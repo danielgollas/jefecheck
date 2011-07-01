@@ -1,0 +1,12 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Apply 3D LUT" menuName="Color/3D LUT" author="Daniel Gollas" version="1.0" name="3D LUT" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" />
+      <widget type="cube" label="Cube LUT" default="0.0" varName="LUT" />
+      <widget type="newLine" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="3DLUT.frag" />
+</root>

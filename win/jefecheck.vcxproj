@@ -1,0 +1,508 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\aboutWindow.cxx" />
+    <ClCompile Include="..\src\activatorCallbacks.cpp" />
+    <ClCompile Include="..\src\activatorWindow.cxx" />
+    <ClCompile Include="..\src\AsynchronousFileIO.cpp" />
+    <ClCompile Include="..\src\AutoRPC.cpp" />
+    <ClCompile Include="..\src\BigInt.cpp" />
+    <ClCompile Include="..\src\BitStream.cpp" />
+    <ClCompile Include="..\src\BitStream_NoTemplate.cpp" />
+    <ClCompile Include="..\src\checkmateResoucesWindow.cxx" />
+    <ClCompile Include="..\src\CheckSum.cpp" />
+    <ClCompile Include="..\src\CommandParserInterface.cpp" />
+    <ClCompile Include="..\src\common.cxx" />
+    <ClCompile Include="..\src\ConnectionGraph.cpp" />
+    <ClCompile Include="..\src\ConsoleServer.cpp" />
+    <ClCompile Include="..\src\DataBlockEncryptor.cpp" />
+    <ClCompile Include="..\src\DataCompressor.cpp" />
+    <ClCompile Include="..\src\DirectoryDeltaTransfer.cpp" />
+    <ClCompile Include="..\src\dpxslice.cpp" />
+    <ClCompile Include="..\src\drawingToolsWindow.cxx" />
+    <ClCompile Include="..\src\DS_BytePool.cpp" />
+    <ClCompile Include="..\src\DS_ByteQueue.cpp" />
+    <ClCompile Include="..\src\DS_HuffmanEncodingTree.cpp" />
+    <ClCompile Include="..\src\DS_Table.cpp" />
+    <ClCompile Include="..\src\EmailSender.cpp" />
+    <ClCompile Include="..\src\EncodeClassName.cpp" />
+    <ClCompile Include="..\src\EpochTimeToString.cpp" />
+    <ClCompile Include="..\src\exrWindow.cxx" />
+    <ClCompile Include="..\src\ExtendedOverlappedPool.cpp" />
+    <ClCompile Include="..\src\FileList.cpp" />
+    <ClCompile Include="..\src\FileListTransfer.cpp" />
+    <ClCompile Include="..\src\FileOperations.cpp" />
+    <ClCompile Include="..\src\Fl_Button_gfc.cpp" />
+    <ClCompile Include="..\src\Fl_Button_RGBA_gfc.cpp" />
+    <ClCompile Include="..\src\Fl_Choice_gfc.cpp" />
+    <ClCompile Include="..\src\Fl_DragBar.cxx" />
+    <ClCompile Include="..\src\Fl_Input_Choice_gfc.cpp" />
+    <ClCompile Include="..\src\Fl_Slider_Timeline_gfc.cpp" />
+    <ClCompile Include="..\src\Fl_Spinner_gfc.cpp" />
+    <ClCompile Include="..\src\FormatString.cpp" />
+    <ClCompile Include="..\src\FullyConnectedMesh.cpp" />
+    <ClCompile Include="..\src\FunctionThread.cpp" />
+    <ClCompile Include="..\src\fxcontrolwindow.cpp" />
+    <ClCompile Include="..\src\fxWindow.cxx" />
+    <ClCompile Include="..\src\gammaWindow.cxx" />
+    <ClCompile Include="..\src\Gen_RPC8.cpp" />
+    <ClCompile Include="..\src\GetTime.cpp" />
+    <ClCompile Include="..\src\gfcframe.cpp" />
+    <ClCompile Include="..\src\gfcfx.cpp" />
+    <ClCompile Include="..\src\gfcFXControlBase.cpp" />
+    <ClCompile Include="..\src\gfcfxmanager.cpp" />
+    <ClCompile Include="..\src\gfcfxstack.cpp" />
+    <ClCompile Include="..\src\gfcglframeinfo.cpp" />
+    <ClCompile Include="..\src\gfcglsubwindow.cpp" />
+    <ClCompile Include="..\src\gfchistogram.cpp" />
+    <ClCompile Include="..\src\gfchistogramglwindow.cpp" />
+    <ClCompile Include="..\src\gfcimageloader.cpp" />
+    <ClCompile Include="..\src\gfcimageloaderdpx.cpp" />
+    <ClCompile Include="..\src\gfcimageloaderexr.cpp" />
+    <ClCompile Include="..\src\gfcimageloadergfl.cpp" />
+    <ClCompile Include="..\src\gfcimageprocessor.cpp" />
+    <ClCompile Include="..\src\gfcimagesaver.cpp" />
+    <ClCompile Include="..\src\gfcimagesaver_exr.cpp" />
+    <ClCompile Include="..\src\gfcimagesaver_gfl.cpp" />
+    <ClCompile Include="..\src\gfcloadparams.cpp" />
+    <ClCompile Include="..\src\gfclutmanager.cpp" />
+    <ClCompile Include="..\src\gfcmemorymanager.cpp" />
+    <ClCompile Include="..\src\gfcnetworkclient.cpp" />
+    <ClCompile Include="..\src\gfcnetworkclientgui.cpp" />
+    <ClCompile Include="..\src\gfcnetworkclientgui_fltk.cpp" />
+    <ClCompile Include="..\src\gfcnetworkeventnotification.cpp" />
+    <ClCompile Include="..\src\gfcnetworklog.cpp" />
+    <ClCompile Include="..\src\gfcnetworkmanager.cpp" />
+    <ClCompile Include="..\src\gfcnetworkserver.cpp" />
+    <ClCompile Include="..\src\gfcnetworkservergui.cpp" />
+    <ClCompile Include="..\src\gfcnetworkservergui_fltk.cpp" />
+    <ClCompile Include="..\src\gfcNetworkStructures.cpp" />
+    <ClCompile Include="..\src\gfcnote.cpp" />
+    <ClCompile Include="..\src\gfcnotetext.cpp" />
+    <ClCompile Include="..\src\gfcpeekinfo.cpp" />
+    <ClCompile Include="..\src\gfcpickdrawee.cpp" />
+    <ClCompile Include="..\src\gfcpickmanager.cpp" />
+    <ClCompile Include="..\src\gfcpicknotifee.cpp" />
+    <ClCompile Include="..\src\gfcpickobject.cpp" />
+    <ClCompile Include="..\src\gfcPlate.cpp" />
+    <ClCompile Include="..\src\gfcplatedrawparams.cpp" />
+    <ClCompile Include="..\src\gfcplategui.cpp" />
+    <ClCompile Include="..\src\gfcplategui_fltk.cpp" />
+    <ClCompile Include="..\src\gfcplatemanager.cpp" />
+    <ClCompile Include="..\src\gfcplaybackgui.cpp" />
+    <ClCompile Include="..\src\gfcplaybackgui_fltk.cpp" />
+    <ClCompile Include="..\src\gfcplaybackmanager.cpp" />
+    <ClCompile Include="..\src\gfcplaylistitem.cpp" />
+    <ClCompile Include="..\src\gfcplaylistmanager.cpp" />
+    <ClCompile Include="..\src\gfcplaylistwindowwindow.cpp" />
+    <ClCompile Include="..\src\gfcpointerstorage.cpp" />
+    <ClCompile Include="..\src\gfcrectang.cpp" />
+    <ClCompile Include="..\src\gfcrenderparams.cpp" />
+    <ClCompile Include="..\src\gfcreview.cpp" />
+    <ClCompile Include="..\src\gfcrevision.cpp" />
+    <ClCompile Include="..\src\gfcSequence.cpp" />
+    <ClCompile Include="..\src\gfcsequencegui.cpp" />
+    <ClCompile Include="..\src\gfcsequencegui_fltk.cpp" />
+    <ClCompile Include="..\src\gfcsessionmanager.cpp" />
+    <ClCompile Include="..\src\gfcSliderInput.cpp" />
+    <ClCompile Include="..\src\gfcStructures.cpp" />
+    <ClCompile Include="..\src\gfctrackmanager.cpp" />
+    <ClCompile Include="..\src\gflCBitmap.cpp" />
+    <ClCompile Include="..\src\gflCFileInformation.cpp" />
+    <ClCompile Include="..\src\gflCFormat.cpp" />
+    <ClCompile Include="..\src\glew.c" />
+    <ClCompile Include="..\src\GlViewport.cpp" />
+    <ClCompile Include="..\src\GridSectorizer.cpp" />
+    <ClCompile Include="..\src\HTTPConnection.cpp" />
+    <ClCompile Include="..\src\IncrementalReadInterface.cpp" />
+    <ClCompile Include="..\src\InlineFunctor.cpp" />
+    <ClCompile Include="..\src\Itoa.cpp" />
+    <ClCompile Include="..\src\LightweightDatabaseClient.cpp" />
+    <ClCompile Include="..\src\LightweightDatabaseCommon.cpp" />
+    <ClCompile Include="..\src\LightweightDatabaseServer.cpp" />
+    <ClCompile Include="..\src\LinuxStrings.cpp" />
+    <ClCompile Include="..\src\loadWindow.cxx" />
+    <ClCompile Include="..\src\LogCommandParser.cpp" />
+    <ClCompile Include="..\src\lut1d.cpp" />
+    <ClCompile Include="..\src\lutWindow.cxx" />
+    <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\mainWindow.cxx" />
+    <ClCompile Include="..\src\MessageFilter.cpp" />
+    <ClCompile Include="..\src\minSpecsWindow.cxx" />
+    <ClCompile Include="..\src\moreOptionWindow.cxx" />
+    <ClCompile Include="..\src\mtpoly.cpp" />
+    <ClCompile Include="..\src\NatPunchthrough.cpp" />
+    <ClCompile Include="..\src\NetworkIDManager.cpp" />
+    <ClCompile Include="..\src\NetworkIDObject.cpp" />
+    <ClCompile Include="..\src\PacketConsoleLogger.cpp" />
+    <ClCompile Include="..\src\PacketFileLogger.cpp" />
+    <ClCompile Include="..\src\PacketLogger.cpp" />
+    <ClCompile Include="..\src\platefxparams.cpp" />
+    <ClCompile Include="..\src\playlistwindow.cpp" />
+    <ClCompile Include="..\src\PluginInterface.cpp" />
+    <ClCompile Include="..\src\preferencesWindow.cxx" />
+    <ClCompile Include="..\src\RakMemoryOverride.cpp" />
+    <ClCompile Include="..\src\RakNetCommandParser.cpp" />
+    <ClCompile Include="..\src\RakNetStatistics.cpp" />
+    <ClCompile Include="..\src\RakNetTransport.cpp" />
+    <ClCompile Include="..\src\RakNetTypes.cpp" />
+    <ClCompile Include="..\src\RakNetworkFactory.cpp" />
+    <ClCompile Include="..\src\RakPeer.cpp" />
+    <ClCompile Include="..\src\RakSleep.cpp" />
+    <ClCompile Include="..\src\RakString.cpp" />
+    <ClCompile Include="..\src\RakThread.cpp" />
+    <ClCompile Include="..\src\Rand.cpp" />
+    <ClCompile Include="..\src\ReadyEvent.cpp" />
+    <ClCompile Include="..\src\ReliabilityLayer.cpp" />
+    <ClCompile Include="..\src\remoteWindow.cxx" />
+    <ClCompile Include="..\src\renderWindow.cxx" />
+    <ClCompile Include="..\src\ReplicaManager.cpp" />
+    <ClCompile Include="..\src\ReplicaManager2.cpp" />
+    <ClCompile Include="..\src\rijndael.cpp" />
+    <ClCompile Include="..\src\Router.cpp" />
+    <ClCompile Include="..\src\RPCMap.cpp" />
+    <ClCompile Include="..\src\RSACrypt.cpp" />
+    <ClCompile Include="..\src\SHA1.cpp" />
+    <ClCompile Include="..\src\SimpleMutex.cpp" />
+    <ClCompile Include="..\src\SocketLayer.cpp" />
+    <ClCompile Include="..\src\splashWindow.cxx" />
+    <ClCompile Include="..\src\StringCompressor.cpp" />
+    <ClCompile Include="..\src\StringTable.cpp" />
+    <ClCompile Include="..\src\SuperFastHash.cpp" />
+    <ClCompile Include="..\src\SystemAddressList.cpp" />
+    <ClCompile Include="..\src\TableSerializer.cpp" />
+    <ClCompile Include="..\src\TCPInterface.cpp" />
+    <ClCompile Include="..\src\TelnetTransport.cpp" />
+    <ClCompile Include="..\src\ThreadsafePacketLogger.cpp" />
+    <ClCompile Include="..\src\trackwidget.cpp" />
+    <ClCompile Include="..\src\trilerp.cpp" />
+    <ClCompile Include="..\src\UICallbacks.cpp" />
+    <ClCompile Include="..\src\vec3d.cpp" />
+    <ClCompile Include="..\src\WSAStartupSingleton.cpp" />
+    <ClCompile Include="..\src\xmlParser.cpp" />
+    <ClCompile Include="..\src\_FindFirst.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\aboutWindow.h" />
+    <ClInclude Include="..\src\activatorCallbacks.h" />
+    <ClInclude Include="..\src\activatorWindow.h" />
+    <ClInclude Include="..\src\AsynchronousFileIO.h" />
+    <ClInclude Include="..\src\AutopatcherPatchContext.h" />
+    <ClInclude Include="..\src\AutopatcherRepositoryInterface.h" />
+    <ClInclude Include="..\src\AutoRPC.h" />
+    <ClInclude Include="..\src\BigInt.h" />
+    <ClInclude Include="..\src\BigTypes.h" />
+    <ClInclude Include="..\src\BitStream.h" />
+    <ClInclude Include="..\src\BitStream_NoTemplate.h" />
+    <ClInclude Include="..\src\CheckMateBetaDemoVersionWatermark.h" />
+    <ClInclude Include="..\src\checkmateResoucesWindow.h" />
+    <ClInclude Include="..\src\CheckSum.h" />
+    <ClInclude Include="..\src\ClientContextStruct.h" />
+    <ClInclude Include="..\src\CommandParserInterface.h" />
+    <ClInclude Include="..\src\ConnectionGraph.h" />
+    <ClInclude Include="..\src\ConsoleServer.h" />
+    <ClInclude Include="..\src\DataBlockEncryptor.h" />
+    <ClInclude Include="..\src\DataCompressor.h" />
+    <ClInclude Include="..\src\demoversion.h" />
+    <ClInclude Include="..\src\DirectoryDeltaTransfer.h" />
+    <ClInclude Include="..\src\dpxslice.h" />
+    <ClInclude Include="..\src\dpx_image_information_interface.h" />
+    <ClInclude Include="..\src\drawingToolsWindow.h" />
+    <ClInclude Include="..\src\DS_BinarySearchTree.h" />
+    <ClInclude Include="..\src\DS_BPlusTree.h" />
+    <ClInclude Include="..\src\DS_BytePool.h" />
+    <ClInclude Include="..\src\DS_ByteQueue.h" />
+    <ClInclude Include="..\src\DS_Heap.h" />
+    <ClInclude Include="..\src\DS_HuffmanEncodingTree.h" />
+    <ClInclude Include="..\src\DS_HuffmanEncodingTreeFactory.h" />
+    <ClInclude Include="..\src\DS_HuffmanEncodingTreeNode.h" />
+    <ClInclude Include="..\src\DS_LinkedList.h" />
+    <ClInclude Include="..\src\DS_List.h" />
+    <ClInclude Include="..\src\DS_Map.h" />
+    <ClInclude Include="..\src\DS_MemoryPool.h" />
+    <ClInclude Include="..\src\DS_OrderedChannelHeap.h" />
+    <ClInclude Include="..\src\DS_OrderedList.h" />
+    <ClInclude Include="..\src\DS_Queue.h" />
+    <ClInclude Include="..\src\DS_QueueLinkedList.h" />
+    <ClInclude Include="..\src\DS_RangeList.h" />
+    <ClInclude Include="..\src\DS_Table.h" />
+    <ClInclude Include="..\src\DS_Tree.h" />
+    <ClInclude Include="..\src\DS_WeightedGraph.h" />
+    <ClInclude Include="..\src\EmailSender.h" />
+    <ClInclude Include="..\src\EpochTimeToString.h" />
+    <ClInclude Include="..\src\Export.h" />
+    <ClInclude Include="..\src\exrWindow.h" />
+    <ClInclude Include="..\src\ExtendedOverlappedPool.h" />
+    <ClInclude Include="..\src\FileList.h" />
+    <ClInclude Include="..\src\FileListNodeContext.h" />
+    <ClInclude Include="..\src\FileListTransfer.h" />
+    <ClInclude Include="..\src\FileListTransferCBInterface.h" />
+    <ClInclude Include="..\src\FileOperations.h" />
+    <ClInclude Include="..\src\Fl_Button_gfc.h" />
+    <ClInclude Include="..\src\Fl_Button_RGBA_gfc.h" />
+    <ClInclude Include="..\src\Fl_Choice_gfc.h" />
+    <ClInclude Include="..\src\Fl_DragBar.H" />
+    <ClInclude Include="..\src\Fl_Input_Choice_gfc.h" />
+    <ClInclude Include="..\src\Fl_Slider_Timeline_gfc.h" />
+    <ClInclude Include="..\src\Fl_Spinner_gfc.h" />
+    <ClInclude Include="..\src\FormatString.h" />
+    <ClInclude Include="..\src\FullyConnectedMesh.h" />
+    <ClInclude Include="..\src\FunctionThread.h" />
+    <ClInclude Include="..\src\fxcontrolwindow.h" />
+    <ClInclude Include="..\src\fxWindow.h" />
+    <ClInclude Include="..\src\gammaWindow.h" />
+    <ClInclude Include="..\src\Gen_RPC8.h" />
+    <ClInclude Include="..\src\GetTime.h" />
+    <ClInclude Include="..\src\gfcdpxstructures.h" />
+    <ClInclude Include="..\src\gfcframe.h" />
+    <ClInclude Include="..\src\gfcfx.h" />
+    <ClInclude Include="..\src\gfcFXControlBase.h" />
+    <ClInclude Include="..\src\gfcfxmanager.h" />
+    <ClInclude Include="..\src\gfcfxstack.h" />
+    <ClInclude Include="..\src\gfcglframeinfo.h" />
+    <ClInclude Include="..\src\gfcglsubwindow.h" />
+    <ClInclude Include="..\src\gfchistogram.h" />
+    <ClInclude Include="..\src\gfchistogramglwindow.h" />
+    <ClInclude Include="..\src\gfcimageloader.h" />
+    <ClInclude Include="..\src\gfcimageloaderdpx.h" />
+    <ClInclude Include="..\src\gfcimageloaderexr.h" />
+    <ClInclude Include="..\src\gfcimageloadergfl.h" />
+    <ClInclude Include="..\src\gfcimageprocessor.h" />
+    <ClInclude Include="..\src\gfcimagesaver.h" />
+    <ClInclude Include="..\src\gfcimagesaver_exr.h" />
+    <ClInclude Include="..\src\gfcimagesaver_gfl.h" />
+    <ClInclude Include="..\src\gfcloadparams.h" />
+    <ClInclude Include="..\src\gfclutmanager.h" />
+    <ClInclude Include="..\src\gfcmemorymanager.h" />
+    <ClInclude Include="..\src\gfcnetremotepointerinfo.h" />
+    <ClInclude Include="..\src\gfcnetworkclient.h" />
+    <ClInclude Include="..\src\gfcnetworkclientgui.h" />
+    <ClInclude Include="..\src\gfcnetworkclientgui_fltk.h" />
+    <ClInclude Include="..\src\gfcnetworkeventnotification.h" />
+    <ClInclude Include="..\src\gfcnetworklog.h" />
+    <ClInclude Include="..\src\gfcnetworkmanager.h" />
+    <ClInclude Include="..\src\gfcnetworkserver.h" />
+    <ClInclude Include="..\src\gfcnetworkservergui.h" />
+    <ClInclude Include="..\src\gfcnetworkservergui_fltk.h" />
+    <ClInclude Include="..\src\gfcNetworkStructures.h" />
+    <ClInclude Include="..\src\gfcnote.h" />
+    <ClInclude Include="..\src\gfcnotetext.h" />
+    <ClInclude Include="..\src\gfcpeekinfo.h" />
+    <ClInclude Include="..\src\gfcpickdrawee.h" />
+    <ClInclude Include="..\src\gfcpickmanager.h" />
+    <ClInclude Include="..\src\gfcpicknotifee.h" />
+    <ClInclude Include="..\src\gfcpickobject.h" />
+    <ClInclude Include="..\src\gfcPlate.h" />
+    <ClInclude Include="..\src\gfcplatedrawparams.h" />
+    <ClInclude Include="..\src\gfcplategui.h" />
+    <ClInclude Include="..\src\gfcplategui_fltk.h" />
+    <ClInclude Include="..\src\gfcplatemanager.h" />
+    <ClInclude Include="..\src\gfcplaybackgui.h" />
+    <ClInclude Include="..\src\gfcplaybackgui_fltk.h" />
+    <ClInclude Include="..\src\gfcplaybackmanager.h" />
+    <ClInclude Include="..\src\gfcplaylistitem.h" />
+    <ClInclude Include="..\src\gfcplaylistmanager.h" />
+    <ClInclude Include="..\src\gfcplaylistwindowwindow.h" />
+    <ClInclude Include="..\src\gfcpointerstorage.h" />
+    <ClInclude Include="..\src\gfcrectang.h" />
+    <ClInclude Include="..\src\gfcrenderparams.h" />
+    <ClInclude Include="..\src\gfcreview.h" />
+    <ClInclude Include="..\src\gfcrevision.h" />
+    <ClInclude Include="..\src\gfcSequence.h" />
+    <ClInclude Include="..\src\gfcsequencegui.h" />
+    <ClInclude Include="..\src\gfcsequencegui_fltk.h" />
+    <ClInclude Include="..\src\gfcsessionmanager.h" />
+    <ClInclude Include="..\src\gfcSliderInput.h" />
+    <ClInclude Include="..\src\gfcStructures.h" />
+    <ClInclude Include="..\src\gfctrackmanager.h" />
+    <ClInclude Include="..\src\gflC.h" />
+    <ClInclude Include="..\src\gflCBitmap.h" />
+    <ClInclude Include="..\src\gflCColor.h" />
+    <ClInclude Include="..\src\gflCColormap.h" />
+    <ClInclude Include="..\src\gflCException.h" />
+    <ClInclude Include="..\src\gflCFileInformation.h" />
+    <ClInclude Include="..\src\gflCFormat.h" />
+    <ClInclude Include="..\src\gflCLibrary.h" />
+    <ClInclude Include="..\src\gflCLoadParams.h" />
+    <ClInclude Include="..\src\gflCSaveParams.h" />
+    <ClInclude Include="..\src\glew.h" />
+    <ClInclude Include="..\src\glext.h" />
+    <ClInclude Include="..\src\GlViewport.h" />
+    <ClInclude Include="..\src\glxew.h" />
+    <ClInclude Include="..\src\GridSectorizer.h" />
+    <ClInclude Include="..\src\HTTPConnection.h" />
+    <ClInclude Include="..\src\IncrementalReadInterface.h" />
+    <ClInclude Include="..\src\InlineFunctor.h" />
+    <ClInclude Include="..\src\InternalPacket.h" />
+    <ClInclude Include="..\src\Itoa.h" />
+    <ClInclude Include="..\src\JefeCorp_JefeCheck1LicenseDSA_public.h" />
+    <ClInclude Include="..\src\JefeCorp_JefeCheck1_ActivatorRSA_public.h" />
+    <ClInclude Include="..\src\JefeCorp_JefeCheck_LicenseRSA_public.h" />
+    <ClInclude Include="..\src\Kbhit.h" />
+    <ClInclude Include="..\src\LightweightDatabaseClient.h" />
+    <ClInclude Include="..\src\LightweightDatabaseCommon.h" />
+    <ClInclude Include="..\src\LightweightDatabaseServer.h" />
+    <ClInclude Include="..\src\LinuxStrings.h" />
+    <ClInclude Include="..\src\loadWindow.h" />
+    <ClInclude Include="..\src\LobbyClientInterface.h" />
+    <ClInclude Include="..\src\LogCommandParser.h" />
+    <ClInclude Include="..\src\lut1d.h" />
+    <ClInclude Include="..\src\lutWindow.h" />
+    <ClInclude Include="..\src\mainWindow.h" />
+    <ClInclude Include="..\src\mainWindowTest.h" />
+    <ClInclude Include="..\src\MessageFilter.h" />
+    <ClInclude Include="..\src\MessageIdentifiers.h" />
+    <ClInclude Include="..\src\minSpecsWindow.h" />
+    <ClInclude Include="..\src\moreOptionWindow.h" />
+    <ClInclude Include="..\src\mtpoly.h" />
+    <ClInclude Include="..\src\MTUSize.h" />
+    <ClInclude Include="..\src\NativeTypes.h" />
+    <ClInclude Include="..\src\NatPunchthrough.h" />
+    <ClInclude Include="..\src\NetworkIDManager.h" />
+    <ClInclude Include="..\src\NetworkIDObject.h" />
+    <ClInclude Include="..\src\osxGetPrimaryMacAddress.h" />
+    <ClInclude Include="..\src\PacketConsoleLogger.h" />
+    <ClInclude Include="..\src\PacketFileLogger.h" />
+    <ClInclude Include="..\src\PacketLogger.h" />
+    <ClInclude Include="..\src\PacketPool.h" />
+    <ClInclude Include="..\src\PacketPriority.h" />
+    <ClInclude Include="..\src\platefxparams.h" />
+    <ClInclude Include="..\src\Platform.h" />
+    <ClInclude Include="..\src\playlistwindow.h" />
+    <ClInclude Include="..\src\PluginInterface.h" />
+    <ClInclude Include="..\src\preferencesWindow.h" />
+    <ClInclude Include="..\src\publicKey.h" />
+    <ClInclude Include="..\src\RakAssert.h" />
+    <ClInclude Include="..\src\RakMemoryOverride.h" />
+    <ClInclude Include="..\src\RakNetCommandParser.h" />
+    <ClInclude Include="..\src\RakNetDefines.h" />
+    <ClInclude Include="..\src\RakNetStatistics.h" />
+    <ClInclude Include="..\src\RakNetTime.h" />
+    <ClInclude Include="..\src\RakNetTransport.h" />
+    <ClInclude Include="..\src\RakNetTypes.h" />
+    <ClInclude Include="..\src\RakNetVersion.h" />
+    <ClInclude Include="..\src\RakNetworkFactory.h" />
+    <ClInclude Include="..\src\RakPeer.h" />
+    <ClInclude Include="..\src\RakPeerInterface.h" />
+    <ClInclude Include="..\src\RakSleep.h" />
+    <ClInclude Include="..\src\RakString.h" />
+    <ClInclude Include="..\src\RakThread.h" />
+    <ClInclude Include="..\src\Rand.h" />
+    <ClInclude Include="..\src\ReadyEvent.h" />
+    <ClInclude Include="..\src\RefCountedObj.h" />
+    <ClInclude Include="..\src\ReliabilityLayer.h" />
+    <ClInclude Include="..\src\remoteWindow.h" />
+    <ClInclude Include="..\src\renderWindow.h" />
+    <ClInclude Include="..\src\Replica.h" />
+    <ClInclude Include="..\src\ReplicaEnums.h" />
+    <ClInclude Include="..\src\ReplicaManager.h" />
+    <ClInclude Include="..\src\ReplicaManager2.h" />
+    <ClInclude Include="..\src\resource.h" />
+    <ClInclude Include="..\src\resource1.h" />
+    <ClInclude Include="..\src\Rijndael-Boxes.h" />
+    <ClInclude Include="..\src\Rijndael.h" />
+    <ClInclude Include="..\src\Router.h" />
+    <ClInclude Include="..\src\RouterInterface.h" />
+    <ClInclude Include="..\src\RPCMap.h" />
+    <ClInclude Include="..\src\RPCNode.h" />
+    <ClInclude Include="..\src\RSACrypt.h" />
+    <ClInclude Include="..\src\SHA1.h" />
+    <ClInclude Include="..\src\SimpleMutex.h" />
+    <ClInclude Include="..\src\SimpleTCPServer.h" />
+    <ClInclude Include="..\src\SingleProducerConsumer.h" />
+    <ClInclude Include="..\src\SocketLayer.h" />
+    <ClInclude Include="..\src\splashWindow.h" />
+    <ClInclude Include="..\src\StringCompressor.h" />
+    <ClInclude Include="..\src\StringTable.h" />
+    <ClInclude Include="..\src\SuperFastHash.h" />
+    <ClInclude Include="..\src\SystemAddressList.h" />
+    <ClInclude Include="..\src\TableSerializer.h" />
+    <ClInclude Include="..\src\TCPInterface.h" />
+    <ClInclude Include="..\src\TelnetTransport.h" />
+    <ClInclude Include="..\src\ThreadPool.h" />
+    <ClInclude Include="..\src\ThreadsafePacketLogger.h" />
+    <ClInclude Include="..\src\trackwidget.h" />
+    <ClInclude Include="..\src\TransportInterface.h" />
+    <ClInclude Include="..\src\trilerp.h" />
+    <ClInclude Include="..\src\Types.h" />
+    <ClInclude Include="..\src\UICallbacks.h" />
+    <ClInclude Include="..\src\UIConstants.h" />
+    <ClInclude Include="..\src\vec3d.h" />
+    <ClInclude Include="..\src\wglew.h" />
+    <ClInclude Include="..\src\wglext.h" />
+    <ClInclude Include="..\src\WSAStartupSingleton.h" />
+    <ClInclude Include="..\src\xmlParser.h" />
+    <ClInclude Include="..\src\_FindFirst.h" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{752D2A64-D9CC-4D1A-9736-2A5A195217A5}</ProjectGuid>
+    <RootNamespace>jefecheck</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level2</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32;NDEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN;VC_EXTRA_LEAN;WIN32_EXTRA_LEAN;GLEW_STATIC;OPENEXR_DLL;CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>buildDependencies\include\OpenEXR;buildDependencies\include;C:\Program Files (x86)\boost\boost_1_46_1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <AdditionalOptions>/EHs /DBOTAN_DLL=__declspec(dllexport) /wo4244 /wo4305 /wd4275 /wd4244  /wd4251 /wd4250 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>buildDependencies\lib\Debug\x86;C:\Program Files (x86)\boost\boost_1_46_1\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glut32.lib;glu32.lib;fltk.lib;fltkgl.lib;opengl32.lib;libbotan.lib;winmm.lib;comctl32.lib;wsock32.lib;glew32s.lib;flulib.lib;ws2_32.lib;IlmImf.lib;IlmThread.lib;Imath.lib;Iex.lib;Half.lib;zdll.lib;Iphlpapi.lib;wldap32.lib;ssleay32.lib;libeay32.lib;curllib_static.lib;libgfl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>
+      </IgnoreSpecificDefaultLibraries>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

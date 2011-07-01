@@ -1,0 +1,17 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Adjust Brightness, Contrast and Saturation \n on on all channels" menuName="Color/Brightness, Contrast, Saturation" author="Daniel Gollas" version="1.0" name="Brightness, Contrast, Saturation" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" label="Brightness" minimum="0" default="1" labelColorG="255" maximum="9999" varName="Brightness" />
+      <widget type="newLine" varName="1" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" label="Contrast" minimum="0" default="1" maximum="9999" labelColorG="255" varName="Contrast" />
+      <widget labelColorR="150" labelColorB="150" type="float" step="0.001" label="Average Y" minimum="0" default="0.5" maximum="1" labelColorG="150" varName="AvgLuminance" />
+      <widget type="newLine" varName="2" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" label="Saturation" minimum="0" default="1" maximum="9999" labelColorG="255" varName="Saturation" />
+      <widget type="newLine" varName="2" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="BCS.frag" />
+</root>

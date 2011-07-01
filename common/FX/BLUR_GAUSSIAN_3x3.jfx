@@ -1,0 +1,10 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Apply Blur with a 3x3 Gaussian Kernel" menuName="Special/Gaussian Blur 3x3" version="1.0" author="Daniel Gollas" name="Gaussian Blur 3x3" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="BLUR_GAUSSIAN_3x3.frag" />
+</root>

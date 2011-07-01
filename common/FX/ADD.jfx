@@ -1,0 +1,16 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Composite two images using an Add operation" menuName="Comp/Add" version="1.0" author="Daniel Gollas" name="Add" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="furstNeLine" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="0" label="Image 1" labelColorG="255" varName="Image1" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="2" label="Image 2" labelColorG="255" varName="Image2" />
+      <widget type="newLine" varName="lastNewLine" />
+	  <widget type="float" step="0.001" label="Factor 1" minimum="-9999" default="1.0" maximum="9999" varName="factor1" />
+	  <widget type="float" step="0.001" label="Factor 2" minimum="-9999" default="1.0" maximum="9999" varName="factor2" />
+	  <widget type="newLine" varName="lastNewLine" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="ADD.frag" />
+</root>

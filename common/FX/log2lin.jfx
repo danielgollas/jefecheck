@@ -1,0 +1,16 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Convert from Logarithmic to Linear color space" menuName="Color/Log to Lin" author="Daniel Gollas" version="1.0" name="Log to Lin" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="1" label="Ref. White" minimum="0" default="685" labelColorG="255" maximum="1024" varName="refWhite" />
+	<widget labelColorR="255" labelColorB="255" type="float" step="1" label="Ref. Black" minimum="0" default="95" labelColorG="255" maximum="1024" varName="refBlack" />
+      <widget type="newLine" varName="1" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" label="Disp. Gamma" minimum="0" default="1.7" maximum="100" labelColorG="255" varName="dispGamma" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="1" label="Soft Clip" minimum="0" default="1" maximum="50" labelColorG="255" varName="softClip" />
+      <widget type="newLine" varName="2" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="log2lin.frag" />
+</root>

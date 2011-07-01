@@ -1,0 +1,14 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Move an image using a vertex shader" menuName="Comp/move2D" version="2.0" author="Daniel Gollas" name="Move2D" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+<widget type="texture" step="1" default="0.0" label="image" varName="theImage" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="1" default="0.0" label="X" minimum="-9999" labelColorG="255" maximum="9999" varName="moveX" />
+	<widget labelColorR="255" labelColorB="255" type="float" step="1" default="0.0" label="Y" minimum="-9999" labelColorG="255" maximum="9999" varName="moveY" />
+      <widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="move2D.frag" />
+</root>

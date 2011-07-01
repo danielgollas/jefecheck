@@ -1,0 +1,14 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Control OpenEXR Paramaters" menuName="Special/OpenEXR" author="Daniel Gollas" version="1.0" name="ExrControls" />
+  <groups>
+    <group name="" >
+      <widget type="newLine" varName="0" />
+        <widget labelColorR="255" labelColorB="255" type="float" step="0.01" label="Gamma" minimum="0" default="2.2" labelColorG="255" maximum="10" varName="Gamma" />
+         <widget width="5" type="spacer" varName="spacer" />
+	<widget labelColorR="255" labelColorB="255" type="float" step="0.01" label="Exposure (+fstops)" minimum="-10" default="0" labelColorG="255" maximum="15" varName="Exposure" />
+      <widget type="newLine" varName="1" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="exrControls.frag" />
+</root>

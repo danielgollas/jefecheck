@@ -1,0 +1,13 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Split an image into odd/even fields" menuName="Special/Fields" version="1.0" author="Daniel Gollas" name="Field Separation" />
+  <groups>
+    <group name="" >
+      <widget type="newLine" varName="0" />
+      <widget type="spacer" width="5" varName="2" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" default="0" maximum="1.0" minimum="0.0"  label="Hidden Intensity" labelColorG="255" varName="intensity" />
+      <widget type="newLine" varName="1" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="FIELDS.frag" />
+</root>
