@@ -27,7 +27,7 @@
 
 #include "glew.h"
 #include <stdio.h>
-#include <FL/Fl.h>
+#include <FL/Fl.H>
 #include "GlViewport.h"
 #include "dpxslice.h"
 #include "lut1d.h"
@@ -50,7 +50,7 @@
 #include "renderWindow.h"
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
-#include <FL/Fl_Text_Buffer.h>
+#include <FL/Fl_Text_Buffer.H>
 
 #include <botan/rsa.h>
 #include <botan/pk_filts.h>
@@ -78,8 +78,8 @@ GLuint gWatermarkTextureID=0;
 Fl_Text_Buffer remoteLogBuffer;
 
 #include "boost/program_options.hpp"
-#include <Fl/Fl_File_Chooser.h>
-#include <Fl/fl_ask.h>
+#include <Fl/Fl_File_Chooser.H>
+#include <Fl/fl_ask.H>
 #include <math.h>
 #include "gfcfx.h"
 //#include <GetTime.h>

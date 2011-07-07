@@ -1,7 +1,7 @@
 #include "glew.h"
 #include "gfcfx.h"
 #include <fstream>
-#include <FL/Fl.h>
+#include <FL/Fl.H>
 #include "trilerp.h"
 #include "xmlParser.h"
 #include "gfcStructures.h"
