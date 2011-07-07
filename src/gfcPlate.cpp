@@ -4,7 +4,7 @@
 #include "mainWindow.h"
 #include "loadWindow.h"
 #include "lutWindow.h"
-#include "FL/fl_ask.h"
+#include "FL/fl_ask.H"
 #include "gfcfx.h"
 #include <string>
 #include "platefxparams.h"

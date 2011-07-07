@@ -22,8 +22,8 @@
 #include <GL/glut.h>
 #endif
 #include <math.h>
-#include <FL/Fl.h>
-#include <FL/Fl_Menu_Window.h>
+#include <FL/Fl.H>
+#include <FL/Fl_Menu_Window.H>
 #include <boost/thread/thread.hpp>
 #include <boost/thread/condition.hpp>
 #include <FL/Fl_Color_Chooser.H>

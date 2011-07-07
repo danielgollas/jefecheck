@@ -1,6 +1,6 @@
 
-#include <FL/Fl.h>
-#include <FL/Fl_Button.h>
+#include <FL/Fl.H>
+#include <FL/Fl_Button.H>
 
 #include <string>
 

@@ -3,7 +3,7 @@
 #ifndef moreOptionWindow_h
 #define moreOptionWindow_h
 #include <FL/Fl.H>
-#include <FL/Fl_Menu_Window.h>
+#include <FL/Fl_Menu_Window.H>
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Value_Input.H>
 extern void moreOptionsCB(Fl_Value_Input*, void*);

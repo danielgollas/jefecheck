@@ -3,4 +3,3 @@
 AUTOMAKE_OPTIONS = foreign 1.4
 
 SUBDIRS = src
-INCLUDES = -I/opt/local/include/boost-1_34_1

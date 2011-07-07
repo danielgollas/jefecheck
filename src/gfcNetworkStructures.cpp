@@ -23,7 +23,7 @@
 #include "gfcfx.h"
 #include "xmlParser.h"
 #include <fstream>
-#include <FL/fl_ask.h>
+#include <FL/fl_ask.H>
 #ifdef _WIN32
 #include <windows.h> // Sleep
 #else

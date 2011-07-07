@@ -28,7 +28,7 @@
 #include <iostream>
 
 #include <FL/filename.H>
-#include <FL/fl_ask.h>
+#include <FL/fl_ask.H>
 
 #include <sys/stat.h> //for stat
 
