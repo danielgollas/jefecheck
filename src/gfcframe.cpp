@@ -85,8 +85,8 @@ int gfcFrame::whatLoaderToUse ( std::string name )
 	
 	if(forceGFLLoader || name.find(".")==std::string::npos){ //if we are forcing or file has no extension use gfl
 		
-		//return GFCLOADER_GFL;
-		return GFCLOADER_FIL;
+		return GFCLOADER_GFL;
+		//return GFCLOADER_FIL;
 			
 	}
 	

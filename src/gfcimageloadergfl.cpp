@@ -429,9 +429,9 @@ void* gfcImageLoaderGFL::getPixelPointer()
 
 void gfcImageLoaderGFL::releaseMemory()
 {	
-	 if(theBitmap)
+	 if(theBitmap){
 	 gflFreeBitmap(theBitmap);
-	 
+	 }
 	 theBitmap=NULL;
 }
 
