@@ -24,15 +24,15 @@
 
 //#include "network.h"
 //#include <Fl/Fl_Native_File_Chooser.h>
-#include <FL/Fl_File_Chooser.h>
+#include <FL/Fl_File_Chooser.H>
 #include <FL/Fl_Color_Chooser.H>
-#include <FL/Fl_Input.h>
+#include <FL/Fl_Input.H>
 #include "aboutWindow.h"
 #include "exrWindow.h"
 #include "xmlParser.h"
 
 #include <FLU/flu_pixmaps.h>
-#include <FL/Fl_Pixmap.h>
+#include <FL/Fl_Pixmap.H>
 #include "trilerp.h"
 #include "gfcfx.h"
 #include "gammaWindow.h"

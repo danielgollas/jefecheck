@@ -28,7 +28,7 @@
 #include <iostream>
 
 #include <FL/filename.H>
-#include <FL/fl_ask.h>
+#include <FL/fl_ask.H>
 
 #include <sys/stat.h> //for stat
 
@@ -1713,7 +1713,8 @@ std::string findFileInSearchPaths(std::string theFile) {
     int folderCount=sett.searchPaths.size();
     std::string result=theFile;
     boost::filesystem::path tempPath(theFile);
-	std::string theFileLeaf=tempPath.leaf().string();
+	//std::string theFileLeaf=tempPath.leaf().string();
+	std::string theFileLeaf=tempPath.filename();
 	std::cout << "Trying to find in search paths thefileLeaf: " << theFileLeaf << std::endl;
     for(int i=0;i<folderCount;i++)
     {

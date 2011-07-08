@@ -4,7 +4,7 @@
 #include <FL/Fl_Box.H>
 #include <FL/Fl.H>
 #include <FL/Fl_Progress.H>
-#include <FL/Fl_Group.h>
+#include <FL/Fl_Group.H>
 #include <string>
 
 /**

@@ -2,8 +2,8 @@
 <kdevelop>
   <general>
     <author>Daniel Gollas Gilman</author>
-    <email>gollas@jefecorp.com</email>
-    <version>1.0</version>
+    <email>dgollas@paladar-virtual</email>
+    <version>0.1</version>
     <projectmanagement>KDevAutoProject</projectmanagement>
     <primarylanguage>C++</primarylanguage>
     <keywords>
@@ -14,39 +14,25 @@
     <projectname>jefecheck</projectname>
     <projectdirectory>.</projectdirectory>
     <absoluteprojectpath>false</absoluteprojectpath>
-    <description/>
-    <defaultencoding/>
-    <versioncontrol/>
+    <description></description>
+    <defaultencoding></defaultencoding>
   </general>
   <kdevautoproject>
     <general>
-      <activetarget>src/checkmate1</activetarget>
-      <useconfiguration>optimized</useconfiguration>
+      <activetarget>src/jefecheck</activetarget>
+      <useconfiguration>debug</useconfiguration>
     </general>
     <run>
-      <mainprogram>src/checkmate1</mainprogram>
+      <mainprogram>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</mainprogram>
       <terminal>true</terminal>
-      <directoryradio>build</directoryradio>
-      <programargs>/home/dgollas/jefeCheckDemo/Camila/59-1_6_s1.1746395.dpx</programargs>
-      <globaldebugarguments>/home/dgollas/jefeCheckDemo/Camila/59-1_6_s1.1746395.dpx  --from 1746393 --to 1746483</globaldebugarguments>
-      <globalcwd>/home/dgollas/projects/jefecheckSVN/trunk/optimized</globalcwd>
+      <programargs></programargs>
+      <globaldebugarguments></globaldebugarguments>
+      <globalcwd>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</globalcwd>
       <useglobalprogram>false</useglobalprogram>
-      <autocompile>true</autocompile>
+      <autocompile>false</autocompile>
       <autoinstall>false</autoinstall>
       <autokdesu>false</autokdesu>
-      <envvars>
-        <envvar value="/home/dgollas/Desktop/" name="JEFECHECK_DEFAULT_BROWSE_PATH" />
-      </envvars>
-      <runarguments>
-        <checkmate1/>
-      </runarguments>
-      <debugarguments>
-        <checkmate1/>
-      </debugarguments>
-      <cwd>
-        <checkmate1>/home/dgollas/projects/jefecheckSVN/trunk/debug/./</checkmate1>
-      </cwd>
-      <customdirectory>/</customdirectory>
+      <envvars/>
     </run>
     <configurations>
       <optimized>
@@ -55,16 +41,6 @@
         <cxxcompiler>kdevgppoptions</cxxcompiler>
         <f77compiler>kdevg77options</f77compiler>
         <cxxflags>-O2 -g0</cxxflags>
-        <envvars/>
-        <configargs/>
-        <topsourcedir/>
-        <cppflags>-I/usr/X11R6/include/ -I/usr/local/include/OpenEXR/ -I/usr/include/OpenEXR/ -I/usr/local/include/boost-1_37/</cppflags>
-        <ldflags>-L/usr/lib/ -static -R/usr/lib/ -R/usr/local/lib/ -R/lib/</ldflags>
-        <ccompilerbinary>gcc</ccompilerbinary>
-        <cxxcompilerbinary>g++</cxxcompilerbinary>
-        <f77compilerbinary/>
-        <cflags/>
-        <f77flags/>
       </optimized>
       <debug>
         <configargs>--enable-debug=full</configargs>
@@ -75,46 +51,20 @@
         <cxxflags>-O0 -g3</cxxflags>
         <envvars/>
         <topsourcedir/>
-        <cppflags>-I/usr/X11R6/include/ -I/usr/local/include/OpenEXR/ -I/usr/include/OpenEXR/</cppflags>
-        <ldflags>-L/usr/lib/</ldflags>
-        <ccompilerbinary>gcc</ccompilerbinary>
+        <cppflags/>
+        <ldflags/>
+        <ccompilerbinary/>
         <cxxcompilerbinary>g++</cxxcompilerbinary>
         <f77compilerbinary/>
         <cflags/>
         <f77flags/>
       </debug>
-      <default>
-        <envvars/>
-        <configargs/>
-        <builddir/>
-        <topsourcedir/>
-        <cppflags/>
-        <ldflags/>
-        <ccompiler>kdevgccoptions</ccompiler>
-        <cxxcompiler>kdevgppoptions</cxxcompiler>
-        <f77compiler>kdevg77options</f77compiler>
-        <ccompilerbinary>gcc</ccompilerbinary>
-        <cxxcompilerbinary>g++</cxxcompilerbinary>
-        <f77compilerbinary/>
-        <cflags/>
-        <cxxflags/>
-        <f77flags/>
-      </default>
     </configurations>
     <make>
       <envvars>
-        <envvar value="-I/usr/local/include/boost-1_37/" name="boostIncludes" />
-        <envvar value="/usr/local/lib" name="boostLibPath" />
-        <envvar value="libboost_thread-mt.a" name="boostThreadLibs" />
-        <envvar value="-I/opt/local/include" name="botanIncludes" />
-        <envvar value="-L/usr/local/lib -lm -lpthread -lrt /usr/local/lib/libbotan.a /usr/lib/libssl.a  /usr/lib/libcrypto.a  /usr/lib/libgmp.a -lbz2" name="botanLibs" />
-        <envvar value="`curl-config --libs`" name="curlLibs" />
-        <envvar value="-I/usr/local/include/OpenEXR" name="exrIncludes" />
-        <envvar value="/usr/lib/libIlmImf.a  /usr/lib/libHalf.a /usr/lib/libImath.a  /usr/lib/libIlmThread.a /usr/lib/libIex.a" name="exrLibs" />
+        <envvar value="-I/usr/local/include/OpenEXR/" name="exrIncludes" />
         <envvar value="`fltk-config --use-gl --use-images --ldstaticflags`" name="fltkLibs" />
-        <envvar value=" `flu-config --ldstaticflags`" name="fluFlags" />
-        <envvar value="-lglut" name="glutLibCommand" />
-        <envvar value="-lkrb5 /usr/lib/libssl.a /usr/lib/libcrypto.a" name="ssllibPath" />
+        <envvar value="`flu-config --ldstaticflags`" name="fluFlags" />
         <envvar value="1" name="WANT_AUTOCONF_2_5" />
         <envvar value="1" name="WANT_AUTOMAKE_1_6" />
       </envvars>
@@ -122,7 +72,7 @@
       <runmultiplejobs>false</runmultiplejobs>
       <numberofjobs>1</numberofjobs>
       <dontact>false</dontact>
-      <makebin/>
+      <makebin></makebin>
       <prio>0</prio>
     </make>
   </kdevautoproject>
@@ -173,7 +123,6 @@
     </ignoredoxygen>
   </kdevdoctreeview>
   <kdevfilecreate>
-    <filetypes/>
     <useglobaltypes>
       <type ext="cpp" />
       <type ext="h" />
@@ -204,30 +153,30 @@
     <APPNAMESC>Jefecheck</APPNAMESC>
     <APPNAMEUC>JEFECHECK</APPNAMEUC>
     <AUTHOR>Daniel Gollas Gilman</AUTHOR>
-    <EMAIL>gollas@jefecorp.com</EMAIL>
-    <LICENSE>Custom</LICENSE>
-    <VERSION>1.0</VERSION>
-    <YEAR>2007</YEAR>
-    <dest>/tmp/jefecheck</dest>
+    <EMAIL>dgollas@paladar-virtual</EMAIL>
+    <LICENSE>GPL</LICENSE>
+    <LICENSEFILE>COPYING</LICENSEFILE>
+    <VERSION>0.1</VERSION>
+    <YEAR>2011</YEAR>
+    <dest>/home/dgollas/projects/jefecheck2/linux/jefecheck</dest>
   </substmap>
   <kdevcppsupport>
     <qt>
       <used>false</used>
       <version>3</version>
       <includestyle>3</includestyle>
-      <root>/usr/lib/qt3</root>
+      <root></root>
       <designerintegration>EmbeddedKDevDesigner</designerintegration>
-      <qmake>/usr/bin/qmake-qt3</qmake>
+      <qmake>/usr/bin/qmake</qmake>
       <designer></designer>
       <designerpluginpaths/>
     </qt>
-    <references/>
     <codecompletion>
-      <automaticCodeCompletion>true</automaticCodeCompletion>
+      <automaticCodeCompletion>false</automaticCodeCompletion>
       <automaticArgumentsHint>true</automaticArgumentsHint>
       <automaticHeaderCompletion>true</automaticHeaderCompletion>
       <codeCompletionDelay>250</codeCompletionDelay>
-      <argumentsHintDelay>300</argumentsHintDelay>
+      <argumentsHintDelay>400</argumentsHintDelay>
       <headerCompletionDelay>250</headerCompletionDelay>
       <showOnlyAccessibleItems>false</showOnlyAccessibleItems>
       <completionBoxItemOrder>0</completionBoxItemOrder>
@@ -235,7 +184,7 @@
       <showCommentWithArgumentHint>true</showCommentWithArgumentHint>
       <statusBarTypeEvaluation>false</statusBarTypeEvaluation>
       <namespaceAliases>std=_GLIBCXX_STD;__gnu_cxx=std</namespaceAliases>
-      <processPrimaryTypes>false</processPrimaryTypes>
+      <processPrimaryTypes>true</processPrimaryTypes>
       <processFunctionArguments>false</processFunctionArguments>
       <preProcessAllHeaders>false</preProcessAllHeaders>
       <parseMissingHeadersExperimental>false</parseMissingHeadersExperimental>
@@ -243,14 +192,10 @@
       <alwaysParseInBackground>true</alwaysParseInBackground>
       <usePermanentCaching>true</usePermanentCaching>
       <alwaysIncludeNamespaces>false</alwaysIncludeNamespaces>
-      <includePaths>.;/usr/local/include/boost-1_37/</includePaths>
-      <includeGlobalFunctions>true</includeGlobalFunctions>
-      <includeTypes>true</includeTypes>
-      <includeEnums>true</includeEnums>
-      <includeTypedefs>false</includeTypedefs>
+      <includePaths>.;/usr/local/include/;/usr/include/;/usr/local/include/OpenEXR/;</includePaths>
     </codecompletion>
     <creategettersetter>
-      <prefixGet/>
+      <prefixGet></prefixGet>
       <prefixSet>set</prefixSet>
       <prefixVariable>m_,_</prefixVariable>
       <parameterName>theValue</parameterName>
@@ -262,6 +207,7 @@
       <synchronize>true</synchronize>
       <orientation>Vertical</orientation>
     </splitheadersource>
+    <references/>
   </kdevcppsupport>
   <cppsupportpart>
     <filetemplates>
@@ -271,16 +217,15 @@
   </cppsupportpart>
   <kdevdebugger>
     <general>
-      <gdbpath/>
-      <dbgshell>libtool</dbgshell>
-      <configGdbScript/>
-      <runShellScript/>
-      <runGdbScript/>
+      <gdbpath></gdbpath>
+      <dbgshell></dbgshell>
+      <configGdbScript></configGdbScript>
+      <runShellScript></runShellScript>
+      <runGdbScript></runGdbScript>
       <breakonloadinglibs>true</breakonloadinglibs>
       <separatetty>false</separatetty>
       <floatingtoolbar>false</floatingtoolbar>
       <raiseGDBOnStart>false</raiseGDBOnStart>
-      <programargs/>
     </general>
     <display>
       <staticmembers>false</staticmembers>
@@ -288,33 +233,4 @@
       <outputradix>10</outputradix>
     </display>
   </kdevdebugger>
-  <dist>
-    <custom>false</custom>
-    <bzip>false</bzip>
-    <archname/>
-    <appname>jefecheck</appname>
-    <version>1.0</version>
-    <release/>
-    <vendor/>
-    <licence/>
-    <summary/>
-    <group/>
-    <packager/>
-    <description/>
-    <changelog/>
-    <devpackage>false</devpackage>
-    <docspackage>false</docspackage>
-    <appicon>false</appicon>
-    <arch>0</arch>
-    <genHTML>false</genHTML>
-    <useRPM>false</useRPM>
-    <ftpkde>false</ftpkde>
-    <appskde>false</appskde>
-    <url/>
-  </dist>
-  <ctagspart>
-    <customArguments/>
-    <customTagfilePath>/home/dgollas/projects/jefecheck/trunk/tags</customTagfilePath>
-    <activeTagsFiles/>
-  </ctagspart>
 </kdevelop>

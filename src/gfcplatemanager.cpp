@@ -1,6 +1,6 @@
 #include "gfcplatemanager.h"
 
-#include <FL/fl_ask.h>
+#include <FL/fl_ask.H>
 
 #include "mainWindow.h"
 extern MainWindow mw;

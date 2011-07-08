@@ -21,7 +21,7 @@
 #  include <GL/glut.h>
 #endif
 
-#include <Fl/Fl_Box.h>
+#include <FL/Fl_Box.H>
 #include "UIConstants.h"
 #include "gfcPlate.h"
 #include "trackwidget.h"

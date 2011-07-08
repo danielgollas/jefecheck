@@ -1426,7 +1426,7 @@ void gfcImageLoaderEXR::readMetaData(const Imf::Header & header)
         if(hasKeyCode(header))
         {
         	ss.str("");
-        	KeyCode kc= keyCode(header);
+        	Imf::KeyCode kc= keyCode(header);
         	ss<<kc.filmMfcCode();
         	ss<<" ";
         	ss<<kc.filmType();

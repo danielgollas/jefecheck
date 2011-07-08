@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <FL/gl.h>
 #include <fstream>
-#include <FL/Fl.h>
+#include <FL/Fl.H>
 #include "gflC.h"
 #include "gfcStructures.h"
 #include "xmlParser.h"

@@ -29,7 +29,7 @@
 #ifndef GlViewport_h
 #define GlViewport_h
 
-#  include <Fl/Fl_Gl_Window.h>
+#  include <FL/Fl_Gl_Window.H>
 //#  include <Fl/gl.h>
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -37,12 +37,12 @@
 #  include <GL/glu.h>
 #endif
 #include <stdio.h>
-#include <Fl/Fl.h>
+#include <Fl/Fl.H>
 #include "gfcSequence.h"
 #include "UIConstants.h"
 #include "gfcPlate.h"
-#include <FL/Fl.h>
-#include <FL/Fl_Menu_Window.h>
+#include <FL/Fl.H>
+#include <FL/Fl_Menu_Window.H>
 
 void IdleFunc ( void* pData );
 

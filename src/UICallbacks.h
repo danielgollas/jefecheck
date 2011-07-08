@@ -5,7 +5,7 @@
 
 #include "glew.h"
 #include <FL/Fl.H>
-#include <FL/Fl_Menu.h>
+#include <FL/Fl_Menu.H>
 #include "UIConstants.h"
 #include <string>
 #include <boost/bind.hpp>

@@ -99,7 +99,7 @@ inline GFL_BOOL GFLC_FORMAT::isReadable(
 	) const
 {
 	ERROR_Check(m_isOk, ""); 
-	return m_bitmapInformations.Status & GFL_READ ? GFL_TRUE : GFL_FALSE; 
+	return m_bitmapInformations.Status_ & GFL_READ ? GFL_TRUE : GFL_FALSE; 
 }
 
 // ~
@@ -109,7 +109,7 @@ inline GFL_BOOL GFLC_FORMAT::isWritable(
 	) const
 {
 	ERROR_Check(m_isOk, ""); 
-	return m_bitmapInformations.Status & GFL_WRITE ? GFL_TRUE : GFL_FALSE; 
+	return m_bitmapInformations.Status_ & GFL_WRITE ? GFL_TRUE : GFL_FALSE; 
 }
 
 // ~

@@ -16,13 +16,7 @@
 #ifndef __GFLC_H__
 #define __GFLC_H__
 
-#ifdef WIN32
 #include <iostream>
-#else
-#include <iostream>
-#endif
-
-
 
 // If you want GFLE feature
 //#define __GFLC_GFLE_FUNCTIONS__

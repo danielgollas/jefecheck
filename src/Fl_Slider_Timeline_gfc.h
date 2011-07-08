@@ -1,5 +1,5 @@
 #pragma once
-#include <Fl/Fl_Slider.H>
+#include <FL/Fl_Slider.H>
 #include "gfcrectang.h"
 
 class Fl_Slider_Timeline_gfc :

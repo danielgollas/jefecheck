@@ -12,7 +12,7 @@ enum GFC_FX_GUI_TYPE{FX_GUI_UNKNOWN=0, FX_GUI_FLOAT,FX_GUI_TEXTURE,FX_GUI_CUBE,F
 #include <map>
 #include <vector>
 #include <string>
-#include <FL/Fl_Progress.h>
+#include <FL/Fl_Progress.H>
 #include "platefxparams.h"
 #include "fxcontrolwindow.h"
 #include "vec3d.h"

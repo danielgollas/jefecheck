@@ -6,7 +6,7 @@
 #include <vector>
 #include "gfcNetworkStructures.h"
 
-#include <FL/Fl_Group.h>
+#include <FL/Fl_Group.H>
 
 #ifndef GFC_MAX_PLATES
 #define GFC_MAX_PLATES 4

@@ -2,7 +2,7 @@
 #include "UIConstants.h"
 #include "gfcStructures.h"
 #include <FL/Fl_File_Chooser.H>
-#include <FL/Fl_Pack.h>
+#include <FL/Fl_Pack.H>
 
 extern gfcSettings sett;
 extern Fl_File_Chooser *fc;

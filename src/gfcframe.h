@@ -8,7 +8,7 @@
 #include <map> 
 #endif //for metadata
 #include "glew.h"
-#include <Fl/Fl_Box.h>
+#include <FL/Fl_Box.H>
 #include "UIConstants.h"
 #include "dpxslice.h"
 #include <vector>

@@ -4,8 +4,8 @@
 
 
 #include "glew.h"
-#include <FL/Fl_Choice.h>
-#include <FL/Fl_Light_Button.h>
+#include <FL/Fl_Choice.H>
+#include <FL/Fl_Light_Button.H>
 #include "gfcSequence.h"
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>

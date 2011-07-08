@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <math.h>
-#include <FL/fl_draw.h>
+#include <FL/fl_draw.H>
 #include "gfcStructures.h"
 
 TrackWidget::TrackWidget(int x, int y, int w, int h)

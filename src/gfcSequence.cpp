@@ -11,13 +11,13 @@
 #include <vector>
 #include <ctype.h>
 #include <sys/stat.h>
-#include <Fl/Fl.h>
+#include <Fl/Fl.H>
 #include "loadWindow.h"
 #include "mainWindow.h"
 #include "exrWindow.h"
-#include <Fl/Fl_Slider.h>
-#include <Fl/Fl_Progress.h>
-#include <Fl/fl_ask.h>
+#include <Fl/Fl_Slider.H>
+#include <Fl/Fl_Progress.H>
+#include <Fl/fl_ask.H>
 #include "GlViewport.h"
 //#include "gfcframeslice.h"
 #ifdef WIN32
