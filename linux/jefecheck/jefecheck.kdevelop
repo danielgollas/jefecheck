@@ -25,8 +25,8 @@
     <run>
       <mainprogram>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</mainprogram>
       <terminal>true</terminal>
-      <programargs/>
-      <globaldebugarguments/>
+      <programargs></programargs>
+      <globaldebugarguments></globaldebugarguments>
       <globalcwd>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</globalcwd>
       <useglobalprogram>false</useglobalprogram>
       <autocompile>false</autocompile>
@@ -59,14 +59,14 @@
         <f77compiler>kdevg77options</f77compiler>
         <cxxflags>-O0 -g3</cxxflags>
         <envvars/>
-        <topsourcedir/>
-        <cppflags/>
-        <ldflags/>
-        <ccompilerbinary/>
+        <topsourcedir></topsourcedir>
+        <cppflags></cppflags>
+        <ldflags></ldflags>
+        <ccompilerbinary></ccompilerbinary>
         <cxxcompilerbinary>g++</cxxcompilerbinary>
-        <f77compilerbinary/>
-        <cflags/>
-        <f77flags/>
+        <f77compilerbinary></f77compilerbinary>
+        <cflags></cflags>
+        <f77flags></f77flags>
       </debug>
     </configurations>
     <make>
@@ -82,7 +82,9 @@
         <envvar value="`curl-config --libs`" name="curlLibs" />
         <envvar value="-I/usr/local/include/OpenEXR/" name="exrIncludes" />
         <envvar value="/usr/local/lib/libIlmImf.a  /usr/local/lib/libHalf.a /usr/local/lib/libImath.a  /usr/local/lib/libIlmThread.a /usr/local/lib/libIex.a" name="exrLibs" />
-        <envvar value="`fltk-config --use-gl --use-images --ldstaticflags`" name="fltkLibs" />
+        <envvar value="-lfreeimageplus" name="filLibs" />
+        <envvar value="/usr/lib/libfreeimage.a /usr/lib/libfreeimageplus.a" name="filLibsStatic" />
+        <envvar value="`fltk-config --use-gl --ldstaticflags`" name="fltkLibs" />
         <envvar value="`flu-config --ldstaticflags`" name="fluFlags" />
         <envvar value="-I../../../sources/GflSDK-Linux-x64/include/" name="gflIncludes" />
         <envvar value="-ldl -lgfl -lgfle" name="gflLibs" />
