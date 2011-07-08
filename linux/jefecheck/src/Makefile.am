@@ -36,8 +36,8 @@ jefecheck_SOURCES = AsynchronousFileIO.cpp AutoRPC.cpp BigInt.cpp BitStream.cpp 
 	gfcplaybackgui_fltk.cpp gfcplaybackmanager.cpp gfcplaylistitem.cpp gfcplaylistmanager.cpp \
 	gfcplaylistwindowwindow.cpp gfcpointerstorage.cpp gfcrectang.cpp gfcrenderparams.cpp gfcreview.cpp \
 	gfcrevision.cpp gfcsequencegui.cpp gfcsequencegui_fltk.cpp gfcsessionmanager.cpp \
-	gfctrackmanager.cpp gflCBitmap.cpp gflCFileInformation.cpp gflCFormat.cpp loadWindow.cxx \
-	lut1d.cpp lutWindow.cxx main.cpp mainWindow.cxx minSpecsWindow.cxx \
+	gfctrackmanager.cpp gflCBitmap.cpp gflCFileInformation.cpp gflCFormat.cpp glew.c \
+	loadWindow.cxx lut1d.cpp lutWindow.cxx main.cpp mainWindow.cxx minSpecsWindow.cxx \
 	moreOptionWindow.cxx mtpoly.cpp platefxparams.cpp playlistwindow.cpp preferencesWindow.cxx \
 	remoteWindow.cxx renderWindow.cxx rijndael.cpp splashWindow.cxx trackwidget.cpp \
 	trilerp.cpp vec3d.cpp xmlParser.cpp
@@ -48,8 +48,8 @@ INCLUDES = $(all_includes) -I/usr/local/include/
 # the library search path.
 jefecheck_LDFLAGS = $(all_libraries) $(boostLibPath)/$(boostFileSystemLibs) \
 	$(boostLibPath)/$(boostProgramOptionsLibs) $(boostLibPath)/$(boostSystemLibs) $(boostLibPath)/$(boostThreadLibs) \
-	$(botanLibs) $(curlLibs) $(exrLibs) $(glutLibCommand) $(ssllibPath) $(gflLibs) \
-	$(filLibs) -lGLEW $(fltkLibs) $(fluFlags)
+	$(botanLibs) $(curlLibs) $(exrLibs) $(filLibs) $(fltkLibs) $(fluFlags) $(gflLibs) \
+	$(glutLibCommand) $(ssllibPath)
 noinst_HEADERS = AsynchronousFileIO.h AutoRPC.h AutopatcherPatchContext.h \
 	AutopatcherRepositoryInterface.h BigInt.h BigTypes.h BitStream.h BitStream_NoTemplate.h \
 	CheckMateBetaDemoVersionWatermark.h CheckSum.h ClientContextStruct.h CommandParserInterface.h \

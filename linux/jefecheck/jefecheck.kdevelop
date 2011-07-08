@@ -34,10 +34,10 @@
       <autokdesu>false</autokdesu>
       <envvars/>
       <runarguments>
-        <jefecheck></jefecheck>
+        <jefecheck/>
       </runarguments>
       <debugarguments>
-        <jefecheck></jefecheck>
+        <jefecheck/>
       </debugarguments>
       <cwd>
         <jefecheck>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug/./src</jefecheck>
@@ -60,7 +60,7 @@
         <cxxflags>-O0 -g3</cxxflags>
         <envvars/>
         <topsourcedir></topsourcedir>
-        <cppflags></cppflags>
+        <cppflags>GLEW_STATIC</cppflags>
         <ldflags></ldflags>
         <ccompilerbinary></ccompilerbinary>
         <cxxcompilerbinary>g++</cxxcompilerbinary>
