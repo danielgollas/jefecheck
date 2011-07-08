@@ -34,10 +34,10 @@
       <autokdesu>false</autokdesu>
       <envvars/>
       <runarguments>
-        <jefecheck/>
+        <jefecheck></jefecheck>
       </runarguments>
       <debugarguments>
-        <jefecheck/>
+        <jefecheck></jefecheck>
       </debugarguments>
       <cwd>
         <jefecheck>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug/./src</jefecheck>
