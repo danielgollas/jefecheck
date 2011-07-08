@@ -20,7 +20,7 @@
   <kdevautoproject>
     <general>
       <activetarget>src/jefecheck</activetarget>
-      <useconfiguration>optimized</useconfiguration>
+      <useconfiguration>debug</useconfiguration>
     </general>
     <run>
       <mainprogram>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</mainprogram>
@@ -34,10 +34,10 @@
       <autokdesu>false</autokdesu>
       <envvars/>
       <runarguments>
-        <jefecheck/>
+        <jefecheck></jefecheck>
       </runarguments>
       <debugarguments>
-        <jefecheck/>
+        <jefecheck></jefecheck>
       </debugarguments>
       <cwd>
         <jefecheck>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug/./src</jefecheck>
@@ -50,16 +50,6 @@
         <cxxcompiler>kdevgppoptions</cxxcompiler>
         <f77compiler>kdevg77options</f77compiler>
         <cxxflags>-O2 -g0</cxxflags>
-        <envvars/>
-        <configargs></configargs>
-        <topsourcedir></topsourcedir>
-        <cppflags></cppflags>
-        <ldflags></ldflags>
-        <ccompilerbinary></ccompilerbinary>
-        <cxxcompilerbinary>g++</cxxcompilerbinary>
-        <f77compilerbinary></f77compilerbinary>
-        <cflags></cflags>
-        <f77flags></f77flags>
       </optimized>
       <debug>
         <configargs>--enable-debug=full</configargs>
@@ -69,14 +59,14 @@
         <f77compiler>kdevg77options</f77compiler>
         <cxxflags>-O0 -g3</cxxflags>
         <envvars/>
-        <topsourcedir/>
-        <cppflags/>
-        <ldflags/>
-        <ccompilerbinary/>
+        <topsourcedir></topsourcedir>
+        <cppflags></cppflags>
+        <ldflags></ldflags>
+        <ccompilerbinary></ccompilerbinary>
         <cxxcompilerbinary>g++</cxxcompilerbinary>
-        <f77compilerbinary/>
-        <cflags/>
-        <f77flags/>
+        <f77compilerbinary></f77compilerbinary>
+        <cflags></cflags>
+        <f77flags></f77flags>
       </debug>
     </configurations>
     <make>
