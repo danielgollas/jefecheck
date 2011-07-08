@@ -25,14 +25,23 @@
     <run>
       <mainprogram>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</mainprogram>
       <terminal>true</terminal>
-      <programargs></programargs>
-      <globaldebugarguments></globaldebugarguments>
+      <programargs/>
+      <globaldebugarguments/>
       <globalcwd>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</globalcwd>
       <useglobalprogram>false</useglobalprogram>
       <autocompile>false</autocompile>
       <autoinstall>false</autoinstall>
       <autokdesu>false</autokdesu>
       <envvars/>
+      <runarguments>
+        <jefecheck></jefecheck>
+      </runarguments>
+      <debugarguments>
+        <jefecheck></jefecheck>
+      </debugarguments>
+      <cwd>
+        <jefecheck>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug/./src</jefecheck>
+      </cwd>
     </run>
     <configurations>
       <optimized>
@@ -62,9 +71,23 @@
     </configurations>
     <make>
       <envvars>
+        <envvar value="libboost_filesystem-mt.a" name="boostFileSystemLibs" />
+        <envvar value="-I/usr/local/include/boost-1_40/" name="boostIncludes" />
+        <envvar value="/usr/lib" name="boostLibPath" />
+        <envvar value="libboost_program_options-mt.a" name="boostProgramOptionsLibs" />
+        <envvar value="libboost_system-mt.a" name="boostSystemLibs" />
+        <envvar value="libboost_thread-mt.a" name="boostThreadLibs" />
+        <envvar value="-I/opt/local/include" name="botanIncludes" />
+        <envvar value="-L/usr/local/lib -lm -lpthread -lrt /usr/lib/libbotan.a /usr/lib/libssl.a  /usr/lib/libcrypto.a  /usr/lib/libgmp.a -lbz2" name="botanLibs" />
+        <envvar value="`curl-config --libs`" name="curlLibs" />
         <envvar value="-I/usr/local/include/OpenEXR/" name="exrIncludes" />
+        <envvar value="/usr/local/lib/libIlmImf.a  /usr/local/lib/libHalf.a /usr/local/lib/libImath.a  /usr/local/lib/libIlmThread.a /usr/local/lib/libIex.a" name="exrLibs" />
         <envvar value="`fltk-config --use-gl --use-images --ldstaticflags`" name="fltkLibs" />
         <envvar value="`flu-config --ldstaticflags`" name="fluFlags" />
+        <envvar value="-I../../../sources/GflSDK-Linux-x64/include/" name="gflIncludes" />
+        <envvar value="-ldl -lgfl -lgfle" name="gflLibs" />
+        <envvar value="-lglut" name="glutLibCommand" />
+        <envvar value="-lkrb5 /usr/lib/libssl.a /usr/lib/libcrypto.a" name="ssllibPath" />
         <envvar value="1" name="WANT_AUTOCONF_2_5" />
         <envvar value="1" name="WANT_AUTOMAKE_1_6" />
       </envvars>

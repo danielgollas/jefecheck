@@ -9,7 +9,7 @@ Fl_Menu_Item moreOptionsPopup::menu_holdFrame[] = {
  {0,0,0,0,0,0,0,0,0}
 };
 #include "UIConstants.h"
-#include <FL/Fl_Menu_Window.h>
+#include <FL/Fl_Menu_Window.H>
 #include "Fl_Choice_gfc.h"
 #include "UICallbacks.h"
 

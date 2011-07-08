@@ -25,7 +25,7 @@
 
 //#define __GFLC_USE_STD_STRING__
 
-#include "libgfl.h"
+#include <libgfl.h>
 
 #ifdef __GFLC_GFLE_FUNCTIONS__
 	#include "libgfle.h"
