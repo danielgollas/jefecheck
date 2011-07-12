@@ -1,4 +1,4 @@
-/// \file
+g/// \file
 /// \brief An interface used by AutopatcherServer to get the data necessary to run an autopatcher.
 ///
 /// This file is part of RakNet Copyright 2003 Kevin Jenkins.

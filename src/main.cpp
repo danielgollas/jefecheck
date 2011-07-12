@@ -785,6 +785,11 @@ int main(int argc, char *argv[]) {
     rw.createMovie->deactivate();
 #endif
 
+#if defined(FREEIMAGE_LIB) || !defined(WIN32)
+	printf("Initializing FreeImage...");
+	FreeImage_Initialise();
+	printf("ok\n");
+#endif
     printf("Initializing GLUT...");
     glutInit(&argc,argv);
     printf("ok\n");

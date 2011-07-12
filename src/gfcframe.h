@@ -20,12 +20,13 @@
 
 #include "gfcimageloadergfl.h"
 #include "gfcimageloaderdpx.h"
+#include "gfcimageloaderfil.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
 */
 
-enum loaders{GFCLOADER_EXR,GFCLOADER_GFL,GFCLOADER_OTHER, GFCLOADER_DPX};
+enum loaders{GFCLOADER_EXR,GFCLOADER_GFL,GFCLOADER_OTHER, GFCLOADER_DPX, GFCLOADER_FIL};
 
 enum frameloaderrors{
 	GFCFRAME_LOADERROR_NO_ERROR=0,

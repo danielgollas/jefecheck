@@ -1,4 +1,4 @@
-#include "gfcimageloadergfl.h"
+#include "gfcimageloaderfil.h"
 #include "UIConstants.h"
 #include "gfcStructures.h"
 #include "gfcframe.h"
@@ -6,46 +6,71 @@
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
 
-gfcImageLoaderGFL::gfcImageLoaderGFL()
+gfcImageLoaderFIL::gfcImageLoaderFIL()
  : gfcImageLoader()
 {
-	theBitmap=NULL;
+	//theBitmap=NULL;
 }
 
 
-gfcImageLoaderGFL::~gfcImageLoaderGFL()
+gfcImageLoaderFIL::~gfcImageLoaderFIL()
 {
 }
 
 
-int gfcImageLoaderGFL::fillProcessor(gfcImageProcessor& processor)
+int gfcImageLoaderFIL::fillProcessor(gfcImageProcessor& processor)
 {
 	return 0;
 }
 
 
-int gfcImageLoaderGFL::load(gfcLoadParams params)
+
+void FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char *message) {
+  printf("\n*** "); 
+  if(fif != FIF_UNKNOWN) {
+    printf("%s Format\n", FreeImage_GetFormatFromFIF(fif));
+  }
+  printf(message);
+  printf(" ***\n");
+}
+
+int gfcImageLoaderFIL::load(gfcLoadParams params)
 {
-	GFL_LOAD_PARAMS load_option; 
-	GFL_FILE_INFORMATION info;
-	GFL_ERROR error; 
+
+	fif = FreeImage_GetFileType(params.fileName.c_str(), 0);
+	FreeImage_SetOutputMessage(FreeImageErrorHandler);
+	//figure out the file path
+	if(fif == FIF_UNKNOWN) {
+		// no signature ?
+		// try to guess the file format from the file extension
+		fif = FreeImage_GetFIFFromFilename(params.fileName.c_str());
+	}
+	// check that the plugin has reading capabilities ...
+	if((fif != FIF_UNKNOWN) && FreeImage_FIFSupportsReading(fif)) {
+		printf("File format supported\n");
+	}
+	else{
+		//there is something wrong, we should return 
+		printf ( "FIL ERROR while loading file %s: %s\n",params.fileName.c_str(), "No support for file format" );
+		return GFCFRAME_LOADERROR_UNKNOWN;
+		
+	}
+
+	/*gflGetDefaultLoadParams( &load_option ); 
+	load_option.ColorModel = FIL_BGRA;
+	load_option.Flags|=FIL_LOAD_FORCE_COLOR_MODEL;
+	load_option.Flags|= FIL_LOAD_METADATA;
+	//load_option.Origin=FIL_BOTTOM_LEFT;*/
 	
-	//printf("GFL load\n");
-	
-	gflGetDefaultLoadParams( &load_option ); 
-	load_option.ColorModel = GFL_BGRA;
-	load_option.Flags|=GFL_LOAD_FORCE_COLOR_MODEL;
-	load_option.Flags|= GFL_LOAD_METADATA;
-	//load_option.Origin=GFL_BOTTOM_LEFT;
+	/*if(params.compressed==GFC_16BPC || params.compressed==GFC_16HALF)
+	{
+		load_option.Flags|= FIL_LOAD_ORIGINAL_DEPTH;
+	}*/
+
 	int resizeToX=0;
 	int resizeToY=0;
 	
-	if(params.compressed==GFC_16BPC || params.compressed==GFC_16HALF)
-	{
-		load_option.Flags|= GFL_LOAD_ORIGINAL_DEPTH;
-	}
-
-	
+	int loadSuccess;
 	
 	if (sett.balanceReads)
 	{
@@ -55,64 +80,63 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 			balanceReadCond.wait(lock);
 		}
 		trackManager.ioBusy=1;
-		error = gflLoadBitmap(params.fileName.c_str(), &theBitmap, &load_option, &info ); 
+
+		// ok, let's load the file
+		//theBitmap = FreeImage_Load(fif, params.fileName.c_str(), 0);
+		loadSuccess = theBitmap.load(params.fileName.c_str(), 0);
+		
+		//how do we handle errors here?
 		trackManager.ioBusy=0;
-		balanceReadCond.notify_one();
+		balanceReadCond.notify_one(); 
 		
 	}
 	else
 	{
-		error = gflLoadBitmap(params.fileName.c_str(), &theBitmap, &load_option, &info ); 
+		loadSuccess = theBitmap.load(params.fileName.c_str(), 0);
 	}
 	
-	if(error)
+	if(!loadSuccess)
 	{
-		printf ( "GFL ERROR while loading file %s: %s\n",params.fileName.c_str(),gflGetErrorString ( error ) );
-		loadErrorString=gflGetErrorString ( error );
-		if (error==GFL_ERROR_NO_MEMORY)
-		{
-			return GFCFRAME_LOADERROR_NO_MORE_MEMORY;
-		}
-		else
-				
+		printf ( "FIL ERROR while loading file %s: %s\n",params.fileName.c_str(),"unknown error");
+		//this is where we would handle the errors if we knew how to get the error code o string in FIL.
+		loadErrorString="Unknown error";		
 		return GFCFRAME_LOADERROR_UNKNOWN;
 	}
 	else
 	{
 		
-		
-		
-		
-		
-		if(params.scale!=100)
+		if(params.scale!=100) 
 		{
-			gflResize(theBitmap,NULL,theBitmap->Width*params.scale/100.0,theBitmap->Height*params.scale/100.0,params.filterType==0?GFL_RESIZE_QUICK:GFL_RESIZE_BILINEAR,0);
+			theBitmap.rescale(theBitmap.getWidth()*params.scale/100.0,theBitmap.getHeight()*params.scale/100.0,
+						params.filterType==0?FILTER_BOX:FILTER_BILINEAR);
+			
+			//gflResize(theBitmap,NULL,theBitmap->Width*params.scale/100.0,theBitmap->Height*params.scale/100.0,params.filterType==0?FIL_RESIZE_QUICK:FIL_RESIZE_BILINEAR,0);
 		}
 		
 		//crop after scale!
 		if(params.crop)
 		{
-			GFL_RECT cropRect;
-			cropRect.x=params.aoi.x;
-			cropRect.y=theBitmap->Height-params.aoi.y-params.aoi.h; //we need to invert the y coordinate since the image has a top origin.
-			cropRect.w=params.aoi.w;
-			cropRect.h=params.aoi.h;
+			int cropRectX=params.aoi.x;
+			int cropRectY=theBitmap.getVerticalResolution()-params.aoi.y-params.aoi.h; //we need to invert the y coordinate since the image has a top origin.
+			int cropRectW=params.aoi.w;
+			int cropRectH=params.aoi.h;
 			//printf("cropping to %i %i %i %i\n",cropRect.x,cropRect.y,cropRect.w,cropRect.h);
-			gflCrop(theBitmap,NULL,&cropRect);
+			//crop works like this (left, top, right, bottom)			
+			theBitmap.crop(cropRectX, cropRectY+cropRectW, cropRectX+cropRectW, cropRectY);
 		}
 		
-		resizeToX=theBitmap->Width;
-		resizeToY=theBitmap->Height;
+		resizeToX=theBitmap.getWidth();
+		resizeToY=theBitmap.getHeight();
 		
-		quadSizeX=theBitmap->Width;
-		quadSizeY=theBitmap->Height;
+		quadSizeX=theBitmap.getWidth();
+		quadSizeY=theBitmap.getHeight();
 		
 		switch(params.compressed)
 		{
 		case GFC_16HALF:
 		case GFC_16BPC: //if loading to is 16bit up each component in each pixel to the correct value
 		{
-			if(info.BitsPerComponent<=8)
+			/*if(info.BitsPerComponent<=8)
 			{
 				//do nothing
 			}
@@ -121,7 +145,7 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 			
 			int imageHeight=theBitmap->Height;
 			int imageWidth=theBitmap->Width;
-			GFL_COLOR gfl_color,gflColor2; 
+			FIL_COLOR gfl_color,gflColor2; 
 			int dataCounter=0;
 			for ( int w=0;w<imageHeight;w++ )
 			{
@@ -149,7 +173,7 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 					gflSetColorAt(theBitmap, j, w, &gflColor2);
 				}
 			}
-			}
+			}*/
 			
 		}
 		break;
@@ -161,29 +185,41 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 			
 			//resize to the next divisible by 4
 			
-			resizeToX=getNextDivisibleBy4(theBitmap->Width);
-			resizeToY=getNextDivisibleBy4(theBitmap->Height);
-			GFL_COLOR gfl_color;
-			GFL_ERROR error;
-			gfl_color.Red=gfl_color.Blue=gfl_color.Green=0.2; 
+			resizeToX=getNextDivisibleBy4(theBitmap.getWidth());
+			resizeToY=getNextDivisibleBy4(theBitmap.getHeight());
+			/*FIL_COLOR gfl_color;
+			FIL_ERROR error;
+			gfl_color.Red=gfl_color.Blue=gfl_color.Green=0.2; */
 			
 			texCoords.x=0;
 			texCoords.y=0;
-			texCoords.w=theBitmap->Width/(float)resizeToX;
-			texCoords.h=theBitmap->Height/(float)resizeToY;
+			texCoords.w=theBitmap.getWidth()/(float)resizeToX;
+			texCoords.h=theBitmap.getHeight()/(float)resizeToY;
 			
 			//printf("generatedtexCoords: %f %f %f %f\n",texCoords.x, texCoords.y, texCoords.w, texCoords.h);
 
-			quadSizeX=theBitmap->Width;
-			quadSizeY=theBitmap->Height;
+			quadSizeX=theBitmap.getWidth();
+			quadSizeY=theBitmap.getHeight();
 			
-			if(resizeToX!=theBitmap->Width || resizeToY!=theBitmap->Height)
+			if(resizeToX!=theBitmap.getWidth() || resizeToY!=theBitmap.getHeight())
 			{
 				printf("Resizing canvas to %ix%i\n",resizeToX,resizeToY);
-				error=gflResizeCanvas(theBitmap,NULL,resizeToX,resizeToY,GFL_CANVASRESIZE_TOPLEFT,&gfl_color);
-				if(error)
+				FIBITMAP *tmpBitmap;
+				RGBQUAD c;
+				c.rgbRed = 0x00;
+				c.rgbBlue = 0x00;
+				c.rgbBlue = 0x00;
+				c.rgbReserved = 0x00;
+
+				tmpBitmap=FreeImage_EnlargeCanvas(theBitmap, 0,0,resizeToX-theBitmap.getHeight(), resizeToY-theBitmap.getWidth(), &c, FI_COLOR_IS_RGB_COLOR);
+				
+				//error=gflResizeCanvas(theBitmap,NULL,resizeToX,resizeToY,FIL_CANVASRESIZE_TOPLEFT,&gfl_color);
+				if(tmpBitmap==NULL)
 				{
-					printf("ResizeCanvas error: %s\n",gflGetErrorString(error));
+					printf("EnlargeCanvas error\n");
+				}
+				else{
+					theBitmap=tmpBitmap;
 				}
 			}
 			
@@ -194,29 +230,61 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 		}
 		
 		
-		sizeX=theBitmap->Width;
-		sizeY=theBitmap->Height;
+		sizeX=theBitmap.getWidth();
+		sizeY=theBitmap.getHeight();
 		
-// 		if(params.compressed!=GFC_S3TCDX1)
-// 		{
-// 			texCoords.x=0;
-// 			texCoords.y=0;
-// 			//texCoords.w=theBitmap->Width;
-// 			//texCoords.h=theBitmap->Height;
-// 			
-// 		}
-		bitDepth=theBitmap->BitsPerComponent;
-		originalBitDepth=info.BitsPerComponent;
-		originalNumOfComponents=info.ComponentsPerPixel;
-		numOfComponents=theBitmap->ComponentsPerPixel;
-		format=info.FormatName;
-		formatDescription=info.Description;
-		compressionDescription=info.CompressionDescription;
+		
+		//bits per component depends on the type of image.
+		switch(theBitmap.getImageType()){
+			case FIT_BITMAP:
+				
+				switch(theBitmap.getBitsPerPixel()){
+					case 24:
+						bitDepth=8;
+						numOfComponents=3;
+					break;
+					
+					case 32:
+						bitDepth=8;
+						numOfComponents=4;
+					default:
+						bitDepth=0;
+						numOfComponents=0;
+			
+				}
+				break;
+			default:
+				bitDepth=8;
+				break;
+		}
+		
+		//TODO: This would need to be stored before doing any color conversions (upscaling to 16bit for example), which we arent doing yet.
+		originalBitDepth=bitDepth;
+		switch(theBitmap.getColorType())
+		{
+			case FIC_RGB:
+				originalNumOfComponents=3;
+			break;
+			
+			case FIC_RGBALPHA:
+				originalNumOfComponents=4;
+			break;
+			
+			case FIC_PALETTE:
+				originalNumOfComponents=1;
+			break;
+		}
+		
+		//format=info.FormatName;
+		format = FreeImage_GetFormatFromFIF(fif);
+		formatDescription=FreeImage_GetFIFDescription(fif);
+		compressionDescription="";
+		
 		//printf("getting metadata\n");
-		if(gflBitmapHasEXIF(theBitmap)==GFL_TRUE)
+		/*if(gflBitmapHasEXIF(theBitmap)==GFC_TRUE)
 		{
 		    //printf("Inside has exif\n");
-			GFL_EXIF_DATA *exif=gflBitmapGetEXIF(theBitmap,0);
+			FIL_EXIF_DATA *exif=gflBitmapGetEXIF(theBitmap,0);
 			if(exif){
 			printf("MetaData: %i items (%i in map)\n",exif->NumberOfItems,metaData.size());
 			//std::multimap<std::string,std::string>::iterator it=metaData.begin();
@@ -232,13 +300,13 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 			
 			gflFreeEXIF(exif);
 			}
-		}
+		}*/
 		//printf("done metadata\n");
 		
 		//printf("getting metadata iptc\n");
-		if(gflBitmapHasIPTC(theBitmap)==GFL_TRUE)
+		/*if(gflBitmapHasIPTC(theBitmap)==FIL_TRUE)
 		{
-			GFL_IPTC_DATA *iptc=gflBitmapGetIPTC(theBitmap);
+			FIL_IPTC_DATA *iptc=gflBitmapGetIPTC(theBitmap);
 			if(iptc){
 			std::multimap<std::string,std::string>::iterator it=metaData.begin();
 			
@@ -251,7 +319,7 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 			//printf("MetaData: %i items (%i in map)\n",iptc->NumberOfItems,metaData.size());
 			gflFreeIPTC(iptc);
 			}
-		}
+		}*/
 		//printf("done metadata iptc\n");
 		
 		//6. fill required frame information 
@@ -281,11 +349,11 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
             break;
         }
         frameInfo.target=GL_TEXTURE_RECTANGLE_ARB;
-        frameInfo.dataPointer=theBitmap->Data;
+        frameInfo.dataPointer=theBitmap.accessPixels();
         texCoords.x=0;
         texCoords.y=0;
-        texCoords.w=theBitmap->Width;
-        texCoords.h=theBitmap->Height;
+        texCoords.w=theBitmap.getWidth();
+        texCoords.h=theBitmap.getHeight();
         break;
 
     case GFC_8BPC:
@@ -314,11 +382,11 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
             break;
         }
         frameInfo.target=GL_TEXTURE_RECTANGLE_ARB;
-        frameInfo.dataPointer=theBitmap->Data;
+        frameInfo.dataPointer=theBitmap.accessPixels();
         texCoords.x=0;
         texCoords.y=0;
-        texCoords.w=theBitmap->Width;
-        texCoords.h=theBitmap->Height;
+        texCoords.w=theBitmap.getWidth();
+        texCoords.h=theBitmap.getHeight();
         break;
 
     case GFC_16HALF:
@@ -347,11 +415,11 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
             break;
         }
         frameInfo.target=GL_TEXTURE_RECTANGLE_ARB;
-        frameInfo.dataPointer=theBitmap->Data;
+        frameInfo.dataPointer=theBitmap.accessPixels();
         texCoords.x=0;
         texCoords.y=0;
-        texCoords.w=theBitmap->Width;
-        texCoords.h=theBitmap->Height;
+        texCoords.w=theBitmap.getWidth();
+        texCoords.h=theBitmap.getHeight();
         break;
 
     case GFC_S3TCDX1:
@@ -379,7 +447,7 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
             break;
         }
         frameInfo.target=GL_TEXTURE_2D;texCoords.x=0;
-        frameInfo.dataPointer=theBitmap->Data;
+        frameInfo.dataPointer=theBitmap.accessPixels();
 		//texCoords.x=0;
         //texCoords.y=0;
         //texCoords.w=1;
@@ -388,20 +456,18 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
     }
 		
 		//fill the channel names
-		switch(theBitmap->Type)
+		switch(theBitmap.getColorType())
 		{
-			case GFL_RGB:
-			case GFL_BGR:
+			case FIC_RGB:
 				channelNames.push_back("RGB");
 			break;
 			
-			case GFL_RGBA:
-			case GFL_BGRA:
+			case FIC_RGBALPHA:
 				channelNames.push_back("RGBA");
 			break;
 			
-			case GFL_GREY:
-				channelNames.push_back("GREY");
+			case FIC_PALETTE:
+				channelNames.push_back("PALETTE");
 			break;
 		}
 		
@@ -417,25 +483,25 @@ int gfcImageLoaderGFL::load(gfcLoadParams params)
 	
 }
 
-int gfcImageLoaderGFL::peek(gfcLoadParams params, gfcPeekInfo* results)
+int gfcImageLoaderFIL::peek(gfcLoadParams params, gfcPeekInfo* results)
 {
 	return 0;
 }
 
-void* gfcImageLoaderGFL::getPixelPointer()
+void* gfcImageLoaderFIL::getPixelPointer()
 {
-	return theBitmap->Data;
+	return theBitmap.accessPixels();
 }
 
-void gfcImageLoaderGFL::releaseMemory()
+void gfcImageLoaderFIL::releaseMemory()
 {	
-	 if(theBitmap){
-	 gflFreeBitmap(theBitmap);
-	 }
-	 theBitmap=NULL;
+	 if(theBitmap)
+	 	theBitmap.clear();
+	 
+	 
 }
 
-std::vector< std::string > gfcImageLoaderGFL::getChannelNames()
+std::vector< std::string > gfcImageLoaderFIL::getChannelNames()
 {
 	return channelNames;
 }
