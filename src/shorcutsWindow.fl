@@ -1,0 +1,26 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0107 
+header_name {.h} 
+code_name {.cxx}
+class AboutWindow {open
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  Function {AboutWindow(int x, int y, int wi, int height, const char* l)} {open
+  } {}
+  Function {make_window()} {open
+  } {
+    Fl_Window aboutWindow {
+      label {About JefeCheck} open
+      xywh {432 465 685 530} type Double color 56 labelcolor 17 size_range {685 530 685 530} visible
+    } {
+      Fl_Box {} {
+        label bg
+        xywh {0 0 690 530} box FLAT_BOX color 0
+      }
+      Fl_Output {} {
+        xywh {15 6 546 449} color 0 labelfont 1 textcolor 23
+      }
+    }
+  }
+} 

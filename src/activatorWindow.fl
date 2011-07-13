@@ -1,0 +1,185 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+class ActivatorWindow {open
+} {
+  decl {\#include "Fl_Button_gfc.h"} {}
+  decl {\#include "activatorCallbacks.h"} {}
+  decl {\#include "UIConstants.h"} {}
+  Function {make_window()} {open
+  } {
+    Fl_Window activatorWindow {
+      label {JefeCheck  - License Request} open
+      xywh {897 548 450 415} type Double color 0 resizable
+      code0 {wizard->value(pageStart);} modal size_range {450 415 450 415} visible
+    } {
+      Fl_Box {} {
+        xywh {0 2 540 595} box FLAT_BOX color 0 resizable
+      }
+      Fl_Group controlsGroup {open
+        xywh {-10 -6 546 601}
+      } {
+        Fl_Box {} {
+          image {AboutWindowImage2.jpg} xywh {-9 -6 512 111} box FLAT_BOX color 0 align 16
+        }
+        Fl_Box checkmark {
+          image {checkmark_16x16.gif} xywh {341 495 25 21} hide
+        }
+      }
+      Fl_Wizard wizard {open
+        xywh {0 74 510 508} box NO_BOX
+      } {
+        Fl_Group pageStart {open
+          xywh {4 102 448 314}
+        } {
+          Fl_Input requesterName {
+            label {Your Name}
+            tooltip {Your real name} xywh {13 182 434 22} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 align 5 textcolor 31 hotspot
+            code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Input clientName {
+            label {Computer Name}
+            tooltip {The computer's name} xywh {13 227 217 22} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 align 5 textcolor 31 hotspot
+            code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Input companyName {
+            label {Company Name}
+            tooltip {The computer's name} xywh {240 227 207 22} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 align 5 textcolor 31 hotspot
+            code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Choice osName {
+            label {Operating System}
+            xywh {363 225 87 25} down_box BORDER_BOX labelcolor 7 align 5 hide deactivate
+          } {
+            MenuItem {} {
+              label Windows
+              xywh {15 15 30 20}
+            }
+            MenuItem {} {
+              label {Mac OSX}
+              xywh {25 25 30 20}
+            }
+            MenuItem {} {
+              label Linux
+              xywh {35 35 30 20}
+            }
+          }
+          Fl_Input email {
+            label {Purchaser Email}
+            tooltip {The email registered during purchase} xywh {13 271 238 22} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 align 5 textcolor 31
+            code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Input purchaseConfirmationNumber {
+            label {Purchase Confirmation Code (XXXX-XXXX-XXXX)}
+            tooltip {The Purchase Confirmation code emailed to you when the purchase was completed. Keep it secret!} xywh {13 321 267 22} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 align 5 textcolor 31 hotspot
+            code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Button sendButton {
+            label {Request License Online @->}
+            user_data ACTIVATORCREATEBUTTON_ID
+            callback createActivationCB
+            xywh {276 363 170 25} labelsize 12
+            class Fl_Button_gfc
+          }
+          Fl_Text_Display message {selected
+            xywh {4 102 443 66} box NO_BOX color 0 selection_color 7 labelfont 1 labelsize 10 textsize 10 textcolor 7
+            code0 {o->textsize(10);}
+          }
+          Fl_Box needToPurchase {
+            label {Need to purchase a license?}
+            user_data ACTIVATORBUYBUTTON_ID
+            callback createActivationCB
+            xywh {308 301 140 21} labelsize 10 labelcolor 41 align 16
+          }
+          Fl_Button buyButton {
+            label {Buy online}
+            user_data ACTIVATORBUYBUTTON_ID
+            callback createActivationCB
+            xywh {348 324 60 22} labelsize 9
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Button {} {
+            label Cancel
+            user_data ACTIVATORDONEBUTTON_ID
+            callback createActivationCB
+            xywh {10 386 75 25}
+            class Fl_Button_gfc
+          }
+          Fl_Button saveButtonMainPage {
+            label {No internet? @->}
+            user_data ACTIVATORSAVEBUTTON_ID
+            callback createActivationCB
+            tooltip {If you don't have an internet connection click here to save a file you can then email from another computer to request your license.} xywh {331 392 115 22} labelsize 12
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Group pageWaiting {open
+          xywh {3 103 490 308} hide
+        } {
+          Fl_Text_Display waitingMessage {
+            xywh {7 105 436 153} box FLAT_BOX color 0 selection_color 7 labelfont 1 textsize 16 textcolor 7
+          }
+          Fl_Button cancelButton {
+            label {Cancel @9+}
+            user_data ACTIVATORTRYAGAINBUTTON_ID
+            callback createActivationCB
+            xywh {280 368 160 38} hide
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Group pageFailure {open
+          xywh {5 121 490 375} hide
+        } {
+          Fl_Text_Display failureMessage {
+            xywh {5 136 436 205} box FLAT_BOX color 0 selection_color 7 labelfont 1 textsize 16 textcolor 7
+          }
+          Fl_Button saveButton {
+            label {Save and email by hand @->}
+            user_data ACTIVATORSAVEBUTTON_ID
+            callback createActivationCB
+            xywh {255 365 190 38}
+            class Fl_Button_gfc
+          }
+          Fl_Button tryAgainButton {
+            label {@<- Try Again}
+            user_data ACTIVATORTRYAGAINBUTTON_ID
+            callback createActivationCB
+            xywh {10 365 185 38}
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Group pageSuccess {open
+          xywh {0 126 450 290} hide
+        } {
+          Fl_Text_Display successMessage {
+            xywh {10 131 425 225} box FLAT_BOX color 0 selection_color 7 labelfont 1 textsize 16 textcolor 7
+          }
+          Fl_Button {} {
+            label Close
+            user_data ACTIVATORDONEBUTTON_ID
+            callback createActivationCB
+            xywh {350 376 75 25}
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Group pageSuccessSave {open
+          xywh {0 116 450 290} hide
+        } {
+          Fl_Text_Display successMessageSave {
+            xywh {10 121 425 225} box FLAT_BOX color 0 selection_color 7 labelfont 1 textsize 16 textcolor 7
+          }
+          Fl_Button {} {
+            label Close
+            user_data ACTIVATORDONEBUTTON_ID
+            callback createActivationCB
+            xywh {350 376 75 25}
+            class Fl_Button_gfc
+          }
+        }
+      }
+    }
+  }
+  decl {int x;} {}
+} 
