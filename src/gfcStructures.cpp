@@ -305,6 +305,7 @@ void saveSetting(std::string name,T value, XMLNode &node) {
     node.addAttribute(name.c_str(),ss.str().c_str());
 }
 
+template void saveSetting<char>(std::string name, char, XMLNode&);
 
 void saveSettings ( const gfcSettings *sett ) {
     std::string appDataPath,settingsFilename;

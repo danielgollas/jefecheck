@@ -383,6 +383,7 @@ std::string ftos(float value,int decimals=5);
 template <class T> std::string toString(T value);
 
 template <class T> void saveSetting(std::string name,T value, XMLNode &node);
+void saveSettingString(std::string name, std::string& result, XMLNode &node);
 template <class T> void readSetting(std::string name, T& result, XMLNode &node);
 void readSettingString(std::string name, std::string& result, XMLNode &node);
 template <class T> void setWidgetFromNode(std::string name, T* widget, XMLNode node);
