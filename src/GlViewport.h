@@ -37,7 +37,7 @@
 #  include <GL/glu.h>
 #endif
 #include <stdio.h>
-#include <Fl/Fl.H>
+#include <FL/Fl.H>
 #include "gfcSequence.h"
 #include "UIConstants.h"
 #include "gfcPlate.h"

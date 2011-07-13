@@ -78,8 +78,8 @@ GLuint gWatermarkTextureID=0;
 Fl_Text_Buffer remoteLogBuffer;
 
 #include "boost/program_options.hpp"
-#include <Fl/Fl_File_Chooser.H>
-#include <Fl/fl_ask.H>
+#include <FL/Fl_File_Chooser.H>
+#include <FL/fl_ask.H>
 #include <math.h>
 #include "gfcfx.h"
 //#include <GetTime.h>

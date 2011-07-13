@@ -30,7 +30,7 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
 
-#include <Fl/Fl_Value_Slider.H>
+#include <FL/Fl_Value_Slider.H>
 #include "gflC.h"
 #include "dpxslice.h"
 #include <vector>

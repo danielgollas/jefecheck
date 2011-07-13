@@ -4,10 +4,10 @@
 #include <string>
 #include <vector>
 #include <queue>
-#include <Fl/filename.H>
+#include <FL/filename.H>
 #include <FL/Fl_Preferences.H>
 #include "glew.h"
-#include <Fl/gl.h>
+#include <FL/gl.h>
 #include "UIConstants.h"
 #include "xmlParser.h"
 
