@@ -60,7 +60,7 @@
         <cxxflags>-O0 -g3</cxxflags>
         <envvars/>
         <topsourcedir></topsourcedir>
-        <cppflags></cppflags>
+        <cppflags>GLEW_STATIC</cppflags>
         <ldflags></ldflags>
         <ccompilerbinary></ccompilerbinary>
         <cxxcompilerbinary>g++</cxxcompilerbinary>

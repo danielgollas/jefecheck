@@ -793,7 +793,9 @@ int main(int argc, char *argv[]) {
     printf("Initializing GLUT...");
     glutInit(&argc,argv);
     printf("ok\n");
-
+    gfcTimer testTimer ( "testTimer" );    
+    testTimer.print();
+    testTimer.start();
     fc= new  Fl_File_Chooser(".",NULL,0,"Choose a file");
 
     sett.numOfPartitions=1;
@@ -1155,6 +1157,8 @@ int main(int argc, char *argv[]) {
     //mw.vp->clear_visible_focus();
     Fl::visible_focus(0);
     printf("READY>\n");
+    testTimer.stop();
+    testTimer.print();
 #ifdef DEMO_VERSION
     {
 
