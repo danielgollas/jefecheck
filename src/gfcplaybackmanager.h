@@ -3,6 +3,7 @@
 #include "gfcplaybackgui.h"
 #include "mainWindow.h"
 #include "gfcNetworkStructures.h"
+#include "gfcStructures.h"
 
 enum LoopPriorities{GFC_LOOPPRIORITY_SHORTEST,GFC_LOOPPRIORITY_LONGEST,GFC_LOOPPRIORITY_TIMELINE};
 
@@ -73,6 +74,7 @@ public:
 private: //private made public while debugging
 
     inline void updateTimestep();
+	gfcTimer timer;
     bool allowNetworkMessages;
     void sendPlayPauseMessage();
     gfcPlaybackGUI* myGUI;
