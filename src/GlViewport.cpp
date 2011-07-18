@@ -1,4 +1,4 @@
-
+#define GLEW_STATIC
 #include "glew.h"
 
 #ifdef WIN32
@@ -277,6 +277,9 @@ void GlViewport::setVsync(int value)
 #endif
 
 #ifdef linux
+		/*if(glewIsSupported("GLX_SGI_swap_control")){
+		
+		}*/		
 
 		if(glxewIsSupported("GLX_SGI_swap_control"))
 		{

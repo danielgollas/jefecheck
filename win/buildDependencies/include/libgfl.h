@@ -510,7 +510,7 @@ typedef struct {
 		GFL_INT32        Index; 
 		char             Name[8]; 
 		char             Description[64]; 
-    GFL_UINT32       Status; 
+    		GFL_UINT32       Status; 
 		GFL_UINT32       NumberOfExtension; 
 		char             Extension[16][8]; 
 	} GFL_FORMAT_INFORMATION; 
