@@ -293,7 +293,7 @@ void GlViewport::setVsync(int value)
 		
 #endif
 #ifdef __APPLE__
-		CGLSetParameter((_CGLContextObject*)context(),kCGLCPSwapInterval,(long int*)&value);
+		CGLSetParameter((_CGLContextObject*)context(),kCGLCPSwapInterval,(int*)&value);
 #endif
 }
 
