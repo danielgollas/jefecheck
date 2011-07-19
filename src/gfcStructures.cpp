@@ -142,7 +142,7 @@ void gfcTimer::initialize(){
 			printf("QueryPerformanceFrequency failed!\n");
 		PCFreq = double(li.QuadPart)/1000.0;
 	#else
-		
+		printf("No timer\n");
 	#endif
 
 
