@@ -21,6 +21,7 @@
 //if not defined no license checking will be done
 
 #define LICENSED //this should always be on, demo version should undefine it when building a demo version
+#undef LICENSED
 #include "demoversion.h"
 #pragma warning( once : 4275)
 
