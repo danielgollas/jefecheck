@@ -58,6 +58,8 @@ extern AboutWindow aboutWindow;
 #ifdef WIN32
 #include <WinSock2.h>
 #include <windows.h>
+#else
+#include <sys/time.h>
 #endif
 
 
@@ -126,12 +128,15 @@ gfcTimer::gfcTimer(std::string pname) {
 }
 
 long long gfcTimer::_getCurrentTime(){
+	//return current time (either wall or process in ms)
 	#ifdef WIN32
 		LARGE_INTEGER li;
 		QueryPerformanceCounter(&li);
 		return li.QuadPart/PCFreq;
 	#else
-		
+		struct timeval time;
+		gettimeofday(&time, NULL);
+		return (time.tv_usec+time.tv_sec*1000000)/PCFreq;
 	#endif
 }
 
@@ -142,6 +147,7 @@ void gfcTimer::initialize(){
 			printf("QueryPerformanceFrequency failed!\n");
 		PCFreq = double(li.QuadPart)/1000.0;
 	#else
+		PCFreq = 1000; //usecs per msec
 		printf("No timer\n");
 	#endif
 
