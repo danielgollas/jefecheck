@@ -1305,7 +1305,7 @@ typedef int ( * PFNGLXWAITVIDEOSYNCSGIPROC) (int divisor, int remainder, unsigne
 #ifndef GLX_SUN_get_transparent_index
 #define GLX_SUN_get_transparent_index 1
 
-typedef Status ( * PFNGLXGETTRANSPARENTINDEXSUNPROC) (Display* dpy, Window overlay, Window underlay, unsigned long *pTransparentIndex);
+//typedef Status ( * PFNGLXGETTRANSPARENTINDEXSUNPROC) (Display* dpy, Window overlay, Window underlay, unsigned long *pTransparentIndex);
 
 #define glXGetTransparentIndexSUN GLXEW_GET_FUN(__glewXGetTransparentIndexSUN)
 
@@ -1462,7 +1462,7 @@ extern PFNGLXSWAPINTERVALSGIPROC __glewXSwapIntervalSGI;
 extern PFNGLXGETVIDEOSYNCSGIPROC __glewXGetVideoSyncSGI;
 extern PFNGLXWAITVIDEOSYNCSGIPROC __glewXWaitVideoSyncSGI;
 
-extern PFNGLXGETTRANSPARENTINDEXSUNPROC __glewXGetTransparentIndexSUN;
+//extern PFNGLXGETTRANSPARENTINDEXSUNPROC __glewXGetTransparentIndexSUN;
 
 extern PFNGLXGETVIDEORESIZESUNPROC __glewXGetVideoResizeSUN;
 extern PFNGLXVIDEORESIZESUNPROC __glewXVideoResizeSUN;
