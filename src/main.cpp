@@ -1136,6 +1136,7 @@ int main(int argc, char *argv[]) {
     //mw.vp->clear_visible_focus();
     Fl::visible_focus(0);
     printf("READY>\n");
+    
     testTimer.stop();
     testTimer.print();
 #ifdef DEMO_VERSION

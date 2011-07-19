@@ -208,11 +208,9 @@ private:
 	long long elapsed;
 	int _initialized;
 	long long _getCurrentTime();
-#ifdef WIN32
+
 	double PCFreq;
-#else
-	
-#endif
+
 
 public:
 	//gfcTimer();
