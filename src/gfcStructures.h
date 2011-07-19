@@ -35,6 +35,7 @@ class gfcPlaylistItemProgramState;
 #ifdef WIN32
 #include <Iphlpapi.h> //for macAddress in windows
 //#include <Winsock2.h> //for hostname in windows
+#include <windows.h> //for HightPerformanceCounter structures
 #endif
 
 //
@@ -202,11 +203,22 @@ public:
 
 class gfcTimer
 {
-	long startTime;
-	long elapsed;
+private:
+	long long startTime;
+	long long elapsed;
+	int _initialized;
+	long long _getCurrentTime();
+#ifdef WIN32
+	double PCFreq;
+#else
+	
+#endif
+
 public:
 	//gfcTimer();
 	gfcTimer(std::string name="timer");
+	void update();
+	void initialize();
 	void print();
 	void start();
 	void stop();

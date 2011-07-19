@@ -1,0 +1,473 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+class PreferencesWindow {open
+} {
+  decl {\#include "UICallbacks.h"} {}
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "Fl_Button_gfc.h"} {}
+  decl {\#include "Fl_Spinner_gfc.h"} {}
+  Function {make_window()} {open
+  } {
+    Fl_Window preferencesWindow {
+      label {JefeCheck -Preferences} open
+      xywh {-1119 350 350 590} type Double non_modal size_range {345 590 345 590} visible
+    } {
+      Fl_Box bg {
+        xywh {0 -1 490 591} box FLAT_BOX color 0 selection_color 39
+        code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+        code1 {o->color(fl_rgb_color(32,32,32));}
+      }
+      Fl_Tabs tabs {open
+        xywh {0 10 355 589} box BORDER_FRAME color 0 selection_color 8 labelcolor 31 align 9
+      } {
+        Fl_Group {} {
+          label General open selected
+          xywh {0 28 352 571} color 8 selection_color 0 labelcolor 8
+        } {
+          Fl_Group {} {
+            label Startup open
+            xywh {10 39 320 133} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Round_Button startFullscreenCheckBox {
+              label {Start in fullscreen mode}
+              callback PreferencesCB
+              xywh {20 84 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31 align 22
+            }
+            Fl_Round_Button loadWindowOnStartupCheckBox {
+              label {Open Load window on startup}
+              callback PreferencesCB
+              xywh {20 64 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelcolor 31 align 22
+            }
+            Fl_Input defaultBrowsePath {
+              label {Default Browse Path}
+              tooltip {When browsing for sequences, this will be the default folder the browser opens. Set it to point to the project folder you are currently working on to make browsing easier! This value is overriden by the environment variable JEFECHECK_DEFAULT_BROWSE_PATH} xywh {18 146 234 18} box FLAT_BOX color 8 labelcolor 31 align 5 when 1 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Button {} {
+              label browse
+              user_data PATHBROWSEBUTTON_ID
+              callback PreferencesCB
+              xywh {256 146 68 18} box FLAT_BOX color 8 labelcolor 31
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Round_Button attemptToRecoverFromCrashCheckBox {
+              label {Attempt to recover from crash}
+              callback PreferencesCB
+              xywh {20 105 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelcolor 31 align 22
+            }
+          }
+          Fl_Group {} {
+            label {Background Color} open
+            xywh {10 179 160 53} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Value_Slider bgColor {
+              label Value
+              callback PreferencesCB
+              tooltip {Set the Value of the gray background color to suit your taste and pupils.} xywh {58 205 97 15} type Horizontal box FLAT_BOX color 8 labelcolor 31 align 4 maximum 127 step 1 value 38 textsize 14 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              code2 {o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+          }
+          Fl_Group {} {
+            label Engine open
+            xywh {10 297 320 232} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Value_Slider percentageOfRam {
+              label {% of RAM to Use}
+              callback PreferencesCB
+              tooltip {The engine will load frames until this amount of system RAM is used up. Recommended values are  be between 80 and 95 so that the system has enough RAM to function properly even when loading large sequences} xywh {20 337 169 15} type {Horz Fill} box FLAT_BOX color 8 selection_color 8 labelcolor 31 align 5 minimum 10 maximum 95 step 0.5 value 85 textsize 14 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              code2 {o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Check_Button forceGFLLoading {
+              label {Force GFL Loading Engine}
+              callback PreferencesCB
+              tooltip {Force GFL SDK loading engine.  If you have problems loading certain types of images you can try using this option. It is slower on some formats though (Particularly DPX).} xywh {20 357 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Check_Button frawProxiesAtFullResolution {
+              label {Draw Proxies at full Resolution}
+              callback PreferencesCB
+              tooltip {Force GFL SDK loading engine.  If you have problems loading certain types of images you can try using this option. It is slower on some formats though (Particularly DPX).} xywh {20 374 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31 hide
+              code0 {o->color(fl_rgb_color(32,32,32));}
+            }
+            Fl_Check_Button dontUseInactiveMemory {
+              label {Don't use Inactive Memory (OS X only)}
+              callback PreferencesCB
+              tooltip {Enable this option if on Mac OS X you whish to use only physically available RAM} xywh {20 378 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Check_Button forceSingleBufferedFXs {
+              label {Force Single Buffered FXs}
+              callback PreferencesCB
+              tooltip {If you have problems using FXs, try enabling this option, specially if your video card is pre GeForce 7} xywh {20 399 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Check_Button continueLoadingOnError {
+              label {Continue loading sequence after load error}
+              callback PreferencesCB
+              tooltip {If a failure ocurrs while loading a particular corrupt frame, JefeCheck will continue loading the sequence moving on to the next frame.} xywh {20 420 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Check_Button vsync {
+              label {Enable Vertical Redraw Sync (vsync)}
+              callback PreferencesCB
+              tooltip {Enable this option to synchronize frame redraw with your monitor's refresh rate. Can help with tearing issues on monitors with a refresh rate different than your attempted frame rate.} xywh {20 441 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Value_Input maximumFramesInQueue {
+              label {Max Frames in Queue}
+              callback PreferencesCB
+              tooltip {If some frames show up black, try setting this to 1.} xywh {244 337 30 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 align 1 when 3 maximum 99999 step 1 value 5 textsize 12 textcolor 31
+            }
+            Fl_Check_Button balanceReads {
+              label {Balance Reads}
+              callback PreferencesCB
+              tooltip {Makes all tracks load at the same rate. Reading a track of jpgs is much faster and might fill up RAM before the same amount of DPXs are read} xywh {20 483 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Value_Slider histogramQuality {
+              label {Histogram Subsampling}
+              callback PreferencesCB
+              tooltip {Sampling determins the histogram quality: lower sampling means higher quality but takes longer to calculate.} xywh {172 504 136 15} type Horizontal box FLAT_BOX color 8 selection_color 8 labelcolor 31 align 4 minimum 1 maximum 64 step 1 value 16 textsize 14 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              code2 {o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Check_Button processorPriority {
+              label {Try hard to maintain FPS (More CPU use)}
+              callback PreferencesCB
+              tooltip {Force GFL SDK loading engine.  If you have problems loading certain types of images you can try using this option. It is slower on some formats though (Particularly DPX).} xywh {20 461 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31 align 8
+            }
+          }
+          Fl_Group {} {
+            label {Text Display} open
+            xywh {10 238 320 49} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Value_Input textDisplayFontSize {
+              label {Font Size}
+              callback PreferencesCB
+              tooltip {Font Size of the text displayed on the viewport} xywh {80 261 25 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 8 maximum 24 step 1 value 16 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input textDisplayOpacity {
+              label Opacity
+              callback PreferencesCB
+              tooltip {Opacity of the text displayed on the viewport} xywh {236 262 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 0.1 step 0.01 value 1 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input textDisplayColor {
+              label Color
+              callback PreferencesCB
+              tooltip {Color of the text displayed on the viewport} xywh {148 262 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 0.1 step 0.01 value 1 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+          }
+          Fl_Group {} {
+            label {Action Feedback} open
+            xywh {175 179 155 53} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Value_Input ActionFeedbackSize {
+              label Size
+              callback PreferencesCB
+              tooltip {Font Size of the Action Feedback Display} xywh {210 210 25 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 8 maximum 48 step 1 value 12 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input ActionFeedbackFadeDelay {
+              label Fade
+              callback PreferencesCB
+              tooltip {How long the Action Feedback is displayed in seconds (set to 0 to turn display Off)} xywh {280 210 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 maximum 10 step 0.01 value 1 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+          }
+        }
+        Fl_Group formatsTab {
+          label Formats open
+          xywh {0 30 355 479} color 0 selection_color 0 labelcolor 8 hide
+        } {
+          Fl_Group {} {
+            label OpenEXR open
+            xywh {5 34 350 170} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Check_Button exrIgnoreDisplayWindow {
+              label {Ignore Display Window}
+              callback PreferencesCB
+              tooltip {Use only the Data Window in the openEXR file to determine image properties} xywh {10 60 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Check_Button exrIgnoreHeadersAspectRatio {
+              label {Ignore Header's Aspect Ratio}
+              callback PreferencesCB
+              tooltip {Use only the Data Window in the openEXR file to determine image properties} xywh {10 83 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+            }
+            Fl_Group {} {
+              label {Float >Integer transformation} open
+              xywh {9 106 331 91} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+            } {
+              Fl_Check_Button exrEnableExposureTransformOnLoad {
+                label {Enable Exposure Transform on Load}
+                callback PreferencesCB
+                tooltip {Perform the reference Float to Integer color transformation when loading to an Integer buffer (8bpc, 16bpc, 4bpc, S3TC)} xywh {25 129 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+              }
+              Fl_Value_Input exrExposure {
+                label Exposure
+                callback PreferencesCB
+                xywh {80 150 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -10 maximum 10 step 0.01 textsize 12 textcolor 31
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input exrDefog {
+                label Defog
+                callback PreferencesCB
+                xywh {159 150 45 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 step 0.0001 textsize 12 textcolor 31
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input exrKneeLow {
+                label {Knee low}
+                callback PreferencesCB
+                xywh {80 173 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -3 maximum 3 step 0.01 textsize 12 textcolor 31
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input exrKneeHigh {
+                label {Knee high}
+                callback PreferencesCB
+                xywh {180 173 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 3.5 maximum 7.5 step 0.01 value 5 textsize 12 textcolor 31
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input exrGamma {
+                label Gamma
+                callback PreferencesCB
+                xywh {255 150 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 0.01 maximum 10 step 0.01 value 2.2 textsize 12 textcolor 31
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Button {} {
+                label Defaults
+                user_data EXRPREFSDEFAULTSBUTTON_ID
+                callback PreferencesCB
+                xywh {230 172 60 18} box FLAT_BOX color 8 labelsize 12 labelcolor 31
+                code0 {\#include "Fl_Button_gfc.h"}
+                class Fl_Button_gfc
+              }
+            }
+          }
+        }
+        Fl_Group remoteSessionTab {
+          label Remote open
+          xywh {5 30 347 426} color 0 selection_color 0 labelcolor 8 hide
+        } {
+          Fl_Group {} {
+            label {Chat Options} open
+            xywh {10 44 320 72} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Value_Input fontSize {
+              label {Font Size}
+              callback PreferencesCB
+              xywh {80 67 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 8 maximum 24 step 1 value 16 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input fadeDelay {
+              label Delay
+              callback PreferencesCB
+              tooltip {How long before the chat display fades away when not in chat mode} xywh {215 90 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 align 8 minimum 1 maximum 999999 step 1 value 8 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input opacity {
+              label Opacity
+              callback PreferencesCB
+              tooltip {Set the opacity of the chat display over the viewport} xywh {288 67 35 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 0.1 step 0.01 value 0.75 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Check_Button autoFade {
+              label {Auto Fade}
+              callback PreferencesCB
+              tooltip {When not in chat mode, the chat display will fade away automatically after a short delay if this is enabled.} xywh {129 90 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 12 labelcolor 31
+            }
+            Fl_Check_Button textBG {
+              label {Text Background}
+              callback PreferencesCB
+              tooltip {Show a gray backdrop behind the chat display to improve readability} xywh {116 67 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 12 labelcolor 31
+            }
+            Fl_Value_Input chatLines {
+              label {History Lines}
+              callback PreferencesCB
+              tooltip {Set how many lines of chat history to show} xywh {95 90 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 1 maximum 30 step 1 value 8 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+          }
+          Fl_Group {} {
+            label {Remote Pointers Options} open
+            xywh {10 120 320 72} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Value_Input remotePointerFontSize {
+              label {Font Size}
+              callback PreferencesCB
+              xywh {74 143 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 when 4 minimum 8 maximum 24 step 1 value 14 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input remotePointerFadeDelay {
+              label Delay
+              callback PreferencesCB
+              tooltip {How long before the chat display fades away when not in chat mode} xywh {261 144 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 align 8 minimum 1 maximum 999999 step 1 value 10 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input remotePointerTrailLenght {
+              label {Trail Lenght}
+              callback PreferencesCB
+              tooltip {Set the opacity of the chat display over the viewport} xywh {140 167 35 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 1 maximum 1000 step 1 value 80 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Check_Button remotePointerFade {
+              label Fade
+              callback PreferencesCB
+              tooltip {When not in chat mode, the chat display will fade away automatically after a short delay if this is enabled.} xywh {210 144 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 12 labelcolor 31
+            }
+            Fl_Value_Input remotePointerSize {
+              label {Pointer Size}
+              callback PreferencesCB
+              tooltip {Set how many lines of chat history to show} xywh {177 144 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 1 maximum 30 step 1 value 5 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Check_Button remotePointerTrail {
+              label Trail
+              callback PreferencesCB
+              tooltip {When not in chat mode, the chat display will fade away automatically after a short delay if this is enabled.} xywh {18 167 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 12 labelcolor 31
+            }
+            Fl_Box remotePointerColorSample {
+              xywh {250 167 15 18} box FLAT_BOX color 7
+            }
+            Fl_Spinner remotePointerColor {
+              label Color
+              callback PreferencesCB
+              xywh {220 167 29 18} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 when 1 minimum 0 maximum 7 value 7 textsize 12
+              code0 {\#include "Fl_Spinner_gfc.h"}
+              code1 {o->textcolor((Fl_Color)31);}
+              class Fl_Spinner_gfc
+            }
+          }
+          Fl_Group {} {
+            label {Update Frequency (per second)} open
+            xywh {10 274 320 72} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Value_Input remoteTransformationsFrequency {
+              label Transformations
+              callback PreferencesCB
+              xywh {110 301 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 1 maximum 3000 step 1 value 60 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input remoteFXFrequency {
+              label {FX Parameters}
+              callback PreferencesCB
+              xywh {110 321 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 1 maximum 3000 step 1 value 60 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Value_Input remoteOthersFrequency {
+              label {Others Messages}
+              callback PreferencesCB
+              xywh {245 302 25 15} box FLAT_BOX color 8 labelsize 12 labelcolor 31 minimum 1 maximum 3000 step 1 value 60 textsize 12 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+          }
+          Fl_Group {} {
+            label {Remote Loading Options} open
+            xywh {10 199 320 72} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Check_Button remoteSendLoadRequests {
+              label {Send Remote Loading Requests}
+              callback PreferencesCB
+              tooltip {When you load a playlist item locally, a request to load that item will be sent to all other participants in the session} xywh {20 226 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 12 labelcolor 31
+            }
+            Fl_Check_Button remoteAutoAcceptLoadRequests {
+              label {Auto accept remote loading requests}
+              callback PreferencesCB
+              tooltip {Choose if a request to load a sequence from another participant is accepted automaticaly without confirmation} xywh {20 246 15 15} down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 12 labelcolor 31
+            }
+          }
+        }
+        Fl_Group pathsTab {
+          label Paths open
+          xywh {5 40 347 464} color 0 selection_color 0 labelcolor 8 hide
+        } {
+          Fl_Group {} {
+            label {Sequence Search Paths} open
+            xywh {10 40 325 241} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Check_Button searchPathsRecursive {
+              label {Include Subfolders}
+              callback PreferencesCB
+              xywh {195 107 15 15} down_box FLAT_BOX color 8 selection_color 31 labelsize 12 labelcolor 31
+            }
+            Fl_Browser searchPaths {
+              user_data PATHSEARCHBROWSER_ID
+              callback PreferencesCB
+              xywh {20 128 305 119} type Multi box FLAT_BOX color 8 selection_color 31 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Button searchPathBrowse {
+              label Browse
+              user_data PATHSEARCHBROWSEBUTTON_ID
+              callback PreferencesCB
+              xywh {22 102 64 20} box FLAT_BOX down_box FLAT_BOX color 8 labelsize 12 labelcolor 31
+              class Fl_Button_gfc
+            }
+            Fl_Button searchPathDelete {
+              label {@9+}
+              user_data PATHSEARCHDELETEBUTTON_ID
+              callback PreferencesCB
+              xywh {285 249 39 20} box FLAT_BOX down_box FLAT_BOX color 8 labelsize 10 labelcolor 31
+              class Fl_Button_gfc
+            }
+            Fl_Check_Button useSearchPaths {
+              label {Use search paths}
+              callback PreferencesCB
+              tooltip {When a file loaded from a saved or remote session is not found, Jefecheck will try to resolve the filename in any of the search paths. This allows you to share sessions across computers with different filesystem structures.} xywh {25 69 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+            }
+          }
+        }
+        Fl_Group licensingTab {
+          label License open
+          xywh {5 35 347 459} color 0 selection_color 0 labelcolor 8 hide
+        } {
+          Fl_Group licenseFileGroup {
+            label {License File} open
+            xywh {10 35 320 116} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+          } {
+            Fl_Input licenseFilePath {
+              label {License File Path}
+              xywh {15 76 234 18} box FLAT_BOX color 8 labelcolor 31 align 5 when 1 textcolor 31
+              code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+            }
+            Fl_Button {} {
+              label browse
+              user_data LICENSEPATHBROWSEBUTTON_ID
+              callback PreferencesCB
+              xywh {253 76 68 18} box FLAT_BOX color 8 labelcolor 31
+              class Fl_Button_gfc
+            }
+            Fl_Button {} {
+              label {Request a new License}
+              user_data LICENSEREQUESTNEWLICENSEEBUTTON_ID
+              callback PreferencesCB
+              tooltip {Request a new license to use JefeCheck on this machine.} xywh {15 101 215 31} box FLAT_BOX color 8 labelcolor 31
+              class Fl_Button_gfc
+            }
+          }
+          Fl_Group {} {
+            label {License Server} open
+            xywh {10 214 320 75} box BORDER_FRAME color 8 labelfont 1 labelcolor 55 align 21 hide deactivate
+          } {
+            Fl_Input licenseServerIP {
+              label {Server IP}
+              tooltip {When browsing for sequences, this will be the default folder the browser opens. Set it to point to the project folder you are currently working on to make browsing easier!} xywh {15 256 205 18} labelcolor 7 align 5 when 1
+            }
+            Fl_Input licenseServerPort {
+              label Port
+              tooltip {When browsing for sequences, this will be the default folder the browser opens. Set it to point to the project folder you are currently working on to make browsing easier!} xywh {228 256 85 18} labelcolor 7 align 5 when 1
+            }
+          }
+        }
+      }
+      Fl_Button {} {
+        label {Save and Close}
+        user_data PREFERENCESDONE_ID
+        callback PreferencesCB
+        tooltip {Closes this window without saving preferences for next session} xywh {210 545 130 35} box FLAT_BOX down_box PLASTIC_DOWN_BOX color 8 labelcolor 31
+        code0 {\#include "Fl_Button_gfc.h"}
+        class Fl_Button_gfc
+      }
+    }
+  }
+} 

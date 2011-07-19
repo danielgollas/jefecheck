@@ -1,0 +1,700 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0107 
+header_name {.h} 
+code_name {.cxx}
+class LoadWindow {open : {public Fl_Double_Window}
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  Function {LoadWindow(int x, int y, int wi, int height,const char* l) : Fl_Double_Window(300, 300, 300, 300, "Load Window")} {open
+  } {
+    Fl_Window loadWindow {
+      label {Load Window}
+      user_data LOADCLOSE_ID
+      callback loadCB open
+      xywh {3 60 1425 435} type Double box NO_BOX color 56 labelcolor 17 resizable non_modal size_range {30 30 1425 435} visible
+    } {
+      Fl_Box {} {
+        label label
+        xywh {0 -4 1675 982} box FLAT_BOX color 0
+      }
+      Fl_Group {} {open selected
+        xywh {0 -1 1677 1124} labelcolor 19
+      } {
+        Fl_Group {} {
+          callback loadCB open
+          xywh {5 14 385 168} box PLASTIC_DOWN_FRAME labelcolor 7
+        } {
+          Fl_File_Input {} {
+            label {File Name} user_data_type long
+            xywh {300 15 25 25} color 0 labelsize 12 labelcolor 7 when 1 hide deactivate
+          }
+          Fl_Value_Slider loadFromSpinnerA {
+            label In
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {39 55 313 11} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Value_Slider loadToSpinnerA {
+            label Out
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {39 69 313 11} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Choice filterChooserA {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {120 90 52 19} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 10
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {25 25 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {35 35 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Button browseButtonA {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {320 29 60 21} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Group {} {
+            xywh {320 120 60 55} labelcolor 7
+          } {
+            Fl_Check_Button appendCheckBoxA {
+              label Append
+              xywh {370 120 10 4} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7 align 0 hide
+            }
+            Fl_Check_Button EraseCheckBoxA {
+              label Erase
+              xywh {325 141 54 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button LeaveCheckBoxA {
+              label Leave
+              xywh {325 154 54 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button ReplaceCheckBoxA {
+              label Replace
+              xywh {325 131 54 8} type Radio down_box DOWN_BOX value 1 color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Input_Choice scaleChooserA {
+            label {%}
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {15 90 54 18} down_box BORDER_BOX color 37 labelsize 12 labelcolor 7 align 8 textsize 12
+          } {
+            MenuItem {} {
+              label 100
+              xywh {15 15 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 50
+              xywh {25 25 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 25
+              xywh {35 35 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Button reloadButtonA {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {353 55 24 25} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Check_Button q1LoadCrop {
+            label Crop
+            xywh {250 91 45 17} down_box DOWN_BOX labelsize 12 labelcolor 7
+          }
+          Fl_Value_Input gammaSliderA {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {220 89 27 20} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1
+          }
+          Fl_Group {} {open
+            xywh {10 117 356 58} labelcolor 7
+          } {
+            Fl_Choice trackAAvailableLuts {
+              label LUTs open
+              xywh {69 121 222 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Choice trackAQueued {
+              label Queued open
+              xywh {69 146 222 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Button trackAQueue {
+              label {@-4+}
+              user_data LOADQUEUEA_ID
+              callback loadCB
+              xywh {297 121 20 20} color 0 labelcolor 60
+            }
+            Fl_Button trackARemoveLut {
+              label {-}
+              user_data LOADREMOVEA_ID
+              callback loadCB
+              xywh {297 146 20 20} color 0 labelfont 1 labelsize 20 labelcolor 1
+            }
+          }
+          Fl_Choice q1Lossy {open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {300 90 62 18} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 12
+          } {
+            MenuItem {} {
+              label {Normal  (x1.0)}
+              xywh {0 0 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {S3TC (x0.3~)}
+              xywh {10 10 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Depth Reduction (x0.5)}
+              xywh {20 20 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Half Float (x2.0)}
+              xywh {55 55 30 20} labelsize 12 labelcolor 7
+            }
+          }
+          Fl_Menu_Button recentButtonA {
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {292 29 27 20} color 0 labelcolor 7
+          } {}
+          Fl_Group {} {open
+            xywh {390 110 0 69} box THIN_UP_FRAME labelcolor 7 hide
+          } {
+            Fl_Check_Button q1logToLin {
+              label {log->lin}
+              xywh {390 111 0 18} down_box DOWN_BOX color 19 labelsize 12 labelcolor 7
+            }
+            Fl_Value_Input q1White {
+              label W
+              xywh {390 132 0 14} labelsize 12 labelcolor 7 maximum 9999 value 685 textsize 10
+            }
+            Fl_Value_Input q1Black {
+              label B
+              xywh {390 132 0 14} labelsize 12 labelcolor 7 maximum 9999 value 95 textsize 10
+            }
+            Fl_Value_Input q1DGamma {
+              label {Display Gamma}
+              xywh {390 153 0 14} labelsize 12 labelcolor 7 maximum 5 step 0.01 value 1.7 textsize 10
+            }
+          }
+          Fl_Output {} {
+            label Sequence user_data_type long
+            xywh {170 56 219 18} labelsize 12 labelcolor 7 when 1 textsize 12 hide
+          }
+          Fl_Input fileNameInputA {
+            label Sequence
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {76 30 215 17} labelsize 12 labelcolor 7 when 1 textsize 12 deactivate
+          }
+        }
+        Fl_Group {} {
+          callback loadCB
+          xywh {5 204 705 169} box PLASTIC_DOWN_FRAME labelcolor 7
+        } {
+          Fl_File_Input fileNameInputC {
+            label {File Name}
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {78 208 523 30} color 0 labelsize 12 labelcolor 7 when 1 deactivate
+          }
+          Fl_Value_Slider loadFromSpinnerC {
+            label {from frame...}
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {78 241 523 13} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Value_Slider loadToSpinnerC {
+            label {...to frame}
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {78 257 523 13} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Choice filterChooserC {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {164 277 75 23} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 10
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {35 35 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {45 45 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Input_Choice scaleChooserC {
+            label {Scale(%)}
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {71 277 58 23} labelsize 12 labelcolor 7
+          } {
+            MenuItem {} {
+              label 100
+              xywh {20 20 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 50
+              xywh {30 30 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 25
+              xywh {40 40 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Button browseButtonC {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {603 209 67 27} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Group {} {open
+            xywh {599 237 106 123} labelcolor 7
+          } {
+            Fl_Check_Button appendCheckBoxC {
+              label Append
+              xywh {604 238 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7 align 0 hide
+            }
+            Fl_Check_Button EraseCheckBoxC {
+              label Erase
+              xywh {640 336 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button LeaveCheckBoxC {
+              label Leave
+              xywh {640 349 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button ReplaceCheckBoxC {
+              label Replace
+              xywh {640 323 50 9} type Radio down_box DOWN_BOX value 1 color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Box {} {
+              label C
+              xywh {673 261 30 26} color 48 labelsize 24 labelcolor 7 align 17
+            }
+            Fl_Box {} {
+              label TRACK
+              xywh {673 245 30 26} color 48 labelsize 10 labelcolor 7 align 17
+            }
+          }
+          Fl_Button reloadButtonC {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {604 241 30 30} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Check_Button q3LoadCrop {
+            label {Area of Interest}
+            xywh {358 282 77 17} down_box DOWN_BOX labelsize 12 labelcolor 7
+          }
+          Fl_Value_Input gammaSliderC {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {305 277 35 23} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1
+          }
+          Fl_Group {} {open
+            xywh {20 305 505 62} box THIN_UP_FRAME labelcolor 7
+          } {
+            Fl_Choice trackCAvailableLuts {
+              label {Available LUTs} open
+              xywh {125 313 324 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Choice trackCQueued {
+              label Queued open
+              xywh {125 338 324 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Button trackCQueue {
+              label Queue
+              user_data LOADQUEUEC_ID
+              callback loadCB
+              xywh {451 313 64 20} color 0 labelcolor 7
+            }
+            Fl_Button trackCRemoveLut {
+              label Remove
+              user_data LOADREMOVEC_ID
+              callback loadCB
+              xywh {451 338 64 20} color 0 labelcolor 7
+            }
+          }
+          Fl_Choice q3Lossy {
+            label Format open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {512 278 90 18} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 12
+          } {
+            MenuItem {} {
+              label {Normal  (x1.0)}
+              xywh {20 20 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {S3TC (x0.3~)}
+              xywh {30 30 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Depth Reduction (x0.5)}
+              xywh {40 40 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Half Float (x2.0)}
+              xywh {75 75 30 20} labelsize 12 labelcolor 7
+            }
+          }
+          Fl_Menu_Button recentButtonC {
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {672 209 27 27} color 0 labelcolor 7
+          } {}
+        }
+        Fl_Group {} {
+          callback loadCB
+          xywh {712 204 706 169} box PLASTIC_DOWN_FRAME labelcolor 7
+        } {
+          Fl_File_Input fileNameInputD {
+            label {File Name}
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {785 210 526 30} color 0 labelsize 12 labelcolor 7 when 1 deactivate
+          }
+          Fl_Value_Slider loadFromSpinnerD {
+            label {from frame...}
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {785 243 526 12} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Value_Slider loadToSpinnerD {
+            label {...to frame}
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {785 259 526 12} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Choice filterChooserD {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {873 280 79 21} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 10
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {30 30 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {40 40 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Input_Choice scaleChooserD {
+            label {Scale(%)}
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {778 278 58 21} labelsize 12 labelcolor 7
+          } {
+            MenuItem {} {
+              label 100
+              xywh {30 30 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 50
+              xywh {40 40 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 25
+              xywh {50 50 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Button browseButtonD {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {1313 212 67 27} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Group {} {open
+            xywh {1309 243 98 125} labelcolor 7
+          } {
+            Fl_Check_Button appendCheckBoxD {
+              label Append
+              xywh {1311 245 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7 align 0 hide
+            }
+            Fl_Check_Button EraseCheckBoxD {
+              label Erase
+              xywh {1350 342 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button LeaveCheckBoxD {
+              label Leave
+              xywh {1350 356 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button ReplaceCheckBoxD {
+              label Replace
+              xywh {1350 330 50 9} type Radio down_box DOWN_BOX value 1 color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Box {} {
+              label D
+              xywh {1375 269 30 26} color 48 labelsize 24 labelcolor 7 align 17
+            }
+            Fl_Box {} {
+              label TRACK
+              xywh {1375 253 30 26} color 48 labelsize 10 labelcolor 7 align 17
+            }
+          }
+          Fl_Button reloadButtonD {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {1315 243 30 30} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Check_Button q4LoadCrop {
+            label {Area of Interest}
+            xywh {1067 283 77 17} down_box DOWN_BOX labelsize 12 labelcolor 7
+          }
+          Fl_Value_Input gammaSliderD {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {1013 279 35 23} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1
+          }
+          Fl_Group {} {open
+            xywh {728 308 502 61} box THIN_UP_FRAME labelcolor 7
+          } {
+            Fl_Choice trackDAvailableLuts {
+              label {Available LUTs} open
+              xywh {833 315 324 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Choice trackDQueued {
+              label Queued open
+              xywh {833 340 324 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Button trackDQueue {
+              label Queue
+              user_data LOADQUEUED_ID
+              callback loadCB
+              xywh {1159 315 64 20} color 0 labelcolor 7
+            }
+            Fl_Button trackDRemoveLut {
+              label Remove
+              user_data LOADREMOVED_ID
+              callback loadCB
+              xywh {1159 340 64 20} color 0 labelcolor 7
+            }
+          }
+          Fl_Choice q4Lossy {
+            label Format open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {1225 281 90 18} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 12
+          } {
+            MenuItem {} {
+              label {Normal  (x1.0)}
+              xywh {10 10 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {S3TC (x0.3~)}
+              xywh {20 20 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Depth Reduction (x0.5)}
+              xywh {30 30 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Half Float (x2.0)}
+              xywh {65 65 30 20} labelsize 12 labelcolor 7
+            }
+          }
+          Fl_Menu_Button recentButtonD {
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {1382 213 27 27} color 0 labelcolor 7
+          } {}
+        }
+        Fl_Group {} {
+          callback loadCB open
+          xywh {395 14 703 171} box PLASTIC_DOWN_FRAME labelcolor 7
+        } {
+          Fl_File_Input fileNameInputB {
+            label {File Name}
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {468 20 526 30} color 0 labelsize 12 labelcolor 7 when 1 deactivate
+          }
+          Fl_Value_Slider loadFromSpinnerB {
+            label {from frame...}
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {468 53 526 11} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Value_Slider loadToSpinnerB {
+            label {...to frame}
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {468 70 526 11} type Horizontal color 0 labelsize 12 labelcolor 7 align 4 step 1 value 1
+          }
+          Fl_Choice filterChooserB {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {556 87 79 22} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 10
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {35 35 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {45 45 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Input_Choice scaleChooserB {
+            label {Scale(%)}
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {461 86 58 22} labelsize 12 labelcolor 7
+          } {
+            MenuItem {} {
+              label 100
+              xywh {40 40 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 50
+              xywh {50 50 31 21} color 0 labelsize 10 labelcolor 7
+            }
+            MenuItem {} {
+              label 25
+              xywh {60 60 31 21} color 0 labelsize 10 labelcolor 7
+            }
+          }
+          Fl_Button browseButtonB {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {997 20 67 27} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Group {} {open
+            xywh {992 50 98 135} labelcolor 7
+          } {
+            Fl_Check_Button appendCheckBoxB {
+              label Append
+              xywh {994 51 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7 align 0 hide
+            }
+            Fl_Check_Button EraseCheckBoxB {
+              label Erase
+              xywh {1033 148 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button LeaveCheckBoxB {
+              label Leave
+              xywh {1033 161 50 11} type Radio down_box DOWN_BOX color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Check_Button ReplaceCheckBoxB {
+              label Replace
+              xywh {1033 135 50 10} type Radio down_box DOWN_BOX value 1 color 0 labelsize 10 labelcolor 7
+            }
+            Fl_Box {} {
+              label B
+              xywh {1058 74 30 26} color 48 labelsize 24 labelcolor 7 align 17
+            }
+            Fl_Box {} {
+              label TRACK
+              xywh {1058 58 30 26} color 48 labelsize 10 labelcolor 7 align 17
+            }
+          }
+          Fl_Button reloadButtonB {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {998 52 30 30} color 0 labelsize 12 labelcolor 7
+          }
+          Fl_Check_Button q2LoadCrop {
+            label {Area of Interest}
+            xywh {750 90 77 17} down_box DOWN_BOX labelsize 12 labelcolor 7
+          }
+          Fl_Value_Input gammaSliderB {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {696 88 35 23} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1
+          }
+          Fl_Group {} {open
+            xywh {403 114 500 63} box THIN_UP_FRAME labelcolor 7
+          } {
+            Fl_Choice trackBAvailableLuts {
+              label {Available LUTs} open
+              xywh {508 123 324 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Choice trackBQueued {
+              label Queued open
+              xywh {508 148 324 20} down_box BORDER_BOX labelcolor 7
+            } {}
+            Fl_Button trackBQueue {
+              label Queue
+              user_data LOADQUEUEB_ID
+              callback loadCB
+              xywh {834 123 64 20} color 0 labelcolor 7
+            }
+            Fl_Button trackBRemoveLut {
+              label Remove
+              user_data LOADREMOVEB_ID
+              callback loadCB
+              xywh {834 148 64 20} color 0 labelcolor 7
+            }
+          }
+          Fl_Choice q2Lossy {
+            label Format open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {906 89 90 18} down_box BORDER_BOX color 0 labelsize 12 labelcolor 7 textsize 12
+          } {
+            MenuItem {} {
+              label {Normal (x1.0)}
+              xywh {5 5 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {S3TC (x0.3~)}
+              xywh {15 15 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Depth Reduction (x0.5)}
+              xywh {25 25 30 20} labelsize 12 labelcolor 7
+            }
+            MenuItem {} {
+              label {Half Float (x2.0)}
+              xywh {60 60 30 20} labelsize 12 labelcolor 7
+            }
+          }
+          Fl_Menu_Button recentButtonB {
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {1067 20 27 27} color 0 labelcolor 7
+          } {}
+        }
+        Fl_Button startButton {
+          label START
+          user_data LOADLOAD_ID
+          callback loadCB
+          tooltip {Start Loading!} xywh {1165 384 245 36} down_box DOWN_BOX color 32 labelfont 1 labelsize 24 labelcolor 7
+        }
+        Fl_Button {} {
+          label CANCEL
+          user_data LOADDONE_ID
+          callback loadCB
+          xywh {915 384 245 36} down_box DOWN_BOX color 32 labelfont 1 labelsize 24 labelcolor 7
+        }
+        Fl_Button {} {
+          user_data LOADLUT_ID
+          callback loadCB
+          image {colorCubeTiny.jpg} xywh {12 379 51 53} box FLAT_BOX down_box FLAT_BOX color 32 labelfont 1 labelsize 24 labelcolor 7 align 64
+        }
+        Fl_Group {} {open
+          xywh {170 393 50 30} labelcolor 7 align 0
+        } {}
+        Fl_Box {} {
+          label A
+          xywh {16 5 17 25} box FLAT_BOX color 0 labelfont 1 labelsize 24 labelcolor 7 align 17
+        }
+        Fl_Button reduceButton {
+          label {@8UpArrow}
+          user_data LOADREDUCE_ID
+          callback loadCB
+          xywh {430 25 25 15} shortcut 0x6d color 0 labelcolor 7 hide
+        }
+      }
+    }
+  }
+} 

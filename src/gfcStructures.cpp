@@ -57,6 +57,7 @@ extern AboutWindow aboutWindow;
 
 #ifdef WIN32
 #include <WinSock2.h>
+#include <windows.h>
 #endif
 
 
@@ -121,15 +122,51 @@ std::string asciiTime ( bool noDate ) {
 
 gfcTimer::gfcTimer(std::string pname) {
     name=pname;
+	_initialized=0;
+}
+
+long long gfcTimer::_getCurrentTime(){
+	#ifdef WIN32
+		LARGE_INTEGER li;
+		QueryPerformanceCounter(&li);
+		return li.QuadPart/PCFreq;
+	#else
+		
+	#endif
+}
+
+void gfcTimer::initialize(){
+	#ifdef WIN32
+		LARGE_INTEGER li;
+		if(!QueryPerformanceFrequency(&li))
+			printf("QueryPerformanceFrequency failed!\n");
+		PCFreq = double(li.QuadPart)/1000.0;
+	#else
+		
+	#endif
+
+
+	_initialized=1;
 }
 
 void gfcTimer::start() {
-    startTime=glutGet(GLUT_ELAPSED_TIME);
+	//OK, all of this will have to be remade for specific OSs so we can get rid of the glut dependencies. 
+	//On WIN32 we should use QueryPerformanceCounters
+	//On *nix we should use gettimeofday, apparently it is accurate to the usecond, even though it might drift if the system time changes
+
+	if(!_initialized){
+		initialize();
+	}
+	
+	startTime=_getCurrentTime();
+	
+//    startTime=glutGet(GLUT_ELAPSED_TIME);
 }
 
 void gfcTimer::stop() {
     //glFinish();
-    elapsed=glutGet(GLUT_ELAPSED_TIME)-startTime;
+	update();
+//    elapsed=glutGet(GLUT_ELAPSED_TIME)-startTime;
 }
 
 void gfcTimer::reset() {
@@ -137,24 +174,31 @@ void gfcTimer::reset() {
     start();
 }
 
-long gfcTimer::getElapsed(bool update) {
-	if (update)
+long gfcTimer::getElapsed(bool update_) {
+	if (update_)
 	{
-		elapsed=glutGet(GLUT_ELAPSED_TIME)-startTime;
+		update();
 	}
     return elapsed;
 }
 
-double gfcTimer::getElapsedSecs(bool update) {
-	if (update)
+void gfcTimer::update() {
+	elapsed = _getCurrentTime()-startTime;
+}
+
+double gfcTimer::getElapsedSecs(bool update_) {
+	if (update_)
 	{
-		elapsed=glutGet(GLUT_ELAPSED_TIME)-startTime;
+		update();
 	}
     return (double)elapsed/1000.0;
 }
 
 void gfcTimer::print() {
-    printf("%s timer: %ims (%fs)\n",name.c_str(),elapsed,elapsed/1000.0);
+	update();
+	double tmpSecs=elapsed*(1.0/(double)1000.0);
+    printf("%s timer: %ims (%.3f s)\n",name.c_str(),elapsed,tmpSecs);
+	printf("%.3fs\n",name.c_str(),elapsed,tmpSecs);
 }
 
 
@@ -1715,7 +1759,11 @@ std::string findFileInSearchPaths(std::string theFile) {
     std::string result=theFile;
     boost::filesystem::path tempPath(theFile);
 	//std::string theFileLeaf=tempPath.leaf().string();
+#ifdef WIN32
+	std::string theFileLeaf=tempPath.filename().string();
+#else
 	std::string theFileLeaf=tempPath.filename();
+#endif
 	std::cout << "Trying to find in search paths thefileLeaf: " << theFileLeaf << std::endl;
     for(int i=0;i<folderCount;i++)
     {

@@ -1,4 +1,4 @@
-
+#define GLEW_STATIC
 #include "glew.h"
 
 #ifdef WIN32
@@ -156,7 +156,7 @@ int getGFCPICKFLAGSfromFLTK()
 }
 
 float fps() {
-    static long baseTime=glutGet ( GLUT_ELAPSED_TIME );
+   /* static long baseTime=glutGet ( GLUT_ELAPSED_TIME );
     static long currentTime;
     static int frameCount=0;
     static char fps[15];
@@ -172,7 +172,8 @@ float fps() {
     }
 
 
-    return atof ( fps );
+    return atof ( fps );*/
+	return 0;
 
 }
 
@@ -183,7 +184,7 @@ void TimeStep() {
 
     timeStep= ( currentTime-tsBaseTime ) /1000.0; //timestep in seconds
 
-    tsBaseTime=glutGet ( GLUT_ELAPSED_TIME );
+    //tsBaseTime=glutGet ( GLUT_ELAPSED_TIME );
 
 }
 
@@ -276,6 +277,9 @@ void GlViewport::setVsync(int value)
 #endif
 
 #ifdef linux
+		/*if(glewIsSupported("GLX_SGI_swap_control")){
+		
+		}*/		
 
 		if(glxewIsSupported("GLX_SGI_swap_control"))
 		{

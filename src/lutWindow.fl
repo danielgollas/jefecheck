@@ -1,0 +1,120 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+class LutWindow {open : {public Fl_Double_Window}
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  Function {LutWindow(int x, int y, int wi, int height,const char* l) : Fl_Double_Window(300, 300, 300, 300, "Load Window")} {open
+  } {
+    Fl_Window lutWindow {
+      label {LUT Manager}
+      callback lutManagerCB_OTHERS open selected
+      xywh {999 501 510 595} type Double box NO_BOX color 56 labelcolor 17
+      code0 {\#include "gfclutmanager.h"} non_modal size_range {510 595 510 595} visible
+    } {
+      Fl_Box {} {
+        label label
+        xywh {0 -4 1675 982} box FLAT_BOX color 0
+        code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+      }
+      Fl_Group {} {open
+        xywh {0 -5 1542 1121} labelcolor 19
+      } {
+        Fl_Group {} {
+          label Load
+          callback loadCB open
+          xywh {3 31 497 38} box BORDER_FRAME color 8 labelfont 1 labelsize 18 labelcolor 8 align 5
+        } {
+          Fl_File_Input fileNameInput {
+            label File
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {35 35 395 24} color 0 labelsize 12 labelcolor 19 when 1 hide deactivate
+          }
+          Fl_Button browseButton {
+            label Browse
+            user_data LUTBROWSE_ID user_data_type long
+            callback lutManagerCB_OTHERS
+            xywh {435 36 58 27} color 0 labelsize 12
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Progress progress {
+            xywh {9 37 422 25} box FLAT_BOX color 0 selection_color 58 labelcolor 31
+          }
+        }
+        Fl_Button doneButton {
+          label Done
+          user_data LUTDONE_ID
+          callback lutManagerCB_OTHERS
+          tooltip {Start Loading!} xywh {410 558 95 27} down_box DOWN_BOX color 8 labelfont 1 labelsize 21 labelcolor 7
+          code0 {\#include "gfclutmanager.h"}
+          class Fl_Button_gfc
+        }
+        Fl_Group {} {
+          label Visualize open
+          xywh {10 483 485 52} box BORDER_FRAME color 8 labelfont 1 labelsize 18 labelcolor 8 align 5
+        } {
+          Fl_Choice loadedLuts {
+            label LUT
+            user_data LUTCHANGEPREVIEW_ID
+            callback lutManagerCB_OTHERS open
+            xywh {52 497 288 21} down_box BORDER_BOX labelfont 1 labelcolor 8
+            code0 {\#include "gfclutmanager.h"}
+            code1 {\#include "Fl_Choice_gfc.h"}
+            class Fl_Choice_gfc
+          } {}
+          Fl_Check_Button preview {
+            label On
+            user_data LUTPREVIEW_ID
+            callback lutManagerCB_OTHERS
+            xywh {345 493 55 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 25
+            code0 {\#include "gfclutmanager.h"}
+          }
+          Fl_Check_Button uniform {
+            label Uniform
+            user_data LUTPREVIEW_ID
+            callback lutManagerCB_OTHERS
+            xywh {345 512 90 16} down_box FLAT_BOX color 8 selection_color 31 labelcolor 25
+            code0 {\#include "gfclutmanager.h"}
+          }
+        }
+        Fl_Scroll scrollLoaded {
+          label Loaded open
+          xywh {7 97 497 269} box BORDER_FRAME color 8 labelfont 1 labelsize 18 labelcolor 8 align 5
+        } {}
+        Fl_Check_Button autoLoadAllButton {
+          label {Auto-Load All}
+          user_data LUTAUTOLOADALL_ID
+          callback lutManagerCB_OTHERS
+          xywh {373 80 64 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 50
+          code0 {\#include "gfclutmanager.h"}
+        }
+        Fl_Group {} {
+          label {Default LUT} open
+          xywh {9 401 496 44} box BORDER_FRAME color 8 labelfont 1 labelsize 18 labelcolor 8 align 5
+        } {
+          Fl_Choice defaultLUT {
+            label LUT
+            user_data LUTDEFAULTLUT_ID
+            callback lutManagerCB_OTHERS open
+            tooltip {This is the LUT that will be applied by default on all viewports. Can be overriden by setting  the environment variable JEFECHECK_DEFAULT_LUT to the LUT's filename (without the file path)} xywh {51 415 288 21} down_box BORDER_BOX labelfont 1 labelcolor 8
+            code0 {\#include "gfclutmanager.h"}
+            code1 {\#include "Fl_Choice_gfc.h"}
+            class Fl_Choice_gfc
+          } {}
+        }
+        Fl_Button {} {
+          label {Unload All}
+          user_data LUTUNLOADALL_ID
+          callback lutManagerCB_OTHERS
+          xywh {292 75 78 20}
+          code0 {\#include "gfclutmanager.h"}
+          class Fl_Button_gfc
+        }
+      }
+    }
+  }
+} 

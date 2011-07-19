@@ -69,6 +69,7 @@
     <ClCompile Include="..\src\gfcimageloader.cpp" />
     <ClCompile Include="..\src\gfcimageloaderdpx.cpp" />
     <ClCompile Include="..\src\gfcimageloaderexr.cpp" />
+    <ClCompile Include="..\src\gfcimageloaderfil.cpp" />
     <ClCompile Include="..\src\gfcimageloadergfl.cpp" />
     <ClCompile Include="..\src\gfcimageprocessor.cpp" />
     <ClCompile Include="..\src\gfcimagesaver.cpp" />

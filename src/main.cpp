@@ -705,29 +705,6 @@ void checkLicense() {
  */
 int main(int argc, char *argv[]) {
 
-	/*std::vector<int> testVector;
-	testVector.push_back(5);
-	testVector.push_back(2);
-	testVector.push_back(8);
-	testVector.push_back(1);
-	testVector.push_back(0);
-
-	std::cout<<"---Unsorted---\n";
-	for (int i=0;i<testVector.size();i++)
-	{
-		std::cout << testVector[i] <<std::endl;
-	}
-	
-	std::sort(testVector.begin(),testVector.end());
-	
-	std::cout<<"---Sorted---\n";
-	for (int i=0;i<testVector.size();i++)
-	{
-		std::cout << testVector[i] <<std::endl;
-	}
-*/
-
-	
     printf("--------------------\nJefeCheck %s \nDaniel Gollas Gilman for JefeCorp\n--------------------\n",JEFE_VERSION);
     //argList=argsParser(argc,argv);
 #ifdef LICENSED
@@ -785,17 +762,19 @@ int main(int argc, char *argv[]) {
     rw.createMovie->deactivate();
 #endif
 
+#ifdef USEFREEIMAGE
 #if defined(FREEIMAGE_LIB) || !defined(WIN32)
 	printf("Initializing FreeImage...");
 	FreeImage_Initialise();
 	printf("ok\n");
 #endif
+#endif 
     printf("Initializing GLUT...");
     glutInit(&argc,argv);
     printf("ok\n");
     gfcTimer testTimer ( "testTimer" );    
-    testTimer.print();
     testTimer.start();
+	testTimer.print();
     fc= new  Fl_File_Chooser(".",NULL,0,"Choose a file");
 
     sett.numOfPartitions=1;

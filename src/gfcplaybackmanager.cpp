@@ -27,6 +27,7 @@ gfcPlaybackManager::gfcPlaybackManager() {
     allowNetworkMessages=true;
 	inPoint=1;
 	outPoint=100;
+	timer.start();
 }
 
 
@@ -384,13 +385,13 @@ void gfcPlaybackManager::rew() {
 
 void gfcPlaybackManager::updateTimestep() {
 
-    static long tsBaseTime=glutGet ( GLUT_ELAPSED_TIME );
-    static long currentTime;
-    currentTime=glutGet ( GLUT_ELAPSED_TIME );
+	static long long tsBaseTime=timer.getElapsed(true);
+    long long currentTime;
+    currentTime=timer.getElapsed(true);
 
     timeStep= ( currentTime-tsBaseTime ) /1000.0; //timestep in seconds
 
-    tsBaseTime=glutGet ( GLUT_ELAPSED_TIME );
+    tsBaseTime=timer.getElapsed(true);
 
 }
 

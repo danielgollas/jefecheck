@@ -24,7 +24,7 @@ int gfcImageLoaderFIL::fillProcessor(gfcImageProcessor& processor)
 }
 
 
-
+#ifdef USEFREEIMAGE
 void FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char *message) {
   printf("\n*** "); 
   if(fif != FIF_UNKNOWN) {
@@ -33,10 +33,11 @@ void FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char *message) {
   printf(message);
   printf(" ***\n");
 }
+#endif
 
 int gfcImageLoaderFIL::load(gfcLoadParams params)
 {
-
+	#ifdef USEFREEIMAGE
 	fif = FreeImage_GetFileType(params.fileName.c_str(), 0);
 	FreeImage_SetOutputMessage(FreeImageErrorHandler);
 	//figure out the file path
@@ -479,8 +480,9 @@ int gfcImageLoaderFIL::load(gfcLoadParams params)
 		return 0; //return 0 to indicate all went well
 	}
 	
-	return 1;
 	
+	#endif //USEFREEIMAGE
+	return 1;
 }
 
 int gfcImageLoaderFIL::peek(gfcLoadParams params, gfcPeekInfo* results)
@@ -490,15 +492,18 @@ int gfcImageLoaderFIL::peek(gfcLoadParams params, gfcPeekInfo* results)
 
 void* gfcImageLoaderFIL::getPixelPointer()
 {
+	#ifdef USEFREEIMAGE
 	return theBitmap.accessPixels();
+	#endif
+	return NULL;
 }
 
 void gfcImageLoaderFIL::releaseMemory()
 {	
+	#ifdef USEFREEIMAGE
 	 if(theBitmap)
 	 	theBitmap.clear();
-	 
-	 
+	#endif
 }
 
 std::vector< std::string > gfcImageLoaderFIL::getChannelNames()

@@ -25,8 +25,8 @@
     <run>
       <mainprogram>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</mainprogram>
       <terminal>true</terminal>
-      <programargs></programargs>
-      <globaldebugarguments></globaldebugarguments>
+      <programargs/>
+      <globaldebugarguments/>
       <globalcwd>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</globalcwd>
       <useglobalprogram>false</useglobalprogram>
       <autocompile>false</autocompile>
@@ -34,10 +34,10 @@
       <autokdesu>false</autokdesu>
       <envvars/>
       <runarguments>
-        <jefecheck></jefecheck>
+        <jefecheck/>
       </runarguments>
       <debugarguments>
-        <jefecheck></jefecheck>
+        <jefecheck/>
       </debugarguments>
       <cwd>
         <jefecheck>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug/./src</jefecheck>
@@ -97,7 +97,7 @@
       <runmultiplejobs>false</runmultiplejobs>
       <numberofjobs>1</numberofjobs>
       <dontact>false</dontact>
-      <makebin></makebin>
+      <makebin/>
       <prio>0</prio>
     </make>
   </kdevautoproject>
