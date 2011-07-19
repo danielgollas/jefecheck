@@ -7,6 +7,13 @@ echo "BUILDING JEFECHECK" $2
 export glutLibCommand="-framework glut -framework IOKit"
 export boostLibPath="/usr/local/lib"
 export boostThreadLibs="libboost_thread-xgcc40-mt-1_37.a"
+export boostProgramOptionsLibs="libboost_program_options-xgcc40-mt-1_37.a"
+export boostSystemLibs="libboost_system-xgcc40-mt-1_37.a"
+export boostFileSystemLibs="libboost_filesystem-xgcc40-mt-1_37.a"
+
+export gflLibs="-ldl -lgfl -lgfle"
+export filLibs="-lfreeimageplus"
+
 export botanLibs="-L/opt/local/lib -lm -lpthread /opt/local/lib/libbotan.a"
 export ssllibPath="-lssl -lcrypto -lkrb5"
 export boostIncludes="-I/usr/local/include/boost-1_37/"
@@ -37,7 +44,7 @@ echo "Architecture " $1
 #./configure
 make 
 rm -Rf JefeCheck.app
-mv src/checkmate1 src/JefeCheck
+mv src/jefecheck src/JefeCheck
 strip src/JefeCheck
 #flbundle -n -i src/checkmate1 -t MacBundleResources/JefeCheckLogo128.png -l MacBundleResources/JefeCheckLogo48.png -m MacBundleResources/JefeCheckLogo32.png -s MacBundleResources/JefeCheckLogo16.png -o ./JefeCheck.app
 echo "creating bundle" $appName
@@ -62,10 +69,10 @@ echo "copying libs from MacResources/"$1libs/lib/*.dylib
 cp -vRf MacResources/$1libs/lib/*.dylib ./$appName/Contents/MacOS
 
 #modify the executable and dylibs to point in the right direction
-install_name_tool -change libgfl.2.70.dylib @executable_path/libgfl.2.70.dylib ./$appName/Contents/MacOS/JefeCheck
-install_name_tool -change libgfle.2.70.dylib @executable_path/libgfle.2.70.dylib ./$appName/Contents/MacOS/JefeCheck
-install_name_tool -change libgfl.2.70.dylib @executable_path/libgfl.2.70.dylib ./$appName/Contents/MacOS/libgfle.2.70.dylib
-install_name_tool -id @executable_path/libgfl.2.70.dylib ./$appName/Contents/MacOS/libgfl.2.70.dylib 
+install_name_tool -change libgfl.3.40.dylib @executable_path/libgfl.3.40.dylib ./$appName/Contents/MacOS/JefeCheck
+install_name_tool -change libgfle.3.40.dylib @executable_path/libgfle.3.40.dylib ./$appName/Contents/MacOS/JefeCheck
+install_name_tool -change libgfl.3.40.dylib @executable_path/libgfl.3.40.dylib ./$appName/Contents/MacOS/libgfle.3.40.dylib
+install_name_tool -id @executable_path/libgfl.3.40.dylib ./$appName/Contents/MacOS/libgfl.3.40.dylib 
 
 #cp MacBundleResources/prefs.ini ./JefeCheck.app/Contents/Resources/
 
@@ -93,4 +100,4 @@ cd ..
 #rm -Rf MacResources/$folderName
 
 echo "done, created " $folderName.tar.gz
-#open MacResources/$folderName/$appName
+open MacResources/$folderName/$appName
