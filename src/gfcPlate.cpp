@@ -2258,6 +2258,8 @@ void gfcPlate::drawText() {
         glEnable(target);
         glBindTexture(target,0);
         glDisable(target);
+        glDisable(GL_TEXTURE_RECTANGLE_ARB);
+    	glDisable(GL_TEXTURE_2D);
 
         gl_font(FL_TIMES + FL_BOLD,textDisplaySize);
         gl_font(FL_HELVETICA + FL_BOLD,textDisplaySize);
