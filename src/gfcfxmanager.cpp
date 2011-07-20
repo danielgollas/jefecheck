@@ -318,7 +318,8 @@ void gfcFXManager::saveScrollPosition() {
 }
 
 void gfcFXManager::restoreScrollPosition() {
-    loadedScroll->position(scrollPosX,scrollPosY);
+    //loadedScroll->position(scrollPosX,scrollPosY);
+	loadedScroll->scroll_to(scrollPosX,scrollPosY);
 }
 
 void gfcFXManager::deleteAllFX() {

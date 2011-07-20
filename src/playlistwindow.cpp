@@ -669,27 +669,6 @@ void PlaylistWindow::updateWindow() {
 	fillPlaylistScroll();
 	plScroll->redraw();
 	}
-	
-
-	/*int prevScrollY=bottomPaneScroll->yposition();
-	int prevScrollX=bottomPaneScroll->xposition();
-
-	printf("prevScroll: %i %i\n",prevScrollX,prevScrollY);
-
-	fillPlaylistPane(prevScrollY);
-
-	char tmpName[256];
-	//bottomPaneScroll->h(fxPacker->h()-menuBar->h());
-	
-	sprintf(tmpName,"PlaylistWindow");
-	theWindow->copy_label(tmpName);
-	bottomPaneScroll->init_sizes();
-	Fl::check();
-	//bottomPaneScroll->position(prevScrollX,prevScrollY);
-	//printf("prevScroll setting: %i %i\n",prevScrollX,prevScrollY);
-	bottomPaneScroll->redraw();*/
-
-	
 }
 
 void PlaylistWindow::fillPlaylistScroll()
