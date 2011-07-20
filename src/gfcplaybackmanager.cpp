@@ -186,7 +186,7 @@ void gfcPlaybackManager::update() {
 		
 		if (fpsCount>=targetFPS*2) 
 		{
-			char tmpNum[6];
+			char tmpNum[6]="";
 			sprintf(tmpNum,"%.2f",fpsCount/fpsTimerCount);
 			currentFPS=atof(tmpNum);
 			//currentFPS=timeStep;
