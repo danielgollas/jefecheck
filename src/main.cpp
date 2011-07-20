@@ -1136,6 +1136,13 @@ int main(int argc, char *argv[]) {
     //disable navigation for the glViewport
     //mw.vp->clear_visible_focus();
     Fl::visible_focus(0);
+    
+    #ifdef __APPLE__
+    		 printf("gl_texture_file_height=%i\n",gl_texture_pile_height());
+    		 gl_texture_pile_height(1);
+    		 printf("gl_texture_file_height=%i\n",gl_texture_pile_height());
+    #endif
+    
     printf("READY>\n");
     
     testTimer.stop();

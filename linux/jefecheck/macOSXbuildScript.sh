@@ -100,4 +100,5 @@ cd ..
 #rm -Rf MacResources/$folderName
 
 echo "done, created " $folderName.tar.gz
+#MacResources/$folderName/$appName/Contents/MacOS/JefeCheck
 open MacResources/$folderName/$appName
