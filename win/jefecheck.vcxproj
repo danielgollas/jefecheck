@@ -543,7 +543,7 @@
     <ClCompile>
       <WarningLevel>Level2</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32; x86_64;NDEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN;VC_EXTRA_LEAN;WIN32_EXTRA_LEAN;GLEW_STATIC;OPENEXR_DLL;CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32;OPENEXR_DLL;x86_64;WIN64;NDEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN;VC_EXTRA_LEAN;WIN32_EXTRA_LEAN;GLEW_STATIC;CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>buildDependencies\include\OpenEXR;buildDependencies\include;C:\Program Files (x86)\boost\boost_1_46_1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
@@ -551,8 +551,8 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>%ProgramFiles%\Microsoft SDKs\Windows\7.1\Lib\x64;buildDependencies\lib\Debug\x86;C:\Program Files (x86)\boost\boost_1_46_1\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glut32.lib;GLU32.Lib;fltk.lib;fltkgl.lib;opengl32.lib;libbotan.lib;winmm.lib;comctl32.lib;wsock32.lib;glew32s.lib;flulib.lib;ws2_32.lib;IlmImf.lib;IlmThread.lib;Imath.lib;Iex.lib;Half.lib;zdll.lib;Iphlpapi.lib;wldap32.lib;ssleay32.lib;libeay32.lib;curllib_static.lib;libgfl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64;C:\projects\jefecheck2\win\buildDependencies\lib\Debug\x86_64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glut32.lib;GlU32.Lib;fltk.lib;fltkgl.lib;opengl32.lib;libbotan.lib;winmm.lib;comctl32.lib;wsock32.lib;glew32s.lib;flulib.lib;ws2_32.lib;Half.lib;IlmImf.lib;IlmThread.lib;Imath.lib;Iex.lib;zdll.lib;zlib.lib;zlibwapi.lib;Iphlpapi.lib;wldap32.lib;ssleay32.lib;libeay32.lib;curllib_static.lib;libgfl.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
     </Link>
@@ -588,7 +588,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>buildDependencies\lib\Debug\x86;C:\Program Files (x86)\boost\boost_1_46_1\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glut32.lib;glu32.lib;fltk.lib;fltkgl.lib;opengl32.lib;libbotan.lib;winmm.lib;comctl32.lib;wsock32.lib;glew32s.lib;flulib.lib;ws2_32.lib;IlmImf.lib;IlmThread.lib;Imath.lib;Iex.lib;Half.lib;zdll.lib;Iphlpapi.lib;wldap32.lib;ssleay32.lib;libeay32.lib;curllib_static.lib;libgfl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glut32.lib;glu32.lib;fltk.lib;fltkgl.lib;opengl32.lib;libbotan.lib;winmm.lib;comctl32.lib;wsock32.lib;glew32s.lib;flulib.lib;ws2_32.lib;IlmImf.lib;IlmThread.lib;Imath.lib;Iex.lib;Half.lib;zdll.lib;Iphlpapi.lib;wldap32.lib;ssleay32.lib;libeay32.lib;curllib.lib;libgfl.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
     </Link>
