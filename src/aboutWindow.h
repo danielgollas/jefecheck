@@ -12,7 +12,7 @@ extern void controlBarCB(Fl_Button*, void*);
 
 class AboutWindow {
 public:
-  AboutWindow(int x, int y, int wi, int height, const char* l);
+  AboutWindow(int x, int y, int wi, int height, const char* l); 
   Fl_Double_Window* make_window();
   Fl_Double_Window *aboutWindow;
   Fl_Box *versionLabel;

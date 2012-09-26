@@ -1,6 +1,8 @@
 #ifndef DEMOVERSION_H
 #define DEMOVERSION_H
 
+//we are building an unlicensed version!
+#undef LICENSED
 //uncomment the following line to build a demo version
 //#define DEMO_VERSION
 #define GWATERMARKDATAWIDTH 461

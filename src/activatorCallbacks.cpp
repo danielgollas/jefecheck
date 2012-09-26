@@ -183,6 +183,8 @@ int postActivation(std::string message, std::string passprhase, std::string &err
     if (curl) { 
         /* what URL that receives this POST */
         curl_easy_setopt(curl, CURLOPT_URL, "https://secure24.inmotionhosting.com/~jefeco5/jefecheck/cgi-bin/lg.cgi");
+		curl_easy_setopt(curl, CURLOPT_URL, "https://secure24.inmotionhosting.com/~jefeco5/jefecheck/cgi-bin/lg.cgi");
+		 
 		//curl_easy_setopt(curl, CURLOPT_URL, "http://www.jefecorp.com/jefecheck/cgi-bin/lg.cgi");
 		//curl_easy_setopt(curl, CURLOPT_URL, "https://secure24.inmotionhosting.com/~jefeco5/perltest/FormHello.cgi");
 
@@ -200,8 +202,10 @@ int postActivation(std::string message, std::string passprhase, std::string &err
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
 
         /* some servers don't like requests that are made without a user-agent
-        field, so we provide one */
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+        field, so we provide one. Apparently mod_security does not like libcurl-agent so we use Mozilla */
+        //curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0");
+		
 		
 		/* set the timeout */
 		curl_easy_setopt(curl,CURLOPT_TIMEOUT,5);
@@ -230,6 +234,7 @@ int postActivation(std::string message, std::string passprhase, std::string &err
 			//printf("///*****START SERVER REPLY******/\n%s\n///*******END SERVER REPLY*******////",chunk.memory);
 
             //parse the post result, see what it says and return the error
+			printf("This is the response\n******\n%s\n******\n",chunk.memory);
 			if (strstr(chunk.memory,"Error:")>0) {
 				//got an error...
 				printf("did not find 'Request received correctly' in chunk\n");

@@ -6396,7 +6396,7 @@ Fl_Double_Window* AboutWindow::make_window() {
     { Fl_Box* o = new Fl_Box(138, 128, 172, 7, "JefeCheck by Daniel Gollas");
       o->labelcolor((Fl_Color)29);
     } // Fl_Box* o
-    { Fl_Box* o = new Fl_Box(199, 160, 50, 10, "2006-2009");
+    { Fl_Box* o = new Fl_Box(199, 160, 50, 10, "2006-2012");
       o->labelcolor((Fl_Color)29);
     } // Fl_Box* o
     { versionLabel = new Fl_Box(199, 177, 50, 11, "v.1.1.0");
