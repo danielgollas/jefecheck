@@ -520,7 +520,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <EmbedManifest>false</EmbedManifest>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level2</WarningLevel>
@@ -620,6 +622,8 @@
       <AdditionalIncludeDirectories>buildDependencies\include\OpenEXR;buildDependencies\include;C:\projects\boost_1_46_1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/EHs /DBOTAN_DLL=__declspec(dllexport) /wo4244 /wo4305 /wd4275 /wd4244  /wd4251 /wd4250 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32;OPENEXR_DLL;x86_64;WIN64;NDEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN;VC_EXTRA_LEAN;WIN32_EXTRA_LEAN;GLEW_STATIC;CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>false</GenerateDebugInformation>
@@ -627,6 +631,8 @@
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>C:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64;C:\projects\jefecheck2\win\buildDependencies\lib\Release\x86_64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>glut32.lib;GlU32.Lib;fltk.lib;fltkgl.lib;opengl32.lib;libbotan.lib;winmm.lib;comctl32.lib;wsock32.lib;glew32s.lib;flulib.lib;ws2_32.lib;Half.lib;IlmImf.lib;IlmThread.lib;Imath.lib;Iex.lib;zdll.lib;zlib.lib;zlibwapi.lib;Iphlpapi.lib;wldap32.lib;ssleay32.lib;libeay32.lib;curllib_static.lib;libgfl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AssemblyDebug>false</AssemblyDebug>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
