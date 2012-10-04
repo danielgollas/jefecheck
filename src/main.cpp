@@ -711,7 +711,7 @@ int main(int argc, char *argv[]) {
 #ifdef LICENSED
     printf("license for use by %s\n",CLIENTNAME);
 #else
-    printf("Demo Version, Not for commercial use\n");
+    printf("Free Version, for commercial use or otherwise!, if you like it, donate or buy me a beer.\n");
 #endif
 
 #ifdef linux
