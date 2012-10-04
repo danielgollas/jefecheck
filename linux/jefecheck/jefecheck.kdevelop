@@ -14,8 +14,8 @@
     <projectname>jefecheck</projectname>
     <projectdirectory>.</projectdirectory>
     <absoluteprojectpath>false</absoluteprojectpath>
-    <description></description>
-    <defaultencoding></defaultencoding>
+    <description/>
+    <defaultencoding/>
   </general>
   <kdevautoproject>
     <general>
@@ -57,16 +57,16 @@
         <ccompiler>kdevgccoptions</ccompiler>
         <cxxcompiler>kdevgppoptions</cxxcompiler>
         <f77compiler>kdevg77options</f77compiler>
-        <cxxflags>-O0 -g3</cxxflags>
+        <cxxflags>-O0 -g3 </cxxflags>
         <envvars/>
-        <topsourcedir></topsourcedir>
-        <cppflags>GLEW_STATIC</cppflags>
-        <ldflags></ldflags>
-        <ccompilerbinary></ccompilerbinary>
+        <topsourcedir/>
+        <cppflags/>
+        <ldflags/>
+        <ccompilerbinary/>
         <cxxcompilerbinary>g++</cxxcompilerbinary>
-        <f77compilerbinary></f77compilerbinary>
-        <cflags></cflags>
-        <f77flags></f77flags>
+        <f77compilerbinary/>
+        <cflags/>
+        <f77flags/>
       </debug>
     </configurations>
     <make>
@@ -78,18 +78,18 @@
         <envvar value="libboost_system-mt.a" name="boostSystemLibs" />
         <envvar value="libboost_thread-mt.a" name="boostThreadLibs" />
         <envvar value="-I/opt/local/include" name="botanIncludes" />
-        <envvar value="-L/usr/local/lib -lm -lpthread -lrt /usr/lib/libbotan.a /usr/lib/libssl.a  /usr/lib/libcrypto.a  /usr/lib/libgmp.a -lbz2" name="botanLibs" />
+        <envvar value="-L/usr/local/lib -lm -lpthread -lrt /usr/lib/libbotan.a  /usr/lib/libgmp.a -lbz2" name="botanLibs" />
         <envvar value="`curl-config --libs`" name="curlLibs" />
-        <envvar value="-I/usr/local/include/OpenEXR/" name="exrIncludes" />
-        <envvar value="/usr/local/lib/libIlmImf.a  /usr/local/lib/libHalf.a /usr/local/lib/libImath.a  /usr/local/lib/libIlmThread.a /usr/local/lib/libIex.a" name="exrLibs" />
+        <envvar value="-I/usr/local/include/OpenEXR/ -I/usr/include/OpenEXR/" name="exrIncludes" />
+        <envvar value="/usr/lib/libIlmImf.a  /usr/lib/libHalf.a /usr/lib/libImath.a  /usr/lib/libIlmThread.a /usr/lib/libIex.a" name="exrLibs" />
         <envvar value="-lfreeimageplus" name="filLibs" />
         <envvar value="/usr/lib/libfreeimage.a /usr/lib/libfreeimageplus.a" name="filLibsStatic" />
         <envvar value="`fltk-config --use-gl --ldstaticflags`" name="fltkLibs" />
         <envvar value="`flu-config --ldstaticflags`" name="fluFlags" />
-        <envvar value="-I../../../sources/GflSDK-Linux-x64/include/" name="gflIncludes" />
+        <envvar value="-I/home/dgollas/Desktop/jefecheck2/linux/sources/GflSDK-Linux-x64/include" name="gflIncludes" />
         <envvar value="-ldl -lgfl -lgfle" name="gflLibs" />
         <envvar value="-lglut" name="glutLibCommand" />
-        <envvar value="-lkrb5 /usr/lib/libssl.a /usr/lib/libcrypto.a" name="ssllibPath" />
+        <envvar value="-lkrb5 /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a" name="ssllibPath" />
         <envvar value="1" name="WANT_AUTOCONF_2_5" />
         <envvar value="1" name="WANT_AUTOMAKE_1_6" />
       </envvars>
@@ -192,7 +192,7 @@
       <includestyle>3</includestyle>
       <root></root>
       <designerintegration>EmbeddedKDevDesigner</designerintegration>
-      <qmake>/usr/bin/qmake</qmake>
+      <qmake></qmake>
       <designer></designer>
       <designerpluginpaths/>
     </qt>
@@ -220,7 +220,7 @@
       <includePaths>.;/usr/local/include/;/usr/include/;/usr/local/include/OpenEXR/;</includePaths>
     </codecompletion>
     <creategettersetter>
-      <prefixGet></prefixGet>
+      <prefixGet/>
       <prefixSet>set</prefixSet>
       <prefixVariable>m_,_</prefixVariable>
       <parameterName>theValue</parameterName>
@@ -242,11 +242,11 @@
   </cppsupportpart>
   <kdevdebugger>
     <general>
-      <gdbpath></gdbpath>
-      <dbgshell></dbgshell>
-      <configGdbScript></configGdbScript>
-      <runShellScript></runShellScript>
-      <runGdbScript></runGdbScript>
+      <gdbpath/>
+      <dbgshell/>
+      <configGdbScript/>
+      <runShellScript/>
+      <runGdbScript/>
       <breakonloadinglibs>true</breakonloadinglibs>
       <separatetty>false</separatetty>
       <floatingtoolbar>false</floatingtoolbar>

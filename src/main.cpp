@@ -816,7 +816,7 @@ int main(int argc, char *argv[]) {
     Fl::dnd_text_ops(true);
 
     mw.mainWindow->redraw();
-    mw.vp->draw();
+    //mw.vp->draw();
 
     //wait until we have a good rendering context
 
