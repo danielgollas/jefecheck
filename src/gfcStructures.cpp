@@ -1765,11 +1765,16 @@ std::string findFileInSearchPaths(std::string theFile) {
     std::string result=theFile;
     boost::filesystem::path tempPath(theFile);
 	//std::string theFileLeaf=tempPath.leaf().string();
-#ifdef WIN32
+	
 	std::string theFileLeaf=tempPath.filename().string();
-#else
-	std::string theFileLeaf=tempPath.filename();
-#endif
+
+//From when we had different versions of boost
+//#ifdef WIN32
+//	//std::string theFileLeaf=tempPath.filename().string();
+//#else
+//	//std::string theFileLeaf=tempPath.filename();
+//#endif
+
 	std::cout << "Trying to find in search paths thefileLeaf: " << theFileLeaf << std::endl;
     for(int i=0;i<folderCount;i++)
     {
