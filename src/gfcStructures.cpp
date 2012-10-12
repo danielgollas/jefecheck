@@ -647,7 +647,7 @@ char splitterChar;
 				if (fl_filename_isdir(tmp->d_name)==0 &&	fl_filename_match(tmp->d_name,"{*.tga|*.cub|*.lut|*.cube}")) {
 					std::string tempLutName = path+tmp->d_name;
 					//printf(" (%i) %s\n",i,tmp->d_name);
-					printf ( "+Path loading LUT %s ",GetFilenameNoPath ( tempLutName ).c_str() );
+					printf ( "+Path loading LUT %s \n",GetFilenameNoPath ( tempLutName ).c_str() );
 					std::string statusString;
 					statusString="Loading LUT: ";
 					statusString+=GetFilenameNoPath ( tempLutName );

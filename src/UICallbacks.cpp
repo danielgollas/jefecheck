@@ -818,8 +818,8 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 
 
 	case FILTERINGMAGLINEAR_ID:
-		sett.filterMin=GL_LINEAR;
-		sett.filterMax=GL_NEAREST;
+		sett.filterMin=GL_NEAREST;
+		sett.filterMax=GL_LINEAR;
 		break;
 
 	case FILTERINGMAGBILINEAR_ID:

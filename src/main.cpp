@@ -60,7 +60,7 @@
 #ifdef WIN32
 //stuff needed to set the program icon on windows
 #include <FL/x.H>
-#include "resource1.h"
+#include "resource.h"
 #endif
 
 #include "minSpecsWindow.h"
@@ -786,10 +786,13 @@ int main(int argc, char *argv[]) {
     Fl::screen_xywh(mwx,mwy,mww,mwh,0);
 
 #ifdef WIN32
-    mw.mainWindow->icon((char *)LoadIcon(fl_display, MAKEINTRESOURCE(IDI_ICON0)));
+    mw.mainWindow->icon((char *)LoadIcon(fl_display,  MAKEINTRESOURCE(IDI_ICON2)));
+	mw.mainWindow->show(1, &argv[0]);
+#else
+	mw.mainWindow->show();
 #endif
     //mw.mainWindow->show(1, &argv[0]);
-    mw.mainWindow->show();
+    
 
     Fl::check();
 

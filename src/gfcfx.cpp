@@ -49,6 +49,16 @@ std::string getInfoLog ( GLhandleARB obj )
 	}
 }
 
+int getShaderCompileStatus ( GLhandleARB obj )
+{
+	int status = 0;
+	
+	glGetObjectParameterivARB ( obj, GL_OBJECT_COMPILE_STATUS_ARB,
+	                            ( GLint* ) &status);
+
+	return status;
+}
+
 std::string gfcFX::getNameNoPath()
 {
 
@@ -482,10 +492,14 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 				
 				glCompileShaderARB ( vertexShader );
 				
-				std::string infoLog;
-				infoLog = getInfoLog ( vertexShader );
-				if ( infoLog.size() >0 )
+				
+				int compileStatus=getShaderCompileStatus(vertexShader);
+				
+
+				if ( !compileStatus )
 				{
+					std::string infoLog;
+					infoLog = getInfoLog ( vertexShader );
 					printf ( "Vertex Shader compilation error!:\n%s\nFX not loaded!\n",infoLog.c_str() );
 					compilationError="Vertex Shader Compilation Error: ";
 					compilationError+=vertex;
@@ -502,10 +516,29 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 					errorWhileLoading=true;
 					//return 1;
 				}
-				else
-				{
-					//printf("..OK!\n");
-				}
+
+				//if ( infoLog.size() >0 )
+				//{
+				//	printf ( "Vertex Shader compilation error!:\n%s\nFX not loaded!\n",infoLog.c_str() );
+				//	compilationError="Vertex Shader Compilation Error: ";
+				//	compilationError+=vertex;
+				//	compilationError+=":\n\n";
+				//	compilationError+=infoLog;
+				//	//delete [] shaderPath;
+				//	if ( pprogress!=NULL )
+				//	{
+				//		pprogress->label ( "Vertex Shader Error" );
+				//		pprogress->value ( 0 );
+				//		pprogress->selection_color (  fl_rgb_color(42,20,20) );
+				//		Fl::check();
+				//	}
+				//	errorWhileLoading=true;
+				//	//return 1;
+				//}
+				//else
+				//{
+				//	//printf("..OK!\n");
+				//}
 			}
 		}
 		//Load Fragment Shader
@@ -566,43 +599,64 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 #endif
 
 				glCompileShaderARB ( fragmentShader );
-				std::string infoLog;
-				infoLog = getInfoLog ( fragmentShader );
-				if ( strstr ( infoLog.c_str(),"ERROR" ) !=NULL || strstr ( infoLog.c_str(),"error" ) !=NULL )
+				
+				int compileStatus=getShaderCompileStatus(fragmentShader);
+				
+				if ( !compileStatus )
 				{
-					printf ( "Fragment Shader compilation error!:\n%s\nFX not loaded!\n",infoLog.c_str() );
-					
-					compilationError="Fragment Shader Compilation Error: ";
-					compilationError+=fragment;
+					std::string infoLog;
+					infoLog = getInfoLog ( fragmentShader );
+					printf ( "Vertex Shader compilation error!:\n%s\nFX not loaded!\n",infoLog.c_str() );
+					compilationError="Vertex Shader Compilation Error: ";
+					compilationError+=vertex;
 					compilationError+=":\n\n";
 					compilationError+=infoLog;
-					//delete shaderPath;
+					//delete [] shaderPath;
 					if ( pprogress!=NULL )
 					{
-						pprogress->label ( "Fragment Shader compilation error!" );
-						pprogress->value ( pprogress->maximum() );
+						pprogress->label ( "Vertex Shader Error" );
+						pprogress->value ( 0 );
 						pprogress->selection_color (  fl_rgb_color(42,20,20) );
 						Fl::check();
 					}
 					errorWhileLoading=true;
 					//return 1;
 				}
-				else
-				{
-					if ( strstr ( infoLog.c_str(),"warning" ) !=NULL )
-					{
-						printf ( "...OK! (With Warnings)\n" );
-#ifdef PRINTFXLOADINGMESSAGES
+//				if ( strstr ( infoLog.c_str(),"ERROR" ) !=NULL || strstr ( infoLog.c_str(),"error" ) !=NULL )
+//				{
+//					printf ( "Fragment Shader compilation error!:\n%s\nFX not loaded!\n",infoLog.c_str() );
+//					
+//					compilationError="Fragment Shader Compilation Error: ";
+//					compilationError+=fragment;
+//					compilationError+=":\n\n";
+//					compilationError+=infoLog;
+//					//delete shaderPath;
+//					if ( pprogress!=NULL )
+//					{
+//						pprogress->label ( "Fragment Shader compilation error!" );
+//						pprogress->value ( pprogress->maximum() );
+//						pprogress->selection_color (  fl_rgb_color(42,20,20) );
+//						Fl::check();
+//					}
+//					errorWhileLoading=true;
+//					//return 1;
+//				}
+//				else
+//				{
+//					if ( strstr ( infoLog.c_str(),"warning" ) !=NULL )
+//					{
+//						printf ( "...OK! (With Warnings)\n" );
+//#ifdef PRINTFXLOADINGMESSAGES
+//
+//						printf ( "    Fragment Shader compilation warnings!:\n%s\nFX still loaded!\n",infoLog.c_str() );
+//#endif
+//
+//					}
+//					else
+//						printf ( "..OK!\n" );
 
-						printf ( "    Fragment Shader compilation warnings!:\n%s\nFX still loaded!\n",infoLog.c_str() );
-#endif
 
-					}
-					else
-						printf ( "..OK!\n" );
-
-
-				}
+				//}
 			}
 		}
 		

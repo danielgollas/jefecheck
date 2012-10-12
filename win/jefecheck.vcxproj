@@ -461,6 +461,9 @@
     <ClInclude Include="..\src\xmlParser.h" />
     <ClInclude Include="..\src\_FindFirst.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\src\jefecheck.rc" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{752D2A64-D9CC-4D1A-9736-2A5A195217A5}</ProjectGuid>
     <RootNamespace>jefecheck</RootNamespace>
@@ -626,6 +629,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32;OPENEXR_DLL;x86_64;WIN64;NDEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN;VC_EXTRA_LEAN;WIN32_EXTRA_LEAN;GLEW_STATIC;CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <SuppressStartupBanner>false</SuppressStartupBanner>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>false</GenerateDebugInformation>
