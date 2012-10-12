@@ -43,7 +43,7 @@ echo "Architecture " $1
 
 #./configure
 make 
-exit
+
 rm -Rf JefeCheck.app
 mv src/jefecheck src/JefeCheck
 strip src/JefeCheck
