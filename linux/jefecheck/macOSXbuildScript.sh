@@ -12,13 +12,13 @@ export boostSystemLibs="libboost_system-xgcc40-mt-1_37.a"
 export boostFileSystemLibs="libboost_filesystem-xgcc40-mt-1_37.a"
 
 export gflLibs="-ldl -lgfl -lgfle"
-export filLibs="-lfreeimageplus"
+export filLibs="-lfreeimage"
 
-export botanLibs="-L/opt/local/lib -lm -lpthread /opt/local/lib/libbotan.a"
+export botanLibs="-L/usr/local/lib -lm -lpthread /usr/local/lib/libbotan.a"
 export ssllibPath="-lssl -lcrypto -lkrb5"
-export boostIncludes="-I/usr/local/include/boost-1_37/"
+export boostIncludes="-I/usr/local/include/boost/"
 export exrIncludes="-I/usr/local/include/OpenEXR/"
-export botanIncludes="-I/opt/local/include/"
+export botanIncludes="-I/opt/local/include/ -I./src"
 export exrLibs="/usr/local/lib/libIlmImf.a /usr/local/lib/libHalf.a /usr/local/lib/libImath.a /usr/local/lib/libIlmThread.a /usr/local/lib/libIex.a"
 #export curlLibs=`curl-config --libs`
 export curlLibs="/usr/local/lib/libcurl.la -lssl -lcrypto -lz"
@@ -43,6 +43,7 @@ echo "Architecture " $1
 
 #./configure
 make 
+exit
 rm -Rf JefeCheck.app
 mv src/jefecheck src/JefeCheck
 strip src/JefeCheck
