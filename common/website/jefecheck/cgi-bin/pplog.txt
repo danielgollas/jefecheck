@@ -1,0 +1,3 @@
+Posting to paypal
+Checking for errors
+Result: INVALID
