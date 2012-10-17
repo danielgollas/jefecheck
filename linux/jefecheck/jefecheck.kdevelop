@@ -14,19 +14,20 @@
     <projectname>jefecheck</projectname>
     <projectdirectory>.</projectdirectory>
     <absoluteprojectpath>false</absoluteprojectpath>
-    <description/>
-    <defaultencoding/>
+    <description></description>
+    <defaultencoding></defaultencoding>
+    <versioncontrol></versioncontrol>
   </general>
   <kdevautoproject>
     <general>
       <activetarget>src/jefecheck</activetarget>
-      <useconfiguration>debug</useconfiguration>
+      <useconfiguration>optimized</useconfiguration>
     </general>
     <run>
       <mainprogram>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</mainprogram>
       <terminal>true</terminal>
-      <programargs/>
-      <globaldebugarguments/>
+      <programargs></programargs>
+      <globaldebugarguments></globaldebugarguments>
       <globalcwd>/home/dgollas/projects/jefecheck2/linux/jefecheck/debug</globalcwd>
       <useglobalprogram>false</useglobalprogram>
       <autocompile>false</autocompile>
@@ -50,6 +51,7 @@
         <cxxcompiler>kdevgppoptions</cxxcompiler>
         <f77compiler>kdevg77options</f77compiler>
         <cxxflags>-O2 -g0</cxxflags>
+        <envvars/>
       </optimized>
       <debug>
         <configargs>--enable-debug=full</configargs>
@@ -97,7 +99,7 @@
       <runmultiplejobs>false</runmultiplejobs>
       <numberofjobs>1</numberofjobs>
       <dontact>false</dontact>
-      <makebin/>
+      <makebin></makebin>
       <prio>0</prio>
     </make>
   </kdevautoproject>
@@ -220,7 +222,7 @@
       <includePaths>.;/usr/local/include/;/usr/include/;/usr/local/include/OpenEXR/;</includePaths>
     </codecompletion>
     <creategettersetter>
-      <prefixGet/>
+      <prefixGet></prefixGet>
       <prefixSet>set</prefixSet>
       <prefixVariable>m_,_</prefixVariable>
       <parameterName>theValue</parameterName>
@@ -242,11 +244,11 @@
   </cppsupportpart>
   <kdevdebugger>
     <general>
-      <gdbpath/>
-      <dbgshell/>
-      <configGdbScript/>
-      <runShellScript/>
-      <runGdbScript/>
+      <gdbpath></gdbpath>
+      <dbgshell></dbgshell>
+      <configGdbScript></configGdbScript>
+      <runShellScript></runShellScript>
+      <runGdbScript></runGdbScript>
       <breakonloadinglibs>true</breakonloadinglibs>
       <separatetty>false</separatetty>
       <floatingtoolbar>false</floatingtoolbar>
