@@ -1,7 +1,7 @@
 #USAGE run with 32 or 64 as arguments to create an installation package for linux32 or 64
 #second argument should be _demo or blank
 
-DIR=JefeCheck_Linux_$1_Install
+DIR=JefeCheck_Linux_$1
 exeFile=jefecheck
 
 #cleanup
@@ -28,7 +28,7 @@ cp -v ./libs$1/* ./${DIR}/lib/
 
 #copy the install scripts, we use the Demo versions if we are creating a demo package
 #cp -v ./installJefeRunAsRoot$2.sh ./${DIR}
-cp -v ./install.sh ./${DIR}
+cp -v ./setup.sh ./${DIR}
 
 #copy the common resources
 cp  ../common/FX/* ./${DIR}/FX/
@@ -41,6 +41,7 @@ cp  ./README.linux ./${DIR}
 #tar gzip 
 echo creating tarball $DIR.tar.gz
 tar czf ${DIR}.tar.gz $DIR
+mv $DIR.tar.gz ../installers/
 #gzip -9 ${DIR}.tar 
 
 #cleanup

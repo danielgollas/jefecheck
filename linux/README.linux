@@ -1,8 +1,10 @@
+
+JefeCheck 1.5
+
 CONTENTS:
 --------------------
 a) Recommended System Requirements
-b) How to Install JefeCheck for Linux
-c) License generation and installation
+b) Installation
 d) Getting Help
 
 
@@ -15,17 +17,17 @@ a) Recommended System Requirements
 *Fast access to frame storage (gigabit ethernet is nice).
 *At least a 1024x768 display resolution. 
 
-JefeCheck can run in almost any system, but it remains a high performance program that requires a fair amount of processing power to run correctly, particularly you need a recent 3D accelerator video card. If you whish to use the FXs feature you need a graphics card with a fair amunt of Pixel/Vertex Shader Units. At the time of writing, the latest GeForce 8 video cards have 128 unified Stream Processors, but having 24 is usually enough to run a few FXs on a full 2K frame in real time. Remember that the amount of video RAM is not the only thing that makes a video card powerfull, shader units (or stream processors) and memory bandwith are much more important. 
+JefeCheck can run in almost any system, but it remains a high performance program that requires a fair amount of processing power to run correctly, particularly you need a recent 3D accelerator video card. If you whish to use the FXs feature you need a graphics card with a fair amunt of Pixel/Vertex Shader Units. At the time of writing, the latest GeForce 8 video cards have 128 unified Stream Processors, but having 24 is usually enough to run a few FXs on a full 2K frame in real time. Remember that the amount of video RAM is not the only thing that makes a video card powerful, shader units (or stream processors) and memory bandwith are much more important. 
 
 
 b) How to Install JefeCheck for Linux
 -----------------------------------------------------
 JefeCheck requires root user access to be installed, as some shared libraries need to be installed into the /usr/local/lib/ folder
 
-1. As a normal user, run the script installJefeRunAsUser.sh
-   >sh installJefeRunAsUser.sh
+1. As a normal user, run the script setup.sh
+   >sh setup.sh
 
-   this will create a .JefeCorp folder in your home directory and install all the FXs and included LUTs into it. 
+   this will create a .JefeCorp folder in your home directory and install all the FXs, LUTs and user manual into it.
 
 2. If you don't already have them in your system, download and install the following shared libraries into /usr/local/lib or /usr/lib or any other place where they can be found by executable programs. The libraries are also included in the installation package in the lib folder
 
@@ -43,17 +45,6 @@ This will list all the required libraries that should be installed on your syste
 
 If you have absolutely no idea what a shared library is or how to install it, please ask your system administrator or someone who can help you.
 
-
-
-c) License generation and installation (not applicable for the Demo version)
--------------------------------------------------------
-1. After purchasing JefeCheck run the application
-2. The program will ask you if you want to request a new license, tell it you do.
-3. Fill out the necessary information on the activation request screen and send.
-4. You will receive a confirmation email indicating that we got your request.
-5. Within a workday (probably within a minute or two) a license file for your computer will be sen't to the email that made the payment at Paypal
-4. When JefeCheck asks you for a license file, point it to the license you received. You only need to do this once (unless you move the license to another folder or reinstall Jefecheck)
-
 d) Getting Help
 --------------------------------------------------------
 To get help please visit 
@@ -61,6 +52,6 @@ http://jefecheck.jefecorp.com/support.html
 
 You can access the support forums, download the User Manual, Quick Reference Guide and Video Tutorials, submit bug reports and feature requests etc.
 
-You can also write to support@jefecheck.com if you have some urgent question that you cant resolve by reading the manual or asking in the forums. 
+You can also write to support@jefecheck.com if you have some urgent question that you cant resolve by reading the manual or asking in the forums.
 
-Have Fun! explore all the features! Tell your friends!
+Have Fun! explore all the features! Tell your friends!, Donate!
