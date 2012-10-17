@@ -1,8 +1,8 @@
 #USAGE run with 32 or 64 as arguments to create an installation package for linux32 or 64
 #second argument should be _demo or blank
 
-DIR=JefeCheck_Linux_x86-$1$2_Install
-exeFile=jefecheck$2
+DIR=JefeCheck_Linux_$1_Install
+exeFile=jefecheck
 
 #cleanup
 echo removing $DIR
@@ -18,7 +18,7 @@ mkdir ./${DIR}/bin
 mkdir ./${DIR}/FX
 
 #copy the executable and append _Demo if  necesary
-cp -v  ../optimized/src/checkmate1 ./${DIR}/bin/$exeFile
+cp -v  ./jefecheck/optimized/src/jefecheck ./${DIR}/bin/$exeFile
 strip  ./${DIR}/bin/$exeFile
 #copy the libs
 cp -v ./libs$1/* ./${DIR}/lib/
@@ -28,12 +28,12 @@ cp -v ./libs$1/* ./${DIR}/lib/
 
 #copy the install scripts, we use the Demo versions if we are creating a demo package
 #cp -v ./installJefeRunAsRoot$2.sh ./${DIR}
-cp -v ./installJefeRunAsUser$2.sh ./${DIR}
+cp -v ./install.sh ./${DIR}
 
 #copy the common resources
-cp  ../CommonResources/FX/* ./${DIR}/FX/
-cp ../CommonResources/Manual/JefeCheckManual.pdf ./${DIR}/
-cp ../CommonResources/Manual/JefeCheckQuickStart.pdf ./${DIR}/
+cp  ../common/FX/* ./${DIR}/FX/
+cp ../common/Manual/JefeCheckManual.pdf ./${DIR}/
+cp ../common/Manual/JefeCheckQuickStart.pdf ./${DIR}/
 
 #copy readme
 cp  ./README.linux ./${DIR}
