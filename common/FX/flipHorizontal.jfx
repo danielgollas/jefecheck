@@ -1,0 +1,12 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Flip Image using a vertex shader" menuName="Comp/Flip Horizontal" version="1.0" author="Daniel Gollas" name="FlipHorizontal" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+<widget type="texture" step="1" default="0.0" label="image" varName="theImage" />
+      <widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="flipHorizontal.vert" fragment="flipHorizontal.frag" />
+</root>
