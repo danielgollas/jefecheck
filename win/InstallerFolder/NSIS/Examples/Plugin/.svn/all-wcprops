@@ -1,0 +1,53 @@
+K 25
+svn:wc:ra_dav:version-url
+V 98
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin
+END
+exdll.dsw
+K 25
+svn:wc:ra_dav:version-url
+V 108
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/exdll.dsw
+END
+extdll.inc
+K 25
+svn:wc:ra_dav:version-url
+V 109
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/extdll.inc
+END
+exdll_with_unit.dpr
+K 25
+svn:wc:ra_dav:version-url
+V 118
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/exdll_with_unit.dpr
+END
+exdll.c
+K 25
+svn:wc:ra_dav:version-url
+V 106
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/exdll.c
+END
+exdll.dpr
+K 25
+svn:wc:ra_dav:version-url
+V 108
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/exdll.dpr
+END
+exdll.dsp
+K 25
+svn:wc:ra_dav:version-url
+V 108
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/exdll.dsp
+END
+exdll.h
+K 25
+svn:wc:ra_dav:version-url
+V 106
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/exdll.h
+END
+nsis.pas
+K 25
+svn:wc:ra_dav:version-url
+V 107
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Examples/Plugin/nsis.pas
+END

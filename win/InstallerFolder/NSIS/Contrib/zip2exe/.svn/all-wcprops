@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 98
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Contrib/zip2exe
+END
+Base.nsh
+K 25
+svn:wc:ra_dav:version-url
+V 107
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Contrib/zip2exe/Base.nsh
+END
+Classic.nsh
+K 25
+svn:wc:ra_dav:version-url
+V 110
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Contrib/zip2exe/Classic.nsh
+END
+Modern.nsh
+K 25
+svn:wc:ra_dav:version-url
+V 109
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Contrib/zip2exe/Modern.nsh
+END
