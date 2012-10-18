@@ -32,7 +32,7 @@ export fluFlags=${result2}
 echo "This is fluFlags " $fluFlags
 
 appName=JefeCheck$2.app
-folderName=JefeCheck$2_$1_Apple_Installation
+folderName=JefeCheck_OSX_$1
 iconFilename=JefeCheck$2.icns
 
 
@@ -97,9 +97,12 @@ cp MacResources/How_To_Install_JefeCheck.pdf MacResources/$folderName/
 #create a tar from the whole MacResources/Architecture folder
 cd MacResources
 tar czf $folderName.tar.gz ./$folderName
+echo "done, created " $folderName.tar.gz
+echo "copying to installers folder..."
+cp $folderName.tar.gz ../../../installers/
 cd ..
 #rm -Rf MacResources/$folderName
 
-echo "done, created " $folderName.tar.gz
+
 #MacResources/$folderName/$appName/Contents/MacOS/JefeCheck
 open MacResources/$folderName/$appName
