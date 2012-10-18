@@ -55,25 +55,25 @@ echo "copying icons"
 cp MacResources/JefeCheckIcon.icns ./$appName/Contents/Resources/$iconFilename
 
 mkdir ./$appName/Contents/Resources/FX
-cp  CommonResources/FX/*.jfx ./$appName/Contents/Resources/FX/
-cp  CommonResources/FX/*.frag ./$appName/Contents/Resources/FX/
-cp  CommonResources/FX/*.vert ./$appName/Contents/Resources/FX/
-cp  CommonResources/FX/*.tga ./$appName/Contents/Resources/FX/
-cp  CommonResources/FX/*.lut ./$appName/Contents/Resources/FX/
-cp  CommonResources/FX/*.cub ./$appName/Contents/Resources/FX/
+cp  ../../common/FX/*.jfx ./$appName/Contents/Resources/FX/
+cp  ../../common/FX/*.frag ./$appName/Contents/Resources/FX/
+cp  ../../common/FX/*.vert ./$appName/Contents/Resources/FX/
+cp  ../../common/FX/*.tga ./$appName/Contents/Resources/FX/
+cp  ../../common/FX/*.lut ./$appName/Contents/Resources/FX/
+cp  ../../common/FX/*.cub ./$appName/Contents/Resources/FX/
 
-cp  CommonResources/Manual/JefeCheckManual.pdf ./$appName/Contents/Resources/
-cp  CommonResources/Manual/JefeCheckQuickStart.pdf ./$appName/Contents/Resources/
+cp  ../../common/Manual/JefeCheckManual.pdf ./$appName/Contents/Resources/
+cp  ../../common/Manual/JefeCheckQuickStart.pdf ./$appName/Contents/Resources/
 
 #copy the required dylibs
 echo "copying libs from MacResources/"$1libs/lib/*.dylib
 cp -vRf MacResources/$1libs/lib/*.dylib ./$appName/Contents/MacOS
 
 #modify the executable and dylibs to point in the right direction
-install_name_tool -change libgfl.3.40.dylib @executable_path/libgfl.3.40.dylib ./$appName/Contents/MacOS/JefeCheck
-install_name_tool -change libgfle.3.40.dylib @executable_path/libgfle.3.40.dylib ./$appName/Contents/MacOS/JefeCheck
-install_name_tool -change libgfl.3.40.dylib @executable_path/libgfl.3.40.dylib ./$appName/Contents/MacOS/libgfle.3.40.dylib
-install_name_tool -id @executable_path/libgfl.3.40.dylib ./$appName/Contents/MacOS/libgfl.3.40.dylib 
+install_name_tool -change libgfl.3.90.dylib @executable_path/libgfl.3.90.dylib ./$appName/Contents/MacOS/JefeCheck
+install_name_tool -change libgfle.3.90.dylib @executable_path/libgfle.3.90.dylib ./$appName/Contents/MacOS/JefeCheck
+install_name_tool -change libgfl.3.90.dylib @executable_path/libgfl.3.90.dylib ./$appName/Contents/MacOS/libgfle.3.90.dylib
+install_name_tool -id @executable_path/libgfl.3.90.dylib ./$appName/Contents/MacOS/libgfl.3.90.dylib 
 
 #cp MacBundleResources/prefs.ini ./JefeCheck.app/Contents/Resources/
 
