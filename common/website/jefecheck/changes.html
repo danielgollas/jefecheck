@@ -1,0 +1,192 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Untitled Document</title>
+<style type="text/css">
+<!--
+body {
+	background-color: #000000;
+}
+-->
+</style>
+<link href="jefecheckCSS.css" rel="stylesheet" type="text/css" />
+<style type="text/css">
+<!--
+.style12 {font-size: 14px}
+-->
+</style>
+</head>
+
+<body>
+<blockquote>
+  <p><span class="SectionTitle">Change log and bug fixes</span><span class="SectionTitle"></span></p>
+</blockquote>
+<ul>
+	
+  <li class="bodyText"><span class="bodyTextBold">JefeCheck 1.5.0</span> (released October 17th 2012)<br />
+    <br />
+    <blockquote>
+      <p><strong><span class="style12">MAJOR CHANGES</span>:</strong></p>
+    </blockquote>
+    <ul>
+      <li><strong>Fisrt Release in over two years! </strong>: We will try to keep adding new features and fix bugs. </li>
+      <li><strong>JefeCheck is now Donationware!:</strong> You can use the current version of JefeCheck for free for any project, including commercial stuff. If you like it, please consider donating.</li>
+      <li><strong>64bit across the board</strong>: All JefeCheck builds are now 64bit on Windows, Linux and OSX<br />  
+        <br/>
+        <p><strong><span class="style12">Minor Changes</span>:</strong></p>
+      </li>
+	<li>
+	<strong>Fixed FX loading error on ATI GPUs</strong><br /><br />
+	</li>
+    </ul>
+  </li>
+  <br />
+  <li class="bodyText"><span class="bodyTextBold">JefeCheck 1.4.03</span> (released August 6th 2009)<br />
+    <br />
+    <blockquote>
+      <p><strong><span class="style12">MAJOR CHANGES</span>:</strong></p>
+    </blockquote>
+    <ul>
+      <li><strong>Brand New User Interface, no more shiny buttons! </strong>: The GUI is now simpler than ever, less clutter, more sober color scheme and easier to use. </li>
+      <li><strong>Brand new Color Correction controls and Shortcuts:</strong> Common CC operations like LUT , Exposure, Gamma, Brightness, Contrast and Saturation are easier to apply than ever. <br />
+      Just press the shortcut key and drag on the screen to adjust.</li>
+      <li><strong>Support for LUT cubes sizes 32x32x32 and up</strong>: Using the .cub format (Truelight Cubes)<br />  
+        <br />    
+        <p><strong><span class="style12">Minor Changes</span>:</strong></p>
+      </li>
+      <li><strong>Better OpenEXR Support</strong>: Better handing of Display Window and Aspect Ratio attributes, better handling of Half values. Optional 16bit float to 8 bit Integer tone mapping.</li>
+      <li><strong>Color Correction favorites:</strong> Save common Color Correction attributes to shortcut keys.</li>
+      <li><strong>Improved Pipeline Integration</strong>: Use environment variables to define: Default Browse Path, FX Path, LUT Path and Default LUT. New command line argument to define LUT for each viewport.</li>
+      <li>Drag and Drop folders, first found image sequence will be loaded.</li>
+      <li>RGB filters now show channels in Grayscale, instead of in color.</li>
+      <li>Improved Playback performance</li>
+      <li>Improved color correction performance on lower end systems (Tested in the extreme case of MacBooks with integrated Intel GMA950 video cards).</li>
+      <li>Aspect Bars can now be semitransparent. </li>
+      <li>Better handling of Remote Session FX and LUT sharing.</li>
+      <li>Many small bugs squashed, more stable.<br />
+        <br />
+      </li>
+    </ul>
+  </li>
+  <li class="bodyText"><span class="bodyTextBold">JefeCheck 1.3.704</span> (released May 21st 2009)<br />
+    <br />
+    <blockquote>
+      <p><strong><span class="style12">MAJOR CHANGES</span>:</strong></p>
+    </blockquote>
+    <ul>
+      <li><strong>Support for Linux 64 bit!</strong> The main advantage of this is that you can use more than 4GB of RAM to cache frames.</li>
+      <li><strong>Playlists</strong> and Playlist Window. </li>
+      <li><strong>Playlist Support in Remote Sessions</strong>. Among other things, loading from a playlist automatically loads the item for the other participants in the Remote Session.<br />
+        Participants must define their sequence search paths so JefeCheck knows where to look for remotely loaded sequences.</li>
+      <li><strong>Histogram</strong> display.</li>
+      <li><strong>FX Stack Favorites</strong>. They let you save and load commonly used FX Stacks with a single keystroke. <br />
+      </li>
+      <li>Updated FXs:<br />
+        <br />
+      </li>
+      <ul>
+        <li>Updated the Chroma Key FXs, they now use a MUCH better algorithm and extract very nice mattes.</li>
+        <li>Split FX now shows a line at the split with configurable opacity and width.<br />  
+          <br />
+        </li>
+      </ul>
+      <li>NewFXs and LUTs:
+        <br />
+        <br />
+      </li>
+    </ul>
+    <ul>
+      <ul>
+        <li>Fun FX - Deforms the images in funny ways.</li>
+        <li>Log To Lin FX - Lets you apply a true Log To Lin transformation, without using LUTs, it's slow, but you can configure white point, black point, etc.</li>
+        <li>Convolution FX - Lets you apply a any 3x3 convolution kernel to the image. Comes with preset values for Sharpen, Blur, Gaussan Blur, Edge Detection and Emboss.</li>
+        <li>Add FX - Adds to images together</li>
+        <li>Multiply FX - Multiplies two images togheter</li>
+        <li>New log2LinsRGB 3D LUT.<br />
+          <br />
+        </li>
+      </ul>
+      <li>New shortcuts:
+        <ul>
+          <li>F key now fits the image to the viewport</li>
+          <li>r, g, b, a now toggle the channels display.</li>
+          <li>Shift+drag on the viewport scrubs the timeline.</li>
+          <li>Shift+F1-F5 loads FX Stack Favorites, Ctrl+Shift+F1-F5 saves FX Stack Favorites.</li>
+          <li>i and o set the In and Out points in the timeline, Shift+i and Shift+o reset them. </li>
+          <li>Alt+i sets the In point, unloads the sequence and begins loading from that point on. Similar to alt clicking on the timeline.</li>
+        </ul>
+        <br />
+      </li>
+    </ul>
+    <ul>
+      <li><strong>New Command Line Options</strong>: Can now load sessions, playlists and FX Stacks, in addition to the previous options for loading sequences, scale and range control.<br />  
+      </li>
+      <li><strong>Vsync</strong> option fixes tearing issues in high motion sequences</li>
+      <li><strong>New Online Store!</strong><br />
+      </li>
+    </ul>
+    <blockquote>
+      <p><strong>MINOR CHANGES AND BUGFIXES:</strong></p>
+    </blockquote>
+    <ul>
+      <li>Improved overall performance.</li>
+      <li>Faster DPX loading.</li>
+      <li>EXR Images loaded in the HALF format can now be loaded as 25% or 50% proxys.</li>
+      <li>Added the Balance Reads option, when enabled, JefeCheck tries to load all tracks at the same rate, even if some are big EXR files and others are small jpgs. This prevents small sized sequences from filling up RAM while big ones are still loading. </li>
+      <li>Fixed .avi file generation after rendering in Linux.</li>
+      <li>Streamlined the Licensing scheme. Now you simply buy online, and then request a License for your machine directly from JefeCheck.</li>
+      <li>Defining the area for Region of Interest (crop) loading is now more intuitive. Just drag the corners of the crop area to resize and drag the crop area to move.</li>
+      <li>Drag and Drop now works for FX Stack files, session files and Playlist files. </li>
+      <li>Some slider controls could not be set by typing in a value, now they can be.</li>
+      <li>Updated User Manual</li>
+      <li>Updated the Main Windows GUI a little bit.</li>
+      <li>Colored Pointers in Remote Sessions</li>
+      <li>FXs and LUTS are now loaded automatically from the installation folder, or from the path defined 
+        in the enviroment variables JEFECHECK_FX_PATH and JEFECHECK_LUT_PATH.</li>
+      <li>The default path used when browsing for files can be defined in the environment variable JEFECHECK_DEFAULT_BROWSE_PATH.</li>
+      <li>Added the System Requirements Check Window to determine what features are available on the hardware.</li>
+      <li>Ended support for Mac Power PC architecture. JefeCheck only runs on Intel Macs now.</li>
+      <li>Installation on Mac is now as simple as can be, just run!</li>
+      <li>If a frame is unreadable, you can skip it and continue loading the rest of the sequence.</li>
+      <li>Many bug fixes, some minor and some that caused crashes.</li>
+    </ul>
+  </li>
+</ul>
+<p>&nbsp;</p>
+<ul>
+  <li class="bodyText"><span class="bodyTextBold">JefeCheck 1.1.370</span>
+    <ul>
+      <li>CPU optimizations: Jefecheck no longer hogs the CPU. CPU usage goes down to 0% when paused and was dramatically reduced during playback and manipulation. Jefecheck now plays nicely with the rest of the programs you may have open at the time.<br />
+      </li>
+      <li>Start loading button for each sequence. You can start loading one sequence while you are still browsing for another sequence to load into another track. The start all button remains there if you want to start loading all sequences at the same time.</li>
+      <li>Fixed the arrow key shortcuts, they now work correctly to advance and rewind frames.</li>
+      <li>Redisigned FX Control Window is now less cluttered.</li>
+      <li>Most dialogs now have a milder contrast color scheme using white on gray instead of white on black.</li>
+      <li>Remote session colored pointers: During a remote session, your remote pointer can now be drawn in one of 8 fancy colors.</li>
+      <li>Brand new FXs!:
+        <br />
+        <br />
+        <ul>
+          <li>Gaussian Blur 3x3: Applies a 3x3 gaussian blur.</li>
+          <li>Average Blur 3x3: Applies a 3x3 average blur.</li>
+          <li>Average Blur: Applies an arbitrarily sized average blur. WARNING: This is a very resource intensive operation, we don't recommend setting the blur size to over 15 pixels, since it can cause a video driver crash.</li>
+          <li>Aspect bars: Applies aspect crop bars to the image. Since this is an FX, it can be rendered out and you can add aspect crop bars to your renders.</li>
+          <li>Move2D: Allows you to move the image within it's own frame. Can help when doing pre-composites.<br />
+            <br />
+          </li>
+        </ul>
+      </li>
+      <li>DPX Loading improvements: Fixed some dpx loading issues that could cause a crash when memory ran out.</li>
+      <li>EXR Rendering to file: Fixed a rendering bug that caused a memory leak when rendering to OpenEXR files. OpenEXR rendering is now very stable.</li>
+      <li>Fixed a bunch of minor bugs including a crash that ocurred when applying a 3D LUT if only one LUT was loaded.</li>
+    </ul>
+  </li>
+  <li class="bodyText"><span class="bodyTextBold">JefeCheck 1.0.317</span>
+    <ul>
+      <li>Initial release </li>
+      </ul>
+  </li>
+</ul>
+</body>
+</html>

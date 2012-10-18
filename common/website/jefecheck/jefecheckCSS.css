@@ -1,0 +1,164 @@
+@charset "utf-8";
+/* CSS Document */
+
+<style type="text/css">
+
+body {
+	background-color: #2A2A2A;
+
+}
+.bodyText {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	color: #CCCCCC;
+}
+body,td,th {
+	color: #2A2A2A;
+}
+.navigationItem {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 16px;
+	font-weight: bold;
+	color: #FFFFFF;
+	text-align: center;
+	
+}
+
+
+
+
+
+.footerText {
+	font-family: "Times New Roman", Times, serif;
+	font-size: 10px;
+	color: #666666;
+	text-align: center;
+}
+.SectionHeader {
+	background-image: url(../www/jefecheck/images/img3.gif);
+	background-repeat: repeat-x;
+	background-position: bottom;
+	font-family: "Times New Roman", Times, serif;
+	font-size: 36px;
+	font-weight: bolder;
+	color: #FFFFFF;
+}
+.SectionTitle {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 24px;
+	font-weight: normal;
+	color: #FFFFFF;
+}
+.titleUnderLine {
+	background-image: url(images/decoration.jpg);
+	background-repeat: repeat-x;
+	background-position: top;
+}
+.titleUnderLineGray {
+	background-image: url(images/img3.gif);
+	background-repeat: repeat-x;
+	background-position: top;
+}
+
+.headerBackground {
+	background-image: url(images/HeaderStrip.png);
+	background-repeat: no-repeat;
+	background-position: left top;
+}
+.headerBackgroundInvertedStrip {
+	background-image: url(images/header3SliceInvertedMedium.jpg);
+	background-repeat: repeat-x;
+	background-position: left bottom;
+}
+.headerBackgroundStrip {
+	background-image: url(images/HeaderStrip.png);
+	background-repeat: repeat-x;
+	background-position: center center;
+}
+
+
+.navigationItem:link {
+	color: #CCCCCC;
+	text-decoration: none;
+}
+.navigationItem:visited {
+	color: #CCCCCC;
+	text-decoration: none;
+}
+.navigationItem:hover {
+	color: #E44108;
+	text-decoration: underline overline;
+}
+a:link {
+	color: #999999;
+	text-decoration: none;
+}
+a:visited {
+	color: #999999;
+	text-decoration: none;
+}
+a:hover {
+	color: #FFFFFF;
+	text-decoration: underline;
+}
+.footerBackground {
+	background-image: url(images/decoration.jpg);
+	background-repeat: repeat-x;
+	background-position: top;
+}
+.style2 {font-size: 18px}
+.bodyTextBold {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 14px;
+	color: #CCCCCC;
+	font-weight: bold;
+}
+
+</style>
+.PCNDisplay {
+	font-family: "Courier New", Courier, monospace;
+	font-size: 24px;
+	background-color: #CCCCCC;
+	height: auto;
+	width: auto;
+	border-top-style: double;
+	border-right-style: double;
+	border-bottom-style: double;
+	border-left-style: double;
+}
+.PCNDisplay {
+	font-family: "Courier New", Courier, monospace;
+	font-size: 24px;
+	color: #000000;
+	background-color: #CCCCCC;
+	height: auto;
+	width: 400px;
+	text-align: center;
+	font-weight: bold;
+	left: 50%;
+}
+.MainTableBG {
+	background-image: url(images/image001.png);
+	background-repeat: no-repeat;
+	background-position: center top;
+}
+.MainTablePosition {
+	position: absolute;
+	top: 0px;
+	width: 100%;
+	left: 0px;
+	height: auto;
+}
+.bodyTextCode {
+	font-family: "Courier New", Courier, monospace;
+	font-size: 12px;
+	color: #CCCCCC;
+	background-color: #333333;
+}
+.exampleBox {
+	border: thin solid #CCCCCC;
+	width: auto;
+}
+.CrossedText {
+	text-decoration: line-through;
+}

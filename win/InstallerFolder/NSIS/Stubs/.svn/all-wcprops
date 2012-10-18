@@ -1,0 +1,47 @@
+K 25
+svn:wc:ra_dav:version-url
+V 88
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs
+END
+bzip2_solid
+K 25
+svn:wc:ra_dav:version-url
+V 100
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs/bzip2_solid
+END
+uninst
+K 25
+svn:wc:ra_dav:version-url
+V 95
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs/uninst
+END
+zlib
+K 25
+svn:wc:ra_dav:version-url
+V 93
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs/zlib
+END
+lzma
+K 25
+svn:wc:ra_dav:version-url
+V 93
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs/lzma
+END
+bzip2
+K 25
+svn:wc:ra_dav:version-url
+V 94
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs/bzip2
+END
+zlib_solid
+K 25
+svn:wc:ra_dav:version-url
+V 99
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs/zlib_solid
+END
+lzma_solid
+K 25
+svn:wc:ra_dav:version-url
+V 99
+/svn/jefecheck/!svn/ver/559/trunk/WindowsResources/Installers/InstallerFolder/NSIS/Stubs/lzma_solid
+END
