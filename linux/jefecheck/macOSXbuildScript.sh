@@ -41,7 +41,7 @@ echo "Architecture " $1
 #export architectureFlags="-arch $1"
 #echo "*******USING ARCHITECTURE " $architectureFlags
 
-#./configure
+./configure
 make 
 
 rm -Rf JefeCheck.app
@@ -74,6 +74,7 @@ install_name_tool -change libgfl.3.90.dylib @executable_path/libgfl.3.90.dylib .
 install_name_tool -change libgfle.3.90.dylib @executable_path/libgfle.3.90.dylib ./$appName/Contents/MacOS/JefeCheck
 install_name_tool -change libgfl.3.90.dylib @executable_path/libgfl.3.90.dylib ./$appName/Contents/MacOS/libgfle.3.90.dylib
 install_name_tool -id @executable_path/libgfl.3.90.dylib ./$appName/Contents/MacOS/libgfl.3.90.dylib 
+#install_name_tool -id @executable_path/libcurl.4.dylib ./$appName/Contents/MacOS/libcurl.4.dylib
 
 #cp MacBundleResources/prefs.ini ./JefeCheck.app/Contents/Resources/
 

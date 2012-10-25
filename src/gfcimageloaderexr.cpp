@@ -116,18 +116,18 @@ struct Gamma {
 };
 
 
-Gamma::Gamma (float gamma, float exposure, float defog, float kneeLow, float kneeHigh,float targetBD):
-       g(gamma),
-		m (Imath::Math<float>::pow (2, exposure + 2.47393)),
-        d (defog),
-        kl (Imath::Math<float>::pow (2, kneeLow)),
-        f (findKneeF (Imath::Math<float>::pow (2, kneeHigh) - kl,
-                      Imath::Math<float>::pow (2, 3.5) - kl)),
-        targetBitDepth(Imath::Math<float>::pow (2, targetBD)-1),
-		s((Imath::Math<float>::pow (2, targetBD)-1)*Imath::Math<float>::pow (2, -3.5 * g))
-	           /*multiplier(targetBitDepth/3.01205)*/{
-    //printf("targetBitDepth/multiplier in gamma: %f/%f\n",targetBitDepth,multiplier);
+Gamma::Gamma (float gamma, float exposure, float defog, float kneeLow, float kneeHigh,float targetBD)
+       {
+  // printf("%f %f %f %f %f %f\n",gamma, exposure, defog, kneeLow, kneeHigh, targetBD);
 
+       g=(gamma);
+       m= (Imath::Math<float>::pow (2, exposure + 2.47393));
+        d= (defog);
+        kl= (Imath::Math<float>::pow (2, kneeLow));
+        f =(findKneeF (Imath::Math<float>::pow (2, kneeHigh) - kl,  Imath::Math<float>::pow (2, 3.5) - kl));
+        targetBitDepth=(Imath::Math<float>::pow (2, targetBD)-1);
+		s=((Imath::Math<float>::pow (2, targetBD)-1)*Imath::Math<float>::pow (2, -3.5 * g));
+   
 }
 
 
@@ -136,7 +136,7 @@ Gamma::operator () (half h) {
     //
     // Defog
     //
-
+//return 0;
     float x = max (0.f, (h - d));
 	//float x=h;
 
@@ -169,6 +169,7 @@ Gamma::operator () (half h) {
 }
 
 
+
 //
 //  Dithering: Reducing the raw 16-bit pixel data to 8 bits for the
 //  OpenGL frame buffer can sometimes lead to contouring in smooth
@@ -189,6 +190,114 @@ dither (float v, int x, int y) {
 }
 
 } // namespace
+
+
+float gammaConvert8(half h){
+  float gamma, exposure, defog, kneeLow, kneeHigh;
+  int targetBD=8;
+  gamma = 1.0/max(sett.exrGamma,0.00001);
+  exposure = sett.exrExposure;
+  defog=sett.exrDefog; //defog x fog per color, should be fogR, fogB, fogG
+  kneeLow=sett.exrKneeLow; //knee low
+  kneeHigh=sett.exrKneeHigh; //knee high
+  
+        float g, m, d, kl, f, s, targetBitDepth, multiplier;
+		g=(gamma);
+		m= (Imath::Math<float>::pow (2, exposure + 2.47393));
+        d= (defog);
+        kl= (Imath::Math<float>::pow (2, kneeLow));
+        f =(findKneeF (Imath::Math<float>::pow (2, kneeHigh) - kl,  Imath::Math<float>::pow (2, 3.5) - kl));
+        targetBitDepth=(Imath::Math<float>::pow (2, targetBD)-1);
+		s=((Imath::Math<float>::pow (2, targetBD)-1)*Imath::Math<float>::pow (2, -3.5 * g));
+		
+		    //
+    // Defog
+    //
+//return 0;
+    float x = max (0.f, (h - d));
+	//float x=h;
+
+    //
+    // Exposure
+    //
+
+    x *= m;
+
+    //
+    // Knee
+    //
+
+    if (x > kl)
+        x = kl + knee (x - kl, f);
+
+    //
+    // Gamma
+    //
+
+    //x = Imath::Math<float>::pow (x, 0.4545f);
+	x = Imath::Math<float>::pow (x, g);
+
+    //
+    // Scale and clamp
+    //
+//     multiplier=84.66f;
+//     targetBitDepth=255.f;
+    return clamp (x * s, 0.f, targetBitDepth);
+}
+
+
+float gammaConvert16(half h){
+  float gamma, exposure, defog, kneeLow, kneeHigh;
+  int targetBD=16;
+  gamma = 1.0/max(sett.exrGamma,0.00001);
+  exposure = sett.exrExposure;
+  defog=sett.exrDefog; //defog x fog per color, should be fogR, fogB, fogG
+  kneeLow=sett.exrKneeLow; //knee low
+  kneeHigh=sett.exrKneeHigh; //knee high
+  
+        float g, m, d, kl, f, s, targetBitDepth, multiplier;
+		g=(gamma);
+		m= (Imath::Math<float>::pow (2, exposure + 2.47393));
+        d= (defog);
+        kl= (Imath::Math<float>::pow (2, kneeLow));
+        f =(findKneeF (Imath::Math<float>::pow (2, kneeHigh) - kl,  Imath::Math<float>::pow (2, 3.5) - kl));
+        targetBitDepth=(Imath::Math<float>::pow (2, targetBD)-1);
+		s=((Imath::Math<float>::pow (2, targetBD)-1)*Imath::Math<float>::pow (2, -3.5 * g));
+		
+		    //
+    // Defog
+    //
+//return 0;
+    float x = max (0.f, (h - d));
+	//float x=h;
+
+    //
+    // Exposure
+    //
+
+    x *= m;
+
+    //
+    // Knee
+    //
+
+    if (x > kl)
+        x = kl + knee (x - kl, f);
+
+    //
+    // Gamma
+    //
+
+    //x = Imath::Math<float>::pow (x, 0.4545f);
+	x = Imath::Math<float>::pow (x, g);
+
+    //
+    // Scale and clamp
+    //
+//     multiplier=84.66f;
+//     targetBitDepth=255.f;
+    return clamp (x * s, 0.f, targetBitDepth);
+}
 
 typedef struct halfRGBA {
     half r;
@@ -829,17 +938,17 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
         //4. Convert and copy the buffer into theBitmap
         {
 			
-            halfFunction<float>
-            rGamma (Gamma (1.0/sett.exrGamma,
-							sett.exrExposure,
-                           sett.exrDefog * 1, //defog x fog per color, should be fogR, fogB, fogG
-                           sett.exrKneeLow, //knee low
-                           sett.exrKneeHigh, //knee high
-                           bitSizeForAlloc),
-                    -HALF_MAX, HALF_MAX);
+       /*     			halfFunction<float>
+           				 rGamma (Gamma::Gamma (1.0/max(sett.exrGamma,0.00001),
+				sett.exrExposure,
+              				 sett.exrDefog * 1, //defog x fog per color, should be fogR, fogB, fogG
+                           			sett.exrKneeLow, //knee low
+                          			 sett.exrKneeHigh, //knee high
+                           			bitSizeForAlloc),
+                   				 -HALF_MAX, HALF_MAX);
 
 			halfFunction<float>
-				gGamma (Gamma (1.0/sett.exrGamma,
+				gGamma (Gamma::Gamma (1.0/max(sett.exrGamma,0.00001),
 				sett.exrExposure,
 				sett.exrDefog * 1, //defog x fog per color, should be fogR, fogB, fogG
 				sett.exrKneeLow, //knee low
@@ -848,15 +957,19 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 				-HALF_MAX, HALF_MAX);
 
 			halfFunction<float>
-				bGamma (Gamma (1.0/sett.exrGamma,
+				bGamma (Gamma::Gamma (1.0/max(sett.exrGamma,0.00001),
 				sett.exrExposure,
 				sett.exrDefog * 1, //defog x fog per color, should be fogR, fogB, fogG
 				sett.exrKneeLow, //knee low
 				sett.exrKneeHigh, //knee high
 				bitSizeForAlloc),
-				-HALF_MAX, HALF_MAX);
-            
+				-HALF_MAX, HALF_MAX);*/
+            			
+			halfFunction<float> halfGammaConvert8(gammaConvert8, -HALF_MAX, HALF_MAX);
 			GFL_COLOR color;
+			
+			
+			
             if (numOfComponents>1) {
                 
 				
@@ -875,10 +988,18 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 							offset+=preLineOffset;
 							for (int j=0;j<copyWidth;j++) {
 								Rgba *pixel= &(*pixels)[lineOffset+j];
-								theBitmap->Data[offset++]=rGamma(pixel->r);
+								/*theBitmap->Data[offset++]=rGamma(pixel->r);
 								theBitmap->Data[offset++]=gGamma(pixel->g);
 								theBitmap->Data[offset++]=bGamma(pixel->b);
 								theBitmap->Data[offset++]=rGamma(pixel->a);
+								*/
+								theBitmap->Data[offset++]=halfGammaConvert8(pixel->r);
+								theBitmap->Data[offset++]=halfGammaConvert8(pixel->g);
+								theBitmap->Data[offset++]=halfGammaConvert8(pixel->b);
+								theBitmap->Data[offset++]=halfGammaConvert8(pixel->a);
+				
+
+
 							}
 							offset+=postLineOffset;
 						}
@@ -914,15 +1035,26 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 					//printf("copying from %i,%i for %i,%i\n",startX,startY,copyWidth, copyHeigth);
 					if (sett.exrEnableExposureTransformOnLoad)
 					{
+						//halfFunction<float> halfGammaConvert16(gammaConvert16, -HALF_MAX, HALF_MAX);
 						for (int i=0;i<copyHeigth;i++) {
 							int lineOffset=(startY+i)*dw+startX;
 							offset+=preLineOffset;
 							for (int j=0;j<copyWidth;j++) {
-								Rgba *pixel= &(*pixels)[lineOffset+j];
+								/*Rgba *pixel= &(*pixels)[lineOffset+j];
 								(((unsigned short*)(theBitmap->Data))[offset++])=rGamma(pixel->r);
 								(((unsigned short*)(theBitmap->Data))[offset++])=bGamma(pixel->g);
 								(((unsigned short*)(theBitmap->Data))[offset++])=gGamma(pixel->b);
-								(((unsigned short*)(theBitmap->Data))[offset++])=rGamma(pixel->a);
+								(((unsigned short*)(theBitmap->Data))[offset++])=rGamma(pixel->a);*/
+								Rgba *pixel= &(*pixels)[lineOffset+j];
+								/*(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->r);
+								(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->g);
+								(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->b);
+								(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->a);*/
+								
+								(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->r);
+								(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->g);
+								(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->b);
+								(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->a);
 							}
 							offset+=postLineOffset;
 						}
@@ -960,10 +1092,10 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 							offset+=preLineOffset;
 							for (int j=0;j<copyWidth;j++) {
 								
-								theBitmap->Data[offset++]=theColor=rGamma((*halfPixels)[lineOffset+j]);
+								/*theBitmap->Data[offset++]=theColor=rGamma((*halfPixels)[lineOffset+j]);
 								theBitmap->Data[offset++]=theColor;
 								theBitmap->Data[offset++]=theColor;
-								theBitmap->Data[offset++]=maxValue;
+								theBitmap->Data[offset++]=maxValue;*/
 							}
 							offset+=postLineOffset;
 						}
@@ -1016,10 +1148,10 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 							offset+=preLineOffset;
 							for (int j=0;j<copyWidth;j++) {
 
-								(((unsigned short*)(theBitmap->Data))[offset++])=theColor=rGamma((*halfPixels)[lineOffset+j]);
+								/*(((unsigned short*)(theBitmap->Data))[offset++])=theColor=halfGammaConvert16((*halfPixels)[lineOffset+j]);
 								(((unsigned short*)(theBitmap->Data))[offset++])=theColor;
 								(((unsigned short*)(theBitmap->Data))[offset++])=theColor;
-								(((unsigned short*)(theBitmap->Data))[offset++])=maxValue;
+								(((unsigned short*)(theBitmap->Data))[offset++])=maxValue;*/
 							}
 							offset+=postLineOffset;
 						}

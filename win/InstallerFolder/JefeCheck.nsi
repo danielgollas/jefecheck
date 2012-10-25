@@ -7,7 +7,7 @@
 !define APP_NAME "JefeCheck"
 !define COMP_NAME "JefeCorp"
 !define WEB_SITE "http://jefecheck.jefecorp.com"
-!define VERSION "00.1.5.0"
+!define VERSION "00.1.5.1"
 !define COPYRIGHT "JefeCorp  © 2006-2012"
 !define DESCRIPTION "JefeCheck Review System"
 !define LICENSE_TXT "C:\projects\jefecheck2\common\EULA.rtf"

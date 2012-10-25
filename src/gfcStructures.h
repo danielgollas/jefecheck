@@ -12,7 +12,7 @@
 #include "xmlParser.h"
 
 #include "gfcrenderparams.h"
-#define JEFE_VERSION "1.5.0" 
+#define JEFE_VERSION "1.5.1" 
 #include <sstream> //for stingstream
 #include <boost/filesystem/path.hpp>
 
@@ -391,7 +391,6 @@ public:
 std::string ftos(float value,int decimals=5);
 
 template <class T> std::string toString(T value);
-
 template <class T> 
 std::string toString(T value)
 {
@@ -399,11 +398,8 @@ std::string toString(T value)
 	ss<<value;
 	return ss.str();
 }
-
 template <class T> void saveSetting(std::string name,T value, XMLNode &node);
-//template void saveSetting<char>(std::string name, char, XMLNode&);
-template <class T>
-void saveSetting(std::string name,T value, XMLNode &node) {
+template <class T> void saveSetting(std::string name,T value, XMLNode &node) {
     std::stringstream ss;
     ss<<value;
     //cout << "Saving setting "<<name<<"="<<ss.str() << " (from "<< value <<")\n";
@@ -413,14 +409,6 @@ void saveSetting(std::string name,T value, XMLNode &node) {
 
 void saveSettingString(std::string name, std::string& result, XMLNode &node);
 template <class T> void readSetting(std::string name, T& result, XMLNode &node);
-template <class T>
-void setWidgetFromNode(std::string name, T* widget, XMLNode node) {
-    if (node.getAttribute ( name.c_str() )!=NULL) {
-        widget->value(atof(node.getAttribute( name.c_str() )));
-		
-    }
-}
-
 template <class T>
 void readSetting(std::string name, T& result, XMLNode &node) {
     if (node.getAttribute ( name.c_str() )!=NULL) {
@@ -436,7 +424,13 @@ void readSetting(std::string name, T& result, XMLNode &node) {
 
 void readSettingString(std::string name, std::string& result, XMLNode &node);
 template <class T> void setWidgetFromNode(std::string name, T* widget, XMLNode node);
-
+template <class T>
+void setWidgetFromNode(std::string name, T* widget, XMLNode node) {
+    if (node.getAttribute ( name.c_str() )!=NULL) {
+        widget->value(atof(node.getAttribute( name.c_str() )));
+		
+    }
+}
 template <class T> T readAttributeFromNode(std::string name,XMLNode &node, T defaultValue);
 template <class T>
 T readAttributeFromNode(std::string name, XMLNode &node, T defaultValue)
