@@ -11,6 +11,9 @@ echo mkdir binaries >> ftpcmd.dat
 echo cd binaries >> ftpcmd.dat
 echo mput C:\projects\jefecheck2\common\website\jefecheck\binaries\Jefe*.*>> ftpcmd.dat
 echo cd .. >> ftpcmd.dat
+echo cd images >> ftpcmd.dat
+REM echo mput C:\projects\jefecheck2\common\website\jefecheck\images\*.png >> ftpcmd.dat
+echo cd .. >> ftpcmd.dat
 echo mput C:\projects\jefecheck2\common\website\jefecheck\*.html>> ftpcmd.dat
 echo quit>> ftpcmd.dat
 ftp -n -i -s:ftpcmd.dat ftp.jefecorp.com
