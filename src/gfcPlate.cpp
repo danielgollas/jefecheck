@@ -1547,7 +1547,7 @@ void gfcPlate::draw3Drect(int pcurrentFrame) {
 
             glEnable(target);
             glBindTexture(target, theFrame.textureID);
-            glTexParameteri(target,GL_TEXTURE_MIN_FILTER,sett.filterMin);
+            glTexParameteri(target,GL_TEXTURE_MIN_FILTER,sett.filterMin);	    
             glTexParameteri(target,GL_TEXTURE_MAG_FILTER,sett.filterMax);
 
 

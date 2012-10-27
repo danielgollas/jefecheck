@@ -391,13 +391,46 @@ public:
 std::string ftos(float value,int decimals=5);
 
 template <class T> std::string toString(T value);
-
+template <class T> 
+std::string toString(T value)
+{
+	std::stringstream ss;
+	ss<<value;
+	return ss.str();
+}
 template <class T> void saveSetting(std::string name,T value, XMLNode &node);
+template <class T> void saveSetting(std::string name,T value, XMLNode &node) {
+    std::stringstream ss;
+    ss<<value;
+    //cout << "Saving setting "<<name<<"="<<ss.str() << " (from "<< value <<")\n";
+	
+    node.addAttribute(name.c_str(),ss.str().c_str());
+}
+
 void saveSettingString(std::string name, std::string& result, XMLNode &node);
 template <class T> void readSetting(std::string name, T& result, XMLNode &node);
+template <class T>
+void readSetting(std::string name, T& result, XMLNode &node) {
+    if (node.getAttribute ( name.c_str() )!=NULL) {
+        std::stringstream ss;
+        ss << node.getAttribute ( name.c_str() );
+        //std::cout << name <<": " <<ss.str() << std::endl;
+        {
+            ss>>result;
+        }
+		
+    }
+}
+
 void readSettingString(std::string name, std::string& result, XMLNode &node);
 template <class T> void setWidgetFromNode(std::string name, T* widget, XMLNode node);
-
+template <class T>
+void setWidgetFromNode(std::string name, T* widget, XMLNode node) {
+    if (node.getAttribute ( name.c_str() )!=NULL) {
+        widget->value(atof(node.getAttribute( name.c_str() )));
+		
+    }
+}
 template <class T> T readAttributeFromNode(std::string name,XMLNode &node, T defaultValue);
 template <class T>
 T readAttributeFromNode(std::string name, XMLNode &node, T defaultValue)
