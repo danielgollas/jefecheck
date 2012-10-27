@@ -338,8 +338,24 @@ std::string ftos(float value,int precision)
 	return ss.str();
 }
 
+template <class T> 
+std::string toString(T value)
+{
+	std::stringstream ss;
+	ss<<value;
+	return ss.str();
+}
 
+template <class T>
+void saveSetting(std::string name,T value, XMLNode &node) {
+    std::stringstream ss;
+    ss<<value;
+    //cout << "Saving setting "<<name<<"="<<ss.str() << " (from "<< value <<")\n";
+	
+    node.addAttribute(name.c_str(),ss.str().c_str());
+}
 
+template void saveSetting<char>(std::string name, char, XMLNode&);
 
 void saveSettings ( const gfcSettings *sett ) {
     std::string appDataPath,settingsFilename;
@@ -538,6 +554,29 @@ void saveSettings ( const gfcSettings *sett ) {
 	
 }
 
+
+
+template <class T>
+void setWidgetFromNode(std::string name, T* widget, XMLNode node) {
+    if (node.getAttribute ( name.c_str() )!=NULL) {
+        widget->value(atof(node.getAttribute( name.c_str() )));
+		
+    }
+}
+
+template <class T>
+void readSetting(std::string name, T& result, XMLNode &node) {
+    if (node.getAttribute ( name.c_str() )!=NULL) {
+        std::stringstream ss;
+        ss << node.getAttribute ( name.c_str() );
+        //std::cout << name <<": " <<ss.str() << std::endl;
+        {
+            ss>>result;
+        }
+		
+    }
+}
+
 void readSettingString(std::string name, std::string& result, XMLNode &node) {
     if (node.getAttribute ( name.c_str() )!=NULL) {
         result=node.getAttribute ( name.c_str() );
@@ -608,7 +647,7 @@ char splitterChar;
 				if (fl_filename_isdir(tmp->d_name)==0 &&	fl_filename_match(tmp->d_name,"{*.tga|*.cub|*.lut|*.cube}")) {
 					std::string tempLutName = path+tmp->d_name;
 					//printf(" (%i) %s\n",i,tmp->d_name);
-					printf ( "+Path loading LUT %s \n",GetFilenameNoPath ( tempLutName ).c_str() );
+					printf ( "+Path loading LUT %s ",GetFilenameNoPath ( tempLutName ).c_str() );
 					std::string statusString;
 					statusString="Loading LUT: ";
 					statusString+=GetFilenameNoPath ( tempLutName );
@@ -814,6 +853,7 @@ void readSettings ( gfcSettings &sett ) {
 	
 	
     setWidgetFromNode("bgColor",pw.bgColor,xGeneralNode);
+    
     setWidgetFromNode("percentageOfRam",pw.percentageOfRam,xGeneralNode);
     setWidgetFromNode("recoverFromCrash",pw.attemptToRecoverFromCrashCheckBox,xGeneralNode);
 	

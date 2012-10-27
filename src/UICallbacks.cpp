@@ -819,7 +819,9 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 
 	case FILTERINGMAGLINEAR_ID:
 		sett.filterMin=GL_LINEAR;
+
 		printf("filterMin set to GL_NEAREST (%i)\n",GL_NEAREST);
+
 		sett.filterMax=GL_NEAREST;
 		break;
 

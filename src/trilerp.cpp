@@ -740,13 +740,17 @@ int CubeLUT::create1DTexture() {
         //printf("1D LUT texture: %i: %f %f %f\n",i,tmpData[i][0],tmpData[i][1],tmpData[i][2]);
 
     }
-
+    glPrintError();
     //create a 3D texture ID
     glEnable(GL_TEXTURE_1D);
-    if (!texture1D)
-        glDeleteTextures(1,&texture1D);
+    glActiveTexture ( GL_TEXTURE0 );
+    
+    //if (!texture1D)
+    //    glDeleteTextures(1,&texture1D);
 
     glGenTextures(1,&texture1D);
+    
+    
 
     glBindTexture(GL_TEXTURE_1D,texture1D);
 //     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -755,7 +759,7 @@ int CubeLUT::create1DTexture() {
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-
+    
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
@@ -766,7 +770,7 @@ int CubeLUT::create1DTexture() {
 	glGetTexLevelParameteriv(GL_TEXTURE_1D,0,GL_TEXTURE_WIDTH,&theTexSize[0]);
 	glGetTexLevelParameteriv(GL_TEXTURE_1D,0,GL_TEXTURE_HEIGHT,&theTexSize[1]);
 
-	printf("1D texture created: %i x %i\n",theTexSize[0],theTexSize[1]);
+	printf("1D texture created: %i x %i id=%i\n",theTexSize[0],theTexSize[1],texture1D);
 
     glBindTexture(GL_TEXTURE_1D,0);
     glDisable(GL_TEXTURE_1D);
@@ -820,11 +824,11 @@ int CubeLUT::create3DTexture() {//creates a 3D texture from the data it has stor
 
     //create a 3D texture ID
     glEnable(GL_TEXTURE_3D);
-    if (!texture3D)
-        glDeleteTextures(1,&texture3D);
+    //if (!texture3D)
+        //glDeleteTextures(1,&texture3D);
 
     glGenTextures(1,&texture3D);
-
+    
     glBindTexture(GL_TEXTURE_3D,texture3D);
 //     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 //     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -832,12 +836,17 @@ int CubeLUT::create3DTexture() {//creates a 3D texture from the data it has stor
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-
+    glPrintError();
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTexImage3D(GL_TEXTURE_3D,0,GL_RGB,size,size,size,0,GL_RGB,GL_FLOAT,tmpData);
+    
     glPrintError();
+    GLint theTexSize[2];
+    glGetTexLevelParameteriv(GL_TEXTURE_3D,0,GL_TEXTURE_WIDTH,&theTexSize[0]);
+    glGetTexLevelParameteriv(GL_TEXTURE_3D,0,GL_TEXTURE_HEIGHT,&theTexSize[1]);
+    printf("3D texture created: %i x %i id=%i\n",theTexSize[0],theTexSize[1],texture3D);
 
     glBindTexture(GL_TEXTURE_3D,0);
     glDisable(GL_TEXTURE_3D);

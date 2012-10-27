@@ -41,7 +41,7 @@ echo "Architecture " $1
 #export architectureFlags="-arch $1"
 #echo "*******USING ARCHITECTURE " $architectureFlags
 
-./configure
+#./configure
 make 
 
 rm -Rf JefeCheck.app
@@ -106,4 +106,4 @@ cd ..
 
 
 #MacResources/$folderName/$appName/Contents/MacOS/JefeCheck
-open MacResources/$folderName/$appName
+#open MacResources/$folderName/$appName

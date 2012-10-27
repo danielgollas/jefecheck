@@ -233,7 +233,7 @@ public:
     {
         startFullscreen=false;
         playbackOnLoad=false;
-        bgColor=0;
+        bgColor=0.149019;
         bool enableCrashRecoverySession=true;
         defaultBrowsePath=getApplicationDataPath();
         framingMode=FRAMINGSINGLE_ID;
