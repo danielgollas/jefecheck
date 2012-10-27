@@ -212,22 +212,23 @@ void gfcPlate::startSuperShader(){
 			glUseProgramObjectARB ( ssProgram );
 			glPrintError();	
 			//pass attributes
-
+			//printf("using shader\n");
 			if(usingLUT){
 				//lut
+				//printf("using LUT\n");
 				glEnable ( GL_TEXTURE_1D );
 				//glEnable ( GL_TEXTURE_3D );
 				glActiveTexture ( GL_TEXTURE0_ARB+4 ); //the LUTs go in texture unit 1
 				//do a switch to figure out from what sequence we will assign the texture, or if we use the previousTexID
 				//printf("binding 3D cube: %i to variable %s in unit GL_TEXTURE0+%i\n",lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).texture3D,groupsIter->second.widgets[*widgetIter].varName.c_str(),CubeUnitCounter);
 				glBindTexture ( this->lutType==CubeLUT::JEFECHECK1D?GL_TEXTURE_1D:GL_TEXTURE_3D,this->lutID);
-				
+				//printf("Setting LUT to id=%i\n",this->lutID);
 				GLuint location=glGetUniformLocationARB(ssProgram,"LUT");
 				if(location!=-1){
 					glUniform1iARB(location, 4); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
-					//printf("Assigning lut1D: %i to %s on texUnit: %i on location: %i\n",lutID,this->lutType==CubeLUT::JEFECHECK1D?"GL_TEXTURE_1D":"GL_TEXTURE_3D",GL_TEXTURE0_ARB+1,location);
+					printf("Assigning lut: %i to %s on texUnit: %i on location: %i\n",lutID,this->lutType==CubeLUT::JEFECHECK1D?"GL_TEXTURE_1D":"GL_TEXTURE_3D",GL_TEXTURE0_ARB+1,location);
 				}
-				glActiveTexture ( GL_TEXTURE0_ARB );
+				//glActiveTexture ( GL_TEXTURE0_ARB );
 
 				//also pass the lutSize to use in 3d lut calculations
 				{
@@ -400,6 +401,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 	//different LUT types require different samplers and sampling methods
 	if (lutType==CubeLUT::JEFECHECK1D && useLut)
 	{
+		//printf("USING LUT1D in SUPER SHADER\n");
 		fragmentSrc+="uniform sampler1D LUT;\n";
 		fragmentSrc+=std::string("\
 					void main(){\n\
@@ -412,6 +414,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 	{
 		if (useLut && (lutType==CubeLUT::BASELIGHT3DCUBE || CubeLUT::IMAGELUT2D))
 		{
+		        //printf("USING LUT3D in SUPER SHADER\n");
 			fragmentSrc+="uniform sampler3D LUT;\n";
 			fragmentSrc+=std::string("\
 									 void main(){\n\
@@ -527,6 +530,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		}
 		else
 		{
+			//printf("\nThis is the fragment shader:\n*************\n%s\n*************\n",fragmentSrc.c_str());
 			//printf("Fragment Compiled..OK!:%s\n",infoLog.c_str());
 		}
 		ssFramgentCompiled=1;

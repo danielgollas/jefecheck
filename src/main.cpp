@@ -60,7 +60,7 @@
 #ifdef WIN32
 //stuff needed to set the program icon on windows
 #include <FL/x.H>
-#include "resource.h"
+#include "resource1.h"
 #endif
 
 #include "minSpecsWindow.h"
@@ -785,17 +785,20 @@ int main(int argc, char *argv[]) {
     int mwx,mwy,mww,mwh;
     Fl::screen_xywh(mwx,mwy,mww,mwh,0);
 
+
+    
 #ifdef WIN32
-    mw.mainWindow->icon((char *)LoadIcon(fl_display,  MAKEINTRESOURCE(IDI_ICON2)));
-	mw.mainWindow->show(1, &argv[0]);
-#else
-	mw.mainWindow->show();
+    mw.mainWindow->icon((char *)LoadIcon(fl_display, MAKEINTRESOURCE(IDI_ICON0)));
 #endif
     //mw.mainWindow->show(1, &argv[0]);
-    
+    mw.mainWindow->show();
 
     Fl::check();
-
+    #ifdef __APPLE__
+    		 //printf("gl_texture_pile_height=%i\n",gl_texture_pile_height());
+    		 gl_texture_pile_height(100);
+    		 printf("gl_texture_pile_height=%i\n",gl_texture_pile_height());
+#endif
     fxControlWindow1.createWindow(0);
     plw.createWindow();
     aboutWindow.aboutWindow->position(mw.mainWindow->x()+mw.mainWindow->w()/2-aboutWindow.aboutWindow->w()/2,mw.mainWindow->y()+200);
@@ -1034,7 +1037,8 @@ int main(int argc, char *argv[]) {
 
     readSettings(sett);
 
-
+    
+    
 #ifdef LICENSED
     checkLicense();
 #endif
@@ -1140,14 +1144,20 @@ int main(int argc, char *argv[]) {
     //mw.vp->clear_visible_focus();
     Fl::visible_focus(0);
     
-    #ifdef __APPLE__
-    		 printf("gl_texture_file_height=%i\n",gl_texture_pile_height());
-    		 gl_texture_pile_height(1);
-    		 printf("gl_texture_file_height=%i\n",gl_texture_pile_height());
-    #endif
+
     
     printf("READY>\n");
-    
+    //sett.bgColor=(sett/255.0);
+    printf("bgColor=%f\n",sett.bgColor);
+    int bgColorOffset=-5;
+    int bgColor=sett.bgColor*255;
+    if(abs(bgColor)<=abs(bgColorOffset))
+    {
+	    bgColorOffset*=-1;
+    }
+
+    mw.bgBox->color(fl_rgb_color(bgColor+bgColorOffset,bgColor+bgColorOffset,bgColor+bgColorOffset));
+    mw.mainWindow->redraw();
     testTimer.stop();
     testTimer.print();
 #ifdef DEMO_VERSION
@@ -1202,7 +1212,7 @@ int main(int argc, char *argv[]) {
         glDisable(GL_TEXTURE_2D);
     }
 #endif
-
+    
     while (!quitNow && mw.mainWindow->shown()) {
         {
             //We always update the managers no matter what we do.
