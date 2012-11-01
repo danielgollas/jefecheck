@@ -1,18 +1,22 @@
 # data file for the Fltk User Interface Designer (fluid)
-version 1.0108 
+version 1.0300 
 header_name {.h} 
 code_name {.cxx}
 class PreferencesWindow {open
 } {
-  decl {\#include "UICallbacks.h"} {}
-  decl {\#include "UIConstants.h"} {}
-  decl {\#include "Fl_Button_gfc.h"} {}
-  decl {\#include "Fl_Spinner_gfc.h"} {}
+  decl {\#include "UICallbacks.h"} {private local
+  }
+  decl {\#include "UIConstants.h"} {private local
+  }
+  decl {\#include "Fl_Button_gfc.h"} {private local
+  }
+  decl {\#include "Fl_Spinner_gfc.h"} {private local
+  }
   Function {make_window()} {open
   } {
     Fl_Window preferencesWindow {
       label {JefeCheck -Preferences} open
-      xywh {-1119 350 350 590} type Double non_modal size_range {345 590 345 590} visible
+      xywh {903 258 348 590} type Double non_modal size_range {345 590 345 590} visible
     } {
       Fl_Box bg {
         xywh {0 -1 490 591} box FLAT_BOX color 0 selection_color 39
@@ -23,8 +27,8 @@ class PreferencesWindow {open
         xywh {0 10 355 589} box BORDER_FRAME color 0 selection_color 8 labelcolor 31 align 9
       } {
         Fl_Group {} {
-          label General open selected
-          xywh {0 28 352 571} color 8 selection_color 0 labelcolor 8
+          label General open
+          xywh {0 28 352 571} color 8 selection_color 0 labelcolor 8 hide
         } {
           Fl_Group {} {
             label Startup open
@@ -179,68 +183,90 @@ class PreferencesWindow {open
         }
         Fl_Group formatsTab {
           label Formats open
-          xywh {0 30 355 479} color 0 selection_color 0 labelcolor 8 hide
+          xywh {0 30 355 479} color 0 selection_color 0 labelcolor 8
         } {
           Fl_Group {} {
             label OpenEXR open
-            xywh {5 34 350 170} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+            xywh {0 33 350 264} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
           } {
             Fl_Check_Button exrIgnoreDisplayWindow {
               label {Ignore Display Window}
               callback PreferencesCB
-              tooltip {Use only the Data Window in the openEXR file to determine image properties} xywh {10 60 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+              tooltip {Use only the Data Window in the openEXR file to determine image properties} xywh {10 59 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
             }
             Fl_Check_Button exrIgnoreHeadersAspectRatio {
               label {Ignore Header's Aspect Ratio}
               callback PreferencesCB
-              tooltip {Use only the Data Window in the openEXR file to determine image properties} xywh {10 83 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+              tooltip {Use only the Data Window in the openEXR file to determine image properties} xywh {10 82 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
             }
             Fl_Group {} {
-              label {Float >Integer transformation} open
-              xywh {9 106 331 91} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+              label {Half > 8bit  transformation} open
+              xywh {9 105 331 91} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
             } {
               Fl_Check_Button exrEnableExposureTransformOnLoad {
                 label {Enable Exposure Transform on Load}
                 callback PreferencesCB
-                tooltip {Perform the reference Float to Integer color transformation when loading to an Integer buffer (8bpc, 16bpc, 4bpc, S3TC)} xywh {25 129 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+                tooltip {Perform the reference Float to Integer color transformation when loading to an Integer buffer (8bpc, 16bpc, 4bpc, S3TC)} xywh {25 128 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
               }
               Fl_Value_Input exrExposure {
                 label Exposure
                 callback PreferencesCB
-                xywh {80 150 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -10 maximum 10 step 0.01 textsize 12 textcolor 31
+                xywh {80 149 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -10 maximum 10 step 0.01 textsize 12 textcolor 31
                 code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
               }
               Fl_Value_Input exrDefog {
                 label Defog
                 callback PreferencesCB
-                xywh {159 150 45 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 step 0.0001 textsize 12 textcolor 31
+                xywh {159 149 45 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 step 0.0001 textsize 12 textcolor 31
                 code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
               }
               Fl_Value_Input exrKneeLow {
                 label {Knee low}
                 callback PreferencesCB
-                xywh {80 173 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -3 maximum 3 step 0.01 textsize 12 textcolor 31
+                xywh {80 172 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -3 maximum 3 step 0.01 textsize 12 textcolor 31
                 code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
               }
               Fl_Value_Input exrKneeHigh {
                 label {Knee high}
                 callback PreferencesCB
-                xywh {180 173 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 3.5 maximum 7.5 step 0.01 value 5 textsize 12 textcolor 31
+                xywh {180 172 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 3.5 maximum 7.5 step 0.01 value 5 textsize 12 textcolor 31
                 code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
               }
               Fl_Value_Input exrGamma {
                 label Gamma
                 callback PreferencesCB
-                xywh {255 150 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 0.01 maximum 10 step 0.01 value 2.2 textsize 12 textcolor 31
+                xywh {255 149 34 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum 0.01 maximum 10 step 0.01 value 2.2 textsize 12 textcolor 31
                 code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
               }
               Fl_Button {} {
                 label Defaults
                 user_data EXRPREFSDEFAULTSBUTTON_ID
                 callback PreferencesCB
-                xywh {230 172 60 18} box FLAT_BOX color 8 labelsize 12 labelcolor 31
+                xywh {230 171 60 18} box FLAT_BOX color 8 labelsize 12 labelcolor 31
                 code0 {\#include "Fl_Button_gfc.h"}
                 class Fl_Button_gfc
+              }
+            }
+            Fl_Group {} {
+              label {Float > 8bit  transformation} open
+              xywh {9 199 331 66} box BORDER_FRAME color 8 labelfont 1 labelcolor 31 align 21
+            } {
+              Fl_Check_Button exrEnableRangeScaling {
+                label {Enable Range Scaling}
+                callback PreferencesCB
+                tooltip {Perform the reference Float to Integer color transformation when loading to an Integer buffer (8bpc, 16bpc, 4bpc, S3TC)} xywh {25 222 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+              }
+              Fl_Value_Input exrRangeMin {
+                label min
+                callback PreferencesCB
+                tooltip {min value in the float range, this will map to 0. For example, for float Z-Depth passes the camera near-clip plane value would be appropriate.} xywh {63 243 90 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -1e+008 maximum 1e+008 step 1e-007 textsize 12 textcolor 31
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input exrRangeMax {
+                label max
+                callback PreferencesCB
+                tooltip {max value in the float range, this will map to 255. For example, for float Z-Depth passes the camera far-clip plane value would be appropriate.} xywh {191 243 90 15} box FLAT_BOX color 8 selection_color 0 labelsize 12 labelcolor 31 minimum -1e-008 maximum 1e+008 step 1e-007 value 1000 textsize 12 textcolor 31
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
               }
             }
           }
@@ -463,7 +489,7 @@ class PreferencesWindow {open
       Fl_Button {} {
         label {Save and Close}
         user_data PREFERENCESDONE_ID
-        callback PreferencesCB
+        callback PreferencesCB selected
         tooltip {Closes this window without saving preferences for next session} xywh {210 545 130 35} box FLAT_BOX down_box PLASTIC_DOWN_BOX color 8 labelcolor 31
         code0 {\#include "Fl_Button_gfc.h"}
         class Fl_Button_gfc

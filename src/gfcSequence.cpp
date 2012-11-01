@@ -2089,6 +2089,10 @@ void gfcSequence::updateEstimates() {
 			aproxBytesPerFrame=sizeX*sizeY*numOfComponents*2;
 			break;
 
+		case GFC_32FLOAT:
+			aproxBytesPerFrame=sizeX*sizeY*numOfComponents*4;
+			break;
+
 		case GFC_4BPC:
 			aproxBytesPerFrame=sizeX*sizeY*numOfComponents/2.0;
 			break;

@@ -311,6 +311,7 @@ gfcImageLoaderEXR::gfcImageLoaderEXR()
     theBitmap=NULL;
 	pixels=new Imf::Array<Imf::Rgba>;
 	halfPixels=new Imf::Array<half>;
+	floatPixels=new Imf::Array<float>;
 }
 
 
@@ -389,6 +390,37 @@ void gfcImageLoaderEXR::resampleHalfPixels(int originalW, int originalH, int sca
 	for (int i=newHeight*newWidth-1;i>=0; --i)
 	{
 		(*halfPixels)[i]=resizedPixels[i];
+	}
+}
+
+
+void gfcImageLoaderEXR::resampleFloatPixels(int originalW, int originalH, int scale, int &newWidth,int &newHeight){
+	Array<float> resizedPixels;
+	int N = 100/scale; //sample every N pixels 
+
+	newWidth=originalW/(float)N;
+	newHeight=originalH/(float)N;
+	resizedPixels.resizeErase(newWidth*newHeight);
+	//printf("newWidth= %i new Height= %i originalW= %i originalH=%i\n",newWidth, newHeight, originalW, originalH);
+	//resample
+	for (int y=0; y<newHeight; ++y)
+	{
+		for (int x=0;x<newWidth;++x)
+		{
+			int destination= y*newWidth+x;
+			int origin = (y * N)*originalW+(x * N);
+			//printf("(x=%i y=%i) Origin=%i destination=%i\n",x,y,origin, destination);
+
+			resizedPixels[destination] = (*floatPixels)[origin];
+			//*resizedPixels[y][x]=pixels[y * N][x * N];
+		}
+	}
+
+	//copy to the original array
+	floatPixels->resizeErase(newWidth*newHeight);
+	for (int i=newHeight*newWidth-1;i>=0; --i)
+	{
+		(*floatPixels)[i]=resizedPixels[i];
 	}
 }
 
@@ -509,7 +541,34 @@ void gfcImageLoaderEXR::copyHalfPixelsToDisplayWindow(int startX, int startY, in
 	}*/
 }
 
-               
+
+
+void gfcImageLoaderEXR::copyFloatPixelsToDisplayWindow(int startX, int startY, int copyWidth, int copyHeigth, int preLineOffset, int postLineOffset)
+{
+	Array<float> newPixels;
+
+	newPixels.resizeErase(w*h);
+	unsigned int counter=max((dy),0)*w;
+	for (int i=0;i<copyHeigth;i++) 
+	{
+		int lineOffset=(startY+i)*dw+startX;
+		counter+=preLineOffset;
+		for (int j=0;j<copyWidth;j++) 
+		{
+			newPixels[counter++]=(*floatPixels)[lineOffset+j];
+		}
+		counter+=postLineOffset;
+	}
+
+	//copy to the original array
+	floatPixels->resizeErase(w*h);
+	for (int i=w*h-1;i>=0; --i)
+	{
+		(*floatPixels)[i]=newPixels[i];
+	}
+}
+
+
 int gfcImageLoaderEXR::layerHasRGBA(Imf::ChannelList::ConstIterator start, Imf::ChannelList::ConstIterator end)
 {
 		return 0;
@@ -584,7 +643,7 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 
     bool isLumaChroma=false;
     bool isRGBA=false;
-
+	int dataType=0;
     setGlobalThreadCount(4);
     //get the channel names
     try{
@@ -777,6 +836,7 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
     
         int sizeOfComponent;
         char *basePointers[4];
+		
         if (numOfComponents>1) {
 			//printf("pixels->resizeErase (%i * %i)",dw,dh);
             pixels->resizeErase (dw * dh);
@@ -787,9 +847,25 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
             basePointers[2]=(char*)&((*pixels)[-dx-dy*dw].b);
             basePointers[3]=(char*)&((*pixels)[-dx-dy*dw].a);
         } else {
-            halfPixels->resizeErase(dw*dh);
-            sizeOfComponent=sizeof(half);
-            basePointers[0]=(char*)&((*halfPixels)[-dx-dy*dw]);
+			    /*UINT  = 0,		// unsigned int (32 bit)
+				HALF  = 1,		// half (16 bit floating point)
+				FLOAT = 2,		// float (32 bit floating point)*/
+			dataType=theChannels[0].type;
+			if(dataType==1){
+				halfPixels->resizeErase(dw*dh);
+				sizeOfComponent=sizeof(half);
+				basePointers[0]=(char*)&((*halfPixels)[-dx-dy*dw]);
+			}
+			else{
+				if(dataType==2){
+					floatPixels->resizeErase(dw*dh);
+					sizeOfComponent=sizeof(float);
+					basePointers[0]=(char*)&((*floatPixels)[-dx-dy*dw]);
+				}
+			}
+
+
+			
         }
 
 	
@@ -919,7 +995,8 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 	postLineOffset*=4;
 
 	//we are downscaling to 8 bits or anything else...
-    if (params.compressed!=GFC_16HALF) {
+	if (params.compressed!=GFC_16HALF && params.compressed!=GFC_32FLOAT) 
+	{
     	loadHALF=false;
         //3.5 Allocate theBitmap if necessary
 
@@ -976,9 +1053,9 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 				if (bitSizeForAlloc==8) {
 
                     /*********************************/
-                    /*				     */
+                    /*								 */
                     /*	MORE THAN 1 COMPONENT TO 8bit*/
-                    /*				     */
+                    /*							    */
                     /********************************/
 					//printf("copying from %i,%i for %i,%i\n",startX,startY,copyWidth, copyHeigth);
 					if (sett.exrEnableExposureTransformOnLoad)
@@ -1027,9 +1104,9 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 					printf("copying from %i,%i for %i,%i\n",startX,startY,copyWidth, copyHeigth);*/
                 } else {
 					/**********************************/
-                    /*				      */
+                    /*							      */
                     /*	MORE THAN 1 COMPONENT TO 16bit*/
-                    /*				      */
+                    /*								  */
                     /*********************************/
 					
 					//printf("copying from %i,%i for %i,%i\n",startX,startY,copyWidth, copyHeigth);
@@ -1092,45 +1169,66 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 							offset+=preLineOffset;
 							for (int j=0;j<copyWidth;j++) {
 								
-								/*theBitmap->Data[offset++]=theColor=rGamma((*halfPixels)[lineOffset+j]);
-								theBitmap->Data[offset++]=theColor;
-								theBitmap->Data[offset++]=theColor;
-								theBitmap->Data[offset++]=maxValue;*/
-							}
-							offset+=postLineOffset;
-						}
-					} 
-					else
-					{
-						for (int i=0;i<copyHeigth;i++) {
-							int lineOffset=(startY+i)*dw+startX;
-							offset+=preLineOffset;
-							for (int j=0;j<copyWidth;j++) {
-									
-								theBitmap->Data[offset++]=theColor=theColor=max (min((*halfPixels)[lineOffset+j]*255,255),0);
+								theBitmap->Data[offset++]=theColor=halfGammaConvert8((*halfPixels)[lineOffset+j]);
 								theBitmap->Data[offset++]=theColor;
 								theBitmap->Data[offset++]=theColor;
 								theBitmap->Data[offset++]=maxValue;
 							}
 							offset+=postLineOffset;
 						}
+					} 
+					else
+					{
+						if (sett.exrEnableRangeScaling)
+						{
+							double multiplier=1.0/(sett.exrRangeMax-sett.exrRangeMin)*255.0;
+							for (int i=0;i<copyHeigth;i++) {
+								int lineOffset=(startY+i)*dw+startX;
+								offset+=preLineOffset;
+								if(dataType==1){
+									//HALF TO CHAR
+									for (int j=0;j<copyWidth;j++) {
+								
+										theBitmap->Data[offset++]=theColor=min(((*halfPixels)[lineOffset+j])*multiplier,255);
+										theBitmap->Data[offset++]=theColor;
+										theBitmap->Data[offset++]=theColor;
+										theBitmap->Data[offset++]=maxValue;
+									}
+									offset+=postLineOffset;
+								}
+								else{
+										if(dataType==2){
+											//FLOAT TO CHAR
+											for (int j=0;j<copyWidth;j++) {
+								
+												theBitmap->Data[offset++]=theColor=min(((*floatPixels)[lineOffset+j])*multiplier,255);
+												theBitmap->Data[offset++]=theColor;
+												theBitmap->Data[offset++]=theColor;
+												theBitmap->Data[offset++]=maxValue;
+											}
+											offset+=postLineOffset;
+										}
+									}
+
+							}
+						} 
+						else{
+
+
+							for (int i=0;i<copyHeigth;i++) {
+								int lineOffset=(startY+i)*dw+startX;
+								offset+=preLineOffset;
+								for (int j=0;j<copyWidth;j++) {
+									
+									theBitmap->Data[offset++]=theColor=theColor=max (min((*halfPixels)[lineOffset+j]*255,255),0);
+									theBitmap->Data[offset++]=theColor;
+									theBitmap->Data[offset++]=theColor;
+									theBitmap->Data[offset++]=maxValue;
+								}
+								offset+=postLineOffset;
+								}
+						}
 					}
-
-					//printf("copying from %i,%i for %i,%i\n",startX,startY,copyWidth, copyHeigth);
-					/*for (int i=0;i<copyHeigth;i++) {
-						int lineOffset=(startY+i)*(copyWidth+startX)+startX;
-						for (int j=0;j<copyWidth;j++) {
-							//printf("Getting pixel (%i)\n",lineOffset+j);
-							//Rgba *pixel= &(*pixels)[lineOffset+j];
-					
-
-                            color.Red=dither(rGamma((*halfPixels)[lineOffset+j]),j,i);
-                            color.Green=color.Red;
-                            color.Blue=color.Red;
-                            color.Alpha=maxValue;
-                            gflSetColorAt(theBitmap,j,i,&color);
-                        }
-                    }*/
                 } else {
                      /*********************************/
                     /*								  */
@@ -1204,20 +1302,42 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
     } 
 	else 
 	{
+		if(dataType==1)
+		{
+			//LOAD AS HALF FORMAT
 
-		//LOAD AS HALF FORMAT
-
-        this->loadHALF=1;
-        theBitmap=NULL;
+			this->loadHALF=1;
+			theBitmap=NULL;
 		
-		if (numOfComponents>1)
-		{
-			copyPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4); //we divide by 4 because when we calculate the offsets we think of each 
-																												//component in a 4 color pixel,  here we talk about whole pixels
-		} 
-		else
-		{
-			copyHalfPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4);
+			if (numOfComponents>1)
+			{
+				copyPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4); //we divide by 4 because when we calculate the offsets we think of each 
+																													//component in a 4 color pixel,  here we talk about whole pixels
+			} 
+			else
+			{
+				copyHalfPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4);
+			}
+		}
+		else{
+			if(dataType==2)
+			{
+				//LOAD AS FLOAT FORMAT
+
+				this->loadHALF=1;
+				theBitmap=NULL;
+		
+				if (numOfComponents>1)
+				{
+					copyPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4); //we divide by 4 because when we calculate the offsets we think of each 
+																														//component in a 4 color pixel,  here we talk about whole pixels
+				} 
+				else
+				{
+					copyFloatPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4);
+				}
+			}
+		
 		}
 				
 		//resize?
@@ -1229,7 +1349,14 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 			} 
 			else
 			{
-				resampleHalfPixels(w, h, params.scale, quadSizeX, quadSizeY);
+				if(dataType==1){
+					resampleHalfPixels(w, h, params.scale, quadSizeX, quadSizeY);
+				}
+				else{
+					if(dataType==2){
+					resampleFloatPixels(w, h, params.scale, quadSizeX, quadSizeY);
+					}
+				}
 			}
 			//resampleFloatPixels(numOfComponents>1?pixels:halfPixels, dw, dh, params.scale, quadSizeX, quadSizeY); 
 		}
@@ -1238,6 +1365,7 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 			quadSizeX=w;
 			quadSizeY=h;
 		}
+
     }
 
     //6. fill required frame information
@@ -1341,10 +1469,20 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
     case GFC_16HALF:
         switch (numOfComponents) {
         case 1:
-            frameInfo.format=GL_LUMINANCE;
-            frameInfo.dataType=GL_HALF_FLOAT_ARB;
-            frameInfo.internalFormat=GL_LUMINANCE16F_ARB;
-            frameInfo.dataPointer=&(*halfPixels)[0];
+			if(dataType==1){
+				frameInfo.format=GL_LUMINANCE;
+				frameInfo.dataType=GL_HALF_FLOAT_ARB;
+				frameInfo.internalFormat=GL_LUMINANCE16F_ARB;
+				frameInfo.dataPointer=&(*halfPixels)[0];
+			}
+			else{
+				if(dataType==2){
+				frameInfo.format=GL_LUMINANCE;
+				frameInfo.dataType=GL_FLOAT;
+				frameInfo.internalFormat=GL_LUMINANCE16F_ARB;
+				frameInfo.dataPointer=&(*floatPixels)[0];
+				}
+			}
             break;
         case 3:
             frameInfo.format=GL_BGRA;
@@ -1362,6 +1500,52 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
             frameInfo.format=GL_BGRA;
             frameInfo.dataType=GL_HALF_FLOAT_ARB;
             frameInfo.internalFormat=GL_RGBA16F_ARB;
+            frameInfo.dataPointer=&(*pixels)[0];
+            break;
+        }
+        frameInfo.target=GL_TEXTURE_RECTANGLE_ARB;
+        texCoords.x=0;
+        texCoords.y=0;
+		
+        texCoords.w=quadSizeX;
+        texCoords.h=quadSizeY;
+        break;
+
+	case GFC_32FLOAT:
+        switch (numOfComponents) {
+        case 1:
+			if(dataType==1){
+				frameInfo.format=GL_LUMINANCE;
+				frameInfo.dataType=GL_HALF_FLOAT_ARB;
+				frameInfo.internalFormat=GL_LUMINANCE32F_ARB;
+				frameInfo.dataPointer=&(*halfPixels)[0];
+			}
+			else{
+				if(dataType==2){
+				frameInfo.format=GL_LUMINANCE;
+				frameInfo.dataType=GL_FLOAT;
+				frameInfo.internalFormat=GL_LUMINANCE32F_ARB;
+				frameInfo.dataPointer=&(*floatPixels)[0];
+				}
+            
+			}
+            break;
+        case 3:
+            frameInfo.format=GL_BGRA;
+            frameInfo.dataType=GL_FLOAT;
+            frameInfo.internalFormat=GL_RGBA32F;
+            frameInfo.dataPointer=&(*pixels)[0];
+            break;
+        case 4:
+            frameInfo.format=GL_BGRA;
+            frameInfo.dataType=GL_FLOAT;
+            frameInfo.internalFormat=GL_RGBA32F;
+            frameInfo.dataPointer=&(*pixels)[0];
+            break;
+        default:
+            frameInfo.format=GL_BGRA;
+            frameInfo.dataType=GL_FLOAT;
+            frameInfo.internalFormat=GL_RGBA32F;
             frameInfo.dataPointer=&(*pixels)[0];
             break;
         }
@@ -1496,6 +1680,7 @@ void gfcImageLoaderEXR::releaseMemory() {
 
     pixels->resizeErase(0);
     halfPixels->resizeErase(0);
+	floatPixels->resizeErase(0);
 }
 
 void gfcImageLoaderEXR::readMetaData(const Imf::Header & header)

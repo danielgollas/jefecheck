@@ -2052,6 +2052,10 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 			sett.exrKneeLow=pw.exrKneeLow->value();
 			sett.exrKneeHigh=pw.exrKneeHigh->value();
 
+			sett.exrEnableRangeScaling=pw.exrEnableRangeScaling->value();
+			sett.exrRangeMin=pw.exrRangeMin->value();
+			sett.exrRangeMax=pw.exrRangeMax->value();
+
 			//Chat options
 			networkManager.chatFontSize=pw.fontSize->value();
 			networkManager.chatTextBG=pw.textBG->value();

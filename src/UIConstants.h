@@ -21,6 +21,7 @@ enum CompressionModes{
 GFC_8BPC,
 GFC_16BPC,
 GFC_16HALF,
+GFC_32FLOAT,
 GFC_4BPC,
 GFC_S3TCDX1
 };

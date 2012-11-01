@@ -2405,6 +2405,10 @@ void gfcPlate::getFrameAndSequence() {
                 stream<< "Depth: 16 bit (Half Floating Point) per component"  <<std::endl;
                 break;
 
+			case GFC_32FLOAT:
+                stream<< "Depth: 32 bit (Floating Point) per component"  <<std::endl;
+                break;
+
             case GFC_16BPC:
                 stream<< "Depth: 16 bit per component"  <<std::endl;
                 break;

@@ -1,14 +1,19 @@
 # data file for the Fltk User Interface Designer (fluid)
-version 1.0109 
+version 1.0300 
 header_name {.h} 
 code_name {.cxx}
 class LoadWindow {open : {public Fl_Double_Window}
 } {
-  decl {\#include "UIConstants.h"} {}
-  decl {\#include "Fl_DragBar.H"} {}
-  decl {\#include "UICallbacks.h"} {}
-  decl {\#include "Fl_Button_gfc.h"} {}
-  decl {\#include "gfcSliderInput.h"} {}
+  decl {\#include "UIConstants.h"} {private local
+  }
+  decl {\#include "Fl_DragBar.H"} {private local
+  }
+  decl {\#include "UICallbacks.h"} {private local
+  }
+  decl {\#include "Fl_Button_gfc.h"} {private local
+  }
+  decl {\#include "gfcSliderInput.h"} {private local
+  }
   Function {LoadWindow(int x, int y, int wi, int height,const char* l) : Fl_Double_Window(300, 300, 300, 300, "Load Window")} {open
   } {
     Fl_Window loadWindow {
@@ -118,7 +123,7 @@ class LoadWindow {open : {public Fl_Double_Window}
             label {Bit Depth}
             user_data LOADUPDATEPREVIEW_ID
             callback loadCB open
-            tooltip {Special Formats can determine the quality/memory ratio.} xywh {170 125 56 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {170 125 65 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
             class Fl_Choice_gfc
           } {
             MenuItem {} {
@@ -131,7 +136,11 @@ class LoadWindow {open : {public Fl_Double_Window}
             }
             MenuItem {} {
               label HALF
-              xywh {65 65 30 20} labelsize 12 divider
+              xywh {65 65 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label FLOAT
+              xywh {75 75 30 20} labelsize 12 divider
             }
             MenuItem {} {
               label 4bpc
@@ -308,7 +317,7 @@ class LoadWindow {open : {public Fl_Double_Window}
             label {Bit Depth}
             user_data LOADUPDATEPREVIEW_ID
             callback loadCB open
-            tooltip {Special Formats can determine the quality/memory ratio.} xywh {542 125 54 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {542 125 65 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
             class Fl_Choice_gfc
           } {
             MenuItem {} {
@@ -321,7 +330,11 @@ class LoadWindow {open : {public Fl_Double_Window}
             }
             MenuItem {} {
               label HALF
-              xywh {70 70 30 20} labelsize 12 divider
+              xywh {70 70 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label FLOAT
+              xywh {85 85 30 20} labelsize 12 divider
             }
             MenuItem {} {
               label 4bpc
@@ -481,7 +494,7 @@ class LoadWindow {open : {public Fl_Double_Window}
             label {Bit Depth}
             user_data LOADUPDATEPREVIEW_ID
             callback loadCB open
-            tooltip {Special Formats can determine the quality/memory ratio.} xywh {172 272 56 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {172 272 65 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
             class Fl_Choice_gfc
           } {
             MenuItem {} {
@@ -494,7 +507,11 @@ class LoadWindow {open : {public Fl_Double_Window}
             }
             MenuItem {} {
               label HALF
-              xywh {70 70 30 20} labelsize 12 divider
+              xywh {70 70 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label FLOAT
+              xywh {95 95 30 20} labelsize 12 divider
             }
             MenuItem {} {
               label 4bpc
@@ -654,7 +671,7 @@ class LoadWindow {open : {public Fl_Double_Window}
             label {Bit Depth}
             user_data LOADUPDATEPREVIEW_ID
             callback loadCB open
-            tooltip {Special Formats can determine the quality/memory ratio.} xywh {542 272 54 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {542 272 65 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
             class Fl_Choice_gfc
           } {
             MenuItem {} {
@@ -667,7 +684,11 @@ class LoadWindow {open : {public Fl_Double_Window}
             }
             MenuItem {} {
               label HALF
-              xywh {70 70 30 20} labelsize 12 divider
+              xywh {70 70 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label FLOAT
+              xywh {105 105 30 20} labelsize 12 divider
             }
             MenuItem {} {
               label 4bpc

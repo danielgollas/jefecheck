@@ -257,6 +257,10 @@ public:
 		exrKneeLow=0;
 		exrKneeHigh=5;
 
+		exrEnableRangeScaling=0;
+		exrRangeMin=0.0;
+		exrRangeMax=1000.0;
+
         renderingEngine=0; //0==3D, 1==2D
         chatFadeDelay=20;
         chatFontSize=20;
@@ -342,6 +346,10 @@ public:
 	float exrGamma;
 	float exrKneeLow;
 	float exrKneeHigh;
+
+	int exrEnableRangeScaling;
+	double exrRangeMin;
+	double exrRangeMax;
 
     int maxRecentFXStacks;
 	int maxRecentFXs;

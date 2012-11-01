@@ -338,24 +338,10 @@ std::string ftos(float value,int precision)
 	return ss.str();
 }
 
-template <class T> 
-std::string toString(T value)
-{
-	std::stringstream ss;
-	ss<<value;
-	return ss.str();
-}
 
-template <class T>
-void saveSetting(std::string name,T value, XMLNode &node) {
-    std::stringstream ss;
-    ss<<value;
-    //cout << "Saving setting "<<name<<"="<<ss.str() << " (from "<< value <<")\n";
-	
-    node.addAttribute(name.c_str(),ss.str().c_str());
-}
 
-template void saveSetting<char>(std::string name, char, XMLNode&);
+
+//template void saveSetting<char>(std::string name, char, XMLNode&);
 
 void saveSettings ( const gfcSettings *sett ) {
     std::string appDataPath,settingsFilename;
@@ -427,6 +413,10 @@ void saveSettings ( const gfcSettings *sett ) {
 	saveSetting("exrKneeLow",sett->exrKneeLow,xGeneralNode);
 	saveSetting("exrKneeHigh",sett->exrKneeHigh,xGeneralNode);
 	
+	saveSetting("exrRangeMin",sett->exrRangeMin,xGeneralNode);
+	saveSetting("exrRangeMax",sett->exrRangeMax,xGeneralNode);
+	saveSetting("exrEnableRangeScaling",sett->exrEnableRangeScaling,xGeneralNode);
+
     saveSetting("forceGFLLoading",(int)pw.forceGFLLoading->value(),xGeneralNode);
     saveSetting("continueLoadingOnError",(int)pw.continueLoadingOnError->value(),xGeneralNode);
     saveSetting("dontUseInactiveMemory",(int)pw.dontUseInactiveMemory->value(),xGeneralNode);
@@ -556,26 +546,7 @@ void saveSettings ( const gfcSettings *sett ) {
 
 
 
-template <class T>
-void setWidgetFromNode(std::string name, T* widget, XMLNode node) {
-    if (node.getAttribute ( name.c_str() )!=NULL) {
-        widget->value(atof(node.getAttribute( name.c_str() )));
-		
-    }
-}
 
-template <class T>
-void readSetting(std::string name, T& result, XMLNode &node) {
-    if (node.getAttribute ( name.c_str() )!=NULL) {
-        std::stringstream ss;
-        ss << node.getAttribute ( name.c_str() );
-        //std::cout << name <<": " <<ss.str() << std::endl;
-        {
-            ss>>result;
-        }
-		
-    }
-}
 
 void readSettingString(std::string name, std::string& result, XMLNode &node) {
     if (node.getAttribute ( name.c_str() )!=NULL) {
@@ -647,7 +618,7 @@ char splitterChar;
 				if (fl_filename_isdir(tmp->d_name)==0 &&	fl_filename_match(tmp->d_name,"{*.tga|*.cub|*.lut|*.cube}")) {
 					std::string tempLutName = path+tmp->d_name;
 					//printf(" (%i) %s\n",i,tmp->d_name);
-					printf ( "+Path loading LUT %s ",GetFilenameNoPath ( tempLutName ).c_str() );
+					printf ( "+Path loading LUT %s \n",GetFilenameNoPath ( tempLutName ).c_str() );
 					std::string statusString;
 					statusString="Loading LUT: ";
 					statusString+=GetFilenameNoPath ( tempLutName );
@@ -719,7 +690,7 @@ void loadFXsFromPath(std::string thePath) {
         if (fl_filename_isdir(tmp->d_name)==0 &&	fl_filename_match(tmp->d_name,"{*.jfx}")) {
             std::string tempFXName = path+tmp->d_name;
             //printf(" (%i) %s\n",i,tmp->d_name);
-            printf ( "+Path loading FX %s ",GetFilenameNoPath ( tempFXName ).c_str() );
+            printf ( "+Path loading FX %s \n",GetFilenameNoPath ( tempFXName ).c_str() );
             std::string statusString;
             statusString="Loading FX: ";
             statusString+=GetFilenameNoPath ( tempFXName );
@@ -912,6 +883,11 @@ void readSettings ( gfcSettings &sett ) {
 	setWidgetFromNode("exrGamma",pw.exrGamma,xGeneralNode);
 	setWidgetFromNode("exrKneeLow",pw.exrKneeLow,xGeneralNode);
 	setWidgetFromNode("exrKneeHigh",pw.exrKneeHigh,xGeneralNode);
+
+	setWidgetFromNode("exrRangeMin",pw.exrRangeMin,xGeneralNode);
+	setWidgetFromNode("exrRangeMax",pw.exrRangeMax,xGeneralNode);
+	setWidgetFromNode("exrEnableRangeScaling",pw.exrEnableRangeScaling,xGeneralNode);
+	
 
     sett.startFullscreen=pw.startFullscreenCheckBox->value();
     sett.openLoadWindowAtStartup=pw.loadWindowOnStartupCheckBox->value();

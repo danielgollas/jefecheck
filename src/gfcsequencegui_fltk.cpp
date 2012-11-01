@@ -45,12 +45,16 @@ int gfcSequenceGUI_FLTK::getCompression()
 		case 2: 
 			return GFC_16HALF;
 		break;
-			
-		case 3:
+		
+		case 3: 
+			return GFC_32FLOAT;
+		break;
+
+		case 4:
 			return GFC_4BPC;
 		break;
 		
-		case 4:
+		case 5:
 			return GFC_S3TCDX1;
 		break;
 		

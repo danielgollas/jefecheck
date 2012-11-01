@@ -41,12 +41,15 @@ public:
      	int loadHALF;
      	Imf::Array<Imf::Rgba> *pixels;
      	Imf::Array<half> *halfPixels;
+		Imf::Array<float> *floatPixels;
      	void readMetaData(const Imf::Header &header);
 		void resamplePixels(int originalW, int originalH, int scale, int &newWidth, int &newHeight);
 		void resampleHalfPixels( int originalW, int originalH, int scale, int &newWidth, int &newHeight);
+		void resampleFloatPixels( int originalW, int originalH, int scale, int &newWidth, int &newHeight);
 		
 		void copyPixelsToDisplayWindow(int startX, int startY, int copyWidth, int copyHeigth, int preLineOffset, int postLineOffset);
 		void copyHalfPixelsToDisplayWindow(int startX, int startY, int copyWidth, int copyHeigth, int preLineOffset, int postLineOffset);
+		void copyFloatPixelsToDisplayWindow(int startX, int startY, int copyWidth, int copyHeigth, int preLineOffset, int postLineOffset);
 		int layerHasRGBA(Imf::ChannelList::ConstIterator start, Imf::ChannelList::ConstIterator end);
 		std::vector<std::string> getChannelsInLayer(const Imf::ChannelList &channels, std::string layerName); //this will return all the channels in a layer, if they contain .R, .G, .B and optionally .A they will be returned in the correct order, not alphabetically.
 };
