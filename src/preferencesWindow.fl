@@ -253,8 +253,8 @@ class PreferencesWindow {open
             } {
               Fl_Check_Button exrEnableRangeScaling {
                 label {Enable Range Scaling}
-                callback PreferencesCB
-                tooltip {Perform the reference Float to Integer color transformation when loading to an Integer buffer (8bpc, 16bpc, 4bpc, S3TC)} xywh {25 222 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
+                callback PreferencesCB selected
+                tooltip {Map floating point values to 8 bit pixels using this range} xywh {25 222 20 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 31
               }
               Fl_Value_Input exrRangeMin {
                 label min
@@ -489,7 +489,7 @@ class PreferencesWindow {open
       Fl_Button {} {
         label {Save and Close}
         user_data PREFERENCESDONE_ID
-        callback PreferencesCB selected
+        callback PreferencesCB
         tooltip {Closes this window without saving preferences for next session} xywh {210 545 130 35} box FLAT_BOX down_box PLASTIC_DOWN_BOX color 8 labelcolor 31
         code0 {\#include "Fl_Button_gfc.h"}
         class Fl_Button_gfc

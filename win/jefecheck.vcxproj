@@ -85,6 +85,7 @@
     <ClCompile Include="..\src\gfcimageloader.cpp" />
     <ClCompile Include="..\src\gfcimageloaderdpx.cpp" />
     <ClCompile Include="..\src\gfcimageloaderexr.cpp" />
+    <ClCompile Include="..\src\gfcimageloaderexr2.cpp" />
     <ClCompile Include="..\src\gfcimageloaderfil.cpp" />
     <ClCompile Include="..\src\gfcimageloadergfl.cpp" />
     <ClCompile Include="..\src\gfcimageprocessor.cpp" />
@@ -293,6 +294,7 @@
     <ClInclude Include="..\src\gfcimageloader.h" />
     <ClInclude Include="..\src\gfcimageloaderdpx.h" />
     <ClInclude Include="..\src\gfcimageloaderexr.h" />
+    <ClInclude Include="..\src\gfcimageloaderexr2.h" />
     <ClInclude Include="..\src\gfcimageloadergfl.h" />
     <ClInclude Include="..\src\gfcimageprocessor.h" />
     <ClInclude Include="..\src\gfcimagesaver.h" />
@@ -555,6 +557,7 @@
       <AdditionalOptions>/EHs /DBOTAN_DLL=__declspec(dllexport) /wo4244 /wo4305 /wd4275 /wd4244  /wd4251 /wd4250 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
+      <DisableSpecificWarnings>4251;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

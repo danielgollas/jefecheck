@@ -10,7 +10,7 @@ echo cd www >> ftpcmd.dat
 echo cd jefecheck >> ftpcmd.dat
 echo mkdir binaries >> ftpcmd.dat
 echo cd binaries >> ftpcmd.dat
-echo mput C:\projects\jefecheck2\common\website\jefecheck\binaries\Jefe*.*>> ftpcmd.dat
+REM echo mput C:\projects\jefecheck2\common\website\jefecheck\binaries\Jefe*.*>> ftpcmd.dat
 echo cd .. >> ftpcmd.dat
 echo cd images >> ftpcmd.dat
 REM echo mput C:\projects\jefecheck2\common\website\jefecheck\images\*.png >> ftpcmd.dat
