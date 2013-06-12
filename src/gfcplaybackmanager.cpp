@@ -186,8 +186,14 @@ void gfcPlaybackManager::update() {
 		
 		if (fpsCount>=targetFPS*2) 
 		{
-			char tmpNum[6]="";
-			sprintf(tmpNum,"%.2f",fpsCount/fpsTimerCount);
+			char tmpNum[12]="0.0";
+			float tmpFloat=0;			
+			if(fpsTimerCount>0){
+				tmpFloat=fpsCount/fpsTimerCount;
+			}
+			if(tmpFloat < 999999999){
+				sprintf(tmpNum,"%.2f",tmpFloat);
+			}
 			currentFPS=atof(tmpNum);
 			//currentFPS=timeStep;
 			myGUI->setCurrentFPS(currentFPS);
