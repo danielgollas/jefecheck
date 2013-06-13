@@ -338,22 +338,9 @@ std::string ftos(float value,int precision)
 	return ss.str();
 }
 
-template <class T> 
-std::string toString(T value)
-{
-	std::stringstream ss;
-	ss<<value;
-	return ss.str();
-}
 
-template <class T>
-void saveSetting(std::string name,T value, XMLNode &node) {
-    std::stringstream ss;
-    ss<<value;
-    //cout << "Saving setting "<<name<<"="<<ss.str() << " (from "<< value <<")\n";
-	
-    node.addAttribute(name.c_str(),ss.str().c_str());
-}
+
+
 
 template void saveSetting<char>(std::string name, char, XMLNode&);
 
@@ -556,26 +543,9 @@ void saveSettings ( const gfcSettings *sett ) {
 
 
 
-template <class T>
-void setWidgetFromNode(std::string name, T* widget, XMLNode node) {
-    if (node.getAttribute ( name.c_str() )!=NULL) {
-        widget->value(atof(node.getAttribute( name.c_str() )));
-		
-    }
-}
 
-template <class T>
-void readSetting(std::string name, T& result, XMLNode &node) {
-    if (node.getAttribute ( name.c_str() )!=NULL) {
-        std::stringstream ss;
-        ss << node.getAttribute ( name.c_str() );
-        //std::cout << name <<": " <<ss.str() << std::endl;
-        {
-            ss>>result;
-        }
-		
-    }
-}
+
+
 
 void readSettingString(std::string name, std::string& result, XMLNode &node) {
     if (node.getAttribute ( name.c_str() )!=NULL) {
@@ -1767,14 +1737,14 @@ std::string findFileInSearchPaths(std::string theFile) {
     boost::filesystem::path tempPath(theFile);
 	//std::string theFileLeaf=tempPath.leaf().string();
 	
-	std::string theFileLeaf=tempPath.filename().string();
+//	std::string theFileLeaf=tempPath.filename().string();
 
 //From when we had different versions of boost
-//#ifdef WIN32
-//	//std::string theFileLeaf=tempPath.filename().string();
-//#else
-//	//std::string theFileLeaf=tempPath.filename();
-//#endif
+#ifdef WIN32
+	std::string theFileLeaf=tempPath.filename().string();
+#else
+	std::string theFileLeaf=tempPath.filename();
+#endif
 
 	std::cout << "Trying to find in search paths thefileLeaf: " << theFileLeaf << std::endl;
     for(int i=0;i<folderCount;i++)

@@ -12,7 +12,7 @@
 #include "xmlParser.h"
 
 #include "gfcrenderparams.h"
-#define JEFE_VERSION "1.5.1" 
+#define JEFE_VERSION "1.5.3" 
 #include <sstream> //for stingstream
 #include <boost/filesystem/path.hpp>
 
