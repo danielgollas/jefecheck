@@ -1,7 +1,13 @@
 #USAGE run with 32 or 64 as arguments to create an installation package for linux32 or 64
 #second argument should be _demo or blank
 
-DIR=JefeCheck_Linux_$1
+
+
+ARCH=$1
+
+: ${ARCH:="x86_64"}
+
+DIR=JefeCheck_Linux_$ARCH
 exeFile=jefecheck
 
 #cleanup

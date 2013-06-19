@@ -5,6 +5,7 @@ set choice=
 set /p choice=Enter password:
 echo %choice%>> ftpcmd.dat
 echo bin>> ftpcmd.dat
+echo hash>> ftpcmd.dat
 echo cd www >> ftpcmd.dat
 echo cd jefecheck >> ftpcmd.dat
 echo mkdir binaries >> ftpcmd.dat
