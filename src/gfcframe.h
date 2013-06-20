@@ -21,6 +21,7 @@
 #include "gfcimageloadergfl.h"
 #include "gfcimageloaderdpx.h"
 #include "gfcimageloaderfil.h"
+#include "gfcimageloaderexr2.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>

@@ -32,7 +32,8 @@
 #include "gfcStructures.h"
 
 #include "gfcimageloaderdpx.h"
-#include "gfcimageloaderexr.h"
+/*#include "gfcimageloaderexr.h"*/
+#include "gfcimageloaderexr2.h"
 #include "gfcimageloadergfl.h"
 
 

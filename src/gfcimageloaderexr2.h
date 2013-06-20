@@ -8,9 +8,23 @@
 #include <OpenEXR/ImfHeader.h>
 #include <OpenEXR/ImfArray.h>
 #include <OpenEXR/ImfChannelList.h>
+#include <OpenEXR/ImfInputFile.h>
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
 */
+
+class DisplayWindowInfo{
+
+public:
+	int w;
+	int h;
+	int x;
+	int y;
+	int dw;
+	int dh;
+	int dx;
+	int dy;
+};
 
 class gfcImageLoaderEXR2 : public gfcImageLoader
 {
@@ -26,7 +40,7 @@ public:
     virtual std::vector<std::string> getChannelNames();
     virtual void releaseMemory();
      
-	
+	DisplayWindowInfo dwi;
 
 	 
      private:
@@ -46,20 +60,25 @@ public:
      	//int loadHALF;
 		Imf::PixelType channelType;
 		std::set<std::string> layerNames;
-		const ChannelList &channels;
+		Imf::ChannelList channels;
+
+		//pixels stores RGBA pixels up to HALF bit depth, we will always read to pixels when we have more than 1 component for the channel we are loading.
+		//For the time being, we do not support FLOAT RGBA images, only FLOAT for single component images (depth e.g.)
      	Imf::Array<Imf::Rgba> *pixels;
-		Imf::Rgba
+
+
 		Imf::Array<unsigned int> *uintPixels;
      	Imf::Array<half> *halfPixels;
 		Imf::Array<float> *floatPixels;
-     	void readMetaData(const Imf::Header &header);
+     	
+		void readMetaData(const Imf::Header &header);
 		int loadChannelNames();
 		int layerHasRGBA(Imf::ChannelList::ConstIterator start, Imf::ChannelList::ConstIterator end);
 		std::vector<std::string> getChannelsInLayer(const Imf::ChannelList &channels, std::string layerName); //this will return all the channels in a layer, if they contain .R, .G, .B and optionally .A they will be returned in the correct order, not alphabetically.
 };
 
 
-char exrCompressionDescriptions[8][60]={"No Compression","Run Lenght Encoding (RLE)","zlib, one scan line at a time compression","zlib, in blocks of 16 scan lines","piz-based wavelet","PXR24 (lossy )","B44,fixed rate (lossy)","B44 (lossy)"};
+
 
 
 template<class T>
@@ -191,16 +210,16 @@ void gfcImageLoaderEXR2::resamplePixels(int originalW, int originalH, int scale,
 */
 
 
-template<class T> void EXR_copyToDisplayWindow(Imf::Array<T> *originaloriginal, int startX, int startY, int copyWidth, int copyHeigth, int preLineOffset, int postLineOffset){
+template<class T> void EXR_copyToDisplayWindow(Imf::Array<T> *original, int startX, int startY, int copyWidth, int copyHeight, int preLineOffset, int postLineOffset, DisplayWindowInfo dwi){
 
 	Imf::Array<T> newPixels;
 	
 	//copy pixels from the originalPixels array into the new pixels taking only the ones in the display window.
-	newPixels.resizeErase(w*h);
-	unsigned int counter=max((dy),0)*w;
-	for (int i=0;i<copyHeigth;i++) 
+	newPixels.resizeErase(dwi.w*dwi.h);
+	unsigned int counter=max((dwi.dy),0)*dwi.w;
+	for (int i=0;i<copyHeight;i++) 
 	{
-		int lineOffset=(startY+i)*dw+startX;
+		int lineOffset=(startY+i)*dwi.dw+startX;
 		counter+=preLineOffset;
 		for (int j=0;j<copyWidth;j++) 
 		{
@@ -210,8 +229,8 @@ template<class T> void EXR_copyToDisplayWindow(Imf::Array<T> *originaloriginal, 
 	}
 	
 	//copy to the original array
-	original->resizeErase(w*h);
-	for (int i=w*h-1;i>=0; --i)
+	original->resizeErase(dwi.w*dwi.h);
+	for (int i=dwi.w*dwi.h-1;i>=0; --i)
 	{
 		(*original)[i]=newPixels[i];
 	}

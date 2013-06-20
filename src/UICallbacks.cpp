@@ -693,7 +693,7 @@ void updateReviewToolsWindowReview();
 void menuCB ( Fl_Menu_* o , void* v ) {
 
 	float newSize;
-	Fl_Widget* temp;
+	Fl_Widget* temp=0;
 	Fl_File_Chooser chooser ( "./","*",0,"Pick a file" );
 	static char gammaCommand[300];
 

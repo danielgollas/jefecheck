@@ -28,6 +28,8 @@
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
 
+char exrCompressionDescriptions2[8][60]={"No Compression","Run Lenght Encoding (RLE)","zlib, one scan line at a time compression","zlib, in blocks of 16 scan lines","piz-based wavelet","PXR24 (lossy )","B44,fixed rate (lossy)","B44 (lossy)"};
+
 #ifndef max
 #define max(a,b)            (((a) > (b)) ? (a) : (b))
 #endif
@@ -192,7 +194,7 @@ dither (float v, int x, int y) {
 } // namespace
 
 
-float gammaConvert8(half h){
+float gammaConvert8_2(half h){
   float gamma, exposure, defog, kneeLow, kneeHigh;
   int targetBD=8;
   gamma = 1.0/max(sett.exrGamma,0.00001);
@@ -246,7 +248,7 @@ float gammaConvert8(half h){
 }
 
 
-float gammaConvert16(half h){
+float gammaConvert16_2(half h){
   float gamma, exposure, defog, kneeLow, kneeHigh;
   int targetBD=16;
   gamma = 1.0/max(sett.exrGamma,0.00001);
@@ -579,9 +581,10 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 				return 1;
 			}
 
-			if (params.channel<0) 
+			if (params.channel<0){
 				//this means it's the first time and the user has not selected a channel, default it to the first
 				params.channel=0;
+			}
 
 	
 			Channel theChannels[4]; //4 channels at most.
@@ -610,11 +613,11 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 			//theChannel sometimes includes standard names such as RGBA or R, or G or A, but it can also be a layer name or a channel in a layer, so
 			//to obtain the list of channels, we try all special cases.
 			bool isLayer=layerNames.find(theChannel)!=layerNames.end();
-			const Box2i &displayWindow = file.header().displayWindow();
-			const Box2i &dataWindow = file.header().dataWindow();
-			pixelAspectRatio = file.header().pixelAspectRatio();
+			const Box2i &displayWindow = file->header().displayWindow();
+			const Box2i &dataWindow = file->header().dataWindow();
+			pixelAspectRatio = file->header().pixelAspectRatio();
 
-			w  = displayWindow.max.x - displayWindow.min.x + 1;
+			 w  = displayWindow.max.x - displayWindow.min.x + 1;
 			 h  = displayWindow.max.y - displayWindow.min.y + 1;
 			 x = displayWindow.min.x;
 			 y = displayWindow.min.y;
@@ -622,6 +625,15 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 			 dh = dataWindow.max.y - dataWindow.min.y + 1;
 			 dx = dataWindow.min.x;
 			 dy = dataWindow.min.y;
+
+			 dwi.w=w;
+			 dwi.h=h;
+			 dwi.x=x;
+			 dwi.y=y;
+			 dwi.dw=dw;
+			 dwi.dh=dh;
+			 dwi.dx=dx;
+			 dwi.dy=dy;
 	
 			/*printf("displayWindow.min.x: %i, displayWindow.min.y: %i\n",displayWindow.min.x,displayWindow.min.y);
 			printf("displayWindow:(%i,%i) - (%i,%i)\ndataWindow:(%i,%i) - (%i,%i)\n",displayWindow.min.x,displayWindow.min.y, displayWindow.max.x, displayWindow.max.y,
@@ -666,7 +678,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
     
 				int sizeOfComponent;
 				char *basePointers[4];
-				Imf::Array =
+				//Imf::Array =
 				channelType=theChannels[0].type;
 				switch(channelType)
 				{
@@ -709,7 +721,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 						basePointers[0]=(char*)&((*halfPixels)[-dx-dy*dw]);
 					}
 					else{
-						if(dataType==2){
+						if(channelType==2){
 							floatPixels->resizeErase(dw*dh);
 							sizeOfComponent=sizeof(float);
 							basePointers[0]=(char*)&((*floatPixels)[-dx-dy*dw]);
@@ -748,14 +760,14 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 						}
 						trackManager.ioBusy=1;
 
-						file.readPixels (dataWindow.min.y, dataWindow.max.y);
+						file->readPixels (dataWindow.min.y, dataWindow.max.y);
 				
 						trackManager.ioBusy=0;
 						balanceReadCond.notify_one();
 					}
 					else
 					{
-						file.readPixels (dataWindow.min.y, dataWindow.max.y);
+						file->readPixels (dataWindow.min.y, dataWindow.max.y);
 					}
 
 				} catch (const std::exception &e) {
@@ -864,7 +876,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 				//4. Convert and copy the buffer into theBitmap
 				{
 			
-					halfFunction<float> halfGammaConvert8(gammaConvert8, -HALF_MAX, HALF_MAX);
+					halfFunction<float> halfGammaConvert8_2(gammaConvert8_2, -HALF_MAX, HALF_MAX);
 					GFL_COLOR color;
 			
 			
@@ -892,10 +904,10 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 										theBitmap->Data[offset++]=bGamma(pixel->b);
 										theBitmap->Data[offset++]=rGamma(pixel->a);
 										*/
-										theBitmap->Data[offset++]=halfGammaConvert8(pixel->r);
-										theBitmap->Data[offset++]=halfGammaConvert8(pixel->g);
-										theBitmap->Data[offset++]=halfGammaConvert8(pixel->b);
-										theBitmap->Data[offset++]=halfGammaConvert8(pixel->a);
+										theBitmap->Data[offset++]=halfGammaConvert8_2(pixel->r);
+										theBitmap->Data[offset++]=halfGammaConvert8_2(pixel->g);
+										theBitmap->Data[offset++]=halfGammaConvert8_2(pixel->b);
+										theBitmap->Data[offset++]=halfGammaConvert8_2(pixel->a);
 				
 
 
@@ -950,10 +962,10 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 										(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->b);
 										(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->a);*/
 								
-										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->r);
-										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->g);
-										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->b);
-										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16(pixel->a);
+										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16_2(pixel->r);
+										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16_2(pixel->g);
+										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16_2(pixel->b);
+										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16_2(pixel->a);
 									}
 									offset+=postLineOffset;
 								}
@@ -991,7 +1003,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 									offset+=preLineOffset;
 									for (int j=0;j<copyWidth;j++) {
 								
-										theBitmap->Data[offset++]=theColor=halfGammaConvert8((*halfPixels)[lineOffset+j]);
+										theBitmap->Data[offset++]=theColor=halfGammaConvert8_2((*halfPixels)[lineOffset+j]);
 										theBitmap->Data[offset++]=theColor;
 										theBitmap->Data[offset++]=theColor;
 										theBitmap->Data[offset++]=maxValue;
@@ -1007,7 +1019,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 									for (int i=0;i<copyHeigth;i++) {
 										int lineOffset=(startY+i)*dw+startX;
 										offset+=preLineOffset;
-										if(dataType==1){
+										if(channelType==1){
 											//HALF TO CHAR
 											for (int j=0;j<copyWidth;j++) {
 								
@@ -1019,7 +1031,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 											offset+=postLineOffset;
 										}
 										else{
-												if(dataType==2){
+												if(channelType==2){
 													//FLOAT TO CHAR
 													for (int j=0;j<copyWidth;j++) {
 								
@@ -1124,39 +1136,42 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 			} 
 			else 
 			{
-				if(dataType==1)
+				if(channelType==1)
 				{
 					//LOAD AS HALF FORMAT
 
-					this->loadHALF=1;
+					//this->loadHALF=1;
 					theBitmap=NULL;
 		
 					if (numOfComponents>1)
 					{
-						copyPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4); //we divide by 4 because when we calculate the offsets we think of each 
+						EXR_copyToDisplayWindow(pixels, startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4, dwi);
+						//copyPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4); //we divide by 4 because when we calculate the offsets we think of each 
 																															//component in a 4 color pixel,  here we talk about whole pixels
 					} 
 					else
 					{
-						copyHalfPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4);
+						EXR_copyToDisplayWindow(halfPixels, startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4, dwi);
+						//copyHalfPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4);
 					}
 				}
 				else{
-					if(dataType==2)
+					if(channelType==2)
 					{
 						//LOAD AS FLOAT FORMAT
 
-						this->loadHALF=1;
+						
 						theBitmap=NULL;
 		
 						if (numOfComponents>1)
 						{
-							copyPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4); //we divide by 4 because when we calculate the offsets we think of each 
+							EXR_copyToDisplayWindow(floatPixels, startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4, dwi);
+							//copyPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4); //we divide by 4 because when we calculate the offsets we think of each 
 																																//component in a 4 color pixel,  here we talk about whole pixels
 						} 
 						else
 						{
-							copyFloatPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4);
+							//copyFloatPixelsToDisplayWindow(startX, startY,copyWidth, copyHeigth,preLineOffset/4, postLineOffset/4);
 						}
 					}
 		
@@ -1167,16 +1182,16 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 				{
 					if (numOfComponents>1)
 					{
-						resamplePixels(w, h, params.scale, quadSizeX, quadSizeY);
+						EXR_resamplePixels(pixels, w, h, params.scale, quadSizeX, quadSizeY);
 					} 
 					else
 					{
-						if(dataType==1){
-							resampleHalfPixels(w, h, params.scale, quadSizeX, quadSizeY);
+						if(channelType==1){
+							EXR_resamplePixels(halfPixels, w, h, params.scale, quadSizeX, quadSizeY);
 						}
 						else{
-							if(dataType==2){
-							resampleFloatPixels(w, h, params.scale, quadSizeX, quadSizeY);
+							if(channelType==2){
+							EXR_resamplePixels(floatPixels, w, h, params.scale, quadSizeX, quadSizeY);
 							}
 						}
 					}
@@ -1291,14 +1306,14 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 			case GFC_16HALF:
 				switch (numOfComponents) {
 				case 1:
-					if(dataType==1){
+					if(channelType==1){
 						frameInfo.format=GL_LUMINANCE;
 						frameInfo.dataType=GL_HALF_FLOAT_ARB;
 						frameInfo.internalFormat=GL_LUMINANCE16F_ARB;
 						frameInfo.dataPointer=&(*halfPixels)[0];
 					}
 					else{
-						if(dataType==2){
+						if(channelType==2){
 						frameInfo.format=GL_LUMINANCE;
 						frameInfo.dataType=GL_FLOAT;
 						frameInfo.internalFormat=GL_LUMINANCE16F_ARB;
@@ -1336,14 +1351,14 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 			case GFC_32FLOAT:
 				switch (numOfComponents) {
 				case 1:
-					if(dataType==1){
+					if(channelType==1){
 						frameInfo.format=GL_LUMINANCE;
 						frameInfo.dataType=GL_HALF_FLOAT_ARB;
 						frameInfo.internalFormat=GL_LUMINANCE32F_ARB;
 						frameInfo.dataPointer=&(*halfPixels)[0];
 					}
 					else{
-						if(dataType==2){
+						if(channelType==2){
 						frameInfo.format=GL_LUMINANCE;
 						frameInfo.dataType=GL_FLOAT;
 						frameInfo.internalFormat=GL_LUMINANCE32F_ARB;
@@ -1445,11 +1460,11 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 			originalBitDepth=bitDepths[theChannels[0].type];
 			originalNumOfComponents=channelNames.size();
 
-			sizeX=loadHALF?quadSizeX:theBitmap->Width;
-			sizeY=loadHALF?quadSizeY:theBitmap->Height;
+			sizeX=channelType==1?quadSizeX:theBitmap->Width;
+			sizeY=channelType==1?quadSizeY:theBitmap->Height;
 	
-			quadSizeX=loadHALF?quadSizeX:theBitmap->Width;
-			quadSizeY=loadHALF?quadSizeY:theBitmap->Height;
+			quadSizeX=channelType==1?quadSizeX:theBitmap->Width;
+			quadSizeY=channelType==1?quadSizeY:theBitmap->Height;
 			if (!sett.exrIgnoreHeadersAspectRatio)
 			{
 				quadSizeX*=pixelAspectRatio; //this stretches horizontally
@@ -1463,9 +1478,9 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 
 			format = "EXR";
 			formatDescription="ILM OpenEXR v";
-			formatDescription += '0'+file.version();
+			formatDescription += '0'+file->version();
     
-			compressionDescription= exrCompressionDescriptions[file.header().compression()];
+			compressionDescription= exrCompressionDescriptions2[file->header().compression()];
 
 	}
     catch(const std::exception &e){
@@ -1481,7 +1496,7 @@ int gfcImageLoaderEXR2::peek ( gfcLoadParams params, gfcPeekInfo* results ) {
 }
 
 void* gfcImageLoaderEXR2::getPixelPointer() {
-    if (this->loadHALF) {
+    if (this->channelType==1) {
         return (void*)&pixels[0];
     } else {
         return theBitmap->Data;

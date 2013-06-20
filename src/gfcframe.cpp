@@ -19,7 +19,7 @@ int TEST_GLOBAL_loaderToUse=GFCLOADER_DPX;
 //#include "gfcframeslice.h"
 #include "gfcimageloaderdpx.h"
 #include "gfcimageloadergfl.h"
-#include "gfcimageloaderexr.h"
+#include "gfcimageloaderexr2.h"
 
 /****/
 
@@ -131,7 +131,8 @@ int gfcFrame::loadFrame ( gfcLoadParams params )
 			break;
 
 		case GFCLOADER_EXR:
-			theImageLoader=new gfcImageLoaderEXR();
+			theImageLoader=new gfcImageLoaderEXR2();
+			//theImageLoader=new gfcImageLoaderEXR();
 			//theImageLoader=new gfcImageLoaderGFL();
 			break;
 
