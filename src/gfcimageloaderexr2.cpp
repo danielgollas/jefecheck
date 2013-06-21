@@ -597,244 +597,221 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 
 			//Is this a lumachroma or rgba image?
 			{
-			std::string theChannel=channelNames[params.channel];
-			if (theChannel=="YRYBY") {
-				isLumaChroma=true;
-			} 
-			else{
-				if (theChannel=="RGB" || theChannel=="RGBA") {
-					isRGBA=true;
+				std::string theChannel=channelNames[params.channel];
+				if (theChannel=="YRYBY") {
+					isLumaChroma=true;
+				} 
+				else{
+					if (theChannel=="RGB" || theChannel=="RGBA") {
+						isRGBA=true;
+					}
 				}
-			}
 
-			//3. Load the image into a float or half or int buffer
-    		//3.1 Fill a vector with the channelNames that will be used as slices in the in file buffer.
-			std::vector<std::string > channelNames; //this contains all the channels that need to be loaded, while theChannel, is the name selected from the GUI
-			//theChannel sometimes includes standard names such as RGBA or R, or G or A, but it can also be a layer name or a channel in a layer, so
-			//to obtain the list of channels, we try all special cases.
-			bool isLayer=layerNames.find(theChannel)!=layerNames.end();
-			const Box2i &displayWindow = file->header().displayWindow();
-			const Box2i &dataWindow = file->header().dataWindow();
-			pixelAspectRatio = file->header().pixelAspectRatio();
+				//3. Load the image into a float or half or int buffer
+    			//3.1 Fill a vector with the channelNames that will be used as slices in the in file buffer.
+				std::vector<std::string > channelNames; //this contains all the channels that need to be loaded, while theChannel, is the name selected from the GUI
+				//theChannel sometimes includes standard names such as RGBA or R, or G or A, but it can also be a layer name or a channel in a layer, so
+				//to obtain the list of channels, we try all special cases.
+				bool isLayer=layerNames.find(theChannel)!=layerNames.end();
+				const Box2i &displayWindow = file->header().displayWindow();
+				const Box2i &dataWindow = file->header().dataWindow();
+				pixelAspectRatio = file->header().pixelAspectRatio();
 
-			 w  = displayWindow.max.x - displayWindow.min.x + 1;
-			 h  = displayWindow.max.y - displayWindow.min.y + 1;
-			 x = displayWindow.min.x;
-			 y = displayWindow.min.y;
-			 dw = dataWindow.max.x - dataWindow.min.x + 1;
-			 dh = dataWindow.max.y - dataWindow.min.y + 1;
-			 dx = dataWindow.min.x;
-			 dy = dataWindow.min.y;
+				 x = displayWindow.min.x;
+				 y = displayWindow.min.y;
+				 w  = displayWindow.max.x - displayWindow.min.x + 1;
+				 h  = displayWindow.max.y - displayWindow.min.y + 1;
 
-			 dwi.w=w;
-			 dwi.h=h;
-			 dwi.x=x;
-			 dwi.y=y;
-			 dwi.dw=dw;
-			 dwi.dh=dh;
-			 dwi.dx=dx;
-			 dwi.dy=dy;
+				 dw = dataWindow.max.x - dataWindow.min.x + 1;
+				 dh = dataWindow.max.y - dataWindow.min.y + 1;
+				 dx = dataWindow.min.x;
+				 dy = dataWindow.min.y;
+
+				 dwi.w=w;
+				 dwi.h=h;
+				 dwi.x=x;
+				 dwi.y=y;
+				 dwi.dw=dw;
+				 dwi.dh=dh;
+				 dwi.dx=dx;
+				 dwi.dy=dy;
 	
-			/*printf("displayWindow.min.x: %i, displayWindow.min.y: %i\n",displayWindow.min.x,displayWindow.min.y);
-			printf("displayWindow:(%i,%i) - (%i,%i)\ndataWindow:(%i,%i) - (%i,%i)\n",displayWindow.min.x,displayWindow.min.y, displayWindow.max.x, displayWindow.max.y,
-																					dataWindow.min.x,dataWindow.min.y, dataWindow.max.x, dataWindow.max.y);
-			printf("w:%i, h:%i, dw:%i, dh:%i, dx:%i, dy:%i\n",w,h,dw,dh,dx,dy);
-			printf("Aspect: %f\n",pixelAspectRatio);*/
+				/*printf("displayWindow.min.x: %i, displayWindow.min.y: %i\n",displayWindow.min.x,displayWindow.min.y);
+				printf("displayWindow:(%i,%i) - (%i,%i)\ndataWindow:(%i,%i) - (%i,%i)\n",displayWindow.min.x,displayWindow.min.y, displayWindow.max.x, displayWindow.max.y,
+																						dataWindow.min.x,dataWindow.min.y, dataWindow.max.x, dataWindow.max.y);
+				printf("w:%i, h:%i, dw:%i, dh:%i, dx:%i, dy:%i\n",w,h,dw,dh,dx,dy);
+				printf("Aspect: %f\n",pixelAspectRatio);*/
 			
 
-			if (!isLumaChroma) { //if the image is luma/chroma, then we will read from an rgbInputFile, not from the standard interfase, only the conversion to the last step is true
-				//easy case for RGB or RGBA
-				if (theChannel=="RGBA" || theChannel=="RGB") {
-					channelNames.insert(channelNames.begin(),"A");
-					channelNames.insert(channelNames.begin(),"R");
-					channelNames.insert(channelNames.begin(),"G");
-					channelNames.insert(channelNames.begin(),"B");
-
-				} else {
-					if (!isLayer) {	//if the selected channel is not a layer, then just save the name, that is the only channel we will load.
-						channelNames.insert(channelNames.begin(),theChannel);
-					} else {
-						//the channel is a layer, iterate through all the channels in the layer and store them.
-						channelNames=this->getChannelsInLayer(channels,theChannel.c_str());
+				if(!isLumaChroma)
+				{ 
+					//if the image is luma/chroma, then we will read from an rgbInputFile, not from the standard interfase, only the conversion to the last step is true
+					//easy case for RGB or RGBA
+					if (theChannel=="RGBA" || theChannel=="RGB") {
+						channelNames.insert(channelNames.begin(),"A");
+						channelNames.insert(channelNames.begin(),"R");
+						channelNames.insert(channelNames.begin(),"G");
+						channelNames.insert(channelNames.begin(),"B");
+					} 
+					else 
+					{
+						if (!isLayer) {	//if the selected channel is not a layer, then just save the name, that is the only channel we will load.
+							channelNames.insert(channelNames.begin(),theChannel);
+						} else {
+							//the channel is a layer, iterate through all the channels in the layer and store them.
+							channelNames=this->getChannelsInLayer(channels,theChannel.c_str());
+						}
 					}
-				}
 
-				char typeNames[NUM_PIXELTYPES][10]={"UINT", "HALF", "FLOAT"};
-				//3.2 Knowing the name of the slices, find out the types
-				//printf("Loading channels:\n");
-				numOfComponents=0;
-				for ( int i=0; i<channelNames.size(); i++ ) {
-					//types[i]=channels.findChannel(channelNames[i].c_str())->type;
-					if (channels.findChannel(channelNames[i].c_str())) {
-						theChannels[i]=*(channels.findChannel(channelNames[i].c_str()));
-					   // printf(" *%s (%s) sampling          %i,%i\n",channelNames[i].c_str(),typeNames[theChannels[i].type],theChannels[i].xSampling,theChannels[i].ySampling);
-						numOfComponents++;
+					char typeNames[NUM_PIXELTYPES][10]={"UINT", "HALF", "FLOAT"};
+					//3.2 Knowing the name of the slices, find out the types
+					//printf("Loading channels:\n");
+					numOfComponents=0;
+					for ( int i=0; i<channelNames.size(); i++ ) {
+						//types[i]=channels.findChannel(channelNames[i].c_str())->type;
+						if (channels.findChannel(channelNames[i].c_str())) {
+							theChannels[i]=*(channels.findChannel(channelNames[i].c_str()));
+						   // printf(" *%s (%s) sampling          %i,%i\n",channelNames[i].c_str(),typeNames[theChannels[i].type],theChannels[i].xSampling,theChannels[i].ySampling);
+							numOfComponents++;
+						}
 					}
-				}
 
 
-				//printf("sizeof Rgba %i\n",sizeof(Rgba));
-				//3.3 Create the slices for the buffer based on the channel names and info and set to store them in the pixels array.
+					//printf("sizeof Rgba %i\n",sizeof(Rgba));
+					//3.3 Create the slices for the buffer based on the channel names and info and set to store them in the pixels array.
     
-				int sizeOfComponent;
-				char *basePointers[4];
-				//Imf::Array =
-				channelType=theChannels[0].type;
-				switch(channelType)
+					int sizeOfComponent;
+					char *basePointers[4];
+					channelType=theChannels[0].type;
+				
+					if (numOfComponents>1) {
+					
+						pixels->resizeErase (dw * dh);
+						sizeOfComponent=sizeof(Rgba);
+						basePointers[0]=(char*)&((*pixels)[-dx-dy*dw].r);
+						basePointers[1]=(char*)&((*pixels)[-dx-dy*dw].g);
+						basePointers[2]=(char*)&((*pixels)[-dx-dy*dw].b);
+						basePointers[3]=(char*)&((*pixels)[-dx-dy*dw].a);
+					} 
+					else {
+						if(channelType==Imf::PixelType::HALF){
+							halfPixels->resizeErase(dw*dh);
+							sizeOfComponent=sizeof(half);
+							basePointers[0]=(char*)&((*halfPixels)[-dx-dy*dw]);
+						}
+						else{
+							if(channelType==Imf::PixelType::FLOAT){
+								floatPixels->resizeErase(dw*dh);
+								sizeOfComponent=sizeof(float);
+								basePointers[0]=(char*)&((*floatPixels)[-dx-dy*dw]);
+							}
+						}
+					}
+
+	
+					FrameBuffer fb;
+					for (int i=0;i<channelNames.size() && i<4;i++) {
+						//printf("Inserting slice %s\n",channelNames[i].c_str());
+						fb.insert(channelNames[i].c_str(), //name
+								  Slice(theChannels[i].type, //type of slice (UINT, HALF, FLOAT)
+										basePointers[i], //base (where this slice starts in the memory layout)
+										sizeOfComponent*theChannels[i].xSampling, //stride x
+										sizeOfComponent*theChannels[i].ySampling*dw, //stride y
+										theChannels[i].xSampling, //sampling x
+										theChannels[i].xSampling //sampling y
+									   )
+								 );
+					}
+					file->setFrameBuffer(fb);
+
+
+					//3.4 Read the pixels into the framebuffer
+					try {
+						if (sett.balanceReads)
+						{
+							boost::try_mutex::scoped_lock lock ( trackManager.readMutex );
+							while (trackManager.ioBusy!=0)
+							{
+								balanceReadCond.wait(lock);
+							}
+							trackManager.ioBusy=1;
+
+							file->readPixels (dataWindow.min.y, dataWindow.max.y);
+				
+							trackManager.ioBusy=0;
+							balanceReadCond.notify_one();
+						}
+						else
+						{
+							file->readPixels (dataWindow.min.y, dataWindow.max.y);
+						}
+
+					} catch (const std::exception &e) {
+						// If some of the pixels in the file cannot be read, warn in some way
+						// but still return
+						loadErrorString=e.what();
+					}
+				} 
+				else 
 				{
-				case Imf::PixelType::HALF:
+					//THE IMAGE IS A LUMA CHROMA IMAGE
 
-					break;
-
-				case Imf::PixelType::FLOAT:
-
-					break;
-
-				case Imf::PixelType::UINT:
-
-					break;
-				
-				}
-
-				for(int i=0; i<numOfComponents; i++){
-					
-				}
-
-				if (numOfComponents>1) {
-					//printf("pixels->resizeErase (%i * %i)",dw,dh);
-					pixels->resizeErase (dw * dh);
-					sizeOfComponent=sizeof(Rgba);
-					//printf("-dx-dy*dw: %i\n",-dx-dy*dw);
-					basePointers[0]=(char*)&((*pixels)[-dx-dy*dw].r);
-					basePointers[1]=(char*)&((*pixels)[-dx-dy*dw].g);
-					basePointers[2]=(char*)&((*pixels)[-dx-dy*dw].b);
-					basePointers[3]=(char*)&((*pixels)[-dx-dy*dw].a);
-				} else {
-						/*UINT  = 0,		// unsigned int (32 bit)
-						HALF  = 1,		// half (16 bit floating point)
-						FLOAT = 2,		// float (32 bit floating point)*/
-					
-					//if(channelType==Imf::PixelType::HALF)
-					if(channelType==1){
-						halfPixels->resizeErase(dw*dh);
-						sizeOfComponent=sizeof(half);
-						basePointers[0]=(char*)&((*halfPixels)[-dx-dy*dw]);
-					}
-					else{
-						if(channelType==2){
-							floatPixels->resizeErase(dw*dh);
-							sizeOfComponent=sizeof(float);
-							basePointers[0]=(char*)&((*floatPixels)[-dx-dy*dw]);
-						}
-					}
-
-
-			
-				}
-
-	
-				FrameBuffer fb;
-				for (int i=0;i<channelNames.size() && i<4;i++) {
-					//printf("Inserting slice %s\n",channelNames[i].c_str());
-					fb.insert(channelNames[i].c_str(), //name
-							  Slice(theChannels[i].type, //type of slice (UINT, HALF, FLOAT)
-									basePointers[i], //base (where this slice starts in the memory layout)
-									sizeOfComponent*theChannels[i].xSampling, //stride x
-									sizeOfComponent*theChannels[i].ySampling*dw, //stride y
-									theChannels[i].xSampling, //sampling x
-									theChannels[i].xSampling //sampling y
-								   )
-							 );
-				}
-				file->setFrameBuffer(fb);
-
-
-				//3.4 Read the pixels into the framebuffer
-				try {
-					if (sett.balanceReads)
-					{
-						boost::try_mutex::scoped_lock lock ( trackManager.readMutex );
-						while (trackManager.ioBusy!=0)
-						{
-							balanceReadCond.wait(lock);
-						}
-						trackManager.ioBusy=1;
-
-						file->readPixels (dataWindow.min.y, dataWindow.max.y);
-				
-						trackManager.ioBusy=0;
-						balanceReadCond.notify_one();
-					}
-					else
-					{
-						file->readPixels (dataWindow.min.y, dataWindow.max.y);
-					}
-
-				} catch (const std::exception &e) {
-					// If some of the pixels in the file cannot be read, warn in some way
-					// but still return
-					//cerr << e.what() << endl;
-					loadErrorString=e.what();
-				}
-			} 
-			else {
-				//THE IMAGE IS A LUMA CHROMA IMAGE
-
-				numOfComponents=4;
-				RgbaInputFile rgbFile(params.fileName.c_str(),4);
+					numOfComponents=4;
+					RgbaInputFile rgbFile(params.fileName.c_str(),4);
         
-				//getMetadata
-				readMetaData(rgbFile.header());
+					//getMetadata
+					readMetaData(rgbFile.header());
                 
-				pixels->resizeErase(dw*dh);
-				//printf("resized the pixels to %ix%i=%i\n",dw,dh,dw*dh);
-				rgbFile.setFrameBuffer(&((*pixels)[-dx-dy*dw]),1,dw);
-				try {
-					if (sett.balanceReads)
-					{
-						boost::try_mutex::scoped_lock lock ( trackManager.readMutex );
-						while (trackManager.ioBusy!=0)
+					pixels->resizeErase(dw*dh);
+					//printf("resized the pixels to %ix%i=%i\n",dw,dh,dw*dh);
+					rgbFile.setFrameBuffer(&((*pixels)[-dx-dy*dw]),1,dw);
+					try {
+						if (sett.balanceReads)
 						{
-							balanceReadCond.wait(lock);
+							boost::try_mutex::scoped_lock lock ( trackManager.readMutex );
+							while (trackManager.ioBusy!=0)
+							{
+								balanceReadCond.wait(lock);
+							}
+							trackManager.ioBusy=1;
+
+							rgbFile.readPixels (dataWindow.min.y, dataWindow.max.y);
+
+							trackManager.ioBusy=0;
+							balanceReadCond.notify_one();
 						}
-						trackManager.ioBusy=1;
+						else
+						{
+							rgbFile.readPixels (dataWindow.min.y, dataWindow.max.y);
+						}
 
-						rgbFile.readPixels (dataWindow.min.y, dataWindow.max.y);
-
-						trackManager.ioBusy=0;
-						balanceReadCond.notify_one();
+					} catch (const std::exception &e) {
+						// If some of the pixels in the file cannot be read, warn in some way
+						// but still return
+						cerr << e.what() << endl;
+						loadErrorString=e.what();
 					}
-					else
-					{
-						rgbFile.readPixels (dataWindow.min.y, dataWindow.max.y);
-					}
-
-				} catch (const std::exception &e) {
-					// If some of the pixels in the file cannot be read, warn in some way
-					// but still return
-					cerr << e.what() << endl;
-					loadErrorString=e.what();
 				}
-			}
-    
-	
-			dx = dataWindow.min.x - displayWindow.min.x;
-			dy = dataWindow.min.y - displayWindow.min.y;
-
-			//ADJUST THE REST OF THE PARAMETERS AFTER LOADING THE PIXELS
-			if (sett.exrIgnoreDisplayWindow)
-			{
-				w = dw;
-				h = dh;
-				dx = 0;
-				dy = 0;
-			}
-	
-	
 			}
 			//printf("w:%i, h:%i, dw:%i, dh:%i, dx:%i, dy:%i\n",w,h,dw,dh,dx,dy);
 
 			//TO DETERMINE WHAT PORTION OF THE DATA WINDOW WE WILL COPY INTO THE DISPLAY WINDOW, WE FIRST CALCULATE THE INTERSECTING RECTANGLE
+			//after reading the image, we recalculate the datawindow source.
+
+				dx = dataWindow.min.x - displayWindow.min.x;
+				dy = dataWindow.min.y - displayWindow.min.y;
+				dwi.dx=dx
+				dwi.dy=dy
+
+				//ADJUST THE REST OF THE PARAMETERS AFTER LOADING THE PIXELS
+				if (sett.exrIgnoreDisplayWindow)
+				{
+					w = dw;
+					h = dh;
+					dx = 0;
+					dy = 0;
+				}
+
 			gfcRectang dispW(0,0,w,h);
 			gfcRectang dataW(dx,dy,dw,dh);
 			gfcRectang intersect=dispW.intersection(dataW);
@@ -855,10 +832,10 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 			preLineOffset*=4;
 			postLineOffset*=4;
 
-			//we are downscaling to 8 bits or anything else...
+			
 			if (params.compressed!=GFC_16HALF && params.compressed!=GFC_32FLOAT) 
-			{
-    			//loadHALF=false;
+			{	
+				//we are downscaling to 8 bits or anything else...
 				//3.5 Allocate theBitmap if necessary
 				
 				int bitSizeForAlloc=8;
@@ -873,23 +850,88 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 				bitDepth=bitSizeForAlloc;
 	
 
-				//4. Convert and copy the buffer into theBitmap
+				//4. Convert and copy the buffer into theBitmap, we only do this if we are targeting 8 or 16 bit pixels.
 				{
 			
 					halfFunction<float> halfGammaConvert8_2(gammaConvert8_2, -HALF_MAX, HALF_MAX);
 					GFL_COLOR color;
 			
+					/*HOW WE WILL RESTRUCTURE*/
+					//what type of image? (RGBA or single component)
+					if(numOfComponents>1){
+						//RGBA image
+						//what is our target? 16bit or 8 bit (we already know we are not going for half or float)
+						switch(bitSizeForAlloc){
+							case 8:
+								//are we tonemapping?
+								if(sett.exrEnableExposureTransformOnLoad){
+									//yes, apply the transformation and copy to the bitmap
+								}
+								else{
+									//no, just map 0-1 to 0-255 and clamp 0-255
+								}
+								break;
+							case 16:
+								//are we tonemapping?
+								if(sett.exrEnableExposureTransformOnLoad){
+									//yes, apply the transformation and copy to the bitmap
+								}
+								else{
+									//no, just map 0-1 to 0-6555 and clamp 0-6555
+								}
+								break;
+						}
+					}
+					else{
+						//SINGLE COMPONENT IMAGE
+						//what is our target? 16bit or 8 bit (we already know we are not going for half or float)
+						switch(bitSizeForAlloc){
+							case 8:
+								if(sett.exrEnableExposureTransformOnLoad){
+									//yes, apply the transformation and copy to the bitmap
+									// PATH 1
+								}
+								else{
+									//are we range scaling?
+									if(sett.exrEnableRangeScaling){
+										//scale from start-end to 0-255
+										// PATH 2
+									}
+									else{
+										//no, just map 0-1 to 0-255 and clamp 0-255
+										// PATH 3
+									}
+								}
+								break;
+
+							case 16:
+								if(sett.exrEnableExposureTransformOnLoad){
+									//yes, apply the transformation and copy to the bitmap
+									// PATH 4
+								}
+								else{
+									//are we range scaling?
+									if(sett.exrEnableRangeScaling){
+										//scale from start-end to 0-255
+										// PATH 5
+									}
+									else{
+										//no, just map 0-1 to 0-255 and clamp 0-255
+										// PATH 6
+									}
+								}
+								break;
+						}
+					}
 			
+
 			
 					if (numOfComponents>1) {
-                
-				
 						if (bitSizeForAlloc==8) {
-
 							/*********************************/
 							/*								 */
 							/*	MORE THAN 1 COMPONENT TO 8bit*/
-							/*							    */
+							/*	RGBA					    */
 							/********************************/
 							//printf("copying from %i,%i for %i,%i\n",startX,startY,copyWidth, copyHeigth);
 							if (sett.exrEnableExposureTransformOnLoad)
@@ -908,9 +950,6 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 										theBitmap->Data[offset++]=halfGammaConvert8_2(pixel->g);
 										theBitmap->Data[offset++]=halfGammaConvert8_2(pixel->b);
 										theBitmap->Data[offset++]=halfGammaConvert8_2(pixel->a);
-				
-
-
 									}
 									offset+=postLineOffset;
 								}
@@ -951,17 +990,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 									int lineOffset=(startY+i)*dw+startX;
 									offset+=preLineOffset;
 									for (int j=0;j<copyWidth;j++) {
-										/*Rgba *pixel= &(*pixels)[lineOffset+j];
-										(((unsigned short*)(theBitmap->Data))[offset++])=rGamma(pixel->r);
-										(((unsigned short*)(theBitmap->Data))[offset++])=bGamma(pixel->g);
-										(((unsigned short*)(theBitmap->Data))[offset++])=gGamma(pixel->b);
-										(((unsigned short*)(theBitmap->Data))[offset++])=rGamma(pixel->a);*/
 										Rgba *pixel= &(*pixels)[lineOffset+j];
-										/*(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->r);
-										(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->g);
-										(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->b);
-										(((unsigned short*)(theBitmap->Data))[offset++])=halfGammaConvert16(pixel->a);*/
-								
 										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16_2(pixel->r);
 										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16_2(pixel->g);
 										(((unsigned short*)(theBitmap->Data))[offset++])=gammaConvert16_2(pixel->b);
@@ -987,23 +1016,40 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 							}
 						}
 					} else {
-						if (bitSizeForAlloc==8) {
+
+						Imf::Array<T> *thePixels=0;
+							switch(channelType){
+
+								case Imf::PixelType::HALF:
+										thePixels=halfPixels;
+									break;
+
+								case Imf::PixelType::FLOAT:
+										thePixels=floatPixels;
+									break;
+
+							}
+
+						//THESE CASES DEAL WITH SINGLE COMPONENTS CONVERTED TO 8bpc
+						if (bitSizeForAlloc==8) 
+						{
 							/*********************************/
 							/*								*/
 							/*	SINGLE COMPONENT TO 8bit     */
 							/*								 */
 							/********************************/
-                    
+							
 							unsigned char theColor;
 							if (sett.exrEnableExposureTransformOnLoad)
 							{
-
+								//tonemap the half pixel to 8bpc
 								for (int i=0;i<copyHeigth;i++) {
 									int lineOffset=(startY+i)*dw+startX;
 									offset+=preLineOffset;
+									
 									for (int j=0;j<copyWidth;j++) {
 								
-										theBitmap->Data[offset++]=theColor=halfGammaConvert8_2((*halfPixels)[lineOffset+j]);
+										theBitmap->Data[offset++]=theColor=halfGammaConvert8_2((*thePixels)[lineOffset+j]);
 										theBitmap->Data[offset++]=theColor;
 										theBitmap->Data[offset++]=theColor;
 										theBitmap->Data[offset++]=maxValue;
@@ -1016,50 +1062,34 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 								if (sett.exrEnableRangeScaling)
 								{
 									double multiplier=1.0/(sett.exrRangeMax-sett.exrRangeMin)*255.0;
+									
+
 									for (int i=0;i<copyHeigth;i++) {
 										int lineOffset=(startY+i)*dw+startX;
 										offset+=preLineOffset;
-										if(channelType==1){
-											//HALF TO CHAR
 											for (int j=0;j<copyWidth;j++) {
-								
-												theBitmap->Data[offset++]=theColor=min(((*halfPixels)[lineOffset+j])*multiplier,255);
+												theBitmap->Data[offset++]=theColor=min(((*thePixels)[lineOffset+j])*multiplier,255);
 												theBitmap->Data[offset++]=theColor;
 												theBitmap->Data[offset++]=theColor;
 												theBitmap->Data[offset++]=maxValue;
 											}
 											offset+=postLineOffset;
 										}
-										else{
-												if(channelType==2){
-													//FLOAT TO CHAR
-													for (int j=0;j<copyWidth;j++) {
-								
-														theBitmap->Data[offset++]=theColor=min(((*floatPixels)[lineOffset+j])*multiplier,255);
-														theBitmap->Data[offset++]=theColor;
-														theBitmap->Data[offset++]=theColor;
-														theBitmap->Data[offset++]=maxValue;
-													}
-													offset+=postLineOffset;
-												}
-											}
-
-									}
 								} 
 								else{
 
-
+									//just map the half or float pixel to 8bpc (0 black, 1 white, clamped in 0-255)
 									for (int i=0;i<copyHeigth;i++) {
-										int lineOffset=(startY+i)*dw+startX;
-										offset+=preLineOffset;
-										for (int j=0;j<copyWidth;j++) {
+											int lineOffset=(startY+i)*dw+startX;
+											offset+=preLineOffset;
+											for (int j=0;j<copyWidth;j++) {
 									
 											theBitmap->Data[offset++]=theColor=theColor=max (min((*halfPixels)[lineOffset+j]*255,255),0);
 											theBitmap->Data[offset++]=theColor;
 											theBitmap->Data[offset++]=theColor;
 											theBitmap->Data[offset++]=maxValue;
-										}
-										offset+=postLineOffset;
+											}
+											offset+=postLineOffset;
 										}
 								}
 							}
@@ -1080,10 +1110,10 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 									offset+=preLineOffset;
 									for (int j=0;j<copyWidth;j++) {
 
-										/*(((unsigned short*)(theBitmap->Data))[offset++])=theColor=halfGammaConvert16((*halfPixels)[lineOffset+j]);
+										(((unsigned short*)(theBitmap->Data))[offset++])=theColor=gammaConvert16_2((*thePixels)[lineOffset+j]);
 										(((unsigned short*)(theBitmap->Data))[offset++])=theColor;
 										(((unsigned short*)(theBitmap->Data))[offset++])=theColor;
-										(((unsigned short*)(theBitmap->Data))[offset++])=maxValue;*/
+										(((unsigned short*)(theBitmap->Data))[offset++])=maxValue;
 									}
 									offset+=postLineOffset;
 								}
@@ -1130,8 +1160,8 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 		
 				quadSizeX=theBitmap->Width;
 				//quadSizeY=theBitmap->Height*1.0/pixelAspect;
-		
-				quadSizeY=theBitmap->Width/pixelAspectRatio;
+				
+				quadSizeY=theBitmap->Height;
 		
 			} 
 			else 
