@@ -916,7 +916,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 										// PATH 5
 									}
 									else{
-										//no, just map 0-1 to 0-255 and clamp 0-255
+										//no, just map 0-1 to 0-6555 and clamp 0-6555
 										// PATH 6
 									}
 								}
