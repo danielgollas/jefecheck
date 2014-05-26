@@ -595,8 +595,14 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 				return 1;
 			}
 
+			
+			const Box2i &displayWindow = file->header().displayWindow();
+			const Box2i &dataWindow = file->header().dataWindow();
+			pixelAspectRatio = file->header().pixelAspectRatio();
+
 			//Is this a lumachroma or rgba image?
 			{
+				
 				std::string theChannel=channelNames[params.channel];
 				if (theChannel=="YRYBY") {
 					isLumaChroma=true;
@@ -607,15 +613,14 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 					}
 				}
 
+				bool isLayer=layerNames.find(theChannel)!=layerNames.end();
+
 				//3. Load the image into a float or half or int buffer
     			//3.1 Fill a vector with the channelNames that will be used as slices in the in file buffer.
 				std::vector<std::string > channelNames; //this contains all the channels that need to be loaded, while theChannel, is the name selected from the GUI
 				//theChannel sometimes includes standard names such as RGBA or R, or G or A, but it can also be a layer name or a channel in a layer, so
 				//to obtain the list of channels, we try all special cases.
-				bool isLayer=layerNames.find(theChannel)!=layerNames.end();
-				const Box2i &displayWindow = file->header().displayWindow();
-				const Box2i &dataWindow = file->header().dataWindow();
-				pixelAspectRatio = file->header().pixelAspectRatio();
+				
 
 				 x = displayWindow.min.x;
 				 y = displayWindow.min.y;
@@ -800,8 +805,8 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 
 				dx = dataWindow.min.x - displayWindow.min.x;
 				dy = dataWindow.min.y - displayWindow.min.y;
-				dwi.dx=dx
-				dwi.dy=dy
+				dwi.dx=dx;
+				dwi.dy=dy;
 
 				//ADJUST THE REST OF THE PARAMETERS AFTER LOADING THE PIXELS
 				if (sett.exrIgnoreDisplayWindow)
@@ -1017,7 +1022,7 @@ int gfcImageLoaderEXR2::load ( gfcLoadParams params ) {
 						}
 					} else {
 
-						Imf::Array<T> *thePixels=0;
+						Imf::Array<void> *thePixels=0;
 							switch(channelType){
 
 								case Imf::PixelType::HALF:
