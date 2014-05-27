@@ -1,0 +1,17 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Transition between two images in a radial fashion" menuName="Transitions/Radial" version="1.0" author="Daniel Gollas" name="Radial Transition" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="1" label="Source" labelColorG="255" varName="first" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="2" label="Target" labelColorG="255" varName="second" />
+      <widget type="newLine" varName="0" />
+	<widget labelColorR="255" labelColorB="255" type="float" default="0" label="Start" labelColorG="255" step="0.01" varName="start" />
+	<widget labelColorR="255" labelColorB="255" type="float" default="24" label="Duration" labelColorG="255" step="0.01" varName="duration" />
+  <widget labelColorR="255" labelColorB="255" type="float" default="0.1" label="Smoothness" labelColorG="255" step="0.001" minimum="0.0" maximum="1.0"   varName="smoothness" />
+	<widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="RadialTransition.frag" />
+</root>

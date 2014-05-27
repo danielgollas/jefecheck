@@ -1,0 +1,33 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Apply a 3x3 Convolution" menuName="Special/Convolution 3x3" version="1.0" author="Daniel Gollas" name="Convolution 3x3" />
+  <groups>
+		
+    <group name="Options" >
+		<widget type="newLine" varName="0" />
+		<widget type="choice" default="0" label="Presets" varName="presets" >
+        <choice type="choice" label="Sharpen" />
+        <choice type="choice" label="Gaussian Blur" />
+		<choice type="choice" label="Mean Blur" />
+        <choice type="choice" label="Laplacian (Edge Detection)" />
+        <choice type="choice" label="Emboss" />
+		<choice type="choice" label="Custom" />
+      </widget>
+      <widget type="newLine" varName="0" />
+      <widget type="float" step="0.001" default="0.00" label="0,0" minimum="-999" maximum="999" varName="k00" />
+	  <widget type="float" step="0.001" default="0.00" label="0,1" minimum="-999" maximum="999" varName="k01" />
+	  <widget type="float" step="0.001" default="0.00" label="0,2" minimum="-999" maximum="999" varName="k02" />
+		<widget type="newLine" varName="1" />
+	  <widget type="float" step="0.001" default="0.00" label="1,0" minimum="-999" maximum="999" varName="k10" />
+	  <widget type="float" step="0.001" default="0.00" label="1,1" minimum="-999" maximum="999" varName="k11" />
+	  <widget type="float" step="0.001" default="0.00" label="1,2" minimum="-999" maximum="999" varName="k12" />
+		<widget type="newLine" varName="1" />
+	  <widget type="float" step="0.001" default="0.00" label="2,0" minimum="-999" maximum="999" varName="k20" />
+	  <widget type="float" step="0.001" default="0.00" label="2,1" minimum="-999" maximum="999" varName="k21" />
+	  <widget type="float" step="0.001" default="0.00" label="2,2" minimum="-999" maximum="999" varName="k22" />
+	<widget type="newLine" varName="1" />
+
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="CONVOLUTION_3x3.frag" />
+</root>

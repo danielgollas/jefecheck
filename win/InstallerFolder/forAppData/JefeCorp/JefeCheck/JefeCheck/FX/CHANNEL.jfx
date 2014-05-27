@@ -1,0 +1,17 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="View Color Channels as Grayscale" menuName="Color/Channel" version="1.0" author="Daniel Gollas" name="Channel" />
+  <groups>
+    <group name="Parameters" >
+	<widget type="newLine" varName="0" />
+	<widget labelColorR="255" labelColorB="255" type="choice" default="0" label="Channel" labelColorG="255" varName="channel" >
+        <choice type="choice" label="R" />
+        <choice type="choice" label="G" />
+        <choice type="choice" label="B" />
+        <choice type="choice" label="A" />
+      </widget>
+      <widget type="newLine" varName="1" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="CHANNEL.frag" />
+</root>

@@ -1,0 +1,16 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Composite two images using an Over operation using the Alpha Channel" menuName="Comp/Alpha Over" version="2.0" author="Daniel Gollas" name="Alpha Over" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="furstNeLine" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="0" label="Bottom" labelColorG="255" varName="Bottom" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="2" label="Top" labelColorG="255" varName="Top" />
+      <widget type="newLine" varName="0" />
+      <widget width="75" type="spacer" label="" varName="spacer1" />
+      <widget type="bool" default="1" label="Premultiplied" varName="Premultiplied" />
+      <widget type="newLine" varName="lastNewLine" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="AOVER.frag" />
+</root>

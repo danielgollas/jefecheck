@@ -1,0 +1,14 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Blend two images together" menuName="Comp/Mix" version="2.0" author="Daniel Gollas" name="Mix" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="0" label="Source" labelColorG="255" varName="first" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" default="0.5" label="Blend Amount" minimum="0" labelColorG="255" maximum="1" varName="Amount" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="2" label="Target" labelColorG="255" varName="second" />
+      <widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="MIX.frag" />
+</root>

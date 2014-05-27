@@ -1,0 +1,12 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Apply 1D LUT" menuName="Color/1D LUT" version="1.0" author="Daniel Gollas" name="1D LUT" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="255" labelColorB="255" type="lut" default="0" label="LUT" labelColorG="255" varName="LUT" />
+      <widget type="newLine" varName="2" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="1DLUT.frag" />
+</root>

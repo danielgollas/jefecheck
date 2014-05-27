@@ -1,0 +1,12 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Ondita" menuName="Comp/Ondita" version="1.0" author="Daniel Gollas" name="Ondita" />
+  <groups>
+    <group name="" >
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" default="0" minimum="-9999" label="Ondita" maximum="9999" labelColorG="255" varName="ondita" />
+      <widget type="newLine" varName="1" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="ondita.frag" />
+</root>

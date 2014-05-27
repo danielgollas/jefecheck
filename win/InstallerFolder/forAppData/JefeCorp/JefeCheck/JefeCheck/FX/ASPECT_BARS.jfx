@@ -1,0 +1,14 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Apply Aspect Crop Bars on an Image" menuName="Special/Aspect Bars" version="2.0" author="Daniel Gollas" name="Aspect Bars" />
+  <groups>
+    <group name="Ratio" >
+      <widget type="newLine" varName="0" />
+	<widget type="texture" step="1" default="0.0" label="image" varName="theImage" />
+	  <widget  type="float" step="0.001" default="2.35" label="Width  :" minimum="-9999" maximum="9999" varName="width" />
+      <widget  type="float" step="0.001" default="1" label="Height" minimum="-9999" maximum="9999" varName="height" />
+      <widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="ASPECT_BARS.frag" />
+</root>

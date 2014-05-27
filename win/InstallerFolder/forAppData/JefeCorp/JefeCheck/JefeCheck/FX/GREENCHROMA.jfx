@@ -1,0 +1,34 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Composite two images together using a Green Chroma Key." menuName="Comp/Chroma Key (Green)" version="1.0" author="Daniel Gollas" name="Chroma Key (Green)" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="firstNeLine" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="2" label="Bottom" labelColorG="255" varName="Bottom" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="0" label="Top" labelColorG="255" varName="Top" />
+	  <widget type="newLine" varName="lastNewLine" />
+     
+		<widget labelColorR="255" labelColorB="255" type="float" step="0.001" default="0" label="Minimum Distance" minimum="0" labelColorG="255" maximum="999" varName="astart" />
+		<widget width="5" type="spacer" varName="spacerForRange" />
+		<widget labelColorR="255" labelColorB="255" type="float" step="0.001" default="0" label="Range" minimum="0" labelColorG="255" maximum="999" varName="range" />
+		<widget type="newLine" varName="lastNewLine" />
+		 <widget width="5" type="spacer" varName="spacerForMatte" />
+      <widget labelColorR="255" labelColorB="255" type="bool" default="0" label="Show Matte" labelColorG="255" varName="ShowMatte" />
+      <widget width="1" type="spacer" varName="spacerForMatte" />
+      <widget labelColorR="255" labelColorB="255" type="bool" default="0" label="Show Clean" labelColorG="255" varName="ShowClean" />
+      <widget width="1" type="spacer" varName="spacerForMatte" />
+	<widget labelColorR="255" labelColorB="255" type="bool" default="1" label="Spill Supression" labelColorG="255" varName="spillSupress" />
+	
+	
+		
+      <widget type="newLine" varName="lastNewLine" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="1" default="1" label="OffsetX" minimum="-9999" labelColorG="255" maximum="9999" varName="OffsetX" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="1" default="1" label="OffsetY" minimum="-9999" labelColorG="255" maximum="9999" varName="OffsetY" />
+      <widget type="newLine" varName="firstNeLine" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" default="1" label="ScaleX" minimum="0" labelColorG="255" maximum="9999" varName="ScaleX" />
+      <widget labelColorR="255" labelColorB="255" type="float" step="0.001" default="1" label="ScaleY" minimum="0" labelColorG="255" maximum="9999" varName="ScaleY" />
+      <widget type="newLine" varName="firstNeLine" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="GREENCHROMA.frag" />
+</root>

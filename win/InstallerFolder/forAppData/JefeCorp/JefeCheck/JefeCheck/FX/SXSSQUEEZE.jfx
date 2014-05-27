@@ -1,0 +1,15 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Squeeze two tracks side by side for stereo Monitors" menuName="Comp/Stereo SxS Squeeze" version="1.0" author="Daniel Gollas" name="SXSSqueeze" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="furstNeLine" />
+      <widget labelColorR="255" labelColorB="255" type="texture" default="0" label="Left" labelColorG="255" varName="Left" />
+        <widget labelColorR="255" labelColorB="255" type="texture" default="2" label="Right" labelColorG="255" varName="Right" />
+      <widget type="newLine" varName="0" />
+      <widget width="75" type="spacer" label="" varName="spacer1" />
+      <widget type="newLine" varName="lastNewLine" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="SXSSQUEEZE.frag" />
+</root>

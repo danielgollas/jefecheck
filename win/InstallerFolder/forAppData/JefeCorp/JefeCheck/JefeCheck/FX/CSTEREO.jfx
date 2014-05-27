@@ -1,0 +1,17 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Create a color anaglyph stereo image from a stereo pair" menuName="Special/Anaglyph Color Stereo" version="1.0" author="Daniel Gollas" name="Anaglyph Color Stereo " />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="0" labelColorB="255" type="texture" default="0" label="Left" labelColorG="255" varName="Left" />
+      <widget labelColorR="255" labelColorB="0" type="texture" default="2" label="Right" labelColorG="0" varName="Right" />
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="0" labelColorB="255" type="float" step="0.001" default="1" label="Cyan" minimum="0" labelColorG="255" maximum="1.0" varName="Cyan" />
+      <widget width="10" type="spacer" label="" varName="spacer1" />
+      <widget labelColorR="255" labelColorB="0" type="float" step="0.001" default="0.8" label="Red" minimum="0" labelColorG="0" maximum="1.0" varName="Red" />
+      <widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="CSTEREO.frag" />
+</root>

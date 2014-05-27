@@ -1,0 +1,24 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<root comment="this is the root node" >
+  <general Description="Apply funny effects" menuName="Fun/Fun" version="1.0" author="Daniel Gollas" name="Fun" />
+  <groups>
+    <group name="Parameters" >
+      <widget type="newLine" varName="0" />
+	<widget labelColorR="255" labelColorB="255" type="choice" default="0" label="effect" labelColorG="255" varName="effect" >
+        <choice type="choice" label="Pinch" />
+        <choice type="choice" label="Bulge" />
+        <choice type="choice" label="Dent" />
+        <choice type="choice" label="Swirl" />
+	  <choice type="choice" label="Light Tunnel" />
+        <choice type="choice" label="Stretch" />
+        <choice type="choice" label="Mirror" />
+        
+      </widget>
+      <widget type="newLine" varName="0" />
+      <widget type="float" step="0.01" default="0.8" label="Control 1" minimum="-20" maximum="20" varName="zoom" />
+	<widget type="float" step="0.01" default="1.8" label="Control 2" minimum="-20" maximum="20" varName="curve" />
+      <widget type="newLine" varName="0" />
+    </group>
+  </groups>
+  <shaders vertex="fixed.vert" fragment="FUN.frag" />
+</root>
