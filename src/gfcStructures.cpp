@@ -226,6 +226,10 @@ int confirmQuit()
 	return 0;
 }
 
+bool dirExists(const std::string &name){
+	return boost::filesystem::is_directory(name);
+}
+
 bool fileExists (const std::string &name ) {
     
 	
@@ -689,7 +693,7 @@ void loadFXsFromPath(std::string thePath) {
         if (fl_filename_isdir(tmp->d_name)==0 &&	fl_filename_match(tmp->d_name,"{*.jfx}")) {
             std::string tempFXName = path+tmp->d_name;
             //printf(" (%i) %s\n",i,tmp->d_name);
-            printf ( "+Path loading FX %s ",GetFilenameNoPath ( tempFXName ).c_str() );
+            printf ( "+Path loading FX %s \n",GetFilenameNoPath ( tempFXName ).c_str() );
             std::string statusString;
             statusString="Loading FX: ";
             statusString+=GetFilenameNoPath ( tempFXName );
@@ -758,6 +762,18 @@ void readSettings ( gfcSettings &sett ) {
     sett.receivedPath=appDataPath;
     sett.receivedPath+="Received/";
 	
+	//check if recievedPath exists, otherwise, create it.
+	if(dirExists(sett.receivedPath)==false){
+		printf("Creating Recieved Path for remote sessions...");
+		boost::filesystem::path dir("newdir");
+		if(boost::filesystem::create_directory(sett.receivedPath)){
+			printf("success\n");
+		}
+		else{
+			printf("failed\n");
+		}
+	}
+
     XMLNode xMainNode=XMLNode::openFileHelper ( settingsFilename.c_str() );
     if ( !xMainNode.loaded ) {
 		//even if we can't find the configuration file, read the fxs and luts from the installation path

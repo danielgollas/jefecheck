@@ -230,6 +230,7 @@ void gfcNetworkServer::Update() {
                 clientsHashes.insert ( theText );
 
                 if ( fxHashMap.find ( theText ) !=fxHashMap.end() ) {
+					printf("Hash %i found in server\n",i);
 
                 } else {
 

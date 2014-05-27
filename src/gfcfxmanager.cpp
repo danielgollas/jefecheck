@@ -481,6 +481,7 @@ gfcFX gfcFXManager::getFXbyHash(std::string hash)
         }
         else{
         gfcFX tmpFX;
+		tmpFX.name="";
         return tmpFX;
         }
 }

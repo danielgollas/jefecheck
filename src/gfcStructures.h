@@ -101,6 +101,7 @@ std::string ReadTextFileIntoString(std::string filename);
 std::string findFileInSearchPaths(std::string theFile);
 std::string getFirstSequenceInDirectory(std::string thePath);
 bool fileExists (const std::string &name );
+bool dirExists(const std::string &name);
 
 gfcPlaylistItemProgramState getCurrentProgramState();
 void setCurrentProgramState(gfcPlaylistItemProgramState state);

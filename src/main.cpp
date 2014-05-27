@@ -853,26 +853,26 @@ int main(int argc, char *argv[]) {
     printf(" *%s\n", tmpReqString);
     reqW.glVersion->copy_label(tmpReqString);
 
-    sprintf(tmpReqString,"GL Vendor: %s\n", (char*)glGetString (GL_VENDOR));
+    sprintf(tmpReqString,"GL Vendor: %s", (char*)glGetString (GL_VENDOR));
     printf(" *%s\n", tmpReqString);
     reqW.glVendor->copy_label(tmpReqString);
 
-    sprintf(tmpReqString,"GL Renderer: %s\n", (char*)glGetString (GL_RENDERER));
+    sprintf(tmpReqString,"GL Renderer: %s", (char*)glGetString (GL_RENDERER));
     printf(" *%s\n", tmpReqString);
     reqW.glRenderer->copy_label(tmpReqString);
 
     int maxDims[2];
     glGetIntegerv(GL_MAX_TEXTURE_SIZE,(GLint*)maxDims);
-    sprintf(tmpReqString,"Maximum Texture Size: %ix%i\n",maxDims[0],maxDims[0]);
+    sprintf(tmpReqString,"Maximum Texture Size: %ix%i",maxDims[0],maxDims[0]);
     printf(" *%s\n", tmpReqString);
     reqW.maxTexSize->copy_label(tmpReqString);
 
     glGetIntegerv(GL_MAX_VIEWPORT_DIMS,(GLint*)maxDims);
-    sprintf(tmpReqString,"Maximum Viewport Size: x:%i, y:%i\n",maxDims[0],maxDims[1]);
+    sprintf(tmpReqString,"Maximum Viewport Size: x:%i, y:%i",maxDims[0],maxDims[1]);
     printf(" *%s\n", tmpReqString);
     reqW.maxViewportSize->copy_label(tmpReqString);
 	
-    printf(" *Initializing GLEW:");
+    printf(" *Initializing GLEW: ");
     glewExperimental=GL_TRUE;
     GLenum err=glewInit();
     if (GLEW_OK != err) {
@@ -881,19 +881,19 @@ int main(int argc, char *argv[]) {
     }
     printf("ok\n");
 
-    sprintf(tmpReqString,"GLEW Version: %s\n", glewGetString(GLEW_VERSION));
+    sprintf(tmpReqString,"GLEW Version: %s", glewGetString(GLEW_VERSION));
     printf(" *%s\n", tmpReqString);
     reqW.glewVersion->copy_label(tmpReqString);
 
     if (GLEW_ARB_shader_objects) {
-        printf(" *Shader Objects Available\n");
+        printf(" *Shader Objects available\n");
         sett.glsl=true;
         reqW.shaderObjects->value(true);
         reqW.shaderObjects->labelcolor(FL_GREEN);
 
 
     } else {
-        printf(" *Shader Objects NOT Available\n");
+        printf(" *Shader Objects NOT available\n");
         sett.glsl=false;
     }
 
@@ -906,7 +906,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (GLEW_ARB_texture_float) {
-        printf(" *GL_ARB_texture_float Available\n");
+        printf(" *GL_ARB_texture_float available\n");
         sett.fp16=1;
         reqW.textureFloat->value(true);
         reqW.textureFloat->labelcolor(FL_GREEN);
@@ -916,7 +916,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (GLEW_ARB_half_float_pixel) {
-        printf(" *Half availabe!\n");
+        printf(" *Half availabe\n");
         reqW.textureHalf->value(true);
         reqW.textureHalf->labelcolor(FL_GREEN);
     } else {
@@ -926,19 +926,19 @@ int main(int argc, char *argv[]) {
 
 
     if (CheckExtension("GL_ARB_texture_rectangle")) {
-        printf(" *GL_ARB_texture_rectangle available!\n");
+        printf(" *GL_ARB_texture_rectangle available\n");
         npotTextures=false;
         sett.textureRectangles=npotTextures?false:true;
         reqW.textureRectangle->value(true);
         reqW.textureRectangle->labelcolor(FL_GREEN);
     } else {
-        printf(" *GL_ARB_texture_rectangle NOT available!\n");
+        printf(" *GL_ARB_texture_rectangle NOT available\n");
         npotTextures=false;
         sett.textureRectangles=false;
         //pop up a message box here saying that jefecheck cannot run without this extension.
     }
     if ( CheckExtension("GL_EXT_texture_compression_s3tc") && CheckExtension("GL_ARB_texture_compression")) {
-        printf(" *Texture compression available! (S3TC)\n");
+        printf(" *Texture compression available (S3TC)\n");
         sett.textureCompression=true;
         reqW.s3tc->value(true);
         reqW.s3tc->labelcolor(FL_GREEN);
@@ -1044,13 +1044,6 @@ int main(int argc, char *argv[]) {
 #endif
 
     if (sett.startFullscreen) {
-        /*fsX=mw.mainWindow->x();
-        fsY=mw.mainWindow->y();
-        fsW=mw.mainWindow->w();
-        fsH=mw.mainWindow->h();
-
-        mw.mainWindow->fullscreen();
-        fullscreenActive=1;*/
 		mw.toggleFullscreen();
     }
 
