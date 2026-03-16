@@ -218,6 +218,15 @@ void GlViewport::size ( int x, int y, int he, int wh ) { //like glut resize func
 }*/
 
 void GlViewport::draw() {
+    // Initialize GLAD on first draw (GL context must exist)
+    static bool gladInitialized = false;
+    if (!gladInitialized) {
+        if (!gladLoadGL()) {
+            fprintf(stderr, "Failed to initialize GLAD\n");
+            return;
+        }
+        gladInitialized = true;
+    }
 
     /*if ( gRendering )
         return;*/

@@ -445,11 +445,8 @@ int main(int argc, char *argv[]) {
     printf(" *%s\n", tmpReqString);
     reqW.maxViewportSize->copy_label(tmpReqString);
 	
-    printf(" *Initializing GLAD: ");
-    if (!gladLoadGL()) {
-        fprintf(stderr, "Failed to initialize OpenGL loader (GLAD)\n");
-    }
-    printf("ok\n");
+    // GLAD is initialized on first GlViewport::draw() call
+    printf(" *GLAD will initialize on first render\n");
 
     // With GLAD/OpenGL 3.3 Core, check extension support via glGetString
     if (CheckExtension("GL_ARB_shader_objects")) {

@@ -750,8 +750,7 @@ void readSettings ( gfcSettings &sett ) {
 	//check if recievedPath exists, otherwise, create it.
 	if(dirExists(sett.receivedPath)==false){
 		printf("Creating Recieved Path for remote sessions...");
-		std::filesystem::path dir("newdir");
-		if(std::filesystem::create_directory(sett.receivedPath)){
+		if(std::filesystem::create_directories(sett.receivedPath)){
 			printf("success\n");
 		}
 		else{
