@@ -33,7 +33,7 @@
 
 #include "gfcimageloaderdpx.h"
 #include "gfcimageloaderexr.h"
-#include "gfcimageloadergfl.h"
+// #include "gfcimageloadergfl.h" // TODO: replace with OIIO
 
 
 #include "gfctrackmanager.h"

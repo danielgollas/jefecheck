@@ -18,7 +18,7 @@ int TEST_GLOBAL_loaderToUse=GFCLOADER_DPX;
 /****/
 //#include "gfcframeslice.h"
 #include "gfcimageloaderdpx.h"
-#include "gfcimageloadergfl.h"
+// #include "gfcimageloadergfl.h" // TODO: replace with OIIO
 #include "gfcimageloaderexr.h"
 
 /****/

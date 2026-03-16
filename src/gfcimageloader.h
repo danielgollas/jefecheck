@@ -2,7 +2,7 @@
 #define GFCIMAGELOADER_H
 
 #include "gfcpeekinfo.h"
-#include "gfcimageprocessor.h"
+// #include "gfcimageprocessor.h" // TODO: replace with OIIO
 #include "gfcloadparams.h"
 #include <string>
 #ifdef WIN32 

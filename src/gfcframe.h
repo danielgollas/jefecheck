@@ -18,9 +18,9 @@
 #include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 
-#include "gfcimageloadergfl.h"
+// #include "gfcimageloadergfl.h" // TODO: replace with OIIO
 #include "gfcimageloaderdpx.h"
-#include "gfcimageloaderfil.h"
+// #include "gfcimageloaderfil.h" // TODO: replace with OIIO
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>

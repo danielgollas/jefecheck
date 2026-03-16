@@ -31,7 +31,7 @@
 #include <boost/thread/condition.hpp>
 
 #include <FL/Fl_Value_Slider.H>
-#include "gflC.h"
+// #include "gflC.h" // TODO: replace with OIIO
 #include "dpxslice.h"
 #include <vector>
 #include "gfcStructures.h"

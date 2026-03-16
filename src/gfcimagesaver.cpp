@@ -1,6 +1,6 @@
 #include "gfcimagesaver.h"
 
-#include "gfcimagesaver_gfl.h"
+// #include "gfcimagesaver_gfl.h" // TODO: replace with OIIO
 #include "gfcimagesaver_exr.h"
 
 #include "glew.h"
