@@ -20,9 +20,6 @@ class gfcPlaylistItemProgramState;
 
 //#include "gfcfxstack.h"
 #pragma warning( disable: 4275 4305 4244 )
-#include <botan/botan.h>
-#include <botan/look_pk.h>
-#include <botan/dsa.h>
 
 /*#ifndef max
 #define max(a,b)            (((a) > (b)) ? (a) : (b))
@@ -114,15 +111,6 @@ std::vector<std::string> getMACAddress();
 std::string getHostname();
 
 std::string stripVersion(std::string fullVersion);
-float maximumVersionForThisLicense(float theVersion);
-
-std::string getSHA1(std::string message);
-Botan::SecureVector<Botan::byte> b64_decode(const std::string& in);
-std::string hex_encode(const std::string& in);
-Botan::SecureVector<Botan::byte> hex_decode(const std::string& in);
-
-int checkValidEmail(std::string email);
-
 std::string upperCase(std::string s);
 std::string lowerCase(std::string s);
 

@@ -13,11 +13,6 @@
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
 #include "gfcreview.h"
-#include "activatorWindow.h"
-#include "demoversion.h"
-
-#include "activatorCallbacks.h"
-
 #include "boost/filesystem/operations.hpp"
 #include "boost/filesystem/path.hpp"
 #include "boost/filesystem/convenience.hpp"
@@ -52,7 +47,6 @@ extern LutWindow lutw;
 extern FXWindow fxw;
 extern FXControlWindow fxControlWindow1,fxControlWindow2,fxControlWindow3,fxControlWindow4;
 extern PreferencesWindow pw;
-extern ActivatorWindow actW;
 extern RenderWindow rw;
 extern RemoteWindow rmw;
 extern PlaylistWindow plw;
@@ -1026,13 +1020,6 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 		version+=JEFE_VERSION;
 
 		aw.textBrowser->add(version.c_str());
-#ifdef DEMO_VERSION
-		aw.textBrowser->add("@c@mDEMO VERSION");
-		aw.textBrowser->add("@cThis demo version adds a watermark to all images,");
-		aw.textBrowser->add("@climits the number of connected remote systems to 3");
-		aw.textBrowser->add("@cand limits rendering to 24 frames at 25%");
-		aw.textBrowser->add(" ");
-#endif
 		aw.textBrowser->add("@cwww.jefecheck.com");
 		aw.textBrowser->add("@cwww.jefecorp.com");
 		aw.textBrowser->add("");
@@ -2184,8 +2171,7 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 								   break;
 
 	case LICENSEREQUESTNEWLICENSEEBUTTON_ID:
-		actW.activatorWindow->show();
-		fillActivationWindowDefaults();
+		// Activation system removed for open-source release
 		break;
 
 	case LICENSEPATHBROWSEBUTTON_ID:

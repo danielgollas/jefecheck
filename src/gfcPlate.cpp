@@ -1640,10 +1640,8 @@ void gfcPlate::resetTransforms(void) {
 	plateManager.setFeedbackMessage("Reset Transformations");
 }
 
-#include "demoversion.h"
-extern GLuint gWatermarkTextureID;
 void gfcPlate::drawDO() {
-#ifdef DEMO_VERSION
+#if 0 // Demo watermark removed for open-source release
 	/*if ((this->theFrame.textureID%30>5))
 		return;*/
 

@@ -10,15 +10,11 @@
 #include "trilerp.h"
 #include <vector>
 #include "UICallbacks.h"
-#include <botan/botan.h>
-#include <botan/look_pk.h>
-#include <botan/dsa.h>
 #include <FL/filename.H>
 #include <fstream>
 #include <sstream> //for stingstream
 #include "xmlParser.h"
 #include "remoteWindow.h"
-#include "demoversion.h"
 
 #include "boost/filesystem/operations.hpp"
 #include "boost/filesystem/path.hpp"
@@ -274,20 +270,12 @@ std::string getApplicationDataPath() {
 	
 #ifdef linux
     char tmpPath[32000];
-#ifdef DEMO_VERSION
-    fl_filename_expand ( tmpPath,"~/.JefeCorp/JefeCheck/JefeCheck_Demo/" );
-#else
     fl_filename_expand ( tmpPath,"~/.JefeCorp/JefeCheck/JefeCheck/" );
-#endif
     return tmpPath;
 #endif
-	
+
 #ifdef WIN32
-#ifdef DEMO_VERSION
-    Fl_Preferences app (Fl_Preferences::USER,"JefeCorp","JefeCheck/JefeCheck_Demo" );
-#else
     Fl_Preferences app (Fl_Preferences::USER,"JefeCorp","JefeCheck/JefeCheck" );
-#endif
     char path[FL_PATH_MAX];
     app.getUserdataPath ( path,sizeof ( path ) );
     return path;
@@ -1264,19 +1252,13 @@ std::string GetFilenameNoPath ( const std::string& filename ) {
 	
 }
 
-std::string GetMD5Hash ( std::string theString ) {	//TODO: Compute MD5 on theString and return
-    using namespace Botan;
-	
-    std::string tmp;
-    Pipe fxHashPipe ( new Hash_Filter ( "MD5" ), new Hex_Encoder() );
-    fxHashPipe.start_msg();
-    fxHashPipe.write ( theString );
-    fxHashPipe.end_msg();
-    /************************/
-    //strcpy(md5Hash,fxHashPipe.read_all_as_string().c_str());
-    tmp=fxHashPipe.read_all_as_string();
-    tmp+="\0";
-    return tmp;
+// Simple hash function for FX/LUT caching (not cryptographic)
+std::string GetMD5Hash ( std::string theString ) {
+    // Use std::hash as a simple non-cryptographic hash for cache keys
+    std::size_t h = std::hash<std::string>{}(theString);
+    char buf[17];
+    snprintf(buf, sizeof(buf), "%016zx", h);
+    return std::string(buf);
 }
 
 void UpdateRecentIPsButtons() {
@@ -2208,62 +2190,5 @@ std::string getHostname() {
 	return returnVal;
 };
 
-using namespace Botan;
-
-std::string getSHA1(std::string message)
-{
-  	Pipe pipe(new Botan::Hash_Filter("SHA-1"),new Base64_Encoder);
-  	pipe.process_msg(message);
-  	return pipe.read_all_as_string();
-}
-
-SecureVector<Botan::byte> b64_decode(const std::string& in)
-{
-	Pipe pipe(new Base64_Decoder);
-	pipe.process_msg(in);
-	return pipe.read_all();
-}
-
-std::string hex_encode(const std::string& in)
-{
-	Pipe pipe(new Hex_Encoder);
-	pipe.process_msg(in);
-	return pipe.read_all_as_string();
-}
-
-SecureVector<Botan::byte> hex_decode(const std::string& in)
-{
-	Pipe pipe(new Hex_Decoder);
-	pipe.process_msg(in);
-	return pipe.read_all();
-}
-
-float maximumVersionForThisLicense(float theVersion)
-{
-	double whole;
-	double decimal;
-	decimal=modf(theVersion,&whole);
-	float result=0;
-	if (decimal>0.5)
-	{
-		result=whole+0.9;
-	}
-	else
-	{
-		result = whole+0.4;
-	}
-	return result;
-}
-
-std::string stripVersion(std::string fullVersion)
-{
-	std::string result;
-	size_t lastPointPos=fullVersion.find_last_of('.');
-	if(lastPointPos!=std::string::npos)
-	{
-		result=fullVersion.substr(0,lastPointPos);
-	}
-	//std::cout << "strippedVersion: "<<result<<std::endl;
-	return result;
 	
 }

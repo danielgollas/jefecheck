@@ -6,10 +6,6 @@
 #include "xmlParser.h"
 #include "gfcStructures.h"
 
-#include <botan/botan.h>
-#include <botan/look_pk.h>
-#include <botan/dsa.h>
-
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
 
