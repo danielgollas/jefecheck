@@ -1,6 +1,8 @@
 #ifndef GFCMEMORYMANAGER_H
 #define GFCMEMORYMANAGER_H
 
+#include <thread>
+#include <mutex>
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>

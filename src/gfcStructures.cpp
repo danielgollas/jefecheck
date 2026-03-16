@@ -2186,6 +2186,3 @@ std::string getHostname() {
 	//printf("HostName: %s\n",returnVal.c_str());
 	return returnVal;
 };
-
-	
-}

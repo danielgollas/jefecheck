@@ -561,7 +561,7 @@ int main(int argc, char *argv[]) {
         int waitingForTestProgramCounter=0;
         int testProgramCounterLimit=50;
         //printf(" Test Program Object=%i\n",testProgramObject);
-        while ((int)testProgramObject==0 && waitingForTestProgramCounter<=testProgramCounterLimit) {
+        while ((intptr_t)testProgramObject==0 && waitingForTestProgramCounter<=testProgramCounterLimit) {
             //printf("counter=%i \n",waitingForTestProgramCounter);
             mw.mainWindow->redraw();
             //printf("main window redrawn \n");

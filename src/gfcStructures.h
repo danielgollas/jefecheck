@@ -467,10 +467,10 @@ void
 swabUInt32(unsigned int* lp);
 
 void
-swabArrayOfUInt16(unsigned short* wp, register size_t n);
+swabArrayOfUInt16(unsigned short* wp, size_t n);
 
 void
-swabArrayOfUInt32(register unsigned int* lp, register size_t n);
+swabArrayOfUInt32(unsigned int* lp, size_t n);
 
 void
 swabFloat(float *fp);
@@ -482,7 +482,7 @@ void
 swabDouble(double *dp);
 
 void
-swabArrayOfDouble(double* dp, register size_t n);
+swabArrayOfDouble(double* dp, size_t n);
 
 #define MSBImportOctets(scanline,packed_u32) \
 { \
@@ -586,7 +586,7 @@ ReadWordU32State;
   static inline unsigned int BitStreamMSBRead(BitStreamReadHandle *bit_stream,
                                               const unsigned int requested_bits)
   {
-    register unsigned int
+    unsigned int
       remaining_quantum_bits,
       quantum;
 
@@ -595,7 +595,7 @@ ReadWordU32State;
 
     while (remaining_quantum_bits > 0)
       {
-        register unsigned int
+        unsigned int
           octet_bits;
 
         octet_bits = remaining_quantum_bits;
@@ -665,7 +665,7 @@ ReadWordU32State;
   static inline unsigned int WordStreamLSBRead(WordStreamReadHandle *word_stream,
                                                const unsigned int requested_bits)
   {
-    register unsigned int
+    unsigned int
       remaining_quantum_bits,
       quantum;
     
@@ -674,7 +674,7 @@ ReadWordU32State;
     
     while (remaining_quantum_bits > 0)
       {
-        register unsigned int
+        unsigned int
           word_bits;
         
         if (word_stream->bits_remaining == 0)

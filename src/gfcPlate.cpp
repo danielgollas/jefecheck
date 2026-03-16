@@ -483,7 +483,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		//create object, load source, compile
 		glDeleteObjectARB(ssVertexShader);
 		ssVertexShader=glCreateShaderObjectARB(GL_VERTEX_SHADER_ARB);
-		glShaderSource(ssVertexShader,1,&vv,NULL);
+		glShaderSource((GLuint)(uintptr_t)ssVertexShader,1,&vv,NULL);
 		glCompileShaderARB(ssVertexShader);
 		
 		std::string infoLog;
@@ -515,8 +515,8 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		strcpy(src,ssFragmentSource.c_str());
 		const char * vv=src;
 
-		glShaderSource(ssFramgmentShader,1,&vv,NULL);
-		//glShaderSource(ssFramgmentShader,1,&src,NULL);
+		glShaderSource((GLuint)(uintptr_t)ssFramgmentShader,1,&vv,NULL);
+		//glShaderSource((GLuint)(uintptr_t)ssFramgmentShader,1,&src,NULL);
 		glCompileShaderARB(ssFramgmentShader);
 		//delete [] src;
 		std::string infoLog;
@@ -544,7 +544,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		glAttachObjectARB(ssProgram,ssVertexShader);
 		glAttachObjectARB(ssProgram,ssFramgmentShader);
 
-		glLinkProgram(ssProgram);
+		glLinkProgram((GLuint)(uintptr_t)ssProgram);
 		
 		std::string infoLog;
 		infoLog = getInfoLog ( ssProgram );
@@ -629,8 +629,8 @@ bool gfcPlate::createFBO() {
 //         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MIN_FILTER,GL_NEAREST );
 //         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MAG_FILTER,GL_NEAREST );
 //
-//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE_EXT );
-//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE_EXT );
+//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE );
+//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE );
 //
 //         glTexImage2D ( GL_TEXTURE_RECTANGLE_ARB, 0, sett.fp16?GL_RGBA16F_ARB:GL_RGBA,  fboVP.w, fboVP.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0 );
 //         glFramebufferTexture2DEXT ( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_RECTANGLE_ARB, fboTexturev[i], 0 );
@@ -689,8 +689,8 @@ bool gfcPlate::createFBO() {
                 glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MIN_FILTER,GL_NEAREST );
                 glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MAG_FILTER,GL_NEAREST );
 
-                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE_EXT );
-                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE_EXT );
+                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE );
+                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE );
 
                 if (i==count-1 && multiFormatFBOSupported) {
                     //this is the special case where we create the 8 bit texture to use later in the histogram
@@ -754,8 +754,8 @@ bool gfcPlate::createFBO() {
             glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MIN_FILTER,GL_NEAREST );
             glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MAG_FILTER,GL_NEAREST );
 
-            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE_EXT );
-            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE_EXT );
+            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE );
+            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE );
 
             glTexImage2D ( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA,  fboVP.w, fboVP.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0 );
             glFramebufferTexture2DEXT ( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT+fboTexturevCount, GL_TEXTURE_RECTANGLE_ARB, fbo8bitTexture, 0 );

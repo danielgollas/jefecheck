@@ -301,9 +301,9 @@ swabUInt16(unsigned short* wp);
 void
 swabUInt32(unsigned int* lp);
 void
-swabArrayOfUInt16(unsigned short* wp, register size_t n);
+swabArrayOfUInt16(unsigned short* wp, size_t n);
 void
-swabArrayOfUInt32(register unsigned int* lp, register size_t n);
+swabArrayOfUInt32(unsigned int* lp, size_t n);
 void
 swabFloat(float *fp);
 void
@@ -311,6 +311,6 @@ swabArrayOfFloat(float *fp, size_t n);
 void
 swabDouble(double *dp);
 void
-swabArrayOfDouble(double* dp, register size_t n);
+swabArrayOfDouble(double* dp, size_t n);
 
 #endif

@@ -131,18 +131,12 @@ int gfcFrame::loadFrame ( gfcLoadParams params )
 			break;
 
 		case GFCLOADER_EXR:
-			theImageLoader=new gfcImageLoaderEXR();
-			//theImageLoader=new gfcImageLoaderGFL();
+			theImageLoader=new gfcImageLoaderOIIO();
 			break;
 
 		case GFCLOADER_GFL:
-	//		printf("Unsing GFL\n");
-			theImageLoader=new gfcImageLoaderGFL();
-			break;
-
 		case GFCLOADER_FIL:
-	//		printf("Unsing GFL\n");
-			theImageLoader=new gfcImageLoaderFIL();
+			theImageLoader=new gfcImageLoaderOIIO();
 			break;
 	}
 

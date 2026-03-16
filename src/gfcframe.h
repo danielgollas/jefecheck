@@ -22,6 +22,7 @@
 
 #include "gfcpixelbuffer.h"
 #include "gfcimageloaderdpx.h"
+#include "gfcimageloaderoiio.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>

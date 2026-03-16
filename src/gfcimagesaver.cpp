@@ -1,7 +1,6 @@
 #include "gfcimagesaver.h"
 
 // TODO: implement OIIO-based saving
-#include "gfcimagesaver_exr.h"
 
 #include <glad/glad.h>
 
@@ -14,15 +13,8 @@ gfcImageSaver* getImageSaverInstance(gfcRenderParams params) {
     case GFC_RENDER_BMP:
     case GFC_RENDER_PNG:
     case GFC_RENDER_JPEG:
-        {
-        ptr=new gfcImageSaver_GFL;        
-        }
-        break;
-
     case GFC_RENDER_EXR:
-        {
-        ptr=new gfcImageSaver_EXR;
-        }
+        // TODO: implement saving via OIIO
         break;
     }
     

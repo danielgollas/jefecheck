@@ -964,7 +964,7 @@ int gfcSequence::loadSequence() {
 				tmpFrame.indexNumber=i;
 
 				{//lock the mutex here to push the frame into the rawFrame stack, which is shared by the main thread, which is the one that generates the textures.
-					std::lock_guard<std::mutex> lock ( rawQueueMutex );
+					std::unique_lock<std::mutex> lock ( rawQueueMutex );
 
 					if (rawFrames.size()>sett.maximumFramesInQueue)
 					{	//wait for a condition signal that the rawFrames have reduced size

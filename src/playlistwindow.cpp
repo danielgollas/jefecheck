@@ -137,7 +137,7 @@ void PlaylistItemWidget::setItem(gfcPlaylistItem item)
 
 		gfcLoadParams tmp=item.loadParams[i];
 		if(tmp.fileName!=""){
-		char track[2]={('A'+i),0};
+		char track[2]={static_cast<char>('A'+i),0};
 		std::string tmpString="@b";
 		tmpString+="Track ";
 		tmpString+=track;

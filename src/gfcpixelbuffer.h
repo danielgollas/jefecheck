@@ -165,23 +165,53 @@ inline GFL_ERROR gflResizeCanvas(GFL_BITMAP* bmp, void*, int newW, int newH, int
     return GFL_NO_ERROR;
 }
 
+// Free a bitmap
+inline void gflFreeBitmap(GFL_BITMAP* bmp) { delete bmp; }
+
+// Error string stub
+inline const char* gflGetErrorString(GFL_ERROR) { return "unknown error"; }
+
+// Load params stub functions
+inline void gflGetDefaultLoadParams(GFL_LOAD_PARAMS* params) {
+    if (params) { params->ColorModel = GFL_BGRA; params->Flags = 0; }
+}
+
+// Bitmap loading stub (returns error - actual loading done by OIIO or custom DPX parser)
+inline GFL_ERROR gflLoadBitmap(const char*, GFL_BITMAP**, GFL_LOAD_PARAMS*, GFL_FILE_INFORMATION*) {
+    return -1; // Not implemented - use OIIO loader instead
+}
+
 // Stub for GFLC_LIBRARY
 namespace GFLC_LIBRARY {
     inline void initialise() {}
 }
 
-// Stub types used by trilerp.cpp
-struct GFLC_BITMAP {
-    int dummy;
-    GFLC_BITMAP(int, int, int) {}
-    GFLC_BITMAP() {}
-};
-struct GFLC_SAVE_PARAMS { int dummy; };
-struct GFLC_LOAD_PARAMS { int dummy; };
+// Stub types used by trilerp.cpp for image-based LUT loading
+// These provide enough API surface for the code to compile;
+// image-based LUT loading will return errors at runtime until OIIO saving is implemented.
 struct GFLC_COLOR {
     float r, g, b;
     GFLC_COLOR() : r(0), g(0), b(0) {}
     GFLC_COLOR(float rr, float gg, float bb) : r(rr), g(gg), b(bb) {}
+    float getRed() const { return r; }
+    float getGreen() const { return g; }
+    float getBlue() const { return b; }
+};
+
+struct GFLC_SAVE_PARAMS { int dummy; };
+struct GFLC_LOAD_PARAMS { int dummy; };
+
+struct GFLC_BITMAP {
+    int w, h;
+    GFLC_BITMAP() : w(0), h(0) {}
+    GFLC_BITMAP(int, int width, int height) : w(width), h(height) {}
+    int getWidth() const { return w; }
+    int getHeight() const { return h; }
+    void setPixel(int, int, const GFLC_COLOR&) {}
+    void getPixel(int, int, GFLC_COLOR&) const {}
+    int loadFromFile(const char*, GFLC_LOAD_PARAMS&) { return 0; } // returns 0 = failure
+    void saveIntoFile(const char*, const char*) {}
+    void rotate(GFLC_BITMAP&, int) {}
 };
 
 #endif

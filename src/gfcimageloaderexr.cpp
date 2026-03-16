@@ -12,12 +12,12 @@
 #include <OpenEXR/ImfPreviewImage.h>
 #include <OpenEXR/ImfChannelList.h>
 #include <OpenEXR/Iex.h>
-#include <OpenEXR/ImathMath.h>
+#include <Imath/ImathMath.h>
 #include <OpenEXR/ImfRgba.h>
 #include <OpenEXR/ImfArray.h>
 #include <OpenEXR/ImfHeader.h>
-#include <OpenEXR/ImathFun.h>
-#include <OpenEXR/halfFunction.h>
+#include <Imath/ImathFun.h>
+#include <Imath/ImathMath.h> // halfFunction removed in modern Imath
 #include <OpenEXR/ImfStandardAttributes.h>
 #include <OpenEXR/ImfKeyCode.h>
 #include <OpenEXR/ImfTimeCode.h>

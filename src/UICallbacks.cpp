@@ -1203,9 +1203,6 @@ void remoteCB ( Fl_Widget* o , void* v ) {
 	}
 }
 
-Fl_Pixmap blueDotXMP ( bluedot_xpm );
-Fl_Pixmap bookXMP ( book_xpm );
-
 void updateReviewToolsWindowReview() {
 	//iterate through all the revisions in the review and fill the review browser.
 	std::vector<gfcRevision>::iterator iter,end;
@@ -1215,9 +1212,6 @@ void updateReviewToolsWindowReview() {
 	//clear the revisions browser.
 
 	dtw.revisionsTree->clear();
-
-	dtw.revisionsTree->branch_icons ( &bookXMP,&bookXMP );
-
 	dtw.revisionsTree->root_label("Revisions");
 	dtw.revisionsTree->add("Default Revision");
 	dtw.revisionsTree->add("Second Revision");

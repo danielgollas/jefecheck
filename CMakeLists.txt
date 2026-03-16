@@ -34,17 +34,41 @@ if(NOT WIN32)
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
 endif()
 
-if(NOT UNIX OR APPLE)
-    # _FindFirst is a Linux compatibility shim for Windows API
+# _FindFirst provides POSIX implementations of Windows FindFirst/FindNext API
+# Needed on Linux and macOS; excluded only on actual Windows
+if(WIN32)
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
 endif()
+
+# gfcTrack.cpp is a duplicate of gfcSequence.cpp (same symbols)
+list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
+
+# Exclude custom EXR loader/saver - OIIO handles EXR natively
+list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
+list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
 
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
 
+# Suppress warnings in vendored RakNet code (template dependent base class issues)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(jefecheck PRIVATE
+        -Wno-deprecated-declarations  # macOS deprecated OpenGL
+        -Wno-register               # C++17 removed register keyword
+    )
+endif()
+
+# Find Imath (separated from OpenEXR in v3+)
+find_package(Imath QUIET)
+
 target_include_directories(jefecheck PRIVATE
     src/
 )
+
+# Add Imath include dirs (separated from OpenEXR in v3+)
+if(Imath_FOUND)
+    target_link_libraries(jefecheck PRIVATE Imath::Imath)
+endif()
 
 target_link_libraries(jefecheck PRIVATE
     glad
