@@ -48,7 +48,11 @@ Modernize JefeCheck for open-source release under GPL v2. Replace proprietary an
 - Replace `gfcimageloadergfl.cpp` with new `gfcimageloaderoiio.cpp` implementing the same `gfcImageLoader` interface
 - Keep `gfcimageloaderdpx.cpp` (custom in-tree parser, potentially faster for DPX)
 - Keep `gfcimageloaderexr.cpp` or consolidate into OIIO (OIIO handles EXR natively) — decide during implementation
-- Remove: `gflC.h`, `libgfl.h`, `libgfle.h`, `gflCFormat.h`, all GFL references
+- Keep `gfcimageloaderexr.cpp` for MVP; consolidate into OIIO post-MVP
+- Remove: `gflC.h`, `gflCBitmap.cpp/h`, `gflCFormat.cpp/h`, `gflCFileInformation.cpp`, `libgfl.h`, `libgfle.h`
+- Remove: `gfcimagesaver_gfl.cpp/h` (replace saving path with OIIO in `gfcimagesaver.cpp`)
+- Remove: `gfcimageprocessor.cpp/h` (uses GFL)
+- Remove: `gfcimageloaderfil.cpp/h` (alternate loader using Boost try_mutex, superseded by OIIO)
 
 ### FLU to Native FLTK
 | FLU Widget | FLTK Replacement |
@@ -57,20 +61,26 @@ Modernize JefeCheck for open-source release under GPL v2. Replace proprietary an
 | `Flu_Combo_Box` | `Fl_Input_Choice` |
 | `Flu_Button` | `Fl_Button` |
 | `Flu_Choice_Group` | `Fl_Tabs` or `Fl_Group` |
-| `Flu_Tree_Browser` | `Fl_Tree` |
+| `Flu_Tree_Browser` | `Fl_Tree` (note: different API — node-based vs. path-string insertion) |
 | `Flu_Spinner` | `Fl_Spinner` |
+| `Flu_Collapsable_Group` | `Fl_Group` (commented out in `fxcontrolwindow.cpp`, remove includes) |
+| `flu_pixmaps.h` | Remove (used in `UICallbacks.cpp`) |
+
+**Note:** `.fl` files (FLUID definitions) referencing FLU widgets need manual editing, not just code swaps. Specifically `drawingToolsWindow.fl` uses `Flu_Tree_Browser`.
 
 ### Boost to C++20 STL
 | Boost Component | C++20 Replacement |
 |-----------------|-------------------|
 | `boost::filesystem` | `std::filesystem` |
 | `boost::thread`, `mutex`, `condition_variable` | `std::thread`, `std::mutex`, `std::condition_variable` |
+| `boost::try_mutex` / `scoped_try_lock` | `std::mutex` + `std::unique_lock` with `try_lock()` (used in ~10 files including image loaders and playback — requires careful refactoring, not mechanical find-and-replace) |
+| `boost::condition` | `std::condition_variable` (used in `gfcSequence.cpp`) |
 | `boost::bind` | `std::bind` or lambdas |
 | `boost::ref` | `std::ref` |
-| `boost::program_options` | CLI11 (BSD, header-only) |
+| `boost::program_options` | CLI11 (BSD, header-only) — `main.cpp` CLI parsing logic needs rewrite, not just include swap |
 
 ### GLEW to GLAD
-- Generate GLAD loader for required OpenGL version/extensions
+- Generate GLAD loader targeting OpenGL 3.3 Core (determine exact version from existing shader requirements during implementation)
 - Replace `#include "glew.h"` with `#include <glad/glad.h>`
 - Replace `glewInit()` with `gladLoadGL()`
 - Remove vendored GLEW source: `glew.c`, `glew.h`, `glext.h`, `glxew.h`, `wglew.h`
@@ -168,16 +178,22 @@ Each swap is its own commit, done in this order:
 3. FLU to native FLTK — UI widget replacements
 4. GFL to OpenImageIO — image loading, needed for MVP validation
 
-### Phase 4 — Get It Running
-- Fix runtime issues on macOS
-- Get the window launching
-- Get single-sequence playback working
-- This is the MVP
+### Phase 4 — Get It Running (MVP on macOS)
+1. App launches without crashing
+2. File chooser opens and selects a sequence
+3. Image loads into memory via OIIO or DPX/EXR loader
+4. Frame renders to OpenGL viewport
+5. Playback controls work (play, stop, scrub, frame step)
 
 ### Phase 5 — Cross-Platform
-- Test/fix Linux build
-- Test/fix Windows build (vcpkg integration)
+- **Linux:** CMake configures and builds on Ubuntu 22.04+ with system packages. App launches and plays a DPX/EXR sequence.
+- **Windows:** CMake configures and builds with vcpkg dependencies. App launches and plays a sequence.
 - CI via GitHub Actions for all three platforms
+
+## Notes
+
+- Vendored third-party code (xmlParser, RakNet) should have license info tracked in a `THIRD_PARTY_LICENSES` file for GPL compliance.
+- Consider moving vendored RakNet files from `src/` to `third_party/raknet/` for clarity (non-blocking, can be done during Phase 1 or later).
 
 ## Platform Priority
 1. **macOS** — primary development target, MVP here first
