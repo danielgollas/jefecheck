@@ -2,6 +2,7 @@
 #define GFCSTRUCTURES_H
 
 #include <string>
+#include <filesystem>
 #include <vector>
 #include <queue>
 #include <FL/filename.H>
@@ -14,7 +15,6 @@
 #include "gfcrenderparams.h"
 #define JEFE_VERSION "1.5.3" 
 #include <sstream> //for stingstream
-#include <boost/filesystem/path.hpp>
 
 class gfcPlaylistItemProgramState;
 
@@ -67,10 +67,7 @@ class gfcPlaylistItemProgramState;
 #define        glCheckFBO()
 #endif
 
-#include "boost/filesystem/operations.hpp"
-#include "boost/filesystem/path.hpp"
-#include "boost/filesystem/convenience.hpp"
-#define FILE_EXISTS(name) boost::filesystem::exists(boost::filesystem::path(name))
+#define FILE_EXISTS(name) std::filesystem::exists(std::filesystem::path(name))
 #define GFC_MAX_FAVORITE_STACKS 5
 #define GFC_MAX_FAVORITE_COLOR_CORRECTION_STACKS 5
 

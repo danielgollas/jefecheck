@@ -16,9 +16,6 @@
 #include "xmlParser.h"
 #include "remoteWindow.h"
 
-#include "boost/filesystem/operations.hpp"
-#include "boost/filesystem/path.hpp"
-#include "boost/filesystem/convenience.hpp"
 
 #include <cstdlib> //for getenv
 #include <iostream>
@@ -223,13 +220,13 @@ int confirmQuit()
 }
 
 bool dirExists(const std::string &name){
-	return boost::filesystem::is_directory(name);
+	return std::filesystem::is_directory(name);
 }
 
 bool fileExists (const std::string &name ) {
     
 	
-	//return boost::filesystem::exists(boost::filesystem::path(name));
+	//return std::filesystem::exists(std::filesystem::path(name));
 	
 	//OLD METHOD, SEEMS SLOWER
 	static struct stat aBuffer;
@@ -297,12 +294,12 @@ std::string getApplicationDataPath() {
 	
 	//initial_path() should return the path to JefeCheck.app/Contents/MacOS/jefecheck
 	
-	/*boost::filesystem::path tmpPath = boost::filesystem::initial_path().parent_path()/"Resources";
+	/*std::filesystem::path tmpPath = std::filesystem::initial_path().parent_path()/"Resources";
 	std::cout << "tmpPath" << tmpPath.string() <<std::endl;
 	return tmpPath.string()+"/";*/
 	
-	boost::filesystem::path tmpPath(gMacExecutablePath);
-	tmpPath=tmpPath.branch_path().branch_path()/"Resources";
+	std::filesystem::path tmpPath(gMacExecutablePath);
+	tmpPath=tmpPath.parent_path().parent_path()/"Resources";
 	//std::cout << "tmpPath" << tmpPath.string() <<std::endl;
 	return tmpPath.string()+"/";
 	/*
@@ -347,8 +344,8 @@ void saveSettings ( const gfcSettings *sett ) {
 		
         printf("Program directory does not exists, it will now be created in\n%s\n",appDataPath.c_str());
 		
-        boost::filesystem::path thePath(appDataPath);
-        boost::filesystem::create_directories(thePath);
+        std::filesystem::path thePath(appDataPath);
+        std::filesystem::create_directories(thePath);
 		
         /*#ifdef WIN32
         _mkdir(appDataPath.c_str());
@@ -753,8 +750,8 @@ void readSettings ( gfcSettings &sett ) {
 	//check if recievedPath exists, otherwise, create it.
 	if(dirExists(sett.receivedPath)==false){
 		printf("Creating Recieved Path for remote sessions...");
-		boost::filesystem::path dir("newdir");
-		if(boost::filesystem::create_directory(sett.receivedPath)){
+		std::filesystem::path dir("newdir");
+		if(std::filesystem::create_directory(sett.receivedPath)){
 			printf("success\n");
 		}
 		else{
@@ -1231,10 +1228,10 @@ std::string GetFilenameNoFilePrefix ( const std::string& filename ) {
 int removeFile(std::string theFilename)
 {
 	//boost::system::error_code error;
-	//boost::filesystem::remove(boost::filesystem::path(theFilename),error);
+	//std::filesystem::remove(std::filesystem::path(theFilename),error);
 	//printf("DeleteFile: %s (%i): %s\n",theFilename.c_str(),error.value(),error.message().c_str());
 	//return error.value();
-	boost::filesystem::remove(boost::filesystem::path(theFilename));
+	std::filesystem::remove(std::filesystem::path(theFilename));
 	return 0;
 }
 
@@ -1654,21 +1651,21 @@ std::vector<std::string> TokenizeString(const std::string& str, const std::strin
 * @param result
 * @return
 */
-int findFileInPath(std::string filename, boost::filesystem::path thePath, bool recursive, std::string &result) {
+int findFileInPath(std::string filename, std::filesystem::path thePath, bool recursive, std::string &result) {
 	//     //1. If thePath is the filename fill in result and then return 1, make sure the filename is also not a directory
 	// 	std::cout << "FindFileInPath :"<<filename<<std::endl << "thePath: "<<thePath.string()<<std::endl<<std::endl;
-	// 	if (thePath.leaf()==filename && !boost::filesystem::is_directory(thePath)) {
+	// 	if (thePath.leaf()==filename && !std::filesystem::is_directory(thePath)) {
 	//         result=thePath.string();
 	//         return 1;
 	//     } else {
 	//         //2. If recursive and path is a directory also try inside each child that is a directory.
-	//         if (boost::filesystem::is_directory(thePath)) {
+	//         if (std::filesystem::is_directory(thePath)) {
 	//         //TODO: Iterate correctly over the path children. 
-	//             boost::filesystem::directory_iterator pathI(thePath);
-	//             boost::filesystem::directory_iterator endI;
+	//             std::filesystem::directory_iterator pathI(thePath);
+	//             std::filesystem::directory_iterator endI;
 	//             for(pathI; pathI!=endI;pathI++) {
 	//                 int childResult=0;
-	//                 if (boost::filesystem::is_directory(*pathI)) {
+	//                 if (std::filesystem::is_directory(*pathI)) {
 	//                     if (recursive)
 	//                     	//std::cout<<*pathI<<std::endl;
 	//                         childResult=findFileInPath(filename,(*pathI),recursive,result);
@@ -1688,8 +1685,8 @@ int findFileInPath(std::string filename, boost::filesystem::path thePath, bool r
 	
 	//construct a path with the path and the filename, if it exists, then	we found the result, 
 	//otherwise, if the path is a directory, iterate through all it's children doing the same thing but ONLY for folders.
-	boost::filesystem::path testPath=thePath/filename;
-	if(boost::filesystem::exists(testPath))
+	std::filesystem::path testPath=thePath/filename;
+	if(std::filesystem::exists(testPath))
 	{
 		//we found it!
 		std::cout << "Found the file! "<<testPath.string() << std::endl;
@@ -1701,13 +1698,13 @@ int findFileInPath(std::string filename, boost::filesystem::path thePath, bool r
 		//not in this folder, maybe in a subfolder?
 		if(recursive)
 		{
-			boost::filesystem::directory_iterator pathI(thePath);
-			boost::filesystem::directory_iterator endI;
+			std::filesystem::directory_iterator pathI(thePath);
+			std::filesystem::directory_iterator endI;
 			int childResult=0;
 			for(pathI; pathI!=endI;pathI++) {
 				
 				childResult=0;
-				if (boost::filesystem::is_directory(*pathI)) {
+				if (std::filesystem::is_directory(*pathI)) {
 					childResult=findFileInPath(filename,(*pathI),recursive,result);
 					if(childResult==1)
 					{
@@ -1732,7 +1729,7 @@ std::string findFileInSearchPaths(std::string theFile) {
     //1. Iterate through all each search path, navigating into subfolders if required.
     int folderCount=sett.searchPaths.size();
     std::string result=theFile;
-    boost::filesystem::path tempPath(theFile);
+    std::filesystem::path tempPath(theFile);
 	//std::string theFileLeaf=tempPath.leaf().string();
 	
 //	std::string theFileLeaf=tempPath.filename().string();
@@ -1747,8 +1744,8 @@ std::string findFileInSearchPaths(std::string theFile) {
 	std::cout << "Trying to find in search paths thefileLeaf: " << theFileLeaf << std::endl;
     for(int i=0;i<folderCount;i++)
     {
-    	boost::filesystem::path thePath(sett.searchPaths[i]);
-    	if(boost::filesystem::exists(thePath) && !boost::filesystem::is_empty(thePath))
+    	std::filesystem::path thePath(sett.searchPaths[i]);
+    	if(std::filesystem::exists(thePath) && !std::filesystem::is_empty(thePath))
     	{
     		if(findFileInPath(theFileLeaf, thePath, sett.searchPathsRecursive,result))
     			return result;
@@ -1791,7 +1788,7 @@ int isSupportedType(std::string theFilename)
 	}
 }
 
-int getFirstSequenceInDirectoryR(boost::filesystem::path thePath, std::string &result) {
+int getFirstSequenceInDirectoryR(std::filesystem::path thePath, std::string &result) {
 
 	if (isSupportedType(thePath.string()))
 	{
@@ -1800,16 +1797,16 @@ int getFirstSequenceInDirectoryR(boost::filesystem::path thePath, std::string &r
 	}
 	else
 	{
-		if (boost::filesystem::is_directory(thePath))
+		if (std::filesystem::is_directory(thePath))
 		{
 			//iterate all children calling recursively if this is a directory.
-			boost::filesystem::directory_iterator pathI(thePath);
-			boost::filesystem::directory_iterator endI;
+			std::filesystem::directory_iterator pathI(thePath);
+			std::filesystem::directory_iterator endI;
 			for(pathI; pathI!=endI;pathI++)
 			{				
 				
-				boost::filesystem::path child;
-				boost::filesystem::path newPath= (pathI->path());
+				std::filesystem::path child;
+				std::filesystem::path newPath= (pathI->path());
 				if(getFirstSequenceInDirectoryR(newPath, result))
 				{
 					return 1;
@@ -1824,7 +1821,7 @@ int getFirstSequenceInDirectoryR(boost::filesystem::path thePath, std::string &r
 std::string getFirstSequenceInDirectory(std::string thePath)
 {
 	std::string result=thePath;
-	if(boost::filesystem::exists(thePath) && !boost::filesystem::is_empty(thePath))
+	if(std::filesystem::exists(thePath) && !std::filesystem::is_empty(thePath))
 	{
 		if(getFirstSequenceInDirectoryR(thePath, result))
 			return result;

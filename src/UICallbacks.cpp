@@ -13,9 +13,6 @@
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
 #include "gfcreview.h"
-#include "boost/filesystem/operations.hpp"
-#include "boost/filesystem/path.hpp"
-#include "boost/filesystem/convenience.hpp"
 
 //#include "network.h"
 //#include <Fl/Fl_Native_File_Chooser.h>
@@ -962,10 +959,10 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 
 	case MENUHELPUSERGUIDE_ID:{
 		char message[1024];
-		boost::filesystem::path userGuidePath(getApplicationDataPath());
+		std::filesystem::path userGuidePath(getApplicationDataPath());
 		std::cout<<"Application Data Path: "<< userGuidePath.string()<<std::endl;
 		userGuidePath=userGuidePath/"JefeCheckManual.pdf";
-		if (boost::filesystem::exists(userGuidePath))
+		if (std::filesystem::exists(userGuidePath))
 		{
 			std::string completePath=std::string("file://")+userGuidePath.string();
 			fl_open_uri(completePath.c_str(),message,1024);
@@ -982,9 +979,9 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 	case MENUHELPQUICKREFERENCE_ID:{
 
 		char message[1024];
-		boost::filesystem::path userGuidePath(getApplicationDataPath());
+		std::filesystem::path userGuidePath(getApplicationDataPath());
 		userGuidePath=userGuidePath/"JefeCheckQuickStart.pdf";
-		if (boost::filesystem::exists(userGuidePath))
+		if (std::filesystem::exists(userGuidePath))
 		{
 			std::string completePath=std::string("file://")+userGuidePath.string();
 			fl_open_uri(completePath.c_str(),message,1024);
