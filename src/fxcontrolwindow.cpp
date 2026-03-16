@@ -16,8 +16,6 @@
 #include <FL/Fl_Group.H>
 #include <FL/Fl_Value_Input.H>
 #include <FL/Fl_Choice.H>
-#include <FLU/Flu_Collapsable_Group.h>
-#include <FLU/Flu_Simple_Group.h>
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_File_Chooser.H>
 #include "gfcfx.h"

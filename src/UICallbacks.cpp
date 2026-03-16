@@ -23,7 +23,6 @@
 #include "exrWindow.h"
 #include "xmlParser.h"
 
-#include <FLU/flu_pixmaps.h>
 #include <FL/Fl_Pixmap.H>
 #include "trilerp.h"
 #include "gfcfx.h"
@@ -1219,12 +1218,9 @@ void updateReviewToolsWindowReview() {
 
 	dtw.revisionsTree->branch_icons ( &bookXMP,&bookXMP );
 
-	dtw.revisionsTree->set_root ( "Revisions" );
-
-	dtw.revisionsTree->leaf_icon ( &blueDotXMP );
-	dtw.revisionsTree->insertion_mode ( FLU_INSERT_BACK );
-	dtw.revisionsTree->add ( "5Default Revision" );
-	dtw.revisionsTree->add ( "2Second Revision" );
+	dtw.revisionsTree->root_label("Revisions");
+	dtw.revisionsTree->add("Default Revision");
+	dtw.revisionsTree->add("Second Revision");
 	for ( iter; iter!=end;iter++ ) {}
 }
 

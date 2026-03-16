@@ -22,7 +22,6 @@ class gfcPlaylistWindowWindow;
 #include <FL/Fl_Tile.H>
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_Browser.H>
-#include <FLU/Flu_Collapsable_Group.h>
 #include "gfcStructures.h"
 #include "gfcplaylistitem.h"
 

@@ -2,13 +2,13 @@
 version 1.0107 
 header_name {.h} 
 code_name {.cxx}
-decl {\#include <FLU/Flu_Tree_Browser.h>} {} 
+decl {\#include <FL/Fl_Tree.H>} {} 
 
 class DrawingToolsWindow {open : {public Fl_Double_Window}
 } {
   decl {\#include "UIConstants.h"} {}
   decl {\#include "UICallbacks.h"} {}
-  decl {\#include <FLU/Flu_Tree_Browser.h>} {}
+  decl {\#include <FL/Fl_Tree.H>} {}
   Function {DrawingToolsWindow(int x, int y, int wi, int height,const char* l) : Fl_Double_Window(300, 300, 300, 300, "Load Window")} {open
   } {
     Fl_Window drawingToolsWindow {
@@ -51,8 +51,8 @@ class DrawingToolsWindow {open : {public Fl_Double_Window}
             user_data REVIEWTOOLSREVIEWTREE_ID
             callback reviewToolsCB
             xywh {16 100 180 84} align 0
-            code0 {\#include <FLU/Flu_Tree_Browser.h>}
-            class Flu_Tree_Browser
+            code0 {\#include <FL/Fl_Tree.H>}
+            class Fl_Tree
           }
           Fl_Button {} {
             label Delete
@@ -85,8 +85,8 @@ class DrawingToolsWindow {open : {public Fl_Double_Window}
         } {
           Fl_Browser notesTree {
             xywh {11 307 186 87} type Hold selection_color 0 labelfont 1 labelsize 12 labelcolor 7 align 1
-            code0 {\#include <FLU/Flu_Tree_Browser.h>}
-            class Flu_Tree_Browser
+            code0 {\#include <FL/Fl_Tree.H>}
+            class Fl_Tree
           }
           Fl_Button {} {
             label Delete
