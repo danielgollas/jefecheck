@@ -1,6 +1,0 @@
-ppuser
-V=)pUc1}c<+1
-
-flag=0
-for i in array
-bitwise.bitor(flag, array(i)*pow(2,i))
