@@ -67,7 +67,7 @@ GLuint gWatermarkTextureID=0;
 
 Fl_Text_Buffer remoteLogBuffer;
 
-#include "boost/program_options.hpp"
+#include "CLI11.hpp"
 #include <FL/Fl_File_Chooser.H>
 #include <FL/fl_ask.H>
 #include <math.h>
@@ -101,9 +101,6 @@ RemoteWindow rmw;
 DrawingToolsWindow dtw(0,0,300,300,"Window");
 
 extern std::vector<int> fxArrayActiveCount;
-namespace po = boost::program_options;
-po::positional_options_description p;
-po::variables_map vm;
 
 
 AboutWindow aboutWindow(300,300,300,300,"about");
@@ -218,133 +215,82 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
 void parseArguments(int argc, char *argv[]) {
 
     using namespace std;
-    p.add("file", -1);
 
     for (int i=0;i<argc; i++) {
         printf("Arg%i: %s\n",i,argv[i]);
     }
 
+    CLI::App app{"JefeCheck - Professional Video Frame Player"};
 
-    //the visible switch options
-    po::options_description standard("You can load files directly from the command line using the following options\n You can specify a filename and parameters for up to 4 sequences, the first sequence will be loaded into track A, the second into B etc. ");
-    standard.add_options()
-    ("help,h", "produce help message")
-    ("from,f", po::value< vector<int> >(), "Start loading from this frame")
-    ("to,t", po::value< vector<int> >(), "Stop loading at this frame")
-    ("scale,s", po::value<vector<int> >(), "Scales to load sequences in percentages (100, 50 etc)")
-    ("frameRate,r", po::value<int>(), "Frame rate for playback")
-    ("fx,x", po::value< vector<string> > (), "FX Stack")
-	("lut,l", po::value< vector<string> > (), "LUT for Plate")
-    ;
+    vector<int> fromFrames, toFrames, scaleValues;
+    int frameRate = 0;
+    vector<string> fxFiles, lutFiles, inputFiles;
 
-    //the hidden options
-    po::options_description hidden("Hidden options");
-    hidden.add_options()
-    ("input", po::value< vector<std::string> >(), "Filenames to load")
-    ;
+    app.add_option("-f,--from", fromFrames, "Start loading from this frame");
+    app.add_option("-t,--to", toFrames, "Stop loading at this frame");
+    app.add_option("-s,--scale", scaleValues, "Scale percentages for sequences");
+    app.add_option("-r,--frameRate", frameRate, "Playback frame rate");
+    app.add_option("-x,--fx", fxFiles, "FX Stack files");
+    app.add_option("-l,--lut", lutFiles, "LUT files for plates");
+    app.add_option("input", inputFiles, "Input files")->expected(-1);
 
-    //explicit and positional ones together
-    po::options_description all("Hidden options");
-    all.add(hidden).add(standard);
-
-    po::positional_options_description p;
-    p.add("input", -1);
-
-    /*po::basic_command_line_parser basicParser(argc, argv);
-     po::command_line_parser(argc, argv).options(all).positional(p).run()
-    basicParser.*/
-
-    po::parsed_options parsed =po::command_line_parser(argc, argv).options(all).positional(p).allow_unregistered().run();
-    po::store(parsed, vm);
-    po::notify(vm);
-
-    if (vm.count("help")) {
-        std::cout << standard << "\n";
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError &e) {
+        app.exit(e);
         return;
     }
 
+    if (!inputFiles.empty()) {
+        std::cout << "Got input files!\n";
 
-    if (vm.count("input")) {
-        std::cout << "Got input files!\n" <<  vm["input"].as< vector<std::string> >() << "\n" ;
-        std::vector< std::string > inputs =  vm["input"].as< vector<std::string> >();
-
-        if (lowerCase(GetExtension(inputs.front()))=="jcs") {//got a session as a filename
-            sessionManager.loadSession(inputs.back());
-            inputs.erase(inputs.begin()); //remove it from the inputs so we don't thing it's a track
+        if (lowerCase(GetExtension(inputFiles.front()))=="jcs") {
+            sessionManager.loadSession(inputFiles.back());
+            inputFiles.erase(inputFiles.begin());
         }
 
-
-
-        if (inputs.size()>0 && lowerCase(GetExtension(inputs.front()))=="jpl") {//got a playlist as a filename
-            playlistManager.loadPlaylist(inputs.back());
-            inputs.erase(inputs.begin()); //remove it from the inputs so we don't thing it's a track
+        if (!inputFiles.empty() && lowerCase(GetExtension(inputFiles.front()))=="jpl") {
+            playlistManager.loadPlaylist(inputFiles.back());
+            inputFiles.erase(inputFiles.begin());
         }
 
-
-
-        std::vector< int > scales;
-        std::vector< int > froms;
-        std::vector< int > tos;
-
-        if (vm.count("scale"))
-            scales =  vm["scale"].as< vector<int> >();
-
-        if (vm.count("from"))
-            froms =  vm["from"].as< vector<int> >();
-
-        if (vm.count("to"))
-            tos =  vm["to"].as< vector<int> >();
-
-        for ( int i=0;i<GFC_MAX_SEQUENCES && i<inputs.size() ;i++ ) {
-
+        for (int i=0; i<GFC_MAX_SEQUENCES && i<(int)inputFiles.size(); i++) {
             gfcLoadParams params;
 
-            if (i<scales.size())
-                params.scale=scales[i];
+            if (i<(int)scaleValues.size())
+                params.scale=scaleValues[i];
 
-            if (i<froms.size())
-                params.fromFrame=froms[i];
+            if (i<(int)fromFrames.size())
+                params.fromFrame=fromFrames[i];
 
-            if (i<tos.size())
-                params.toFrame=tos[i];
-			
-			//TODO: add options for EXR channel names and bit depth compression. 
-			
+            if (i<(int)toFrames.size())
+                params.toFrame=toFrames[i];
 
-            params.fileName=inputs[i];
+            params.fileName=inputFiles[i];
             trackManager.loadFromFilename(i,params);
         }
-        
-        //after loading from command line set the correct in/out points
+
         playbackManager.setInPoint(0);
         playbackManager.setOutPoint(trackManager.getMaxTrackLength());
     }
 
-    if (vm.count("frameRate")) {
-        playbackManager.setTargetFPS(vm["frameRate"].as<int>());
+    if (frameRate > 0) {
+        playbackManager.setTargetFPS(frameRate);
     }
 
-
-
-    int fxCount=vm.count("fx");
-    printf("fxCount %i\n",fxCount);
-    if (fxCount) {
-        std::vector< std::string > fxstacks= vm["fx"].as< vector<std::string> >();
-
-        for (int i=0; i<fxstacks.size();i++) {
-            plateManager.loadStackFromFile(i,fxstacks[i]);
+    if (!fxFiles.empty()) {
+        printf("fxCount %i\n",(int)fxFiles.size());
+        for (int i=0; i<(int)fxFiles.size(); i++) {
+            plateManager.loadStackFromFile(i,fxFiles[i]);
         }
     }
 
-	int lutCount=vm.count("lut");
-	printf("lutCount %i\n",fxCount);
-	if (lutCount) {
-		std::vector< std::string > luts= vm["lut"].as< vector<std::string> >();
-
-		for (int i=0; i<luts.size();i++) {
-			plateManager.setLUTByName(i,luts[i]);
-		}
-	}
+    if (!lutFiles.empty()) {
+        printf("lutCount %i\n",(int)lutFiles.size());
+        for (int i=0; i<(int)lutFiles.size(); i++) {
+            plateManager.setLUTByName(i,lutFiles[i]);
+        }
+    }
 
 }
 
