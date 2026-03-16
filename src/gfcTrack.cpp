@@ -5,6 +5,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include <glad/glad.h>
+#include <functional>
 #include "gfcSequence.h"
 #include <string.h>
 #include <stdio.h>
@@ -21,10 +22,7 @@
 #include "GlViewport.h"
 //#include "gfcframeslice.h"
 #ifdef WIN32
-#include <boost/thread/condition.hpp>
-#include <boost/thread/win32/thread_primitives.hpp>
 #else
-#include <boost/thread/condition.hpp>
 #endif
 
 #include <stdlib.h>
@@ -54,7 +52,7 @@ extern MainWindow mw;
 extern ExrWindow ew;
 extern bool mainWindowExists;
 extern bool npotTextures;
-extern boost::mutex gGLMutex;
+extern std::mutex gGLMutex;
 extern void* gGLContext;
 extern bool gResizeTrigger;
 std::vector<int> dummyVectorForLut;
@@ -69,13 +67,13 @@ std::vector<int> dummyVectorForLut;
 
 //memory mutex and stuff
 bool gMTOutOfMemory=false;
-boost::mutex gNoMoreRamMutex;
-boost::condition gNoMoreRamCondition;
+std::mutex gNoMoreRamMutex;
+std::condition_variable gNoMoreRamCondition;
 
 bool gLoadCanceled=false;
 int dummyInt2;
-boost::try_mutex rawMutexA;
-boost::try_mutex loadingOutOfRamMutex;
+std::mutex rawMutexA;
+std::mutex loadingOutOfRamMutex;
 std::vector<ExrChannelInfo> exrChannelList;
 
 bool gOutOfMemory=false;
@@ -379,7 +377,7 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 	//try lock mutex
 	{
 
-		boost::try_mutex::scoped_try_lock lock ( rawQueueMutex );
+		std::unique_lock<std::mutex> lock ( rawQueueMutex, std::try_to_lock );
 		if ( lock.owns_lock() ) {
 
 
@@ -479,7 +477,7 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 
 	GLuint glError = glGetError();
 	{
-	boost::mutex::scoped_lock lock ( gNoMoreRamMutex )
+	std::lock_guard<std::mutex> lock ( gNoMoreRamMutex )
 	;
 	//do
 	{
@@ -749,7 +747,7 @@ int gfcSequence::generateTextures ( int howMany ) {
 
 
 	{//START scope for try lock (it's a try lock, if it can't get the lock, it moves on, we don't want to hold up the main thread)
-		boost::try_mutex::scoped_try_lock lock ( rawQueueMutex )
+		std::unique_lock<std::mutex> lock ( rawQueueMutex, std::try_to_lock )
 			;
 
 		if ( lock.owns_lock() ) {//if lock is succesfull check for empty queue
@@ -966,7 +964,7 @@ int gfcSequence::loadSequence() {
 				tmpFrame.indexNumber=i;
 
 				{//lock the mutex here to push the frame into the rawFrame stack, which is shared by the main thread, which is the one that generates the textures.
-					boost::try_mutex::scoped_lock lock ( rawQueueMutex );
+					std::lock_guard<std::mutex> lock ( rawQueueMutex );
 
 					if (rawFrames.size()>sett.maximumFramesInQueue)
 					{	//wait for a condition signal that the rawFrames have reduced size
@@ -986,7 +984,7 @@ int gfcSequence::loadSequence() {
 				//this while loop is a control method for limiting the number of rawFrames we store in the queue. We dont want to have to many rawFrames in the queue since that means it takes longer to generate textures than it takes to load the raw frames.
 				/*while (!continueLoading && !loadingCanceled && sett.maximumFramesInQueue>0) {
 				{//lock the mutex here to check if the rawFrames queue is over it's allowed maximum lenght
-				boost::try_mutex::scoped_lock lock ( rawQueueMutex );
+				std::lock_guard<std::mutex> lock ( rawQueueMutex );
 
 				printf("Waiting for raw queue to go under %i (currently %i)\n",sett.maximumFramesInQueue, rawFrames.size());
 				if (rawFrames.size()<sett.maximumFramesInQueue)
@@ -1079,7 +1077,7 @@ int gfcSequence::loadSequence() {
 //         //printf("stream thread=%x\n",trackAStreamingThread);
 //         if ( true ) {
 //             printf ( "Thread == NULL\n" );
-//             StreamingThread=new boost::thread ( StreamingThreadStarterFunc );
+//             StreamingThread=new std::thread ( StreamingThreadStarterFunc );
 //         }
 //         /*if(trackAStreamingThread!=NULL)
 //         {
@@ -1187,7 +1185,7 @@ int gfcSequence::loadSequence() {
 //             	}
 //             }
 //             {//lock the mutex here to push the frame into the rawFrame stack, which is shared by the main thread, which is the one that generates the textures.
-//             	boost::try_mutex::scoped_lock lock ( rawQueueMutex )
+//             	std::lock_guard<std::mutex> lock ( rawQueueMutex )
 //             		;
 //             	rawFrames.push ( tmpRawFrame );
 //             	mw.playUpToInput->value ( mw.vp->getMaxTrackLenght() );
@@ -1293,7 +1291,7 @@ void gfcSequence::loadForStreaming() { //this function should be called from an 
 	//start a frameSlice loa
 
 	/*{//lock the mutex here to push the frame into the rawFrame stack, which is shared by the main thread, which is the one that generates the textures.
-	boost::try_mutex::scoped_lock lock ( rawQueueMutex )
+	std::lock_guard<std::mutex> lock ( rawQueueMutex )
 	;
 	rawFrames.push ( tmpRawFrame );
 	mw.playUpToInput->value ( mw.vp->getMaxTrackLenght() );
@@ -1561,7 +1559,7 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 	myGUI->activateAbortButton();
 
 	//printf ( "Starting thread for %c\n",trackID);
-	myThread=new boost::thread ( boost::bind ( &startSequenceThread,this ) );
+	myThread=new std::thread ( std::bind ( &startSequenceThread,this ) );
 	//printf("Started thread for %c\n",trackID);
 }
 
@@ -1601,7 +1599,7 @@ void gfcSequence::stopLoading() {
 void gfcSequence::clearRawQueue() {
 	int counter=0;
 	{//lock the raw queue mutex in case for some inexplicable reason some other thread is using it. Should not happen since we only clear the RawQueue once the loader thread has ended.
-		boost::try_mutex::scoped_lock lock ( rawQueueMutex )
+		std::lock_guard<std::mutex> lock ( rawQueueMutex )
 			;
 
 		while ( !rawFrames.empty() ) {

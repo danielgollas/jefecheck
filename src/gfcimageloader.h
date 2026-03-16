@@ -2,6 +2,10 @@
 #define GFCIMAGELOADER_H
 
 #include "gfcpeekinfo.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 // #include "gfcimageprocessor.h" // TODO: replace with OIIO
 #include "gfcloadparams.h"
 #include <string>
@@ -12,8 +16,6 @@
 #endif //for metadata
 #include "gfcglframeinfo.h"
 
-#include <boost/thread/mutex.hpp>
-#include <boost/thread/condition.hpp>
 
 /**
 All image loaders derive from this one
@@ -58,7 +60,7 @@ public:
     protected:
     std::vector<std::string> channelNames;
     gfcGLFrameInfo frameInfo;
-	boost::condition balanceReadCond;
+	std::condition_variable balanceReadCond;
 
 };
 

@@ -147,17 +147,17 @@ char gFilename[2048]=" ";
 float gSavedGamma=1;
 bool originalGammaExists=false;
 
-/*boost::thread* threadA;
-boost::thread* threadB;
-boost::thread* threadC;
-boost::thread* threadD;
+/*std::thread* threadA;
+std::thread* threadB;
+std::thread* threadC;
+std::thread* threadD;
 
-boost::thread* sequenceThreads[GFC_NUM_OF_SEQUENCES];
+std::thread* sequenceThreads[GFC_NUM_OF_SEQUENCES];
 
-boost::thread* startThreadA();
-boost::thread* startThreadB();
-boost::thread* startThreadC();
-boost::thread* startThreadD();*/
+std::thread* startThreadA();
+std::thread* startThreadB();
+std::thread* startThreadC();
+std::thread* startThreadD();*/
 gfcPlate* getPlateFromWidget ( Fl_Widget* o, void *v );
 
 void lutCBFillLoadedScroll();

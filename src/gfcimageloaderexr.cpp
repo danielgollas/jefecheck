@@ -816,7 +816,7 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 		try {
 			if (sett.balanceReads)
 			{
-				boost::try_mutex::scoped_lock lock ( trackManager.readMutex );
+				std::lock_guard<std::mutex> lock ( trackManager.readMutex );
 				while (trackManager.ioBusy!=0)
 				{
 					balanceReadCond.wait(lock);
@@ -855,7 +855,7 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 		try {
 			if (sett.balanceReads)
 			{
-				boost::try_mutex::scoped_lock lock ( trackManager.readMutex );
+				std::lock_guard<std::mutex> lock ( trackManager.readMutex );
 				while (trackManager.ioBusy!=0)
 				{
 					balanceReadCond.wait(lock);

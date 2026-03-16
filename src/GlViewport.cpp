@@ -1,8 +1,10 @@
 #include <glad/glad.h>
+#include <functional>
 
 
 #ifdef __APPLE__
 #include <OpenGL/OpenGL.h>
+#include <functional>
 #endif
 
 #include "GlViewport.h"
@@ -19,8 +21,6 @@
 #include <math.h>
 #include <FL/Fl.H>
 #include <FL/Fl_Menu_Window.H>
-#include <boost/thread/thread.hpp>
-#include <boost/thread/condition.hpp>
 #include <FL/Fl_Color_Chooser.H>
 #include <vector>
 #include <string>
@@ -71,7 +71,7 @@ extern RemoteWindow rmw;
 extern void* gGLContext;
 float timeStep;
 int timeLineValue;
-boost::mutex gGLMutex;
+std::mutex gGLMutex;
 extern MainWindow mw;
 extern LoadWindow lw;
 extern PreferencesWindow pw;
@@ -82,11 +82,11 @@ extern int gRangeEnd;
 extern int gRangeBegin;
 extern bool gOutOfMemory;
 extern bool gLoadingMemoryError;
-extern boost::try_mutex loadingOutOfRamMutex;
+extern std::mutex loadingOutOfRamMutex;
 //memory mutex and stuff
 extern bool gOutOfMemory;
-extern boost::mutex gNoMoreRamMutex;
-extern boost::condition gNoMoreRamCondition;
+extern std::mutex gNoMoreRamMutex;
+extern std::condition_variable gNoMoreRamCondition;
 
 bool rotateActive=false;
 float tmpCount=0;

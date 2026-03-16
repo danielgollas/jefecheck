@@ -77,7 +77,7 @@ gfcMemoryManager::~gfcMemoryManager() {
  */
 int gfcMemoryManager::withinLimits() {
     
-    boost::mutex::scoped_lock lock(updateMutex);
+    std::lock_guard<std::mutex> lock(updateMutex);
     updateData();
     return m_withinLimits;
 }
@@ -89,13 +89,13 @@ void gfcMemoryManager::setLimit(const float percentage) {
 
 
 float gfcMemoryManager::getFreeRAM() {
-    boost::mutex::scoped_lock lock(updateMutex);
+    std::lock_guard<std::mutex> lock(updateMutex);
     updateData();
     return freeRAM;
 }
 
 float gfcMemoryManager::getTotalRAM() {
-    boost::mutex::scoped_lock lock(updateMutex);
+    std::lock_guard<std::mutex> lock(updateMutex);
     updateData();
     return totalRAM;
 }

@@ -9,7 +9,7 @@
 extern ExrWindow ew;
 extern bool mainWindowExists;
 extern bool npotTextures;
-extern boost::mutex gGLMutex;
+extern std::mutex gGLMutex;
 extern void* gGLContext;
 extern bool gResizeTrigger;
 

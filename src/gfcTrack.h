@@ -3,6 +3,10 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "gfcsequencegui_fltk.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 
 #if !defined(AFX_GFCTRACK_H__B640892A_60B9_471B_86DB_D6EE198B1304__INCLUDED_)
 #define AFX_GFCTRACK_H__B640892A_60B9_471B_86DB_D6EE198B1304__INCLUDED_
@@ -20,9 +24,6 @@
 #include "gfcPlate.h"
 #include "trackwidget.h"
 
-#include <boost/thread/thread.hpp>
-#include <boost/thread/mutex.hpp>
-#include <boost/thread/condition.hpp>
 
 #include <FL/Fl_Value_Slider.H>
 // #include "gflC.h" // TODO: replace with OIIO
@@ -59,7 +60,7 @@ private:
     
     //std::vector<gfcFrame> frames;
     //std::queue<gfcFrame> rawFrames;
-	boost::condition cond; //this condition is used to wait for the queue to go to the correct level.
+	std::condition_variable cond; //this condition is used to wait for the queue to go to the correct level.
 	
     //std::queue<int> loadedFrames;
     //gfcFrame previewFrame;
@@ -87,7 +88,7 @@ private:
 public:
     
     
-    //boost::try_mutex rawQueueMutex;
+    //std::mutex rawQueueMutex;
     //bool loadingCanceled;
     
     gfcFrame getFrame(int frameNumber, bool forceLoad=false);
@@ -104,7 +105,7 @@ public:
    gfcSequence();
     virtual ~gfcSequence();
     
-    boost::thread* myThread;
+    std::thread* myThread;
     gfcSequenceInfo info;
     int numFrames;
     int compressed;
@@ -188,14 +189,14 @@ public:
     void resizeSldr(void);
     bool isActive;
     int quadrant;
-    //now it's a global for each sequence boost::try_mutex rawMutex; //mutex for the raw sequence, controls access to the raw queue for loading and generating textures.
+    //now it's a global for each sequence std::mutex rawMutex; //mutex for the raw sequence, controls access to the raw queue for loading and generating textures.
     bool generateTexture(RawFrame *pRawFrame=NULL, gfcFrame *pFrame=NULL); //locks the raw frame queue, checks if it's empty, if not, pops first element and generates glTexture.
     
     //Hard drive streaming variables
     std::vector<GLuint> cacheTextures; //stores x number amount of cache textures, these textures are used to do a glTexSubImage upload.
     bool streaming; //determines if this is a streaming track.
     void loadForStreaming();
-    boost::thread* StreamingThread;
+    std::thread* StreamingThread;
     void (*StreamingThreadStarterFunc)(void);
     
      void setOffset(int offset);
@@ -220,7 +221,7 @@ public:
     float tkneeL;
     int tchannel;
     Rectang *taoi;
-    boost::try_mutex rawQueueMutex;
+    std::mutex rawQueueMutex;
     bool loadingCanceled;
     Fl_Value_Slider *loadFromSpinner;
     Fl_Value_Slider *loadToSpinner;

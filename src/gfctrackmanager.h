@@ -2,6 +2,10 @@
 #define GFCTRACKMANAGER_H
 
 #include <glad/glad.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 #include <vector>
 #include <string>
 #include <map>
@@ -11,8 +15,6 @@
 #include "gfcNetworkStructures.h"
 
 
-#include <boost/thread/mutex.hpp>
-#include <boost/thread/condition.hpp>
 
 #ifndef GFC_MAX_SEQUENCES
 #define GFC_MAX_SEQUENCES 4
@@ -91,7 +93,7 @@ public:
 	void setAutoAcceptRemoteLoadRequests(int value);
 	int getAutoAcceptRemoteLoadRequests();
 	
-	boost::try_mutex readMutex;
+	std::mutex readMutex;
 	int ioBusy;
 private:
 gfcSequence sequences[GFC_MAX_SEQUENCES];

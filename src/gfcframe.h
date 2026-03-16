@@ -2,6 +2,10 @@
 #define GFCFRAME_H
 
 #include <string.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 #ifdef WIN32 
 #include <map> 
 #else 
@@ -15,8 +19,6 @@
 #include "gfcStructures.h"
 #include "gfcloadparams.h"
 #include "gfcimageloader.h"
-#include <boost/thread/thread.hpp>
-#include <boost/thread/mutex.hpp>
 
 // #include "gfcimageloadergfl.h" // TODO: replace with OIIO
 #include "gfcimageloaderdpx.h"

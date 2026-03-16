@@ -8,8 +8,6 @@
 #include <FL/Fl_Menu.H>
 #include "UIConstants.h"
 #include <string>
-#include <boost/bind.hpp>
-#include <boost/ref.hpp>
 #define GFC_NUM_OF_SEQUENCES 4
 
 #include "gfcrenderparams.h"
