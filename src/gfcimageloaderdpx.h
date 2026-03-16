@@ -2,6 +2,7 @@
 #define GFCIMAGELOADERDPX_H
 
 #include "gfcimageloader.h"
+#include "gfcpixelbuffer.h"
 #include "gfcStructures.h"
 #include "gfcdpxstructures.h"
 

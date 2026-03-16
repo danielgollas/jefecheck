@@ -2,6 +2,7 @@
 #define GFCIMAGELOADEREXR_H
 
 #include "gfcimageloader.h"
+#include "gfcpixelbuffer.h"
 
 #include <OpenEXR/ImfRgba.h>
 #include <OpenEXR/ImfArray.h>

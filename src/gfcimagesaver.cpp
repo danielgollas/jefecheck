@@ -1,6 +1,6 @@
 #include "gfcimagesaver.h"
 
-// #include "gfcimagesaver_gfl.h" // TODO: replace with OIIO
+// TODO: implement OIIO-based saving
 #include "gfcimagesaver_exr.h"
 
 #include <glad/glad.h>

@@ -32,7 +32,7 @@
 
 
 #include <FL/Fl_Value_Slider.H>
-// #include "gflC.h" // TODO: replace with OIIO
+#include "gfcpixelbuffer.h"
 #include "dpxslice.h"
 #include <vector>
 #include "gfcStructures.h"

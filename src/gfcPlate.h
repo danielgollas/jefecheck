@@ -38,7 +38,7 @@
 //#include "mtpoly.h"
 
 class gfcRenderParams;
-class GFLC_BITMAP;
+struct GFLC_BITMAP;
 class Fl_Input_Choice;
 class gfcSequence;
 class gfcFrame;

@@ -20,9 +20,8 @@
 #include "gfcloadparams.h"
 #include "gfcimageloader.h"
 
-// #include "gfcimageloadergfl.h" // TODO: replace with OIIO
+#include "gfcpixelbuffer.h"
 #include "gfcimageloaderdpx.h"
-// #include "gfcimageloaderfil.h" // TODO: replace with OIIO
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>

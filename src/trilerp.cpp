@@ -23,7 +23,7 @@
 #include <FL/gl.h>
 #include <fstream>
 #include <FL/Fl.H>
-// #include "gflC.h" // TODO: replace with OIIO
+#include "gfcpixelbuffer.h"
 #include "gfcStructures.h"
 #include "xmlParser.h"
 /*
