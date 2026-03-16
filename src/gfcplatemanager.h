@@ -1,7 +1,7 @@
 #ifndef GFCPLATEMANAGER_H
 #define GFCPLATEMANAGER_H
 
-//#include "glew.h"
+//#include <glad/glad.h>
 #include "gfcPlate.h"
 #include <vector>
 #include "gfcNetworkStructures.h"

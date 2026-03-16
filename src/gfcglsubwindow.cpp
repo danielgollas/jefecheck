@@ -1,5 +1,5 @@
 #include "gfcglsubwindow.h"
-#include "glew.h"
+#include <glad/glad.h>
 
 #include "gfcpickmanager.h"
 extern gfcPickManager pickManager;

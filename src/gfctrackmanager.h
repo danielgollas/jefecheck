@@ -1,7 +1,7 @@
 #ifndef GFCTRACKMANAGER_H
 #define GFCTRACKMANAGER_H
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <vector>
 #include <string>
 #include <map>

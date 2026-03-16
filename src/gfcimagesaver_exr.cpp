@@ -1,6 +1,6 @@
 #include "gfcimagesaver_exr.h"
 
-#include "glew.h"
+#include <glad/glad.h>
 
 using namespace Imath;
 using namespace Imf;

@@ -3,7 +3,7 @@
 //#pragma once
 
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/Fl_Choice.H>
 #include <FL/Fl_Light_Button.H>
 #include "gfcSequence.h"

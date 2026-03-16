@@ -1,9 +1,4 @@
-#define GLEW_STATIC
-#include "glew.h"
-
-#ifdef WIN32
-#include "wglew.h"
-#endif
+#include <glad/glad.h>
 
 
 #ifdef __APPLE__
@@ -258,22 +253,10 @@ void GlViewport::draw() {
 
 
 
-#ifdef linux 
-#include "glxew.h"
-#endif
 void GlViewport::setVsync(int value)
 {
 #ifdef WIN32
-		if (wglewIsSupported("WGL_EXT_swap_control"))
-		{
-			//printf("Setting vsync to %i\n",value);
-			wglSwapIntervalEXT(value);
-		}
-		else
-		{
-			//printf("NO WGL_EXT_swap_control (%i)\n",value);
-		}
-		
+		// TODO: implement vsync with platform-specific API (wglSwapIntervalEXT)
 #endif
 
 #ifdef linux

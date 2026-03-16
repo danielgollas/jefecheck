@@ -8,7 +8,7 @@
 
 enum GFC_FX_GUI_TYPE{FX_GUI_UNKNOWN=0, FX_GUI_FLOAT,FX_GUI_TEXTURE,FX_GUI_CUBE,FX_GUI_LUT,FX_GUI_BOOL, FX_GUI_CHOICE,FX_GUI_SPACER,FX_GUI_NEWLINE, FX_ACTIVATE,FX_ADDTOACTIVE,FX_DELETE,FX_RESET,FX_MOVEUP, FX_MOVEDOWN};
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <map>
 #include <vector>
 #include <string>

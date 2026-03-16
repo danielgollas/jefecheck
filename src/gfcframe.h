@@ -7,7 +7,7 @@
 #else 
 #include <map> 
 #endif //for metadata
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/Fl_Box.H>
 #include "UIConstants.h"
 #include "dpxslice.h"

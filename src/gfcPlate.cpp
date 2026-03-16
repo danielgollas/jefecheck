@@ -1,4 +1,4 @@
-#include "glew.h"
+#include <glad/glad.h>
 #include "gfcPlate.h"
 #include "gfcSequence.h"
 #include "mainWindow.h"

@@ -3,7 +3,7 @@
 #define GL_GLEXT_PROTOTYPES
 
 #include "trilerp.h"
-#include "glew.h"
+#include <glad/glad.h>
 #include "vec3d.h"
 //#include <GL/gl.h>
 #ifdef __APPLE__

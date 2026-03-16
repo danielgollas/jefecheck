@@ -3,7 +3,7 @@
 #ifndef UICALLBACKS_H
 #define UICALLBACKS_H
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/Fl.H>
 #include <FL/Fl_Menu.H>
 #include "UIConstants.h"

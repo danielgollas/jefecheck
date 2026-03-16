@@ -1,4 +1,4 @@
-#include "glew.h"
+#include <glad/glad.h>
 #include "gfcfx.h"
 #include <fstream>
 #include <FL/Fl.H>

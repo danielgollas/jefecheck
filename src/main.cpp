@@ -21,7 +21,7 @@
 #pragma warning( once : 4275)
 
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <stdio.h>
 #include <FL/Fl.H>
 #include "GlViewport.h"
@@ -499,32 +499,24 @@ int main(int argc, char *argv[]) {
     printf(" *%s\n", tmpReqString);
     reqW.maxViewportSize->copy_label(tmpReqString);
 	
-    printf(" *Initializing GLEW: ");
-    glewExperimental=GL_TRUE;
-    GLenum err=glewInit();
-    if (GLEW_OK != err) {
-        /* Problem: glewInit failed, something is seriously wrong. */
-        fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
+    printf(" *Initializing GLAD: ");
+    if (!gladLoadGL()) {
+        fprintf(stderr, "Failed to initialize OpenGL loader (GLAD)\n");
     }
     printf("ok\n");
 
-    sprintf(tmpReqString,"GLEW Version: %s", glewGetString(GLEW_VERSION));
-    printf(" *%s\n", tmpReqString);
-    reqW.glewVersion->copy_label(tmpReqString);
-
-    if (GLEW_ARB_shader_objects) {
+    // With GLAD/OpenGL 3.3 Core, check extension support via glGetString
+    if (CheckExtension("GL_ARB_shader_objects")) {
         printf(" *Shader Objects available\n");
         sett.glsl=true;
         reqW.shaderObjects->value(true);
         reqW.shaderObjects->labelcolor(FL_GREEN);
-
-
     } else {
         printf(" *Shader Objects NOT available\n");
         sett.glsl=false;
     }
 
-    if (GLEW_ARB_pixel_buffer_object) {
+    if (CheckExtension("GL_ARB_pixel_buffer_object")) {
         printf(" *PBO available\n");
         reqW.PBO->value(true);
         reqW.PBO->labelcolor(FL_GREEN);
@@ -532,7 +524,7 @@ int main(int argc, char *argv[]) {
         printf(" *PBO NOT available\n");
     }
 
-    if (GLEW_ARB_texture_float) {
+    if (CheckExtension("GL_ARB_texture_float")) {
         printf(" *GL_ARB_texture_float available\n");
         sett.fp16=1;
         reqW.textureFloat->value(true);
@@ -542,7 +534,7 @@ int main(int argc, char *argv[]) {
         sett.fp16=0;
     }
 
-    if (GLEW_ARB_half_float_pixel) {
+    if (CheckExtension("GL_ARB_half_float_pixel")) {
         printf(" *Half availabe\n");
         reqW.textureHalf->value(true);
         reqW.textureHalf->labelcolor(FL_GREEN);

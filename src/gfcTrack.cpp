@@ -4,7 +4,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "glew.h"
+#include <glad/glad.h>
 #include "gfcSequence.h"
 #include <string.h>
 #include <stdio.h>

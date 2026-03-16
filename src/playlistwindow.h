@@ -5,7 +5,7 @@ class gfcPlaylistItem;
 class PlaylistWindow;
 class gfcPlaylistWindowWindow;
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
 #include "gfcplaylistwindowwindow.h"

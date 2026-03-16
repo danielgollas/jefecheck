@@ -6,7 +6,7 @@
  ***************************************************************************/
 #include "mtpoly.h"
 #include "UIConstants.h"
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/gl.h>
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
