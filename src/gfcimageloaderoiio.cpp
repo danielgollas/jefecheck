@@ -47,37 +47,37 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         return -1;
     }
 
-    // Read into a temporary RGBA buffer, then swizzle to BGRA
-    size_t pixelSize = outChannels * (bitsPerComponent / 8);
-    size_t rowBytes = (size_t)width * pixelSize;
-    std::vector<unsigned char> rowBuf(rowBytes);
+    // Read entire image as RGBA (OIIO handles channel conversion)
+    // Then swizzle to BGRA for OpenGL
+    size_t srcPixelSize = outChannels * (bitsPerComponent / 8);
+    size_t srcRowBytes = (size_t)width * srcPixelSize;
+    std::vector<unsigned char> imgBuf(srcRowBytes * height);
 
+    // Read as RGBA with outChannels channels — OIIO will pad missing alpha
+    inp->read_image(0, 0, 0, outChannels, readType, imgBuf.data());
+
+    // Swizzle RGBA to BGRA
     for (int y = 0; y < height; y++) {
-        // Read one scanline as RGBA
-        inp->read_scanline(y, 0, readType, rowBuf.data());
-
+        unsigned char *src = imgBuf.data() + (size_t)y * srcRowBytes;
         unsigned char *dst = theBitmap->Data + (size_t)y * theBitmap->BytesPerLine;
 
         if (bitsPerComponent == 16) {
-            unsigned short *src16 = (unsigned short*)rowBuf.data();
+            unsigned short *src16 = (unsigned short*)src;
             unsigned short *dst16 = (unsigned short*)dst;
             for (int x = 0; x < width; x++) {
-                int si = x * outChannels;
-                int di = x * outChannels;
-                dst16[di + 0] = (channels > 2) ? src16[si + 2] : src16[si]; // B
-                dst16[di + 1] = (channels > 1) ? src16[si + 1] : src16[si]; // G
-                dst16[di + 2] = src16[si + 0]; // R
-                dst16[di + 3] = (channels > 3) ? src16[si + 3] : 0xFFFF;   // A
+                int i = x * outChannels;
+                dst16[i + 0] = src16[i + 2]; // B <- R
+                dst16[i + 1] = src16[i + 1]; // G
+                dst16[i + 2] = src16[i + 0]; // R <- B
+                dst16[i + 3] = src16[i + 3]; // A
             }
         } else {
-            unsigned char *src8 = rowBuf.data();
             for (int x = 0; x < width; x++) {
-                int si = x * std::min(channels, outChannels);
-                int di = x * outChannels;
-                dst[di + 0] = (channels > 2) ? src8[si + 2] : src8[si]; // B
-                dst[di + 1] = (channels > 1) ? src8[si + 1] : src8[si]; // G
-                dst[di + 2] = src8[si + 0]; // R
-                dst[di + 3] = (channels > 3) ? src8[si + 3] : 0xFF;     // A
+                int i = x * outChannels;
+                dst[i + 0] = src[i + 2]; // B <- R
+                dst[i + 1] = src[i + 1]; // G
+                dst[i + 2] = src[i + 0]; // R <- B
+                dst[i + 3] = src[i + 3]; // A
             }
         }
     }
@@ -102,6 +102,9 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     }
 
     // Fill loader info
+    printf("OIIO: Loaded %s (%dx%d, %d-bit, %d channels)\n",
+           params.fileName.c_str(), theBitmap->Width, theBitmap->Height,
+           bitsPerComponent, outChannels);
     sizeX = theBitmap->Width;
     sizeY = theBitmap->Height;
     bitDepth = bitsPerComponent;
@@ -112,11 +115,11 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     // Set GL frame info
     if (bitsPerComponent == 16) {
         frameInfo.format = GL_BGRA;
-        frameInfo.internalFormat = GL_RGBA16;
+        frameInfo.internalFormat = GL_RGBA;
         frameInfo.dataType = GL_UNSIGNED_SHORT;
     } else {
         frameInfo.format = GL_BGRA;
-        frameInfo.internalFormat = GL_RGBA8;
+        frameInfo.internalFormat = GL_RGBA;
         frameInfo.dataType = GL_UNSIGNED_BYTE;
     }
     frameInfo.dataPointer = theBitmap->Data;

@@ -302,6 +302,7 @@ void parseArguments(int argc, char *argv[]) {
  * @return
  */
 int main(int argc, char *argv[]) {
+    setbuf(stdout, NULL); // disable buffering for debug output
 
     printf("--------------------\nJefeCheck %s \nDaniel Gollas Gilman\n--------------------\n",JEFE_VERSION);
 
@@ -647,7 +648,9 @@ int main(int argc, char *argv[]) {
 #else
 
     //on mac, the -psnXXXXX stuff needs to be skipped
-    if (argc>=2) {
+    printf("parseArguments: argc=%d\n", argc);
+    for (int i=0; i<argc; i++) printf("  argv[%d]=%s\n", i, argv[i]);
+    if (argc>=1) {
         if (strstr(argv[1],"-psn")!=NULL) { //we have that psn shit
             //printf("Fuck mac and the PSN\n");
             parseArguments(argc-1, &argv[1]);
