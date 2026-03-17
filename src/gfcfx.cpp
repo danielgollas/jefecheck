@@ -39,10 +39,9 @@ std::string getInfoLog ( GLhandleARB obj )
 		infoLog = ( char * ) malloc ( infologLength );
 		glGetInfoLogARB ( obj, infologLength, ( GLint* ) &charsWritten, infoLog );
 		returnValue = infoLog;
-		//printf("%s\n",infoLog);
 		free ( infoLog );
-		return returnValue;
 	}
+	return returnValue;
 }
 
 int getShaderCompileStatus ( GLhandleARB obj )
@@ -75,6 +74,9 @@ gfcFX::gfcFX()
 	sizeX=sizeY=0;
 	loadedAndCompiled=false;
 	autoload=true;
+	vertexShader=0;
+	fragmentShader=0;
+	ShaderProgram=0;
 }
 
 /*gfcFX::gfcFX(const gfcFX &fx)

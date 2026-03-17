@@ -146,8 +146,15 @@ gfcPlate::gfcPlate ( void )
     remotePointerSize=5;
     remotePointerFontSize=14;
 
-
     renderModeSelection=0;
+
+    ssVertexCompiled=0;
+    ssFramgentCompiled=0;
+    ssProgramCreated=0;
+    ssVertexShader=0;
+    ssFramgmentShader=0;
+    ssProgram=0;
+    useShader=false;
 	
 	fbov[0]=fbov[1]=fbov[2]=0;
 	fboTexturev[0]=fboTexturev[1]=fboTexturev[2]=0;
@@ -193,10 +200,9 @@ std::string gfcPlate::getInfoLog ( GLhandleARB obj )
 		infoLog = ( char * ) malloc ( infologLength );
 		glGetInfoLogARB ( obj, infologLength, ( GLint* ) &charsWritten, infoLog );
 		returnValue = infoLog;
-		//printf("%s\n",infoLog);
 		free ( infoLog );
-		return returnValue;
 	}
+	return returnValue;
 }
 
 void gfcPlate::startSuperShader(){
@@ -469,7 +475,8 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 	//fragmentSrc="void main(){ gl_FragColor=vec4(gl_TexCoord[0].s/1000.0,gl_TexCoord[0].t/1000.0,0.0,1.0);}";
 	
 	ssFragmentSource=fragmentSrc;
-	//printf("This is the fragment shader:\n %s\n",fragmentSrc.c_str());
+	printf("SuperShader vertex:\n%s\n", ssVertexSource.c_str());
+	printf("SuperShader fragment:\n%s\n", fragmentSrc.c_str());
 	
 
 	//compile vertex shader;
@@ -483,7 +490,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		//create object, load source, compile
 		glDeleteObjectARB(ssVertexShader);
 		ssVertexShader=glCreateShaderObjectARB(GL_VERTEX_SHADER_ARB);
-		glShaderSource((GLuint)(uintptr_t)ssVertexShader,1,&vv,NULL);
+		glShaderSourceARB(ssVertexShader,1,&vv,NULL);
 		glCompileShaderARB(ssVertexShader);
 		
 		std::string infoLog;
@@ -515,8 +522,8 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		strcpy(src,ssFragmentSource.c_str());
 		const char * vv=src;
 
-		glShaderSource((GLuint)(uintptr_t)ssFramgmentShader,1,&vv,NULL);
-		//glShaderSource((GLuint)(uintptr_t)ssFramgmentShader,1,&src,NULL);
+		glShaderSourceARB(ssFramgmentShader,1,&vv,NULL);
+		//glShaderSourceARB(ssFramgmentShader,1,&src,NULL);
 		glCompileShaderARB(ssFramgmentShader);
 		//delete [] src;
 		std::string infoLog;
@@ -544,7 +551,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		glAttachObjectARB(ssProgram,ssVertexShader);
 		glAttachObjectARB(ssProgram,ssFramgmentShader);
 
-		glLinkProgram((GLuint)(uintptr_t)ssProgram);
+		glLinkProgramARB(ssProgram);
 		
 		std::string infoLog;
 		infoLog = getInfoLog ( ssProgram );
@@ -555,7 +562,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		}
 		else
 		{
-			//printf ( "Shader Program Linker OK!:%s\n",infoLog.c_str());
+			printf ( "SuperShader: Program linked OK\n");
 			ssProgramCreated=1;
 		}
 		
@@ -593,8 +600,8 @@ void gfcPlate::recompileSuperShader()
 	//if we need to use something different than the shader that is already built, then rebuild and remember what we are using now
 	if (useShader && ((useLUT!=usingLUT) || (useGammaExp!=usingGammaExp) || useBCS!=usingBCS || differentTypeOfLUT || useRGBAMasks!=usingRGBAMasks || usingTextureType!=textureType) )
 	{
-		//printf("Rebuilding new shader: useLUT:%i (%i), useGammaExp:%i (%i), useBCS:%i (%i) textureType:%i(%i)\n",useLUT,usingLUT, useGammaExp, usingGammaExp, useBCS, usingGammaExp,textureType,usingTextureType);
-		
+		printf("SuperShader: rebuilding (LUT:%i GammaExp:%i BCS:%i RGBA:%i texType:%i)\n",useLUT, useGammaExp, useBCS, useRGBAMasks, textureType);
+
 		buildShader(useLUT,useGammaExp,useBCS,useRGBAMasks,textureType);
 	}
 	
