@@ -651,7 +651,7 @@ int main(int argc, char *argv[]) {
     printf("parseArguments: argc=%d\n", argc);
     for (int i=0; i<argc; i++) printf("  argv[%d]=%s\n", i, argv[i]);
     if (argc>=1) {
-        if (strstr(argv[1],"-psn")!=NULL) { //we have that psn shit
+        if (argc>=2 && strstr(argv[1],"-psn")!=NULL) { //we have that psn shit
             //printf("Fuck mac and the PSN\n");
             parseArguments(argc-1, &argv[1]);
         } else { //parse normally

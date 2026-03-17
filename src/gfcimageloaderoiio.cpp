@@ -109,6 +109,15 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     sizeY = theBitmap->Height;
     bitDepth = bitsPerComponent;
     numOfComponents = outChannels;
+
+    // Texture coordinates for GL_TEXTURE_RECTANGLE_ARB (pixel space)
+    texCoords.x = 0;
+    texCoords.y = 0;
+    texCoords.w = (float)theBitmap->Width;
+    texCoords.h = (float)theBitmap->Height;
+    quadSizeX = theBitmap->Width;
+    quadSizeY = theBitmap->Height;
+
     format = spec.format.c_str();
     formatDescription = inp->format_name();
 
