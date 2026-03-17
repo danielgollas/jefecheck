@@ -105,7 +105,8 @@ extern std::vector<int> fxArrayActiveCount;
 
 AboutWindow aboutWindow(300,300,300,300,"about");
 LUT1D testLut;
-Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+NativeFileChooser *fc;
 bool mainWindowExists=false;
 bool npotTextures=false;
 extern int globalCB(int);
@@ -355,7 +356,7 @@ int main(int argc, char *argv[]) {
     gfcTimer testTimer ( "testTimer" );    
     testTimer.start();
 	testTimer.print();
-    fc= new  Fl_File_Chooser(".",NULL,0,"Choose a file");
+    fc= new NativeFileChooser(".",NULL,0,"Choose a file");
 
     sett.numOfPartitions=1;
 

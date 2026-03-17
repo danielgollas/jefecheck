@@ -49,7 +49,8 @@ extern PlaylistWindow plw;
 extern DrawingToolsWindow dtw;
 GammaWindow gw ( 0,0,100,100,"Gamma Window" );
 extern bool rotateActive;
-extern Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+extern NativeFileChooser *fc;
 extern bool gLoadCanceled;
 extern bool quitNow;
 extern void startLoadingThreadA();

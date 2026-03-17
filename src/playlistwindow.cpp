@@ -59,10 +59,11 @@ extern LoadWindow lw;
 extern FXControlWindow fxControlWindow1;
 
 extern gfcSettings sett;
-extern Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+extern NativeFileChooser *fc;
 extern PlaylistWindow plw;
 extern void save_input_file(Fl_File_Chooser *w, void *userdata);
-extern char gFilename[300];
+extern char gFilename[2048];
 
 #ifndef max 
 #define max(a,b)            (((a) > (b)) ? (a) : (b))

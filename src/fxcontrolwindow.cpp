@@ -45,7 +45,8 @@ extern gfcNetworkManager networkManager;
 extern MainWindow mw;
 
 extern gfcSettings sett;
-extern Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+extern NativeFileChooser *fc;
 extern FXControlWindow fxControlWindow1;
 extern FXWindow fxw;
 extern void fxCBFillLoadedScroll();
@@ -54,7 +55,7 @@ extern void fxCBFillLoadedScroll();
 //extern std::vector<int> fxArrayActiveCount;
 //extern std::vector<gfcFX> fxApplied[4]; // this are the applied fx for each quadrant, they can change order and are added when the correponding button on the FX theWindow is pressed.
 extern void save_input_file(Fl_File_Chooser *w, void *userdata);
-extern char gFilename[300];
+extern char gFilename[2048];
 extern int numberOfActiveEffects[4];
 extern bool gNetworkFXAddEvent;
 extern std::map<std::string, int> fxHashMap;
