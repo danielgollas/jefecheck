@@ -20,6 +20,7 @@ jobs:
             build-essential \
             libfltk1.3-dev \
             libopenimageio-dev \
+            openimageio-tools \
             libopenexr-dev \
             libilmbase-dev \
             libimath-dev \
