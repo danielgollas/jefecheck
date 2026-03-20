@@ -400,7 +400,7 @@ LoadWindow::LoadWindow(int x, int y, int wi, int height,const char* l) : Fl_Doub
           formatA->when(FL_WHEN_RELEASE);
           formatA->menu(menu_formatA);
         } // Fl_Choice_gfc* formatA
-        { Fl_Menu_Button* o = recentButtonA = new Fl_Menu_Button(263, 26, 27, 17);
+        { Fl_Menu_Button* o = recentButtonA = new Fl_Menu_Button(263, 26, 17, 17);
           recentButtonA->box(FL_FLAT_BOX);
           recentButtonA->down_box(FL_FLAT_BOX);
           recentButtonA->color(FL_INACTIVE_COLOR);
@@ -653,7 +653,7 @@ it is");
           formatB->when(FL_WHEN_RELEASE);
           formatB->menu(menu_formatB);
         } // Fl_Choice_gfc* formatB
-        { Fl_Menu_Button* o = recentButtonB = new Fl_Menu_Button(633, 26, 27, 17);
+        { Fl_Menu_Button* o = recentButtonB = new Fl_Menu_Button(633, 26, 17, 17);
           recentButtonB->box(FL_FLAT_BOX);
           recentButtonB->down_box(FL_FLAT_BOX);
           recentButtonB->color(FL_INACTIVE_COLOR);
@@ -879,7 +879,7 @@ it is");
           formatC->when(FL_WHEN_RELEASE);
           formatC->menu(menu_formatC);
         } // Fl_Choice_gfc* formatC
-        { Fl_Menu_Button* o = recentButtonC = new Fl_Menu_Button(263, 173, 27, 17);
+        { Fl_Menu_Button* o = recentButtonC = new Fl_Menu_Button(263, 173, 17, 17);
           recentButtonC->box(FL_FLAT_BOX);
           recentButtonC->down_box(FL_FLAT_BOX);
           recentButtonC->color(FL_INACTIVE_COLOR);
@@ -1105,7 +1105,7 @@ it is");
           formatD->when(FL_WHEN_RELEASE);
           formatD->menu(menu_formatD);
         } // Fl_Choice_gfc* formatD
-        { Fl_Menu_Button* o = recentButtonD = new Fl_Menu_Button(633, 174, 27, 17);
+        { Fl_Menu_Button* o = recentButtonD = new Fl_Menu_Button(633, 174, 17, 17);
           recentButtonD->box(FL_FLAT_BOX);
           recentButtonD->down_box(FL_FLAT_BOX);
           recentButtonD->color(FL_INACTIVE_COLOR);

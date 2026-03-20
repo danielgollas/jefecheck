@@ -2130,22 +2130,29 @@ void gfcPlate::drawTextureRectangleWarning() {
         glPushAttrib(GL_ALL_ATTRIB_BITS);
         glEnable(GL_BLEND);
         glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_TEXTURE_RECTANGLE_ARB);
+        glDisable(GL_TEXTURE_2D);
 
-        glEnable(target);
-        glBindTexture(target,0);
-        glDisable(target);
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(0, viewport.w, 0, viewport.h, -1, 1);
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
 
-        gl_font(FL_TIMES + FL_BOLD,textDisplaySize);
         gl_font(FL_HELVETICA + FL_BOLD,textDisplaySize);
-        // gl_font(FL_COURIER + FL_BOLD,12);
-
         glColor4f(textDisplayColor,textDisplayColor,textDisplayColor,textDisplayOpacity);
 
         gl_draw("Sorry, your video hardware does not fill JefeCheck's basic requirements.\n Maybe a driver upgrade can help, but it is not likely.\n\nPlease review the minimum hardware requirements to run JefeCheck at www.jefecheck.com",
-                rect.x+10,rect.y-15,
-                rect.w,rect.h,
-
+                10, viewport.h - (int)textDisplaySize - 5,
+                viewport.w - 20, viewport.h,
                 Fl_Align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_WRAP));
+
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
 
         glPopAttrib();
     }
@@ -2260,31 +2267,23 @@ void gfcPlate::drawVectorscope() {
 
 void gfcPlate::drawText() {
     if (showText) {
-    	
-    	
+
         glPushAttrib(GL_ALL_ATTRIB_BITS);
         glEnable(GL_BLEND);
         glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        glEnable(target);
-        glBindTexture(target,0);
-        glDisable(target);
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
-    	glDisable(GL_TEXTURE_2D);
+        glDisable(GL_TEXTURE_2D);
 
-        gl_font(FL_TIMES + FL_BOLD,textDisplaySize);
+        // Set up a 1:1 pixel projection matching the viewport so text isn't squashed
+        // TODO: text is squashed in multi-plate layouts due to FLTK 1.4 gl_draw
+        // coordinate handling. Needs stb_truetype or custom text rendering.
         gl_font(FL_HELVETICA + FL_BOLD,textDisplaySize);
-        // gl_font(FL_COURIER + FL_BOLD,12);
-
         glColor4f(textDisplayColor,textDisplayColor,textDisplayColor,textDisplayOpacity);
 
-
-
-
         gl_draw(labelString.c_str(),
-                rect.x+10,rect.y-15,
-                rect.w,rect.h,
-
+                rect.x+10, rect.y-15,
+                rect.w, rect.h,
                 Fl_Align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP));
 
         glPopAttrib();

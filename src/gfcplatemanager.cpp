@@ -126,16 +126,9 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
 
         case FRAMINGSINGLE_ID:
 
-            if ( resized ) {
-                //printf("Resetting projections and viewports!\n");
-                glMatrixMode ( GL_PROJECTION );
-                glLoadIdentity();
-                glOrtho ( -w /2.0, w /2.0, -h /2.0, h /2.0, -5000.0, 5000.0 );
-
-
-
-            }
-
+            glMatrixMode ( GL_PROJECTION );
+            glLoadIdentity();
+            glOrtho ( -w /2.0, w /2.0, -h /2.0, h /2.0, -5000.0, 5000.0 );
 
             glMatrixMode ( GL_MODELVIEW );
             glLoadIdentity();
@@ -148,17 +141,11 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
             break;//*/
 
         case FRAMINGDOUBLE_ID:
-            if ( resized ) {
-                //printf("Resizing for Double framing mode\n");
-                glMatrixMode ( GL_PROJECTION );
-                glLoadIdentity();
-                glOrtho ( -w /4.0, w /4.0, -h /2.0, h /2.0, -5000.0, 5000.0 );
-
-
-                glMatrixMode ( GL_MODELVIEW );
-                glLoadIdentity();
-
-            }
+            glMatrixMode ( GL_PROJECTION );
+            glLoadIdentity();
+            glOrtho ( -w /4.0, w /4.0, -h /2.0, h /2.0, -5000.0, 5000.0 );
+            glMatrixMode ( GL_MODELVIEW );
+            glLoadIdentity();
             plates[0].setViewport( 0,0,w /2,h );
 
             plates[0].rect.set ( -w /4, -h /2,
@@ -175,15 +162,11 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
             break;
 
         case FRAMINGDOUBLEVERT_ID:
-            if ( resized ) {
-                glMatrixMode ( GL_PROJECTION );
-                glLoadIdentity();
-                glOrtho ( -w /2.0, w /2.0, -h /4.0, h /4.0, -5000.0, 5000.0 );
-
-
-                glMatrixMode ( GL_MODELVIEW );
-
-            }
+            glMatrixMode ( GL_PROJECTION );
+            glLoadIdentity();
+            glOrtho ( -w /2.0, w /2.0, -h /4.0, h /4.0, -5000.0, 5000.0 );
+            glMatrixMode ( GL_MODELVIEW );
+            glLoadIdentity();
             plates[1].setViewport( 0,0,w,h /2 );
             plates[1].rect.set ( -w /2, -h /4,
                                  w,h /2 );
@@ -198,14 +181,11 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
             break;
 
         case FRAMINGQUAD_ID:
-            if ( resized ) {
-                glMatrixMode ( GL_PROJECTION );
-                glLoadIdentity();
-                glOrtho ( -w /4.0, w /4.0, -h /4.0, h /4.0, -5000.0, 5000.0 );
-                //glOrtho(0,300,0,300,-1,1);
-
-                glMatrixMode ( GL_MODELVIEW );
-            }
+            glMatrixMode ( GL_PROJECTION );
+            glLoadIdentity();
+            glOrtho ( -w /4.0, w /4.0, -h /4.0, h /4.0, -5000.0, 5000.0 );
+            glMatrixMode ( GL_MODELVIEW );
+            glLoadIdentity();
 
             plates[0].setViewport( 0,h /2,w /2,h /2 );
             plates[0].rect.set ( -w /4, -h /4,
