@@ -81,7 +81,7 @@ jobs:
 
       - name: Install dependencies
         run: .\vcpkg\vcpkg install fltk openimageio openexr curl zlib --triplet x64-windows
-        timeout-minutes: 30
+        timeout-minutes: 60
 
       - name: Configure
         run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
