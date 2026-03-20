@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+    branches: [modernize-opensource, master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            libfltk1.3-dev \
+            libopenimageio-dev \
+            libopenexr-dev \
+            libilmbase-dev \
+            libimath-dev \
+            libcurl4-openssl-dev \
+            zlib1g-dev \
+            freeglut3-dev \
+            libgl-dev \
+            libglu1-mesa-dev \
+            libx11-dev \
+            libxext-dev \
+            libxft-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxrender-dev \
+            libxfixes-dev
+
+      - name: Configure
+        run: cmake -B build
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install fltk openimageio openexr curl zlib cmake
+
+      - name: Configure
+        run: cmake -B build
+
+      - name: Build
+        run: cmake --build build -j$(sysctl -n hw.ncpu)
