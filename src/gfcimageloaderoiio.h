@@ -3,6 +3,12 @@
 
 #include "gfcimageloader.h"
 #include "gfcpixelbuffer.h"
+
+// X11 defines None as a macro (0L) which conflicts with OIIO's enum values
+#ifdef None
+#undef None
+#endif
+
 #include <OpenImageIO/imageio.h>
 
 /**
