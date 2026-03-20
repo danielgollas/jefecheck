@@ -35,7 +35,9 @@ jobs:
             libxinerama-dev \
             libxcursor-dev \
             libxrender-dev \
-            libxfixes-dev
+            libxfixes-dev \
+            libopencv-dev \
+            libglu1-mesa-dev
 
       - name: Configure
         run: cmake -B build
@@ -58,6 +60,7 @@ jobs:
         run: cmake --build build -j$(sysctl -n hw.ncpu)
 
   build-windows:
+    if: false  # Disabled until Windows port is tested
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

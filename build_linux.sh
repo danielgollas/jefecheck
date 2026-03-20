@@ -27,7 +27,8 @@ sudo apt-get install -y \
     libxcursor-dev \
     libxrender-dev \
     libxfixes-dev \
-    libopencv-dev
+    libopencv-dev \
+    libglu1-mesa-dev
 
 # Symlink FX resources if not already done
 if [ ! -L "Resources/FX" ] && [ ! -d "Resources/FX" ]; then
