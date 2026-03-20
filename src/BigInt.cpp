@@ -1,7 +1,7 @@
 #include "BigInt.h"
 #include <ctype.h>
 #include <memory.h>
-#if (defined(__GNUC__)  || defined(__GCCXML__))
+#if (defined(__GNUC__) || defined(__GCCXML__)) && !defined(_WIN32)
 #include <alloca.h>
 #else
 #include <malloc.h> // alloca
