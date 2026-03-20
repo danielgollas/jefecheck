@@ -407,6 +407,11 @@ int main(int argc, char *argv[]) {
     //mw.vp->draw();
 
     //wait until we have a good rendering context
+    // Force GLAD initialization - need GL context first
+    mw.vp->make_current();
+    if (!gladLoadGL()) {
+        printf("Warning: GLAD initialization failed, retrying after draw...\n");
+    }
 
     while ((glGetString(GL_VERSION))==0) {
         printf("%i\n",glGetString(GL_VERSION));
