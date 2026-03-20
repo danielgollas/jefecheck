@@ -61,30 +61,31 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    env:
-      VCPKG_DEFAULT_TRIPLET: x64-windows
-      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Enable vcpkg binary caching
-        uses: actions/github-script@v7
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Setup vcpkg
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git
-          .\vcpkg\bootstrap-vcpkg.bat
-
-      - name: Install dependencies
-        run: .\vcpkg\vcpkg install fltk openimageio openexr curl zlib --triplet x64-windows
-        timeout-minutes: 60
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-fltk
+            mingw-w64-x86_64-openimageio
+            mingw-w64-x86_64-openexr
+            mingw-w64-x86_64-imath
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-freeglut
+            mingw-w64-x86_64-glu
 
       - name: Configure
-        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+        run: cmake -B build -G "MinGW Makefiles"
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build -j$(nproc)
