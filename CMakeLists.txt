@@ -102,6 +102,7 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(jefecheck PRIVATE
         Threads::Threads
         X11::X11
+        GLU
     )
     # Find GLUT on Linux
     find_package(GLUT REQUIRED)
