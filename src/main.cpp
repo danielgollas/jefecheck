@@ -1,3 +1,6 @@
+// CLI11 must be included before any X11/OIIO headers to avoid macro conflicts
+#include "CLI11.hpp"
+
 // ***************************************************************
 //  main   version:  1.0     date: 03/20/2006
 //  -------------------------------------------------------------
@@ -67,7 +70,6 @@ GLuint gWatermarkTextureID=0;
 
 Fl_Text_Buffer remoteLogBuffer;
 
-#include "CLI11.hpp"
 #include <FL/Fl_File_Chooser.H>
 #include <FL/fl_ask.H>
 #include <math.h>
