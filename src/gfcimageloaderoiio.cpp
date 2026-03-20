@@ -295,9 +295,26 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     // Copy metadata
     metaData.clear();
+#if OIIO_VERSION_MAJOR >= 3
     for (auto &p : spec.extra_attribs) {
         metaData.insert({p.name().string(), p.get_string()});
     }
+#else
+    // OIIO 2.x: use serialized string to extract metadata
+    for (auto &p : spec.extra_attribs) {
+        std::string val;
+        auto td = p.type();
+        if (td == OIIO::TypeDesc::STRING)
+            val = *(const char **)p.data();
+        else if (td == OIIO::TypeDesc::INT)
+            val = std::to_string(*(const int *)p.data());
+        else if (td == OIIO::TypeDesc::FLOAT)
+            val = std::to_string(*(const float *)p.data());
+        else
+            val = "?";
+        metaData.insert({p.name().string(), val});
+    }
+#endif
 
     return 0;
 }

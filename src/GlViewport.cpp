@@ -269,19 +269,7 @@ void GlViewport::setVsync(int value)
 #endif
 
 #ifdef linux
-		/*if(glewIsSupported("GLX_SGI_swap_control")){
-		
-		}*/		
-
-		if(glxewIsSupported("GLX_SGI_swap_control"))
-		{
-			//printf("Setting vsync to %i\n",value);
-			glXSwapIntervalSGI(value);
-		}
-		else
-		{
-			printf("NO GLX_SGI_swap_control (%i)\n",value);
-		}
+		// TODO: implement vsync with GLX_SGI_swap_control or GLX_EXT_swap_control
 		
 #endif
 #ifdef __APPLE__
