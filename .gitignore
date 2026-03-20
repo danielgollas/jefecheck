@@ -66,3 +66,4 @@ win/buildDependencies/
 win/InstallerFolder/NSIS/
 win/InstallerFolder/forAppData/
 win/libSources/
+.cache/
