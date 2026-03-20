@@ -55,3 +55,22 @@ jobs:
 
       - name: Build
         run: cmake --build build -j$(sysctl -n hw.ncpu)
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2cbc495aa94'
+
+      - name: Install dependencies
+        run: vcpkg install fltk openimageio openexr curl zlib --triplet x64-windows
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build build --config Release
