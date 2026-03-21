@@ -34,7 +34,10 @@
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
 #elif defined(_WIN32)
+// Prevent std::byte / Windows byte conflict in C++17+
+#define byte win_byte_override
 #include <windows.h>
+#undef byte
 #include <GL/glu.h>
 #else
 #  include <GL/glu.h>
