@@ -60,6 +60,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(jefecheck PRIVATE
             -fpermissive             # void* to int casts in FLTK callbacks
         )
+        target_compile_definitions(jefecheck PRIVATE
+            _HAS_STD_BYTE=0          # Prevent std::byte conflicting with Windows byte
+        )
     endif()
 endif()
 
