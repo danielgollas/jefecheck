@@ -30,7 +30,7 @@
 #define GlViewport_h
 
 #  include <FL/Fl_Gl_Window.H>
-//#  include <Fl/gl.h>
+#include <glad/glad.h>
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
 #else
