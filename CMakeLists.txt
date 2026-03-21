@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(jefecheck VERSION 2.0.0 LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+# C++20 on macOS/Linux, C++17 on Windows (avoids std::byte vs Windows byte conflict)
+if(WIN32)
+    set(CMAKE_CXX_STANDARD 17)
+else()
+    set(CMAKE_CXX_STANDARD 20)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
