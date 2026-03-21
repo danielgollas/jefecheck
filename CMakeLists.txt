@@ -60,6 +60,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(jefecheck PRIVATE
             -fpermissive             # void* to int casts in FLTK callbacks
         )
+        target_link_libraries(jefecheck PRIVATE
+            glu32 opengl32 ws2_32 winmm
+        )
+        find_package(GLUT REQUIRED)
+        target_link_libraries(jefecheck PRIVATE GLUT::GLUT)
     endif()
 endif()
 
