@@ -61,7 +61,7 @@ std::vector<int> dummyVectorForLut;
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
 #ifdef WIN32
-#include "glext.h"
+// glext.h removed — GLAD provides GL extension definitions
 #endif
 
 
