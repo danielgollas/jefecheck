@@ -1,12 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(jefecheck VERSION 2.0.0 LANGUAGES C CXX)
 
-# C++20 on macOS/Linux, C++17 on Windows (avoids std::byte vs Windows byte conflict)
-if(WIN32)
-    set(CMAKE_CXX_STANDARD 17)
-else()
-    set(CMAKE_CXX_STANDARD 20)
-endif()
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -64,9 +59,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     if(WIN32)
         target_compile_options(jefecheck PRIVATE
             -fpermissive             # void* to int casts in FLTK callbacks
-        )
-        target_compile_definitions(jefecheck PRIVATE
-            _HAS_STD_BYTE=0          # Prevent std::byte conflicting with Windows byte
         )
     endif()
 endif()

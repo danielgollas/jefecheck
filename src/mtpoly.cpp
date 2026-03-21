@@ -69,7 +69,7 @@ void MtPoly::addPoint(Vec3D pos, int index)
 {}
 
 void MtPoly::insertPoint(){
-	vector<Vec3D>::iterator p=points.begin() + selectedPoint +1 ;
+	std::vector<Vec3D>::iterator p=points.begin() + selectedPoint +1 ;
 	points.insert(p,points[selectedPoint]+(points[(selectedPoint+1)%points.size()]-points[selectedPoint])*0.5);
 }
 
@@ -101,7 +101,7 @@ int MtPoly::movePoint(int index,float x, float y, float z)
 void MtPoly::deleteSelected()
 {
 
-  vector<Vec3D>::iterator it=points.begin();
+  std::vector<Vec3D>::iterator it=points.begin();
 
 
   glColor3f(1,1,0);
@@ -135,7 +135,7 @@ void MtPoly::draw(const char *name)
   //printf("drawing\n");
   int lineMode=GL_LINE_LOOP;
   
-  vector<Vec3D>::iterator it=points.begin();
+  std::vector<Vec3D>::iterator it=points.begin();
 
   glBegin(lineMode);
   for(it;it<points.end();it++)
@@ -172,7 +172,7 @@ void MtPoly::draw(const char *name)
 void MtPoly::drawForPointSelect()
 {
 
-  vector<Vec3D>::iterator it=points.begin();
+  std::vector<Vec3D>::iterator it=points.begin();
 
 
   glColor3f(1,1,0);
@@ -201,7 +201,7 @@ void MtPoly::drawForLineSelect()
   glLineWidth(2);
   glColor3f(0.8,0.8,0.8);
 
-  vector<Vec3D>::iterator it=points.begin();
+  std::vector<Vec3D>::iterator it=points.begin();
 
   glBegin(lineMode);
   for(it;it<points.end();it++)
