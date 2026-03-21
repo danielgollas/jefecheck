@@ -56,6 +56,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         -Wno-deprecated-declarations  # macOS deprecated OpenGL
         -Wno-register               # C++17 removed register keyword
     )
+    if(WIN32)
+        target_compile_options(jefecheck PRIVATE
+            -fpermissive             # void* to int casts in FLTK callbacks
+        )
+    endif()
 endif()
 
 # Find Imath (separated from OpenEXR in v3+)
