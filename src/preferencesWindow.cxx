@@ -252,21 +252,21 @@ ticularly DPX).");
           } // Fl_Check_Button* processorPriority
           o->end();
         } // Fl_Group* o
-        { Fl_Group* o = new Fl_Group(10, 238, 320, 49, "Text Display");
+        { Fl_Group* o = new Fl_Group(10, 238, 320, 85, "Text Display");
           o->box(FL_BORDER_FRAME);
           o->color(FL_INACTIVE_COLOR);
           o->labelfont(1);
           o->labelcolor((Fl_Color)31);
           o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { Fl_Value_Input* o = textDisplayFontSize = new Fl_Value_Input(80, 261, 25, 15, "Font Size");
-            textDisplayFontSize->tooltip("Font Size of the text displayed on the viewport");
+          { Fl_Value_Input* o = textDisplayFontSize = new Fl_Value_Input(80, 261, 35, 15, "Font Size");
+            textDisplayFontSize->tooltip("Font Size of the text displayed on the viewport (8-48)");
             textDisplayFontSize->box(FL_FLAT_BOX);
             textDisplayFontSize->color(FL_INACTIVE_COLOR);
             textDisplayFontSize->selection_color(FL_FOREGROUND_COLOR);
             textDisplayFontSize->labelsize(12);
             textDisplayFontSize->labelcolor((Fl_Color)31);
             textDisplayFontSize->minimum(8);
-            textDisplayFontSize->maximum(24);
+            textDisplayFontSize->maximum(48);
             textDisplayFontSize->step(1);
             textDisplayFontSize->value(16);
             textDisplayFontSize->textsize(12);
@@ -304,6 +304,29 @@ ticularly DPX).");
             textDisplayColor->callback((Fl_Callback*)PreferencesCB);
             o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
           } // Fl_Value_Input* textDisplayColor
+          { Fl_Check_Button* o = textDisplayShadow = new Fl_Check_Button(15, 282, 80, 15, "Shadow");
+            textDisplayShadow->tooltip("Enable drop shadow behind viewport text");
+            textDisplayShadow->down_box(FL_FLAT_BOX);
+            textDisplayShadow->color(FL_INACTIVE_COLOR);
+            textDisplayShadow->selection_color((Fl_Color)31);
+            textDisplayShadow->labelsize(12);
+            textDisplayShadow->labelcolor((Fl_Color)31);
+            textDisplayShadow->value(1);
+            textDisplayShadow->callback((Fl_Callback*)PreferencesCB);
+            textDisplayShadow->align(FL_ALIGN_RIGHT);
+          } // Fl_Check_Button* textDisplayShadow
+          { Fl_Choice* o = textDisplayFont = new Fl_Choice(148, 282, 170, 18, "Font");
+            textDisplayFont->tooltip("TrueType font for viewport text");
+            textDisplayFont->box(FL_FLAT_BOX);
+            textDisplayFont->down_box(FL_FLAT_BOX);
+            textDisplayFont->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+            textDisplayFont->selection_color(FL_INACTIVE_COLOR);
+            textDisplayFont->labelsize(12);
+            textDisplayFont->labelcolor((Fl_Color)31);
+            textDisplayFont->textsize(11);
+            textDisplayFont->textcolor(31);
+            textDisplayFont->callback((Fl_Callback*)PreferencesCB);
+          } // Fl_Choice* textDisplayFont
           o->end();
         } // Fl_Group* o
         { Fl_Group* o = new Fl_Group(175, 179, 155, 53, "Action Feedback");

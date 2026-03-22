@@ -572,7 +572,7 @@ int main(int argc, char *argv[]) {
         textRenderer().setShadowEnabled(true);
         textRenderer().setShadowOffset(dpi, -dpi);        // 1 logical pixel down-right
         textRenderer().setShadowColor(0, 0, 0, 0.5f);
-        textRenderer().setShadowBlur(dpi * 0.5f);        // 0.5 logical pixel blur
+        textRenderer().setShadowBlur(0);                 // no blur — single clean shadow pass
     }
 	
 	GLuint testTextures[5];
@@ -619,6 +619,22 @@ int main(int argc, char *argv[]) {
     networkLog.initialize();
 
     mw.vp->invalidate(); //make sure the VP has correct transformations initially.
+
+    // Populate font dropdown with system TrueType fonts
+    {
+        auto fonts = enumerateSystemFonts();
+        int selectedIdx = 0;
+        for (size_t i = 0; i < fonts.size(); i++) {
+            // Store the font path as user_data (must be persistent — use strdup)
+            pw.textDisplayFont->add(fonts[i].first.c_str(), 0, nullptr, strdup(fonts[i].second.c_str()));
+            if (fonts[i].first.find("Inter") != std::string::npos &&
+                fonts[i].first.find("Bold") == std::string::npos &&
+                fonts[i].first.find("Italic") == std::string::npos)
+                selectedIdx = (int)i;
+        }
+        pw.textDisplayFont->value(selectedIdx);
+        printf("GfcTextRenderer: enumerated %zu system fonts\n", fonts.size());
+    }
 
     readSettings(sett);
 

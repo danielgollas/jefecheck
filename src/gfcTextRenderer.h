@@ -108,6 +108,9 @@ private:
 // Global singleton
 GfcTextRenderer& textRenderer();
 
+// Enumerate TrueType fonts on the system. Returns pairs of (display name, file path).
+std::vector<std::pair<std::string, std::string>> enumerateSystemFonts();
+
 // FLTK-compatible wrapper functions
 void gfc_gl_font(int face, int size);
 void gfc_gl_draw(const char *str);

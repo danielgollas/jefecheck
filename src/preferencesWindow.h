@@ -18,6 +18,8 @@ extern void PreferencesCB(Fl_Value_Slider*, void*);
 extern void PreferencesCB(Fl_Check_Button*, void*);
 #include <FL/Fl_Value_Input.H>
 extern void PreferencesCB(Fl_Value_Input*, void*);
+#include <FL/Fl_Choice.H>
+extern void PreferencesCB(Fl_Choice*, void*);
 #include "Fl_Spinner_gfc.h"
 extern void PreferencesCB(Fl_Spinner_gfc*, void*);
 #include <FL/Fl_Browser.H>
@@ -48,6 +50,8 @@ public:
   Fl_Value_Input *textDisplayFontSize;
   Fl_Value_Input *textDisplayOpacity;
   Fl_Value_Input *textDisplayColor;
+  Fl_Check_Button *textDisplayShadow;
+  Fl_Choice *textDisplayFont;
   Fl_Value_Input *ActionFeedbackSize;
   Fl_Value_Input *ActionFeedbackFadeDelay;
   Fl_Group *formatsTab;

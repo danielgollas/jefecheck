@@ -8,6 +8,9 @@
 #include <algorithm>
 #include <fstream>
 
+// Debug: dump atlas to PNG
+#include <OpenImageIO/imageio.h>
+
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
 #else
@@ -140,12 +143,8 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     }
     FT_Set_Pixel_Sizes(face, 0, (FT_UInt)pixelSize);
 
-    // Hinting mode: light for Retina, full for standard DPI
-    FT_Int32 loadFlags = FT_LOAD_RENDER;
-    if (dpiScale >= 2.0f)
-        loadFlags |= FT_LOAD_TARGET_LIGHT;
-    else
-        loadFlags |= FT_LOAD_TARGET_NORMAL;
+    // Light hinting: good AA on diagonals with vertical stem snapping
+    FT_Int32 loadFlags = FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT;
 
     unsigned char *bitmap = new unsigned char[TEX_W * TEX_H];
     memset(bitmap, 0, TEX_W * TEX_H);
@@ -207,6 +206,28 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     atlas.lineHeight = face->size->metrics.height / 64.0f;
 
     FT_Done_Face(face);
+
+    // Gamma boost: darken semi-transparent edge pixels to approximate
+    // Core Text's gamma-correct blending. Makes thin strokes appear thicker/sharper.
+    for (int i = 0; i < TEX_W * TEX_H; i++) {
+        float v = bitmap[i] / 255.0f;
+        v = powf(v, 0.65f);  // gamma < 1.0 boosts mid-tones
+        bitmap[i] = (unsigned char)(v * 255.0f + 0.5f);
+    }
+
+    // Debug: dump atlas to PNG before GL flip (so it reads top-down)
+    {
+        char debugPath[256];
+        snprintf(debugPath, sizeof(debugPath), "/tmp/atlas_%.0fpx.png", pixelSize);
+        auto out = OIIO::ImageOutput::create(debugPath);
+        if (out) {
+            OIIO::ImageSpec spec(TEX_W, TEX_H, 1, OIIO::TypeDesc::UINT8);
+            out->open(debugPath, spec);
+            out->write_image(OIIO::TypeDesc::UINT8, bitmap);
+            out->close();
+            printf("GfcTextRenderer: dumped atlas to %s\n", debugPath);
+        }
+    }
 
     // Flip bitmap vertically for GL's bottom-up convention
     for (int y = 0; y < TEX_H / 2; y++) {
@@ -581,4 +602,82 @@ float gfc_gl_height() {
 
 void gfc_gl_measure(const char *str, int &w, int &h, int wrap) {
     textRenderer().measure(str, w, h, wrap);
+}
+
+// ---------------------------------------------------------------------------
+// System font enumeration
+// ---------------------------------------------------------------------------
+
+#include <dirent.h>
+#include <sys/stat.h>
+
+static void scanFontDir(const std::string &dirPath,
+                        std::vector<std::pair<std::string, std::string>> &results) {
+    DIR *dir = opendir(dirPath.c_str());
+    if (!dir) return;
+
+    FT_Library lib = ftLibrary();
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        std::string name = entry->d_name;
+        // Check for .ttf or .otf extension
+        size_t len = name.size();
+        if (len < 5) continue;
+        std::string ext = name.substr(len - 4);
+        // Convert to lowercase for comparison
+        for (auto &c : ext) c = tolower(c);
+        if (ext != ".ttf" && ext != ".otf") continue;
+
+        std::string fullPath = dirPath + "/" + name;
+
+        // Use FreeType to get the font family name
+        FT_Face face;
+        if (lib && FT_New_Face(lib, fullPath.c_str(), 0, &face) == 0) {
+            std::string displayName = face->family_name ? face->family_name : name;
+            if (face->style_name && std::string(face->style_name) != "Regular") {
+                displayName += " ";
+                displayName += face->style_name;
+            }
+            FT_Done_Face(face);
+            results.push_back({displayName, fullPath});
+        }
+    }
+    closedir(dir);
+}
+
+std::vector<std::pair<std::string, std::string>> enumerateSystemFonts() {
+    std::vector<std::pair<std::string, std::string>> fonts;
+
+#ifdef __APPLE__
+    scanFontDir("/System/Library/Fonts", fonts);
+    scanFontDir("/System/Library/Fonts/Supplemental", fonts);
+    scanFontDir("/Library/Fonts", fonts);
+    // User fonts
+    const char *home = getenv("HOME");
+    if (home) scanFontDir(std::string(home) + "/Library/Fonts", fonts);
+#elif defined(_WIN32)
+    const char *windir = getenv("WINDIR");
+    if (windir) scanFontDir(std::string(windir) + "\\Fonts", fonts);
+#else
+    scanFontDir("/usr/share/fonts/truetype", fonts);
+    scanFontDir("/usr/share/fonts/TTF", fonts);
+    scanFontDir("/usr/share/fonts/opentype", fonts);
+    scanFontDir("/usr/local/share/fonts", fonts);
+    const char *home = getenv("HOME");
+    if (home) scanFontDir(std::string(home) + "/.local/share/fonts", fonts);
+#endif
+
+    // Also include our bundled fonts
+    scanFontDir("common/fonts", fonts);
+    scanFontDir("Resources/fonts", fonts);
+
+    // Sort by display name
+    std::sort(fonts.begin(), fonts.end());
+
+    // Remove duplicates (same display name)
+    fonts.erase(std::unique(fonts.begin(), fonts.end(),
+        [](const auto &a, const auto &b) { return a.first == b.first; }),
+        fonts.end());
+
+    return fonts;
 }

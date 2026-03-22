@@ -452,6 +452,12 @@ void saveSettings ( const gfcSettings *sett ) {
     saveSetting("textDisplaySize",pw.textDisplayFontSize->value(),xGeneralNode);
     saveSetting("textDisplayColor",pw.textDisplayColor->value(),xGeneralNode);
     saveSetting("textDisplayOpacity",pw.textDisplayOpacity->value(),xGeneralNode);
+    saveSetting("textDisplayShadow",pw.textDisplayShadow->value(),xGeneralNode);
+    // Save font path from dropdown user_data
+    if (pw.textDisplayFont->value() >= 0) {
+        const char *fontPath = (const char *)pw.textDisplayFont->menu()[pw.textDisplayFont->value()].user_data();
+        if (fontPath) saveSetting("textDisplayFontPath", fontPath, xGeneralNode);
+    }
 	
 	saveSetting("ActionFeedbackSize",pw.ActionFeedbackSize->value(),xGeneralNode);
 	saveSetting("ActionFeedbackFadeDelay",pw.ActionFeedbackFadeDelay->value(),xGeneralNode);
@@ -856,6 +862,21 @@ void readSettings ( gfcSettings &sett ) {
     setWidgetFromNode("textDisplaySize",pw.textDisplayFontSize,xGeneralNode);
     setWidgetFromNode("textDisplayOpacity",pw.textDisplayOpacity,xGeneralNode);
     setWidgetFromNode("textDisplayColor",pw.textDisplayColor,xGeneralNode);
+    setWidgetFromNode("textDisplayShadow",pw.textDisplayShadow,xGeneralNode);
+    // Restore font selection from saved path
+    {
+        const char *savedFontPath = xGeneralNode.getAttribute("textDisplayFontPath");
+        if (savedFontPath && savedFontPath[0]) {
+            const Fl_Menu_Item *items = pw.textDisplayFont->menu();
+            for (int i = 0; i < pw.textDisplayFont->size(); i++) {
+                const char *ud = (const char *)items[i].user_data();
+                if (ud && strcmp(ud, savedFontPath) == 0) {
+                    pw.textDisplayFont->value(i);
+                    break;
+                }
+            }
+        }
+    }
 	
 	setWidgetFromNode("ActionFeedbackSize",pw.ActionFeedbackSize,xGeneralNode);
 	setWidgetFromNode("ActionFeedbackFadeDelay",pw.ActionFeedbackFadeDelay,xGeneralNode);

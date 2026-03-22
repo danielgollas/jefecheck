@@ -9,6 +9,7 @@
 #include "playlistwindow.h"
 #include "gfcSequence.h"
 #include "preferencesWindow.h"
+#include "gfcTextRenderer.h"
 #include "renderWindow.h"
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
@@ -2051,8 +2052,18 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 			rmw.remotePointerColorSample->color(Fl_Color(int(sett.remotePointerColor)));
 			rmw.remotePointerColorSample->redraw();
 
-			//text display optionhs
+			//text display options
 			plateManager.setTextDisplayOptions(pw.textDisplayFontSize->value(),pw.textDisplayColor->value(),pw.textDisplayOpacity->value());
+			textRenderer().setShadowEnabled(pw.textDisplayShadow->value());
+
+			// Font selection from dropdown
+			if (pw.textDisplayFont->value() >= 0) {
+				const char *fontPath = (const char *)pw.textDisplayFont->menu()[pw.textDisplayFont->value()].user_data();
+				if (fontPath) {
+					textRenderer().loadFont(fontPath);
+					textRenderer().loadBoldFont(fontPath); // use same font for bold
+				}
+			}
 
 			//Remote Update options
 			networkManager.setEventSendDelay(GFCNETEVENT_TRANSFORMS,1.0/pw.remoteTransformationsFrequency->value());
