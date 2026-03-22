@@ -342,58 +342,101 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
     glPopAttrib();
 }
 
+// Helper: set up pixel-exact ortho projection for the current viewport.
+// Returns the viewport bounds. Caller must pop both matrices when done.
+static void beginPixelOrtho(GLint viewport[4]) {
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(viewport[0], viewport[0] + viewport[2],
+            viewport[1], viewport[1] + viewport[3], -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+}
+
+static void endPixelOrtho() {
+    glMatrixMode(GL_MODELVIEW);
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+}
+
+// Project a 2D point (z=0) from the caller's GL coordinate space to screen pixels.
+static void projectToScreen(float x, float y, float &sx, float &sy) {
+    GLdouble modelview[16], projection[16];
+    GLint viewport[4];
+    GLdouble dsx, dsy, dsz;
+    glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+    glGetDoublev(GL_PROJECTION_MATRIX, projection);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    gluProject(x, y, 0, modelview, projection, viewport, &dsx, &dsy, &dsz);
+    sx = (float)dsx;
+    sy = (float)dsy;
+}
+
 void GfcTextRenderer::draw(const char *str, float x, float y) {
     if (!str || !*str || !fontLoaded) return;
-    // (x, y) is the baseline-left position in Y-up GL coords
-    drawLine(str, (int)strlen(str), x, y);
+
+    // Project the caller's (x, y) to screen pixel coordinates
+    float sx, sy;
+    projectToScreen(x, y, sx, sy);
+
+    // Render in pixel-exact ortho — 1:1 texel-to-pixel mapping
+    GLint viewport[4];
+    beginPixelOrtho(viewport);
+    drawLine(str, (int)strlen(str), sx, sy);
+    endPixelOrtho();
 }
 
 void GfcTextRenderer::draw(const char *str, float x, float y, float w, float h, int align) {
     if (!str || !*str || !fontLoaded) return;
 
-    // In GL Y-up coordinates:
-    //   (x, y) = lower-left of bounding box
-    //   (x+w, y+h) = upper-right of bounding box
-    //   FL_ALIGN_TOP → text starts at top (y+h), lines go downward
-    //   FL_ALIGN_BOTTOM → text ends at bottom (y)
+    // Project the bounding box corners to screen pixel coordinates
+    float sx0, sy0, sx1, sy1;
+    projectToScreen(x, y, sx0, sy0);          // lower-left
+    projectToScreen(x + w, y + h, sx1, sy1);  // upper-right
 
-    auto lines = wrapText(str, (align & GFC_ALIGN_WRAP) ? w : 0.0f);
+    float screenW = sx1 - sx0;
+    float screenH = sy1 - sy0;
+
+    // Word wrap uses screen-pixel widths for correct line breaking
+    auto lines = wrapText(str, (align & GFC_ALIGN_WRAP) ? screenW : 0.0f);
     if (lines.empty()) return;
 
     float lh = lineHeight();
     float totalHeight = lines.size() * lh;
     GfcFontAtlas &atlas = getAtlas();
 
-    // Vertical positioning (Y-up: top of box is y+h, bottom is y)
+    // Vertical positioning in screen pixels (Y-up: top = sy1, bottom = sy0)
     float topY;
     if (align & GFC_ALIGN_BOTTOM) {
-        // Align text block to bottom of box
-        topY = y + totalHeight;
+        topY = sy0 + totalHeight;
     } else if (align & GFC_ALIGN_TOP) {
-        // Align text block to top of box
-        topY = y + h;
+        topY = sy1;
     } else {
-        // Center vertically
-        topY = y + (h + totalHeight) / 2.0f;
+        topY = sy0 + (screenH + totalHeight) / 2.0f;
     }
 
+    // Set up pixel-exact ortho for rendering
+    GLint viewport[4];
+    beginPixelOrtho(viewport);
+
     for (size_t i = 0; i < lines.size(); i++) {
-        float lineX = x;
-        // Horizontal alignment
+        float lineX = sx0;
         if (align & GFC_ALIGN_LEFT) {
-            lineX = x;
+            lineX = sx0;
         } else if (align & GFC_ALIGN_RIGHT) {
-            lineX = x + w - lines[i].width;
+            lineX = sx0 + screenW - lines[i].width;
         } else {
-            // Center (GFC_ALIGN_CENTER = 0, default)
-            lineX = x + (w - lines[i].width) / 2.0f;
+            lineX = sx0 + (screenW - lines[i].width) / 2.0f;
         }
-        // In Y-up: first line is at top, going downward.
-        // Baseline = top - (line index) * lineHeight - descent offset
-        // The ascent goes UP from baseline, so baseline = topY - ascent - i*lh
         float baselineY = topY - atlas.ascent / dpiScale - i * lh;
         drawLine(lines[i].start, lines[i].length, lineX, baselineY);
     }
+
+    endPixelOrtho();
 }
 
 void GfcTextRenderer::draw3D(const char *str, float x, float y, float z) {
@@ -407,23 +450,9 @@ void GfcTextRenderer::draw3D(const char *str, float x, float y, float z) {
     glGetIntegerv(GL_VIEWPORT, viewport);
     gluProject(x, y, z, modelview, projection, viewport, &sx, &sy, &sz);
 
-    // Set up pixel-exact Y-up ortho for this viewport
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glOrtho(viewport[0], viewport[0] + viewport[2],
-            viewport[1], viewport[1] + viewport[3], -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glLoadIdentity();
-
-    // sy is in pixel coords (Y-up), use as baseline
+    beginPixelOrtho(viewport);
     drawLine(str, (int)strlen(str), (float)sx, (float)sy);
-
-    glMatrixMode(GL_MODELVIEW);
-    glPopMatrix();
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
+    endPixelOrtho();
 }
 
 // ---------------------------------------------------------------------------
