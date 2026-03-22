@@ -1900,7 +1900,7 @@ void gfcPlate::drawAOIOverlay() {
                 aoi.w,aoi.h,
                 ((float)aoi.w*aoi.h)/((float)theFrame.sizeX*theFrame.sizeY)*100.0);
 
-        gfc_gl_font(FL_HELVETICA_BOLD, 10);
+        gfc_gl_font(FL_HELVETICA, 10);
         textRenderer().setColor(1, 1, 1, 1);
         gfc_gl_draw(temp,
                 x0toDraw+5, y0toDraw+5, aoi.w, aoi.h,
@@ -2145,7 +2145,7 @@ void gfcPlate::drawTextureRectangleWarning() {
         glPushMatrix();
         glLoadIdentity();
 
-        gfc_gl_font(FL_HELVETICA + FL_BOLD, textDisplaySize);
+        gfc_gl_font(FL_HELVETICA, textDisplaySize);
         textRenderer().setColor(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
 
         gfc_gl_draw("Sorry, your video hardware does not fill JefeCheck's basic requirements.\n Maybe a driver upgrade can help, but it is not likely.\n\nPlease review the minimum hardware requirements to run JefeCheck at www.jefecheck.com",
@@ -2277,7 +2277,7 @@ void gfcPlate::drawText() {
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
         glDisable(GL_TEXTURE_2D);
 
-        gfc_gl_font(FL_HELVETICA + FL_BOLD, textDisplaySize);
+        gfc_gl_font(FL_HELVETICA, textDisplaySize);
         textRenderer().setColor(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
 
         gfc_gl_draw(labelString.c_str(),

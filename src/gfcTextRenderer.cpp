@@ -123,7 +123,7 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
 
     stbtt_pack_context pc;
     stbtt_PackBegin(&pc, bitmap, TEX_W, TEX_H, 0, 2, nullptr);
-    stbtt_PackSetOversampling(&pc, 1, 1);  // 1x — pixel-perfect with GL_NEAREST
+    stbtt_PackSetOversampling(&pc, 1, 1);  // 1x — sharpest with GL_NEAREST, upgrade to FreeType for hinting
 
     stbtt_packedchar pdata[96];
     stbtt_PackFontRange(&pc, data.data(), 0, pixelSize, 32, 96, pdata);

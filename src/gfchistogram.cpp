@@ -177,7 +177,7 @@ void gfcHistogram::draw(int caching) {
             glEnable(GL_BLEND);
             glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-            gfc_gl_font(FL_HELVETICA + FL_BOLD, 10);
+            gfc_gl_font(FL_HELVETICA, 10);
             textRenderer().setColor(1.0, 1.0, 1.0, 0.8);
 
             gfc_gl_draw("Caching Histogram", 0.0f, 0.0f);

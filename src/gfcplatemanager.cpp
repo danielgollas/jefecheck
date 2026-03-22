@@ -92,7 +92,7 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
         glDisable(GL_TEXTURE_2D);
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
         //glTranslatef(-showLutTX,-showLutTY,0);
-        gfc_gl_font(FL_HELVETICA_BOLD, 12);
+        gfc_gl_font(FL_HELVETICA, 12);
         textRenderer().setColor(1.0, 1.0, 1.0, 1.0);
 		gfc_gl_draw(lutManager.getLUT(showLutChoice).filename, (int)(-w/2.0+10), -10, (int)(w/2.0), (int)(h/2.0), FL_ALIGN_LEFT | FL_ALIGN_TOP);
         lutManager.drawLut(showLutChoice, showLutscale, showLutTX, showLutTY, 0, showLutUniform, w, h);
@@ -117,7 +117,7 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
             glVertex3f(0,0,0);
             glEnd();
 
-            gfc_gl_font(FL_HELVETICA_BOLD, 15);
+            gfc_gl_font(FL_HELVETICA, 15);
             textRenderer().setColor(1, 1, 1, 1);
             gfc_gl_draw("no layout selected", 0.0f, 0.0f);
 

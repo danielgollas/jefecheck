@@ -302,7 +302,7 @@ std::string gfcNetworkManager::getChatDisplayString()
 
 void setupAnfPrintSincStatus(int value, std::string sincWaitString,int w, int h)
 {
-	gfc_gl_font(FL_HELVETICA+FL_BOLD, 24);
+	gfc_gl_font(FL_HELVETICA, 24);
 	if (value==1)
 	{
 		sincWaitString+="...Done\n";
@@ -361,7 +361,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
 			//build the string
 			std::string sincWaitString="\nPlease wait until all users are ready\n\n";
 			
-			gfc_gl_font(FL_HELVETICA+FL_BOLD, 18);
+			gfc_gl_font(FL_HELVETICA, 18);
 			textRenderer().setColor(1, 1, 1, 1.0);
 			gfc_gl_draw(sincWaitString.c_str(), -w/4+10, -h/4+10, w/2-10, h/2-10, FL_ALIGN_CENTER | FL_ALIGN_TOP | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
 
@@ -379,7 +379,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
 			
 			if (sincStatus_LUT && sincStatus_FX && sincStatus_Stacks && sincStatus_Playlist && !allReady)
 			{
-				gfc_gl_font(FL_HELVETICA+FL_BOLD, 18);
+				gfc_gl_font(FL_HELVETICA, 18);
 				textRenderer().setColor(1, 1, 1, 1.0);
 				sincWaitString="\n\n\n\n\n\n\n\n\nWaiting for other users\n";
 				gfc_gl_draw(sincWaitString.c_str(), -w/4+10, -h/4+10, w/2-10, h/2-10, FL_ALIGN_CENTER | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
@@ -482,7 +482,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                 glDisable ( GL_TEXTURE_RECTANGLE_ARB );
                 glBlendFunc ( GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA );
 
-                gfc_gl_font(FL_HELVETICA+FL_BOLD, chatFontSize);
+                gfc_gl_font(FL_HELVETICA, chatFontSize);
 
                 //how many lines to draw?
                 int linesToDraw=0;
