@@ -377,11 +377,6 @@ int main(int argc, char *argv[]) {
     mw.mainWindow->show();
 
     Fl::check();
-    #ifdef __APPLE__
-    		 //printf("gl_texture_pile_height=%i\n",gl_texture_pile_height());
-    		 gl_texture_pile_height(100);
-    		 printf("gl_texture_pile_height=%i\n",gl_texture_pile_height());
-#endif
     fxControlWindow1.createWindow(0);
     plw.createWindow();
     aboutWindow.aboutWindow->position(mw.mainWindow->x()+mw.mainWindow->w()/2-aboutWindow.aboutWindow->w()/2,mw.mainWindow->y()+200);
