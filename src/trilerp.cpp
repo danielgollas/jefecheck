@@ -3,6 +3,7 @@
 #define GL_GLEXT_PROTOTYPES
 
 #include "trilerp.h"
+#include "gfcTextRenderer.h"
 #include <glad/glad.h>
 #include "vec3d.h"
 //#include <GL/gl.h>
@@ -518,19 +519,19 @@ void CubeLUT::draw(float scale, float rotX, float rotY, float rotZ) {
     
 
         //glDisable(GL_DEPTH_TEST);
-        gl_font(2, 12);
-        glColor3f(1.0, 1.0, 1.0);
+        gfc_gl_font(FL_HELVETICA, 12);
+        textRenderer().setColor(1.0, 1.0, 1.0, 1.0);
         sprintf(tmp,"(0,0,0)=(%f %f %f)",cube[0][0][0].x,cube[0][0][0].y,cube[0][0][0].z);
-        glRasterPos3f(0,0,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, 0, 0, 0);
 
         sprintf(tmp,"(%i,%i,%i)=(%f %f %f)",size-1,size-1,size-1,cube[size-1][size-1][size-1].x,cube[size-1][size-1][size-1].y,cube[size-1][size-1][size-1].z);
-        glRasterPos3f(size-1,size-1,size-1),gl_draw(tmp);
+        textRenderer().draw3D(tmp, size-1, size-1, size-1);
 
         sprintf(tmp,"(%i,%i,%i)=(%f %f %f)",size-1,0,0,cube[size-1][0][0].x,cube[size-1][0][0].y,cube[size-1][0][0].z);
-        glRasterPos3f(size-1,0,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, size-1, 0, 0);
 
         sprintf(tmp,"(%i,%i,%i)=(%f %f %f)",0,size-1,0,cube[0][size-1][0].x,cube[0][size-1][0].y,cube[0][size-1][0].z);
-        glRasterPos3f(0,size-1,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, 0, size-1, 0);
 
         glPopMatrix();
        
@@ -569,33 +570,32 @@ void CubeLUT::draw(float scale, float rotX, float rotY, float rotZ) {
 
 
 
-        gl_font(2, 10*scale);
-        glColor3f(0, 0, 1.0);
+        gfc_gl_font(FL_HELVETICA, (int)(10*scale));
+        textRenderer().setColor(0, 0, 1.0, 1.0);
         sprintf(tmp,"%i",(int)(maximum1DValue*size*1.2));
         /*max Y point*/
-        glRasterPos3f(-20/scale,maximum1DValue*size*1.2,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, -20/scale, maximum1DValue*size*1.2, 0);
 
-        glColor3f(1, 0, 0.0);
+        textRenderer().setColor(1, 0, 0.0, 1.0);
         sprintf(tmp,"%i",(int)(size*1.2));
         /*max X point*/
-        glRasterPos3f(size*1.2,-8,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, size*1.2, -8, 0);
 
-
-        glColor3f(1.0, 0, 1.0);
-        /*oirigin*/
-        glRasterPos3f(-20/scale,-8,0),gl_draw("(0,0)");
+        textRenderer().setColor(1.0, 0, 1.0, 1.0);
+        /*origin*/
+        textRenderer().draw3D("(0,0)", -20/scale, -8, 0);
 
         //Draw Relevant curve point info
 
-        glColor3f(1, 1, 1.0);
+        textRenderer().setColor(1, 1, 1.0, 1.0);
         for (int i=0;i<size;i+=31) {
 
             sprintf(tmp,"(%i,%i)",i,(int)(lut1D[i]*size));
-            glRasterPos3f(i,lut1D[i]*size,0),gl_draw(tmp);
+            textRenderer().draw3D(tmp, i, lut1D[i]*size, 0);
         }
         //make sure we draw the maximum point
         sprintf(tmp,"(%i,%i)",size-1,(int)(lut1D[size-1]*size));
-        glRasterPos3f(size-1,lut1D[size-1]*size,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, size-1, lut1D[size-1]*size, 0);
 
 
         glPopMatrix();
@@ -621,19 +621,19 @@ void CubeLUT::drawSkewed( float scale, float rotX, float rotY, float rotZ) {
         glDisable(GL_POINT_SMOOTH);
         createDisplayList(1);
 
-        gl_font(2, 12);
-        glColor3f(1.0, 1.0, 1.0);
+        gfc_gl_font(FL_HELVETICA, 12);
+        textRenderer().setColor(1.0, 1.0, 1.0, 1.0);
         sprintf(tmp,"(0,0,0)=(%f %f %f)",cube[0][0][0].x,cube[0][0][0].y,cube[0][0][0].z);
-        glRasterPos3f(cube[0][0][0].x,cube[0][0][0].y,cube[0][0][0].z),gl_draw(tmp);
+        textRenderer().draw3D(tmp, cube[0][0][0].x, cube[0][0][0].y, cube[0][0][0].z);
 
         sprintf(tmp,"(%i,%i,%i)=(%f %f %f)",size-1,size-1,size-1,cube[size-1][size-1][size-1].x,cube[size-1][size-1][size-1].y,cube[size-1][size-1][size-1].z);
-        glRasterPos3f(cube[size-1][size-1][size-1].x,cube[size-1][size-1][size-1].y,cube[size-1][size-1][size-1].z),gl_draw(tmp);
+        textRenderer().draw3D(tmp, cube[size-1][size-1][size-1].x, cube[size-1][size-1][size-1].y, cube[size-1][size-1][size-1].z);
 
         sprintf(tmp,"(%i,%i,%i)=(%f %f %f)",size-1,0,0,cube[size-1][0][0].x,cube[size-1][0][0].y,cube[size-1][0][0].z);
-        glRasterPos3f(cube[size-1][0][0].x,cube[size-1][0][0].y,cube[size-1][0][0].z),gl_draw(tmp);
+        textRenderer().draw3D(tmp, cube[size-1][0][0].x, cube[size-1][0][0].y, cube[size-1][0][0].z);
 
         sprintf(tmp,"(%i,%i,%i)=(%f %f %f)",0,size-1,0,cube[0][size-1][0].x,cube[0][size-1][0].y,cube[0][size-1][0].z);
-        glRasterPos3f(cube[0][size-1][0].x,cube[0][size-1][0].y,cube[0][size-1][0].z),gl_draw(tmp);
+        textRenderer().draw3D(tmp, cube[0][size-1][0].x, cube[0][size-1][0].y, cube[0][size-1][0].z);
 
         glPopMatrix();
       
@@ -672,33 +672,32 @@ void CubeLUT::drawSkewed( float scale, float rotX, float rotY, float rotZ) {
 
 
 
-        gl_font(2, 10*scale);
-        glColor3f(0, 0, 1.0);
+        gfc_gl_font(FL_HELVETICA, (int)(10*scale));
+        textRenderer().setColor(0, 0, 1.0, 1.0);
         sprintf(tmp,"%i",(int)(maximum1DValue*size*1.2));
         /*max Y point*/
-        glRasterPos3f(-20/scale,maximum1DValue*size*1.2,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, -20/scale, maximum1DValue*size*1.2, 0);
 
-        glColor3f(1, 0, 0.0);
+        textRenderer().setColor(1, 0, 0.0, 1.0);
         sprintf(tmp,"%i",(int)(size*1.2));
         /*max X point*/
-        glRasterPos3f(size*1.2,-8,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, size*1.2, -8, 0);
 
-
-        glColor3f(1.0, 0, 1.0);
-        /*oirigin*/
-        glRasterPos3f(-20/scale,-8,0),gl_draw("(0,0)");
+        textRenderer().setColor(1.0, 0, 1.0, 1.0);
+        /*origin*/
+        textRenderer().draw3D("(0,0)", -20/scale, -8, 0);
 
         //Draw Relevant curve point info
 
-        glColor3f(1, 1, 1.0);
+        textRenderer().setColor(1, 1, 1.0, 1.0);
         for (int i=0;i<size;i+=31) {
 
             sprintf(tmp,"(%i,%i)",i,(int)(lut1D[i]*size));
-            glRasterPos3f(i,lut1D[i]*size,0),gl_draw(tmp);
+            textRenderer().draw3D(tmp, i, lut1D[i]*size, 0);
         }
         //make sure we draw the maximum point
         sprintf(tmp,"(%i,%i)",size-1,(int)(lut1D[size-1]*size));
-        glRasterPos3f(size-1,lut1D[size-1]*size,0),gl_draw(tmp);
+        textRenderer().draw3D(tmp, size-1, lut1D[size-1]*size, 0);
 
 
         glPopMatrix();
