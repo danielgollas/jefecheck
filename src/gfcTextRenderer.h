@@ -91,7 +91,7 @@ private:
     GfcFontAtlas& getAtlas();
 
     // Bake a new atlas
-    GfcFontAtlas bakeAtlas(const std::vector<unsigned char> &data, float pixelSize);
+    GfcFontAtlas bakeAtlas(const std::vector<unsigned char> &data, float pixelSize, float dpiScale);
 
     // Word wrapping
     struct TextLine {

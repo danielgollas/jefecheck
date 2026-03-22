@@ -1,5 +1,5 @@
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 #include "gfcTextRenderer.h"
 
@@ -108,43 +108,105 @@ void GfcTextRenderer::setShadowBlur(float radius) { shadowBlurRadius = radius; }
 // Atlas baking
 // ---------------------------------------------------------------------------
 
-GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, float pixelSize) {
+static FT_Library ftLibrary() {
+    static FT_Library lib = nullptr;
+    if (!lib) {
+        if (FT_Init_FreeType(&lib)) {
+            printf("GfcTextRenderer: FreeType initialization failed\n");
+            lib = nullptr;
+        }
+    }
+    return lib;
+}
+
+GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, float pixelSize, float dpiScale) {
     GfcFontAtlas atlas;
     const int TEX_W = 2048;
     const int TEX_H = 2048;
+    const int PADDING = 2;
     atlas.texWidth = TEX_W;
     atlas.texHeight = TEX_H;
     atlas.pixelSize = pixelSize;
     atlas.textureID = 0;
     atlas.valid = false;
 
+    FT_Library lib = ftLibrary();
+    if (!lib) return atlas;
+
+    FT_Face face;
+    if (FT_New_Memory_Face(lib, data.data(), (FT_Long)data.size(), 0, &face)) {
+        printf("GfcTextRenderer: FreeType failed to load font\n");
+        return atlas;
+    }
+    FT_Set_Pixel_Sizes(face, 0, (FT_UInt)pixelSize);
+
+    // Hinting mode: light for Retina, full for standard DPI
+    FT_Int32 loadFlags = FT_LOAD_RENDER;
+    if (dpiScale >= 2.0f)
+        loadFlags |= FT_LOAD_TARGET_LIGHT;
+    else
+        loadFlags |= FT_LOAD_TARGET_NORMAL;
+
     unsigned char *bitmap = new unsigned char[TEX_W * TEX_H];
     memset(bitmap, 0, TEX_W * TEX_H);
 
-    stbtt_pack_context pc;
-    stbtt_PackBegin(&pc, bitmap, TEX_W, TEX_H, 0, 2, nullptr);
-    stbtt_PackSetOversampling(&pc, 1, 1);  // 1x — sharpest with GL_NEAREST, upgrade to FreeType for hinting
+    // Row-by-row bin packing
+    int penX = PADDING, penY = PADDING, rowHeight = 0;
 
-    stbtt_packedchar pdata[96];
-    stbtt_PackFontRange(&pc, data.data(), 0, pixelSize, 32, 96, pdata);
-    stbtt_PackEnd(&pc);
+    for (int i = 0; i < 96; i++) {
+        FT_UInt ch = 32 + i;
+        if (FT_Load_Char(face, ch, loadFlags)) {
+            GfcBakedGlyph &g = atlas.glyphs[i];
+            g.x0 = g.y0 = g.x1 = g.y1 = 0;
+            g.u0 = g.v0 = g.u1 = g.v1 = 0;
+            g.xadvance = pixelSize * 0.5f;
+            continue;
+        }
 
-    // Get font metrics
-    stbtt_fontinfo fontInfo;
-    if (stbtt_InitFont(&fontInfo, data.data(), 0)) {
-        int iAscent, iDescent, iLineGap;
-        stbtt_GetFontVMetrics(&fontInfo, &iAscent, &iDescent, &iLineGap);
-        float scale = stbtt_ScaleForPixelHeight(&fontInfo, pixelSize);
-        atlas.ascent = iAscent * scale;
-        atlas.descent = iDescent * scale;
-        atlas.lineGap = iLineGap * scale;
-        atlas.lineHeight = atlas.ascent - atlas.descent + atlas.lineGap;
-    } else {
-        atlas.ascent = pixelSize * 0.8f;
-        atlas.descent = -pixelSize * 0.2f;
-        atlas.lineGap = 0;
-        atlas.lineHeight = pixelSize;
+        FT_GlyphSlot glyph = face->glyph;
+        int bw = glyph->bitmap.width;
+        int bh = glyph->bitmap.rows;
+
+        if (penX + bw + PADDING > TEX_W) {
+            penX = PADDING;
+            penY += rowHeight + PADDING;
+            rowHeight = 0;
+        }
+        if (penY + bh + PADDING > TEX_H) {
+            printf("GfcTextRenderer: atlas full at glyph %d\n", ch);
+            break;
+        }
+
+        // Copy glyph bitmap into atlas
+        for (int row = 0; row < bh; row++) {
+            memcpy(&bitmap[(penY + row) * TEX_W + penX],
+                   &glyph->bitmap.buffer[row * glyph->bitmap.pitch],
+                   bw);
+        }
+
+        // Fill GfcBakedGlyph — offsets relative to baseline cursor
+        GfcBakedGlyph &g = atlas.glyphs[i];
+        g.x0 = (float)glyph->bitmap_left;
+        g.y0 = -(float)glyph->bitmap_top;
+        g.x1 = (float)(glyph->bitmap_left + bw);
+        g.y1 = -(float)(glyph->bitmap_top - bh);
+        g.u0 = penX / (float)TEX_W;
+        g.u1 = (penX + bw) / (float)TEX_W;
+        g.v0 = 1.0f - penY / (float)TEX_H;
+        g.v1 = 1.0f - (penY + bh) / (float)TEX_H;
+        g.xadvance = glyph->advance.x / 64.0f;
+
+        penX += bw + PADDING;
+        if (bh > rowHeight) rowHeight = bh;
     }
+
+    // Font-level metrics (26.6 fixed-point)
+    atlas.ascent = face->size->metrics.ascender / 64.0f;
+    atlas.descent = face->size->metrics.descender / 64.0f;
+    atlas.lineGap = 0;
+    atlas.lineHeight = face->size->metrics.height / 64.0f;
+
+    FT_Done_Face(face);
 
     // Flip bitmap vertically for GL's bottom-up convention
     for (int y = 0; y < TEX_H / 2; y++) {
@@ -154,23 +216,7 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         }
     }
 
-    // Convert stbtt_packedchar to GfcBakedGlyph
-    float invW = 1.0f / TEX_W;
-    float invH = 1.0f / TEX_H;
-    for (int i = 0; i < 96; i++) {
-        GfcBakedGlyph &g = atlas.glyphs[i];
-        g.x0 = pdata[i].xoff;
-        g.y0 = pdata[i].yoff;
-        g.x1 = pdata[i].xoff2;
-        g.y1 = pdata[i].yoff2;
-        g.u0 = pdata[i].x0 * invW;
-        g.u1 = pdata[i].x1 * invW;
-        g.v0 = 1.0f - pdata[i].y0 * invH;
-        g.v1 = 1.0f - pdata[i].y1 * invH;
-        g.xadvance = pdata[i].xadvance;
-    }
-
-    // Pure GL_ALPHA texture — shadow is drawn as a separate pass
+    // Upload as GL_ALPHA texture
     glGenTextures(1, &atlas.textureID);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -181,7 +227,6 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
                  GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
 
     delete[] bitmap;
-
     atlas.valid = true;
     return atlas;
 }
@@ -199,7 +244,7 @@ GfcFontAtlas& GfcTextRenderer::getAtlas() {
     }
 
     const auto &data = currentBold && boldFontLoaded ? boldFontData : fontData;
-    cache[key] = bakeAtlas(data, currentSize * dpiScale);
+    cache[key] = bakeAtlas(data, currentSize * dpiScale, dpiScale);
     return cache[key];
 }
 
