@@ -1,5 +1,6 @@
 #include <glad/glad.h>
 #include "gfcPlate.h"
+#include "gfcTextRenderer.h"
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
 #include <FL/x.H>
@@ -881,9 +882,9 @@ void gfcPlate::drawRemotePointers() {
 				glEnd();*/
 				
 
-                glRasterPos3f ( pIter->x+remotePointerSize, pIter->y+remotePointerSize,0 );
-                gl_font(FL_HELVETICA,remotePointerFontSize);
-                gl_draw ( pIter->name.c_str() );
+                gfc_gl_font(FL_HELVETICA, remotePointerFontSize);
+                textRenderer().setColor(1, 1, 1, 1);
+                gfc_gl_draw(pIter->name.c_str(), pIter->x+remotePointerSize, pIter->y+remotePointerSize);
 
             }
 
@@ -1192,7 +1193,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
     //END OF GET THE GFCFRAME AND WRITE THE LABEL
     if ( !sett.fbo || !sett.glsl) {
         draw3Drect();
-        gl_draw ( "Your hardware configuration can't make use of JefeCheck's FX functionality" );
+        textRenderer().setColor(1, 1, 1, 1);
+        gfc_gl_draw("Your hardware configuration can't make use of JefeCheck's FX functionality", 0.0f, 0.0f);
     }
     if (theFrame.loaded) {
 
@@ -1874,14 +1876,14 @@ void gfcPlate::drawAOIOverlay() {
 		
         //draw start and end points text
         char temp[800];
-        glColor3f(1,1,1);
-        gl_font(FL_HELVETICA,10);
+        gfc_gl_font(FL_HELVETICA, 10);
+        textRenderer().setColor(1, 1, 1, 1);
         sprintf(temp," ( %i,%i ) ",aoi.x,aoi.y);
-        gl_draw(temp,x0toDraw-5,y0toDraw-5);
+        gfc_gl_draw(temp, (float)(x0toDraw-5), (float)(y0toDraw-5));
 
 
         sprintf(temp," ( %i,%i ) ",aoi.x+aoi.w,aoi.y+aoi.h);
-        gl_draw(temp,x0toDraw+aoi.w+5,y0toDraw+aoi.h+5);
+        gfc_gl_draw(temp, (float)(x0toDraw+aoi.w+5), (float)(y0toDraw+aoi.h+5));
 
 		}
 
@@ -1898,16 +1900,11 @@ void gfcPlate::drawAOIOverlay() {
                 aoi.w,aoi.h,
                 ((float)aoi.w*aoi.h)/((float)theFrame.sizeX*theFrame.sizeY)*100.0);
 
-        gl_font(FL_HELVETICA_BOLD,10);
-        gl_draw(temp,
-                x0toDraw+5, y0toDraw+5,  aoi.w, aoi.h,
-                Fl_Align(FL_ALIGN_CENTER));
-
-        /*sprintf(temp,"\n\n\n\nRight Click-Drag to Move\nShift+Righ Click-Drag to Resize");
-        gl_font(FL_HELVETICA_BOLD,10);
-        gl_draw(temp,
-                x0toDraw, y0toDraw,  aoi.w, aoi.h,
-                Fl_Align(FL_ALIGN_CENTER));*/
+        gfc_gl_font(FL_HELVETICA_BOLD, 10);
+        textRenderer().setColor(1, 1, 1, 1);
+        gfc_gl_draw(temp,
+                x0toDraw+5, y0toDraw+5, aoi.w, aoi.h,
+                FL_ALIGN_CENTER);
 
 		//gl_rectf( x0toDraw, y0toDraw,  aoi.w, aoi.h);
 		
@@ -2148,13 +2145,13 @@ void gfcPlate::drawTextureRectangleWarning() {
         glPushMatrix();
         glLoadIdentity();
 
-        gl_font(FL_HELVETICA + FL_BOLD,textDisplaySize);
-        glColor4f(textDisplayColor,textDisplayColor,textDisplayColor,textDisplayOpacity);
+        gfc_gl_font(FL_HELVETICA + FL_BOLD, textDisplaySize);
+        textRenderer().setColor(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
 
-        gl_draw("Sorry, your video hardware does not fill JefeCheck's basic requirements.\n Maybe a driver upgrade can help, but it is not likely.\n\nPlease review the minimum hardware requirements to run JefeCheck at www.jefecheck.com",
+        gfc_gl_draw("Sorry, your video hardware does not fill JefeCheck's basic requirements.\n Maybe a driver upgrade can help, but it is not likely.\n\nPlease review the minimum hardware requirements to run JefeCheck at www.jefecheck.com",
                 10, viewport.h - (int)textDisplaySize - 5,
                 viewport.w - 20, viewport.h,
-                Fl_Align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_WRAP));
+                FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
 
         glMatrixMode(GL_PROJECTION);
         glPopMatrix();
@@ -2280,13 +2277,13 @@ void gfcPlate::drawText() {
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
         glDisable(GL_TEXTURE_2D);
 
-        gl_font(FL_HELVETICA + FL_BOLD, textDisplaySize);
-        glColor4f(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
+        gfc_gl_font(FL_HELVETICA + FL_BOLD, textDisplaySize);
+        textRenderer().setColor(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
 
-        gl_draw(labelString.c_str(),
+        gfc_gl_draw(labelString.c_str(),
                 rect.x+10, rect.y-15,
                 rect.w, rect.h,
-                Fl_Align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP));
+                FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP);
 
         glPopAttrib();
     }
