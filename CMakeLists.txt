@@ -73,6 +73,7 @@ find_package(Imath QUIET)
 
 target_include_directories(jefecheck PRIVATE
     src/
+    third_party/stb/
 )
 
 # Add Imath include dirs (separated from OpenEXR in v3+)
