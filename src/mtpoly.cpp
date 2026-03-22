@@ -5,6 +5,7 @@
  *                                                                                    
  ***************************************************************************/
 #include "mtpoly.h"
+#include "gfcTextRenderer.h"
 #include "UIConstants.h"
 #include <glad/glad.h>
 #include <FL/gl.h>
@@ -164,8 +165,9 @@ void MtPoly::draw(const char *name)
   
   if(points.size()>0){
   glColor3f(0.2,0.2,1);
-   gl_font(FL_COURIER,12);
-   gl_draw("Area Of Interest", (float)points[0].x+5, (float)-points[0].y+5);
+   gfc_gl_font(FL_COURIER, 12);
+   textRenderer().setColor(1, 1, 1, 1);
+   gfc_gl_draw("Area Of Interest", (float)points[0].x+5, (float)-points[0].y+5);
   }
 }
 
