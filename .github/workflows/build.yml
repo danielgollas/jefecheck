@@ -37,7 +37,8 @@ jobs:
             libxrender-dev \
             libxfixes-dev \
             libopencv-dev \
-            libglu1-mesa-dev
+            libglu1-mesa-dev \
+            libfreetype6-dev
 
       - name: Configure
         run: cmake -B build
@@ -51,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: brew install fltk openimageio openexr curl zlib cmake
+        run: brew install fltk openimageio openexr curl zlib cmake freetype
 
       - name: Configure
         run: cmake -B build
@@ -83,6 +84,7 @@ jobs:
             mingw-w64-x86_64-zlib
             mingw-w64-x86_64-freeglut
             mingw-w64-x86_64-fmt
+            mingw-w64-x86_64-freetype
 
       - name: Configure
         run: cmake -B build -G "MinGW Makefiles"

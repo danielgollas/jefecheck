@@ -12,6 +12,7 @@ find_package(OpenImageIO REQUIRED)
 find_package(OpenEXR REQUIRED)
 find_package(CURL REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(Freetype REQUIRED)
 
 # GLAD (in-tree)
 add_library(glad STATIC third_party/glad/src/glad.c)
@@ -84,6 +85,7 @@ endif()
 target_link_libraries(jefecheck PRIVATE
     glad
     cli11
+    Freetype::Freetype
     OpenGL::GL
     ${FLTK_LIBRARIES}
     OpenImageIO::OpenImageIO
