@@ -202,10 +202,14 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     }
 
     // Build shadow into a 2-channel LA texture BEFORE flipping
+    // Shadow offset & blur scale with pixelSize so they're ~1 logical pixel
+    // (pixelSize includes dpiScale, so this produces 1 screen pixel on Retina)
+    int shadowOff = std::max(1, (int)(pixelSize / 14.0f + 0.5f));
+    int shadowBlur = std::max(1, shadowOff);
     unsigned char *texData = nullptr;
     GLenum internalFmt, uploadFmt;
     if (shadowEnabled) {
-        texData = buildShadowedLA(bitmap, TEX_W, TEX_H, 1, -1, 2);
+        texData = buildShadowedLA(bitmap, TEX_W, TEX_H, shadowOff, -shadowOff, shadowBlur);
         internalFmt = GL_LUMINANCE_ALPHA;
         uploadFmt = GL_LUMINANCE_ALPHA;
         // Flip the LA bitmap vertically (2 bytes per pixel)
