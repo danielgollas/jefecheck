@@ -2156,29 +2156,7 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 								   }
 								   break;
 
-	case LICENSEREQUESTNEWLICENSEEBUTTON_ID:
-		// Activation system removed for open-source release
-		break;
-
-	case LICENSEPATHBROWSEBUTTON_ID:
-
-		//fc->callback ( save_input_file );
-		fc->preview ( 0 );
-		fc->label ( "Select a License File" );
-		fc->filter("JefeCorp License Files(*.{lic})");
-		fc->type ( Fl_File_Chooser::SINGLE );
-		//printf ( "FileChooser Type is %i\n",fc->type() );
-		fc->show();
-		fc->directory();
-
-		while ( fc->shown() )
-			Fl::wait();
-
-		if (fc->count()) {
-			pw.licenseFilePath->value ( fc->value(0));
-			sett.licensePath=fc->value(0);
-		}
-		break;
+	// License callbacks removed for open-source release
 
 			}
 

@@ -422,7 +422,7 @@ void saveSettings ( const gfcSettings *sett ) {
     saveSetting("clientPort",rmw.port->value(),xGeneralNode);
     saveSetting("serverPort",rmw.serverPort->value(),xGeneralNode);
     saveSetting("defaultIP",rmw.ip->value(),xGeneralNode);
-    saveSetting("licensePath",pw.licenseFilePath->value(),xGeneralNode);
+    // licensePath removed for open-source release
 	
     for ( int i=0;i<sett->recentIPs.size();i++ ) {
         XMLNode xTmp = xRecentIPsNode.addChild ( "address" );
@@ -902,8 +902,7 @@ void readSettings ( gfcSettings &sett ) {
     rmw.serverPort->value(atoi(xGeneralNode.getAttribute ( "serverPort")));
     rmw.ip->value(xGeneralNode.getAttribute ( "defaultIP"));
 	
-    pw.licenseFilePath->value(xGeneralNode.getAttribute ( "licensePath"));
-    sett.licensePath=pw.licenseFilePath->value();
+    // licensePath loading removed for open-source release
 	
     printf ( "Loading JEFECHECK_LUT_PATH luts\n");
     char *envLUTPath=getenv("JEFECHECK_LUT_PATH");

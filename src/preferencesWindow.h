@@ -85,10 +85,6 @@ public:
   Fl_Button_gfc *searchPathBrowse;
   Fl_Button_gfc *searchPathDelete;
   Fl_Check_Button *useSearchPaths;
-  Fl_Group *licensingTab;
-  Fl_Group *licenseFileGroup;
-  Fl_Input *licenseFilePath;
-  Fl_Input *licenseServerIP;
-  Fl_Input *licenseServerPort;
+  // License tab removed for open-source release
 };
 #endif
