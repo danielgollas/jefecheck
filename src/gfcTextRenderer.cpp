@@ -152,18 +152,26 @@ void GfcTextRenderer::bakeShadow(unsigned char *bitmap, int w, int h,
 
 GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, float pixelSize) {
     GfcFontAtlas atlas;
-    atlas.texWidth = 1024;
-    atlas.texHeight = 1024;
+    const int TEX_W = 2048;
+    const int TEX_H = 2048;
+    const int OVERSAMPLE = 3;  // 3x oversampling for crisp edges
+    atlas.texWidth = TEX_W;
+    atlas.texHeight = TEX_H;
     atlas.pixelSize = pixelSize;
     atlas.textureID = 0;
     atlas.valid = false;
 
-    stbtt_bakedchar cdata[96];
-    unsigned char *bitmap = new unsigned char[1024 * 1024];
-    memset(bitmap, 0, 1024 * 1024);
+    // Use stb_truetype's packing API with oversampling for much crisper glyphs
+    unsigned char *bitmap = new unsigned char[TEX_W * TEX_H];
+    memset(bitmap, 0, TEX_W * TEX_H);
 
-    stbtt_BakeFontBitmap(data.data(), 0, pixelSize,
-                         bitmap, 1024, 1024, 32, 96, cdata);
+    stbtt_pack_context pc;
+    stbtt_PackBegin(&pc, bitmap, TEX_W, TEX_H, 0, 1, nullptr);
+    stbtt_PackSetOversampling(&pc, OVERSAMPLE, OVERSAMPLE);
+
+    stbtt_packedchar pdata[96];
+    stbtt_PackFontRange(&pc, data.data(), 0, pixelSize, 32, 96, pdata);
+    stbtt_PackEnd(&pc);
 
     // Get font metrics
     stbtt_fontinfo fontInfo;
@@ -184,32 +192,33 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
 
     // Bake shadow BEFORE flipping (shadow offsets are in screen-space Y-down)
     if (shadowEnabled) {
-        bakeShadow(bitmap, 1024, 1024, 1, -1, 2);
+        bakeShadow(bitmap, TEX_W, TEX_H, 1, -1, 2);
     }
 
     // Flip bitmap vertically so row 0 = bottom in GL convention
-    // This makes texture v-coordinates from stb map correctly in GL
-    for (int y = 0; y < 512; y++) {
-        int y2 = 1023 - y;
-        for (int x = 0; x < 1024; x++) {
-            std::swap(bitmap[y * 1024 + x], bitmap[y2 * 1024 + x]);
+    for (int y = 0; y < TEX_H / 2; y++) {
+        int y2 = TEX_H - 1 - y;
+        for (int x = 0; x < TEX_W; x++) {
+            std::swap(bitmap[y * TEX_W + x], bitmap[y2 * TEX_W + x]);
         }
     }
 
-    // Convert stbtt_bakedchar to GfcBakedGlyph
-    // After bitmap flip, v-coordinates need to be flipped too: v_gl = 1.0 - v_stb
+    // Convert stbtt_packedchar to GfcBakedGlyph
+    // stbtt_packedchar has: x0,y0,x1,y1 (atlas pixel coords), xoff,yoff,xadvance,xoff2,yoff2
+    float invW = 1.0f / TEX_W;
+    float invH = 1.0f / TEX_H;
     for (int i = 0; i < 96; i++) {
         GfcBakedGlyph &g = atlas.glyphs[i];
-        g.x0 = cdata[i].xoff;
-        g.y0 = cdata[i].yoff;
-        g.x1 = cdata[i].xoff + (cdata[i].x1 - cdata[i].x0);
-        g.y1 = cdata[i].yoff + (cdata[i].y1 - cdata[i].y0);
-        g.u0 = cdata[i].x0 / 1024.0f;
-        g.u1 = cdata[i].x1 / 1024.0f;
-        // Flip v: stb has v=0 at top, GL has v=0 at bottom after our bitmap flip
-        g.v0 = 1.0f - cdata[i].y0 / 1024.0f;  // top of glyph in stb → high v in GL
-        g.v1 = 1.0f - cdata[i].y1 / 1024.0f;  // bottom of glyph in stb → low v in GL
-        g.xadvance = cdata[i].xadvance;
+        g.x0 = pdata[i].xoff;
+        g.y0 = pdata[i].yoff;
+        g.x1 = pdata[i].xoff2;
+        g.y1 = pdata[i].yoff2;
+        g.u0 = pdata[i].x0 * invW;
+        g.u1 = pdata[i].x1 * invW;
+        // Flip v for GL's bottom-up convention
+        g.v0 = 1.0f - pdata[i].y0 * invH;
+        g.v1 = 1.0f - pdata[i].y1 * invH;
+        g.xadvance = pdata[i].xadvance;
     }
 
     glGenTextures(1, &atlas.textureID);
@@ -218,7 +227,7 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, 1024, 1024, 0,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, TEX_W, TEX_H, 0,
                  GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
 
     delete[] bitmap;
