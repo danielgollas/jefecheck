@@ -165,7 +165,7 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     GfcFontAtlas atlas;
     const int TEX_W = 2048;
     const int TEX_H = 2048;
-    const int OVERSAMPLE = 3;  // 3x oversampling for crisp edges
+    const int OVERSAMPLE = 1;  // No oversampling — pixel-exact ortho gives 1:1 mapping
     atlas.texWidth = TEX_W;
     atlas.texHeight = TEX_H;
     atlas.pixelSize = pixelSize;
@@ -251,9 +251,10 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
 
     glGenTextures(1, &atlas.textureID);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
-    // Trilinear filtering with mipmaps for crisp text at all zoom levels
+    // Nearest-neighbor for pixel-exact rendering (1:1 texel-to-pixel via ortho projection)
+    // Mipmap for minification if text is viewed at sub-1:1 (e.g. 3D LUT labels zoomed out)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     if (shadowEnabled) {
@@ -324,21 +325,19 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
         if (ch < 32 || ch >= 128) continue;
         const GfcBakedGlyph &g = atlas.glyphs[ch - 32];
 
-        float qx0 = cursorX + g.x0 / dpiScale;
-        float qx1 = cursorX + g.x1 / dpiScale;
-        // Negate y-offsets for Y-up: stb y0 (negative/up) becomes positive in GL
-        float qy0 = y - g.y0 / dpiScale;  // top of glyph (higher y in GL)
-        float qy1 = y - g.y1 / dpiScale;  // bottom of glyph (lower y in GL)
+        // Glyph positions in atlas pixels = physical pixels in our pixel-exact ortho
+        // Snap to integer pixels for perfect 1:1 texel mapping
+        float qx0 = floorf(cursorX + g.x0 + 0.5f);
+        float qx1 = floorf(cursorX + g.x1 + 0.5f);
+        float qy0 = floorf(y - g.y0 + 0.5f);
+        float qy1 = floorf(y - g.y1 + 0.5f);
 
-        // v0 is high (top of glyph in texture), v1 is low (bottom)
-        // qy0 is high (top of glyph on screen), qy1 is low (bottom)
-        // Map: top→top, bottom→bottom
-        glTexCoord2f(g.u0, g.v0); glVertex2f(qx0, qy0);  // top-left
-        glTexCoord2f(g.u1, g.v0); glVertex2f(qx1, qy0);  // top-right
-        glTexCoord2f(g.u1, g.v1); glVertex2f(qx1, qy1);  // bottom-right
-        glTexCoord2f(g.u0, g.v1); glVertex2f(qx0, qy1);  // bottom-left
+        glTexCoord2f(g.u0, g.v0); glVertex2f(qx0, qy0);
+        glTexCoord2f(g.u1, g.v0); glVertex2f(qx1, qy0);
+        glTexCoord2f(g.u1, g.v1); glVertex2f(qx1, qy1);
+        glTexCoord2f(g.u0, g.v1); glVertex2f(qx0, qy1);
 
-        cursorX += g.xadvance / dpiScale;
+        cursorX += g.xadvance;
     }
     glEnd();
 
@@ -409,18 +408,19 @@ void GfcTextRenderer::draw(const char *str, float x, float y, float w, float h, 
     auto lines = wrapText(str, (align & GFC_ALIGN_WRAP) ? screenW : 0.0f);
     if (lines.empty()) return;
 
-    float lh = lineHeight();
-    float totalHeight = lines.size() * lh;
     GfcFontAtlas &atlas = getAtlas();
+    // Use atlas pixel sizes (= physical pixels in our pixel-exact ortho)
+    float lhPx = atlas.lineHeight;
+    float totalHeightPx = lines.size() * lhPx;
 
     // Vertical positioning in screen pixels (Y-up: top = sy1, bottom = sy0)
     float topY;
     if (align & GFC_ALIGN_BOTTOM) {
-        topY = sy0 + totalHeight;
+        topY = sy0 + totalHeightPx;
     } else if (align & GFC_ALIGN_TOP) {
         topY = sy1;
     } else {
-        topY = sy0 + (screenH + totalHeight) / 2.0f;
+        topY = sy0 + (screenH + totalHeightPx) / 2.0f;
     }
 
     // Set up pixel-exact ortho for rendering
@@ -436,7 +436,7 @@ void GfcTextRenderer::draw(const char *str, float x, float y, float w, float h, 
         } else {
             lineX = sx0 + (screenW - lines[i].width) / 2.0f;
         }
-        float baselineY = topY - atlas.ascent / dpiScale - i * lh;
+        float baselineY = topY - atlas.ascent - i * lhPx;
         drawLine(lines[i].start, lines[i].length, lineX, baselineY);
     }
 
@@ -484,10 +484,12 @@ float GfcTextRenderer::lineHeight() {
 void GfcTextRenderer::measure(const char *str, int &w, int &h, int wrapWidth) {
     if (!str || !fontLoaded) { w = 0; h = 0; return; }
     if (wrapWidth > 0) {
-        auto lines = wrapText(str, (float)wrapWidth);
+        // wrapText works in atlas pixels; convert wrapWidth from logical to atlas pixels
+        auto lines = wrapText(str, (float)wrapWidth * dpiScale);
         float maxW = 0;
         for (auto &l : lines) maxW = std::max(maxW, l.width);
-        w = (int)maxW;
+        // Convert back to logical pixels for external callers
+        w = (int)(maxW / dpiScale);
         h = (int)(lines.size() * lineHeight());
     } else {
         w = (int)textWidth(str);
@@ -538,7 +540,7 @@ std::vector<GfcTextRenderer::TextLine> GfcTextRenderer::wrapText(const char *str
 
         float charW = 0;
         if (ch >= 32 && ch < 128)
-            charW = atlas.glyphs[ch - 32].xadvance / dpiScale;
+            charW = atlas.glyphs[ch - 32].xadvance;
 
         if (ch == ' ') {
             lineWidth += wordWidth + charW;
