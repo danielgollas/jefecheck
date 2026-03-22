@@ -73,6 +73,11 @@ static bool readFileToVector(const std::string &path, std::vector<unsigned char>
 bool GfcTextRenderer::loadFont(const std::string &fontPath) {
     if (readFileToVector(fontPath, fontData)) {
         fontLoaded = true;
+        // Invalidate all cached atlases so they rebake with the new font
+        for (auto &pair : atlasCache) {
+            if (pair.second.textureID) glDeleteTextures(1, &pair.second.textureID);
+        }
+        atlasCache.clear();
         printf("GfcTextRenderer: loaded font %s\n", fontPath.c_str());
         return true;
     }
@@ -83,6 +88,10 @@ bool GfcTextRenderer::loadFont(const std::string &fontPath) {
 bool GfcTextRenderer::loadBoldFont(const std::string &fontPath) {
     if (readFileToVector(fontPath, boldFontData)) {
         boldFontLoaded = true;
+        for (auto &pair : boldAtlasCache) {
+            if (pair.second.textureID) glDeleteTextures(1, &pair.second.textureID);
+        }
+        boldAtlasCache.clear();
         printf("GfcTextRenderer: loaded bold font %s\n", fontPath.c_str());
         return true;
     }
