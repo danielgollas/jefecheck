@@ -6,17 +6,18 @@
 #include <map>
 #include <vector>
 
-// Alignment flags (matching FLTK for compatibility)
-#define GFC_ALIGN_LEFT    0
-#define GFC_ALIGN_CENTER  1
-#define GFC_ALIGN_TOP     0
-#define GFC_ALIGN_BOTTOM  2
-#define GFC_ALIGN_WRAP    4
-#define GFC_ALIGN_INSIDE  8
+// Alignment flags — must match FLTK's Fl_Align values since call sites pass FL_ALIGN_*
+#define GFC_ALIGN_CENTER  0x0000
+#define GFC_ALIGN_TOP     0x0001
+#define GFC_ALIGN_BOTTOM  0x0002
+#define GFC_ALIGN_LEFT    0x0004
+#define GFC_ALIGN_RIGHT   0x0008
+#define GFC_ALIGN_INSIDE  0x0010
+#define GFC_ALIGN_WRAP    0x0080
 
 struct GfcBakedGlyph {
     float x0, y0, x1, y1;   // quad position offset from cursor (in pixels)
-    float u0, v0, u1, v1;   // texture coordinates
+    float u0, v0, u1, v1;   // texture coordinates (GL convention: v=0 at bottom)
     float xadvance;          // horizontal advance
 };
 
@@ -47,12 +48,15 @@ public:
     // Color
     void setColor(float r, float g, float b, float a);
 
-    // Shadow (baked into atlas, just controls whether to use shadow atlas variant)
+    // Shadow (baked into atlas)
     void setShadowEnabled(bool enabled);
 
-    // Drawing
+    // Drawing — all coordinates are in the caller's GL coordinate space (Y-up)
+    // draw(str, x, y): x,y is the baseline-left position
     void draw(const char *str, float x, float y);
+    // draw(str, x, y, w, h, align): (x,y) is lower-left of bounding box, w/h is size
     void draw(const char *str, float x, float y, float w, float h, int align);
+    // draw3D: project 3D point to screen, render in pixel-exact ortho
     void draw3D(const char *str, float x, float y, float z);
 
     // Measurement
@@ -94,7 +98,7 @@ private:
     };
     std::vector<TextLine> wrapText(const char *str, float maxWidth);
 
-    // Draw a single line of text as quads
+    // Draw a single line of text as quads (y is the baseline in Y-up GL coords)
     void drawLine(const char *str, int len, float x, float y);
 };
 

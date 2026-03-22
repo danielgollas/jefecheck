@@ -103,7 +103,6 @@ void GfcTextRenderer::setShadowEnabled(bool enabled) { shadowEnabled = enabled; 
 void GfcTextRenderer::bakeShadow(unsigned char *bitmap, int w, int h,
                                   int shadowOffX, int shadowOffY, int blurRadius)
 {
-    // Create a copy for the shadow layer
     std::vector<unsigned char> shadow(w * h, 0);
 
     // Offset copy of glyph bitmap into shadow buffer
@@ -117,12 +116,11 @@ void GfcTextRenderer::bakeShadow(unsigned char *bitmap, int w, int h,
         }
     }
 
-    // Box blur the shadow (simple 2-pass separable blur)
+    // Box blur (2-pass separable)
     if (blurRadius > 0) {
         std::vector<unsigned char> temp(w * h, 0);
         int kernelSize = blurRadius * 2 + 1;
 
-        // Horizontal pass
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int sum = 0;
@@ -134,7 +132,6 @@ void GfcTextRenderer::bakeShadow(unsigned char *bitmap, int w, int h,
             }
         }
 
-        // Vertical pass
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int sum = 0;
@@ -147,11 +144,7 @@ void GfcTextRenderer::bakeShadow(unsigned char *bitmap, int w, int h,
         }
     }
 
-    // Composite: shadow underneath, glyph on top
-    // Result stored back in bitmap
-    // We'll also need a separate alpha channel, but since we're using
-    // GL_LUMINANCE_ALPHA, we need to create a 2-channel texture later.
-    // For now, just max the shadow into the bitmap so we can use it as alpha.
+    // Composite: max shadow into bitmap
     for (int i = 0; i < w * h; i++) {
         bitmap[i] = std::max(bitmap[i], shadow[i]);
     }
@@ -169,12 +162,8 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     unsigned char *bitmap = new unsigned char[1024 * 1024];
     memset(bitmap, 0, 1024 * 1024);
 
-    int result = stbtt_BakeFontBitmap(data.data(), 0, pixelSize,
-                                       bitmap, 1024, 1024, 32, 96, cdata);
-    if (result <= 0 && result != 0) {
-        // result is negative if not all chars fit, but we still get partial results
-        // Only truly fail if we got nothing
-    }
+    stbtt_BakeFontBitmap(data.data(), 0, pixelSize,
+                         bitmap, 1024, 1024, 32, 96, cdata);
 
     // Get font metrics
     stbtt_fontinfo fontInfo;
@@ -193,7 +182,22 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         atlas.lineHeight = pixelSize;
     }
 
+    // Bake shadow BEFORE flipping (shadow offsets are in screen-space Y-down)
+    if (shadowEnabled) {
+        bakeShadow(bitmap, 1024, 1024, 1, -1, 2);
+    }
+
+    // Flip bitmap vertically so row 0 = bottom in GL convention
+    // This makes texture v-coordinates from stb map correctly in GL
+    for (int y = 0; y < 512; y++) {
+        int y2 = 1023 - y;
+        for (int x = 0; x < 1024; x++) {
+            std::swap(bitmap[y * 1024 + x], bitmap[y2 * 1024 + x]);
+        }
+    }
+
     // Convert stbtt_bakedchar to GfcBakedGlyph
+    // After bitmap flip, v-coordinates need to be flipped too: v_gl = 1.0 - v_stb
     for (int i = 0; i < 96; i++) {
         GfcBakedGlyph &g = atlas.glyphs[i];
         g.x0 = cdata[i].xoff;
@@ -201,31 +205,12 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         g.x1 = cdata[i].xoff + (cdata[i].x1 - cdata[i].x0);
         g.y1 = cdata[i].yoff + (cdata[i].y1 - cdata[i].y0);
         g.u0 = cdata[i].x0 / 1024.0f;
-        g.v0 = cdata[i].y0 / 1024.0f;
         g.u1 = cdata[i].x1 / 1024.0f;
-        g.v1 = cdata[i].y1 / 1024.0f;
+        // Flip v: stb has v=0 at top, GL has v=0 at bottom after our bitmap flip
+        g.v0 = 1.0f - cdata[i].y0 / 1024.0f;  // top of glyph in stb → high v in GL
+        g.v1 = 1.0f - cdata[i].y1 / 1024.0f;  // bottom of glyph in stb → low v in GL
         g.xadvance = cdata[i].xadvance;
     }
-
-    // Bake shadow into bitmap
-    if (shadowEnabled) {
-        bakeShadow(bitmap, 1024, 1024, 1, -1, 2);
-    }
-
-    // Create GL_LUMINANCE_ALPHA texture
-    // For each pixel: luminance = 255 (white for glyph tinting), alpha = bitmap value
-    // But we want shadow to be dark, so we need two channels:
-    // We'll use a different approach: RGBA texture where:
-    //   - Original glyph pixels get full white + alpha from bitmap (before shadow)
-    //   - Shadow pixels get black + alpha from shadow
-    // Actually, simpler: use GL_ALPHA texture and let glColor handle the tinting.
-    // The shadow baked into the alpha makes it render as the current color.
-    // For proper shadow (dark behind light text), we need two passes or a 2-channel approach.
-    //
-    // Simplest working approach: just use GL_ALPHA texture.
-    // Shadow will be same color as text but softer. This is acceptable for v1.
-    // The manual shadow in the old code was also same-color (dark text behind light text
-    // via two draw calls). Our baked shadow achieves similar effect when text is light on dark.
 
     glGenTextures(1, &atlas.textureID);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
@@ -247,10 +232,8 @@ GfcFontAtlas& GfcTextRenderer::getAtlas() {
     auto &cache = currentBold ? boldAtlasCache : atlasCache;
     auto it = cache.find(key);
     if (it != cache.end()) {
-        // Validate texture still exists
         if (it->second.valid && glIsTexture(it->second.textureID))
             return it->second;
-        // Invalid — rebake
         if (it->second.textureID)
             glDeleteTextures(1, &it->second.textureID);
         cache.erase(it);
@@ -272,17 +255,23 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
 
     glPushAttrib(GL_ALL_ATTRIB_BITS);
 
+    // Disable any active shader program (super shader uses ARB, not core)
+    GLhandleARB prevProgram = glGetHandleARB(GL_PROGRAM_OBJECT_ARB);
+    if (prevProgram) glUseProgramObjectARB(0);
+
     glEnable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
-
-    // Disable GL_TEXTURE_RECTANGLE_ARB which may be active from image rendering
     glDisable(GL_TEXTURE_RECTANGLE_ARB);
 
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
     glColor4f(colorR, colorG, colorB, colorA);
 
+    // y is the baseline position in GL Y-up coordinates.
+    // stb glyph offsets (y0, y1) are in Y-down screen space:
+    //   y0 is negative (above baseline), y1 is positive (below baseline)
+    // In Y-up GL: negate the offsets so glyphs render above the baseline.
     glBegin(GL_QUADS);
     float cursorX = x;
     for (int i = 0; i < len; i++) {
@@ -291,62 +280,84 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
         const GfcBakedGlyph &g = atlas.glyphs[ch - 32];
 
         float qx0 = cursorX + g.x0 / dpiScale;
-        float qy0 = y + g.y0 / dpiScale;
         float qx1 = cursorX + g.x1 / dpiScale;
-        float qy1 = y + g.y1 / dpiScale;
+        // Negate y-offsets for Y-up: stb y0 (negative/up) becomes positive in GL
+        float qy0 = y - g.y0 / dpiScale;  // top of glyph (higher y in GL)
+        float qy1 = y - g.y1 / dpiScale;  // bottom of glyph (lower y in GL)
 
-        glTexCoord2f(g.u0, g.v0); glVertex2f(qx0, qy0);
-        glTexCoord2f(g.u1, g.v0); glVertex2f(qx1, qy0);
-        glTexCoord2f(g.u1, g.v1); glVertex2f(qx1, qy1);
-        glTexCoord2f(g.u0, g.v1); glVertex2f(qx0, qy1);
+        // v0 is high (top of glyph in texture), v1 is low (bottom)
+        // qy0 is high (top of glyph on screen), qy1 is low (bottom)
+        // Map: top→top, bottom→bottom
+        glTexCoord2f(g.u0, g.v0); glVertex2f(qx0, qy0);  // top-left
+        glTexCoord2f(g.u1, g.v0); glVertex2f(qx1, qy0);  // top-right
+        glTexCoord2f(g.u1, g.v1); glVertex2f(qx1, qy1);  // bottom-right
+        glTexCoord2f(g.u0, g.v1); glVertex2f(qx0, qy1);  // bottom-left
 
         cursorX += g.xadvance / dpiScale;
     }
     glEnd();
 
+    if (prevProgram) glUseProgramObjectARB(prevProgram);
     glPopAttrib();
 }
 
 void GfcTextRenderer::draw(const char *str, float x, float y) {
     if (!str || !*str || !fontLoaded) return;
-    GfcFontAtlas &atlas = getAtlas();
-    // Position y at baseline: caller passes top-left, we add ascent
-    drawLine(str, (int)strlen(str), x, y + atlas.ascent / dpiScale);
+    // (x, y) is the baseline-left position in Y-up GL coords
+    drawLine(str, (int)strlen(str), x, y);
 }
 
 void GfcTextRenderer::draw(const char *str, float x, float y, float w, float h, int align) {
     if (!str || !*str || !fontLoaded) return;
+
+    // In GL Y-up coordinates:
+    //   (x, y) = lower-left of bounding box
+    //   (x+w, y+h) = upper-right of bounding box
+    //   FL_ALIGN_TOP → text starts at top (y+h), lines go downward
+    //   FL_ALIGN_BOTTOM → text ends at bottom (y)
 
     auto lines = wrapText(str, (align & GFC_ALIGN_WRAP) ? w : 0.0f);
     if (lines.empty()) return;
 
     float lh = lineHeight();
     float totalHeight = lines.size() * lh;
-
-    // Vertical alignment
-    float startY;
-    if (align & GFC_ALIGN_BOTTOM) {
-        startY = y + h - totalHeight;
-    } else {
-        startY = y; // top
-    }
-
     GfcFontAtlas &atlas = getAtlas();
+
+    // Vertical positioning (Y-up: top of box is y+h, bottom is y)
+    float topY;
+    if (align & GFC_ALIGN_BOTTOM) {
+        // Align text block to bottom of box
+        topY = y + totalHeight;
+    } else if (align & GFC_ALIGN_TOP) {
+        // Align text block to top of box
+        topY = y + h;
+    } else {
+        // Center vertically
+        topY = y + (h + totalHeight) / 2.0f;
+    }
 
     for (size_t i = 0; i < lines.size(); i++) {
         float lineX = x;
-        if (align & GFC_ALIGN_CENTER) {
+        // Horizontal alignment
+        if (align & GFC_ALIGN_LEFT) {
+            lineX = x;
+        } else if (align & GFC_ALIGN_RIGHT) {
+            lineX = x + w - lines[i].width;
+        } else {
+            // Center (GFC_ALIGN_CENTER = 0, default)
             lineX = x + (w - lines[i].width) / 2.0f;
         }
-        float lineY = startY + i * lh + atlas.ascent / dpiScale;
-        drawLine(lines[i].start, lines[i].length, lineX, lineY);
+        // In Y-up: first line is at top, going downward.
+        // Baseline = top - (line index) * lineHeight - descent offset
+        // The ascent goes UP from baseline, so baseline = topY - ascent - i*lh
+        float baselineY = topY - atlas.ascent / dpiScale - i * lh;
+        drawLine(lines[i].start, lines[i].length, lineX, baselineY);
     }
 }
 
 void GfcTextRenderer::draw3D(const char *str, float x, float y, float z) {
     if (!str || !*str || !fontLoaded) return;
 
-    // Project 3D point to 2D screen coordinates
     GLdouble modelview[16], projection[16];
     GLint viewport[4];
     GLdouble sx, sy, sz;
@@ -355,7 +366,7 @@ void GfcTextRenderer::draw3D(const char *str, float x, float y, float z) {
     glGetIntegerv(GL_VIEWPORT, viewport);
     gluProject(x, y, z, modelview, projection, viewport, &sx, &sy, &sz);
 
-    // Save current matrices, set up pixel-exact ortho for this viewport
+    // Set up pixel-exact Y-up ortho for this viewport
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
@@ -365,6 +376,7 @@ void GfcTextRenderer::draw3D(const char *str, float x, float y, float z) {
     glPushMatrix();
     glLoadIdentity();
 
+    // sy is in pixel coords (Y-up), use as baseline
     drawLine(str, (int)strlen(str), (float)sx, (float)sy);
 
     glMatrixMode(GL_MODELVIEW);
@@ -428,7 +440,6 @@ std::vector<GfcTextRenderer::TextLine> GfcTextRenderer::wrapText(const char *str
         unsigned char ch = (unsigned char)*str;
 
         if (ch == '\n' || ch == '\0') {
-            // End current line
             if (str > lineStart) {
                 TextLine tl;
                 tl.start = lineStart;
@@ -436,7 +447,6 @@ std::vector<GfcTextRenderer::TextLine> GfcTextRenderer::wrapText(const char *str
                 tl.width = lineWidth + wordWidth;
                 lines.push_back(tl);
             } else {
-                // Empty line
                 TextLine tl;
                 tl.start = lineStart;
                 tl.length = 0;
@@ -466,13 +476,10 @@ std::vector<GfcTextRenderer::TextLine> GfcTextRenderer::wrapText(const char *str
 
         wordWidth += charW;
 
-        // Check if we need to wrap
         if (maxWidth > 0 && lineWidth + wordWidth > maxWidth && lineWidth > 0) {
-            // Wrap before this word
             TextLine tl;
             tl.start = lineStart;
             tl.length = (int)(wordStart - lineStart);
-            // Trim trailing space
             while (tl.length > 0 && tl.start[tl.length - 1] == ' ')
                 tl.length--;
             tl.width = lineWidth;
@@ -491,14 +498,10 @@ std::vector<GfcTextRenderer::TextLine> GfcTextRenderer::wrapText(const char *str
 // FLTK-compatible wrapper functions
 // ---------------------------------------------------------------------------
 
-static bool s_currentBold = false;
-static int s_currentSize = 12;
-
 void gfc_gl_font(int face, int size) {
     // FL_HELVETICA=0, FL_BOLD=1, FL_ITALIC=2
-    s_currentBold = (face & 1) != 0;
-    s_currentSize = size;
-    textRenderer().setBold(s_currentBold);
+    bool bold = (face & 1) != 0;
+    textRenderer().setBold(bold);
     textRenderer().setSize((float)size);
 }
 
