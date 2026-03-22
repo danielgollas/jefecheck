@@ -244,6 +244,10 @@ class gfcPlate: public gfcPickNotifee
 	Rectang fboVP;
 	bool showText;
 	bool extensiveText;
+	// Cached text overlay texture
+	GLuint textOverlayTexID;
+	int textOverlayTexW, textOverlayTexH;
+	std::string textOverlayCachedLabel;
 	bool showHelp;
 	int showHistogram;
 	bool showVectorscope;

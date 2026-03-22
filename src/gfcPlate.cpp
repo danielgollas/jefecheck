@@ -1,5 +1,8 @@
 #include <glad/glad.h>
 #include "gfcPlate.h"
+#include <FL/Fl.H>
+#include <FL/fl_draw.H>
+#include <FL/x.H>
 #include "gfcSequence.h"
 #include "mainWindow.h"
 #include "loadWindow.h"
@@ -147,6 +150,10 @@ gfcPlate::gfcPlate ( void )
     remotePointerFontSize=14;
 
     renderModeSelection=0;
+
+    textOverlayTexID=0;
+    textOverlayTexW=0;
+    textOverlayTexH=0;
 
     ssVertexCompiled=0;
     ssFramgentCompiled=0;
@@ -2267,19 +2274,14 @@ void gfcPlate::drawVectorscope() {
 
 void gfcPlate::drawText() {
     if (showText) {
-
         glPushAttrib(GL_ALL_ATTRIB_BITS);
         glEnable(GL_BLEND);
-        glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
         glDisable(GL_TEXTURE_2D);
 
-        // Set up a 1:1 pixel projection matching the viewport so text isn't squashed
-        // TODO: text is squashed in multi-plate layouts due to FLTK 1.4 gl_draw
-        // coordinate handling. Needs stb_truetype or custom text rendering.
-        gl_font(FL_HELVETICA + FL_BOLD,textDisplaySize);
-        glColor4f(textDisplayColor,textDisplayColor,textDisplayColor,textDisplayOpacity);
+        gl_font(FL_HELVETICA + FL_BOLD, textDisplaySize);
+        glColor4f(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
 
         gl_draw(labelString.c_str(),
                 rect.x+10, rect.y-15,
