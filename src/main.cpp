@@ -554,12 +554,12 @@ int main(int argc, char *argv[]) {
 
     // Initialize text renderer
     {
-        std::string fontPath = getApplicationDataPath() + "fonts/DejaVuSans.ttf";
-        std::string boldFontPath = getApplicationDataPath() + "fonts/DejaVuSans-Bold.ttf";
+        std::string fontPath = getApplicationDataPath() + "fonts/Inter-Regular.ttf";
+        std::string boldFontPath = getApplicationDataPath() + "fonts/Inter-Bold.ttf";
         if (!textRenderer().loadFont(fontPath))
-            textRenderer().loadFont("common/fonts/DejaVuSans.ttf");
+            textRenderer().loadFont("common/fonts/Inter-Regular.ttf");
         if (!textRenderer().loadBoldFont(boldFontPath))
-            textRenderer().loadBoldFont("common/fonts/DejaVuSans-Bold.ttf");
+            textRenderer().loadBoldFont("common/fonts/Inter-Bold.ttf");
         textRenderer().setDPIScale(mw.vp->pixels_per_unit());
         textRenderer().setShadowEnabled(true);
     }

@@ -247,7 +247,8 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
 
     glGenTextures(1, &atlas.textureID);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // Trilinear filtering with mipmaps for crisp text at all zoom levels
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -259,6 +260,7 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         glTexImage2D(GL_TEXTURE_2D, 0, internalFmt, TEX_W, TEX_H, 0,
                      uploadFmt, GL_UNSIGNED_BYTE, bitmap);
     }
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     delete[] bitmap;
 
