@@ -87,9 +87,6 @@ private:
     // Bake a new atlas
     GfcFontAtlas bakeAtlas(const std::vector<unsigned char> &data, float pixelSize);
 
-    // Bake drop shadow into atlas
-    void bakeShadow(unsigned char *bitmap, int w, int h, int shadowOffX, int shadowOffY, int blurRadius);
-
     // Word wrapping
     struct TextLine {
         const char *start;

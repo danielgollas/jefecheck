@@ -100,23 +100,26 @@ void GfcTextRenderer::setShadowEnabled(bool enabled) { shadowEnabled = enabled; 
 // Atlas baking
 // ---------------------------------------------------------------------------
 
-void GfcTextRenderer::bakeShadow(unsigned char *bitmap, int w, int h,
-                                  int shadowOffX, int shadowOffY, int blurRadius)
+// Build a GL_LUMINANCE_ALPHA texture from glyph bitmap + shadow.
+// Returns a 2-channel buffer (caller must delete[]).
+// Luminance = glyph brightness (white for text, black for shadow)
+// Alpha = combined coverage (glyph + shadow)
+static unsigned char* buildShadowedLA(const unsigned char *glyphBitmap, int w, int h,
+                                       int shadowOffX, int shadowOffY, int blurRadius)
 {
+    // Create shadow: offset copy + box blur
     std::vector<unsigned char> shadow(w * h, 0);
 
-    // Offset copy of glyph bitmap into shadow buffer
     for (int y = 0; y < h; y++) {
         int sy = y - shadowOffY;
         if (sy < 0 || sy >= h) continue;
         for (int x = 0; x < w; x++) {
             int sx = x - shadowOffX;
             if (sx < 0 || sx >= w) continue;
-            shadow[y * w + x] = bitmap[sy * w + sx];
+            shadow[y * w + x] = glyphBitmap[sy * w + sx];
         }
     }
 
-    // Box blur (2-pass separable)
     if (blurRadius > 0) {
         std::vector<unsigned char> temp(w * h, 0);
         int kernelSize = blurRadius * 2 + 1;
@@ -144,10 +147,18 @@ void GfcTextRenderer::bakeShadow(unsigned char *bitmap, int w, int h,
         }
     }
 
-    // Composite: max shadow into bitmap
+    // Build 2-channel LA texture:
+    //   L = glyph alpha (white where glyph, black where shadow-only)
+    //   A = max(glyph, shadow) (visible for both)
+    // With GL_LUMINANCE_ALPHA + glColor(r,g,b,a):
+    //   fragment.rgb = glColor.rgb * L  → glyph pixels get user color, shadow gets black
+    //   fragment.a   = glColor.a * A    → both glyph and shadow are visible
+    unsigned char *la = new unsigned char[w * h * 2];
     for (int i = 0; i < w * h; i++) {
-        bitmap[i] = std::max(bitmap[i], shadow[i]);
+        la[i * 2 + 0] = glyphBitmap[i];                                    // luminance
+        la[i * 2 + 1] = (unsigned char)std::max(glyphBitmap[i], shadow[i]); // alpha
     }
+    return la;
 }
 
 GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, float pixelSize) {
@@ -190,21 +201,34 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         atlas.lineHeight = pixelSize;
     }
 
-    // Bake shadow BEFORE flipping (shadow offsets are in screen-space Y-down)
+    // Build shadow into a 2-channel LA texture BEFORE flipping
+    unsigned char *texData = nullptr;
+    GLenum internalFmt, uploadFmt;
     if (shadowEnabled) {
-        bakeShadow(bitmap, TEX_W, TEX_H, 1, -1, 2);
-    }
-
-    // Flip bitmap vertically so row 0 = bottom in GL convention
-    for (int y = 0; y < TEX_H / 2; y++) {
-        int y2 = TEX_H - 1 - y;
-        for (int x = 0; x < TEX_W; x++) {
-            std::swap(bitmap[y * TEX_W + x], bitmap[y2 * TEX_W + x]);
+        texData = buildShadowedLA(bitmap, TEX_W, TEX_H, 1, -1, 2);
+        internalFmt = GL_LUMINANCE_ALPHA;
+        uploadFmt = GL_LUMINANCE_ALPHA;
+        // Flip the LA bitmap vertically (2 bytes per pixel)
+        for (int y = 0; y < TEX_H / 2; y++) {
+            int y2 = TEX_H - 1 - y;
+            for (int x = 0; x < TEX_W; x++) {
+                std::swap(texData[(y * TEX_W + x) * 2 + 0], texData[(y2 * TEX_W + x) * 2 + 0]);
+                std::swap(texData[(y * TEX_W + x) * 2 + 1], texData[(y2 * TEX_W + x) * 2 + 1]);
+            }
         }
+    } else {
+        // No shadow: flip single-channel bitmap, upload as GL_ALPHA
+        for (int y = 0; y < TEX_H / 2; y++) {
+            int y2 = TEX_H - 1 - y;
+            for (int x = 0; x < TEX_W; x++) {
+                std::swap(bitmap[y * TEX_W + x], bitmap[y2 * TEX_W + x]);
+            }
+        }
+        internalFmt = GL_ALPHA;
+        uploadFmt = GL_ALPHA;
     }
 
     // Convert stbtt_packedchar to GfcBakedGlyph
-    // stbtt_packedchar has: x0,y0,x1,y1 (atlas pixel coords), xoff,yoff,xadvance,xoff2,yoff2
     float invW = 1.0f / TEX_W;
     float invH = 1.0f / TEX_H;
     for (int i = 0; i < 96; i++) {
@@ -227,8 +251,14 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, TEX_W, TEX_H, 0,
-                 GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
+    if (shadowEnabled) {
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFmt, TEX_W, TEX_H, 0,
+                     uploadFmt, GL_UNSIGNED_BYTE, texData);
+        delete[] texData;
+    } else {
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFmt, TEX_W, TEX_H, 0,
+                     uploadFmt, GL_UNSIGNED_BYTE, bitmap);
+    }
 
     delete[] bitmap;
 
