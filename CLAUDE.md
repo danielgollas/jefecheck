@@ -4,70 +4,167 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. It supports Windows, macOS, and Linux.
+JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. Originally written 2006-2014, modernized for open-source release in 2026 under GPL v2.
+
+**GitHub:** github.com/danielgollas/jefecheck (private)
+**Branch:** `modernize-opensource` (active development)
 
 ## Build System
 
-**Windows (primary):** Open `win/jefecheck.sln` in Visual Studio 2010+. Supports Debug/Release and x64 configurations. Pre-built dependencies are in `win/buildDependencies/`.
+**CMake** is the single build system for all platforms. C++20 on macOS/Linux, C++20 on Windows (with `-fpermissive` for FLTK callback casts).
 
-**Linux:** Uses GNU Autotools.
+### macOS (primary development)
 ```bash
-cd linux/jefecheck
-make -f Makefile.cvs        # Generate configure script
-./configure
-make
+brew install fltk openimageio openexr curl zlib cmake
+cmake -B build && cmake --build build
 ```
-Packaging: `linux/createInstallPackage.sh`
 
-**macOS:** See `mac/howToBuildJefeCheckOnAMac.txt`. Uses custom build scripts with bundle resources in `mac/MacBundleResources/`.
+### Linux (Ubuntu 24.04)
+```bash
+bash build_linux.sh
+# Or manually:
+sudo apt install cmake build-essential libfltk1.3-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev freeglut3-dev libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libopencv-dev
+cmake -B build && cmake --build build -j$(nproc)
+```
+
+### Windows (MinGW/MSYS2 via GitHub Actions)
+Uses MSYS2 with pre-built packages. See `.github/workflows/build.yml`.
+
+### Runtime Resources
+The app expects `Resources/FX/` and `Resources/fonts/` relative to the working directory. For development:
+```bash
+mkdir -p Resources && ln -sf $(pwd)/common/FX Resources/FX && ln -sf $(pwd)/common/fonts Resources/fonts
+```
 
 ## Architecture
 
 ### Core Manager Pattern
-The application uses a manager pattern where singleton-style manager classes coordinate subsystems:
-
+Singleton-style manager classes coordinate subsystems:
 - **gfcPlaybackManager** — Timeline, FPS, playback state control
-- **gfcTrackManager** — Manages up to 4 video sequences/tracks for parallel playback
-- **gfcPlateManager** — Manages 4 display quadrants (plates) with compositing
+- **gfcTrackManager** — Manages up to 4 video sequences/tracks
+- **gfcPlateManager** — Manages 4 display quadrants (plates) with compositing, multi-plate layouts (1x1, 2x1, 1x2, 2x2)
 - **gfcPlaylistManager** — Sequential playlist of items
 - **gfcSessionManager** — Save/load sessions with crash recovery via XML
+- **gfcNetworkManager** — RakNet-based client/server for remote control
 
 ### Rendering Pipeline
-- **GlViewport** (Fl_Gl_Window subclass) — Main OpenGL rendering context
-- **gfcPlate** — A display quadrant with its own color correction and FX stack
-- **gfcFX / gfcFXStack** — Individual effects and their ordered stack per plate
-- Fragment/vertex shaders in `common/FX/` (.frag/.vert files), with XML metadata in .jfx files
+- **GlViewport** (`Fl_Gl_Window` subclass) — Main OpenGL rendering context. GLAD initialized in first `draw()` call (not in main).
+- **gfcPlate** — A display quadrant with color correction, FX stack, and text overlay
+- **gfcFX / gfcFXStack** — Shader-based effects pipeline. Shaders in `common/FX/` (.frag/.vert/.jfx)
+- **Super Shader** — Dynamically generated GLSL in `gfcPlate::buildShader()` for gamma/exposure/BCS/LUT. Uses ARB extension functions (`glCreateShaderObjectARB`, etc.)
+- Multi-plate layouts set different GL projections per plate — this affects text rendering (see Known Issues)
 
 ### Image I/O
-Base class `gfcImageLoader` with format-specific subclasses:
-- **gfcImageLoaderDPX** — DPX cinema format (custom parser via dpxslice)
-- **gfcImageLoaderEXR** — OpenEXR high-bit-depth
-- **gfcImageLoaderGFL** — GFL SDK for 100+ standard formats
-- **gfcImageSaver** — Frame export
-
-### Networking
-RakNet-based client/server architecture for remote control and synchronization:
-- **gfcNetworkManager** orchestrates server (`gfcNetworkServer`) and client (`gfcNetworkClient`)
-- Packet definitions in `gfcNetworkStructures.h`
+- **gfcImageLoaderOIIO** — OpenImageIO for all general formats (JPEG, PNG, TIFF, EXR with multi-layer support)
+- **gfcImageLoaderDPX** — Custom DPX parser (kept for potential performance, uses `gfcpixelbuffer.h` for bitmap ops)
+- **gfcpixelbuffer.h** — Drop-in replacement for removed GFL SDK types (`GFL_BITMAP`, `GFL_COLOR`, `gflResize`, `gflCrop`, etc.)
+- Custom EXR loader disabled — OIIO handles EXR natively
+- Image saving stubbed out (TODO: implement via OIIO)
 
 ### UI
-FLTK-based GUI. Window layouts defined in `.fl` files (FLUID designer), generating `.cxx`/`.h` pairs. Custom widgets prefixed `Fl_*_gfc`.
+- FLTK 1.4 GUI. Window layouts in `.fl` files (FLUID designer) → `.cxx`/`.h` pairs
+- Native file dialogs via `NativeFileChooser` wrapper (`src/gfcfilechooser.h`) — uses `Fl_Native_File_Chooser` with FLTK filter format conversion
+- Custom widgets prefixed `Fl_*_gfc`
 
 ## Key Dependencies
 
-FLTK (GUI), OpenGL/GLEW (rendering), Boost (filesystem, threading, program_options), OpenEXR, GFL SDK (image formats), RakNet (networking), Botan (license/crypto), libcurl (HTTP).
+| Library | Purpose | License |
+|---------|---------|---------|
+| FLTK 1.4 | GUI framework | LGPL v2 |
+| OpenImageIO | Image I/O (all formats) | BSD |
+| GLAD | OpenGL loading (compatibility profile 3.3) | Public domain |
+| CLI11 | CLI argument parsing | BSD |
+| OpenEXR / Imath | EXR support (via OIIO) | BSD |
+| RakNet | Networking (vendored in src/) | GPL v2 |
+| libcurl | HTTP | MIT |
+| zlib | Compression | zlib |
+| xmlParser | XML parsing (vendored in src/) | BSD |
+
+**Removed dependencies:** GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan
 
 ## Directory Layout
 
-- `src/` — All C++ source (~416 files). Entry point: `main.cpp`
-- `common/FX/` — Effect definitions: shaders (.frag/.vert), metadata (.jfx), LUTs (.lut/.cub)
-- `win/` — VS solution, project files, build dependencies, installer (NSIS)
-- `linux/` — Autotools build, packaging scripts
-- `mac/` — macOS build scripts and bundle resources
+```
+src/                    All C++ source. Entry point: main.cpp
+common/FX/              Effect shaders (.frag/.vert), metadata (.jfx), LUTs (.lut/.cub)
+common/fonts/           Bundled TTF fonts (DejaVu Sans)
+third_party/glad/       Generated GLAD loader (OpenGL 3.3 compatibility)
+third_party/cli11/      CLI11 single-header argument parser
+third_party/stb/        stb_truetype (for upcoming text renderer)
+win/                    Windows installer scripts (.nsi)
+linux/                  Linux README
+mac/                    macOS bundle resources
+docs/                   Design specs, plans, journal
+.github/workflows/      CI for macOS, Linux, Windows
+```
+
+## Platform-Specific Notes
+
+### macOS
+- OpenGL is Metal-backed (GL 2.1 via Apple's translation layer). OpenGL is deprecated but functional.
+- `GLhandleARB` is `void*` (not `GLuint`). Shader functions use ARB variants (`glShaderSourceARB`, `glLinkProgramARB`). Do NOT mix ARB and modern GL calls.
+- GLAD must be initialized via `mw.vp->make_current()` + `gladLoadGL()` before any GL calls in `main()`.
+- `Fl_Gl_Window::pixels_per_unit()` returns 2.0 on Retina displays.
+
+### Linux
+- X11 `#define None 0L` conflicts with OIIO's `enum { None=0 }` and CLI11 internals. Include order matters: CLI11 first (top of main.cpp), then `#undef None` before OIIO headers (in `gfcimageloaderoiio.h`).
+- OIIO 2.x `tostring()` API differs from 3.x. Metadata extraction uses manual type checking with `#if OIIO_VERSION_MAJOR >= 3` guard.
+- GCC is stricter than Clang: missing returns are SIGILL (not just UB), `const` correctness enforced, `mutable` required for mutexes in const methods.
+- Link GLU explicitly (`-lGLU`).
+
+### Windows (MinGW/MSYS2)
+- `using namespace std;` in headers causes `std::byte` vs Windows `byte` conflict. Removed from `mtpoly.h`.
+- `alloca.h` doesn't exist — use `malloc.h`. Guard: `#if (defined(__GNUC__) || defined(__GCCXML__)) && !defined(_WIN32)`
+- `GLhandleARB` casts require `(GLuint)(uintptr_t)` on 64-bit.
+- Link: `glu32 opengl32 ws2_32 winmm iphlpapi` + GLUT.
+- `-fpermissive` needed for `void*` to `long` casts in FLTK callbacks.
+
+## Key Code Patterns
+
+### Image Loading Flow
+1. `gfcFrame::loadFrame()` creates a loader based on file extension
+2. `GFCLOADER_GFL` and `GFCLOADER_FIL` → `gfcImageLoaderOIIO` (replaced GFL)
+3. `GFCLOADER_EXR` → `gfcImageLoaderOIIO` (custom EXR loader disabled)
+4. `GFCLOADER_DPX` → `gfcImageLoaderDPX` (custom parser)
+5. Loader fills `gfcGLFrameInfo` (GL format, data pointer, target)
+6. `gfcFrame::generateTexture()` uploads to GL via `glTexImage2D`
+7. Texture target is `GL_TEXTURE_RECTANGLE_ARB` — tex coords are in pixel space, not normalized
+
+### OIIO Loader (`gfcimageloaderoiio.cpp`)
+- Discovers EXR layers from channel names (e.g. `R,G,B,right.R,right.G,right.B`)
+- Reads selected layer's channels using `inp->read_image(0, 0, chBegin, chBegin+srcChannels, ...)`
+- Converts RGB→BGRA (swizzle) for OpenGL `GL_BGRA` format
+- Supports texture format modes: `GFC_4BPC`, `GFC_8BPC`, `GFC_16BPC`, `GFC_16HALF`, `GFC_S3TCDX1`
+- Sets `texCoords` to pixel space `(0, 0, width, height)` and `quadSizeX/Y` for the viewport
+
+### Shader System
+- `gfcPlate::startSuperShader()` / `stopSuperShader()` — dynamically built GLSL for color correction
+- `gfcPlate::buildShader()` constructs vertex + fragment shader source strings based on active features (LUT, gamma/exposure, BCS, RGBA masks)
+- `gfcFX::load()` / `gfcFX::bind()` — loads .jfx effect definitions, compiles shaders from .frag/.vert files
+- All shader handles (`ssProgram`, `ssVertexShader`, `ssFramgmentShader`) MUST be initialized to 0 in constructors — uninitialized handles cause trace traps on macOS
+
+### File Chooser (`gfcfilechooser.h`)
+- `NativeFileChooser` wraps `Fl_Native_File_Chooser` with `Fl_File_Chooser` API compatibility
+- Converts FLTK filter format `"Desc (*.{ext1,ext2})"` to native format `"Desc\t*.{ext1,ext2}"`
+- Writes selected path to global `gFilename[2048]` for legacy code compatibility
+
+## Known Issues
+
+- **Text squashing in multi-plate layouts** — FLTK 1.4's `gl_draw()` uses `glDrawPixels` (fixed pixel size) with `glRasterPos` (projection-affected). In 2x1/1x2/2x2 layouts, text is squashed. A stb_truetype replacement is designed and planned (see `docs/superpowers/specs/2026-03-21-stb-text-rendering-design.md`).
+- **`gfcTrack.cpp` is an exact duplicate of `gfcSequence.cpp`** — excluded from build in CMakeLists.txt. The `subsequence` branch was an incomplete refactoring.
+- **Image saving not implemented** — `gfcimagesaver.cpp` has stubs for OIIO-based saving (TODO).
+- **Image-based LUT loading disabled** — `trilerp.cpp` IMAGELUT2D case returns -1 (needs OIIO image reading).
+- **Custom EXR loader disabled** — `gfcimageloaderexr.cpp` excluded from build due to OpenEXR 3.x API changes. OIIO handles EXR.
+
+## CI
+
+GitHub Actions builds on macOS (ARM64), Linux (x64 Ubuntu 24.04), and Windows (x64 MSYS2/MinGW). See `.github/workflows/build.yml`.
 
 ## Notes
 
 - No automated test suite exists.
 - The `gfc` prefix on classes stands for the project's internal namespace convention.
-- UI windows follow the pattern: `*Window.fl` → FLUID generates `*Window.cxx` + `*Window.h`.
-- License/activation system uses RSA/DSA via Botan (see `activatorWindow`, `activatorCallbacks`).
+- UI windows follow: `*Window.fl` → FLUID generates `*Window.cxx` + `*Window.h`. Editing `.cxx` directly is fine since FLUID is not actively used.
+- Never put `using namespace std;` in header files — causes `std::byte` conflict on Windows.
+- Always initialize GL object handles to 0 in constructors — uninitialized handles cause crashes when `glDeleteObjectARB` is called.
+- GLAD must be initialized before any GL calls. On macOS, `draw()` is called during `Fl::check()` before `main()` reaches the GL init code — GLAD is initialized in `GlViewport::draw()` on first call.
