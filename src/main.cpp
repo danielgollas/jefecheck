@@ -47,6 +47,7 @@
 #include "renderWindow.h"
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
+#include "gfcTextRenderer.h"
 #include <FL/Fl_Text_Buffer.H>
 
 #ifdef WIN32
@@ -555,6 +556,18 @@ int main(int argc, char *argv[]) {
     printf("Initializing OpenGL\n");
     initOpenGL();
     Fl::check();
+
+    // Initialize text renderer
+    {
+        std::string fontPath = getApplicationDataPath() + "fonts/DejaVuSans.ttf";
+        std::string boldFontPath = getApplicationDataPath() + "fonts/DejaVuSans-Bold.ttf";
+        if (!textRenderer().loadFont(fontPath))
+            textRenderer().loadFont("common/fonts/DejaVuSans.ttf");
+        if (!textRenderer().loadBoldFont(boldFontPath))
+            textRenderer().loadBoldFont("common/fonts/DejaVuSans-Bold.ttf");
+        textRenderer().setDPIScale(mw.vp->pixels_per_unit());
+        textRenderer().setShadowEnabled(true);
+    }
 	
 	GLuint testTextures[5];
 	glGenTextures(5,testTextures);
