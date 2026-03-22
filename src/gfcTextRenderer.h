@@ -52,6 +52,7 @@ public:
     void setShadowEnabled(bool enabled);
     void setShadowOffset(float x, float y);
     void setShadowColor(float r, float g, float b, float a);
+    void setShadowBlur(float radius);
 
     // Drawing — all coordinates are in the caller's GL coordinate space (Y-up)
     // draw(str, x, y): x,y is the baseline-left position
@@ -84,6 +85,7 @@ private:
     bool shadowEnabled;
     float shadowOffX, shadowOffY;
     float shadowR, shadowG, shadowB, shadowA;
+    float shadowBlurRadius;
 
     // Get or create atlas for current size/DPI
     GfcFontAtlas& getAtlas();

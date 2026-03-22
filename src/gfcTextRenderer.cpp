@@ -37,6 +37,7 @@ GfcTextRenderer::GfcTextRenderer()
     , shadowEnabled(true)
     , shadowOffX(1.0f), shadowOffY(-1.0f)
     , shadowR(0.0f), shadowG(0.0f), shadowB(0.0f), shadowA(0.5f)
+    , shadowBlurRadius(0.0f)
 {
 }
 
@@ -101,6 +102,7 @@ void GfcTextRenderer::setShadowOffset(float x, float y) { shadowOffX = x; shadow
 void GfcTextRenderer::setShadowColor(float r, float g, float b, float a) {
     shadowR = r; shadowG = g; shadowB = b; shadowA = a;
 }
+void GfcTextRenderer::setShadowBlur(float radius) { shadowBlurRadius = radius; }
 
 // ---------------------------------------------------------------------------
 // Atlas baking
@@ -121,7 +123,7 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
 
     stbtt_pack_context pc;
     stbtt_PackBegin(&pc, bitmap, TEX_W, TEX_H, 0, 2, nullptr);
-    stbtt_PackSetOversampling(&pc, 1, 1);
+    stbtt_PackSetOversampling(&pc, 1, 1);  // 1x — pixel-perfect with GL_NEAREST
 
     stbtt_packedchar pdata[96];
     stbtt_PackFontRange(&pc, data.data(), 0, pixelSize, 32, 96, pdata);
@@ -171,13 +173,12 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     // Pure GL_ALPHA texture — shadow is drawn as a separate pass
     glGenTextures(1, &atlas.textureID);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, TEX_W, TEX_H, 0,
                  GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
-    glGenerateMipmap(GL_TEXTURE_2D);
 
     delete[] bitmap;
 
@@ -209,25 +210,31 @@ GfcFontAtlas& GfcTextRenderer::getAtlas() {
 // Emit quads for a line of text at (x, y) baseline. No GL state changes.
 static void emitQuads(const GfcBakedGlyph *glyphs, const char *str, int len,
                       float x, float y, float offX, float offY) {
+    // Snap baseline and cursor origin to integer pixels FIRST,
+    // then add glyph offsets. This prevents oversampling's sub-pixel
+    // shifts from causing inconsistent rounding between glyphs.
+    float baseX = floorf(x + offX + 0.5f);
+    float baseY = floorf(y + offY + 0.5f);
+
     glBegin(GL_QUADS);
-    float cursorX = x + offX;
-    float baseY = y + offY;
+    float cursorX = baseX;
     for (int i = 0; i < len; i++) {
         unsigned char ch = (unsigned char)str[i];
         if (ch < 32 || ch >= 128) continue;
         const GfcBakedGlyph &g = glyphs[ch - 32];
 
-        float qx0 = floorf(cursorX + g.x0 + 0.5f);
-        float qx1 = floorf(cursorX + g.x1 + 0.5f);
-        float qy0 = floorf(baseY - g.y0 + 0.5f);
-        float qy1 = floorf(baseY - g.y1 + 0.5f);
+        // Use integer glyph dimensions from the snapped cursor/baseline
+        float qx0 = floorf(cursorX + g.x0);
+        float qx1 = qx0 + floorf(g.x1 - g.x0 + 0.5f);  // preserve integer glyph width
+        float qy0 = baseY - floorf(g.y0 + 0.5f);
+        float qy1 = baseY - floorf(g.y1 + 0.5f);
 
         glTexCoord2f(g.u0, g.v0); glVertex2f(qx0, qy0);
         glTexCoord2f(g.u1, g.v0); glVertex2f(qx1, qy0);
         glTexCoord2f(g.u1, g.v1); glVertex2f(qx1, qy1);
         glTexCoord2f(g.u0, g.v1); glVertex2f(qx0, qy1);
 
-        cursorX += g.xadvance;
+        cursorX = floorf(cursorX + g.xadvance + 0.5f);  // snap advance too
     }
     glEnd();
 }
@@ -249,10 +256,22 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
     glDisable(GL_TEXTURE_RECTANGLE_ARB);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
 
-    // Pass 1: shadow (offset, dark color)
+    // Pass 1: shadow (offset, dark color, optional blur via multi-pass)
     if (shadowEnabled) {
-        glColor4f(shadowR, shadowG, shadowB, shadowA * colorA);
-        emitQuads(atlas.glyphs, str, len, x, y, shadowOffX, shadowOffY);
+        if (shadowBlurRadius > 0.1f) {
+            // Draw shadow at 5 sample points (center + 4 cardinal offsets)
+            // with reduced alpha per sample for a soft blur effect
+            float a = shadowA * colorA * 0.34f;  // ~1/3 per sample, overlap adds up
+            glColor4f(shadowR, shadowG, shadowB, a);
+            emitQuads(atlas.glyphs, str, len, x, y, shadowOffX, shadowOffY);
+            emitQuads(atlas.glyphs, str, len, x, y, shadowOffX - shadowBlurRadius, shadowOffY);
+            emitQuads(atlas.glyphs, str, len, x, y, shadowOffX + shadowBlurRadius, shadowOffY);
+            emitQuads(atlas.glyphs, str, len, x, y, shadowOffX, shadowOffY - shadowBlurRadius);
+            emitQuads(atlas.glyphs, str, len, x, y, shadowOffX, shadowOffY + shadowBlurRadius);
+        } else {
+            glColor4f(shadowR, shadowG, shadowB, shadowA * colorA);
+            emitQuads(atlas.glyphs, str, len, x, y, shadowOffX, shadowOffY);
+        }
     }
 
     // Pass 2: foreground text

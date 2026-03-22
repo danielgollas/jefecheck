@@ -563,8 +563,9 @@ int main(int argc, char *argv[]) {
         float dpi = mw.vp->pixels_per_unit();
         textRenderer().setDPIScale(dpi);
         textRenderer().setShadowEnabled(true);
-        textRenderer().setShadowOffset(dpi, -dpi);       // 1 logical pixel down-right
-        textRenderer().setShadowColor(0, 0, 0, 0.6f);
+        textRenderer().setShadowOffset(dpi, -dpi);        // 1 logical pixel down-right
+        textRenderer().setShadowColor(0, 0, 0, 0.5f);
+        textRenderer().setShadowBlur(dpi * 0.5f);        // 0.5 logical pixel blur
     }
 	
 	GLuint testTextures[5];

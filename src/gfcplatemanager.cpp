@@ -1205,7 +1205,7 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 		if (showHelp)
 		{
 			//printf("SHOWING HELP\n");
-			gfc_gl_font(FL_HELVETICA + FL_BOLD, 12);
+			gfc_gl_font(FL_HELVETICA, 15);
 			textRenderer().setColor(1, 1, 1, 1);
 			gfc_gl_draw(helpMessage.c_str(),
 					-w/2, -h/2, w, h,
