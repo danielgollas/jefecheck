@@ -1,4 +1,5 @@
 #include "gfcplatemanager.h"
+#include "gfcTextRenderer.h"
 
 #include <FL/fl_ask.H>
 
@@ -91,10 +92,9 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
         glDisable(GL_TEXTURE_2D);
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
         //glTranslatef(-showLutTX,-showLutTY,0);
-        glColor3f(1.0,1.0,1.0);
-        gl_font(FL_HELVETICA_BOLD,12);
-        
-		gl_draw(lutManager.getLUT(showLutChoice).filename,-w/2.0+10 , -10, w/2.0, h/2.0, FL_ALIGN_LEFT_TOP);
+        gfc_gl_font(FL_HELVETICA_BOLD, 12);
+        textRenderer().setColor(1.0, 1.0, 1.0, 1.0);
+		gfc_gl_draw(lutManager.getLUT(showLutChoice).filename, (int)(-w/2.0+10), -10, (int)(w/2.0), (int)(h/2.0), FL_ALIGN_LEFT | FL_ALIGN_TOP);
         lutManager.drawLut(showLutChoice, showLutscale, showLutTX, showLutTY, 0, showLutUniform, w, h);
     
         
@@ -117,9 +117,9 @@ void gfcPlateManager::drawPlates(int w, int h, bool resized) {
             glVertex3f(0,0,0);
             glEnd();
 
-            gl_font(FL_HELVETICA_BOLD,15);
-            glRasterPos3f(0,0,0);
-            gl_draw("no layout selected");
+            gfc_gl_font(FL_HELVETICA_BOLD, 15);
+            textRenderer().setColor(1, 1, 1, 1);
+            gfc_gl_draw("no layout selected", 0.0f, 0.0f);
 
             break;
 
@@ -1150,20 +1150,15 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 		{
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			gl_font(FL_TIMES,sett.feedbackMessageSize);
-			gl_font(FL_HELVETICA,sett.feedbackMessageSize);
-			
+			gfc_gl_font(FL_HELVETICA, sett.feedbackMessageSize);
+
 			float theOpacity=min(feedbackMessageOpacity,1.0)*0.5;
 
-			//printf("sett.feedbackMessageSize=%i\n",sett.feedbackMessageSize);
 			//draw a background
 			int textWidth=w/2; //the box should not be wider than 1/2 of the viewport
 			int textHeight=h/10;
-			
-			//int textPosx=-w/2;
-			//int textPosy=-h/2;
 
-			fl_measure(feedbackMessage.c_str(),textWidth,textHeight);
+			gfc_gl_measure(feedbackMessage.c_str(), textWidth, textHeight);
 			//textWidth*=2;
 			
 			textWidth*=1.2;
@@ -1199,10 +1194,9 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 			glEnd();
 
 			//draw the text
-			glColor4f(1.0,1.0,1.0,theOpacity);
-			gl_draw(feedbackMessage.c_str(),
-				textPosx,textPosy,textWidth,textHeight,Fl_Align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_WRAP)
-				);
+			textRenderer().setColor(1.0, 1.0, 1.0, theOpacity);
+			gfc_gl_draw(feedbackMessage.c_str(),
+				textPosx, textPosy, textWidth, textHeight, FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
 			
 						
 
@@ -1211,17 +1205,11 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 		if (showHelp)
 		{
 			//printf("SHOWING HELP\n");
-			gl_font(FL_HELVETICA + FL_BOLD,12);
-			glColor3f(0.1,0.1,0.1);
-			gl_draw(helpMessage.c_str(),
-			
-					-w/2,-h/2,w,h,
-					Fl_Align(FL_ALIGN_CENTER | FL_ALIGN_WRAP));
-
-			glColor3f(1,1,1);
-			gl_draw(helpMessage.c_str(),
-					-w/2+1,-h/2+1,w+1,h+1,
-					Fl_Align(FL_ALIGN_CENTER | FL_ALIGN_WRAP));
+			gfc_gl_font(FL_HELVETICA + FL_BOLD, 12);
+			textRenderer().setColor(1, 1, 1, 1);
+			gfc_gl_draw(helpMessage.c_str(),
+					-w/2, -h/2, w, h,
+					FL_ALIGN_CENTER | FL_ALIGN_WRAP);
 		}
 
 
