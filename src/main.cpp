@@ -560,8 +560,11 @@ int main(int argc, char *argv[]) {
             textRenderer().loadFont("common/fonts/Inter-Regular.ttf");
         if (!textRenderer().loadBoldFont(boldFontPath))
             textRenderer().loadBoldFont("common/fonts/Inter-Bold.ttf");
-        textRenderer().setDPIScale(mw.vp->pixels_per_unit());
+        float dpi = mw.vp->pixels_per_unit();
+        textRenderer().setDPIScale(dpi);
         textRenderer().setShadowEnabled(true);
+        textRenderer().setShadowOffset(dpi, -dpi);       // 1 logical pixel down-right
+        textRenderer().setShadowColor(0, 0, 0, 0.6f);
     }
 	
 	GLuint testTextures[5];

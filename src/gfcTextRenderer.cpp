@@ -35,6 +35,8 @@ GfcTextRenderer::GfcTextRenderer()
     , currentBold(false)
     , colorR(1.0f), colorG(1.0f), colorB(1.0f), colorA(1.0f)
     , shadowEnabled(true)
+    , shadowOffX(1.0f), shadowOffY(-1.0f)
+    , shadowR(0.0f), shadowG(0.0f), shadowB(0.0f), shadowA(0.5f)
 {
 }
 
@@ -95,90 +97,31 @@ void GfcTextRenderer::setColor(float r, float g, float b, float a) {
     colorR = r; colorG = g; colorB = b; colorA = a;
 }
 void GfcTextRenderer::setShadowEnabled(bool enabled) { shadowEnabled = enabled; }
+void GfcTextRenderer::setShadowOffset(float x, float y) { shadowOffX = x; shadowOffY = y; }
+void GfcTextRenderer::setShadowColor(float r, float g, float b, float a) {
+    shadowR = r; shadowG = g; shadowB = b; shadowA = a;
+}
 
 // ---------------------------------------------------------------------------
 // Atlas baking
 // ---------------------------------------------------------------------------
 
-// Build a GL_LUMINANCE_ALPHA texture from glyph bitmap + shadow.
-// Returns a 2-channel buffer (caller must delete[]).
-// Luminance = glyph brightness (white for text, black for shadow)
-// Alpha = combined coverage (glyph + shadow)
-static unsigned char* buildShadowedLA(const unsigned char *glyphBitmap, int w, int h,
-                                       int shadowOffX, int shadowOffY, int blurRadius)
-{
-    // Create shadow: offset copy + box blur
-    std::vector<unsigned char> shadow(w * h, 0);
-
-    for (int y = 0; y < h; y++) {
-        int sy = y - shadowOffY;
-        if (sy < 0 || sy >= h) continue;
-        for (int x = 0; x < w; x++) {
-            int sx = x - shadowOffX;
-            if (sx < 0 || sx >= w) continue;
-            shadow[y * w + x] = glyphBitmap[sy * w + sx];
-        }
-    }
-
-    if (blurRadius > 0) {
-        std::vector<unsigned char> temp(w * h, 0);
-        int kernelSize = blurRadius * 2 + 1;
-
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int sum = 0;
-                for (int k = -blurRadius; k <= blurRadius; k++) {
-                    int sx = std::clamp(x + k, 0, w - 1);
-                    sum += shadow[y * w + sx];
-                }
-                temp[y * w + x] = (unsigned char)(sum / kernelSize);
-            }
-        }
-
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int sum = 0;
-                for (int k = -blurRadius; k <= blurRadius; k++) {
-                    int sy = std::clamp(y + k, 0, h - 1);
-                    sum += temp[sy * w + x];
-                }
-                shadow[y * w + x] = (unsigned char)(sum / kernelSize);
-            }
-        }
-    }
-
-    // Build 2-channel LA texture:
-    //   L = glyph alpha (white where glyph, black where shadow-only)
-    //   A = max(glyph, shadow) (visible for both)
-    // With GL_LUMINANCE_ALPHA + glColor(r,g,b,a):
-    //   fragment.rgb = glColor.rgb * L  → glyph pixels get user color, shadow gets black
-    //   fragment.a   = glColor.a * A    → both glyph and shadow are visible
-    unsigned char *la = new unsigned char[w * h * 2];
-    for (int i = 0; i < w * h; i++) {
-        la[i * 2 + 0] = glyphBitmap[i];                                    // luminance
-        la[i * 2 + 1] = (unsigned char)std::max(glyphBitmap[i], shadow[i]); // alpha
-    }
-    return la;
-}
-
 GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, float pixelSize) {
     GfcFontAtlas atlas;
     const int TEX_W = 2048;
     const int TEX_H = 2048;
-    const int OVERSAMPLE = 1;  // No oversampling — pixel-exact ortho gives 1:1 mapping
     atlas.texWidth = TEX_W;
     atlas.texHeight = TEX_H;
     atlas.pixelSize = pixelSize;
     atlas.textureID = 0;
     atlas.valid = false;
 
-    // Use stb_truetype's packing API with oversampling for much crisper glyphs
     unsigned char *bitmap = new unsigned char[TEX_W * TEX_H];
     memset(bitmap, 0, TEX_W * TEX_H);
 
     stbtt_pack_context pc;
-    stbtt_PackBegin(&pc, bitmap, TEX_W, TEX_H, 0, 1, nullptr);
-    stbtt_PackSetOversampling(&pc, OVERSAMPLE, OVERSAMPLE);
+    stbtt_PackBegin(&pc, bitmap, TEX_W, TEX_H, 0, 2, nullptr);
+    stbtt_PackSetOversampling(&pc, 1, 1);
 
     stbtt_packedchar pdata[96];
     stbtt_PackFontRange(&pc, data.data(), 0, pixelSize, 32, 96, pdata);
@@ -201,35 +144,12 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         atlas.lineHeight = pixelSize;
     }
 
-    // Build shadow into a 2-channel LA texture BEFORE flipping
-    // Shadow offset & blur scale with pixelSize so they're ~1 logical pixel
-    // (pixelSize includes dpiScale, so this produces 1 screen pixel on Retina)
-    int shadowOff = std::max(1, (int)(pixelSize / 14.0f + 0.5f));
-    int shadowBlur = std::max(1, shadowOff);
-    unsigned char *texData = nullptr;
-    GLenum internalFmt, uploadFmt;
-    if (shadowEnabled) {
-        texData = buildShadowedLA(bitmap, TEX_W, TEX_H, shadowOff, -shadowOff, shadowBlur);
-        internalFmt = GL_LUMINANCE_ALPHA;
-        uploadFmt = GL_LUMINANCE_ALPHA;
-        // Flip the LA bitmap vertically (2 bytes per pixel)
-        for (int y = 0; y < TEX_H / 2; y++) {
-            int y2 = TEX_H - 1 - y;
-            for (int x = 0; x < TEX_W; x++) {
-                std::swap(texData[(y * TEX_W + x) * 2 + 0], texData[(y2 * TEX_W + x) * 2 + 0]);
-                std::swap(texData[(y * TEX_W + x) * 2 + 1], texData[(y2 * TEX_W + x) * 2 + 1]);
-            }
+    // Flip bitmap vertically for GL's bottom-up convention
+    for (int y = 0; y < TEX_H / 2; y++) {
+        int y2 = TEX_H - 1 - y;
+        for (int x = 0; x < TEX_W; x++) {
+            std::swap(bitmap[y * TEX_W + x], bitmap[y2 * TEX_W + x]);
         }
-    } else {
-        // No shadow: flip single-channel bitmap, upload as GL_ALPHA
-        for (int y = 0; y < TEX_H / 2; y++) {
-            int y2 = TEX_H - 1 - y;
-            for (int x = 0; x < TEX_W; x++) {
-                std::swap(bitmap[y * TEX_W + x], bitmap[y2 * TEX_W + x]);
-            }
-        }
-        internalFmt = GL_ALPHA;
-        uploadFmt = GL_ALPHA;
     }
 
     // Convert stbtt_packedchar to GfcBakedGlyph
@@ -243,28 +163,20 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         g.y1 = pdata[i].yoff2;
         g.u0 = pdata[i].x0 * invW;
         g.u1 = pdata[i].x1 * invW;
-        // Flip v for GL's bottom-up convention
         g.v0 = 1.0f - pdata[i].y0 * invH;
         g.v1 = 1.0f - pdata[i].y1 * invH;
         g.xadvance = pdata[i].xadvance;
     }
 
+    // Pure GL_ALPHA texture — shadow is drawn as a separate pass
     glGenTextures(1, &atlas.textureID);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
-    // Nearest-neighbor for pixel-exact rendering (1:1 texel-to-pixel via ortho projection)
-    // Mipmap for minification if text is viewed at sub-1:1 (e.g. 3D LUT labels zoomed out)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    if (shadowEnabled) {
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFmt, TEX_W, TEX_H, 0,
-                     uploadFmt, GL_UNSIGNED_BYTE, texData);
-        delete[] texData;
-    } else {
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFmt, TEX_W, TEX_H, 0,
-                     uploadFmt, GL_UNSIGNED_BYTE, bitmap);
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, TEX_W, TEX_H, 0,
+                 GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
     glGenerateMipmap(GL_TEXTURE_2D);
 
     delete[] bitmap;
@@ -294,43 +206,21 @@ GfcFontAtlas& GfcTextRenderer::getAtlas() {
 // Drawing
 // ---------------------------------------------------------------------------
 
-void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
-    if (!fontLoaded) return;
-    GfcFontAtlas &atlas = getAtlas();
-    if (!atlas.valid) return;
-
-    glPushAttrib(GL_ALL_ATTRIB_BITS);
-
-    // Disable any active shader program (super shader uses ARB, not core)
-    GLhandleARB prevProgram = glGetHandleARB(GL_PROGRAM_OBJECT_ARB);
-    if (prevProgram) glUseProgramObjectARB(0);
-
-    glEnable(GL_TEXTURE_2D);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_TEXTURE_RECTANGLE_ARB);
-
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
-    glColor4f(colorR, colorG, colorB, colorA);
-
-    // y is the baseline position in GL Y-up coordinates.
-    // stb glyph offsets (y0, y1) are in Y-down screen space:
-    //   y0 is negative (above baseline), y1 is positive (below baseline)
-    // In Y-up GL: negate the offsets so glyphs render above the baseline.
+// Emit quads for a line of text at (x, y) baseline. No GL state changes.
+static void emitQuads(const GfcBakedGlyph *glyphs, const char *str, int len,
+                      float x, float y, float offX, float offY) {
     glBegin(GL_QUADS);
-    float cursorX = x;
+    float cursorX = x + offX;
+    float baseY = y + offY;
     for (int i = 0; i < len; i++) {
         unsigned char ch = (unsigned char)str[i];
         if (ch < 32 || ch >= 128) continue;
-        const GfcBakedGlyph &g = atlas.glyphs[ch - 32];
+        const GfcBakedGlyph &g = glyphs[ch - 32];
 
-        // Glyph positions in atlas pixels = physical pixels in our pixel-exact ortho
-        // Snap to integer pixels for perfect 1:1 texel mapping
         float qx0 = floorf(cursorX + g.x0 + 0.5f);
         float qx1 = floorf(cursorX + g.x1 + 0.5f);
-        float qy0 = floorf(y - g.y0 + 0.5f);
-        float qy1 = floorf(y - g.y1 + 0.5f);
+        float qy0 = floorf(baseY - g.y0 + 0.5f);
+        float qy1 = floorf(baseY - g.y1 + 0.5f);
 
         glTexCoord2f(g.u0, g.v0); glVertex2f(qx0, qy0);
         glTexCoord2f(g.u1, g.v0); glVertex2f(qx1, qy0);
@@ -340,6 +230,34 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
         cursorX += g.xadvance;
     }
     glEnd();
+}
+
+void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
+    if (!fontLoaded) return;
+    GfcFontAtlas &atlas = getAtlas();
+    if (!atlas.valid) return;
+
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+
+    GLhandleARB prevProgram = glGetHandleARB(GL_PROGRAM_OBJECT_ARB);
+    if (prevProgram) glUseProgramObjectARB(0);
+
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_TEXTURE_RECTANGLE_ARB);
+    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+
+    // Pass 1: shadow (offset, dark color)
+    if (shadowEnabled) {
+        glColor4f(shadowR, shadowG, shadowB, shadowA * colorA);
+        emitQuads(atlas.glyphs, str, len, x, y, shadowOffX, shadowOffY);
+    }
+
+    // Pass 2: foreground text
+    glColor4f(colorR, colorG, colorB, colorA);
+    emitQuads(atlas.glyphs, str, len, x, y, 0, 0);
 
     if (prevProgram) glUseProgramObjectARB(prevProgram);
     glPopAttrib();

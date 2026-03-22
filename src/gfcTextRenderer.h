@@ -48,8 +48,10 @@ public:
     // Color
     void setColor(float r, float g, float b, float a);
 
-    // Shadow (baked into atlas)
+    // Shadow (drawn as a second pass with offset)
     void setShadowEnabled(bool enabled);
+    void setShadowOffset(float x, float y);
+    void setShadowColor(float r, float g, float b, float a);
 
     // Drawing — all coordinates are in the caller's GL coordinate space (Y-up)
     // draw(str, x, y): x,y is the baseline-left position
@@ -80,6 +82,8 @@ private:
     bool currentBold;
     float colorR, colorG, colorB, colorA;
     bool shadowEnabled;
+    float shadowOffX, shadowOffY;
+    float shadowR, shadowG, shadowB, shadowA;
 
     // Get or create atlas for current size/DPI
     GfcFontAtlas& getAtlas();
