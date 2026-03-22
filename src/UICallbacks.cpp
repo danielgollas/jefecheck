@@ -2056,12 +2056,17 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 			plateManager.setTextDisplayOptions(pw.textDisplayFontSize->value(),pw.textDisplayColor->value(),pw.textDisplayOpacity->value());
 			textRenderer().setShadowEnabled(pw.textDisplayShadow->value());
 
+			// Rendering options
+			textRenderer().setHintMode((GfcTextRenderer::HintMode)pw.textDisplayHinting->value());
+			textRenderer().setFilterNearest(pw.textDisplayFilter->value() == 0);
+			textRenderer().setGamma(pw.textDisplayGamma->value());
+
 			// Font selection from dropdown
 			if (pw.textDisplayFont->value() >= 0) {
 				const char *fontPath = (const char *)pw.textDisplayFont->menu()[pw.textDisplayFont->value()].user_data();
 				if (fontPath) {
 					textRenderer().loadFont(fontPath);
-					textRenderer().loadBoldFont(fontPath); // use same font for bold
+					textRenderer().loadBoldFont(fontPath);
 				}
 			}
 

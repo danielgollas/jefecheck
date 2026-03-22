@@ -453,6 +453,9 @@ void saveSettings ( const gfcSettings *sett ) {
     saveSetting("textDisplayColor",pw.textDisplayColor->value(),xGeneralNode);
     saveSetting("textDisplayOpacity",pw.textDisplayOpacity->value(),xGeneralNode);
     saveSetting("textDisplayShadow",pw.textDisplayShadow->value(),xGeneralNode);
+    saveSetting("textDisplayHinting",pw.textDisplayHinting->value(),xGeneralNode);
+    saveSetting("textDisplayFilter",pw.textDisplayFilter->value(),xGeneralNode);
+    saveSetting("textDisplayGamma",pw.textDisplayGamma->value(),xGeneralNode);
     // Save font path from dropdown user_data
     if (pw.textDisplayFont->value() >= 0) {
         const char *fontPath = (const char *)pw.textDisplayFont->menu()[pw.textDisplayFont->value()].user_data();
@@ -863,6 +866,9 @@ void readSettings ( gfcSettings &sett ) {
     setWidgetFromNode("textDisplayOpacity",pw.textDisplayOpacity,xGeneralNode);
     setWidgetFromNode("textDisplayColor",pw.textDisplayColor,xGeneralNode);
     setWidgetFromNode("textDisplayShadow",pw.textDisplayShadow,xGeneralNode);
+    setWidgetFromNode("textDisplayHinting",pw.textDisplayHinting,xGeneralNode);
+    setWidgetFromNode("textDisplayFilter",pw.textDisplayFilter,xGeneralNode);
+    setWidgetFromNode("textDisplayGamma",pw.textDisplayGamma,xGeneralNode);
     // Restore font selection from saved path
     {
         const char *savedFontPath = xGeneralNode.getAttribute("textDisplayFontPath");

@@ -41,6 +41,9 @@ GfcTextRenderer::GfcTextRenderer()
     , shadowOffX(1.0f), shadowOffY(-1.0f)
     , shadowR(0.0f), shadowG(0.0f), shadowB(0.0f), shadowA(0.5f)
     , shadowBlurRadius(0.0f)
+    , hintMode(HINT_LIGHT)
+    , filterNearest(true)
+    , gammaValue(0.65f)
 {
 }
 
@@ -116,6 +119,29 @@ void GfcTextRenderer::setShadowColor(float r, float g, float b, float a) {
 }
 void GfcTextRenderer::setShadowBlur(float radius) { shadowBlurRadius = radius; }
 
+void GfcTextRenderer::setHintMode(HintMode mode) {
+    if (hintMode != mode) {
+        hintMode = mode;
+        // Invalidate caches — need to rebake with new hinting
+        for (auto &p : atlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
+        for (auto &p : boldAtlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
+        atlasCache.clear();
+        boldAtlasCache.clear();
+    }
+}
+
+void GfcTextRenderer::setFilterNearest(bool nearest) { filterNearest = nearest; }
+
+void GfcTextRenderer::setGamma(float gamma) {
+    if (gammaValue != gamma) {
+        gammaValue = gamma;
+        for (auto &p : atlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
+        for (auto &p : boldAtlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
+        atlasCache.clear();
+        boldAtlasCache.clear();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Atlas baking
 // ---------------------------------------------------------------------------
@@ -152,8 +178,13 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     }
     FT_Set_Pixel_Sizes(face, 0, (FT_UInt)pixelSize);
 
-    // Light hinting: good AA on diagonals with vertical stem snapping
-    FT_Int32 loadFlags = FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT;
+    // Hinting mode from preferences
+    FT_Int32 loadFlags = FT_LOAD_RENDER;
+    switch (hintMode) {
+        case HINT_LIGHT:  loadFlags |= FT_LOAD_TARGET_LIGHT; break;
+        case HINT_NORMAL: loadFlags |= FT_LOAD_TARGET_NORMAL; break;
+        case HINT_AUTO:   loadFlags |= FT_LOAD_TARGET_NORMAL | FT_LOAD_FORCE_AUTOHINT; break;
+    }
 
     unsigned char *bitmap = new unsigned char[TEX_W * TEX_H];
     memset(bitmap, 0, TEX_W * TEX_H);
@@ -217,11 +248,14 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     FT_Done_Face(face);
 
     // Gamma boost: darken semi-transparent edge pixels to approximate
-    // Core Text's gamma-correct blending. Makes thin strokes appear thicker/sharper.
-    for (int i = 0; i < TEX_W * TEX_H; i++) {
-        float v = bitmap[i] / 255.0f;
-        v = powf(v, 0.65f);  // gamma < 1.0 boosts mid-tones
-        bitmap[i] = (unsigned char)(v * 255.0f + 0.5f);
+    // Core Text's gamma-correct blending. Lower values = bolder text.
+    if (gammaValue < 0.99f) {
+        for (int i = 0; i < TEX_W * TEX_H; i++) {
+            if (bitmap[i] == 0 || bitmap[i] == 255) continue;  // skip fully transparent/opaque
+            float v = bitmap[i] / 255.0f;
+            v = powf(v, gammaValue);
+            bitmap[i] = (unsigned char)(v * 255.0f + 0.5f);
+        }
     }
 
     // Debug: dump atlas to PNG before GL flip (so it reads top-down)
@@ -249,8 +283,9 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
     // Upload as GL_ALPHA texture
     glGenTextures(1, &atlas.textureID);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    GLint texFilter = filterNearest ? GL_NEAREST : GL_LINEAR;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, texFilter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, texFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, TEX_W, TEX_H, 0,

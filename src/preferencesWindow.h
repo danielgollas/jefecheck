@@ -52,6 +52,9 @@ public:
   Fl_Value_Input *textDisplayColor;
   Fl_Check_Button *textDisplayShadow;
   Fl_Choice *textDisplayFont;
+  Fl_Choice *textDisplayHinting;
+  Fl_Choice *textDisplayFilter;
+  Fl_Value_Input *textDisplayGamma;
   Fl_Value_Input *ActionFeedbackSize;
   Fl_Value_Input *ActionFeedbackFadeDelay;
   Fl_Group *formatsTab;

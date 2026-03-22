@@ -54,6 +54,12 @@ public:
     void setShadowColor(float r, float g, float b, float a);
     void setShadowBlur(float radius);
 
+    // Rendering options
+    enum HintMode { HINT_LIGHT = 0, HINT_NORMAL = 1, HINT_AUTO = 2 };
+    void setHintMode(HintMode mode);
+    void setFilterNearest(bool nearest);  // true=GL_NEAREST, false=GL_LINEAR
+    void setGamma(float gamma);           // gamma correction for atlas (0.5-1.0)
+
     // Drawing — all coordinates are in the caller's GL coordinate space (Y-up)
     // draw(str, x, y): x,y is the baseline-left position
     void draw(const char *str, float x, float y);
@@ -86,6 +92,10 @@ private:
     float shadowOffX, shadowOffY;
     float shadowR, shadowG, shadowB, shadowA;
     float shadowBlurRadius;
+
+    HintMode hintMode;
+    bool filterNearest;
+    float gammaValue;
 
     // Get or create atlas for current size/DPI
     GfcFontAtlas& getAtlas();
