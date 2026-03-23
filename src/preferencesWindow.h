@@ -5,8 +5,9 @@
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
 #include <FL/Fl_Box.H>
-#include <FL/Fl_Tabs.H>
 #include <FL/Fl_Group.H>
+#include <FL/Fl_Hold_Browser.H>
+#include <FL/Fl_Scroll.H>
 #include <FL/Fl_Round_Button.H>
 extern void PreferencesCB(Fl_Round_Button*, void*);
 #include <FL/Fl_Input.H>
@@ -30,7 +31,9 @@ public:
   Fl_Double_Window* make_window();
   Fl_Double_Window *preferencesWindow;
   Fl_Box *bg;
-  Fl_Tabs *tabs;
+  Fl_Hold_Browser *sectionList;
+  Fl_Group *panels[5];  // General, Text, Formats, Remote, Paths
+  void showPanel(int index);
   Fl_Round_Button *startFullscreenCheckBox;
   Fl_Round_Button *loadWindowOnStartupCheckBox;
   Fl_Input *defaultBrowsePath;

@@ -7,910 +7,945 @@
 #include "Fl_Spinner_gfc.h"
 
 Fl_Double_Window* PreferencesWindow::make_window() {
-  { preferencesWindow = new Fl_Double_Window(350, 590, "JefeCheck -Preferences");
+  { preferencesWindow = new Fl_Double_Window(600, 500, "JefeCheck -Preferences");
     preferencesWindow->user_data((void*)(this));
-    { Fl_Box* o = bg = new Fl_Box(0, -1, 490, 591);
+    { Fl_Box* o = bg = new Fl_Box(0, -1, 600, 501);
       bg->box(FL_FLAT_BOX);
       bg->color(FL_FOREGROUND_COLOR);
       bg->selection_color(FL_DARK3);
       o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));
       o->color(fl_rgb_color(32,32,32));
     } // Fl_Box* bg
-    { tabs = new Fl_Tabs(0, 10, 355, 589);
-      tabs->box(FL_FLAT_BOX);
-      tabs->color(fl_rgb_color(32,32,32));               // tab bar background + unselected tabs
-      tabs->selection_color(fl_rgb_color(48,48,48));      // selected tab button (slightly lighter)
-      tabs->labelcolor(fl_rgb_color(180,180,180));        // tab label text
-      tabs->align(FL_ALIGN_TOP_RIGHT);
-      { Fl_Group* o = new Fl_Group(0, 28, 352, 571, "General");
-        o->color(fl_rgb_color(38,38,38));
-        o->selection_color(fl_rgb_color(50,50,50));
-        o->labelcolor(fl_rgb_color(200,200,200));
-        { Fl_Group* o = new Fl_Group(10, 39, 320, 133, "Startup");
+
+    // Sidebar
+    { sectionList = new Fl_Hold_Browser(5, 5, 120, 450);
+      sectionList->box(FL_FLAT_BOX);
+      sectionList->color(fl_rgb_color(38,38,38));
+      sectionList->textcolor(fl_rgb_color(200,200,200));
+      sectionList->textsize(13);
+      sectionList->selection_color(fl_rgb_color(60,60,60));
+      sectionList->add("General");
+      sectionList->add("Text");
+      sectionList->add("Formats");
+      sectionList->add("Remote");
+      sectionList->add("Paths");
+      sectionList->value(1);
+      sectionList->callback([](Fl_Widget* w, void* data) {
+        PreferencesWindow* pw = (PreferencesWindow*)data;
+        int sel = pw->sectionList->value();
+        if (sel >= 1 && sel <= 5) pw->showPanel(sel - 1);
+      }, (void*)this);
+    }
+
+    // === Panel 0: General ===
+    { panels[0] = new Fl_Group(130, 5, 465, 450);
+      panels[0]->box(FL_FLAT_BOX);
+      panels[0]->color(fl_rgb_color(38,38,38));
+      { Fl_Group* o = new Fl_Group(140, 16, 440, 133, "Startup");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { startFullscreenCheckBox = new Fl_Round_Button(150, 61, 15, 15, "Start in fullscreen mode");
+          startFullscreenCheckBox->down_box(FL_FLAT_BOX);
+          startFullscreenCheckBox->color(FL_INACTIVE_COLOR);
+          startFullscreenCheckBox->selection_color((Fl_Color)31);
+          startFullscreenCheckBox->labelcolor((Fl_Color)31);
+          startFullscreenCheckBox->callback((Fl_Callback*)PreferencesCB);
+          startFullscreenCheckBox->align(FL_ALIGN_BOTTOM_LEFT|FL_ALIGN_INSIDE);
+        } // Fl_Round_Button* startFullscreenCheckBox
+        { loadWindowOnStartupCheckBox = new Fl_Round_Button(150, 41, 15, 15, "Open Load window on startup");
+          loadWindowOnStartupCheckBox->down_box(FL_FLAT_BOX);
+          loadWindowOnStartupCheckBox->value(1);
+          loadWindowOnStartupCheckBox->color(FL_INACTIVE_COLOR);
+          loadWindowOnStartupCheckBox->selection_color((Fl_Color)31);
+          loadWindowOnStartupCheckBox->labelcolor((Fl_Color)31);
+          loadWindowOnStartupCheckBox->callback((Fl_Callback*)PreferencesCB);
+          loadWindowOnStartupCheckBox->align(FL_ALIGN_BOTTOM_LEFT|FL_ALIGN_INSIDE);
+        } // Fl_Round_Button* loadWindowOnStartupCheckBox
+        { Fl_Input* o = defaultBrowsePath = new Fl_Input(148, 123, 354, 18, "Default Browse Path");
+          defaultBrowsePath->tooltip("When browsing for sequences, this will be the default folder the browser open\
+s. Set it to point to the project folder you are currently working on to make \
+browsing easier! This value is overriden by the environment variable JEFECHECK\
+_DEFAULT_BROWSE_PATH");
+          defaultBrowsePath->box(FL_FLAT_BOX);
+          defaultBrowsePath->color(FL_INACTIVE_COLOR);
+          defaultBrowsePath->labelcolor((Fl_Color)31);
+          defaultBrowsePath->textcolor(31);
+          defaultBrowsePath->align(FL_ALIGN_TOP_LEFT);
+          defaultBrowsePath->when(FL_WHEN_CHANGED);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Input* defaultBrowsePath
+        { Fl_Button_gfc* o = new Fl_Button_gfc(506, 123, 68, 18, "browse");
+          o->box(FL_FLAT_BOX);
+          o->color(FL_INACTIVE_COLOR);
+          o->selection_color(FL_BACKGROUND_COLOR);
+          o->labeltype(FL_NORMAL_LABEL);
+          o->labelfont(0);
+          o->labelsize(14);
+          o->labelcolor((Fl_Color)31);
+          o->callback((Fl_Callback*)PreferencesCB, (void*)(PATHBROWSEBUTTON_ID));
+          o->align(FL_ALIGN_CENTER);
+          o->when(FL_WHEN_RELEASE);
+        } // Fl_Button_gfc* o
+        { attemptToRecoverFromCrashCheckBox = new Fl_Round_Button(150, 82, 15, 15, "Attempt to recover from crash");
+          attemptToRecoverFromCrashCheckBox->down_box(FL_FLAT_BOX);
+          attemptToRecoverFromCrashCheckBox->value(1);
+          attemptToRecoverFromCrashCheckBox->color(FL_INACTIVE_COLOR);
+          attemptToRecoverFromCrashCheckBox->selection_color((Fl_Color)31);
+          attemptToRecoverFromCrashCheckBox->labelcolor((Fl_Color)31);
+          attemptToRecoverFromCrashCheckBox->callback((Fl_Callback*)PreferencesCB);
+          attemptToRecoverFromCrashCheckBox->align(FL_ALIGN_BOTTOM_LEFT|FL_ALIGN_INSIDE);
+        } // Fl_Round_Button* attemptToRecoverFromCrashCheckBox
+        o->end();
+      } // Fl_Group* o
+      { Fl_Group* o = new Fl_Group(140, 156, 160, 53, "Background Color");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { Fl_Value_Slider* o = bgColor = new Fl_Value_Slider(188, 182, 97, 15, "Value");
+          bgColor->tooltip("Set the Value of the gray background color to suit your taste and pupils.");
+          bgColor->type(1);
+          bgColor->box(FL_FLAT_BOX);
+          bgColor->color(FL_INACTIVE_COLOR);
+          bgColor->labelcolor((Fl_Color)31);
+          bgColor->maximum(127);
+          bgColor->step(1);
+          bgColor->value(38);
+          bgColor->textsize(14);
+          bgColor->textcolor(31);
+          bgColor->callback((Fl_Callback*)PreferencesCB);
+          bgColor->align(FL_ALIGN_LEFT);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+          o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Slider* bgColor
+        o->end();
+      } // Fl_Group* o
+      { Fl_Group* o = new Fl_Group(140, 274, 440, 170, "Engine");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { Fl_Value_Slider* o = percentageOfRam = new Fl_Value_Slider(150, 314, 169, 15, "% of RAM to Use");
+          percentageOfRam->tooltip("The engine will load frames until this amount of system RAM is used up. Recom\
+mended values are  be between 80 and 95 so that the system has enough RAM to f\
+unction properly even when loading large sequences");
+          percentageOfRam->type(3);
+          percentageOfRam->box(FL_FLAT_BOX);
+          percentageOfRam->color(FL_INACTIVE_COLOR);
+          percentageOfRam->selection_color(FL_INACTIVE_COLOR);
+          percentageOfRam->labelcolor((Fl_Color)31);
+          percentageOfRam->minimum(10);
+          percentageOfRam->maximum(95);
+          percentageOfRam->step(0.5);
+          percentageOfRam->value(85);
+          percentageOfRam->textsize(14);
+          percentageOfRam->textcolor(31);
+          percentageOfRam->callback((Fl_Callback*)PreferencesCB);
+          percentageOfRam->align(FL_ALIGN_TOP_LEFT);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+          o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Slider* percentageOfRam
+        { forceGFLLoading = new Fl_Check_Button(150, 334, 15, 15, "Force GFL Loading Engine");
+          forceGFLLoading->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
+images you can try using this option. It is slower on some formats though (Par\
+ticularly DPX).");
+          forceGFLLoading->down_box(FL_FLAT_BOX);
+          forceGFLLoading->color(FL_INACTIVE_COLOR);
+          forceGFLLoading->selection_color((Fl_Color)31);
+          forceGFLLoading->labelcolor((Fl_Color)31);
+          forceGFLLoading->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* forceGFLLoading
+        { Fl_Check_Button* o = frawProxiesAtFullResolution = new Fl_Check_Button(150, 351, 15, 15, "Draw Proxies at full Resolution");
+          frawProxiesAtFullResolution->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
+images you can try using this option. It is slower on some formats though (Par\
+ticularly DPX).");
+          frawProxiesAtFullResolution->down_box(FL_FLAT_BOX);
+          frawProxiesAtFullResolution->color(FL_INACTIVE_COLOR);
+          frawProxiesAtFullResolution->selection_color((Fl_Color)31);
+          frawProxiesAtFullResolution->labelcolor((Fl_Color)31);
+          frawProxiesAtFullResolution->callback((Fl_Callback*)PreferencesCB);
+          frawProxiesAtFullResolution->hide();
+          o->color(fl_rgb_color(32,32,32));
+        } // Fl_Check_Button* frawProxiesAtFullResolution
+        { dontUseInactiveMemory = new Fl_Check_Button(150, 355, 15, 15, "Don\'t use Inactive Memory (OS X only)");
+          dontUseInactiveMemory->tooltip("Enable this option if on Mac OS X you whish to use only physically available \
+RAM");
+          dontUseInactiveMemory->down_box(FL_FLAT_BOX);
+          dontUseInactiveMemory->color(FL_INACTIVE_COLOR);
+          dontUseInactiveMemory->selection_color((Fl_Color)31);
+          dontUseInactiveMemory->labelcolor((Fl_Color)31);
+          dontUseInactiveMemory->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* dontUseInactiveMemory
+        { forceSingleBufferedFXs = new Fl_Check_Button(150, 376, 15, 15, "Force Single Buffered FXs");
+          forceSingleBufferedFXs->tooltip("If you have problems using FXs, try enabling this option, specially if your v\
+ideo card is pre GeForce 7");
+          forceSingleBufferedFXs->down_box(FL_FLAT_BOX);
+          forceSingleBufferedFXs->color(FL_INACTIVE_COLOR);
+          forceSingleBufferedFXs->selection_color((Fl_Color)31);
+          forceSingleBufferedFXs->labelcolor((Fl_Color)31);
+          forceSingleBufferedFXs->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* forceSingleBufferedFXs
+        { continueLoadingOnError = new Fl_Check_Button(150, 397, 15, 15, "Continue loading sequence after load error");
+          continueLoadingOnError->tooltip("If a failure ocurrs while loading a particular corrupt frame, JefeCheck will \
+continue loading the sequence moving on to the next frame.");
+          continueLoadingOnError->down_box(FL_FLAT_BOX);
+          continueLoadingOnError->value(1);
+          continueLoadingOnError->color(FL_INACTIVE_COLOR);
+          continueLoadingOnError->selection_color((Fl_Color)31);
+          continueLoadingOnError->labelcolor((Fl_Color)31);
+          continueLoadingOnError->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* continueLoadingOnError
+        { vsync = new Fl_Check_Button(150, 418, 15, 15, "Enable Vertical Redraw Sync (vsync)");
+          vsync->tooltip("Enable this option to synchronize frame redraw with your monitor\'s refresh r\
+ate. Can help with tearing issues on monitors with a refresh rate different th\
+an your attempted frame rate.");
+          vsync->down_box(FL_FLAT_BOX);
+          vsync->color(FL_INACTIVE_COLOR);
+          vsync->selection_color((Fl_Color)31);
+          vsync->labelcolor((Fl_Color)31);
+          vsync->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* vsync
+        { maximumFramesInQueue = new Fl_Value_Input(374, 314, 30, 15, "Max Frames in Queue");
+          maximumFramesInQueue->tooltip("If some frames show up black, try setting this to 1.");
+          maximumFramesInQueue->box(FL_FLAT_BOX);
+          maximumFramesInQueue->color(FL_INACTIVE_COLOR);
+          maximumFramesInQueue->labelsize(12);
+          maximumFramesInQueue->labelcolor((Fl_Color)31);
+          maximumFramesInQueue->maximum(99999);
+          maximumFramesInQueue->step(1);
+          maximumFramesInQueue->value(5);
+          maximumFramesInQueue->textsize(12);
+          maximumFramesInQueue->textcolor(31);
+          maximumFramesInQueue->callback((Fl_Callback*)PreferencesCB);
+          maximumFramesInQueue->align(FL_ALIGN_TOP);
+          maximumFramesInQueue->when(3);
+        } // Fl_Value_Input* maximumFramesInQueue
+        o->end();
+      } // Fl_Group* o
+      { Fl_Group* o = new Fl_Group(305, 156, 155, 53, "Action Feedback");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { Fl_Value_Input* o = ActionFeedbackSize = new Fl_Value_Input(340, 187, 25, 15, "Size");
+          ActionFeedbackSize->tooltip("Font Size of the Action Feedback Display");
+          ActionFeedbackSize->box(FL_FLAT_BOX);
+          ActionFeedbackSize->color(FL_INACTIVE_COLOR);
+          ActionFeedbackSize->selection_color(FL_FOREGROUND_COLOR);
+          ActionFeedbackSize->labelsize(12);
+          ActionFeedbackSize->labelcolor((Fl_Color)31);
+          ActionFeedbackSize->minimum(8);
+          ActionFeedbackSize->maximum(48);
+          ActionFeedbackSize->step(1);
+          ActionFeedbackSize->value(12);
+          ActionFeedbackSize->textsize(12);
+          ActionFeedbackSize->textcolor(31);
+          ActionFeedbackSize->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* ActionFeedbackSize
+        { Fl_Value_Input* o = ActionFeedbackFadeDelay = new Fl_Value_Input(410, 187, 36, 15, "Fade");
+          ActionFeedbackFadeDelay->tooltip("How long the Action Feedback is displayed in seconds (set to 0 to turn displa\
+y Off)");
+          ActionFeedbackFadeDelay->box(FL_FLAT_BOX);
+          ActionFeedbackFadeDelay->color(FL_INACTIVE_COLOR);
+          ActionFeedbackFadeDelay->selection_color(FL_FOREGROUND_COLOR);
+          ActionFeedbackFadeDelay->labelsize(12);
+          ActionFeedbackFadeDelay->labelcolor((Fl_Color)31);
+          ActionFeedbackFadeDelay->maximum(10);
+          ActionFeedbackFadeDelay->step(0.01);
+          ActionFeedbackFadeDelay->value(1);
+          ActionFeedbackFadeDelay->textsize(12);
+          ActionFeedbackFadeDelay->textcolor(31);
+          ActionFeedbackFadeDelay->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* ActionFeedbackFadeDelay
+        o->end();
+      } // Fl_Group* o
+
+      // Engine continued: items that were below the Engine group in the old layout
+      // These need to be direct children of the panel since they don't fit in the Engine group vertically
+      { balanceReads = new Fl_Check_Button(150, 448, 15, 15, "Balance Reads");
+        balanceReads->tooltip("Makes all tracks load at the same rate. Reading a track of jpgs is much faste\
+r and might fill up RAM before the same amount of DPXs are read");
+        balanceReads->down_box(FL_FLAT_BOX);
+        balanceReads->value(1);
+        balanceReads->color(FL_INACTIVE_COLOR);
+        balanceReads->selection_color((Fl_Color)31);
+        balanceReads->labelcolor((Fl_Color)31);
+        balanceReads->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Check_Button* balanceReads
+      { processorPriority = new Fl_Check_Button(300, 448, 15, 15, "Try hard to maintain FPS (More CPU use)");
+        processorPriority->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
+images you can try using this option. It is slower on some formats though (Par\
+ticularly DPX).");
+        processorPriority->down_box(FL_FLAT_BOX);
+        processorPriority->color(FL_INACTIVE_COLOR);
+        processorPriority->selection_color((Fl_Color)31);
+        processorPriority->labelcolor((Fl_Color)31);
+        processorPriority->callback((Fl_Callback*)PreferencesCB);
+        processorPriority->align(FL_ALIGN_RIGHT);
+      } // Fl_Check_Button* processorPriority
+      { Fl_Group* o = new Fl_Group(140, 216, 440, 53, "Histogram");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { Fl_Value_Slider* o = histogramQuality = new Fl_Value_Slider(302, 243, 136, 15, "Histogram Subsampling");
+          histogramQuality->tooltip("Sampling determins the histogram quality: lower sampling means higher quality\
+ but takes longer to calculate.");
+          histogramQuality->type(1);
+          histogramQuality->box(FL_FLAT_BOX);
+          histogramQuality->color(FL_INACTIVE_COLOR);
+          histogramQuality->selection_color(FL_INACTIVE_COLOR);
+          histogramQuality->labelcolor((Fl_Color)31);
+          histogramQuality->minimum(1);
+          histogramQuality->maximum(64);
+          histogramQuality->step(1);
+          histogramQuality->value(16);
+          histogramQuality->textsize(14);
+          histogramQuality->textcolor(31);
+          histogramQuality->callback((Fl_Callback*)PreferencesCB);
+          histogramQuality->align(FL_ALIGN_LEFT);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+          o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Slider* histogramQuality
+        o->end();
+      } // Fl_Group* o
+
+      panels[0]->end();
+    } // panels[0] General
+
+    // === Panel 1: Text ===
+    { panels[1] = new Fl_Group(130, 5, 465, 450);
+      panels[1]->box(FL_FLAT_BOX);
+      panels[1]->color(fl_rgb_color(38,38,38));
+      panels[1]->hide();
+      textTab = panels[1];
+
+      // All widgets start at x=195 (130+65), labels right-align to that edge
+      int W = 195;  // widget left edge
+
+      // Font
+      { Fl_Choice* o = textDisplayFont = new Fl_Choice(W, 50, 270, 22, "Font");
+        textDisplayFont->tooltip("TrueType font for viewport text");
+        textDisplayFont->box(FL_FLAT_BOX);
+        textDisplayFont->down_box(FL_FLAT_BOX);
+        textDisplayFont->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        textDisplayFont->selection_color(FL_INACTIVE_COLOR);
+        textDisplayFont->labelsize(12);
+        textDisplayFont->labelcolor((Fl_Color)31);
+        textDisplayFont->textsize(12);
+        textDisplayFont->textcolor(31);
+        textDisplayFont->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Choice* textDisplayFont
+
+      // Size, Color, Opacity on one row
+      { Fl_Value_Input* o = textDisplayFontSize = new Fl_Value_Input(W, 78, 45, 22, "Size");
+        textDisplayFontSize->tooltip("Font size in points (8-48)");
+        textDisplayFontSize->box(FL_FLAT_BOX);
+        textDisplayFontSize->labelsize(12);
+        textDisplayFontSize->labelcolor((Fl_Color)31);
+        textDisplayFontSize->minimum(8);
+        textDisplayFontSize->maximum(48);
+        textDisplayFontSize->step(1);
+        textDisplayFontSize->value(15);
+        textDisplayFontSize->textsize(12);
+        textDisplayFontSize->textcolor(31);
+        textDisplayFontSize->callback((Fl_Callback*)PreferencesCB);
+        o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+      } // Fl_Value_Input* textDisplayFontSize
+      { Fl_Value_Input* o = textDisplayColor = new Fl_Value_Input(290, 78, 45, 22, "Color");
+        textDisplayColor->tooltip("Text brightness (0-1)");
+        textDisplayColor->box(FL_FLAT_BOX);
+        textDisplayColor->labelsize(12);
+        textDisplayColor->labelcolor((Fl_Color)31);
+        textDisplayColor->minimum(0.0);
+        textDisplayColor->maximum(1.0);
+        textDisplayColor->step(0.01);
+        textDisplayColor->value(1);
+        textDisplayColor->textsize(12);
+        textDisplayColor->textcolor(31);
+        textDisplayColor->callback((Fl_Callback*)PreferencesCB);
+        o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+      } // Fl_Value_Input* textDisplayColor
+      { Fl_Value_Input* o = textDisplayOpacity = new Fl_Value_Input(395, 78, 45, 22, "Opacity");
+        textDisplayOpacity->tooltip("Text opacity (0-1)");
+        textDisplayOpacity->box(FL_FLAT_BOX);
+        textDisplayOpacity->labelsize(12);
+        textDisplayOpacity->labelcolor((Fl_Color)31);
+        textDisplayOpacity->minimum(0.0);
+        textDisplayOpacity->maximum(1.0);
+        textDisplayOpacity->step(0.01);
+        textDisplayOpacity->value(1);
+        textDisplayOpacity->textsize(12);
+        textDisplayOpacity->textcolor(31);
+        textDisplayOpacity->callback((Fl_Callback*)PreferencesCB);
+        o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+      } // Fl_Value_Input* textDisplayOpacity
+
+      // Drop Shadow
+      { textDisplayShadow = new Fl_Check_Button(W, 106, 15, 15, "Drop Shadow");
+        textDisplayShadow->tooltip("Enable drop shadow behind viewport text");
+        textDisplayShadow->down_box(FL_FLAT_BOX);
+        textDisplayShadow->color(FL_INACTIVE_COLOR);
+        textDisplayShadow->selection_color((Fl_Color)31);
+        textDisplayShadow->labelcolor((Fl_Color)31);
+        textDisplayShadow->labelsize(12);
+        textDisplayShadow->value(1);
+        textDisplayShadow->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Check_Button* textDisplayShadow
+
+      // Hinting and Filter on one row
+      { Fl_Choice* o = textDisplayHinting = new Fl_Choice(W, 130, 110, 22, "Hint");
+        textDisplayHinting->tooltip("Light (smooth diagonals), Normal (sharp stems), Auto (FreeType auto-hinter)");
+        textDisplayHinting->box(FL_FLAT_BOX);
+        textDisplayHinting->down_box(FL_FLAT_BOX);
+        textDisplayHinting->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        textDisplayHinting->labelsize(12);
+        textDisplayHinting->labelcolor((Fl_Color)31);
+        textDisplayHinting->textsize(12);
+        textDisplayHinting->textcolor(31);
+        textDisplayHinting->add("Light");
+        textDisplayHinting->add("Normal");
+        textDisplayHinting->add("Auto");
+        textDisplayHinting->value(0);
+        textDisplayHinting->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Choice* textDisplayHinting
+      { Fl_Choice* o = textDisplayFilter = new Fl_Choice(365, 130, 100, 22, "Filter");
+        textDisplayFilter->tooltip("Nearest (pixel-perfect), Linear (smooth)");
+        textDisplayFilter->box(FL_FLAT_BOX);
+        textDisplayFilter->down_box(FL_FLAT_BOX);
+        textDisplayFilter->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        textDisplayFilter->labelsize(12);
+        textDisplayFilter->labelcolor((Fl_Color)31);
+        textDisplayFilter->textsize(12);
+        textDisplayFilter->textcolor(31);
+        textDisplayFilter->add("Nearest");
+        textDisplayFilter->add("Linear");
+        textDisplayFilter->value(0);
+        textDisplayFilter->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Choice* textDisplayFilter
+
+      // Gamma
+      { Fl_Value_Input* o = textDisplayGamma = new Fl_Value_Input(W, 158, 50, 22, "Gamma");
+        textDisplayGamma->tooltip("Gamma correction for text edges (lower = bolder, 0.3-1.0)");
+        textDisplayGamma->box(FL_FLAT_BOX);
+        textDisplayGamma->labelsize(12);
+        textDisplayGamma->labelcolor((Fl_Color)31);
+        textDisplayGamma->minimum(0.3);
+        textDisplayGamma->maximum(1.0);
+        textDisplayGamma->step(0.05);
+        textDisplayGamma->value(1.0);
+        textDisplayGamma->textsize(12);
+        textDisplayGamma->textcolor(31);
+        textDisplayGamma->callback((Fl_Callback*)PreferencesCB);
+        o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+      } // Fl_Value_Input* textDisplayGamma
+
+      panels[1]->end();
+    } // panels[1] Text
+
+    // === Panel 2: Formats ===
+    { panels[2] = new Fl_Group(130, 5, 465, 450);
+      panels[2]->box(FL_FLAT_BOX);
+      panels[2]->color(fl_rgb_color(38,38,38));
+      panels[2]->hide();
+      formatsTab = panels[2];
+      { Fl_Group* o = new Fl_Group(135, 10, 450, 170, "OpenEXR");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { exrIgnoreDisplayWindow = new Fl_Check_Button(140, 36, 20, 15, "Ignore Display Window");
+          exrIgnoreDisplayWindow->tooltip("Use only the Data Window in the openEXR file to determine image properties");
+          exrIgnoreDisplayWindow->down_box(FL_FLAT_BOX);
+          exrIgnoreDisplayWindow->color(FL_INACTIVE_COLOR);
+          exrIgnoreDisplayWindow->selection_color((Fl_Color)31);
+          exrIgnoreDisplayWindow->labelcolor((Fl_Color)31);
+          exrIgnoreDisplayWindow->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* exrIgnoreDisplayWindow
+        { exrIgnoreHeadersAspectRatio = new Fl_Check_Button(140, 59, 20, 15, "Ignore Header\'s Aspect Ratio");
+          exrIgnoreHeadersAspectRatio->tooltip("Use only the Data Window in the openEXR file to determine image properties");
+          exrIgnoreHeadersAspectRatio->down_box(FL_FLAT_BOX);
+          exrIgnoreHeadersAspectRatio->color(FL_INACTIVE_COLOR);
+          exrIgnoreHeadersAspectRatio->selection_color((Fl_Color)31);
+          exrIgnoreHeadersAspectRatio->labelcolor((Fl_Color)31);
+          exrIgnoreHeadersAspectRatio->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* exrIgnoreHeadersAspectRatio
+        { Fl_Group* o = new Fl_Group(139, 82, 431, 91, "Float >Integer transformation");
           o->box(FL_BORDER_FRAME);
           o->color(FL_INACTIVE_COLOR);
           o->labelfont(1);
           o->labelcolor((Fl_Color)31);
           o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { startFullscreenCheckBox = new Fl_Round_Button(20, 84, 15, 15, "Start in fullscreen mode");
-            startFullscreenCheckBox->down_box(FL_FLAT_BOX);
-            startFullscreenCheckBox->color(FL_INACTIVE_COLOR);
-            startFullscreenCheckBox->selection_color((Fl_Color)31);
-            startFullscreenCheckBox->labelcolor((Fl_Color)31);
-            startFullscreenCheckBox->callback((Fl_Callback*)PreferencesCB);
-            startFullscreenCheckBox->align(FL_ALIGN_BOTTOM_LEFT|FL_ALIGN_INSIDE);
-          } // Fl_Round_Button* startFullscreenCheckBox
-          { loadWindowOnStartupCheckBox = new Fl_Round_Button(20, 64, 15, 15, "Open Load window on startup");
-            loadWindowOnStartupCheckBox->down_box(FL_FLAT_BOX);
-            loadWindowOnStartupCheckBox->value(1);
-            loadWindowOnStartupCheckBox->color(FL_INACTIVE_COLOR);
-            loadWindowOnStartupCheckBox->selection_color((Fl_Color)31);
-            loadWindowOnStartupCheckBox->labelcolor((Fl_Color)31);
-            loadWindowOnStartupCheckBox->callback((Fl_Callback*)PreferencesCB);
-            loadWindowOnStartupCheckBox->align(FL_ALIGN_BOTTOM_LEFT|FL_ALIGN_INSIDE);
-          } // Fl_Round_Button* loadWindowOnStartupCheckBox
-          { Fl_Input* o = defaultBrowsePath = new Fl_Input(18, 146, 234, 18, "Default Browse Path");
-            defaultBrowsePath->tooltip("When browsing for sequences, this will be the default folder the browser open\
-s. Set it to point to the project folder you are currently working on to make \
-browsing easier! This value is overriden by the environment variable JEFECHECK\
-_DEFAULT_BROWSE_PATH");
-            defaultBrowsePath->box(FL_FLAT_BOX);
-            defaultBrowsePath->color(FL_INACTIVE_COLOR);
-            defaultBrowsePath->labelcolor((Fl_Color)31);
-            defaultBrowsePath->textcolor(31);
-            defaultBrowsePath->align(FL_ALIGN_TOP_LEFT);
-            defaultBrowsePath->when(FL_WHEN_CHANGED);
+          { exrEnableExposureTransformOnLoad = new Fl_Check_Button(155, 105, 20, 15, "Enable Exposure Transform on Load");
+            exrEnableExposureTransformOnLoad->tooltip("Perform the reference Float to Integer color transformation when loading to a\
+n Integer buffer (8bpc, 16bpc, 4bpc, S3TC)");
+            exrEnableExposureTransformOnLoad->down_box(FL_FLAT_BOX);
+            exrEnableExposureTransformOnLoad->color(FL_INACTIVE_COLOR);
+            exrEnableExposureTransformOnLoad->selection_color((Fl_Color)31);
+            exrEnableExposureTransformOnLoad->labelcolor((Fl_Color)31);
+            exrEnableExposureTransformOnLoad->callback((Fl_Callback*)PreferencesCB);
+          } // Fl_Check_Button* exrEnableExposureTransformOnLoad
+          { Fl_Value_Input* o = exrExposure = new Fl_Value_Input(210, 126, 34, 15, "Exposure");
+            exrExposure->box(FL_FLAT_BOX);
+            exrExposure->color(FL_INACTIVE_COLOR);
+            exrExposure->selection_color(FL_FOREGROUND_COLOR);
+            exrExposure->labelsize(12);
+            exrExposure->labelcolor((Fl_Color)31);
+            exrExposure->minimum(-10);
+            exrExposure->maximum(10);
+            exrExposure->step(0.01);
+            exrExposure->textsize(12);
+            exrExposure->textcolor(31);
+            exrExposure->callback((Fl_Callback*)PreferencesCB);
             o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Input* defaultBrowsePath
-          { Fl_Button_gfc* o = new Fl_Button_gfc(256, 146, 68, 18, "browse");
+          } // Fl_Value_Input* exrExposure
+          { Fl_Value_Input* o = exrDefog = new Fl_Value_Input(289, 126, 45, 15, "Defog");
+            exrDefog->box(FL_FLAT_BOX);
+            exrDefog->color(FL_INACTIVE_COLOR);
+            exrDefog->selection_color(FL_FOREGROUND_COLOR);
+            exrDefog->labelsize(12);
+            exrDefog->labelcolor((Fl_Color)31);
+            exrDefog->step(0.0001);
+            exrDefog->textsize(12);
+            exrDefog->textcolor(31);
+            exrDefog->callback((Fl_Callback*)PreferencesCB);
+            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+          } // Fl_Value_Input* exrDefog
+          { Fl_Value_Input* o = exrKneeLow = new Fl_Value_Input(210, 149, 34, 15, "Knee low");
+            exrKneeLow->box(FL_FLAT_BOX);
+            exrKneeLow->color(FL_INACTIVE_COLOR);
+            exrKneeLow->selection_color(FL_FOREGROUND_COLOR);
+            exrKneeLow->labelsize(12);
+            exrKneeLow->labelcolor((Fl_Color)31);
+            exrKneeLow->minimum(-3);
+            exrKneeLow->maximum(3);
+            exrKneeLow->step(0.01);
+            exrKneeLow->textsize(12);
+            exrKneeLow->textcolor(31);
+            exrKneeLow->callback((Fl_Callback*)PreferencesCB);
+            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+          } // Fl_Value_Input* exrKneeLow
+          { Fl_Value_Input* o = exrKneeHigh = new Fl_Value_Input(310, 149, 34, 15, "Knee high");
+            exrKneeHigh->box(FL_FLAT_BOX);
+            exrKneeHigh->color(FL_INACTIVE_COLOR);
+            exrKneeHigh->selection_color(FL_FOREGROUND_COLOR);
+            exrKneeHigh->labelsize(12);
+            exrKneeHigh->labelcolor((Fl_Color)31);
+            exrKneeHigh->minimum(3.5);
+            exrKneeHigh->maximum(7.5);
+            exrKneeHigh->step(0.01);
+            exrKneeHigh->value(5);
+            exrKneeHigh->textsize(12);
+            exrKneeHigh->textcolor(31);
+            exrKneeHigh->callback((Fl_Callback*)PreferencesCB);
+            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+          } // Fl_Value_Input* exrKneeHigh
+          { Fl_Value_Input* o = exrGamma = new Fl_Value_Input(385, 126, 34, 15, "Gamma");
+            exrGamma->box(FL_FLAT_BOX);
+            exrGamma->color(FL_INACTIVE_COLOR);
+            exrGamma->selection_color(FL_FOREGROUND_COLOR);
+            exrGamma->labelsize(12);
+            exrGamma->labelcolor((Fl_Color)31);
+            exrGamma->minimum(0.01);
+            exrGamma->maximum(10);
+            exrGamma->step(0.01);
+            exrGamma->value(2.2);
+            exrGamma->textsize(12);
+            exrGamma->textcolor(31);
+            exrGamma->callback((Fl_Callback*)PreferencesCB);
+            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+          } // Fl_Value_Input* exrGamma
+          { Fl_Button_gfc* o = new Fl_Button_gfc(360, 148, 60, 18, "Defaults");
             o->box(FL_FLAT_BOX);
             o->color(FL_INACTIVE_COLOR);
             o->selection_color(FL_BACKGROUND_COLOR);
             o->labeltype(FL_NORMAL_LABEL);
             o->labelfont(0);
-            o->labelsize(14);
+            o->labelsize(12);
             o->labelcolor((Fl_Color)31);
-            o->callback((Fl_Callback*)PreferencesCB, (void*)(PATHBROWSEBUTTON_ID));
+            o->callback((Fl_Callback*)PreferencesCB, (void*)(EXRPREFSDEFAULTSBUTTON_ID));
             o->align(FL_ALIGN_CENTER);
             o->when(FL_WHEN_RELEASE);
           } // Fl_Button_gfc* o
-          { attemptToRecoverFromCrashCheckBox = new Fl_Round_Button(20, 105, 15, 15, "Attempt to recover from crash");
-            attemptToRecoverFromCrashCheckBox->down_box(FL_FLAT_BOX);
-            attemptToRecoverFromCrashCheckBox->value(1);
-            attemptToRecoverFromCrashCheckBox->color(FL_INACTIVE_COLOR);
-            attemptToRecoverFromCrashCheckBox->selection_color((Fl_Color)31);
-            attemptToRecoverFromCrashCheckBox->labelcolor((Fl_Color)31);
-            attemptToRecoverFromCrashCheckBox->callback((Fl_Callback*)PreferencesCB);
-            attemptToRecoverFromCrashCheckBox->align(FL_ALIGN_BOTTOM_LEFT|FL_ALIGN_INSIDE);
-          } // Fl_Round_Button* attemptToRecoverFromCrashCheckBox
-          o->end();
-        } // Fl_Group* o
-        { Fl_Group* o = new Fl_Group(10, 179, 160, 53, "Background Color");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { Fl_Value_Slider* o = bgColor = new Fl_Value_Slider(58, 205, 97, 15, "Value");
-            bgColor->tooltip("Set the Value of the gray background color to suit your taste and pupils.");
-            bgColor->type(1);
-            bgColor->box(FL_FLAT_BOX);
-            bgColor->color(FL_INACTIVE_COLOR);
-            bgColor->labelcolor((Fl_Color)31);
-            bgColor->maximum(127);
-            bgColor->step(1);
-            bgColor->value(38);
-            bgColor->textsize(14);
-            bgColor->textcolor(31);
-            bgColor->callback((Fl_Callback*)PreferencesCB);
-            bgColor->align(FL_ALIGN_LEFT);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Slider* bgColor
-          o->end();
-        } // Fl_Group* o
-        { Fl_Group* o = new Fl_Group(10, 297, 320, 232, "Engine");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { Fl_Value_Slider* o = percentageOfRam = new Fl_Value_Slider(20, 337, 169, 15, "% of RAM to Use");
-            percentageOfRam->tooltip("The engine will load frames until this amount of system RAM is used up. Recom\
-mended values are  be between 80 and 95 so that the system has enough RAM to f\
-unction properly even when loading large sequences");
-            percentageOfRam->type(3);
-            percentageOfRam->box(FL_FLAT_BOX);
-            percentageOfRam->color(FL_INACTIVE_COLOR);
-            percentageOfRam->selection_color(FL_INACTIVE_COLOR);
-            percentageOfRam->labelcolor((Fl_Color)31);
-            percentageOfRam->minimum(10);
-            percentageOfRam->maximum(95);
-            percentageOfRam->step(0.5);
-            percentageOfRam->value(85);
-            percentageOfRam->textsize(14);
-            percentageOfRam->textcolor(31);
-            percentageOfRam->callback((Fl_Callback*)PreferencesCB);
-            percentageOfRam->align(FL_ALIGN_TOP_LEFT);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Slider* percentageOfRam
-          { forceGFLLoading = new Fl_Check_Button(20, 357, 15, 15, "Force GFL Loading Engine");
-            forceGFLLoading->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
-images you can try using this option. It is slower on some formats though (Par\
-ticularly DPX).");
-            forceGFLLoading->down_box(FL_FLAT_BOX);
-            forceGFLLoading->color(FL_INACTIVE_COLOR);
-            forceGFLLoading->selection_color((Fl_Color)31);
-            forceGFLLoading->labelcolor((Fl_Color)31);
-            forceGFLLoading->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* forceGFLLoading
-          { Fl_Check_Button* o = frawProxiesAtFullResolution = new Fl_Check_Button(20, 374, 15, 15, "Draw Proxies at full Resolution");
-            frawProxiesAtFullResolution->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
-images you can try using this option. It is slower on some formats though (Par\
-ticularly DPX).");
-            frawProxiesAtFullResolution->down_box(FL_FLAT_BOX);
-            frawProxiesAtFullResolution->color(FL_INACTIVE_COLOR);
-            frawProxiesAtFullResolution->selection_color((Fl_Color)31);
-            frawProxiesAtFullResolution->labelcolor((Fl_Color)31);
-            frawProxiesAtFullResolution->callback((Fl_Callback*)PreferencesCB);
-            frawProxiesAtFullResolution->hide();
-            o->color(fl_rgb_color(32,32,32));
-          } // Fl_Check_Button* frawProxiesAtFullResolution
-          { dontUseInactiveMemory = new Fl_Check_Button(20, 378, 15, 15, "Don\'t use Inactive Memory (OS X only)");
-            dontUseInactiveMemory->tooltip("Enable this option if on Mac OS X you whish to use only physically available \
-RAM");
-            dontUseInactiveMemory->down_box(FL_FLAT_BOX);
-            dontUseInactiveMemory->color(FL_INACTIVE_COLOR);
-            dontUseInactiveMemory->selection_color((Fl_Color)31);
-            dontUseInactiveMemory->labelcolor((Fl_Color)31);
-            dontUseInactiveMemory->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* dontUseInactiveMemory
-          { forceSingleBufferedFXs = new Fl_Check_Button(20, 399, 15, 15, "Force Single Buffered FXs");
-            forceSingleBufferedFXs->tooltip("If you have problems using FXs, try enabling this option, specially if your v\
-ideo card is pre GeForce 7");
-            forceSingleBufferedFXs->down_box(FL_FLAT_BOX);
-            forceSingleBufferedFXs->color(FL_INACTIVE_COLOR);
-            forceSingleBufferedFXs->selection_color((Fl_Color)31);
-            forceSingleBufferedFXs->labelcolor((Fl_Color)31);
-            forceSingleBufferedFXs->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* forceSingleBufferedFXs
-          { continueLoadingOnError = new Fl_Check_Button(20, 420, 15, 15, "Continue loading sequence after load error");
-            continueLoadingOnError->tooltip("If a failure ocurrs while loading a particular corrupt frame, JefeCheck will \
-continue loading the sequence moving on to the next frame.");
-            continueLoadingOnError->down_box(FL_FLAT_BOX);
-            continueLoadingOnError->value(1);
-            continueLoadingOnError->color(FL_INACTIVE_COLOR);
-            continueLoadingOnError->selection_color((Fl_Color)31);
-            continueLoadingOnError->labelcolor((Fl_Color)31);
-            continueLoadingOnError->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* continueLoadingOnError
-          { vsync = new Fl_Check_Button(20, 441, 15, 15, "Enable Vertical Redraw Sync (vsync)");
-            vsync->tooltip("Enable this option to synchronize frame redraw with your monitor\'s refresh r\
-ate. Can help with tearing issues on monitors with a refresh rate different th\
-an your attempted frame rate.");
-            vsync->down_box(FL_FLAT_BOX);
-            vsync->color(FL_INACTIVE_COLOR);
-            vsync->selection_color((Fl_Color)31);
-            vsync->labelcolor((Fl_Color)31);
-            vsync->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* vsync
-          { maximumFramesInQueue = new Fl_Value_Input(244, 337, 30, 15, "Max Frames in Queue");
-            maximumFramesInQueue->tooltip("If some frames show up black, try setting this to 1.");
-            maximumFramesInQueue->box(FL_FLAT_BOX);
-            maximumFramesInQueue->color(FL_INACTIVE_COLOR);
-            maximumFramesInQueue->labelsize(12);
-            maximumFramesInQueue->labelcolor((Fl_Color)31);
-            maximumFramesInQueue->maximum(99999);
-            maximumFramesInQueue->step(1);
-            maximumFramesInQueue->value(5);
-            maximumFramesInQueue->textsize(12);
-            maximumFramesInQueue->textcolor(31);
-            maximumFramesInQueue->callback((Fl_Callback*)PreferencesCB);
-            maximumFramesInQueue->align(FL_ALIGN_TOP);
-            maximumFramesInQueue->when(3);
-          } // Fl_Value_Input* maximumFramesInQueue
-          { balanceReads = new Fl_Check_Button(20, 483, 15, 15, "Balance Reads");
-            balanceReads->tooltip("Makes all tracks load at the same rate. Reading a track of jpgs is much faste\
-r and might fill up RAM before the same amount of DPXs are read");
-            balanceReads->down_box(FL_FLAT_BOX);
-            balanceReads->value(1);
-            balanceReads->color(FL_INACTIVE_COLOR);
-            balanceReads->selection_color((Fl_Color)31);
-            balanceReads->labelcolor((Fl_Color)31);
-            balanceReads->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* balanceReads
-          { Fl_Value_Slider* o = histogramQuality = new Fl_Value_Slider(172, 504, 136, 15, "Histogram Subsampling");
-            histogramQuality->tooltip("Sampling determins the histogram quality: lower sampling means higher quality\
- but takes longer to calculate.");
-            histogramQuality->type(1);
-            histogramQuality->box(FL_FLAT_BOX);
-            histogramQuality->color(FL_INACTIVE_COLOR);
-            histogramQuality->selection_color(FL_INACTIVE_COLOR);
-            histogramQuality->labelcolor((Fl_Color)31);
-            histogramQuality->minimum(1);
-            histogramQuality->maximum(64);
-            histogramQuality->step(1);
-            histogramQuality->value(16);
-            histogramQuality->textsize(14);
-            histogramQuality->textcolor(31);
-            histogramQuality->callback((Fl_Callback*)PreferencesCB);
-            histogramQuality->align(FL_ALIGN_LEFT);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Slider* histogramQuality
-          { processorPriority = new Fl_Check_Button(20, 461, 15, 15, "Try hard to maintain FPS (More CPU use)");
-            processorPriority->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
-images you can try using this option. It is slower on some formats though (Par\
-ticularly DPX).");
-            processorPriority->down_box(FL_FLAT_BOX);
-            processorPriority->color(FL_INACTIVE_COLOR);
-            processorPriority->selection_color((Fl_Color)31);
-            processorPriority->labelcolor((Fl_Color)31);
-            processorPriority->callback((Fl_Callback*)PreferencesCB);
-            processorPriority->align(FL_ALIGN_RIGHT);
-          } // Fl_Check_Button* processorPriority
-          o->end();
-        } // Fl_Group* o
-        { Fl_Group* o = new Fl_Group(175, 179, 155, 53, "Action Feedback");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { Fl_Value_Input* o = ActionFeedbackSize = new Fl_Value_Input(210, 210, 25, 15, "Size");
-            ActionFeedbackSize->tooltip("Font Size of the Action Feedback Display");
-            ActionFeedbackSize->box(FL_FLAT_BOX);
-            ActionFeedbackSize->color(FL_INACTIVE_COLOR);
-            ActionFeedbackSize->selection_color(FL_FOREGROUND_COLOR);
-            ActionFeedbackSize->labelsize(12);
-            ActionFeedbackSize->labelcolor((Fl_Color)31);
-            ActionFeedbackSize->minimum(8);
-            ActionFeedbackSize->maximum(48);
-            ActionFeedbackSize->step(1);
-            ActionFeedbackSize->value(12);
-            ActionFeedbackSize->textsize(12);
-            ActionFeedbackSize->textcolor(31);
-            ActionFeedbackSize->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* ActionFeedbackSize
-          { Fl_Value_Input* o = ActionFeedbackFadeDelay = new Fl_Value_Input(280, 210, 36, 15, "Fade");
-            ActionFeedbackFadeDelay->tooltip("How long the Action Feedback is displayed in seconds (set to 0 to turn displa\
-y Off)");
-            ActionFeedbackFadeDelay->box(FL_FLAT_BOX);
-            ActionFeedbackFadeDelay->color(FL_INACTIVE_COLOR);
-            ActionFeedbackFadeDelay->selection_color(FL_FOREGROUND_COLOR);
-            ActionFeedbackFadeDelay->labelsize(12);
-            ActionFeedbackFadeDelay->labelcolor((Fl_Color)31);
-            ActionFeedbackFadeDelay->maximum(10);
-            ActionFeedbackFadeDelay->step(0.01);
-            ActionFeedbackFadeDelay->value(1);
-            ActionFeedbackFadeDelay->textsize(12);
-            ActionFeedbackFadeDelay->textcolor(31);
-            ActionFeedbackFadeDelay->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* ActionFeedbackFadeDelay
           o->end();
         } // Fl_Group* o
         o->end();
       } // Fl_Group* o
-      { textTab = new Fl_Group(5, 35, 347, 459, "Text");
-        textTab->color(fl_rgb_color(38,38,38));
-        textTab->selection_color(fl_rgb_color(50,50,50));
-        textTab->labelcolor(fl_rgb_color(200,200,200));
-        textTab->hide();
+      panels[2]->end();
+    } // panels[2] Formats
 
-        // All widgets start at x=65, labels right-align to that edge (FLTK default)
-        int W = 65;  // widget left edge
-
-        // Font
-        { Fl_Choice* o = textDisplayFont = new Fl_Choice(W, 50, 270, 22, "Font");
-          textDisplayFont->tooltip("TrueType font for viewport text");
-          textDisplayFont->box(FL_FLAT_BOX);
-          textDisplayFont->down_box(FL_FLAT_BOX);
-          textDisplayFont->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          textDisplayFont->selection_color(FL_INACTIVE_COLOR);
-          textDisplayFont->labelsize(12);
-          textDisplayFont->labelcolor((Fl_Color)31);
-          textDisplayFont->textsize(12);
-          textDisplayFont->textcolor(31);
-          textDisplayFont->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Choice* textDisplayFont
-
-        // Size, Color, Opacity on one row
-        { Fl_Value_Input* o = textDisplayFontSize = new Fl_Value_Input(W, 78, 45, 22, "Size");
-          textDisplayFontSize->tooltip("Font size in points (8-48)");
-          textDisplayFontSize->box(FL_FLAT_BOX);
-          textDisplayFontSize->labelsize(12);
-          textDisplayFontSize->labelcolor((Fl_Color)31);
-          textDisplayFontSize->minimum(8);
-          textDisplayFontSize->maximum(48);
-          textDisplayFontSize->step(1);
-          textDisplayFontSize->value(15);
-          textDisplayFontSize->textsize(12);
-          textDisplayFontSize->textcolor(31);
-          textDisplayFontSize->callback((Fl_Callback*)PreferencesCB);
+    // === Panel 3: Remote ===
+    { panels[3] = new Fl_Group(130, 5, 465, 450);
+      panels[3]->box(FL_FLAT_BOX);
+      panels[3]->color(fl_rgb_color(38,38,38));
+      panels[3]->hide();
+      remoteSessionTab = panels[3];
+      { Fl_Group* o = new Fl_Group(140, 20, 440, 72, "Chat Options");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { Fl_Value_Input* o = fontSize = new Fl_Value_Input(210, 43, 25, 15, "Font Size");
+          fontSize->box(FL_FLAT_BOX);
+          fontSize->color(FL_INACTIVE_COLOR);
+          fontSize->labelsize(12);
+          fontSize->labelcolor((Fl_Color)31);
+          fontSize->minimum(8);
+          fontSize->maximum(24);
+          fontSize->step(1);
+          fontSize->value(16);
+          fontSize->textsize(12);
+          fontSize->textcolor(31);
+          fontSize->callback((Fl_Callback*)PreferencesCB);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-        } // Fl_Value_Input* textDisplayFontSize
-        { Fl_Value_Input* o = textDisplayColor = new Fl_Value_Input(160, 78, 45, 22, "Color");
-          textDisplayColor->tooltip("Text brightness (0-1)");
-          textDisplayColor->box(FL_FLAT_BOX);
-          textDisplayColor->labelsize(12);
-          textDisplayColor->labelcolor((Fl_Color)31);
-          textDisplayColor->minimum(0.0);
-          textDisplayColor->maximum(1.0);
-          textDisplayColor->step(0.01);
-          textDisplayColor->value(1);
-          textDisplayColor->textsize(12);
-          textDisplayColor->textcolor(31);
-          textDisplayColor->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Value_Input* fontSize
+        { Fl_Value_Input* o = fadeDelay = new Fl_Value_Input(345, 66, 25, 15, "Delay");
+          fadeDelay->tooltip("How long before the chat display fades away when not in chat mode");
+          fadeDelay->box(FL_FLAT_BOX);
+          fadeDelay->color(FL_INACTIVE_COLOR);
+          fadeDelay->labelsize(12);
+          fadeDelay->labelcolor((Fl_Color)31);
+          fadeDelay->minimum(1);
+          fadeDelay->maximum(999999);
+          fadeDelay->step(1);
+          fadeDelay->value(8);
+          fadeDelay->textsize(12);
+          fadeDelay->textcolor(31);
+          fadeDelay->callback((Fl_Callback*)PreferencesCB);
+          fadeDelay->align(FL_ALIGN_RIGHT);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-        } // Fl_Value_Input* textDisplayColor
-        { Fl_Value_Input* o = textDisplayOpacity = new Fl_Value_Input(265, 78, 45, 22, "Opacity");
-          textDisplayOpacity->tooltip("Text opacity (0-1)");
-          textDisplayOpacity->box(FL_FLAT_BOX);
-          textDisplayOpacity->labelsize(12);
-          textDisplayOpacity->labelcolor((Fl_Color)31);
-          textDisplayOpacity->minimum(0.0);
-          textDisplayOpacity->maximum(1.0);
-          textDisplayOpacity->step(0.01);
-          textDisplayOpacity->value(1);
-          textDisplayOpacity->textsize(12);
-          textDisplayOpacity->textcolor(31);
-          textDisplayOpacity->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Value_Input* fadeDelay
+        { Fl_Value_Input* o = opacity = new Fl_Value_Input(418, 43, 35, 15, "Opacity");
+          opacity->tooltip("Set the opacity of the chat display over the viewport");
+          opacity->box(FL_FLAT_BOX);
+          opacity->color(FL_INACTIVE_COLOR);
+          opacity->labelsize(12);
+          opacity->labelcolor((Fl_Color)31);
+          opacity->minimum(0.1);
+          opacity->step(0.01);
+          opacity->value(0.75);
+          opacity->textsize(12);
+          opacity->textcolor(31);
+          opacity->callback((Fl_Callback*)PreferencesCB);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-        } // Fl_Value_Input* textDisplayOpacity
-
-        // Drop Shadow
-        { textDisplayShadow = new Fl_Check_Button(W, 106, 15, 15, "Drop Shadow");
-          textDisplayShadow->tooltip("Enable drop shadow behind viewport text");
-          textDisplayShadow->down_box(FL_FLAT_BOX);
-          textDisplayShadow->color(FL_INACTIVE_COLOR);
-          textDisplayShadow->selection_color((Fl_Color)31);
-          textDisplayShadow->labelcolor((Fl_Color)31);
-          textDisplayShadow->labelsize(12);
-          textDisplayShadow->value(1);
-          textDisplayShadow->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Check_Button* textDisplayShadow
-
-        // Hinting and Filter on one row
-        { Fl_Choice* o = textDisplayHinting = new Fl_Choice(W, 130, 110, 22, "Hint");
-          textDisplayHinting->tooltip("Light (smooth diagonals), Normal (sharp stems), Auto (FreeType auto-hinter)");
-          textDisplayHinting->box(FL_FLAT_BOX);
-          textDisplayHinting->down_box(FL_FLAT_BOX);
-          textDisplayHinting->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          textDisplayHinting->labelsize(12);
-          textDisplayHinting->labelcolor((Fl_Color)31);
-          textDisplayHinting->textsize(12);
-          textDisplayHinting->textcolor(31);
-          textDisplayHinting->add("Light");
-          textDisplayHinting->add("Normal");
-          textDisplayHinting->add("Auto");
-          textDisplayHinting->value(0);
-          textDisplayHinting->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Choice* textDisplayHinting
-        { Fl_Choice* o = textDisplayFilter = new Fl_Choice(235, 130, 100, 22, "Filter");
-          textDisplayFilter->tooltip("Nearest (pixel-perfect), Linear (smooth)");
-          textDisplayFilter->box(FL_FLAT_BOX);
-          textDisplayFilter->down_box(FL_FLAT_BOX);
-          textDisplayFilter->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          textDisplayFilter->labelsize(12);
-          textDisplayFilter->labelcolor((Fl_Color)31);
-          textDisplayFilter->textsize(12);
-          textDisplayFilter->textcolor(31);
-          textDisplayFilter->add("Nearest");
-          textDisplayFilter->add("Linear");
-          textDisplayFilter->value(0);
-          textDisplayFilter->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Choice* textDisplayFilter
-
-        // Gamma
-        { Fl_Value_Input* o = textDisplayGamma = new Fl_Value_Input(W, 158, 50, 22, "Gamma");
-          textDisplayGamma->tooltip("Gamma correction for text edges (lower = bolder, 0.3-1.0)");
-          textDisplayGamma->box(FL_FLAT_BOX);
-          textDisplayGamma->labelsize(12);
-          textDisplayGamma->labelcolor((Fl_Color)31);
-          textDisplayGamma->minimum(0.3);
-          textDisplayGamma->maximum(1.0);
-          textDisplayGamma->step(0.05);
-          textDisplayGamma->value(1.0);
-          textDisplayGamma->textsize(12);
-          textDisplayGamma->textcolor(31);
-          textDisplayGamma->callback((Fl_Callback*)PreferencesCB);
-          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-        } // Fl_Value_Input* textDisplayGamma
-
-        textTab->end();
-      } // Fl_Group* textTab
-      { formatsTab = new Fl_Group(0, 30, 355, 479, "Formats");
-        formatsTab->color(fl_rgb_color(38,38,38));
-        formatsTab->selection_color(fl_rgb_color(50,50,50));
-        formatsTab->labelcolor(fl_rgb_color(200,200,200));
-        formatsTab->hide();
-        { Fl_Group* o = new Fl_Group(5, 34, 350, 170, "OpenEXR");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { exrIgnoreDisplayWindow = new Fl_Check_Button(10, 60, 20, 15, "Ignore Display Window");
-            exrIgnoreDisplayWindow->tooltip("Use only the Data Window in the openEXR file to determine image properties");
-            exrIgnoreDisplayWindow->down_box(FL_FLAT_BOX);
-            exrIgnoreDisplayWindow->color(FL_INACTIVE_COLOR);
-            exrIgnoreDisplayWindow->selection_color((Fl_Color)31);
-            exrIgnoreDisplayWindow->labelcolor((Fl_Color)31);
-            exrIgnoreDisplayWindow->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* exrIgnoreDisplayWindow
-          { exrIgnoreHeadersAspectRatio = new Fl_Check_Button(10, 83, 20, 15, "Ignore Header\'s Aspect Ratio");
-            exrIgnoreHeadersAspectRatio->tooltip("Use only the Data Window in the openEXR file to determine image properties");
-            exrIgnoreHeadersAspectRatio->down_box(FL_FLAT_BOX);
-            exrIgnoreHeadersAspectRatio->color(FL_INACTIVE_COLOR);
-            exrIgnoreHeadersAspectRatio->selection_color((Fl_Color)31);
-            exrIgnoreHeadersAspectRatio->labelcolor((Fl_Color)31);
-            exrIgnoreHeadersAspectRatio->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* exrIgnoreHeadersAspectRatio
-          { Fl_Group* o = new Fl_Group(9, 106, 331, 91, "Float >Integer transformation");
-            o->box(FL_BORDER_FRAME);
-            o->color(FL_INACTIVE_COLOR);
-            o->labelfont(1);
-            o->labelcolor((Fl_Color)31);
-            o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-            { exrEnableExposureTransformOnLoad = new Fl_Check_Button(25, 129, 20, 15, "Enable Exposure Transform on Load");
-              exrEnableExposureTransformOnLoad->tooltip("Perform the reference Float to Integer color transformation when loading to a\
-n Integer buffer (8bpc, 16bpc, 4bpc, S3TC)");
-              exrEnableExposureTransformOnLoad->down_box(FL_FLAT_BOX);
-              exrEnableExposureTransformOnLoad->color(FL_INACTIVE_COLOR);
-              exrEnableExposureTransformOnLoad->selection_color((Fl_Color)31);
-              exrEnableExposureTransformOnLoad->labelcolor((Fl_Color)31);
-              exrEnableExposureTransformOnLoad->callback((Fl_Callback*)PreferencesCB);
-            } // Fl_Check_Button* exrEnableExposureTransformOnLoad
-            { Fl_Value_Input* o = exrExposure = new Fl_Value_Input(80, 150, 34, 15, "Exposure");
-              exrExposure->box(FL_FLAT_BOX);
-              exrExposure->color(FL_INACTIVE_COLOR);
-              exrExposure->selection_color(FL_FOREGROUND_COLOR);
-              exrExposure->labelsize(12);
-              exrExposure->labelcolor((Fl_Color)31);
-              exrExposure->minimum(-10);
-              exrExposure->maximum(10);
-              exrExposure->step(0.01);
-              exrExposure->textsize(12);
-              exrExposure->textcolor(31);
-              exrExposure->callback((Fl_Callback*)PreferencesCB);
-              o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            } // Fl_Value_Input* exrExposure
-            { Fl_Value_Input* o = exrDefog = new Fl_Value_Input(159, 150, 45, 15, "Defog");
-              exrDefog->box(FL_FLAT_BOX);
-              exrDefog->color(FL_INACTIVE_COLOR);
-              exrDefog->selection_color(FL_FOREGROUND_COLOR);
-              exrDefog->labelsize(12);
-              exrDefog->labelcolor((Fl_Color)31);
-              exrDefog->step(0.0001);
-              exrDefog->textsize(12);
-              exrDefog->textcolor(31);
-              exrDefog->callback((Fl_Callback*)PreferencesCB);
-              o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            } // Fl_Value_Input* exrDefog
-            { Fl_Value_Input* o = exrKneeLow = new Fl_Value_Input(80, 173, 34, 15, "Knee low");
-              exrKneeLow->box(FL_FLAT_BOX);
-              exrKneeLow->color(FL_INACTIVE_COLOR);
-              exrKneeLow->selection_color(FL_FOREGROUND_COLOR);
-              exrKneeLow->labelsize(12);
-              exrKneeLow->labelcolor((Fl_Color)31);
-              exrKneeLow->minimum(-3);
-              exrKneeLow->maximum(3);
-              exrKneeLow->step(0.01);
-              exrKneeLow->textsize(12);
-              exrKneeLow->textcolor(31);
-              exrKneeLow->callback((Fl_Callback*)PreferencesCB);
-              o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            } // Fl_Value_Input* exrKneeLow
-            { Fl_Value_Input* o = exrKneeHigh = new Fl_Value_Input(180, 173, 34, 15, "Knee high");
-              exrKneeHigh->box(FL_FLAT_BOX);
-              exrKneeHigh->color(FL_INACTIVE_COLOR);
-              exrKneeHigh->selection_color(FL_FOREGROUND_COLOR);
-              exrKneeHigh->labelsize(12);
-              exrKneeHigh->labelcolor((Fl_Color)31);
-              exrKneeHigh->minimum(3.5);
-              exrKneeHigh->maximum(7.5);
-              exrKneeHigh->step(0.01);
-              exrKneeHigh->value(5);
-              exrKneeHigh->textsize(12);
-              exrKneeHigh->textcolor(31);
-              exrKneeHigh->callback((Fl_Callback*)PreferencesCB);
-              o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            } // Fl_Value_Input* exrKneeHigh
-            { Fl_Value_Input* o = exrGamma = new Fl_Value_Input(255, 150, 34, 15, "Gamma");
-              exrGamma->box(FL_FLAT_BOX);
-              exrGamma->color(FL_INACTIVE_COLOR);
-              exrGamma->selection_color(FL_FOREGROUND_COLOR);
-              exrGamma->labelsize(12);
-              exrGamma->labelcolor((Fl_Color)31);
-              exrGamma->minimum(0.01);
-              exrGamma->maximum(10);
-              exrGamma->step(0.01);
-              exrGamma->value(2.2);
-              exrGamma->textsize(12);
-              exrGamma->textcolor(31);
-              exrGamma->callback((Fl_Callback*)PreferencesCB);
-              o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-            } // Fl_Value_Input* exrGamma
-            { Fl_Button_gfc* o = new Fl_Button_gfc(230, 172, 60, 18, "Defaults");
-              o->box(FL_FLAT_BOX);
-              o->color(FL_INACTIVE_COLOR);
-              o->selection_color(FL_BACKGROUND_COLOR);
-              o->labeltype(FL_NORMAL_LABEL);
-              o->labelfont(0);
-              o->labelsize(12);
-              o->labelcolor((Fl_Color)31);
-              o->callback((Fl_Callback*)PreferencesCB, (void*)(EXRPREFSDEFAULTSBUTTON_ID));
-              o->align(FL_ALIGN_CENTER);
-              o->when(FL_WHEN_RELEASE);
-            } // Fl_Button_gfc* o
-            o->end();
-          } // Fl_Group* o
-          o->end();
-        } // Fl_Group* o
-        formatsTab->end();
-      } // Fl_Group* formatsTab
-      { remoteSessionTab = new Fl_Group(5, 30, 347, 426, "Remote");
-        remoteSessionTab->color(fl_rgb_color(38,38,38));
-        remoteSessionTab->selection_color(fl_rgb_color(50,50,50));
-        remoteSessionTab->labelcolor(fl_rgb_color(200,200,200));
-        remoteSessionTab->hide();
-        { Fl_Group* o = new Fl_Group(10, 44, 320, 72, "Chat Options");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { Fl_Value_Input* o = fontSize = new Fl_Value_Input(80, 67, 25, 15, "Font Size");
-            fontSize->box(FL_FLAT_BOX);
-            fontSize->color(FL_INACTIVE_COLOR);
-            fontSize->labelsize(12);
-            fontSize->labelcolor((Fl_Color)31);
-            fontSize->minimum(8);
-            fontSize->maximum(24);
-            fontSize->step(1);
-            fontSize->value(16);
-            fontSize->textsize(12);
-            fontSize->textcolor(31);
-            fontSize->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* fontSize
-          { Fl_Value_Input* o = fadeDelay = new Fl_Value_Input(215, 90, 25, 15, "Delay");
-            fadeDelay->tooltip("How long before the chat display fades away when not in chat mode");
-            fadeDelay->box(FL_FLAT_BOX);
-            fadeDelay->color(FL_INACTIVE_COLOR);
-            fadeDelay->labelsize(12);
-            fadeDelay->labelcolor((Fl_Color)31);
-            fadeDelay->minimum(1);
-            fadeDelay->maximum(999999);
-            fadeDelay->step(1);
-            fadeDelay->value(8);
-            fadeDelay->textsize(12);
-            fadeDelay->textcolor(31);
-            fadeDelay->callback((Fl_Callback*)PreferencesCB);
-            fadeDelay->align(FL_ALIGN_RIGHT);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* fadeDelay
-          { Fl_Value_Input* o = opacity = new Fl_Value_Input(288, 67, 35, 15, "Opacity");
-            opacity->tooltip("Set the opacity of the chat display over the viewport");
-            opacity->box(FL_FLAT_BOX);
-            opacity->color(FL_INACTIVE_COLOR);
-            opacity->labelsize(12);
-            opacity->labelcolor((Fl_Color)31);
-            opacity->minimum(0.1);
-            opacity->step(0.01);
-            opacity->value(0.75);
-            opacity->textsize(12);
-            opacity->textcolor(31);
-            opacity->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* opacity
-          { autoFade = new Fl_Check_Button(129, 90, 15, 15, "Auto Fade");
-            autoFade->tooltip("When not in chat mode, the chat display will fade away automatically after a \
+        } // Fl_Value_Input* opacity
+        { autoFade = new Fl_Check_Button(259, 66, 15, 15, "Auto Fade");
+          autoFade->tooltip("When not in chat mode, the chat display will fade away automatically after a \
 short delay if this is enabled.");
-            autoFade->down_box(FL_FLAT_BOX);
-            autoFade->value(1);
-            autoFade->color(FL_INACTIVE_COLOR);
-            autoFade->selection_color((Fl_Color)31);
-            autoFade->labelsize(12);
-            autoFade->labelcolor((Fl_Color)31);
-            autoFade->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* autoFade
-          { textBG = new Fl_Check_Button(116, 67, 15, 15, "Text Background");
-            textBG->tooltip("Show a gray backdrop behind the chat display to improve readability");
-            textBG->down_box(FL_FLAT_BOX);
-            textBG->value(1);
-            textBG->color(FL_INACTIVE_COLOR);
-            textBG->selection_color((Fl_Color)31);
-            textBG->labelsize(12);
-            textBG->labelcolor((Fl_Color)31);
-            textBG->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* textBG
-          { Fl_Value_Input* o = chatLines = new Fl_Value_Input(95, 90, 25, 15, "History Lines");
-            chatLines->tooltip("Set how many lines of chat history to show");
-            chatLines->box(FL_FLAT_BOX);
-            chatLines->color(FL_INACTIVE_COLOR);
-            chatLines->labelsize(12);
-            chatLines->labelcolor((Fl_Color)31);
-            chatLines->minimum(1);
-            chatLines->maximum(30);
-            chatLines->step(1);
-            chatLines->value(8);
-            chatLines->textsize(12);
-            chatLines->textcolor(31);
-            chatLines->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* chatLines
-          o->end();
-        } // Fl_Group* o
-        { Fl_Group* o = new Fl_Group(10, 120, 320, 72, "Remote Pointers Options");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { Fl_Value_Input* o = remotePointerFontSize = new Fl_Value_Input(74, 143, 25, 15, "Font Size");
-            remotePointerFontSize->box(FL_FLAT_BOX);
-            remotePointerFontSize->color(FL_INACTIVE_COLOR);
-            remotePointerFontSize->labelsize(12);
-            remotePointerFontSize->labelcolor((Fl_Color)31);
-            remotePointerFontSize->minimum(8);
-            remotePointerFontSize->maximum(24);
-            remotePointerFontSize->step(1);
-            remotePointerFontSize->value(14);
-            remotePointerFontSize->textsize(12);
-            remotePointerFontSize->textcolor(31);
-            remotePointerFontSize->callback((Fl_Callback*)PreferencesCB);
-            remotePointerFontSize->when(FL_WHEN_RELEASE);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* remotePointerFontSize
-          { Fl_Value_Input* o = remotePointerFadeDelay = new Fl_Value_Input(261, 144, 25, 15, "Delay");
-            remotePointerFadeDelay->tooltip("How long before the chat display fades away when not in chat mode");
-            remotePointerFadeDelay->box(FL_FLAT_BOX);
-            remotePointerFadeDelay->color(FL_INACTIVE_COLOR);
-            remotePointerFadeDelay->labelsize(12);
-            remotePointerFadeDelay->labelcolor((Fl_Color)31);
-            remotePointerFadeDelay->minimum(1);
-            remotePointerFadeDelay->maximum(999999);
-            remotePointerFadeDelay->step(1);
-            remotePointerFadeDelay->value(10);
-            remotePointerFadeDelay->textsize(12);
-            remotePointerFadeDelay->textcolor(31);
-            remotePointerFadeDelay->callback((Fl_Callback*)PreferencesCB);
-            remotePointerFadeDelay->align(FL_ALIGN_RIGHT);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* remotePointerFadeDelay
-          { Fl_Value_Input* o = remotePointerTrailLenght = new Fl_Value_Input(140, 167, 35, 15, "Trail Lenght");
-            remotePointerTrailLenght->tooltip("Set the opacity of the chat display over the viewport");
-            remotePointerTrailLenght->box(FL_FLAT_BOX);
-            remotePointerTrailLenght->color(FL_INACTIVE_COLOR);
-            remotePointerTrailLenght->labelsize(12);
-            remotePointerTrailLenght->labelcolor((Fl_Color)31);
-            remotePointerTrailLenght->minimum(1);
-            remotePointerTrailLenght->maximum(1000);
-            remotePointerTrailLenght->step(1);
-            remotePointerTrailLenght->value(80);
-            remotePointerTrailLenght->textsize(12);
-            remotePointerTrailLenght->textcolor(31);
-            remotePointerTrailLenght->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* remotePointerTrailLenght
-          { remotePointerFade = new Fl_Check_Button(210, 144, 15, 15, "Fade");
-            remotePointerFade->tooltip("When not in chat mode, the chat display will fade away automatically after a \
+          autoFade->down_box(FL_FLAT_BOX);
+          autoFade->value(1);
+          autoFade->color(FL_INACTIVE_COLOR);
+          autoFade->selection_color((Fl_Color)31);
+          autoFade->labelsize(12);
+          autoFade->labelcolor((Fl_Color)31);
+          autoFade->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* autoFade
+        { textBG = new Fl_Check_Button(246, 43, 15, 15, "Text Background");
+          textBG->tooltip("Show a gray backdrop behind the chat display to improve readability");
+          textBG->down_box(FL_FLAT_BOX);
+          textBG->value(1);
+          textBG->color(FL_INACTIVE_COLOR);
+          textBG->selection_color((Fl_Color)31);
+          textBG->labelsize(12);
+          textBG->labelcolor((Fl_Color)31);
+          textBG->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* textBG
+        { Fl_Value_Input* o = chatLines = new Fl_Value_Input(225, 66, 25, 15, "History Lines");
+          chatLines->tooltip("Set how many lines of chat history to show");
+          chatLines->box(FL_FLAT_BOX);
+          chatLines->color(FL_INACTIVE_COLOR);
+          chatLines->labelsize(12);
+          chatLines->labelcolor((Fl_Color)31);
+          chatLines->minimum(1);
+          chatLines->maximum(30);
+          chatLines->step(1);
+          chatLines->value(8);
+          chatLines->textsize(12);
+          chatLines->textcolor(31);
+          chatLines->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* chatLines
+        o->end();
+      } // Fl_Group* o
+      { Fl_Group* o = new Fl_Group(140, 96, 440, 72, "Remote Pointers Options");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { Fl_Value_Input* o = remotePointerFontSize = new Fl_Value_Input(204, 119, 25, 15, "Font Size");
+          remotePointerFontSize->box(FL_FLAT_BOX);
+          remotePointerFontSize->color(FL_INACTIVE_COLOR);
+          remotePointerFontSize->labelsize(12);
+          remotePointerFontSize->labelcolor((Fl_Color)31);
+          remotePointerFontSize->minimum(8);
+          remotePointerFontSize->maximum(24);
+          remotePointerFontSize->step(1);
+          remotePointerFontSize->value(14);
+          remotePointerFontSize->textsize(12);
+          remotePointerFontSize->textcolor(31);
+          remotePointerFontSize->callback((Fl_Callback*)PreferencesCB);
+          remotePointerFontSize->when(FL_WHEN_RELEASE);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* remotePointerFontSize
+        { Fl_Value_Input* o = remotePointerFadeDelay = new Fl_Value_Input(391, 120, 25, 15, "Delay");
+          remotePointerFadeDelay->tooltip("How long before the chat display fades away when not in chat mode");
+          remotePointerFadeDelay->box(FL_FLAT_BOX);
+          remotePointerFadeDelay->color(FL_INACTIVE_COLOR);
+          remotePointerFadeDelay->labelsize(12);
+          remotePointerFadeDelay->labelcolor((Fl_Color)31);
+          remotePointerFadeDelay->minimum(1);
+          remotePointerFadeDelay->maximum(999999);
+          remotePointerFadeDelay->step(1);
+          remotePointerFadeDelay->value(10);
+          remotePointerFadeDelay->textsize(12);
+          remotePointerFadeDelay->textcolor(31);
+          remotePointerFadeDelay->callback((Fl_Callback*)PreferencesCB);
+          remotePointerFadeDelay->align(FL_ALIGN_RIGHT);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* remotePointerFadeDelay
+        { Fl_Value_Input* o = remotePointerTrailLenght = new Fl_Value_Input(270, 143, 35, 15, "Trail Lenght");
+          remotePointerTrailLenght->tooltip("Set the opacity of the chat display over the viewport");
+          remotePointerTrailLenght->box(FL_FLAT_BOX);
+          remotePointerTrailLenght->color(FL_INACTIVE_COLOR);
+          remotePointerTrailLenght->labelsize(12);
+          remotePointerTrailLenght->labelcolor((Fl_Color)31);
+          remotePointerTrailLenght->minimum(1);
+          remotePointerTrailLenght->maximum(1000);
+          remotePointerTrailLenght->step(1);
+          remotePointerTrailLenght->value(80);
+          remotePointerTrailLenght->textsize(12);
+          remotePointerTrailLenght->textcolor(31);
+          remotePointerTrailLenght->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* remotePointerTrailLenght
+        { remotePointerFade = new Fl_Check_Button(340, 120, 15, 15, "Fade");
+          remotePointerFade->tooltip("When not in chat mode, the chat display will fade away automatically after a \
 short delay if this is enabled.");
-            remotePointerFade->down_box(FL_FLAT_BOX);
-            remotePointerFade->value(1);
-            remotePointerFade->color(FL_INACTIVE_COLOR);
-            remotePointerFade->selection_color((Fl_Color)31);
-            remotePointerFade->labelsize(12);
-            remotePointerFade->labelcolor((Fl_Color)31);
-            remotePointerFade->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* remotePointerFade
-          { Fl_Value_Input* o = remotePointerSize = new Fl_Value_Input(177, 144, 25, 15, "Pointer Size");
-            remotePointerSize->tooltip("Set how many lines of chat history to show");
-            remotePointerSize->box(FL_FLAT_BOX);
-            remotePointerSize->color(FL_INACTIVE_COLOR);
-            remotePointerSize->labelsize(12);
-            remotePointerSize->labelcolor((Fl_Color)31);
-            remotePointerSize->minimum(1);
-            remotePointerSize->maximum(30);
-            remotePointerSize->step(1);
-            remotePointerSize->value(5);
-            remotePointerSize->textsize(12);
-            remotePointerSize->textcolor(31);
-            remotePointerSize->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* remotePointerSize
-          { remotePointerTrail = new Fl_Check_Button(18, 167, 15, 15, "Trail");
-            remotePointerTrail->tooltip("When not in chat mode, the chat display will fade away automatically after a \
+          remotePointerFade->down_box(FL_FLAT_BOX);
+          remotePointerFade->value(1);
+          remotePointerFade->color(FL_INACTIVE_COLOR);
+          remotePointerFade->selection_color((Fl_Color)31);
+          remotePointerFade->labelsize(12);
+          remotePointerFade->labelcolor((Fl_Color)31);
+          remotePointerFade->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* remotePointerFade
+        { Fl_Value_Input* o = remotePointerSize = new Fl_Value_Input(307, 120, 25, 15, "Pointer Size");
+          remotePointerSize->tooltip("Set how many lines of chat history to show");
+          remotePointerSize->box(FL_FLAT_BOX);
+          remotePointerSize->color(FL_INACTIVE_COLOR);
+          remotePointerSize->labelsize(12);
+          remotePointerSize->labelcolor((Fl_Color)31);
+          remotePointerSize->minimum(1);
+          remotePointerSize->maximum(30);
+          remotePointerSize->step(1);
+          remotePointerSize->value(5);
+          remotePointerSize->textsize(12);
+          remotePointerSize->textcolor(31);
+          remotePointerSize->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* remotePointerSize
+        { remotePointerTrail = new Fl_Check_Button(148, 143, 15, 15, "Trail");
+          remotePointerTrail->tooltip("When not in chat mode, the chat display will fade away automatically after a \
 short delay if this is enabled.");
-            remotePointerTrail->down_box(FL_FLAT_BOX);
-            remotePointerTrail->value(1);
-            remotePointerTrail->color(FL_INACTIVE_COLOR);
-            remotePointerTrail->selection_color((Fl_Color)31);
-            remotePointerTrail->labelsize(12);
-            remotePointerTrail->labelcolor((Fl_Color)31);
-            remotePointerTrail->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* remotePointerTrail
-          { remotePointerColorSample = new Fl_Box(250, 167, 15, 18);
-            remotePointerColorSample->box(FL_FLAT_BOX);
-            remotePointerColorSample->color(FL_BACKGROUND2_COLOR);
-          } // Fl_Box* remotePointerColorSample
-          { Fl_Spinner_gfc* o = remotePointerColor = new Fl_Spinner_gfc(220, 167, 29, 18, "Color");
-            remotePointerColor->box(FL_FLAT_BOX);
-            remotePointerColor->color(FL_INACTIVE_COLOR);
-            remotePointerColor->selection_color(FL_FOREGROUND_COLOR);
-            remotePointerColor->labeltype(FL_NORMAL_LABEL);
-            remotePointerColor->labelfont(0);
-            remotePointerColor->labelsize(12);
-            remotePointerColor->labelcolor((Fl_Color)31);
-            remotePointerColor->minimum(0);
-            remotePointerColor->maximum(7);
-            remotePointerColor->value(7);
-            remotePointerColor->textsize(12);
-            remotePointerColor->callback((Fl_Callback*)PreferencesCB);
-            remotePointerColor->align(FL_ALIGN_LEFT);
-            remotePointerColor->when(FL_WHEN_CHANGED);
-            o->textcolor((Fl_Color)31);
-          } // Fl_Spinner_gfc* remotePointerColor
-          o->end();
-        } // Fl_Group* o
-        { Fl_Group* o = new Fl_Group(10, 274, 320, 72, "Update Frequency (per second)");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { Fl_Value_Input* o = remoteTransformationsFrequency = new Fl_Value_Input(110, 301, 25, 15, "Transformations");
-            remoteTransformationsFrequency->box(FL_FLAT_BOX);
-            remoteTransformationsFrequency->color(FL_INACTIVE_COLOR);
-            remoteTransformationsFrequency->labelsize(12);
-            remoteTransformationsFrequency->labelcolor((Fl_Color)31);
-            remoteTransformationsFrequency->minimum(1);
-            remoteTransformationsFrequency->maximum(3000);
-            remoteTransformationsFrequency->step(1);
-            remoteTransformationsFrequency->value(60);
-            remoteTransformationsFrequency->textsize(12);
-            remoteTransformationsFrequency->textcolor(31);
-            remoteTransformationsFrequency->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* remoteTransformationsFrequency
-          { Fl_Value_Input* o = remoteFXFrequency = new Fl_Value_Input(110, 321, 25, 15, "FX Parameters");
-            remoteFXFrequency->box(FL_FLAT_BOX);
-            remoteFXFrequency->color(FL_INACTIVE_COLOR);
-            remoteFXFrequency->labelsize(12);
-            remoteFXFrequency->labelcolor((Fl_Color)31);
-            remoteFXFrequency->minimum(1);
-            remoteFXFrequency->maximum(3000);
-            remoteFXFrequency->step(1);
-            remoteFXFrequency->value(60);
-            remoteFXFrequency->textsize(12);
-            remoteFXFrequency->textcolor(31);
-            remoteFXFrequency->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* remoteFXFrequency
-          { Fl_Value_Input* o = remoteOthersFrequency = new Fl_Value_Input(245, 302, 25, 15, "Others Messages");
-            remoteOthersFrequency->box(FL_FLAT_BOX);
-            remoteOthersFrequency->color(FL_INACTIVE_COLOR);
-            remoteOthersFrequency->labelsize(12);
-            remoteOthersFrequency->labelcolor((Fl_Color)31);
-            remoteOthersFrequency->minimum(1);
-            remoteOthersFrequency->maximum(3000);
-            remoteOthersFrequency->step(1);
-            remoteOthersFrequency->value(60);
-            remoteOthersFrequency->textsize(12);
-            remoteOthersFrequency->textcolor(31);
-            remoteOthersFrequency->callback((Fl_Callback*)PreferencesCB);
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Value_Input* remoteOthersFrequency
-          o->end();
-        } // Fl_Group* o
-        { Fl_Group* o = new Fl_Group(10, 199, 320, 72, "Remote Loading Options");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { remoteSendLoadRequests = new Fl_Check_Button(20, 226, 15, 15, "Send Remote Loading Requests");
-            remoteSendLoadRequests->tooltip("When you load a playlist item locally, a request to load that item will be se\
+          remotePointerTrail->down_box(FL_FLAT_BOX);
+          remotePointerTrail->value(1);
+          remotePointerTrail->color(FL_INACTIVE_COLOR);
+          remotePointerTrail->selection_color((Fl_Color)31);
+          remotePointerTrail->labelsize(12);
+          remotePointerTrail->labelcolor((Fl_Color)31);
+          remotePointerTrail->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* remotePointerTrail
+        { remotePointerColorSample = new Fl_Box(380, 143, 15, 18);
+          remotePointerColorSample->box(FL_FLAT_BOX);
+          remotePointerColorSample->color(FL_BACKGROUND2_COLOR);
+        } // Fl_Box* remotePointerColorSample
+        { Fl_Spinner_gfc* o = remotePointerColor = new Fl_Spinner_gfc(350, 143, 29, 18, "Color");
+          remotePointerColor->box(FL_FLAT_BOX);
+          remotePointerColor->color(FL_INACTIVE_COLOR);
+          remotePointerColor->selection_color(FL_FOREGROUND_COLOR);
+          remotePointerColor->labeltype(FL_NORMAL_LABEL);
+          remotePointerColor->labelfont(0);
+          remotePointerColor->labelsize(12);
+          remotePointerColor->labelcolor((Fl_Color)31);
+          remotePointerColor->minimum(0);
+          remotePointerColor->maximum(7);
+          remotePointerColor->value(7);
+          remotePointerColor->textsize(12);
+          remotePointerColor->callback((Fl_Callback*)PreferencesCB);
+          remotePointerColor->align(FL_ALIGN_LEFT);
+          remotePointerColor->when(FL_WHEN_CHANGED);
+          o->textcolor((Fl_Color)31);
+        } // Fl_Spinner_gfc* remotePointerColor
+        o->end();
+      } // Fl_Group* o
+      { Fl_Group* o = new Fl_Group(140, 175, 440, 72, "Remote Loading Options");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { remoteSendLoadRequests = new Fl_Check_Button(150, 202, 15, 15, "Send Remote Loading Requests");
+          remoteSendLoadRequests->tooltip("When you load a playlist item locally, a request to load that item will be se\
 nt to all other participants in the session");
-            remoteSendLoadRequests->down_box(FL_FLAT_BOX);
-            remoteSendLoadRequests->value(1);
-            remoteSendLoadRequests->color(FL_INACTIVE_COLOR);
-            remoteSendLoadRequests->selection_color((Fl_Color)31);
-            remoteSendLoadRequests->labelsize(12);
-            remoteSendLoadRequests->labelcolor((Fl_Color)31);
-            remoteSendLoadRequests->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* remoteSendLoadRequests
-          { remoteAutoAcceptLoadRequests = new Fl_Check_Button(20, 246, 15, 15, "Auto accept remote loading requests");
-            remoteAutoAcceptLoadRequests->tooltip("Choose if a request to load a sequence from another participant is accepted a\
+          remoteSendLoadRequests->down_box(FL_FLAT_BOX);
+          remoteSendLoadRequests->value(1);
+          remoteSendLoadRequests->color(FL_INACTIVE_COLOR);
+          remoteSendLoadRequests->selection_color((Fl_Color)31);
+          remoteSendLoadRequests->labelsize(12);
+          remoteSendLoadRequests->labelcolor((Fl_Color)31);
+          remoteSendLoadRequests->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* remoteSendLoadRequests
+        { remoteAutoAcceptLoadRequests = new Fl_Check_Button(150, 222, 15, 15, "Auto accept remote loading requests");
+          remoteAutoAcceptLoadRequests->tooltip("Choose if a request to load a sequence from another participant is accepted a\
 utomaticaly without confirmation");
-            remoteAutoAcceptLoadRequests->down_box(FL_FLAT_BOX);
-            remoteAutoAcceptLoadRequests->value(1);
-            remoteAutoAcceptLoadRequests->color(FL_INACTIVE_COLOR);
-            remoteAutoAcceptLoadRequests->selection_color((Fl_Color)31);
-            remoteAutoAcceptLoadRequests->labelsize(12);
-            remoteAutoAcceptLoadRequests->labelcolor((Fl_Color)31);
-            remoteAutoAcceptLoadRequests->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* remoteAutoAcceptLoadRequests
-          o->end();
-        } // Fl_Group* o
-        remoteSessionTab->end();
-      } // Fl_Group* remoteSessionTab
-      { pathsTab = new Fl_Group(5, 40, 347, 464, "Paths");
-        pathsTab->color(fl_rgb_color(38,38,38));
-        pathsTab->selection_color(fl_rgb_color(50,50,50));
-        pathsTab->labelcolor(fl_rgb_color(200,200,200));
-        pathsTab->hide();
-        { Fl_Group* o = new Fl_Group(10, 40, 325, 241, "Sequence Search Paths");
-          o->box(FL_BORDER_FRAME);
-          o->color(FL_INACTIVE_COLOR);
-          o->labelfont(1);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-          { searchPathsRecursive = new Fl_Check_Button(195, 107, 15, 15, "Include Subfolders");
-            searchPathsRecursive->down_box(FL_FLAT_BOX);
-            searchPathsRecursive->color(FL_INACTIVE_COLOR);
-            searchPathsRecursive->selection_color((Fl_Color)31);
-            searchPathsRecursive->labelsize(12);
-            searchPathsRecursive->labelcolor((Fl_Color)31);
-            searchPathsRecursive->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* searchPathsRecursive
-          { Fl_Browser* o = searchPaths = new Fl_Browser(20, 128, 305, 119);
-            searchPaths->type(3);
-            searchPaths->box(FL_FLAT_BOX);
-            searchPaths->color(FL_INACTIVE_COLOR);
-            searchPaths->selection_color((Fl_Color)31);
-            searchPaths->textcolor(31);
-            searchPaths->callback((Fl_Callback*)PreferencesCB, (void*)(PATHSEARCHBROWSER_ID));
-            o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          } // Fl_Browser* searchPaths
-          { searchPathBrowse = new Fl_Button_gfc(22, 102, 64, 20, "Browse");
-            searchPathBrowse->box(FL_FLAT_BOX);
-            searchPathBrowse->down_box(FL_FLAT_BOX);
-            searchPathBrowse->color(FL_INACTIVE_COLOR);
-            searchPathBrowse->selection_color(FL_BACKGROUND_COLOR);
-            searchPathBrowse->labeltype(FL_NORMAL_LABEL);
-            searchPathBrowse->labelfont(0);
-            searchPathBrowse->labelsize(12);
-            searchPathBrowse->labelcolor((Fl_Color)31);
-            searchPathBrowse->callback((Fl_Callback*)PreferencesCB, (void*)(PATHSEARCHBROWSEBUTTON_ID));
-            searchPathBrowse->align(FL_ALIGN_CENTER);
-            searchPathBrowse->when(FL_WHEN_RELEASE);
-          } // Fl_Button_gfc* searchPathBrowse
-          { searchPathDelete = new Fl_Button_gfc(285, 249, 39, 20, "@9+");
-            searchPathDelete->box(FL_FLAT_BOX);
-            searchPathDelete->down_box(FL_FLAT_BOX);
-            searchPathDelete->color(FL_INACTIVE_COLOR);
-            searchPathDelete->selection_color(FL_BACKGROUND_COLOR);
-            searchPathDelete->labeltype(FL_NORMAL_LABEL);
-            searchPathDelete->labelfont(0);
-            searchPathDelete->labelsize(10);
-            searchPathDelete->labelcolor((Fl_Color)31);
-            searchPathDelete->callback((Fl_Callback*)PreferencesCB, (void*)(PATHSEARCHDELETEBUTTON_ID));
-            searchPathDelete->align(FL_ALIGN_CENTER);
-            searchPathDelete->when(FL_WHEN_RELEASE);
-          } // Fl_Button_gfc* searchPathDelete
-          { useSearchPaths = new Fl_Check_Button(25, 69, 15, 15, "Use search paths");
-            useSearchPaths->tooltip("When a file loaded from a saved or remote session is not found, Jefecheck wil\
+          remoteAutoAcceptLoadRequests->down_box(FL_FLAT_BOX);
+          remoteAutoAcceptLoadRequests->value(1);
+          remoteAutoAcceptLoadRequests->color(FL_INACTIVE_COLOR);
+          remoteAutoAcceptLoadRequests->selection_color((Fl_Color)31);
+          remoteAutoAcceptLoadRequests->labelsize(12);
+          remoteAutoAcceptLoadRequests->labelcolor((Fl_Color)31);
+          remoteAutoAcceptLoadRequests->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* remoteAutoAcceptLoadRequests
+        o->end();
+      } // Fl_Group* o
+      { Fl_Group* o = new Fl_Group(140, 250, 440, 72, "Update Frequency (per second)");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { Fl_Value_Input* o = remoteTransformationsFrequency = new Fl_Value_Input(240, 277, 25, 15, "Transformations");
+          remoteTransformationsFrequency->box(FL_FLAT_BOX);
+          remoteTransformationsFrequency->color(FL_INACTIVE_COLOR);
+          remoteTransformationsFrequency->labelsize(12);
+          remoteTransformationsFrequency->labelcolor((Fl_Color)31);
+          remoteTransformationsFrequency->minimum(1);
+          remoteTransformationsFrequency->maximum(3000);
+          remoteTransformationsFrequency->step(1);
+          remoteTransformationsFrequency->value(60);
+          remoteTransformationsFrequency->textsize(12);
+          remoteTransformationsFrequency->textcolor(31);
+          remoteTransformationsFrequency->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* remoteTransformationsFrequency
+        { Fl_Value_Input* o = remoteFXFrequency = new Fl_Value_Input(240, 297, 25, 15, "FX Parameters");
+          remoteFXFrequency->box(FL_FLAT_BOX);
+          remoteFXFrequency->color(FL_INACTIVE_COLOR);
+          remoteFXFrequency->labelsize(12);
+          remoteFXFrequency->labelcolor((Fl_Color)31);
+          remoteFXFrequency->minimum(1);
+          remoteFXFrequency->maximum(3000);
+          remoteFXFrequency->step(1);
+          remoteFXFrequency->value(60);
+          remoteFXFrequency->textsize(12);
+          remoteFXFrequency->textcolor(31);
+          remoteFXFrequency->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* remoteFXFrequency
+        { Fl_Value_Input* o = remoteOthersFrequency = new Fl_Value_Input(375, 278, 25, 15, "Others Messages");
+          remoteOthersFrequency->box(FL_FLAT_BOX);
+          remoteOthersFrequency->color(FL_INACTIVE_COLOR);
+          remoteOthersFrequency->labelsize(12);
+          remoteOthersFrequency->labelcolor((Fl_Color)31);
+          remoteOthersFrequency->minimum(1);
+          remoteOthersFrequency->maximum(3000);
+          remoteOthersFrequency->step(1);
+          remoteOthersFrequency->value(60);
+          remoteOthersFrequency->textsize(12);
+          remoteOthersFrequency->textcolor(31);
+          remoteOthersFrequency->callback((Fl_Callback*)PreferencesCB);
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Value_Input* remoteOthersFrequency
+        o->end();
+      } // Fl_Group* o
+      panels[3]->end();
+    } // panels[3] Remote
+
+    // === Panel 4: Paths ===
+    { panels[4] = new Fl_Group(130, 5, 465, 450);
+      panels[4]->box(FL_FLAT_BOX);
+      panels[4]->color(fl_rgb_color(38,38,38));
+      panels[4]->hide();
+      pathsTab = panels[4];
+      { Fl_Group* o = new Fl_Group(140, 16, 445, 241, "Sequence Search Paths");
+        o->box(FL_BORDER_FRAME);
+        o->color(FL_INACTIVE_COLOR);
+        o->labelfont(1);
+        o->labelcolor((Fl_Color)31);
+        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
+        { searchPathsRecursive = new Fl_Check_Button(325, 83, 15, 15, "Include Subfolders");
+          searchPathsRecursive->down_box(FL_FLAT_BOX);
+          searchPathsRecursive->color(FL_INACTIVE_COLOR);
+          searchPathsRecursive->selection_color((Fl_Color)31);
+          searchPathsRecursive->labelsize(12);
+          searchPathsRecursive->labelcolor((Fl_Color)31);
+          searchPathsRecursive->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* searchPathsRecursive
+        { Fl_Browser* o = searchPaths = new Fl_Browser(150, 104, 425, 119);
+          searchPaths->type(3);
+          searchPaths->box(FL_FLAT_BOX);
+          searchPaths->color(FL_INACTIVE_COLOR);
+          searchPaths->selection_color((Fl_Color)31);
+          searchPaths->textcolor(31);
+          searchPaths->callback((Fl_Callback*)PreferencesCB, (void*)(PATHSEARCHBROWSER_ID));
+          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        } // Fl_Browser* searchPaths
+        { searchPathBrowse = new Fl_Button_gfc(152, 78, 64, 20, "Browse");
+          searchPathBrowse->box(FL_FLAT_BOX);
+          searchPathBrowse->down_box(FL_FLAT_BOX);
+          searchPathBrowse->color(FL_INACTIVE_COLOR);
+          searchPathBrowse->selection_color(FL_BACKGROUND_COLOR);
+          searchPathBrowse->labeltype(FL_NORMAL_LABEL);
+          searchPathBrowse->labelfont(0);
+          searchPathBrowse->labelsize(12);
+          searchPathBrowse->labelcolor((Fl_Color)31);
+          searchPathBrowse->callback((Fl_Callback*)PreferencesCB, (void*)(PATHSEARCHBROWSEBUTTON_ID));
+          searchPathBrowse->align(FL_ALIGN_CENTER);
+          searchPathBrowse->when(FL_WHEN_RELEASE);
+        } // Fl_Button_gfc* searchPathBrowse
+        { searchPathDelete = new Fl_Button_gfc(535, 225, 39, 20, "@9+");
+          searchPathDelete->box(FL_FLAT_BOX);
+          searchPathDelete->down_box(FL_FLAT_BOX);
+          searchPathDelete->color(FL_INACTIVE_COLOR);
+          searchPathDelete->selection_color(FL_BACKGROUND_COLOR);
+          searchPathDelete->labeltype(FL_NORMAL_LABEL);
+          searchPathDelete->labelfont(0);
+          searchPathDelete->labelsize(10);
+          searchPathDelete->labelcolor((Fl_Color)31);
+          searchPathDelete->callback((Fl_Callback*)PreferencesCB, (void*)(PATHSEARCHDELETEBUTTON_ID));
+          searchPathDelete->align(FL_ALIGN_CENTER);
+          searchPathDelete->when(FL_WHEN_RELEASE);
+        } // Fl_Button_gfc* searchPathDelete
+        { useSearchPaths = new Fl_Check_Button(155, 45, 15, 15, "Use search paths");
+          useSearchPaths->tooltip("When a file loaded from a saved or remote session is not found, Jefecheck wil\
 l try to resolve the filename in any of the search paths. This allows you to s\
 hare sessions across computers with different filesystem structures.");
-            useSearchPaths->down_box(FL_FLAT_BOX);
-            useSearchPaths->color(FL_INACTIVE_COLOR);
-            useSearchPaths->selection_color((Fl_Color)31);
-            useSearchPaths->labelcolor((Fl_Color)31);
-            useSearchPaths->callback((Fl_Callback*)PreferencesCB);
-          } // Fl_Check_Button* useSearchPaths
-          o->end();
-        } // Fl_Group* o
-        pathsTab->end();
-      } // Fl_Group* pathsTab
-      // License tab removed for open-source release
-      tabs->end();
-    } // Fl_Tabs* tabs
-    { Fl_Button_gfc* o = new Fl_Button_gfc(210, 545, 130, 35, "Save and Close");
+          useSearchPaths->down_box(FL_FLAT_BOX);
+          useSearchPaths->color(FL_INACTIVE_COLOR);
+          useSearchPaths->selection_color((Fl_Color)31);
+          useSearchPaths->labelcolor((Fl_Color)31);
+          useSearchPaths->callback((Fl_Callback*)PreferencesCB);
+        } // Fl_Check_Button* useSearchPaths
+        o->end();
+      } // Fl_Group* o
+      panels[4]->end();
+    } // panels[4] Paths
+
+    // License tab removed for open-source release
+
+    { Fl_Button_gfc* o = new Fl_Button_gfc(460, 460, 130, 35, "Save and Close");
       o->tooltip("Closes this window without saving preferences for next session");
       o->box(FL_FLAT_BOX);
       o->down_box(FL_PLASTIC_DOWN_BOX);
@@ -925,8 +960,15 @@ hare sessions across computers with different filesystem structures.");
       o->when(FL_WHEN_RELEASE);
     } // Fl_Button_gfc* o
     preferencesWindow->set_non_modal();
-    preferencesWindow->size_range(345, 590, 345, 590);
+    preferencesWindow->size_range(600, 500, 600, 500);
     preferencesWindow->end();
   } // Fl_Double_Window* preferencesWindow
   return preferencesWindow;
+}
+
+void PreferencesWindow::showPanel(int index) {
+  for (int i = 0; i < 5; i++) {
+    if (i == index) panels[i]->show();
+    else panels[i]->hide();
+  }
 }
