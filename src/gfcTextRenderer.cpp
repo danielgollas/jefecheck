@@ -8,8 +8,6 @@
 #include <algorithm>
 #include <fstream>
 
-// Debug: dump atlas to PNG
-#include <OpenImageIO/imageio.h>
 
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -289,20 +287,6 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
             float v = bitmap[i] / 255.0f;
             v = powf(v, gammaValue);
             bitmap[i] = (unsigned char)(v * 255.0f + 0.5f);
-        }
-    }
-
-    // Debug: dump atlas to PNG before GL flip (so it reads top-down)
-    {
-        char debugPath[256];
-        snprintf(debugPath, sizeof(debugPath), "/tmp/atlas_%.0fpx.png", pixelSize);
-        auto out = OIIO::ImageOutput::create(debugPath);
-        if (out) {
-            OIIO::ImageSpec spec(TEX_W, TEX_H, 1, OIIO::TypeDesc::UINT8);
-            out->open(debugPath, spec);
-            out->write_image(OIIO::TypeDesc::UINT8, bitmap);
-            out->close();
-            printf("GfcTextRenderer: dumped atlas to %s\n", debugPath);
         }
     }
 
