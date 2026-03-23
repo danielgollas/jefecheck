@@ -1140,7 +1140,7 @@ void remoteCB ( Fl_Widget* o , void* v ) {
 
 	case REMOTE_PREFERENCES_ID:{
 		pw.preferencesWindow->show();
-		pw.sectionList->value(4); pw.showPanel(3);
+		pw.sectionList->value(5); pw.showPanel(4);
 							   }
 							   break;
 

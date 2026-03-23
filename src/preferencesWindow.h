@@ -32,7 +32,7 @@ public:
   Fl_Double_Window *preferencesWindow;
   Fl_Box *bg;
   Fl_Hold_Browser *sectionList;
-  Fl_Group *panels[5];  // General, Text, Formats, Remote, Paths
+  Fl_Group *panels[6];  // General, Text, Engine, Formats, Remote, Paths
   void showPanel(int index);
   Fl_Round_Button *startFullscreenCheckBox;
   Fl_Round_Button *loadWindowOnStartupCheckBox;

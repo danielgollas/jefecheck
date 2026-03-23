@@ -26,6 +26,7 @@ Fl_Double_Window* PreferencesWindow::make_window() {
       sectionList->selection_color(fl_rgb_color(60,60,60));
       sectionList->add("General");
       sectionList->add("Text");
+      sectionList->add("Engine");
       sectionList->add("Formats");
       sectionList->add("Remote");
       sectionList->add("Paths");
@@ -33,7 +34,7 @@ Fl_Double_Window* PreferencesWindow::make_window() {
       sectionList->callback([](Fl_Widget* w, void* data) {
         PreferencesWindow* pw = (PreferencesWindow*)data;
         int sel = pw->sectionList->value();
-        if (sel >= 1 && sel <= 5) pw->showPanel(sel - 1);
+        if (sel >= 1 && sel <= 6) pw->showPanel(sel - 1);
       }, (void*)this);
     }
 
@@ -124,109 +125,6 @@ _DEFAULT_BROWSE_PATH");
         } // Fl_Value_Slider* bgColor
         o->end();
       } // Fl_Group* o
-      { Fl_Group* o = new Fl_Group(140, 274, 440, 170, "Engine");
-        o->box(FL_BORDER_FRAME);
-        o->color(FL_INACTIVE_COLOR);
-        o->labelfont(1);
-        o->labelcolor((Fl_Color)31);
-        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-        { Fl_Value_Slider* o = percentageOfRam = new Fl_Value_Slider(150, 314, 169, 15, "% of RAM to Use");
-          percentageOfRam->tooltip("The engine will load frames until this amount of system RAM is used up. Recom\
-mended values are  be between 80 and 95 so that the system has enough RAM to f\
-unction properly even when loading large sequences");
-          percentageOfRam->type(3);
-          percentageOfRam->box(FL_FLAT_BOX);
-          percentageOfRam->color(FL_INACTIVE_COLOR);
-          percentageOfRam->selection_color(FL_INACTIVE_COLOR);
-          percentageOfRam->labelcolor((Fl_Color)31);
-          percentageOfRam->minimum(10);
-          percentageOfRam->maximum(95);
-          percentageOfRam->step(0.5);
-          percentageOfRam->value(85);
-          percentageOfRam->textsize(14);
-          percentageOfRam->textcolor(31);
-          percentageOfRam->callback((Fl_Callback*)PreferencesCB);
-          percentageOfRam->align(FL_ALIGN_TOP_LEFT);
-          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-        } // Fl_Value_Slider* percentageOfRam
-        { forceGFLLoading = new Fl_Check_Button(150, 334, 15, 15, "Force GFL Loading Engine");
-          forceGFLLoading->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
-images you can try using this option. It is slower on some formats though (Par\
-ticularly DPX).");
-          forceGFLLoading->down_box(FL_FLAT_BOX);
-          forceGFLLoading->color(FL_INACTIVE_COLOR);
-          forceGFLLoading->selection_color((Fl_Color)31);
-          forceGFLLoading->labelcolor((Fl_Color)31);
-          forceGFLLoading->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Check_Button* forceGFLLoading
-        { Fl_Check_Button* o = frawProxiesAtFullResolution = new Fl_Check_Button(150, 351, 15, 15, "Draw Proxies at full Resolution");
-          frawProxiesAtFullResolution->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
-images you can try using this option. It is slower on some formats though (Par\
-ticularly DPX).");
-          frawProxiesAtFullResolution->down_box(FL_FLAT_BOX);
-          frawProxiesAtFullResolution->color(FL_INACTIVE_COLOR);
-          frawProxiesAtFullResolution->selection_color((Fl_Color)31);
-          frawProxiesAtFullResolution->labelcolor((Fl_Color)31);
-          frawProxiesAtFullResolution->callback((Fl_Callback*)PreferencesCB);
-          frawProxiesAtFullResolution->hide();
-          o->color(fl_rgb_color(32,32,32));
-        } // Fl_Check_Button* frawProxiesAtFullResolution
-        { dontUseInactiveMemory = new Fl_Check_Button(150, 355, 15, 15, "Don\'t use Inactive Memory (OS X only)");
-          dontUseInactiveMemory->tooltip("Enable this option if on Mac OS X you whish to use only physically available \
-RAM");
-          dontUseInactiveMemory->down_box(FL_FLAT_BOX);
-          dontUseInactiveMemory->color(FL_INACTIVE_COLOR);
-          dontUseInactiveMemory->selection_color((Fl_Color)31);
-          dontUseInactiveMemory->labelcolor((Fl_Color)31);
-          dontUseInactiveMemory->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Check_Button* dontUseInactiveMemory
-        { forceSingleBufferedFXs = new Fl_Check_Button(150, 376, 15, 15, "Force Single Buffered FXs");
-          forceSingleBufferedFXs->tooltip("If you have problems using FXs, try enabling this option, specially if your v\
-ideo card is pre GeForce 7");
-          forceSingleBufferedFXs->down_box(FL_FLAT_BOX);
-          forceSingleBufferedFXs->color(FL_INACTIVE_COLOR);
-          forceSingleBufferedFXs->selection_color((Fl_Color)31);
-          forceSingleBufferedFXs->labelcolor((Fl_Color)31);
-          forceSingleBufferedFXs->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Check_Button* forceSingleBufferedFXs
-        { continueLoadingOnError = new Fl_Check_Button(150, 397, 15, 15, "Continue loading sequence after load error");
-          continueLoadingOnError->tooltip("If a failure ocurrs while loading a particular corrupt frame, JefeCheck will \
-continue loading the sequence moving on to the next frame.");
-          continueLoadingOnError->down_box(FL_FLAT_BOX);
-          continueLoadingOnError->value(1);
-          continueLoadingOnError->color(FL_INACTIVE_COLOR);
-          continueLoadingOnError->selection_color((Fl_Color)31);
-          continueLoadingOnError->labelcolor((Fl_Color)31);
-          continueLoadingOnError->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Check_Button* continueLoadingOnError
-        { vsync = new Fl_Check_Button(150, 418, 15, 15, "Enable Vertical Redraw Sync (vsync)");
-          vsync->tooltip("Enable this option to synchronize frame redraw with your monitor\'s refresh r\
-ate. Can help with tearing issues on monitors with a refresh rate different th\
-an your attempted frame rate.");
-          vsync->down_box(FL_FLAT_BOX);
-          vsync->color(FL_INACTIVE_COLOR);
-          vsync->selection_color((Fl_Color)31);
-          vsync->labelcolor((Fl_Color)31);
-          vsync->callback((Fl_Callback*)PreferencesCB);
-        } // Fl_Check_Button* vsync
-        { maximumFramesInQueue = new Fl_Value_Input(374, 314, 30, 15, "Max Frames in Queue");
-          maximumFramesInQueue->tooltip("If some frames show up black, try setting this to 1.");
-          maximumFramesInQueue->box(FL_FLAT_BOX);
-          maximumFramesInQueue->color(FL_INACTIVE_COLOR);
-          maximumFramesInQueue->labelsize(12);
-          maximumFramesInQueue->labelcolor((Fl_Color)31);
-          maximumFramesInQueue->maximum(99999);
-          maximumFramesInQueue->step(1);
-          maximumFramesInQueue->value(5);
-          maximumFramesInQueue->textsize(12);
-          maximumFramesInQueue->textcolor(31);
-          maximumFramesInQueue->callback((Fl_Callback*)PreferencesCB);
-          maximumFramesInQueue->align(FL_ALIGN_TOP);
-          maximumFramesInQueue->when(3);
-        } // Fl_Value_Input* maximumFramesInQueue
-        o->end();
-      } // Fl_Group* o
       { Fl_Group* o = new Fl_Group(305, 156, 155, 53, "Action Feedback");
         o->box(FL_BORDER_FRAME);
         o->color(FL_INACTIVE_COLOR);
@@ -250,8 +148,7 @@ an your attempted frame rate.");
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Value_Input* ActionFeedbackSize
         { Fl_Value_Input* o = ActionFeedbackFadeDelay = new Fl_Value_Input(410, 187, 36, 15, "Fade");
-          ActionFeedbackFadeDelay->tooltip("How long the Action Feedback is displayed in seconds (set to 0 to turn displa\
-y Off)");
+          ActionFeedbackFadeDelay->tooltip("How long the Action Feedback is displayed in seconds (set to 0 to turn display Off)");
           ActionFeedbackFadeDelay->box(FL_FLAT_BOX);
           ActionFeedbackFadeDelay->color(FL_INACTIVE_COLOR);
           ActionFeedbackFadeDelay->selection_color(FL_FOREGROUND_COLOR);
@@ -268,11 +165,85 @@ y Off)");
         o->end();
       } // Fl_Group* o
 
-      // Engine continued: items that were below the Engine group in the old layout
-      // These need to be direct children of the panel since they don't fit in the Engine group vertically
-      { balanceReads = new Fl_Check_Button(150, 448, 15, 15, "Balance Reads");
-        balanceReads->tooltip("Makes all tracks load at the same rate. Reading a track of jpgs is much faste\
-r and might fill up RAM before the same amount of DPXs are read");
+      panels[0]->end();
+    } // panels[0] General
+
+    // === Panel 2: Engine ===
+    { panels[2] = new Fl_Group(130, 5, 465, 450);
+      panels[2]->box(FL_FLAT_BOX);
+      panels[2]->color(fl_rgb_color(38,38,38));
+      panels[2]->hide();
+      { Fl_Value_Slider* o = percentageOfRam = new Fl_Value_Slider(140, 25, 169, 15, "% of RAM to Use");
+        percentageOfRam->tooltip("The engine will load frames until this amount of system RAM is used up. Recommended values are between 80 and 95.");
+        percentageOfRam->type(3);
+        percentageOfRam->box(FL_FLAT_BOX);
+        percentageOfRam->color(FL_INACTIVE_COLOR);
+        percentageOfRam->selection_color(FL_INACTIVE_COLOR);
+        percentageOfRam->labelcolor((Fl_Color)31);
+        percentageOfRam->minimum(10);
+        percentageOfRam->maximum(95);
+        percentageOfRam->step(0.5);
+        percentageOfRam->value(85);
+        percentageOfRam->textsize(14);
+        percentageOfRam->textcolor(31);
+        percentageOfRam->callback((Fl_Callback*)PreferencesCB);
+        percentageOfRam->align(FL_ALIGN_TOP_LEFT);
+        o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+      } // Fl_Value_Slider* percentageOfRam
+      { maximumFramesInQueue = new Fl_Value_Input(374, 25, 30, 15, "Max Frames in Queue");
+        maximumFramesInQueue->tooltip("If some frames show up black, try setting this to 1.");
+        maximumFramesInQueue->box(FL_FLAT_BOX);
+        maximumFramesInQueue->color(FL_INACTIVE_COLOR);
+        maximumFramesInQueue->labelsize(12);
+        maximumFramesInQueue->labelcolor((Fl_Color)31);
+        maximumFramesInQueue->maximum(99999);
+        maximumFramesInQueue->step(1);
+        maximumFramesInQueue->value(5);
+        maximumFramesInQueue->textsize(12);
+        maximumFramesInQueue->textcolor(31);
+        maximumFramesInQueue->callback((Fl_Callback*)PreferencesCB);
+        maximumFramesInQueue->align(FL_ALIGN_TOP);
+        maximumFramesInQueue->when(3);
+      } // Fl_Value_Input* maximumFramesInQueue
+      { forceGFLLoading = new Fl_Check_Button(140, 50, 15, 15, "Force GFL Loading Engine");
+        forceGFLLoading->down_box(FL_FLAT_BOX);
+        forceGFLLoading->color(FL_INACTIVE_COLOR);
+        forceGFLLoading->selection_color((Fl_Color)31);
+        forceGFLLoading->labelcolor((Fl_Color)31);
+        forceGFLLoading->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Check_Button* forceGFLLoading
+      { dontUseInactiveMemory = new Fl_Check_Button(140, 70, 15, 15, "Don\'t use Inactive Memory (OS X only)");
+        dontUseInactiveMemory->down_box(FL_FLAT_BOX);
+        dontUseInactiveMemory->color(FL_INACTIVE_COLOR);
+        dontUseInactiveMemory->selection_color((Fl_Color)31);
+        dontUseInactiveMemory->labelcolor((Fl_Color)31);
+        dontUseInactiveMemory->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Check_Button* dontUseInactiveMemory
+      { forceSingleBufferedFXs = new Fl_Check_Button(140, 90, 15, 15, "Force Single Buffered FXs");
+        forceSingleBufferedFXs->down_box(FL_FLAT_BOX);
+        forceSingleBufferedFXs->color(FL_INACTIVE_COLOR);
+        forceSingleBufferedFXs->selection_color((Fl_Color)31);
+        forceSingleBufferedFXs->labelcolor((Fl_Color)31);
+        forceSingleBufferedFXs->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Check_Button* forceSingleBufferedFXs
+      { continueLoadingOnError = new Fl_Check_Button(140, 110, 15, 15, "Continue loading sequence after load error");
+        continueLoadingOnError->down_box(FL_FLAT_BOX);
+        continueLoadingOnError->value(1);
+        continueLoadingOnError->color(FL_INACTIVE_COLOR);
+        continueLoadingOnError->selection_color((Fl_Color)31);
+        continueLoadingOnError->labelcolor((Fl_Color)31);
+        continueLoadingOnError->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Check_Button* continueLoadingOnError
+      { vsync = new Fl_Check_Button(140, 130, 15, 15, "Enable Vertical Redraw Sync (vsync)");
+        vsync->down_box(FL_FLAT_BOX);
+        vsync->color(FL_INACTIVE_COLOR);
+        vsync->selection_color((Fl_Color)31);
+        vsync->labelcolor((Fl_Color)31);
+        vsync->callback((Fl_Callback*)PreferencesCB);
+      } // Fl_Check_Button* vsync
+      { balanceReads = new Fl_Check_Button(140, 150, 15, 15, "Balance Reads");
+        balanceReads->tooltip("Makes all tracks load at the same rate.");
         balanceReads->down_box(FL_FLAT_BOX);
         balanceReads->value(1);
         balanceReads->color(FL_INACTIVE_COLOR);
@@ -280,47 +251,41 @@ r and might fill up RAM before the same amount of DPXs are read");
         balanceReads->labelcolor((Fl_Color)31);
         balanceReads->callback((Fl_Callback*)PreferencesCB);
       } // Fl_Check_Button* balanceReads
-      { processorPriority = new Fl_Check_Button(300, 448, 15, 15, "Try hard to maintain FPS (More CPU use)");
-        processorPriority->tooltip("Force GFL SDK loading engine.  If you have problems loading certain types of \
-images you can try using this option. It is slower on some formats though (Par\
-ticularly DPX).");
+      { processorPriority = new Fl_Check_Button(140, 170, 15, 15, "Try hard to maintain FPS (More CPU use)");
         processorPriority->down_box(FL_FLAT_BOX);
         processorPriority->color(FL_INACTIVE_COLOR);
         processorPriority->selection_color((Fl_Color)31);
         processorPriority->labelcolor((Fl_Color)31);
         processorPriority->callback((Fl_Callback*)PreferencesCB);
-        processorPriority->align(FL_ALIGN_RIGHT);
       } // Fl_Check_Button* processorPriority
-      { Fl_Group* o = new Fl_Group(140, 216, 440, 53, "Histogram");
-        o->box(FL_BORDER_FRAME);
-        o->color(FL_INACTIVE_COLOR);
-        o->labelfont(1);
-        o->labelcolor((Fl_Color)31);
-        o->align(FL_ALIGN_TOP_LEFT|FL_ALIGN_INSIDE);
-        { Fl_Value_Slider* o = histogramQuality = new Fl_Value_Slider(302, 243, 136, 15, "Histogram Subsampling");
-          histogramQuality->tooltip("Sampling determins the histogram quality: lower sampling means higher quality\
- but takes longer to calculate.");
-          histogramQuality->type(1);
-          histogramQuality->box(FL_FLAT_BOX);
-          histogramQuality->color(FL_INACTIVE_COLOR);
-          histogramQuality->selection_color(FL_INACTIVE_COLOR);
-          histogramQuality->labelcolor((Fl_Color)31);
-          histogramQuality->minimum(1);
-          histogramQuality->maximum(64);
-          histogramQuality->step(1);
-          histogramQuality->value(16);
-          histogramQuality->textsize(14);
-          histogramQuality->textcolor(31);
-          histogramQuality->callback((Fl_Callback*)PreferencesCB);
-          histogramQuality->align(FL_ALIGN_LEFT);
-          o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-          o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
-        } // Fl_Value_Slider* histogramQuality
-        o->end();
-      } // Fl_Group* o
-
-      panels[0]->end();
-    } // panels[0] General
+      { Fl_Check_Button* o = frawProxiesAtFullResolution = new Fl_Check_Button(140, 190, 15, 15, "Draw Proxies at full Resolution");
+        frawProxiesAtFullResolution->down_box(FL_FLAT_BOX);
+        frawProxiesAtFullResolution->color(FL_INACTIVE_COLOR);
+        frawProxiesAtFullResolution->selection_color((Fl_Color)31);
+        frawProxiesAtFullResolution->labelcolor((Fl_Color)31);
+        frawProxiesAtFullResolution->callback((Fl_Callback*)PreferencesCB);
+        frawProxiesAtFullResolution->hide();
+        o->color(fl_rgb_color(32,32,32));
+      } // Fl_Check_Button* frawProxiesAtFullResolution
+      { Fl_Value_Slider* o = histogramQuality = new Fl_Value_Slider(302, 220, 136, 15, "Histogram Subsampling");
+        histogramQuality->type(1);
+        histogramQuality->box(FL_FLAT_BOX);
+        histogramQuality->color(FL_INACTIVE_COLOR);
+        histogramQuality->selection_color(FL_INACTIVE_COLOR);
+        histogramQuality->labelcolor((Fl_Color)31);
+        histogramQuality->minimum(1);
+        histogramQuality->maximum(64);
+        histogramQuality->step(1);
+        histogramQuality->value(16);
+        histogramQuality->textsize(14);
+        histogramQuality->textcolor(31);
+        histogramQuality->callback((Fl_Callback*)PreferencesCB);
+        histogramQuality->align(FL_ALIGN_LEFT);
+        o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+        o->selection_color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
+      } // Fl_Value_Slider* histogramQuality
+      panels[2]->end();
+    } // panels[2] Engine
 
     // === Panel 1: Text ===
     { panels[1] = new Fl_Group(130, 5, 465, 450);
@@ -452,12 +417,12 @@ ticularly DPX).");
       panels[1]->end();
     } // panels[1] Text
 
-    // === Panel 2: Formats ===
-    { panels[2] = new Fl_Group(130, 5, 465, 450);
-      panels[2]->box(FL_FLAT_BOX);
-      panels[2]->color(fl_rgb_color(38,38,38));
-      panels[2]->hide();
-      formatsTab = panels[2];
+    // === Panel 3: Formats ===
+    { panels[3] = new Fl_Group(130, 5, 465, 450);
+      panels[3]->box(FL_FLAT_BOX);
+      panels[3]->color(fl_rgb_color(38,38,38));
+      panels[3]->hide();
+      formatsTab = panels[3];
       { Fl_Group* o = new Fl_Group(135, 10, 450, 170, "OpenEXR");
         o->box(FL_BORDER_FRAME);
         o->color(FL_INACTIVE_COLOR);
@@ -581,15 +546,15 @@ n Integer buffer (8bpc, 16bpc, 4bpc, S3TC)");
         } // Fl_Group* o
         o->end();
       } // Fl_Group* o
-      panels[2]->end();
-    } // panels[2] Formats
+      panels[3]->end();
+    } // panels[3] Formats
 
     // === Panel 3: Remote ===
-    { panels[3] = new Fl_Group(130, 5, 465, 450);
-      panels[3]->box(FL_FLAT_BOX);
-      panels[3]->color(fl_rgb_color(38,38,38));
-      panels[3]->hide();
-      remoteSessionTab = panels[3];
+    { panels[4] = new Fl_Group(130, 5, 465, 450);
+      panels[4]->box(FL_FLAT_BOX);
+      panels[4]->color(fl_rgb_color(38,38,38));
+      panels[4]->hide();
+      remoteSessionTab = panels[4];
       { Fl_Group* o = new Fl_Group(140, 20, 440, 72, "Chat Options");
         o->box(FL_BORDER_FRAME);
         o->color(FL_INACTIVE_COLOR);
@@ -870,15 +835,15 @@ utomaticaly without confirmation");
         } // Fl_Value_Input* remoteOthersFrequency
         o->end();
       } // Fl_Group* o
-      panels[3]->end();
-    } // panels[3] Remote
+      panels[4]->end();
+    } // panels[4] Remote
 
     // === Panel 4: Paths ===
-    { panels[4] = new Fl_Group(130, 5, 465, 450);
-      panels[4]->box(FL_FLAT_BOX);
-      panels[4]->color(fl_rgb_color(38,38,38));
-      panels[4]->hide();
-      pathsTab = panels[4];
+    { panels[5] = new Fl_Group(130, 5, 465, 450);
+      panels[5]->box(FL_FLAT_BOX);
+      panels[5]->color(fl_rgb_color(38,38,38));
+      panels[5]->hide();
+      pathsTab = panels[5];
       { Fl_Group* o = new Fl_Group(140, 16, 445, 241, "Sequence Search Paths");
         o->box(FL_BORDER_FRAME);
         o->color(FL_INACTIVE_COLOR);
@@ -940,8 +905,8 @@ hare sessions across computers with different filesystem structures.");
         } // Fl_Check_Button* useSearchPaths
         o->end();
       } // Fl_Group* o
-      panels[4]->end();
-    } // panels[4] Paths
+      panels[5]->end();
+    } // panels[5] Paths
 
     // License tab removed for open-source release
 
@@ -967,7 +932,7 @@ hare sessions across computers with different filesystem structures.");
 }
 
 void PreferencesWindow::showPanel(int index) {
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 6; i++) {
     if (i == index) panels[i]->show();
     else panels[i]->hide();
   }
