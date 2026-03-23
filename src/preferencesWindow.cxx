@@ -423,9 +423,9 @@ y Off)");
         textTab->end();
       } // Fl_Group* textTab
       { formatsTab = new Fl_Group(0, 30, 355, 479, "Formats");
-        formatsTab->color(FL_FOREGROUND_COLOR);
-        formatsTab->selection_color(FL_FOREGROUND_COLOR);
-        formatsTab->labelcolor(FL_INACTIVE_COLOR);
+        formatsTab->color(fl_rgb_color(38,38,38));
+        formatsTab->selection_color(fl_rgb_color(50,50,50));
+        formatsTab->labelcolor(fl_rgb_color(200,200,200));
         formatsTab->hide();
         { Fl_Group* o = new Fl_Group(5, 34, 350, 170, "OpenEXR");
           o->box(FL_BORDER_FRAME);
@@ -553,9 +553,9 @@ n Integer buffer (8bpc, 16bpc, 4bpc, S3TC)");
         formatsTab->end();
       } // Fl_Group* formatsTab
       { remoteSessionTab = new Fl_Group(5, 30, 347, 426, "Remote");
-        remoteSessionTab->color(FL_FOREGROUND_COLOR);
-        remoteSessionTab->selection_color(FL_FOREGROUND_COLOR);
-        remoteSessionTab->labelcolor(FL_INACTIVE_COLOR);
+        remoteSessionTab->color(fl_rgb_color(38,38,38));
+        remoteSessionTab->selection_color(fl_rgb_color(50,50,50));
+        remoteSessionTab->labelcolor(fl_rgb_color(200,200,200));
         remoteSessionTab->hide();
         { Fl_Group* o = new Fl_Group(10, 44, 320, 72, "Chat Options");
           o->box(FL_BORDER_FRAME);
@@ -840,9 +840,9 @@ utomaticaly without confirmation");
         remoteSessionTab->end();
       } // Fl_Group* remoteSessionTab
       { pathsTab = new Fl_Group(5, 40, 347, 464, "Paths");
-        pathsTab->color(FL_FOREGROUND_COLOR);
-        pathsTab->selection_color(FL_FOREGROUND_COLOR);
-        pathsTab->labelcolor(FL_INACTIVE_COLOR);
+        pathsTab->color(fl_rgb_color(38,38,38));
+        pathsTab->selection_color(fl_rgb_color(50,50,50));
+        pathsTab->labelcolor(fl_rgb_color(200,200,200));
         pathsTab->hide();
         { Fl_Group* o = new Fl_Group(10, 40, 325, 241, "Sequence Search Paths");
           o->box(FL_BORDER_FRAME);
