@@ -677,6 +677,16 @@ int main(int argc, char *argv[]) {
 
     aboutWindow.aboutWindow->set_non_modal();
     aboutWindow.aboutWindow->hide();
+
+    // Now that the splash is closed, set global colors for dark-themed dialogs
+    // (fl_alert, fl_choice, fl_message all use these)
+    Fl::set_color(FL_BACKGROUND_COLOR, 38, 38, 38);
+    Fl::set_color(FL_BACKGROUND2_COLOR, 48, 48, 48);
+    Fl::set_color(FL_FOREGROUND_COLOR, 200, 200, 200);
+    Fl::foreground(200, 200, 200);
+    Fl::background(38, 38, 38);
+    Fl::background2(48, 48, 48);
+
     rw.path->value(sett.defaultBrowsePath.c_str());
     //parse the command line arguments if not recovering
 
