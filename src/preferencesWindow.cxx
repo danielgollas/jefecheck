@@ -366,19 +366,17 @@ y Off)");
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Value_Input* textDisplayOpacity
 
-        // Drop Shadow — checkbox then label, left-aligned
-        { Fl_Check_Button* o = textDisplayShadow = new Fl_Check_Button(LX, 115, 22, 22);
+        // Drop Shadow — matching style of other checkboxes in the prefs window
+        { textDisplayShadow = new Fl_Check_Button(LX, 115, 15, 15, "Drop Shadow");
           textDisplayShadow->tooltip("Enable drop shadow behind viewport text");
           textDisplayShadow->down_box(FL_FLAT_BOX);
+          textDisplayShadow->color(FL_INACTIVE_COLOR);
           textDisplayShadow->selection_color((Fl_Color)31);
+          textDisplayShadow->labelcolor((Fl_Color)31);
+          textDisplayShadow->labelsize(12);
           textDisplayShadow->value(1);
           textDisplayShadow->callback((Fl_Callback*)PreferencesCB);
         } // Fl_Check_Button* textDisplayShadow
-        { Fl_Box* o = new Fl_Box(38, 115, 100, 22, "Drop Shadow");
-          o->labelsize(12);
-          o->labelcolor((Fl_Color)31);
-          o->align(FL_ALIGN_LEFT|FL_ALIGN_INSIDE);
-        }
 
         // Hinting and Filter on one row
         { Fl_Choice* o = textDisplayHinting = new Fl_Choice(WX, 150, 110, 22, "Hinting");
