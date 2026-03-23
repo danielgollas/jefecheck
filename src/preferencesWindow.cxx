@@ -18,9 +18,9 @@ Fl_Double_Window* PreferencesWindow::make_window() {
     } // Fl_Box* bg
     { tabs = new Fl_Tabs(0, 10, 355, 589);
       tabs->box(FL_FLAT_BOX);
-      tabs->color(fl_rgb_color(38,38,38));               // tab content area
-      tabs->selection_color(fl_rgb_color(50,50,50));      // selected tab button
-      tabs->labelcolor(fl_rgb_color(200,200,200));        // tab label text
+      tabs->color(fl_rgb_color(32,32,32));               // tab bar background + unselected tabs
+      tabs->selection_color(fl_rgb_color(48,48,48));      // selected tab button (slightly lighter)
+      tabs->labelcolor(fl_rgb_color(180,180,180));        // tab label text
       tabs->align(FL_ALIGN_TOP_RIGHT);
       { Fl_Group* o = new Fl_Group(0, 28, 352, 571, "General");
         o->color(fl_rgb_color(38,38,38));
