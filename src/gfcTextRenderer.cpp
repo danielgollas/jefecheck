@@ -157,13 +157,16 @@ static FT_Library ftLibrary() {
     return lib;
 }
 
+// Round up to next power of 2
+static int nextPow2(int v) {
+    v--;
+    v |= v >> 1; v |= v >> 2; v |= v >> 4; v |= v >> 8; v |= v >> 16;
+    return v + 1;
+}
+
 GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, float pixelSize, float dpiScale) {
     GfcFontAtlas atlas;
-    const int TEX_W = 2048;
-    const int TEX_H = 2048;
     const int PADDING = 2;
-    atlas.texWidth = TEX_W;
-    atlas.texHeight = TEX_H;
     atlas.pixelSize = pixelSize;
     atlas.textureID = 0;
     atlas.valid = false;
@@ -186,11 +189,42 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
         case HINT_AUTO:   loadFlags |= FT_LOAD_TARGET_NORMAL | FT_LOAD_FORCE_AUTOHINT; break;
     }
 
+    // Pass 1: measure glyph sizes to determine atlas dimensions
+    // Use a reasonable width, compute needed height
+    int atlasW = std::max(256, nextPow2((int)(pixelSize * 16)));  // ~16 glyphs per row
+    if (atlasW > 2048) atlasW = 2048;
+    int penX = PADDING, penY = PADDING, rowHeight = 0;
+
+    for (int i = 0; i < 96; i++) {
+        if (FT_Load_Char(face, 32 + i, loadFlags)) continue;
+        int bw = face->glyph->bitmap.width;
+        int bh = face->glyph->bitmap.rows;
+        if (penX + bw + PADDING > atlasW) {
+            penX = PADDING;
+            penY += rowHeight + PADDING;
+            rowHeight = 0;
+        }
+        penX += bw + PADDING;
+        if (bh > rowHeight) rowHeight = bh;
+    }
+    int atlasH = nextPow2(penY + rowHeight + PADDING);
+    if (atlasH < 16) atlasH = 16;
+    if (atlasH > 2048) atlasH = 2048;
+
+    const int TEX_W = atlasW;
+    const int TEX_H = atlasH;
+    atlas.texWidth = TEX_W;
+    atlas.texHeight = TEX_H;
+
+    printf("GfcTextRenderer: atlas %dx%d for %.0fpx font\n", TEX_W, TEX_H, pixelSize);
+
+    // Pass 2: re-render and pack into the right-sized atlas
+    FT_Set_Pixel_Sizes(face, 0, (FT_UInt)pixelSize);  // reset after pass 1
+
     unsigned char *bitmap = new unsigned char[TEX_W * TEX_H];
     memset(bitmap, 0, TEX_W * TEX_H);
 
-    // Row-by-row bin packing
-    int penX = PADDING, penY = PADDING, rowHeight = 0;
+    penX = PADDING; penY = PADDING; rowHeight = 0;
 
     for (int i = 0; i < 96; i++) {
         FT_UInt ch = 32 + i;
