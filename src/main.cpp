@@ -561,12 +561,12 @@ int main(int argc, char *argv[]) {
 
     // Initialize text renderer
     {
-        std::string fontPath = getApplicationDataPath() + "fonts/Inter-Regular.ttf";
-        std::string boldFontPath = getApplicationDataPath() + "fonts/Inter-Bold.ttf";
+        std::string fontPath = getApplicationDataPath() + "fonts/Roboto-Regular.ttf";
+        std::string boldFontPath = getApplicationDataPath() + "fonts/Roboto-Bold.ttf";
         if (!textRenderer().loadFont(fontPath))
-            textRenderer().loadFont("common/fonts/Inter-Regular.ttf");
+            textRenderer().loadFont("common/fonts/Roboto-Regular.ttf");
         if (!textRenderer().loadBoldFont(boldFontPath))
-            textRenderer().loadBoldFont("common/fonts/Inter-Bold.ttf");
+            textRenderer().loadBoldFont("common/fonts/Roboto-Bold.ttf");
         float dpi = mw.vp->pixels_per_unit();
         textRenderer().setDPIScale(dpi);
         textRenderer().setShadowEnabled(true);
@@ -627,9 +627,10 @@ int main(int argc, char *argv[]) {
         for (size_t i = 0; i < fonts.size(); i++) {
             // Store the font path as user_data (must be persistent — use strdup)
             pw.textDisplayFont->add(fonts[i].first.c_str(), 0, nullptr, strdup(fonts[i].second.c_str()));
-            if (fonts[i].first.find("Inter") != std::string::npos &&
-                fonts[i].first.find("Bold") == std::string::npos &&
-                fonts[i].first.find("Italic") == std::string::npos)
+            if (fonts[i].first == "Roboto" ||
+                (fonts[i].first.find("Roboto") != std::string::npos &&
+                 fonts[i].first.find("Bold") == std::string::npos &&
+                 fonts[i].first.find("Italic") == std::string::npos))
                 selectedIdx = (int)i;
         }
         pw.textDisplayFont->value(selectedIdx);
