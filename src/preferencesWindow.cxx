@@ -17,15 +17,15 @@ Fl_Double_Window* PreferencesWindow::make_window() {
       o->color(fl_rgb_color(32,32,32));
     } // Fl_Box* bg
     { tabs = new Fl_Tabs(0, 10, 355, 589);
-      tabs->box(FL_BORDER_FRAME);
-      tabs->color(FL_FOREGROUND_COLOR);
-      tabs->selection_color(FL_INACTIVE_COLOR);
-      tabs->labelcolor((Fl_Color)31);
+      tabs->box(FL_FLAT_BOX);
+      tabs->color(fl_rgb_color(38,38,38));               // tab content area
+      tabs->selection_color(fl_rgb_color(50,50,50));      // selected tab button
+      tabs->labelcolor(fl_rgb_color(200,200,200));        // tab label text
       tabs->align(FL_ALIGN_TOP_RIGHT);
       { Fl_Group* o = new Fl_Group(0, 28, 352, 571, "General");
-        o->color(FL_INACTIVE_COLOR);
-        o->selection_color(FL_FOREGROUND_COLOR);
-        o->labelcolor(FL_INACTIVE_COLOR);
+        o->color(fl_rgb_color(38,38,38));
+        o->selection_color(fl_rgb_color(50,50,50));
+        o->labelcolor(fl_rgb_color(200,200,200));
         { Fl_Group* o = new Fl_Group(10, 39, 320, 133, "Startup");
           o->box(FL_BORDER_FRAME);
           o->color(FL_INACTIVE_COLOR);
@@ -295,16 +295,16 @@ y Off)");
         o->end();
       } // Fl_Group* o
       { textTab = new Fl_Group(5, 35, 347, 459, "Text");
-        textTab->color(FL_FOREGROUND_COLOR);
-        textTab->selection_color(FL_FOREGROUND_COLOR);
-        textTab->labelcolor(FL_INACTIVE_COLOR);
+        textTab->color(fl_rgb_color(38,38,38));
+        textTab->selection_color(fl_rgb_color(50,50,50));
+        textTab->labelcolor(fl_rgb_color(200,200,200));
         textTab->hide();
 
-        // All widgets start at x=70, labels right-align to that edge (FLTK default)
-        int W = 70;  // widget left edge
+        // All widgets start at x=65, labels right-align to that edge (FLTK default)
+        int W = 65;  // widget left edge
 
         // Font
-        { Fl_Choice* o = textDisplayFont = new Fl_Choice(W, 50, 265, 22, "Font");
+        { Fl_Choice* o = textDisplayFont = new Fl_Choice(W, 50, 270, 22, "Font");
           textDisplayFont->tooltip("TrueType font for viewport text");
           textDisplayFont->box(FL_FLAT_BOX);
           textDisplayFont->down_box(FL_FLAT_BOX);
@@ -318,7 +318,7 @@ y Off)");
         } // Fl_Choice* textDisplayFont
 
         // Size, Color, Opacity on one row
-        { Fl_Value_Input* o = textDisplayFontSize = new Fl_Value_Input(W, 80, 45, 22, "Size");
+        { Fl_Value_Input* o = textDisplayFontSize = new Fl_Value_Input(W, 78, 45, 22, "Size");
           textDisplayFontSize->tooltip("Font size in points (8-48)");
           textDisplayFontSize->box(FL_FLAT_BOX);
           textDisplayFontSize->labelsize(12);
@@ -332,7 +332,7 @@ y Off)");
           textDisplayFontSize->callback((Fl_Callback*)PreferencesCB);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Value_Input* textDisplayFontSize
-        { Fl_Value_Input* o = textDisplayColor = new Fl_Value_Input(165, 80, 45, 22, "Color");
+        { Fl_Value_Input* o = textDisplayColor = new Fl_Value_Input(160, 78, 45, 22, "Color");
           textDisplayColor->tooltip("Text brightness (0-1)");
           textDisplayColor->box(FL_FLAT_BOX);
           textDisplayColor->labelsize(12);
@@ -346,7 +346,7 @@ y Off)");
           textDisplayColor->callback((Fl_Callback*)PreferencesCB);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Value_Input* textDisplayColor
-        { Fl_Value_Input* o = textDisplayOpacity = new Fl_Value_Input(270, 80, 45, 22, "Opacity");
+        { Fl_Value_Input* o = textDisplayOpacity = new Fl_Value_Input(265, 78, 45, 22, "Opacity");
           textDisplayOpacity->tooltip("Text opacity (0-1)");
           textDisplayOpacity->box(FL_FLAT_BOX);
           textDisplayOpacity->labelsize(12);
@@ -362,7 +362,7 @@ y Off)");
         } // Fl_Value_Input* textDisplayOpacity
 
         // Drop Shadow
-        { textDisplayShadow = new Fl_Check_Button(W, 115, 15, 15, "Drop Shadow");
+        { textDisplayShadow = new Fl_Check_Button(W, 106, 15, 15, "Drop Shadow");
           textDisplayShadow->tooltip("Enable drop shadow behind viewport text");
           textDisplayShadow->down_box(FL_FLAT_BOX);
           textDisplayShadow->color(FL_INACTIVE_COLOR);
@@ -374,7 +374,7 @@ y Off)");
         } // Fl_Check_Button* textDisplayShadow
 
         // Hinting and Filter on one row
-        { Fl_Choice* o = textDisplayHinting = new Fl_Choice(W, 145, 110, 22, "Hint");
+        { Fl_Choice* o = textDisplayHinting = new Fl_Choice(W, 130, 110, 22, "Hint");
           textDisplayHinting->tooltip("Light (smooth diagonals), Normal (sharp stems), Auto (FreeType auto-hinter)");
           textDisplayHinting->box(FL_FLAT_BOX);
           textDisplayHinting->down_box(FL_FLAT_BOX);
@@ -389,7 +389,7 @@ y Off)");
           textDisplayHinting->value(0);
           textDisplayHinting->callback((Fl_Callback*)PreferencesCB);
         } // Fl_Choice* textDisplayHinting
-        { Fl_Choice* o = textDisplayFilter = new Fl_Choice(240, 145, 95, 22, "Filter");
+        { Fl_Choice* o = textDisplayFilter = new Fl_Choice(235, 130, 100, 22, "Filter");
           textDisplayFilter->tooltip("Nearest (pixel-perfect), Linear (smooth)");
           textDisplayFilter->box(FL_FLAT_BOX);
           textDisplayFilter->down_box(FL_FLAT_BOX);
@@ -405,7 +405,7 @@ y Off)");
         } // Fl_Choice* textDisplayFilter
 
         // Gamma
-        { Fl_Value_Input* o = textDisplayGamma = new Fl_Value_Input(W, 175, 50, 22, "Gamma");
+        { Fl_Value_Input* o = textDisplayGamma = new Fl_Value_Input(W, 158, 50, 22, "Gamma");
           textDisplayGamma->tooltip("Gamma correction for text edges (lower = bolder, 0.3-1.0)");
           textDisplayGamma->box(FL_FLAT_BOX);
           textDisplayGamma->labelsize(12);

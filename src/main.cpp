@@ -363,14 +363,7 @@ int main(int argc, char *argv[]) {
 
     sett.numOfPartitions=1;
 
-    // Set FLTK's global colors to match the dark theme.
-    // This affects Fl_Tabs button drawing, scrollbar backgrounds, etc.
-    Fl::set_color(FL_BACKGROUND_COLOR, 32, 32, 32);     // main bg
-    Fl::set_color(FL_BACKGROUND2_COLOR, 42, 42, 42);    // input fields bg
-    Fl::set_color(FL_FOREGROUND_COLOR, 160, 160, 160);  // text/labels
-    Fl::set_color(FL_INACTIVE_COLOR, 55, 55, 55);       // disabled/borders
-    Fl::set_color(FL_SELECTION_COLOR, 80, 120, 180);    // selection highlight
-    Fl::scheme("gtk+");  // flat tab style that works with dark colors
+    //Fl::scheme("gtk+");
 
     int mwx,mwy,mww,mwh;
     Fl::screen_xywh(mwx,mwy,mww,mwh,0);
