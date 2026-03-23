@@ -7,6 +7,7 @@
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Group.H>
 #include <FL/Fl_Hold_Browser.H>
+#include <FL/Fl_Flex.H>
 #include <FL/Fl_Scroll.H>
 #include <FL/Fl_Round_Button.H>
 extern void PreferencesCB(Fl_Round_Button*, void*);
