@@ -1,8 +1,12 @@
 # JefeCheck Quick Reference
 
+![Main application window](../common/Manual/Images/MainWindow.png)
+
 ## Loading
 
 ### How to Load an Image Sequence into Track X
+
+![The Load Window](../common/Manual/Images/LoadWindow.png)
 
 1. Open the Load Window (Menu > File > Load Sequence or `Ctrl+L`)
 2. Click on the Browse button for track X
@@ -76,6 +80,8 @@ OR
 ---
 
 ## Playback
+
+![Playback controls](../common/Manual/Images/PlaybackControls.png)
 
 ### Change the Layout of the Viewports
 
@@ -206,6 +212,8 @@ Click on the Up or Down button on the FX's controls.
 ---
 
 ## Remote Session
+
+![The Remote Session Manager Window](../common/Manual/Images/RemoteSessionManager.png)
 
 ### How to Start a JefeCheck Remote Session Server
 
