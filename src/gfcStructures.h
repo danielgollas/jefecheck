@@ -13,7 +13,7 @@
 #include "xmlParser.h"
 
 #include "gfcrenderparams.h"
-#define JEFE_VERSION "1.5.3" 
+#define JEFE_VERSION "1.7.0"
 #include <sstream> //for stingstream
 
 class gfcPlaylistItemProgramState;

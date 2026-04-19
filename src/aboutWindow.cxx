@@ -6399,7 +6399,7 @@ Fl_Double_Window* AboutWindow::make_window() {
     { Fl_Box* o = new Fl_Box(199, 160, 50, 10, "2006-2012");
       o->labelcolor((Fl_Color)29);
     } // Fl_Box* o
-    { versionLabel = new Fl_Box(199, 177, 50, 11, "v.1.1.0");
+    { versionLabel = new Fl_Box(199, 177, 50, 11, "v.1.7.0");
       versionLabel->labelfont(1);
       versionLabel->labelsize(16);
       versionLabel->labelcolor((Fl_Color)29);

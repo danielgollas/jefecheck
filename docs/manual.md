@@ -1,6 +1,6 @@
 # JefeCheck User's Manual
 
-Version 2.0 — Open Source Release
+Version 1.7 — Open Source Release
 
 ---
 
