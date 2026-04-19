@@ -35,8 +35,8 @@ jobs:
         run: |
           mkdir -p package/jefecheck
           cp build/jefecheck package/jefecheck/
-          cp -r common/FX package/jefecheck/
-          cp -r common/fonts package/jefecheck/
+          cp -r src/FX package/jefecheck/
+          cp -r src/fonts package/jefecheck/
           cd package && tar czf ../jefecheck-linux-x64.tar.gz jefecheck
 
       - uses: actions/upload-artifact@v4
@@ -61,8 +61,8 @@ jobs:
         run: |
           mkdir -p package/jefecheck
           cp build/jefecheck package/jefecheck/
-          cp -r common/FX package/jefecheck/
-          cp -r common/fonts package/jefecheck/
+          cp -r src/FX package/jefecheck/
+          cp -r src/fonts package/jefecheck/
           cd package && tar czf ../jefecheck-macos-arm64.tar.gz jefecheck
 
       - uses: actions/upload-artifact@v4
@@ -105,8 +105,8 @@ jobs:
         run: |
           mkdir -p package/jefecheck
           cp build/jefecheck.exe package/jefecheck/
-          cp -r common/FX package/jefecheck/
-          cp -r common/fonts package/jefecheck/
+          cp -r src/FX package/jefecheck/
+          cp -r src/fonts package/jefecheck/
           # Bundle MinGW runtime DLLs
           ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} package/jefecheck/
           cd package && 7z a -tzip ../jefecheck-windows-x64.zip jefecheck

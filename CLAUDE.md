@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. Originally written 2006-2014, modernized for open-source release in 2026 under GPL v2.
 
-**GitHub:** github.com/danielgollas/jefecheck (private)
-**Branch:** `modernize-opensource` (active development)
+**GitHub:** github.com/danielgollas/jefecheck
+**Version:** 1.7.0
+**Default branch:** `main`
 
 ## Build System
 
@@ -15,7 +16,7 @@ JefeCheck is a professional C++ video frame processing and playback application 
 
 ### macOS (primary development)
 ```bash
-brew install fltk openimageio openexr curl zlib cmake
+brew install fltk openimageio openexr curl zlib cmake freetype
 cmake -B build && cmake --build build
 ```
 
@@ -23,18 +24,19 @@ cmake -B build && cmake --build build
 ```bash
 bash build_linux.sh
 # Or manually:
-sudo apt install cmake build-essential libfltk1.3-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev freeglut3-dev libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libopencv-dev
+sudo apt install cmake build-essential libfltk1.3-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev freeglut3-dev libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libopencv-dev libfreetype6-dev
 cmake -B build && cmake --build build -j$(nproc)
 ```
 
 ### Windows (MinGW/MSYS2 via GitHub Actions)
-Uses MSYS2 with pre-built packages. See `.github/workflows/build.yml`.
+Uses MSYS2 with pre-built packages including `mingw-w64-x86_64-freetype`. See `.github/workflows/build.yml`.
 
 ### Runtime Resources
-The app expects `Resources/FX/` and `Resources/fonts/` relative to the working directory. For development:
+The app finds FX and fonts via `getApplicationDataPath()` (platform-specific install path). For development, symlink to the source tree:
 ```bash
-mkdir -p Resources && ln -sf $(pwd)/common/FX Resources/FX && ln -sf $(pwd)/common/fonts Resources/fonts
+ln -sf $(pwd)/src/FX FX && ln -sf $(pwd)/src/fonts fonts
 ```
+Release builds package `src/FX/` and `src/fonts/` alongside the binary.
 
 ## Architecture
 
@@ -52,7 +54,35 @@ Singleton-style manager classes coordinate subsystems:
 - **gfcPlate** — A display quadrant with color correction, FX stack, and text overlay
 - **gfcFX / gfcFXStack** — Shader-based effects pipeline. Shaders in `common/FX/` (.frag/.vert/.jfx)
 - **Super Shader** — Dynamically generated GLSL in `gfcPlate::buildShader()` for gamma/exposure/BCS/LUT. Uses ARB extension functions (`glCreateShaderObjectARB`, etc.)
-- Multi-plate layouts set different GL projections per plate — this affects text rendering (see Known Issues)
+
+### Text Rendering (`GfcTextRenderer`)
+Custom text renderer replacing FLTK's `gl_draw`/`gl_font`. Fixes text squashing in multi-plate layouts.
+
+**Architecture:**
+- Singleton `GfcTextRenderer` accessed via `textRenderer()`
+- **FreeType** rasterizes glyphs with hinting into a dynamically-sized `GL_ALPHA` atlas texture
+- All text draws in a **pixel-exact orthographic projection** via `gluProject` — 1:1 texel-to-pixel mapping regardless of plate projection
+- **Two-pass shadow**: dark offset pass + foreground pass (configurable offset, color, blur)
+- **Wrapper functions** (`gfc_gl_font`, `gfc_gl_draw`, etc.) match FLTK signatures for minimal call site changes
+
+**Key implementation details:**
+- Atlas baked at `fontSize * dpiScale` texels for Retina support
+- `drawLine()` uses atlas pixel sizes directly (no dpiScale division) since rendering is in physical pixel space
+- `emitQuads()` snaps glyph positions to integer pixels; baseline and cursor snapped before glyph offsets applied
+- `GL_NEAREST` filter for pixel-perfect rendering; `GL_LINEAR` available via preferences
+- Hinting mode: `FT_LOAD_TARGET_LIGHT` (default, smooth diagonals) or `FT_LOAD_TARGET_NORMAL` / `FT_LOAD_FORCE_AUTOHINT`
+- Gamma correction (`powf(coverage, gamma)`) boosts semi-transparent edge pixels for bolder appearance
+- `loadFont()`/`loadBoldFont()` invalidate all cached atlases so font changes take effect immediately
+- System fonts enumerated via FreeType from platform-specific directories
+- Font data kept in memory vectors; `FT_Library` is a static singleton; `FT_Face` created per `bakeAtlas()` call
+
+**Alignment constants must match FLTK:**
+```
+GFC_ALIGN_CENTER=0x0000, GFC_ALIGN_TOP=0x0001, GFC_ALIGN_BOTTOM=0x0002,
+GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIGN_WRAP=0x0080
+```
+
+**Files:** `src/gfcTextRenderer.h`, `src/gfcTextRenderer.cpp`
 
 ### Image I/O
 - **gfcImageLoaderOIIO** — OpenImageIO for all general formats (JPEG, PNG, TIFF, EXR with multi-layer support)
@@ -62,9 +92,12 @@ Singleton-style manager classes coordinate subsystems:
 - Image saving stubbed out (TODO: implement via OIIO)
 
 ### UI
-- FLTK 1.4 GUI. Window layouts in `.fl` files (FLUID designer) → `.cxx`/`.h` pairs
-- Native file dialogs via `NativeFileChooser` wrapper (`src/gfcfilechooser.h`) — uses `Fl_Native_File_Chooser` with FLTK filter format conversion
+- **FLTK 1.4** GUI. Window layouts in `.fl` files (FLUID designer) → `.cxx`/`.h` pairs
+- Native file dialogs via `NativeFileChooser` wrapper (`src/gfcfilechooser.h`)
 - Custom widgets prefixed `Fl_*_gfc`
+- **Preferences window** uses sidebar (`Fl_Hold_Browser`) + panel layout with 6 sections: General, Text, Engine, Formats, Remote, Paths
+- Dark-themed `fl_alert`/`fl_choice`/`fl_message` dialogs — global FLTK colors set after splash window closes in `main.cpp`
+- System requirements window (`minSpecsWindow`) uses `GFC_BG_COLOR` for dark background
 
 ## Key Dependencies
 
@@ -72,6 +105,7 @@ Singleton-style manager classes coordinate subsystems:
 |---------|---------|---------|
 | FLTK 1.4 | GUI framework | LGPL v2 |
 | OpenImageIO | Image I/O (all formats) | BSD |
+| FreeType | Font rasterization with hinting | FreeType License (BSD-like) |
 | GLAD | OpenGL loading (compatibility profile 3.3) | Public domain |
 | CLI11 | CLI argument parsing | BSD |
 | OpenEXR / Imath | EXR support (via OIIO) | BSD |
@@ -80,22 +114,24 @@ Singleton-style manager classes coordinate subsystems:
 | zlib | Compression | zlib |
 | xmlParser | XML parsing (vendored in src/) | BSD |
 
-**Removed dependencies:** GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan
+**Removed dependencies:** GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
+
+**Bundled fonts:** Roboto Regular/Bold (Apache 2.0, default), Inter Regular/Bold (SIL OFL), DejaVu Sans Regular/Bold (Bitstream Vera)
 
 ## Directory Layout
 
 ```
 src/                    All C++ source. Entry point: main.cpp
-common/FX/              Effect shaders (.frag/.vert), metadata (.jfx), LUTs (.lut/.cub)
-common/fonts/           Bundled TTF fonts (DejaVu Sans)
+src/FX/                 Effect shaders (.frag/.vert), metadata (.jfx), LUTs (.lut/.cub)
+src/fonts/              Bundled TTF fonts (Roboto, Inter, DejaVu Sans)
 third_party/glad/       Generated GLAD loader (OpenGL 3.3 compatibility)
 third_party/cli11/      CLI11 single-header argument parser
-third_party/stb/        stb_truetype (for upcoming text renderer)
-win/                    Windows installer scripts (.nsi)
-linux/                  Linux README
-mac/                    macOS bundle resources
-docs/                   Design specs, plans, journal
-.github/workflows/      CI for macOS, Linux, Windows
+scripts/                Build/setup scripts (build_linux.sh)
+docs/                   User manual, quick start, design specs, plans
+docs/manual.md          User manual (converted from 2014 .docx)
+docs/quick-start.md     Quick reference guide
+docs/manual-images/     Screenshots (2014, need updating)
+.github/workflows/      CI (build.yml) and releases (release.yml)
 ```
 
 ## Platform-Specific Notes
@@ -105,12 +141,14 @@ docs/                   Design specs, plans, journal
 - `GLhandleARB` is `void*` (not `GLuint`). Shader functions use ARB variants (`glShaderSourceARB`, `glLinkProgramARB`). Do NOT mix ARB and modern GL calls.
 - GLAD must be initialized via `mw.vp->make_current()` + `gladLoadGL()` before any GL calls in `main()`.
 - `Fl_Gl_Window::pixels_per_unit()` returns 2.0 on Retina displays.
+- FreeType: use `<OpenGL/glu.h>` (not `<GL/glu.h>`).
 
 ### Linux
 - X11 `#define None 0L` conflicts with OIIO's `enum { None=0 }` and CLI11 internals. Include order matters: CLI11 first (top of main.cpp), then `#undef None` before OIIO headers (in `gfcimageloaderoiio.h`).
 - OIIO 2.x `tostring()` API differs from 3.x. Metadata extraction uses manual type checking with `#if OIIO_VERSION_MAJOR >= 3` guard.
 - GCC is stricter than Clang: missing returns are SIGILL (not just UB), `const` correctness enforced, `mutable` required for mutexes in const methods.
 - Link GLU explicitly (`-lGLU`).
+- `#include <cmath>` required for `powf`/`floorf` (GCC doesn't implicitly include).
 
 ### Windows (MinGW/MSYS2)
 - `using namespace std;` in headers causes `std::byte` vs Windows `byte` conflict. Removed from `mtpoly.h`.
@@ -118,6 +156,7 @@ docs/                   Design specs, plans, journal
 - `GLhandleARB` casts require `(GLuint)(uintptr_t)` on 64-bit.
 - Link: `glu32 opengl32 ws2_32 winmm iphlpapi` + GLUT.
 - `-fpermissive` needed for `void*` to `long` casts in FLTK callbacks.
+- `#include <windows.h>` must come before `<GL/glu.h>` (GLU callbacks need Windows types).
 
 ## Key Code Patterns
 
@@ -142,23 +181,41 @@ docs/                   Design specs, plans, journal
 - `gfcPlate::buildShader()` constructs vertex + fragment shader source strings based on active features (LUT, gamma/exposure, BCS, RGBA masks)
 - `gfcFX::load()` / `gfcFX::bind()` — loads .jfx effect definitions, compiles shaders from .frag/.vert files
 - All shader handles (`ssProgram`, `ssVertexShader`, `ssFramgmentShader`) MUST be initialized to 0 in constructors — uninitialized handles cause trace traps on macOS
+- Text renderer disables active shader programs (`glGetHandleARB`/`glUseProgramObjectARB(0)`) before drawing text quads
 
 ### File Chooser (`gfcfilechooser.h`)
 - `NativeFileChooser` wraps `Fl_Native_File_Chooser` with `Fl_File_Chooser` API compatibility
 - Converts FLTK filter format `"Desc (*.{ext1,ext2})"` to native format `"Desc\t*.{ext1,ext2}"`
 - Writes selected path to global `gFilename[2048]` for legacy code compatibility
 
+### Preferences System
+- Settings saved/loaded via XML (`gfcStructures.cpp`) using `saveSetting()`/`setWidgetFromNode()` templates
+- Text rendering settings: font path, size, color, opacity, shadow, hinting mode, filter mode, gamma — all persisted
+- `PreferencesCB` callback in `UICallbacks.cpp` applies all preference changes including text renderer settings
+- System font enumeration (`enumerateSystemFonts()`) scans platform-specific directories via FreeType
+
 ## Known Issues
 
-- **Text squashing in multi-plate layouts** — FLTK 1.4's `gl_draw()` uses `glDrawPixels` (fixed pixel size) with `glRasterPos` (projection-affected). In 2x1/1x2/2x2 layouts, text is squashed. A stb_truetype replacement is designed and planned (see `docs/superpowers/specs/2026-03-21-stb-text-rendering-design.md`).
 - **`gfcTrack.cpp` is an exact duplicate of `gfcSequence.cpp`** — excluded from build in CMakeLists.txt. The `subsequence` branch was an incomplete refactoring.
 - **Image saving not implemented** — `gfcimagesaver.cpp` has stubs for OIIO-based saving (TODO).
 - **Image-based LUT loading disabled** — `trilerp.cpp` IMAGELUT2D case returns -1 (needs OIIO image reading).
 - **Custom EXR loader disabled** — `gfcimageloaderexr.cpp` excluded from build due to OpenEXR 3.x API changes. OIIO handles EXR.
+- **Text rendering quality** — FreeType with light hinting is good but not Core Text quality on macOS. Diagonal strokes (/, 7, k) have some stairstepping at small sizes. Possible future improvement: render via Core Text on macOS.
+- **Preferences font dropdown z-order** — `Fl_Choice` popup may appear behind the preferences window on macOS. Workaround: make window modal.
 
-## CI
+## CI & Releases
 
-GitHub Actions builds on macOS (ARM64), Linux (x64 Ubuntu 24.04), and Windows (x64 MSYS2/MinGW). See `.github/workflows/build.yml`.
+- **Build CI** (`.github/workflows/build.yml`): Runs on push to `main` and all PRs targeting `main`. Builds on macOS (ARM64), Linux (x64 Ubuntu 24.04), and Windows (x64 MSYS2/MinGW).
+- **Release CI** (`.github/workflows/release.yml`): Triggers on `v*` tags. Builds Release binaries on all 3 platforms, packages with FX plugins and fonts, publishes to GitHub Releases via `softprops/action-gh-release`.
+- **To publish a release:** `git tag v1.7.0 && git push origin v1.7.0`
+- **Artifacts:** `jefecheck-linux-x64.tar.gz`, `jefecheck-macos-arm64.tar.gz`, `jefecheck-windows-x64.zip`
+
+## Documentation
+
+- **User Manual:** `docs/manual.md` (1,104 lines, converted from 2014 .docx)
+- **Quick Start:** `docs/quick-start.md` (250 lines, task-oriented how-to reference)
+- **Screenshots:** `common/Manual/Images/` (41 images from 2014, need retaking for current UI)
+- **Original .docx files:** `common/Manual/JefeCheckManual.docx`, `common/Manual/JefeCheckQuickStart.docx` (archived)
 
 ## Notes
 
@@ -168,3 +225,5 @@ GitHub Actions builds on macOS (ARM64), Linux (x64 Ubuntu 24.04), and Windows (x
 - Never put `using namespace std;` in header files — causes `std::byte` conflict on Windows.
 - Always initialize GL object handles to 0 in constructors — uninitialized handles cause crashes when `glDeleteObjectARB` is called.
 - GLAD must be initialized before any GL calls. On macOS, `draw()` is called during `Fl::check()` before `main()` reaches the GL init code — GLAD is initialized in `GlViewport::draw()` on first call.
+- Version string is defined in `src/gfcStructures.h` (`JEFE_VERSION`), `CMakeLists.txt` (`project VERSION`), and `src/aboutWindow.cxx`/`.fl` (splash label).
+- Legacy branches (`floatEXR`, `gfcTrackIntroduced`, `subsequence`, `trackloading`) contain incomplete refactoring work from the original development period.

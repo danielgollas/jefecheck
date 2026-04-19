@@ -33,37 +33,18 @@ Thumbs.db
 # Generated
 *.autosave
 
-# Binary assets
+# Binary assets (source files, not documentation)
 *.xcf
 *.psd
-*.ico
-*.icns
-*.bmp
-*.png
-*.pdf
-*.rtf
 
-# Windows build output
-win/Debug/
-win/Release/
-win/x64/
-
-# Legacy directories (removed from repo, may exist on disk)
-common/website/
-common/licenseGenerator/
+# Allow documentation images and PDFs
+!docs/**/*.png
+!docs/**/*.pdf
 
 # Misc
 *.tlog
-*.ini
 *.config.bad
 *.intermediate.manifest.xml
 *.bak
 *.log
-*.filters
-
-# Legacy directories (removed from repo, may exist on disk)
-win/buildDependencies/
-win/InstallerFolder/NSIS/
-win/InstallerFolder/forAppData/
-win/libSources/
 .cache/

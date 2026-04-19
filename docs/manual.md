@@ -74,21 +74,21 @@ The most basic way of using JefeCheck is to see one Track on one Viewport withou
 
 ### Basic User Interface
 
-![Main application window](../common/Manual/Images/MainWindow.png)
+![Main application window](manual-images/MainWindow.png)
 
 When you first open JefeCheck, you will see the **Main Window** and the **Load Window** on top. If you don't see the Load Window, you can bring it up by pressing `Ctrl+L` (L is for load). As you might have guessed, the Load Window is used to load the image sequences into tracks.
 
 ### The Load Window
 
-![The Load Window](../common/Manual/Images/LoadWindow.png)
+![The Load Window](manual-images/LoadWindow.png)
 
 The **Load Window** is divided into 4 sections. These four sections represent the four tracks into which you can load image sequences. You don't have to use all four — you can use as many as you want. Each section is exactly the same, so let's analyze what each control does.
 
 #### Sequence Info Controls
 
-![Load Parameters](../common/Manual/Images/LoadParameters.png)
+![Load Parameters](manual-images/LoadParameters.png)
 
-![Load Parameters (populated)](../common/Manual/Images/LoadParameters-Populated.png)
+![Load Parameters (populated)](manual-images/LoadParameters-Populated.png)
 
 The **Sequence Info Controls** let you select what sequence you want to load. When you press the **Browse** button a file-choosing dialog appears.
 
@@ -151,7 +151,7 @@ Crop is a load time modification that has no Real Time counterpart, and is great
 
 Crop allows you to specify a rectangular sub-section of the image you want to load, and only that part will be loaded into memory. When you enable the **Crop** checkbox, a blue overlay square will appear atop the preview image in the main window.
 
-![Crop region selection on a frame](../common/Manual/Images/CropSample.png) Whatever is under this square will be loaded. To move the Crop square, click and drag it; to resize the square, click and drag the corner squares.
+![Crop region selection on a frame](manual-images/CropSample.png) Whatever is under this square will be loaded. To move the Crop square, click and drag it; to resize the square, click and drag the corner squares.
 
 ##### BitDepth
 
@@ -175,7 +175,7 @@ This option box lets you choose between any available channels present in the im
 
 #### Start All and Playlist Buttons
 
-![Start and Cancel buttons](../common/Manual/Images/StartCancelButtons.png)
+![Start and Cancel buttons](manual-images/StartCancelButtons.png)
 
 Once you have selected what tracks you want to load, adjusted their load-time parameters (if needed), and you are sure of what you want to load, hit the **START** button. This will start loading the track in the background and you can continue using the Load Window to load another sequence into another track. If you set up all the tracks and want to start loading them all at the same time, click the **Start All** button at the bottom of the Load Window. This closes the Load Window and the sequences will start loading into the tracks. If you decide you don't want to do anything, you can simply click the **Done** button to close the Load Window.
 
@@ -205,7 +205,7 @@ Remember: tracks are independent from viewports — tracks hold sequences, and v
 
 ### The Control Bar
 
-![The Control Bar](../common/Manual/Images/ControlBar.png)
+![The Control Bar](manual-images/ControlBar.png)
 
 The Control Bar contains many different controls grouped into three logical areas:
 
@@ -215,7 +215,7 @@ The Control Bar contains many different controls grouped into three logical area
 
 #### Timeline and Track Controls
 
-![Timeline controls](../common/Manual/Images/TimeLineControls.png)
+![Timeline controls](manual-images/TimeLineControls.png)
 
 The **Timeline and Track Controls** show you information relevant to time and position of what you are seeing on the screen, and they let you control what frames of the loaded sequences you are looking at.
 
@@ -237,17 +237,17 @@ The Timeline controls from left to right are:
 
 **Track Controls** — There are four rows of controls under the Timeline, one for each track. Each row contains a **Track Options Button**, a **Cancel** button, and a **Track Bar**.
 
-![Track controls row](../common/Manual/Images/TrackControls.png)
+![Track controls row](manual-images/TrackControls.png)
 
 - **The Track Bar** — A gray background showing how long the track is in relation to the timeline and other tracks.
 
-  ![Track bar showing loading progress](../common/Manual/Images/TrackBar.png)
+  ![Track bar showing loading progress](manual-images/TrackBar.png)
 
-  ![Track loading mode indicator](../common/Manual/Images/TrackLoadingMode.png) Inside the gray background there is a slightly darker gray area that shows the range of the track we wish to load. That range area lights up in green to show what frames are loaded in memory and ready to show. While a track is loading, you can play back whatever part is already in memory.
+  ![Track loading mode indicator](manual-images/TrackLoadingMode.png) Inside the gray background there is a slightly darker gray area that shows the range of the track we wish to load. That range area lights up in green to show what frames are loaded in memory and ready to show. While a track is loading, you can play back whatever part is already in memory.
 
 - **The Cancel Loading Button** — Turns red whenever its corresponding track is being loaded, allowing you to cancel the load at any point. When the track is completely loaded or no more frames can fit into memory, loading stops and the button turns gray.
 
-  ![Cancel loading button](../common/Manual/Images/cancelLoading.png)
+  ![Cancel loading button](manual-images/cancelLoading.png)
 
 - **The Track Options Button** — When you click on the Track Options button, a **Track Options** window appears with the following options:
 
@@ -268,7 +268,7 @@ Many times a whole sequence won't fit into memory. You can tell JefeCheck to unl
 
 #### Playback Controls
 
-![Playback controls](../common/Manual/Images/PlaybackControls.png)
+![Playback controls](manual-images/PlaybackControls.png)
 
 The **Playback Controls** let you control and decide how the timeline is to behave.
 
@@ -300,7 +300,7 @@ You can also scrub the timeline by clicking and dragging on the viewport while h
 
 #### Viewport Controls
 
-![Viewport controls](../common/Manual/Images/ViewportControls.png)
+![Viewport controls](manual-images/ViewportControls.png)
 
 The **Viewport Controls** allow you to specify and control what viewports will be shown, and what track each viewport will display.
 
@@ -315,15 +315,15 @@ You can also access layouts from the keyboard or from **View > Viewport Layout**
 
 The controls shown correspond to the active viewport. To activate a viewport, select it in the Active Viewport checkboxes or click on it in the viewport area.
 
-![Single viewport control panel](../common/Manual/Images/SingleViewportControl.png)
+![Single viewport control panel](manual-images/SingleViewportControl.png)
 
 **Per-Viewport Controls:**
 
-![Track selection box](../common/Manual/Images/trackSelectionBox.png)
+![Track selection box](manual-images/trackSelectionBox.png)
 
 **Track Selection Box** — Select which track you want displayed on this viewport. It can be any of the four tracks. If no sequence is loaded in the selected track, the viewport will not show anything. More than one viewport can show the same track at the same time.
 
-![Aspect ratio controls](../common/Manual/Images/AspectControls.png)
+![Aspect ratio controls](manual-images/AspectControls.png)
 
 **Aspect Ratio Controls** — You can change the aspect ratio of the sequence being shown on the screen in real time. The default value is **original**, which uses the original aspect ratio of the image. The drop-down menu shows commonly used aspect ratios such as 4:3, 16:9, 2.35:1, etc., but you can type in any ratio using `x:y` notation or as a decimal.
 
@@ -331,15 +331,15 @@ By default, when you change the aspect ratio, the image will be deformed to adap
 
 When you activate the **Crop Bars** control and the Aspect Ratio is set to anything other than "original", the aspect ratio will be changed not by squashing or stretching the image but by applying black crop bars to hide or compensate for a portion of the image. The opacity of the black aspect bars can be changed in **View > Aspect Bars opacity**.
 
-![Flip/flop controls](../common/Manual/Images/FlipFlopControls.png)
+![Flip/flop controls](manual-images/FlipFlopControls.png)
 
 **Flip/Flop Controls** — Reflects the viewport vertically (Flip) or horizontally (Flop) or both. Shortcuts: `Ctrl+8` (flip) and `Ctrl+9` (flop).
 
-![RGBA channel mask controls](../common/Manual/Images/ChannelMaskControls.png)
+![RGBA channel mask controls](manual-images/ChannelMaskControls.png)
 
 **RGBA Mask** — View any RGB color channel of the image by clicking the RGB color mask button, which toggles through each channel. Shortcuts: `R`, `G`, `B`, and `A`.
 
-![Transformation controls](../common/Manual/Images/TransformationControls.png)
+![Transformation controls](manual-images/TransformationControls.png)
 
 **Transformation Controls** — Zoom in and out using the scroll wheel, or use the zoom control (1 = no zoom). You can also zoom by holding `Ctrl` and left-clicking and dragging on the viewport. Pan by left-clicking and dragging on the viewport, or use the X/Y position controls (0 = centered). You can also rotate the frame an arbitrary number of degrees. To reset transformations use `Ctrl+R`, or `Alt+Ctrl+R` to reset all viewports.
 
@@ -372,7 +372,7 @@ Viewports show different information depending on what you are doing at the mome
 
 **With the Load Window Open:**
 
-![Preview information overlay shown in viewport](../common/Manual/Images/PreviewInformation.png)
+![Preview information overlay shown in viewport](manual-images/PreviewInformation.png)
 
 When the Load Window is open, each visible viewport shows a preview frame for each sequence that will be loaded into each track. Each viewport shows the preview for whatever track it is assigned to.
 
@@ -395,7 +395,7 @@ Once sequences are loaded and the Load Window is closed, you will see the frames
 
 The text overlay can toggle between three states by pressing `T`: no display, basic information, and basic plus metadata
 
-![Viewport text overlay during playback](../common/Manual/Images/PreviewText.png) (if the track contains DPX, OpenEXR, or EXIF metadata). Press `Alt+T` to toggle the text display for all viewports.
+![Viewport text overlay during playback](manual-images/PreviewText.png) (if the track contains DPX, OpenEXR, or EXIF metadata). Press `Alt+T` to toggle the text display for all viewports.
 
 Basic mode shows:
 
@@ -407,7 +407,7 @@ Basic mode shows:
 
 When DPX metadata is present and enabled, the following additional fields are shown:
 
-![DPX metadata displayed on viewport](../common/Manual/Images/DPXMetadata.png)
+![DPX metadata displayed on viewport](manual-images/DPXMetadata.png)
 
 - Timecode (from the DPX TV Header)
 - KeyKode (derived from the DPX Motion Picture Header)
@@ -470,7 +470,7 @@ Using the mouse and keyboard you can interact with the viewports to modify their
 
 ### The Menu Bar
 
-![The Menu Bar](../common/Manual/Images/MenuBar.png)
+![The Menu Bar](manual-images/MenuBar.png)
 
 At the top of the Main Window is the **Menu Bar**, from which you can access settings that modify the way the program behaves and the viewports are displayed. Most menu items have a keyboard shortcut displayed next to them.
 
@@ -528,7 +528,7 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 
 ### Playlists
 
-![Playlist window screenshot](../common/Manual/Images/Clipboard05.png)
+![Playlist window screenshot](manual-images/Clipboard05.png)
 
 **Playlists** allow you to save a series of "Playlist Items" and then recall them at will. A playlist item is NOT a single sequence — it holds much more information, including what sequences are loaded in what tracks and with which parameters, the viewport layout, playback settings, and any FX stacks applied to the viewport. This way, jumping from one setup to another is a snap.
 
@@ -590,7 +590,7 @@ To load a LUT, be it 3D or 1D, you use the **LUT Manager**.
 
 ### The LUT Manager Window
 
-![The LUT Manager Window](../common/Manual/Images/LUTManager.png)
+![The LUT Manager Window](manual-images/LUTManager.png)
 
 From the **LUT Manager** (`F4` or **Dialogs > LUT Manager**) you can load and unload LUTs.
 
@@ -612,13 +612,13 @@ JefeCheck can show you a visual representation of loaded LUTs, be they 1D or 3D.
 
 **1D LUTs** are plotted on an X/Y plane, with the input value on the X axis and the output value on the Y axis. A grayscale value of the output is used to color each point in the plot. Text labels of a subsample of the values are also drawn showing input and output values.
 
-![Grayscale 1D LUT visualization](../common/Manual/Images/grayScaleLUT.png)
+![Grayscale 1D LUT visualization](manual-images/grayScaleLUT.png)
 
 **3D LUTs** are displayed as color cubes, placing a colored point at each sample in 3D space. A canonical 3D LUT generates a perfect color cube, while a modified cube displays other characteristics.
 
-![Perfect (unmodified) color cube visualization](../common/Manual/Images/PerfectCube.png)
+![Perfect (unmodified) color cube visualization](manual-images/PerfectCube.png)
 
-![Grayscale 3D LUT cube visualization](../common/Manual/Images/GrayscaleCube.png) Each point in the LUT is positioned in 3D space corresponding to its output RGB value, and is colored with that same information. If you click the **Uniform** checkbox, the samples will be spaced uniformly forming a perfect cube, but points will still be colored with their output values — this lets you compare two cubes without being distracted by geometric deformations.
+![Grayscale 3D LUT cube visualization](manual-images/GrayscaleCube.png) Each point in the LUT is positioned in 3D space corresponding to its output RGB value, and is colored with that same information. If you click the **Uniform** checkbox, the samples will be spaced uniformly forming a perfect cube, but points will still be colored with their output values — this lets you compare two cubes without being distracted by geometric deformations.
 
 #### Using LUTs
 
@@ -628,7 +628,7 @@ Real Time modifications are called **FXs** within JefeCheck. Each FX comes in th
 
 ### The FX Manager Window
 
-![The FX Manager Window](../common/Manual/Images/FXManager.png)
+![The FX Manager Window](manual-images/FXManager.png)
 
 From the **FX Manager** (`F3` or **Dialogs > FX Manager**) you can load and unload FXs.
 
@@ -638,7 +638,7 @@ When you first open the FX Manager, it will be empty. To load an FX, click the *
 
 ### The FX Control Window
 
-![The FX Stack Manager (FX Control Window)](../common/Manual/Images/FXStackManager.png)
+![The FX Stack Manager (FX Control Window)](manual-images/FXStackManager.png)
 
 You use FXs by applying them to viewports. A viewport can have no FX applied, or as many as your graphics card performance will allow while maintaining a desired playback frame rate. To apply an FX, use the **FX Stack Manager** (`F2` or **Dialogs > FX Stack Manager**). You can also click the FX button on the Main Window's Control Bar.
 
@@ -655,7 +655,7 @@ All FXs have a set of common controls:
 - **On/Off** — Turns the FX on or off. This lets you compare with and without the effect without having to delete and re-apply it.
 - **Delete** — Removes the FX from the FX stack.
 
-  ![Delete FX button on an FX stack entry](../common/Manual/Images/DeleteFX.png)
+  ![Delete FX button on an FX stack entry](manual-images/DeleteFX.png)
 - **Reset** — Returns all FX parameters to their default values.
 - **Move Up/Down** — Moves the FX up or down the stack.
 
@@ -715,7 +715,7 @@ Everything involved in setting up or joining a Remote Session is done from the *
 
 ### The Remote Session Manager
 
-![The Remote Session Manager Window](../common/Manual/Images/RemoteSessionManager.png)
+![The Remote Session Manager Window](manual-images/RemoteSessionManager.png)
 
 To start or join a remote session, open the **Remote Session Manager** (`F5` or **Dialogs > Remote Session Manager**).
 
@@ -886,7 +886,7 @@ The render process is as follows: load a sequence and apply FXs to the viewport 
 
 ### The Render Window
 
-![The Render Window](../common/Manual/Images/RenderWindow.png)
+![The Render Window](manual-images/RenderWindow.png)
 
 Parameters in the **Render Manager** are organized in tabs:
 
@@ -1030,19 +1030,19 @@ This perfect color cube can be encoded into an image by "unfolding" it into 2D. 
 
 Since the canonical color patch is just an image, you can put it through any image processing pipeline (Shake, Photoshop, etc.). Open `canonicCubeImage.tga` in your software, apply color processing (only color processing — not geometric operations), and save back in TGA format.
 
-![Canonical cube image (the 64×64 LUT source patch)](../common/Manual/Images/canonicCubeImage.png)
+![Canonical cube image (the 64×64 LUT source patch)](manual-images/canonicCubeImage.png)
 
-![Canonical cube visualized as a 3D cube](../common/Manual/Images/canonicCube.png) Load it back into JefeCheck and use it as a 3D LUT.
+![Canonical cube visualized as a 3D cube](manual-images/canonicCube.png) Load it back into JefeCheck and use it as a 3D LUT.
 
 An example: taking the patch and converting it to grayscale would yield a cube where all vertices are in a single line — this is how a grayscale 3D LUT looks when visualized in JefeCheck. More extreme color processes produce more deformed cubes. You can plot any LUT directly in JefeCheck using the LUT Manager (see Visualizing LUTs).
 
-![Example image: Viper Zodiac test footage](../common/Manual/Images/ViperZodiac.png)
+![Example image: Viper Zodiac test footage](manual-images/ViperZodiac.png)
 
-![Viper Zodiac image processed through a 3D LUT cube](../common/Manual/Images/ViperZodiacCube.png)
+![Viper Zodiac image processed through a 3D LUT cube](manual-images/ViperZodiacCube.png)
 
-![Example: image with contrast and brightness adjustment applied](../common/Manual/Images/ContrastedAndBrightened.png)
+![Example: image with contrast and brightness adjustment applied](manual-images/ContrastedAndBrightened.png)
 
-![Resulting cube after contrast/brightness color correction](../common/Manual/Images/ContrastedAndBrightenedCube.png)
+![Resulting cube after contrast/brightness color correction](manual-images/ContrastedAndBrightenedCube.png)
 
 ---
 
@@ -1109,7 +1109,7 @@ Many FXs can share the same shader files — most included FXs use the `fixed.ve
 
 #### Example: The MIX FX
 
-![Mix FX GUI in the FX Stack Manager](../common/Manual/Images/MixGUI.png)
+![Mix FX GUI in the FX Stack Manager](manual-images/MixGUI.png)
 
 Here is the complete `MIX.jfx` file:
 
