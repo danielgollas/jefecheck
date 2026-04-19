@@ -32,10 +32,11 @@ cmake -B build && cmake --build build -j$(nproc)
 Uses MSYS2 with pre-built packages including `mingw-w64-x86_64-freetype`. See `.github/workflows/build.yml`.
 
 ### Runtime Resources
-The app expects `Resources/FX/` and `Resources/fonts/` relative to the working directory. For development:
+The app finds FX and fonts via `getApplicationDataPath()` (platform-specific install path). For development, symlink to the source tree:
 ```bash
-mkdir -p Resources && ln -sf $(pwd)/common/FX Resources/FX && ln -sf $(pwd)/common/fonts Resources/fonts
+ln -sf $(pwd)/src/FX FX && ln -sf $(pwd)/src/fonts fonts
 ```
+Release builds package `src/FX/` and `src/fonts/` alongside the binary.
 
 ## Architecture
 
@@ -121,18 +122,15 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 
 ```
 src/                    All C++ source. Entry point: main.cpp
-common/FX/              Effect shaders (.frag/.vert), metadata (.jfx), LUTs (.lut/.cub)
-common/fonts/           Bundled TTF fonts (Roboto, Inter, DejaVu Sans)
+src/FX/                 Effect shaders (.frag/.vert), metadata (.jfx), LUTs (.lut/.cub)
+src/fonts/              Bundled TTF fonts (Roboto, Inter, DejaVu Sans)
 third_party/glad/       Generated GLAD loader (OpenGL 3.3 compatibility)
 third_party/cli11/      CLI11 single-header argument parser
-third_party/stb/        stb_truetype.h (kept for reference, not compiled)
-win/                    Windows installer scripts (.nsi)
-linux/                  Linux README
-mac/                    macOS bundle resources
+scripts/                Build/setup scripts (build_linux.sh)
 docs/                   User manual, quick start, design specs, plans
 docs/manual.md          User manual (converted from 2014 .docx)
 docs/quick-start.md     Quick reference guide
-common/Manual/Images/   Screenshots (2014, need updating)
+docs/manual-images/     Screenshots (2014, need updating)
 .github/workflows/      CI (build.yml) and releases (release.yml)
 ```
 

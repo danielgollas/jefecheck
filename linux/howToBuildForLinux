@@ -1,7 +1,0 @@
-Build JefeCheck with DEMO_VERSION defined or not.
-
-run createInstallPackage.sh [32,64] [_Demo]
-
-It will create the appropriate tarball. 
-
-We need to have the libs32 or libs64 folder and items in there.

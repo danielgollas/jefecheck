@@ -557,9 +557,9 @@ int main(int argc, char *argv[]) {
         std::string fontPath = getApplicationDataPath() + "fonts/Roboto-Regular.ttf";
         std::string boldFontPath = getApplicationDataPath() + "fonts/Roboto-Bold.ttf";
         if (!textRenderer().loadFont(fontPath))
-            textRenderer().loadFont("common/fonts/Roboto-Regular.ttf");
+            textRenderer().loadFont("fonts/Roboto-Regular.ttf");
         if (!textRenderer().loadBoldFont(boldFontPath))
-            textRenderer().loadBoldFont("common/fonts/Roboto-Bold.ttf");
+            textRenderer().loadBoldFont("fonts/Roboto-Bold.ttf");
         float dpi = mw.vp->pixels_per_unit();
         textRenderer().setDPIScale(dpi);
         textRenderer().setShadowEnabled(true);

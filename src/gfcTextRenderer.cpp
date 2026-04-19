@@ -732,9 +732,8 @@ std::vector<std::pair<std::string, std::string>> enumerateSystemFonts() {
     if (home) scanFontDir(std::string(home) + "/.local/share/fonts", fonts);
 #endif
 
-    // Also include our bundled fonts
-    scanFontDir("common/fonts", fonts);
-    scanFontDir("Resources/fonts", fonts);
+    // Also include our bundled fonts (relative to working directory)
+    scanFontDir("fonts", fonts);
 
     // Sort by display name
     std::sort(fonts.begin(), fonts.end());
