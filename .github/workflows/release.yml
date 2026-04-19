@@ -33,11 +33,10 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p package/jefecheck
-          cp build/jefecheck package/jefecheck/
-          cp -r src/FX package/jefecheck/
-          cp -r src/fonts package/jefecheck/
-          cd package && tar czf ../jefecheck-linux-x64.tar.gz jefecheck
+          VERSION="${GITHUB_REF_NAME#v}"
+          chmod +x scripts/create_linux_package.sh
+          bash scripts/create_linux_package.sh "$VERSION"
+          mv "jefecheck-${VERSION}-linux-x64.tar.gz" jefecheck-linux-x64.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
@@ -57,18 +56,17 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j$(sysctl -n hw.ncpu)
 
-      - name: Package
+      - name: Create app bundle
         run: |
-          mkdir -p package/jefecheck
-          cp build/jefecheck package/jefecheck/
-          cp -r src/FX package/jefecheck/
-          cp -r src/fonts package/jefecheck/
-          cd package && tar czf ../jefecheck-macos-arm64.tar.gz jefecheck
+          VERSION="${GITHUB_REF_NAME#v}"
+          chmod +x scripts/create_macos_bundle.sh
+          bash scripts/create_macos_bundle.sh "$VERSION"
+          hdiutil create -volname "JefeCheck" -srcfolder JefeCheck.app -ov -format UDZO jefecheck-macos-arm64.dmg
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: jefecheck-macos-arm64.tar.gz
+          path: jefecheck-macos-arm64.dmg
 
   build-windows:
     runs-on: windows-latest
@@ -103,13 +101,15 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p package/jefecheck
-          cp build/jefecheck.exe package/jefecheck/
-          cp -r src/FX package/jefecheck/
-          cp -r src/fonts package/jefecheck/
+          VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE="jefecheck-${VERSION}-windows-x64"
+          mkdir -p "$PACKAGE"
+          cp build/jefecheck.exe "$PACKAGE/"
+          cp -r src/FX "$PACKAGE/"
+          cp -r src/fonts "$PACKAGE/"
           # Bundle MinGW runtime DLLs
-          ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} package/jefecheck/
-          cd package && 7z a -tzip ../jefecheck-windows-x64.zip jefecheck
+          ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
+          7z a -tzip jefecheck-windows-x64.zip "$PACKAGE"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -130,5 +130,5 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/linux-build/jefecheck-linux-x64.tar.gz
-            artifacts/macos-build/jefecheck-macos-arm64.tar.gz
+            artifacts/macos-build/jefecheck-macos-arm64.dmg
             artifacts/windows-build/jefecheck-windows-x64.zip
