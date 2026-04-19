@@ -1,0 +1,69 @@
+# Build
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.xcodeproj
+*.xcworkspace
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compiled objects
+*.o
+*.obj
+*.exe
+*.dll
+*.dylib
+*.so
+*.lib
+*.a
+
+# Visual Studio
+*.sdf
+*.opensdf
+*.suo
+*.ncb
+*.pdb
+
+# Generated
+*.autosave
+
+# Binary assets
+*.xcf
+*.psd
+*.ico
+*.icns
+*.bmp
+*.png
+*.pdf
+*.rtf
+
+# Windows build output
+win/Debug/
+win/Release/
+win/x64/
+
+# Legacy directories (removed from repo, may exist on disk)
+common/website/
+common/licenseGenerator/
+
+# Misc
+*.tlog
+*.ini
+*.config.bad
+*.intermediate.manifest.xml
+*.bak
+*.log
+*.filters
+
+# Legacy directories (removed from repo, may exist on disk)
+win/buildDependencies/
+win/InstallerFolder/NSIS/
+win/InstallerFolder/forAppData/
+win/libSources/
+.cache/

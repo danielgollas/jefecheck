@@ -16,8 +16,6 @@
 #include <FL/Fl_Group.H>
 #include <FL/Fl_Value_Input.H>
 #include <FL/Fl_Choice.H>
-#include <FLU/Flu_Collapsable_Group.h>
-#include <FLU/Flu_Simple_Group.h>
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_File_Chooser.H>
 #include "xmlParser.h"
@@ -61,10 +59,11 @@ extern LoadWindow lw;
 extern FXControlWindow fxControlWindow1;
 
 extern gfcSettings sett;
-extern Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+extern NativeFileChooser *fc;
 extern PlaylistWindow plw;
 extern void save_input_file(Fl_File_Chooser *w, void *userdata);
-extern char gFilename[300];
+extern char gFilename[2048];
 
 #ifndef max 
 #define max(a,b)            (((a) > (b)) ? (a) : (b))
@@ -139,7 +138,7 @@ void PlaylistItemWidget::setItem(gfcPlaylistItem item)
 
 		gfcLoadParams tmp=item.loadParams[i];
 		if(tmp.fileName!=""){
-		char track[2]={('A'+i),0};
+		char track[2]={static_cast<char>('A'+i),0};
 		std::string tmpString="@b";
 		tmpString+="Track ";
 		tmpString+=track;

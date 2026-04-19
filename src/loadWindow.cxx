@@ -400,7 +400,7 @@ LoadWindow::LoadWindow(int x, int y, int wi, int height,const char* l) : Fl_Doub
           formatA->when(FL_WHEN_RELEASE);
           formatA->menu(menu_formatA);
         } // Fl_Choice_gfc* formatA
-        { Fl_Menu_Button* o = recentButtonA = new Fl_Menu_Button(263, 26, 27, 17, "@2>");
+        { Fl_Menu_Button* o = recentButtonA = new Fl_Menu_Button(263, 26, 17, 17);
           recentButtonA->box(FL_FLAT_BOX);
           recentButtonA->down_box(FL_FLAT_BOX);
           recentButtonA->color(FL_INACTIVE_COLOR);
@@ -424,7 +424,7 @@ LoadWindow::LoadWindow(int x, int y, int wi, int height,const char* l) : Fl_Doub
           fileNameInputA->textsize(12);
           fileNameInputA->callback((Fl_Callback*)loadCB, (void*)(LOADFILENAME_ID));
           fileNameInputA->when(FL_WHEN_CHANGED);
-          fileNameInputA->deactivate();
+          fileNameInputA->readonly(1); fileNameInputA->textcolor(FL_WHITE);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Input* fileNameInputA
         { Fl_Choice_gfc* o = loadModeA = new Fl_Choice_gfc(170, 126, 64, 15, "Mode");
@@ -653,7 +653,7 @@ it is");
           formatB->when(FL_WHEN_RELEASE);
           formatB->menu(menu_formatB);
         } // Fl_Choice_gfc* formatB
-        { Fl_Menu_Button* o = recentButtonB = new Fl_Menu_Button(633, 26, 27, 17, "@2>");
+        { Fl_Menu_Button* o = recentButtonB = new Fl_Menu_Button(633, 26, 17, 17);
           recentButtonB->box(FL_FLAT_BOX);
           recentButtonB->down_box(FL_FLAT_BOX);
           recentButtonB->color(FL_INACTIVE_COLOR);
@@ -677,7 +677,7 @@ it is");
           fileNameInputB->textsize(12);
           fileNameInputB->callback((Fl_Callback*)loadCB, (void*)(LOADFILENAME_ID));
           fileNameInputB->when(FL_WHEN_CHANGED);
-          fileNameInputB->deactivate();
+          fileNameInputB->readonly(1); fileNameInputB->textcolor(FL_WHITE);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Input* fileNameInputB
         { Fl_Choice_gfc* o = loadModeB = new Fl_Choice_gfc(539, 125, 64, 15, "Mode");
@@ -879,7 +879,7 @@ it is");
           formatC->when(FL_WHEN_RELEASE);
           formatC->menu(menu_formatC);
         } // Fl_Choice_gfc* formatC
-        { Fl_Menu_Button* o = recentButtonC = new Fl_Menu_Button(263, 173, 27, 17, "@2>");
+        { Fl_Menu_Button* o = recentButtonC = new Fl_Menu_Button(263, 173, 17, 17);
           recentButtonC->box(FL_FLAT_BOX);
           recentButtonC->down_box(FL_FLAT_BOX);
           recentButtonC->color(FL_INACTIVE_COLOR);
@@ -903,7 +903,7 @@ it is");
           fileNameInputC->textsize(12);
           fileNameInputC->callback((Fl_Callback*)loadCB, (void*)(LOADFILENAME_ID));
           fileNameInputC->when(FL_WHEN_CHANGED);
-          fileNameInputC->deactivate();
+          fileNameInputC->readonly(1); fileNameInputC->textcolor(FL_WHITE);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Input* fileNameInputC
         { Fl_Choice_gfc* o = loadModeC = new Fl_Choice_gfc(169, 272, 64, 15, "Mode");
@@ -1105,7 +1105,7 @@ it is");
           formatD->when(FL_WHEN_RELEASE);
           formatD->menu(menu_formatD);
         } // Fl_Choice_gfc* formatD
-        { Fl_Menu_Button* o = recentButtonD = new Fl_Menu_Button(633, 174, 27, 17, "@2>");
+        { Fl_Menu_Button* o = recentButtonD = new Fl_Menu_Button(633, 174, 17, 17);
           recentButtonD->box(FL_FLAT_BOX);
           recentButtonD->down_box(FL_FLAT_BOX);
           recentButtonD->color(FL_INACTIVE_COLOR);
@@ -1129,7 +1129,7 @@ it is");
           fileNameInputD->textsize(12);
           fileNameInputD->callback((Fl_Callback*)loadCB, (void*)(LOADFILENAME_ID));
           fileNameInputD->when(FL_WHEN_CHANGED);
-          fileNameInputD->deactivate();
+          fileNameInputD->readonly(1); fileNameInputD->textcolor(FL_WHITE);
           o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));
         } // Fl_Input* fileNameInputD
         { Fl_Choice_gfc* o = loadModeD = new Fl_Choice_gfc(539, 273, 64, 15, "Mode");

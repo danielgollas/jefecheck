@@ -1,5 +1,9 @@
-#include "glew.h"
+#include <glad/glad.h>
 #include "gfcPlate.h"
+#include "gfcTextRenderer.h"
+#include <FL/Fl.H>
+#include <FL/fl_draw.H>
+#include <FL/x.H>
 #include "gfcSequence.h"
 #include "mainWindow.h"
 #include "loadWindow.h"
@@ -146,8 +150,19 @@ gfcPlate::gfcPlate ( void )
     remotePointerSize=5;
     remotePointerFontSize=14;
 
-
     renderModeSelection=0;
+
+    textOverlayTexID=0;
+    textOverlayTexW=0;
+    textOverlayTexH=0;
+
+    ssVertexCompiled=0;
+    ssFramgentCompiled=0;
+    ssProgramCreated=0;
+    ssVertexShader=0;
+    ssFramgmentShader=0;
+    ssProgram=0;
+    useShader=false;
 	
 	fbov[0]=fbov[1]=fbov[2]=0;
 	fboTexturev[0]=fboTexturev[1]=fboTexturev[2]=0;
@@ -193,10 +208,9 @@ std::string gfcPlate::getInfoLog ( GLhandleARB obj )
 		infoLog = ( char * ) malloc ( infologLength );
 		glGetInfoLogARB ( obj, infologLength, ( GLint* ) &charsWritten, infoLog );
 		returnValue = infoLog;
-		//printf("%s\n",infoLog);
 		free ( infoLog );
-		return returnValue;
 	}
+	return returnValue;
 }
 
 void gfcPlate::startSuperShader(){
@@ -469,7 +483,8 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 	//fragmentSrc="void main(){ gl_FragColor=vec4(gl_TexCoord[0].s/1000.0,gl_TexCoord[0].t/1000.0,0.0,1.0);}";
 	
 	ssFragmentSource=fragmentSrc;
-	//printf("This is the fragment shader:\n %s\n",fragmentSrc.c_str());
+	printf("SuperShader vertex:\n%s\n", ssVertexSource.c_str());
+	printf("SuperShader fragment:\n%s\n", fragmentSrc.c_str());
 	
 
 	//compile vertex shader;
@@ -483,7 +498,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		//create object, load source, compile
 		glDeleteObjectARB(ssVertexShader);
 		ssVertexShader=glCreateShaderObjectARB(GL_VERTEX_SHADER_ARB);
-		glShaderSource(ssVertexShader,1,&vv,NULL);
+		glShaderSourceARB(ssVertexShader,1,&vv,NULL);
 		glCompileShaderARB(ssVertexShader);
 		
 		std::string infoLog;
@@ -515,8 +530,8 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		strcpy(src,ssFragmentSource.c_str());
 		const char * vv=src;
 
-		glShaderSource(ssFramgmentShader,1,&vv,NULL);
-		//glShaderSource(ssFramgmentShader,1,&src,NULL);
+		glShaderSourceARB(ssFramgmentShader,1,&vv,NULL);
+		//glShaderSourceARB(ssFramgmentShader,1,&src,NULL);
 		glCompileShaderARB(ssFramgmentShader);
 		//delete [] src;
 		std::string infoLog;
@@ -544,7 +559,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		glAttachObjectARB(ssProgram,ssVertexShader);
 		glAttachObjectARB(ssProgram,ssFramgmentShader);
 
-		glLinkProgram(ssProgram);
+		glLinkProgramARB(ssProgram);
 		
 		std::string infoLog;
 		infoLog = getInfoLog ( ssProgram );
@@ -555,7 +570,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		}
 		else
 		{
-			//printf ( "Shader Program Linker OK!:%s\n",infoLog.c_str());
+			printf ( "SuperShader: Program linked OK\n");
 			ssProgramCreated=1;
 		}
 		
@@ -593,8 +608,8 @@ void gfcPlate::recompileSuperShader()
 	//if we need to use something different than the shader that is already built, then rebuild and remember what we are using now
 	if (useShader && ((useLUT!=usingLUT) || (useGammaExp!=usingGammaExp) || useBCS!=usingBCS || differentTypeOfLUT || useRGBAMasks!=usingRGBAMasks || usingTextureType!=textureType) )
 	{
-		//printf("Rebuilding new shader: useLUT:%i (%i), useGammaExp:%i (%i), useBCS:%i (%i) textureType:%i(%i)\n",useLUT,usingLUT, useGammaExp, usingGammaExp, useBCS, usingGammaExp,textureType,usingTextureType);
-		
+		printf("SuperShader: rebuilding (LUT:%i GammaExp:%i BCS:%i RGBA:%i texType:%i)\n",useLUT, useGammaExp, useBCS, useRGBAMasks, textureType);
+
 		buildShader(useLUT,useGammaExp,useBCS,useRGBAMasks,textureType);
 	}
 	
@@ -629,8 +644,8 @@ bool gfcPlate::createFBO() {
 //         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MIN_FILTER,GL_NEAREST );
 //         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MAG_FILTER,GL_NEAREST );
 //
-//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE_EXT );
-//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE_EXT );
+//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE );
+//         glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE );
 //
 //         glTexImage2D ( GL_TEXTURE_RECTANGLE_ARB, 0, sett.fp16?GL_RGBA16F_ARB:GL_RGBA,  fboVP.w, fboVP.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0 );
 //         glFramebufferTexture2DEXT ( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_RECTANGLE_ARB, fboTexturev[i], 0 );
@@ -689,8 +704,8 @@ bool gfcPlate::createFBO() {
                 glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MIN_FILTER,GL_NEAREST );
                 glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MAG_FILTER,GL_NEAREST );
 
-                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE_EXT );
-                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE_EXT );
+                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE );
+                glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE );
 
                 if (i==count-1 && multiFormatFBOSupported) {
                     //this is the special case where we create the 8 bit texture to use later in the histogram
@@ -754,8 +769,8 @@ bool gfcPlate::createFBO() {
             glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MIN_FILTER,GL_NEAREST );
             glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_MAG_FILTER,GL_NEAREST );
 
-            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE_EXT );
-            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE_EXT );
+            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE );
+            glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE );
 
             glTexImage2D ( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA,  fboVP.w, fboVP.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0 );
             glFramebufferTexture2DEXT ( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT+fboTexturevCount, GL_TEXTURE_RECTANGLE_ARB, fbo8bitTexture, 0 );
@@ -867,9 +882,9 @@ void gfcPlate::drawRemotePointers() {
 				glEnd();*/
 				
 
-                glRasterPos3f ( pIter->x+remotePointerSize, pIter->y+remotePointerSize,0 );
-                gl_font(FL_HELVETICA,remotePointerFontSize);
-                gl_draw ( pIter->name.c_str() );
+                gfc_gl_font(FL_HELVETICA, remotePointerFontSize);
+                textRenderer().setColor(1, 1, 1, 1);
+                gfc_gl_draw(pIter->name.c_str(), pIter->x+remotePointerSize, pIter->y+remotePointerSize);
 
             }
 
@@ -1178,7 +1193,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
     //END OF GET THE GFCFRAME AND WRITE THE LABEL
     if ( !sett.fbo || !sett.glsl) {
         draw3Drect();
-        gl_draw ( "Your hardware configuration can't make use of JefeCheck's FX functionality" );
+        textRenderer().setColor(1, 1, 1, 1);
+        gfc_gl_draw("Your hardware configuration can't make use of JefeCheck's FX functionality", 0.0f, 0.0f);
     }
     if (theFrame.loaded) {
 
@@ -1640,10 +1656,8 @@ void gfcPlate::resetTransforms(void) {
 	plateManager.setFeedbackMessage("Reset Transformations");
 }
 
-#include "demoversion.h"
-extern GLuint gWatermarkTextureID;
 void gfcPlate::drawDO() {
-#ifdef DEMO_VERSION
+#if 0 // Demo watermark removed for open-source release
 	/*if ((this->theFrame.textureID%30>5))
 		return;*/
 
@@ -1862,14 +1876,14 @@ void gfcPlate::drawAOIOverlay() {
 		
         //draw start and end points text
         char temp[800];
-        glColor3f(1,1,1);
-        gl_font(FL_HELVETICA,10);
+        gfc_gl_font(FL_HELVETICA, 10);
+        textRenderer().setColor(1, 1, 1, 1);
         sprintf(temp," ( %i,%i ) ",aoi.x,aoi.y);
-        gl_draw(temp,x0toDraw-5,y0toDraw-5);
+        gfc_gl_draw(temp, (float)(x0toDraw-5), (float)(y0toDraw-5));
 
 
         sprintf(temp," ( %i,%i ) ",aoi.x+aoi.w,aoi.y+aoi.h);
-        gl_draw(temp,x0toDraw+aoi.w+5,y0toDraw+aoi.h+5);
+        gfc_gl_draw(temp, (float)(x0toDraw+aoi.w+5), (float)(y0toDraw+aoi.h+5));
 
 		}
 
@@ -1886,16 +1900,11 @@ void gfcPlate::drawAOIOverlay() {
                 aoi.w,aoi.h,
                 ((float)aoi.w*aoi.h)/((float)theFrame.sizeX*theFrame.sizeY)*100.0);
 
-        gl_font(FL_HELVETICA_BOLD,10);
-        gl_draw(temp,
-                x0toDraw+5, y0toDraw+5,  aoi.w, aoi.h,
-                Fl_Align(FL_ALIGN_CENTER));
-
-        /*sprintf(temp,"\n\n\n\nRight Click-Drag to Move\nShift+Righ Click-Drag to Resize");
-        gl_font(FL_HELVETICA_BOLD,10);
-        gl_draw(temp,
-                x0toDraw, y0toDraw,  aoi.w, aoi.h,
-                Fl_Align(FL_ALIGN_CENTER));*/
+        gfc_gl_font(FL_HELVETICA, 10);
+        textRenderer().setColor(1, 1, 1, 1);
+        gfc_gl_draw(temp,
+                x0toDraw+5, y0toDraw+5, aoi.w, aoi.h,
+                FL_ALIGN_CENTER);
 
 		//gl_rectf( x0toDraw, y0toDraw,  aoi.w, aoi.h);
 		
@@ -2125,22 +2134,29 @@ void gfcPlate::drawTextureRectangleWarning() {
         glPushAttrib(GL_ALL_ATTRIB_BITS);
         glEnable(GL_BLEND);
         glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_TEXTURE_RECTANGLE_ARB);
+        glDisable(GL_TEXTURE_2D);
 
-        glEnable(target);
-        glBindTexture(target,0);
-        glDisable(target);
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(0, viewport.w, 0, viewport.h, -1, 1);
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
 
-        gl_font(FL_TIMES + FL_BOLD,textDisplaySize);
-        gl_font(FL_HELVETICA + FL_BOLD,textDisplaySize);
-        // gl_font(FL_COURIER + FL_BOLD,12);
+        gfc_gl_font(FL_HELVETICA, textDisplaySize);
+        textRenderer().setColor(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
 
-        glColor4f(textDisplayColor,textDisplayColor,textDisplayColor,textDisplayOpacity);
+        gfc_gl_draw("Sorry, your video hardware does not fill JefeCheck's basic requirements.\n Maybe a driver upgrade can help, but it is not likely.\n\nPlease review the minimum hardware requirements to run JefeCheck at www.jefecheck.com",
+                10, viewport.h - (int)textDisplaySize - 5,
+                viewport.w - 20, viewport.h,
+                FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
 
-        gl_draw("Sorry, your video hardware does not fill JefeCheck's basic requirements.\n Maybe a driver upgrade can help, but it is not likely.\n\nPlease review the minimum hardware requirements to run JefeCheck at www.jefecheck.com",
-                rect.x+10,rect.y-15,
-                rect.w,rect.h,
-
-                Fl_Align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_WRAP));
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
 
         glPopAttrib();
     }
@@ -2255,32 +2271,19 @@ void gfcPlate::drawVectorscope() {
 
 void gfcPlate::drawText() {
     if (showText) {
-    	
-    	
         glPushAttrib(GL_ALL_ATTRIB_BITS);
         glEnable(GL_BLEND);
-        glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        glEnable(target);
-        glBindTexture(target,0);
-        glDisable(target);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
-    	glDisable(GL_TEXTURE_2D);
+        glDisable(GL_TEXTURE_2D);
 
-        gl_font(FL_TIMES + FL_BOLD,textDisplaySize);
-        gl_font(FL_HELVETICA + FL_BOLD,textDisplaySize);
-        // gl_font(FL_COURIER + FL_BOLD,12);
+        gfc_gl_font(FL_HELVETICA, textDisplaySize);
+        textRenderer().setColor(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
 
-        glColor4f(textDisplayColor,textDisplayColor,textDisplayColor,textDisplayOpacity);
-
-
-
-
-        gl_draw(labelString.c_str(),
-                rect.x+10,rect.y-15,
-                rect.w,rect.h,
-
-                Fl_Align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP));
+        gfc_gl_draw(labelString.c_str(),
+                rect.x+10, rect.y-15,
+                rect.w, rect.h,
+                FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP);
 
         glPopAttrib();
     }

@@ -5,7 +5,8 @@
 #include <FL/Fl_Pack.H>
 
 extern gfcSettings sett;
-extern Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+extern NativeFileChooser *fc;
 extern void save_input_file ( Fl_File_Chooser *w, void *userdata );
 
 #include "lutWindow.h"

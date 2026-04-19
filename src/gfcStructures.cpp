@@ -10,19 +10,12 @@
 #include "trilerp.h"
 #include <vector>
 #include "UICallbacks.h"
-#include <botan/botan.h>
-#include <botan/look_pk.h>
-#include <botan/dsa.h>
 #include <FL/filename.H>
 #include <fstream>
 #include <sstream> //for stingstream
 #include "xmlParser.h"
 #include "remoteWindow.h"
-#include "demoversion.h"
 
-#include "boost/filesystem/operations.hpp"
-#include "boost/filesystem/path.hpp"
-#include "boost/filesystem/convenience.hpp"
 
 #include <cstdlib> //for getenv
 #include <iostream>
@@ -227,13 +220,13 @@ int confirmQuit()
 }
 
 bool dirExists(const std::string &name){
-	return boost::filesystem::is_directory(name);
+	return std::filesystem::is_directory(name);
 }
 
 bool fileExists (const std::string &name ) {
     
 	
-	//return boost::filesystem::exists(boost::filesystem::path(name));
+	//return std::filesystem::exists(std::filesystem::path(name));
 	
 	//OLD METHOD, SEEMS SLOWER
 	static struct stat aBuffer;
@@ -274,20 +267,12 @@ std::string getApplicationDataPath() {
 	
 #ifdef linux
     char tmpPath[32000];
-#ifdef DEMO_VERSION
-    fl_filename_expand ( tmpPath,"~/.JefeCorp/JefeCheck/JefeCheck_Demo/" );
-#else
     fl_filename_expand ( tmpPath,"~/.JefeCorp/JefeCheck/JefeCheck/" );
-#endif
     return tmpPath;
 #endif
-	
+
 #ifdef WIN32
-#ifdef DEMO_VERSION
-    Fl_Preferences app (Fl_Preferences::USER,"JefeCorp","JefeCheck/JefeCheck_Demo" );
-#else
     Fl_Preferences app (Fl_Preferences::USER,"JefeCorp","JefeCheck/JefeCheck" );
-#endif
     char path[FL_PATH_MAX];
     app.getUserdataPath ( path,sizeof ( path ) );
     return path;
@@ -309,12 +294,12 @@ std::string getApplicationDataPath() {
 	
 	//initial_path() should return the path to JefeCheck.app/Contents/MacOS/jefecheck
 	
-	/*boost::filesystem::path tmpPath = boost::filesystem::initial_path().parent_path()/"Resources";
+	/*std::filesystem::path tmpPath = std::filesystem::initial_path().parent_path()/"Resources";
 	std::cout << "tmpPath" << tmpPath.string() <<std::endl;
 	return tmpPath.string()+"/";*/
 	
-	boost::filesystem::path tmpPath(gMacExecutablePath);
-	tmpPath=tmpPath.branch_path().branch_path()/"Resources";
+	std::filesystem::path tmpPath(gMacExecutablePath);
+	tmpPath=tmpPath.parent_path().parent_path()/"Resources";
 	//std::cout << "tmpPath" << tmpPath.string() <<std::endl;
 	return tmpPath.string()+"/";
 	/*
@@ -359,8 +344,8 @@ void saveSettings ( const gfcSettings *sett ) {
 		
         printf("Program directory does not exists, it will now be created in\n%s\n",appDataPath.c_str());
 		
-        boost::filesystem::path thePath(appDataPath);
-        boost::filesystem::create_directories(thePath);
+        std::filesystem::path thePath(appDataPath);
+        std::filesystem::create_directories(thePath);
 		
         /*#ifdef WIN32
         _mkdir(appDataPath.c_str());
@@ -437,7 +422,7 @@ void saveSettings ( const gfcSettings *sett ) {
     saveSetting("clientPort",rmw.port->value(),xGeneralNode);
     saveSetting("serverPort",rmw.serverPort->value(),xGeneralNode);
     saveSetting("defaultIP",rmw.ip->value(),xGeneralNode);
-    saveSetting("licensePath",pw.licenseFilePath->value(),xGeneralNode);
+    // licensePath removed for open-source release
 	
     for ( int i=0;i<sett->recentIPs.size();i++ ) {
         XMLNode xTmp = xRecentIPsNode.addChild ( "address" );
@@ -467,6 +452,15 @@ void saveSettings ( const gfcSettings *sett ) {
     saveSetting("textDisplaySize",pw.textDisplayFontSize->value(),xGeneralNode);
     saveSetting("textDisplayColor",pw.textDisplayColor->value(),xGeneralNode);
     saveSetting("textDisplayOpacity",pw.textDisplayOpacity->value(),xGeneralNode);
+    saveSetting("textDisplayShadow",pw.textDisplayShadow->value(),xGeneralNode);
+    saveSetting("textDisplayHinting",pw.textDisplayHinting->value(),xGeneralNode);
+    saveSetting("textDisplayFilter",pw.textDisplayFilter->value(),xGeneralNode);
+    saveSetting("textDisplayGamma",pw.textDisplayGamma->value(),xGeneralNode);
+    // Save font path from dropdown user_data
+    if (pw.textDisplayFont->value() >= 0) {
+        const char *fontPath = (const char *)pw.textDisplayFont->menu()[pw.textDisplayFont->value()].user_data();
+        if (fontPath) saveSetting("textDisplayFontPath", fontPath, xGeneralNode);
+    }
 	
 	saveSetting("ActionFeedbackSize",pw.ActionFeedbackSize->value(),xGeneralNode);
 	saveSetting("ActionFeedbackFadeDelay",pw.ActionFeedbackFadeDelay->value(),xGeneralNode);
@@ -765,8 +759,7 @@ void readSettings ( gfcSettings &sett ) {
 	//check if recievedPath exists, otherwise, create it.
 	if(dirExists(sett.receivedPath)==false){
 		printf("Creating Recieved Path for remote sessions...");
-		boost::filesystem::path dir("newdir");
-		if(boost::filesystem::create_directory(sett.receivedPath)){
+		if(std::filesystem::create_directories(sett.receivedPath)){
 			printf("success\n");
 		}
 		else{
@@ -872,6 +865,24 @@ void readSettings ( gfcSettings &sett ) {
     setWidgetFromNode("textDisplaySize",pw.textDisplayFontSize,xGeneralNode);
     setWidgetFromNode("textDisplayOpacity",pw.textDisplayOpacity,xGeneralNode);
     setWidgetFromNode("textDisplayColor",pw.textDisplayColor,xGeneralNode);
+    setWidgetFromNode("textDisplayShadow",pw.textDisplayShadow,xGeneralNode);
+    setWidgetFromNode("textDisplayHinting",pw.textDisplayHinting,xGeneralNode);
+    setWidgetFromNode("textDisplayFilter",pw.textDisplayFilter,xGeneralNode);
+    setWidgetFromNode("textDisplayGamma",pw.textDisplayGamma,xGeneralNode);
+    // Restore font selection from saved path
+    {
+        const char *savedFontPath = xGeneralNode.getAttribute("textDisplayFontPath");
+        if (savedFontPath && savedFontPath[0]) {
+            const Fl_Menu_Item *items = pw.textDisplayFont->menu();
+            for (int i = 0; i < pw.textDisplayFont->size(); i++) {
+                const char *ud = (const char *)items[i].user_data();
+                if (ud && strcmp(ud, savedFontPath) == 0) {
+                    pw.textDisplayFont->value(i);
+                    break;
+                }
+            }
+        }
+    }
 	
 	setWidgetFromNode("ActionFeedbackSize",pw.ActionFeedbackSize,xGeneralNode);
 	setWidgetFromNode("ActionFeedbackFadeDelay",pw.ActionFeedbackFadeDelay,xGeneralNode);
@@ -918,8 +929,7 @@ void readSettings ( gfcSettings &sett ) {
     rmw.serverPort->value(atoi(xGeneralNode.getAttribute ( "serverPort")));
     rmw.ip->value(xGeneralNode.getAttribute ( "defaultIP"));
 	
-    pw.licenseFilePath->value(xGeneralNode.getAttribute ( "licensePath"));
-    sett.licensePath=pw.licenseFilePath->value();
+    // licensePath loading removed for open-source release
 	
     printf ( "Loading JEFECHECK_LUT_PATH luts\n");
     char *envLUTPath=getenv("JEFECHECK_LUT_PATH");
@@ -1243,10 +1253,10 @@ std::string GetFilenameNoFilePrefix ( const std::string& filename ) {
 int removeFile(std::string theFilename)
 {
 	//boost::system::error_code error;
-	//boost::filesystem::remove(boost::filesystem::path(theFilename),error);
+	//std::filesystem::remove(std::filesystem::path(theFilename),error);
 	//printf("DeleteFile: %s (%i): %s\n",theFilename.c_str(),error.value(),error.message().c_str());
 	//return error.value();
-	boost::filesystem::remove(boost::filesystem::path(theFilename));
+	std::filesystem::remove(std::filesystem::path(theFilename));
 	return 0;
 }
 
@@ -1264,19 +1274,13 @@ std::string GetFilenameNoPath ( const std::string& filename ) {
 	
 }
 
-std::string GetMD5Hash ( std::string theString ) {	//TODO: Compute MD5 on theString and return
-    using namespace Botan;
-	
-    std::string tmp;
-    Pipe fxHashPipe ( new Hash_Filter ( "MD5" ), new Hex_Encoder() );
-    fxHashPipe.start_msg();
-    fxHashPipe.write ( theString );
-    fxHashPipe.end_msg();
-    /************************/
-    //strcpy(md5Hash,fxHashPipe.read_all_as_string().c_str());
-    tmp=fxHashPipe.read_all_as_string();
-    tmp+="\0";
-    return tmp;
+// Simple hash function for FX/LUT caching (not cryptographic)
+std::string GetMD5Hash ( std::string theString ) {
+    // Use std::hash as a simple non-cryptographic hash for cache keys
+    std::size_t h = std::hash<std::string>{}(theString);
+    char buf[17];
+    snprintf(buf, sizeof(buf), "%016zx", h);
+    return std::string(buf);
 }
 
 void UpdateRecentIPsButtons() {
@@ -1672,21 +1676,21 @@ std::vector<std::string> TokenizeString(const std::string& str, const std::strin
 * @param result
 * @return
 */
-int findFileInPath(std::string filename, boost::filesystem::path thePath, bool recursive, std::string &result) {
+int findFileInPath(std::string filename, std::filesystem::path thePath, bool recursive, std::string &result) {
 	//     //1. If thePath is the filename fill in result and then return 1, make sure the filename is also not a directory
 	// 	std::cout << "FindFileInPath :"<<filename<<std::endl << "thePath: "<<thePath.string()<<std::endl<<std::endl;
-	// 	if (thePath.leaf()==filename && !boost::filesystem::is_directory(thePath)) {
+	// 	if (thePath.leaf()==filename && !std::filesystem::is_directory(thePath)) {
 	//         result=thePath.string();
 	//         return 1;
 	//     } else {
 	//         //2. If recursive and path is a directory also try inside each child that is a directory.
-	//         if (boost::filesystem::is_directory(thePath)) {
+	//         if (std::filesystem::is_directory(thePath)) {
 	//         //TODO: Iterate correctly over the path children. 
-	//             boost::filesystem::directory_iterator pathI(thePath);
-	//             boost::filesystem::directory_iterator endI;
+	//             std::filesystem::directory_iterator pathI(thePath);
+	//             std::filesystem::directory_iterator endI;
 	//             for(pathI; pathI!=endI;pathI++) {
 	//                 int childResult=0;
-	//                 if (boost::filesystem::is_directory(*pathI)) {
+	//                 if (std::filesystem::is_directory(*pathI)) {
 	//                     if (recursive)
 	//                     	//std::cout<<*pathI<<std::endl;
 	//                         childResult=findFileInPath(filename,(*pathI),recursive,result);
@@ -1706,8 +1710,8 @@ int findFileInPath(std::string filename, boost::filesystem::path thePath, bool r
 	
 	//construct a path with the path and the filename, if it exists, then	we found the result, 
 	//otherwise, if the path is a directory, iterate through all it's children doing the same thing but ONLY for folders.
-	boost::filesystem::path testPath=thePath/filename;
-	if(boost::filesystem::exists(testPath))
+	std::filesystem::path testPath=thePath/filename;
+	if(std::filesystem::exists(testPath))
 	{
 		//we found it!
 		std::cout << "Found the file! "<<testPath.string() << std::endl;
@@ -1719,13 +1723,13 @@ int findFileInPath(std::string filename, boost::filesystem::path thePath, bool r
 		//not in this folder, maybe in a subfolder?
 		if(recursive)
 		{
-			boost::filesystem::directory_iterator pathI(thePath);
-			boost::filesystem::directory_iterator endI;
+			std::filesystem::directory_iterator pathI(thePath);
+			std::filesystem::directory_iterator endI;
 			int childResult=0;
 			for(pathI; pathI!=endI;pathI++) {
 				
 				childResult=0;
-				if (boost::filesystem::is_directory(*pathI)) {
+				if (std::filesystem::is_directory(*pathI)) {
 					childResult=findFileInPath(filename,(*pathI),recursive,result);
 					if(childResult==1)
 					{
@@ -1750,7 +1754,7 @@ std::string findFileInSearchPaths(std::string theFile) {
     //1. Iterate through all each search path, navigating into subfolders if required.
     int folderCount=sett.searchPaths.size();
     std::string result=theFile;
-    boost::filesystem::path tempPath(theFile);
+    std::filesystem::path tempPath(theFile);
 	//std::string theFileLeaf=tempPath.leaf().string();
 	
 //	std::string theFileLeaf=tempPath.filename().string();
@@ -1765,8 +1769,8 @@ std::string findFileInSearchPaths(std::string theFile) {
 	std::cout << "Trying to find in search paths thefileLeaf: " << theFileLeaf << std::endl;
     for(int i=0;i<folderCount;i++)
     {
-    	boost::filesystem::path thePath(sett.searchPaths[i]);
-    	if(boost::filesystem::exists(thePath) && !boost::filesystem::is_empty(thePath))
+    	std::filesystem::path thePath(sett.searchPaths[i]);
+    	if(std::filesystem::exists(thePath) && !std::filesystem::is_empty(thePath))
     	{
     		if(findFileInPath(theFileLeaf, thePath, sett.searchPathsRecursive,result))
     			return result;
@@ -1809,7 +1813,7 @@ int isSupportedType(std::string theFilename)
 	}
 }
 
-int getFirstSequenceInDirectoryR(boost::filesystem::path thePath, std::string &result) {
+int getFirstSequenceInDirectoryR(std::filesystem::path thePath, std::string &result) {
 
 	if (isSupportedType(thePath.string()))
 	{
@@ -1818,16 +1822,16 @@ int getFirstSequenceInDirectoryR(boost::filesystem::path thePath, std::string &r
 	}
 	else
 	{
-		if (boost::filesystem::is_directory(thePath))
+		if (std::filesystem::is_directory(thePath))
 		{
 			//iterate all children calling recursively if this is a directory.
-			boost::filesystem::directory_iterator pathI(thePath);
-			boost::filesystem::directory_iterator endI;
+			std::filesystem::directory_iterator pathI(thePath);
+			std::filesystem::directory_iterator endI;
 			for(pathI; pathI!=endI;pathI++)
 			{				
 				
-				boost::filesystem::path child;
-				boost::filesystem::path newPath= (pathI->path());
+				std::filesystem::path child;
+				std::filesystem::path newPath= (pathI->path());
 				if(getFirstSequenceInDirectoryR(newPath, result))
 				{
 					return 1;
@@ -1842,7 +1846,7 @@ int getFirstSequenceInDirectoryR(boost::filesystem::path thePath, std::string &r
 std::string getFirstSequenceInDirectory(std::string thePath)
 {
 	std::string result=thePath;
-	if(boost::filesystem::exists(thePath) && !boost::filesystem::is_empty(thePath))
+	if(std::filesystem::exists(thePath) && !std::filesystem::is_empty(thePath))
 	{
 		if(getFirstSequenceInDirectoryR(thePath, result))
 			return result;
@@ -2207,63 +2211,3 @@ std::string getHostname() {
 	//printf("HostName: %s\n",returnVal.c_str());
 	return returnVal;
 };
-
-using namespace Botan;
-
-std::string getSHA1(std::string message)
-{
-  	Pipe pipe(new Botan::Hash_Filter("SHA-1"),new Base64_Encoder);
-  	pipe.process_msg(message);
-  	return pipe.read_all_as_string();
-}
-
-SecureVector<Botan::byte> b64_decode(const std::string& in)
-{
-	Pipe pipe(new Base64_Decoder);
-	pipe.process_msg(in);
-	return pipe.read_all();
-}
-
-std::string hex_encode(const std::string& in)
-{
-	Pipe pipe(new Hex_Encoder);
-	pipe.process_msg(in);
-	return pipe.read_all_as_string();
-}
-
-SecureVector<Botan::byte> hex_decode(const std::string& in)
-{
-	Pipe pipe(new Hex_Decoder);
-	pipe.process_msg(in);
-	return pipe.read_all();
-}
-
-float maximumVersionForThisLicense(float theVersion)
-{
-	double whole;
-	double decimal;
-	decimal=modf(theVersion,&whole);
-	float result=0;
-	if (decimal>0.5)
-	{
-		result=whole+0.9;
-	}
-	else
-	{
-		result = whole+0.4;
-	}
-	return result;
-}
-
-std::string stripVersion(std::string fullVersion)
-{
-	std::string result;
-	size_t lastPointPos=fullVersion.find_last_of('.');
-	if(lastPointPos!=std::string::npos)
-	{
-		result=fullVersion.substr(0,lastPointPos);
-	}
-	//std::cout << "strippedVersion: "<<result<<std::endl;
-	return result;
-	
-}

@@ -16,8 +16,6 @@
 #include <FL/Fl_Group.H>
 #include <FL/Fl_Value_Input.H>
 #include <FL/Fl_Choice.H>
-#include <FLU/Flu_Collapsable_Group.h>
-#include <FLU/Flu_Simple_Group.h>
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_File_Chooser.H>
 #include "gfcfx.h"
@@ -47,7 +45,8 @@ extern gfcNetworkManager networkManager;
 extern MainWindow mw;
 
 extern gfcSettings sett;
-extern Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+extern NativeFileChooser *fc;
 extern FXControlWindow fxControlWindow1;
 extern FXWindow fxw;
 extern void fxCBFillLoadedScroll();
@@ -56,7 +55,7 @@ extern void fxCBFillLoadedScroll();
 //extern std::vector<int> fxArrayActiveCount;
 //extern std::vector<gfcFX> fxApplied[4]; // this are the applied fx for each quadrant, they can change order and are added when the correponding button on the FX theWindow is pressed.
 extern void save_input_file(Fl_File_Chooser *w, void *userdata);
-extern char gFilename[300];
+extern char gFilename[2048];
 extern int numberOfActiveEffects[4];
 extern bool gNetworkFXAddEvent;
 extern std::map<std::string, int> fxHashMap;

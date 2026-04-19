@@ -1,4 +1,5 @@
 #include "gfchistogram.h"
+#include "gfcTextRenderer.h"
 #include <FL/gl.h>
 
 #include "gfcpickmanager.h"
@@ -176,22 +177,10 @@ void gfcHistogram::draw(int caching) {
             glEnable(GL_BLEND);
             glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-            gl_font(FL_TIMES + FL_BOLD,10);
-            gl_font(FL_HELVETICA + FL_BOLD,10);
-            // gl_font(FL_COURIER + FL_BOLD,12);
+            gfc_gl_font(FL_HELVETICA, 10);
+            textRenderer().setColor(1.0, 1.0, 1.0, 0.8);
 
-            glColor4f(1.0,1.0,1.0,0.8);
-
-
-
-//-hWidth*scale/2.0
-//scale*h/2.0-16
-            /*gl_draw("Caching Histogram",
-                    -hWidth/2.0,h100,20,
-
-            Fl_Align(FL_ALIGN_LEFT| FL_ALIGN_TOP | FL_ALIGN_WRA/));*/
-	    
-            gl_draw("Caching Histogram",(float)0.0,(float)0.0);
+            gfc_gl_draw("Caching Histogram", 0.0f, 0.0f);
 
             glPopAttrib();
         }//END OF DRAWING CACHING

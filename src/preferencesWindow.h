@@ -5,8 +5,9 @@
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
 #include <FL/Fl_Box.H>
-#include <FL/Fl_Tabs.H>
 #include <FL/Fl_Group.H>
+#include <FL/Fl_Hold_Browser.H>
+#include <FL/Fl_Scroll.H>
 #include <FL/Fl_Round_Button.H>
 extern void PreferencesCB(Fl_Round_Button*, void*);
 #include <FL/Fl_Input.H>
@@ -18,6 +19,8 @@ extern void PreferencesCB(Fl_Value_Slider*, void*);
 extern void PreferencesCB(Fl_Check_Button*, void*);
 #include <FL/Fl_Value_Input.H>
 extern void PreferencesCB(Fl_Value_Input*, void*);
+#include <FL/Fl_Choice.H>
+extern void PreferencesCB(Fl_Choice*, void*);
 #include "Fl_Spinner_gfc.h"
 extern void PreferencesCB(Fl_Spinner_gfc*, void*);
 #include <FL/Fl_Browser.H>
@@ -28,7 +31,9 @@ public:
   Fl_Double_Window* make_window();
   Fl_Double_Window *preferencesWindow;
   Fl_Box *bg;
-  Fl_Tabs *tabs;
+  Fl_Hold_Browser *sectionList;
+  Fl_Group *panels[6];  // General, Text, Engine, Formats, Remote, Paths
+  void showPanel(int index);
   Fl_Round_Button *startFullscreenCheckBox;
   Fl_Round_Button *loadWindowOnStartupCheckBox;
   Fl_Input *defaultBrowsePath;
@@ -48,6 +53,12 @@ public:
   Fl_Value_Input *textDisplayFontSize;
   Fl_Value_Input *textDisplayOpacity;
   Fl_Value_Input *textDisplayColor;
+  Fl_Check_Button *textDisplayShadow;
+  Fl_Choice *textDisplayFont;
+  Fl_Group *textTab;
+  Fl_Choice *textDisplayHinting;
+  Fl_Choice *textDisplayFilter;
+  Fl_Value_Input *textDisplayGamma;
   Fl_Value_Input *ActionFeedbackSize;
   Fl_Value_Input *ActionFeedbackFadeDelay;
   Fl_Group *formatsTab;
@@ -85,10 +96,6 @@ public:
   Fl_Button_gfc *searchPathBrowse;
   Fl_Button_gfc *searchPathDelete;
   Fl_Check_Button *useSearchPaths;
-  Fl_Group *licensingTab;
-  Fl_Group *licenseFileGroup;
-  Fl_Input *licenseFilePath;
-  Fl_Input *licenseServerIP;
-  Fl_Input *licenseServerPort;
+  // License tab removed for open-source release
 };
 #endif

@@ -9,18 +9,11 @@
 #include "playlistwindow.h"
 #include "gfcSequence.h"
 #include "preferencesWindow.h"
+#include "gfcTextRenderer.h"
 #include "renderWindow.h"
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
 #include "gfcreview.h"
-#include "activatorWindow.h"
-#include "demoversion.h"
-
-#include "activatorCallbacks.h"
-
-#include "boost/filesystem/operations.hpp"
-#include "boost/filesystem/path.hpp"
-#include "boost/filesystem/convenience.hpp"
 
 //#include "network.h"
 //#include <Fl/Fl_Native_File_Chooser.h>
@@ -31,7 +24,6 @@
 #include "exrWindow.h"
 #include "xmlParser.h"
 
-#include <FLU/flu_pixmaps.h>
 #include <FL/Fl_Pixmap.H>
 #include "trilerp.h"
 #include "gfcfx.h"
@@ -52,14 +44,14 @@ extern LutWindow lutw;
 extern FXWindow fxw;
 extern FXControlWindow fxControlWindow1,fxControlWindow2,fxControlWindow3,fxControlWindow4;
 extern PreferencesWindow pw;
-extern ActivatorWindow actW;
 extern RenderWindow rw;
 extern RemoteWindow rmw;
 extern PlaylistWindow plw;
 extern DrawingToolsWindow dtw;
 GammaWindow gw ( 0,0,100,100,"Gamma Window" );
 extern bool rotateActive;
-extern Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+extern NativeFileChooser *fc;
 extern bool gLoadCanceled;
 extern bool quitNow;
 extern void startLoadingThreadA();
@@ -153,17 +145,17 @@ char gFilename[2048]=" ";
 float gSavedGamma=1;
 bool originalGammaExists=false;
 
-/*boost::thread* threadA;
-boost::thread* threadB;
-boost::thread* threadC;
-boost::thread* threadD;
+/*std::thread* threadA;
+std::thread* threadB;
+std::thread* threadC;
+std::thread* threadD;
 
-boost::thread* sequenceThreads[GFC_NUM_OF_SEQUENCES];
+std::thread* sequenceThreads[GFC_NUM_OF_SEQUENCES];
 
-boost::thread* startThreadA();
-boost::thread* startThreadB();
-boost::thread* startThreadC();
-boost::thread* startThreadD();*/
+std::thread* startThreadA();
+std::thread* startThreadB();
+std::thread* startThreadC();
+std::thread* startThreadD();*/
 gfcPlate* getPlateFromWidget ( Fl_Widget* o, void *v );
 
 void lutCBFillLoadedScroll();
@@ -818,17 +810,15 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 
 
 	case FILTERINGMAGLINEAR_ID:
-		sett.filterMin=GL_LINEAR;
-
-		printf("filterMin set to GL_NEAREST (%i)\n",GL_NEAREST);
-
+		sett.filterMin=GL_NEAREST;
 		sett.filterMax=GL_NEAREST;
+		printf("filterMin set to GL_NEAREST (%i)\n",GL_NEAREST);
 		break;
 
 	case FILTERINGMAGBILINEAR_ID:
 		sett.filterMin=GL_LINEAR;
-		printf("filterMin set to GL_LINEAR (%i)\n",GL_LINEAR);
 		sett.filterMax=GL_LINEAR;
+		printf("filterMin set to GL_LINEAR (%i)\n",GL_LINEAR);
 		break;
 
 	case MENUASPECTOPACITY100_ID:
@@ -968,10 +958,10 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 
 	case MENUHELPUSERGUIDE_ID:{
 		char message[1024];
-		boost::filesystem::path userGuidePath(getApplicationDataPath());
+		std::filesystem::path userGuidePath(getApplicationDataPath());
 		std::cout<<"Application Data Path: "<< userGuidePath.string()<<std::endl;
 		userGuidePath=userGuidePath/"JefeCheckManual.pdf";
-		if (boost::filesystem::exists(userGuidePath))
+		if (std::filesystem::exists(userGuidePath))
 		{
 			std::string completePath=std::string("file://")+userGuidePath.string();
 			fl_open_uri(completePath.c_str(),message,1024);
@@ -988,9 +978,9 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 	case MENUHELPQUICKREFERENCE_ID:{
 
 		char message[1024];
-		boost::filesystem::path userGuidePath(getApplicationDataPath());
+		std::filesystem::path userGuidePath(getApplicationDataPath());
 		userGuidePath=userGuidePath/"JefeCheckQuickStart.pdf";
-		if (boost::filesystem::exists(userGuidePath))
+		if (std::filesystem::exists(userGuidePath))
 		{
 			std::string completePath=std::string("file://")+userGuidePath.string();
 			fl_open_uri(completePath.c_str(),message,1024);
@@ -1026,13 +1016,6 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 		version+=JEFE_VERSION;
 
 		aw.textBrowser->add(version.c_str());
-#ifdef DEMO_VERSION
-		aw.textBrowser->add("@c@mDEMO VERSION");
-		aw.textBrowser->add("@cThis demo version adds a watermark to all images,");
-		aw.textBrowser->add("@climits the number of connected remote systems to 3");
-		aw.textBrowser->add("@cand limits rendering to 24 frames at 25%");
-		aw.textBrowser->add(" ");
-#endif
 		aw.textBrowser->add("@cwww.jefecheck.com");
 		aw.textBrowser->add("@cwww.jefecorp.com");
 		aw.textBrowser->add("");
@@ -1157,7 +1140,7 @@ void remoteCB ( Fl_Widget* o , void* v ) {
 
 	case REMOTE_PREFERENCES_ID:{
 		pw.preferencesWindow->show();
-		pw.tabs->value(pw.remoteSessionTab);
+		pw.sectionList->value(5); pw.showPanel(4);
 							   }
 							   break;
 
@@ -1220,9 +1203,6 @@ void remoteCB ( Fl_Widget* o , void* v ) {
 	}
 }
 
-Fl_Pixmap blueDotXMP ( bluedot_xpm );
-Fl_Pixmap bookXMP ( book_xpm );
-
 void updateReviewToolsWindowReview() {
 	//iterate through all the revisions in the review and fill the review browser.
 	std::vector<gfcRevision>::iterator iter,end;
@@ -1232,15 +1212,9 @@ void updateReviewToolsWindowReview() {
 	//clear the revisions browser.
 
 	dtw.revisionsTree->clear();
-
-	dtw.revisionsTree->branch_icons ( &bookXMP,&bookXMP );
-
-	dtw.revisionsTree->set_root ( "Revisions" );
-
-	dtw.revisionsTree->leaf_icon ( &blueDotXMP );
-	dtw.revisionsTree->insertion_mode ( FLU_INSERT_BACK );
-	dtw.revisionsTree->add ( "5Default Revision" );
-	dtw.revisionsTree->add ( "2Second Revision" );
+	dtw.revisionsTree->root_label("Revisions");
+	dtw.revisionsTree->add("Default Revision");
+	dtw.revisionsTree->add("Second Revision");
 	for ( iter; iter!=end;iter++ ) {}
 }
 
@@ -2078,8 +2052,23 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 			rmw.remotePointerColorSample->color(Fl_Color(int(sett.remotePointerColor)));
 			rmw.remotePointerColorSample->redraw();
 
-			//text display optionhs
+			//text display options
 			plateManager.setTextDisplayOptions(pw.textDisplayFontSize->value(),pw.textDisplayColor->value(),pw.textDisplayOpacity->value());
+			textRenderer().setShadowEnabled(pw.textDisplayShadow->value());
+
+			// Rendering options
+			textRenderer().setHintMode((GfcTextRenderer::HintMode)pw.textDisplayHinting->value());
+			textRenderer().setFilterNearest(pw.textDisplayFilter->value() == 0);
+			textRenderer().setGamma(pw.textDisplayGamma->value());
+
+			// Font selection from dropdown
+			if (pw.textDisplayFont->value() >= 0) {
+				const char *fontPath = (const char *)pw.textDisplayFont->menu()[pw.textDisplayFont->value()].user_data();
+				if (fontPath) {
+					textRenderer().loadFont(fontPath);
+					textRenderer().loadBoldFont(fontPath);
+				}
+			}
 
 			//Remote Update options
 			networkManager.setEventSendDelay(GFCNETEVENT_TRANSFORMS,1.0/pw.remoteTransformationsFrequency->value());
@@ -2183,30 +2172,7 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 								   }
 								   break;
 
-	case LICENSEREQUESTNEWLICENSEEBUTTON_ID:
-		actW.activatorWindow->show();
-		fillActivationWindowDefaults();
-		break;
-
-	case LICENSEPATHBROWSEBUTTON_ID:
-
-		//fc->callback ( save_input_file );
-		fc->preview ( 0 );
-		fc->label ( "Select a License File" );
-		fc->filter("JefeCorp License Files(*.{lic})");
-		fc->type ( Fl_File_Chooser::SINGLE );
-		//printf ( "FileChooser Type is %i\n",fc->type() );
-		fc->show();
-		fc->directory();
-
-		while ( fc->shown() )
-			Fl::wait();
-
-		if (fc->count()) {
-			pw.licenseFilePath->value ( fc->value(0));
-			sett.licensePath=fc->value(0);
-		}
-		break;
+	// License callbacks removed for open-source release
 
 			}
 

@@ -1,8 +1,8 @@
 #ifndef GFCMEMORYMANAGER_H
 #define GFCMEMORYMANAGER_H
 
-#include <boost/thread/thread.hpp>
-#include <boost/thread/mutex.hpp>
+#include <thread>
+#include <mutex>
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>
@@ -28,7 +28,7 @@ private:
 	float freeRAM;
 	float totalRAM;
 	void updateData();
-	boost::mutex updateMutex;
+	std::mutex updateMutex;
 	int m_withinLimits;
 };
 

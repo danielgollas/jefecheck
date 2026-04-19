@@ -3,7 +3,7 @@
 //#pragma once
 
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/Fl_Choice.H>
 #include <FL/Fl_Light_Button.H>
 #include "gfcSequence.h"
@@ -38,7 +38,7 @@
 //#include "mtpoly.h"
 
 class gfcRenderParams;
-class GFLC_BITMAP;
+struct GFLC_BITMAP;
 class Fl_Input_Choice;
 class gfcSequence;
 class gfcFrame;
@@ -244,6 +244,10 @@ class gfcPlate: public gfcPickNotifee
 	Rectang fboVP;
 	bool showText;
 	bool extensiveText;
+	// Cached text overlay texture
+	GLuint textOverlayTexID;
+	int textOverlayTexW, textOverlayTexH;
+	std::string textOverlayCachedLabel;
 	bool showHelp;
 	int showHistogram;
 	bool showVectorscope;

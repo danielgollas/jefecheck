@@ -9,7 +9,7 @@
 extern ExrWindow ew;
 extern bool mainWindowExists;
 extern bool npotTextures;
-extern boost::mutex gGLMutex;
+extern std::mutex gGLMutex;
 extern void* gGLContext;
 extern bool gResizeTrigger;
 
@@ -18,7 +18,7 @@ int TEST_GLOBAL_loaderToUse=GFCLOADER_DPX;
 /****/
 //#include "gfcframeslice.h"
 #include "gfcimageloaderdpx.h"
-#include "gfcimageloadergfl.h"
+// Image loading handled by gfcpixelbuffer.h via gfcframe.h
 #include "gfcimageloaderexr.h"
 
 /****/
@@ -131,18 +131,12 @@ int gfcFrame::loadFrame ( gfcLoadParams params )
 			break;
 
 		case GFCLOADER_EXR:
-			theImageLoader=new gfcImageLoaderEXR();
-			//theImageLoader=new gfcImageLoaderGFL();
+			theImageLoader=new gfcImageLoaderOIIO();
 			break;
 
 		case GFCLOADER_GFL:
-	//		printf("Unsing GFL\n");
-			theImageLoader=new gfcImageLoaderGFL();
-			break;
-
 		case GFCLOADER_FIL:
-	//		printf("Unsing GFL\n");
-			theImageLoader=new gfcImageLoaderFIL();
+			theImageLoader=new gfcImageLoaderOIIO();
 			break;
 	}
 
@@ -227,8 +221,12 @@ GLuint gfcFrame::generateTexture()
 	glTexParameterf ( info.target, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 	glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
-	//printf("sizeX, sizeY, dataType: %i %i %i\n",sizeX,sizeY,info.dataType);
+	while (glGetError() != GL_NO_ERROR) {} // clear stale errors
+	printf("generateTexture: texID=%u target=0x%x internalFmt=0x%x size=%dx%d fmt=0x%x type=0x%x dataPtr=%p\n",
+		textureID, info.target, info.internalFormat, sizeX, sizeY, info.format, info.dataType, info.dataPointer);
 	glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
+	GLenum glErr = glGetError();
+	if (glErr != GL_NO_ERROR) printf("generateTexture: glTexImage2D error: 0x%x\n", glErr);
 	/*
 	glFinish();
 	timer.stop();

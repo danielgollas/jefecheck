@@ -1,3 +1,6 @@
+// CLI11 must be included before any X11/OIIO headers to avoid macro conflicts
+#include "CLI11.hpp"
+
 // ***************************************************************
 //  main   version:  1.0     date: 03/20/2006
 //  -------------------------------------------------------------
@@ -18,15 +21,10 @@
 //
 // ***************************************************************
 
-//if not defined no license checking will be done
-
-#define LICENSED //this should always be on, demo version should undefine it when building a demo version
-#undef LICENSED
-#include "demoversion.h"
 #pragma warning( once : 4275)
 
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <stdio.h>
 #include <FL/Fl.H>
 #include "GlViewport.h"
@@ -40,8 +38,6 @@
 #include "fxcontrolwindow.h"
 #include "playlistwindow.h"
 #include "preferencesWindow.h"
-#include "activatorWindow.h"
-#include "activatorCallbacks.h"
 #include "gfcStructures.h"
 #include <stdlib.h>
 #include <map>
@@ -51,11 +47,8 @@
 #include "renderWindow.h"
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
+#include "gfcTextRenderer.h"
 #include <FL/Fl_Text_Buffer.H>
-
-#include <botan/rsa.h>
-#include <botan/pk_filts.h>
-#include <botan/filters.h>
 
 #ifdef WIN32
 //stuff needed to set the program icon on windows
@@ -78,7 +71,6 @@ GLuint gWatermarkTextureID=0;
 
 Fl_Text_Buffer remoteLogBuffer;
 
-#include "boost/program_options.hpp"
 #include <FL/Fl_File_Chooser.H>
 #include <FL/fl_ask.H>
 #include <math.h>
@@ -96,11 +88,6 @@ Fl_Text_Buffer remoteLogBuffer;
 
 
 
-#define CLIENT_NAME "Ollin Studio Internal Use"
-
-
-#include "publicKey.h"
-
 #include "UICallbacks.h"
 //#include "network.h"
 
@@ -108,7 +95,6 @@ Fl_Text_Buffer remoteLogBuffer;
 MainWindow mw(0,0,300,300,"It's Broken Cycler - Main Window");
 LoadWindow lw(300,300,300,300,"Load Window");
 PreferencesWindow pw;
-ActivatorWindow actW;
 LutWindow lutw(300,300,300,300,"LUT Window");
 FXWindow fxw(300,300,300,300,"FX Window");
 FXControlWindow fxControlWindow1;
@@ -118,14 +104,12 @@ RemoteWindow rmw;
 DrawingToolsWindow dtw(0,0,300,300,"Window");
 
 extern std::vector<int> fxArrayActiveCount;
-namespace po = boost::program_options;
-po::positional_options_description p;
-po::variables_map vm;
 
 
 AboutWindow aboutWindow(300,300,300,300,"about");
 LUT1D testLut;
-Fl_File_Chooser *fc;
+#include "gfcfilechooser.h"
+NativeFileChooser *fc;
 bool mainWindowExists=false;
 bool npotTextures=false;
 extern int globalCB(int);
@@ -186,7 +170,6 @@ enum argEnum {
 };
 
 
-#define LICENSE_FILE "OllinStudioLicense.lic"
 GLboolean CheckExtension( char *extName ) {
     /*
      ** Search for extName in the extensions string.  Use of strstr()
@@ -236,467 +219,85 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
 void parseArguments(int argc, char *argv[]) {
 
     using namespace std;
-    p.add("file", -1);
 
     for (int i=0;i<argc; i++) {
         printf("Arg%i: %s\n",i,argv[i]);
     }
 
+    CLI::App app{"JefeCheck - Professional Video Frame Player"};
 
-    //the visible switch options
-    po::options_description standard("You can load files directly from the command line using the following options\n You can specify a filename and parameters for up to 4 sequences, the first sequence will be loaded into track A, the second into B etc. ");
-    standard.add_options()
-    ("help,h", "produce help message")
-    ("from,f", po::value< vector<int> >(), "Start loading from this frame")
-    ("to,t", po::value< vector<int> >(), "Stop loading at this frame")
-    ("scale,s", po::value<vector<int> >(), "Scales to load sequences in percentages (100, 50 etc)")
-    ("frameRate,r", po::value<int>(), "Frame rate for playback")
-    ("fx,x", po::value< vector<string> > (), "FX Stack")
-	("lut,l", po::value< vector<string> > (), "LUT for Plate")
-    ;
+    vector<int> fromFrames, toFrames, scaleValues;
+    int frameRate = 0;
+    vector<string> fxFiles, lutFiles, inputFiles;
 
-    //the hidden options
-    po::options_description hidden("Hidden options");
-    hidden.add_options()
-    ("input", po::value< vector<std::string> >(), "Filenames to load")
-    ;
+    app.add_option("-f,--from", fromFrames, "Start loading from this frame");
+    app.add_option("-t,--to", toFrames, "Stop loading at this frame");
+    app.add_option("-s,--scale", scaleValues, "Scale percentages for sequences");
+    app.add_option("-r,--frameRate", frameRate, "Playback frame rate");
+    app.add_option("-x,--fx", fxFiles, "FX Stack files");
+    app.add_option("-l,--lut", lutFiles, "LUT files for plates");
+    app.add_option("input", inputFiles, "Input files")->expected(-1);
 
-    //explicit and positional ones together
-    po::options_description all("Hidden options");
-    all.add(hidden).add(standard);
-
-    po::positional_options_description p;
-    p.add("input", -1);
-
-    /*po::basic_command_line_parser basicParser(argc, argv);
-     po::command_line_parser(argc, argv).options(all).positional(p).run()
-    basicParser.*/
-
-    po::parsed_options parsed =po::command_line_parser(argc, argv).options(all).positional(p).allow_unregistered().run();
-    po::store(parsed, vm);
-    po::notify(vm);
-
-    if (vm.count("help")) {
-        std::cout << standard << "\n";
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError &e) {
+        app.exit(e);
         return;
     }
 
+    if (!inputFiles.empty()) {
+        std::cout << "Got input files!\n";
 
-    if (vm.count("input")) {
-        std::cout << "Got input files!\n" <<  vm["input"].as< vector<std::string> >() << "\n" ;
-        std::vector< std::string > inputs =  vm["input"].as< vector<std::string> >();
-
-        if (lowerCase(GetExtension(inputs.front()))=="jcs") {//got a session as a filename
-            sessionManager.loadSession(inputs.back());
-            inputs.erase(inputs.begin()); //remove it from the inputs so we don't thing it's a track
+        if (lowerCase(GetExtension(inputFiles.front()))=="jcs") {
+            sessionManager.loadSession(inputFiles.back());
+            inputFiles.erase(inputFiles.begin());
         }
 
-
-
-        if (inputs.size()>0 && lowerCase(GetExtension(inputs.front()))=="jpl") {//got a playlist as a filename
-            playlistManager.loadPlaylist(inputs.back());
-            inputs.erase(inputs.begin()); //remove it from the inputs so we don't thing it's a track
+        if (!inputFiles.empty() && lowerCase(GetExtension(inputFiles.front()))=="jpl") {
+            playlistManager.loadPlaylist(inputFiles.back());
+            inputFiles.erase(inputFiles.begin());
         }
 
-
-
-        std::vector< int > scales;
-        std::vector< int > froms;
-        std::vector< int > tos;
-
-        if (vm.count("scale"))
-            scales =  vm["scale"].as< vector<int> >();
-
-        if (vm.count("from"))
-            froms =  vm["from"].as< vector<int> >();
-
-        if (vm.count("to"))
-            tos =  vm["to"].as< vector<int> >();
-
-        for ( int i=0;i<GFC_MAX_SEQUENCES && i<inputs.size() ;i++ ) {
-
+        for (int i=0; i<GFC_MAX_SEQUENCES && i<(int)inputFiles.size(); i++) {
             gfcLoadParams params;
 
-            if (i<scales.size())
-                params.scale=scales[i];
+            if (i<(int)scaleValues.size())
+                params.scale=scaleValues[i];
 
-            if (i<froms.size())
-                params.fromFrame=froms[i];
+            if (i<(int)fromFrames.size())
+                params.fromFrame=fromFrames[i];
 
-            if (i<tos.size())
-                params.toFrame=tos[i];
-			
-			//TODO: add options for EXR channel names and bit depth compression. 
-			
+            if (i<(int)toFrames.size())
+                params.toFrame=toFrames[i];
 
-            params.fileName=inputs[i];
+            params.fileName=inputFiles[i];
             trackManager.loadFromFilename(i,params);
         }
-        
-        //after loading from command line set the correct in/out points
+
         playbackManager.setInPoint(0);
         playbackManager.setOutPoint(trackManager.getMaxTrackLength());
     }
 
-    if (vm.count("frameRate")) {
-        playbackManager.setTargetFPS(vm["frameRate"].as<int>());
+    if (frameRate > 0) {
+        playbackManager.setTargetFPS(frameRate);
     }
 
-
-
-    int fxCount=vm.count("fx");
-    printf("fxCount %i\n",fxCount);
-    if (fxCount) {
-        std::vector< std::string > fxstacks= vm["fx"].as< vector<std::string> >();
-
-        for (int i=0; i<fxstacks.size();i++) {
-            plateManager.loadStackFromFile(i,fxstacks[i]);
+    if (!fxFiles.empty()) {
+        printf("fxCount %i\n",(int)fxFiles.size());
+        for (int i=0; i<(int)fxFiles.size(); i++) {
+            plateManager.loadStackFromFile(i,fxFiles[i]);
         }
     }
 
-	int lutCount=vm.count("lut");
-	printf("lutCount %i\n",fxCount);
-	if (lutCount) {
-		std::vector< std::string > luts= vm["lut"].as< vector<std::string> >();
-
-		for (int i=0; i<luts.size();i++) {
-			plateManager.setLUTByName(i,luts[i]);
-		}
-	}
+    if (!lutFiles.empty()) {
+        printf("lutCount %i\n",(int)lutFiles.size());
+        for (int i=0; i<(int)lutFiles.size(); i++) {
+            plateManager.setLUTByName(i,lutFiles[i]);
+        }
+    }
 
 }
 
-#include "JefeCorp_JefeCheck1LicenseDSA_public.h"
-#include "JefeCorp_JefeCheck_LicenseRSA_public.h"
-void checkLicense() {
-
-#ifdef LICENSED
-    using namespace Botan;
-
-    fillPublicDSAVector();
-    /***************************LICENSE CHECK**************************/
-    std::string message="";
-    std::string productVersion="";
-    std::string clientName="";
-    std::string companyName="";
-    std::string os="";
-    std::string creationDate="";
-    std::string serialNumber="";
-    std::string readActivationNumber="";
-
-    std::string strLine;
-    std::string sig="";
-	
-	std::string testStripped=stripVersion(JEFE_VERSION);
-	
-    while (true) {
-        //TODO: Add extra verification for the publicKey to prevent tampering.
-        //1. Find license file, if no license file, ask to browse or exit
-        std::ifstream license(sett.licensePath.c_str());
-#ifdef OLDSTYLELICENSE
-        {
-            printf("Using old style license\n");
-            if (license) {
-                //2. Read Key from embeded code.
-                std::vector<std::string>::iterator it=publicKeyDSA.begin(), end=publicKeyDSA.end();
-                std::stringstream ss;
-                for ( it;it!=end ;it++ )
-                    ss << *it <<std::endl;
-                DataSource_Memory dataSource ( ( Botan::byte* ) ss.str().c_str(),ss.str().size() );
-                std::auto_ptr<X509_PublicKey> key(X509::load_key(dataSource));
-                DSA_PublicKey* dsakey = dynamic_cast<DSA_PublicKey*>(key.get());
-                if (!dsakey) {
-                    //fl_alert("It apears that the executable file has been tampered with.\n This is a violation of the JefeCheck contract and the program will now exit.");
-                    exit(0);
-                } else {
-                    //3. read the message from the license file
-                    message="";
-                    clientName="clientName";
-                    companyName="companyName";
-                    serialNumber="serialNumber";
-                    readActivationNumber="readActivationNumber";
-
-                    //Read each line of the license file, gathering the necesary info
-
-                    //license.getline(line,3000);
-                    getline(license,strLine);
-                    //std::cout << line;
-                    while (license.good() && strLine.find("SIGNATURE")==std::string::npos ) {
-                        if (strLine.find("Client Name=")!=std::string::npos) {
-                            clientName=strLine.substr(strLine.find("=")+1);
-                            //clientName=strstr(line,"=")+1;
-                            //printf("Client Name=%s\n",clientName.c_str());
-                        }
-                        if (strLine.find("Company Name=")!=std::string::npos) {
-                            companyName=strLine.substr(strLine.find("=")+1);
-                            //companyName=strstr(line,"=")+1;
-                            //printf("CompanyName=%s\n",companyName.c_str());
-                        }
-                        if (strLine.find("Activation Number=")!=std::string::npos) {
-                            readActivationNumber=strLine.substr(strLine.find("=")+1);
-                            //printf("readActivationNumber=%s\n",readActivationNumber.c_str());
-                        }
-                        if (strLine.find("Serial=")!=std::string::npos) {
-                            serialNumber=strLine.substr(strLine.find("=")+1);
-                            //printf("Serial=%s\n",serialNumber.c_str());
-                        }
-                        message+=strLine;
-                        message+="\n";
-                        getline(license,strLine);
-                        //fl_alert(strLine.c_str());
-                        //license.getline(line,300);
-                    }
-                    /*while (license.good() && !strstr(line,"SIGNATURE") ) {
-                        if (strstr(line,"Client Name=")) {
-                    		clientName=strLine.substr(strLine.find("="));
-                            //clientName=strstr(line,"=")+1;
-                            //printf("Client Name=%s",clientName.c_str());
-                        }
-                        if (strstr(line,"Company Name=")) {
-                    		companyName=strLine.substr(strLine.find("="));
-                            //companyName=strstr(line,"=")+1;
-                            //printf("CompanyName=%s",companyName.c_str());
-                        }
-                        if (strstr(line,"Activation Number=")) {
-                            readActivationNumber=strstr(line,"=")+1;
-                            //printf("readActivationNumber=%s",readActivationNumber.c_str());
-                        }
-                        if (strstr(line,"Serial=")) {
-                            serialNumber=strstr(line,"=")+1;
-                            //printf("readActivationNumber=%s",readActivationNumber.c_str());
-                        }
-                        message+=line;
-                        message+="\n";
-                    	getline(license,strLine);
-                        //license.getline(line,300);
-                    }*/
-                    //std::cout << "Message: " << message <<std::endl;
-                    if (strLine.find("SIGNATURE")!=std::string::npos) {
-                        getline(license,strLine);
-                        //license.getline(line,300);
-                        sig=strLine;
-                        //std::cout << "Signature: " << sig <<std::endl;
-                    } else {
-                        fl_alert("It apears that the license file has been tampered with.\n This is a violation of the JefeCheck contract and the program will now exit.");
-                        //fl_alert(strLine.c_str());
-                        //std::cout << "The loaded key is not a DSA key!\n";
-                        //exit(0);
-                    }
-
-                    //std::cout << "***********\n"<< message << "***********\n";
-                    //4. Validate the signature using the embeded key
-                    //create the veryfing pipe with the key, and process the hex_decoded signature from the license file.
-                    SecureVector<Botan::byte> sign = hex_decode(sig);
-                    Pipe pipe(new PK_Verifier_Filter(get_pk_verifier(*dsakey, "EMSA1(SHA-512)"), sign)
-                             );
-
-                    pipe.start_msg();
-                    pipe.write(message);
-                    pipe.end_msg();
-
-                    Botan::byte result = 0;
-                    pipe.read(result);
-
-                    if (result) {
-                        //fl_alert("license not tampered!");
-
-                        //5. Validate the values in the file to match the running computer.
-                        Pipe activationNumPipe(new Hash_Filter("MD5"), new Hex_Encoder());
-                        std::string activationMessage=clientName+companyName+getOS()+getMACAddress()+""+serialNumber; //we no longer use the hostname
-                        //std::cout << "Activation message" << activationMessage << std::endl;
-                        activationNumPipe.start_msg();
-                        activationNumPipe.write(activationMessage);
-                        activationNumPipe.end_msg();
-                        /************************/
-                        std::string activationNumber=activationNumPipe.read_all_as_string();
-                        //printf("Hash Is %s\n", activationNumber.c_str());
-                        if (strcmp(activationNumber.c_str(),readActivationNumber.c_str())!=0) {
-                            //fl_alert("You do not seem to have a valid license file to run on this computer.\n Contact JefeCorp (www.jefecorp.com) to purchase a valid license or to upgrade your license to this version.\nThe program will now exit.");
-
-                            //exit(0);
-                        } else {
-                            break;
-                        }
-
-                    } else {
-                        //fl_alert("Invalid License!");
-                        //exit(0);
-                    }
-
-                }
-
-
-            }
-        }
-#else
-//USE THE NEW LICENSING METHOD STYLE
-        if (license) {
-            //2. Read Key from embeded code.
-            fillPublicRSAVector();
-	std::vector<std::string>::iterator it=publicKeyRSA.begin(), end=publicKeyRSA.end();
-        std::stringstream ss;
-        for ( it;it!=end ;it++ )
-        	ss << *it <<std::endl;
-	
-	 
-		
-	 DataSource_Memory dataSource ( ( Botan::byte* ) ss.str().c_str(),ss.str().size() );
-         std::auto_ptr<X509_PublicKey> key(X509::load_key(dataSource));
-         
-         //std::string pubkeyFile="/home/dgollas/projects/botanPerlLicenseTest/src/pubkey.pem";
-	 //std::auto_ptr<X509_PublicKey> key(X509::load_key(pubkeyFile));
-         RSA_PublicKey* rsakey = dynamic_cast<RSA_PublicKey*>(key.get());
-         if(!rsakey)
-         {
-         std::cout << "The loaded key is not an RSA key!\n";
-         exit(0);
-         }
-         else {
-                //3. read the message from the license file
-                message="";
-                
-                //Read each line of the license file, gathering the necesary info
-
-                //license.getline(line,3000);
-                getline(license,strLine);
-                //std::cout << line;
-                while (license.good() && strLine.find("SIGNATURE")==std::string::npos ) {
-                
-                    if (strLine.find("JefeCheckVersion=")!=std::string::npos) {
-                        productVersion=strLine.substr(strLine.find("=")+1);
-                        //printf("Serial=%s\n",serialNumber.c_str());
-                    }
-                  	
-                    if (strLine.find("CompanyName=")!=std::string::npos) {
-                        companyName=strLine.substr(strLine.find("=")+1);
-                    }
-                	
-                    if (strLine.find("ClientName=")!=std::string::npos) {
-                        clientName=strLine.substr(strLine.find("=")+1);
-                    }
-                    
-                    if (strLine.find("OS=")!=std::string::npos) {
-                        os=strLine.substr(strLine.find("=")+1);
-                    }
-                    
-                    if (strLine.find("CreationDate=")!=std::string::npos) {
-                        creationDate=strLine.substr(strLine.find("=")+1);
-
-                    }
-		    
-		    if (strLine.find("Serial=")!=std::string::npos) {
-                        serialNumber=strLine.substr(strLine.find("=")+1);
-                        //printf("Serial=%s\n",serialNumber.c_str());
-                    }
-
-                    if (strLine.find("ActivationNumber=")!=std::string::npos) {
-                        readActivationNumber=strLine.substr(strLine.find("=")+1);
-                    }
-		    
-		    if(strLine!=""){
-		    //std::cout << "Adding line: "<<strLine<<std::endl;
-                    message+=strLine;
-                    message+="\n";
-                    }
-                    
-                    getline(license,strLine);
-
-                }
-                
-                sig="";
-                if (strLine.find("SIGNATURE")!=std::string::npos) {
-                     	//get whatever is left in the file
-                     	char sigArray[300];
-                     	license.get(sigArray,300,'*');
-                     	sig+=sigArray;
-                    	//std::cout << "Signature:\n" << sig <<"......."<<std::endl;
-                } else {
-                    fl_alert("It apears that the license file has been tampered with.\nThat is not good.");
-                }
-		
-		
-		//4. Validate the signature using the embeded key
-                //create the veryfing pipe with the key, and process the hex_decoded signature from the license file.
-				//std::cout << "Message: " <<message<<"**********"<<std::endl;  
-				//std::cout << "Signature: "<<sig << "**********"<<std::endl;
-
-				SecureVector<Botan::byte> sign = b64_decode(sig);
-		Pipe pipesig(new PK_Verifier_Filter(get_pk_verifier(*rsakey, "EMSA3(SHA1)") , sign) );
-
-                pipesig.start_msg();
-                pipesig.write(message);
-                pipesig.end_msg();
-
-                Botan::byte result = 0;
-                pipesig.read(result);
-		
-                if (result) {
-					std::vector<std::string> theMacAdresses=getMACAddress();
-					int good=0;
-					for (int i=0;i<theMacAdresses.size();i++){
-					
-					//5. Validate the values in the file to match the running computer, try it for each mac address.
-					
-                    //TODO: Maybe run this check creating the activationMessage using each MAC in the system, create a vector<string> getMacAddresses() function...
-                    //this would prevent problems when the primary mac address changes, but could also lend itself to abuse if we could just add a new mac address.
-                    std::string activationMessage=productVersion+companyName+clientName+getOS()+creationDate+serialNumber+theMacAdresses[i];
-                    std::string activationNumber=getSHA1(activationMessage);
-					//std::cout << "Activation Message:"<<activationMessage<<"******"<<std::endl;
-					//std::cout << "Activation Number:"<<activationNumber<<"******"<<std::endl;
-					//std::cout << "Read Activation Number:"<<readActivationNumber<<"******"<<std::endl;
-
-						if (strcmp(activationNumber.c_str(),readActivationNumber.c_str())==0) {
-							//valid license!
-							 if (ftos(maximumVersionForThisLicense(atof(stripVersion(productVersion).c_str())),1)>=stripVersion(JEFE_VERSION))
-							 {
-								//license is good for this version
-								 good = 'k';
-								 break;
-							 }
-						}
-					}
-					if (good=='k')
-					{
-						break;
-					}
-					
-                } 
-
-            }
-
-
-        }
-#endif //OLDSTYLELICENSE
-
-        {
-            int selectedOption=0;
-            selectedOption=fl_choice("No valid license file found, would you like to find it yourself or request a new license?","Quit", "Find it myself", "Request new license", NULL);
-            switch (selectedOption) {
-            case 2:
-                //show activation
-                actW.activatorWindow->show();
-                fillActivationWindowDefaults();
-                while (actW.activatorWindow->shown()) Fl::wait();
-                //fl_alert("Please email your activation file to activator@@jefecorp.com and include your full name and paypal confirmation number, JefeCheck will now exit");
-                exit(0);
-                break;
-            case 1: {
-                PreferencesCB((Fl_Widget*)0,(void*)LICENSEPATHBROWSEBUTTON_ID);
-            }
-            break;
-
-            case 0:
-                exit(0);
-
-                break;
-            }
-
-            //no license found, ask to browse.
-        }
-
-    }
-#endif
-}
 
 /**
  *
@@ -705,14 +306,9 @@ void checkLicense() {
  * @return
  */
 int main(int argc, char *argv[]) {
+    setbuf(stdout, NULL); // disable buffering for debug output
 
-    printf("--------------------\nJefeCheck %s \nDaniel Gollas Gilman for JefeCorp\n--------------------\n",JEFE_VERSION);
-    //argList=argsParser(argc,argv);
-#ifdef LICENSED
-    printf("license for use by %s\n",CLIENTNAME);
-#else
-    printf("Free Version, for commercial use or otherwise!, if you like it, donate or buy me a beer.\n");
-#endif
+    printf("--------------------\nJefeCheck %s \nDaniel Gollas Gilman\n--------------------\n",JEFE_VERSION);
 
 #ifdef linux
     printf("Running on Linux\n");
@@ -738,22 +334,9 @@ int main(int argc, char *argv[]) {
     pw.make_window();
     rw.make_window();
 
-#ifdef DEMO_VERSION
-	//limit render stuff
-	rw.scale->value(0.25);
-	rw.scale->deactivate();
-	rw.startFrame->value(0);
-	rw.endFrame->value(24);
-	rw.startFrame->deactivate();
-	rw.autoRange->deactivate();
-	rw.endFrame->deactivate();
-#endif
-	
-
     rmw.make_window();
     rmw.log->buffer(remoteLogBuffer);
     aboutWindow.make_window();
-    actW.make_window();
 
     reqW.make_window();
 
@@ -776,7 +359,7 @@ int main(int argc, char *argv[]) {
     gfcTimer testTimer ( "testTimer" );    
     testTimer.start();
 	testTimer.print();
-    fc= new  Fl_File_Chooser(".",NULL,0,"Choose a file");
+    fc= new NativeFileChooser(".",NULL,0,"Choose a file");
 
     sett.numOfPartitions=1;
 
@@ -794,11 +377,6 @@ int main(int argc, char *argv[]) {
     mw.mainWindow->show();
 
     Fl::check();
-    #ifdef __APPLE__
-    		 //printf("gl_texture_pile_height=%i\n",gl_texture_pile_height());
-    		 gl_texture_pile_height(100);
-    		 printf("gl_texture_pile_height=%i\n",gl_texture_pile_height());
-#endif
     fxControlWindow1.createWindow(0);
     plw.createWindow();
     aboutWindow.aboutWindow->position(mw.mainWindow->x()+mw.mainWindow->w()/2-aboutWindow.aboutWindow->w()/2,mw.mainWindow->y()+200);
@@ -825,6 +403,11 @@ int main(int argc, char *argv[]) {
     //mw.vp->draw();
 
     //wait until we have a good rendering context
+    // Force GLAD initialization - need GL context first
+    mw.vp->make_current();
+    if (!gladLoadGL()) {
+        printf("Warning: GLAD initialization failed, retrying after draw...\n");
+    }
 
     while ((glGetString(GL_VERSION))==0) {
         printf("%i\n",glGetString(GL_VERSION));
@@ -839,11 +422,6 @@ int main(int argc, char *argv[]) {
     printf("Relevant FLTK Library Information:\n");
     printf("--------------------------------------------\n");
     printf(" *Version: %f\n", Fl::version());
-
-    printf("\n--------------------------------------------\n");
-    printf("Relevant GFLS Library Information:\n");
-    printf("--------------------------------------------\n");
-    printf(" *Version: %s\n", (char*)gflGetVersion());
 
     printf("\n--------------------------------------------\n");
     printf("Relevant OpenGL Implementation Information:\n");
@@ -872,32 +450,21 @@ int main(int argc, char *argv[]) {
     printf(" *%s\n", tmpReqString);
     reqW.maxViewportSize->copy_label(tmpReqString);
 	
-    printf(" *Initializing GLEW: ");
-    glewExperimental=GL_TRUE;
-    GLenum err=glewInit();
-    if (GLEW_OK != err) {
-        /* Problem: glewInit failed, something is seriously wrong. */
-        fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
-    }
-    printf("ok\n");
+    // GLAD is initialized on first GlViewport::draw() call
+    printf(" *GLAD will initialize on first render\n");
 
-    sprintf(tmpReqString,"GLEW Version: %s", glewGetString(GLEW_VERSION));
-    printf(" *%s\n", tmpReqString);
-    reqW.glewVersion->copy_label(tmpReqString);
-
-    if (GLEW_ARB_shader_objects) {
+    // With GLAD/OpenGL 3.3 Core, check extension support via glGetString
+    if (CheckExtension("GL_ARB_shader_objects")) {
         printf(" *Shader Objects available\n");
         sett.glsl=true;
         reqW.shaderObjects->value(true);
         reqW.shaderObjects->labelcolor(FL_GREEN);
-
-
     } else {
         printf(" *Shader Objects NOT available\n");
         sett.glsl=false;
     }
 
-    if (GLEW_ARB_pixel_buffer_object) {
+    if (CheckExtension("GL_ARB_pixel_buffer_object")) {
         printf(" *PBO available\n");
         reqW.PBO->value(true);
         reqW.PBO->labelcolor(FL_GREEN);
@@ -905,7 +472,7 @@ int main(int argc, char *argv[]) {
         printf(" *PBO NOT available\n");
     }
 
-    if (GLEW_ARB_texture_float) {
+    if (CheckExtension("GL_ARB_texture_float")) {
         printf(" *GL_ARB_texture_float available\n");
         sett.fp16=1;
         reqW.textureFloat->value(true);
@@ -915,7 +482,7 @@ int main(int argc, char *argv[]) {
         sett.fp16=0;
     }
 
-    if (GLEW_ARB_half_float_pixel) {
+    if (CheckExtension("GL_ARB_half_float_pixel")) {
         printf(" *Half availabe\n");
         reqW.textureHalf->value(true);
         reqW.textureHalf->labelcolor(FL_GREEN);
@@ -978,14 +545,28 @@ int main(int argc, char *argv[]) {
     Fl::check();
 
     //npotTextures=false; //JUST TO TEST NPOT PERFORMANCE, COMMENT AFTER DEBBUGING
-    GFLC_LIBRARY::initialise();
     Fl::check();
-    //printf("gflc initialise checked \n");
     gGLContext=mw.vp->context();
     glReady=true;
     printf("Initializing OpenGL\n");
     initOpenGL();
     Fl::check();
+
+    // Initialize text renderer
+    {
+        std::string fontPath = getApplicationDataPath() + "fonts/Roboto-Regular.ttf";
+        std::string boldFontPath = getApplicationDataPath() + "fonts/Roboto-Bold.ttf";
+        if (!textRenderer().loadFont(fontPath))
+            textRenderer().loadFont("common/fonts/Roboto-Regular.ttf");
+        if (!textRenderer().loadBoldFont(boldFontPath))
+            textRenderer().loadBoldFont("common/fonts/Roboto-Bold.ttf");
+        float dpi = mw.vp->pixels_per_unit();
+        textRenderer().setDPIScale(dpi);
+        textRenderer().setShadowEnabled(true);
+        textRenderer().setShadowOffset(dpi, -dpi);        // 1 logical pixel down-right
+        textRenderer().setShadowColor(0, 0, 0, 0.5f);
+        textRenderer().setShadowBlur(0);                 // no blur — single clean shadow pass
+    }
 	
 	GLuint testTextures[5];
 	glGenTextures(5,testTextures);
@@ -998,7 +579,7 @@ int main(int argc, char *argv[]) {
         int waitingForTestProgramCounter=0;
         int testProgramCounterLimit=50;
         //printf(" Test Program Object=%i\n",testProgramObject);
-        while ((int)testProgramObject==0 && waitingForTestProgramCounter<=testProgramCounterLimit) {
+        while ((intptr_t)testProgramObject==0 && waitingForTestProgramCounter<=testProgramCounterLimit) {
             //printf("counter=%i \n",waitingForTestProgramCounter);
             mw.mainWindow->redraw();
             //printf("main window redrawn \n");
@@ -1032,16 +613,24 @@ int main(int argc, char *argv[]) {
 
     mw.vp->invalidate(); //make sure the VP has correct transformations initially.
 
-    printf("Initializing Hashes\n");
-    Botan::LibraryInitializer init;
+    // Populate font dropdown with system TrueType fonts
+    {
+        auto fonts = enumerateSystemFonts();
+        int selectedIdx = 0;
+        for (size_t i = 0; i < fonts.size(); i++) {
+            // Store the font path as user_data (must be persistent — use strdup)
+            pw.textDisplayFont->add(fonts[i].first.c_str(), 0, nullptr, strdup(fonts[i].second.c_str()));
+            if (fonts[i].first == "Roboto" ||
+                (fonts[i].first.find("Roboto") != std::string::npos &&
+                 fonts[i].first.find("Bold") == std::string::npos &&
+                 fonts[i].first.find("Italic") == std::string::npos))
+                selectedIdx = (int)i;
+        }
+        pw.textDisplayFont->value(selectedIdx);
+        printf("GfcTextRenderer: enumerated %zu system fonts\n", fonts.size());
+    }
 
     readSettings(sett);
-
-    
-    
-#ifdef LICENSED
-    checkLicense();
-#endif
 
     if (sett.startFullscreen) {
 		mw.toggleFullscreen();
@@ -1088,6 +677,16 @@ int main(int argc, char *argv[]) {
 
     aboutWindow.aboutWindow->set_non_modal();
     aboutWindow.aboutWindow->hide();
+
+    // Now that the splash is closed, set global colors for dark-themed dialogs
+    // (fl_alert, fl_choice, fl_message all use these)
+    Fl::set_color(FL_BACKGROUND_COLOR, 38, 38, 38);
+    Fl::set_color(FL_BACKGROUND2_COLOR, 48, 48, 48);
+    Fl::set_color(FL_FOREGROUND_COLOR, 200, 200, 200);
+    Fl::foreground(200, 200, 200);
+    Fl::background(38, 38, 38);
+    Fl::background2(48, 48, 48);
+
     rw.path->value(sett.defaultBrowsePath.c_str());
     //parse the command line arguments if not recovering
 
@@ -1096,8 +695,10 @@ int main(int argc, char *argv[]) {
 #else
 
     //on mac, the -psnXXXXX stuff needs to be skipped
-    if (argc>=2) {
-        if (strstr(argv[1],"-psn")!=NULL) { //we have that psn shit
+    printf("parseArguments: argc=%d\n", argc);
+    for (int i=0; i<argc; i++) printf("  argv[%d]=%s\n", i, argv[i]);
+    if (argc>=1) {
+        if (argc>=2 && strstr(argv[1],"-psn")!=NULL) { //we have that psn shit
             //printf("Fuck mac and the PSN\n");
             parseArguments(argc-1, &argv[1]);
         } else { //parse normally
@@ -1153,58 +754,6 @@ int main(int argc, char *argv[]) {
     mw.mainWindow->redraw();
     testTimer.stop();
     testTimer.print();
-#ifdef DEMO_VERSION
-    {
-
-        //disable the licensing tab in the preferences window.
-        pw.licensingTab->deactivate();
-        pw.licenseFileGroup->hide();
-
-        glEnable(GL_TEXTURE_2D);
-
-        glGenTextures(1,&gWatermarkTextureID);
-
-        glBindTexture(GL_TEXTURE_2D,gWatermarkTextureID);
-
-        glTexParameteri ( GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR );
-        glTexParameteri ( GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR );
-
-        glTexParameteri ( GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR );
-        glTexParameteri ( GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR );
-
-        glTexParameteri ( GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT );
-        glTexParameteri ( GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
-
-        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-        int totalPixels=GWATERMARKDATAWIDTH*GWATERMARKDATAHEIGHT*3;
-        /*for(int i=totalPixels;i>=0;i--)
-        {
-        jcdmwm[i]/=255.0;
-        }*/
-
-        float *waterMarkData=new float[GWATERMARKDATAWIDTH*GWATERMARKDATAHEIGHT*4];
-
-        int markCount=0;
-        for (int i=0;i<totalPixels;i=i+3) {
-            waterMarkData[markCount]=jcdmwm[i]/255.0;
-            waterMarkData[markCount+1]=waterMarkData[markCount+2]=waterMarkData[markCount]; //set all to the same value
-            waterMarkData[markCount+3]=1.0-waterMarkData[markCount];//set alpha to complement the grayscale
-            markCount+=4;
-            /*waterMarkData[i]=1.0;
-            waterMarkData[i+1]=waterMarkData[i+2]=0; //set all to the same value
-            waterMarkData[i+3]=waterMarkData[i]/2.0;//set alpha to half the grayscale*/
-
-        }
-
-
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,GWATERMARKDATAWIDTH,GWATERMARKDATAHEIGHT,0,GL_RGBA,GL_FLOAT,waterMarkData);
-
-        delete waterMarkData;
-        glBindTexture(GL_TEXTURE_2D,0);
-        glDisable(GL_TEXTURE_2D);
-    }
-#endif
     
     while (!quitNow && mw.mainWindow->shown()) {
         {

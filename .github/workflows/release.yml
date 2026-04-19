@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake build-essential \
+            libfltk1.3-dev libopenimageio-dev openimageio-tools \
+            libopenexr-dev libilmbase-dev libimath-dev \
+            libcurl4-openssl-dev zlib1g-dev \
+            freeglut3-dev libgl-dev libglu1-mesa-dev \
+            libx11-dev libxext-dev libxft-dev libxinerama-dev \
+            libxcursor-dev libxrender-dev libxfixes-dev \
+            libopencv-dev libfreetype6-dev
+
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p package/jefecheck
+          cp build/jefecheck package/jefecheck/
+          cp -r common/FX package/jefecheck/
+          cp -r common/fonts package/jefecheck/
+          cd package && tar czf ../jefecheck-linux-x64.tar.gz jefecheck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: jefecheck-linux-x64.tar.gz
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install fltk openimageio openexr curl zlib cmake freetype
+
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          mkdir -p package/jefecheck
+          cp build/jefecheck package/jefecheck/
+          cp -r common/FX package/jefecheck/
+          cp -r common/fonts package/jefecheck/
+          cd package && tar czf ../jefecheck-macos-arm64.tar.gz jefecheck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: jefecheck-macos-arm64.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-fltk
+            mingw-w64-x86_64-openimageio
+            mingw-w64-x86_64-openexr
+            mingw-w64-x86_64-imath
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-freeglut
+            mingw-w64-x86_64-fmt
+            mingw-w64-x86_64-freetype
+
+      - name: Build
+        run: |
+          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p package/jefecheck
+          cp build/jefecheck.exe package/jefecheck/
+          cp -r common/FX package/jefecheck/
+          cp -r common/fonts package/jefecheck/
+          # Bundle MinGW runtime DLLs
+          ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} package/jefecheck/
+          cd package && 7z a -tzip ../jefecheck-windows-x64.zip jefecheck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: jefecheck-windows-x64.zip
+
+  release:
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/linux-build/jefecheck-linux-x64.tar.gz
+            artifacts/macos-build/jefecheck-macos-arm64.tar.gz
+            artifacts/windows-build/jefecheck-windows-x64.zip

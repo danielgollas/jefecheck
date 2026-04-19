@@ -1,4 +1,5 @@
 #include "gfcnetworkmanager.h"
+#include "gfcTextRenderer.h"
 
 #include <FL/fl_ask.H>
 #include "gfcNetworkStructures.h"
@@ -301,19 +302,17 @@ std::string gfcNetworkManager::getChatDisplayString()
 
 void setupAnfPrintSincStatus(int value, std::string sincWaitString,int w, int h)
 {
+	gfc_gl_font(FL_HELVETICA, 24);
 	if (value==1)
 	{
 		sincWaitString+="...Done\n";
-		glColor4f(0.0,0.7,0.0,1.0);
-		gl_font ( FL_HELVETICA+FL_BOLD,24);
+		textRenderer().setColor(0.0, 0.7, 0.0, 1.0);
 	}
 	else
 	{
-		glColor4f(0.9,0.9,0.9,1.0);
-		gl_font ( FL_HELVETICA+FL_BOLD,24);
-
+		textRenderer().setColor(0.9, 0.9, 0.9, 1.0);
 	}
-	gl_draw ( sincWaitString.c_str(),-w/4+10, -h/4+10, w/2-10, h/2-10,Fl_Align ( FL_ALIGN_CENTER | FL_ALIGN_TOP | FL_ALIGN_WRAP | FL_ALIGN_INSIDE) );
+	gfc_gl_draw(sincWaitString.c_str(), -w/4+10, -h/4+10, w/2-10, h/2-10, FL_ALIGN_CENTER | FL_ALIGN_TOP | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
 }
 
 void gfcNetworkManager::draw(int w, int h, bool resized)
@@ -362,11 +361,9 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
 			//build the string
 			std::string sincWaitString="\nPlease wait until all users are ready\n\n";
 			
-			glColor4f ( 1,1,1,1.0 );
-			gl_font ( FL_TIMES+FL_BOLD,18);
-			gl_font ( FL_HELVETICA+FL_BOLD,18);
-			gl_draw ( sincWaitString.c_str(),-w/4+10, -h/4+10, w/2-10, h/2-10,Fl_Align ( FL_ALIGN_CENTER |FL_ALIGN_TOP| FL_ALIGN_WRAP | FL_ALIGN_INSIDE) );
-			
+			gfc_gl_font(FL_HELVETICA, 18);
+			textRenderer().setColor(1, 1, 1, 1.0);
+			gfc_gl_draw(sincWaitString.c_str(), -w/4+10, -h/4+10, w/2-10, h/2-10, FL_ALIGN_CENTER | FL_ALIGN_TOP | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
 
 			sincWaitString="\n\n\nSyncing FXs";			
 			setupAnfPrintSincStatus(sincStatus_FX,sincWaitString,w,h);
@@ -382,11 +379,10 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
 			
 			if (sincStatus_LUT && sincStatus_FX && sincStatus_Stacks && sincStatus_Playlist && !allReady)
 			{
-				glColor4f ( 1,1,1,1.0 );
-				gl_font ( FL_TIMES+FL_BOLD,18);
-				gl_font ( FL_HELVETICA+FL_BOLD,18);
+				gfc_gl_font(FL_HELVETICA, 18);
+				textRenderer().setColor(1, 1, 1, 1.0);
 				sincWaitString="\n\n\n\n\n\n\n\n\nWaiting for other users\n";
-				gl_draw ( sincWaitString.c_str(),-w/4+10, -h/4+10, w/2-10, h/2-10,Fl_Align ( FL_ALIGN_CENTER | FL_ALIGN_WRAP | FL_ALIGN_INSIDE) );
+				gfc_gl_draw(sincWaitString.c_str(), -w/4+10, -h/4+10, w/2-10, h/2-10, FL_ALIGN_CENTER | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
 			}
 			
 			//printf("\n\n****Sinc Status****\n\nFX:%i\nLUT:%i\nStack:%i\nPlaylist:%i\nAllReady:%i\nString:\n%s\n",sincStatus_FX,sincStatus_LUT,sincStatus_Stacks,sincStatus_Playlist,allReady,sincWaitString.c_str());
@@ -486,8 +482,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                 glDisable ( GL_TEXTURE_RECTANGLE_ARB );
                 glBlendFunc ( GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA );
 
-                gl_font ( FL_TIMES+FL_BOLD,chatFontSize);
-                gl_font ( FL_HELVETICA+FL_BOLD,chatFontSize );
+                gfc_gl_font(FL_HELVETICA, chatFontSize);
 
                 //how many lines to draw?
                 int linesToDraw=0;
@@ -500,13 +495,12 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
 
                 if ( chatTextBG && ( gChatMode || logSize>0 ) ) {
                     glColor4f ( 0.1,0.1,0.1,chatFadeCounter>chatOpacity?chatOpacity:chatFadeCounter );
-                    //gl_rectf ( -w /2+10,  -h/2+10, w, ( gl_height() ) * ( logSize-beginLine+1+gChatMode ) );
-                    gl_rectf ( -w /2,  -h/2+10, w, ( gl_height() ) * ( linesToDraw+gChatMode ) );
+                    gl_rectf ( -w /2,  -h/2+10, w, (int)( gfc_gl_height() * ( linesToDraw+gChatMode ) ) );
                 }
 
-                glColor4f ( 1,1,1,chatFadeCounter>chatOpacity?chatOpacity:chatFadeCounter );
-                
-                gl_draw ( chatDisplayString.c_str(),-w /2+10,-h /2 + 10,w,( gl_height() ) * ( logSize-beginLine+1+gChatMode ),Fl_Align ( FL_ALIGN_LEFT | FL_ALIGN_BOTTOM | FL_ALIGN_WRAP | FL_ALIGN_INSIDE) );
+                textRenderer().setColor(1, 1, 1, chatFadeCounter>chatOpacity?chatOpacity:chatFadeCounter);
+
+                gfc_gl_draw(chatDisplayString.c_str(), -w/2+10, -h/2+10, w, (int)(gfc_gl_height() * (logSize-beginLine+1+gChatMode)), FL_ALIGN_LEFT | FL_ALIGN_BOTTOM | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
                 glDisable ( GL_BLEND );
                 glPopMatrix(); //pop modelview
                 glMatrixMode ( GL_PROJECTION );

@@ -1,0 +1,23 @@
+# Third-Party Licenses
+
+This file documents the licenses of third-party code vendored in this repository.
+
+## xmlParser
+
+- Files: src/xmlParser.cpp, src/xmlParser.h
+- Author: Frank Vanden Berghen
+- License: BSD 3-Clause
+- URL: http://www.applied-mathematics.net/tools/xmlParser.html
+
+## RakNet
+
+- Files: src/RakPeer.*, src/RakNet*.*, src/BitStream.*, src/ReplicaManager.*, src/DS_*.*, and related networking files in src/
+- Author: Jenkins Software LLC
+- License: GNU General Public License v2.0
+- URL: https://github.com/facebookarchive/RakNet
+
+## Rijndael / AES
+
+- Files: src/Rijndael.h, src/rijndael.cpp, src/Rijndael-Boxes.h
+- License: AES Crypt Project License
+- URL: http://www.sf.net/projects/aescrypt

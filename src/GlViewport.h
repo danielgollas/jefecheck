@@ -30,9 +30,12 @@
 #define GlViewport_h
 
 #  include <FL/Fl_Gl_Window.H>
-//#  include <Fl/gl.h>
+#include <glad/glad.h>
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <GL/glu.h>
 #else
 #  include <GL/glu.h>
 #endif

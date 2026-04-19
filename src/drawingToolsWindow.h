@@ -9,8 +9,8 @@
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Text_Display.H>
 #include <FL/Fl_Scroll.H>
-#include <FLU/Flu_Tree_Browser.h>
-extern void reviewToolsCB(Flu_Tree_Browser*, void*);
+#include <FL/Fl_Tree.H>
+extern void reviewToolsCB(Fl_Tree*, void*);
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Output.H>
 #include <FL/Fl_Value_Input.H>
@@ -27,8 +27,8 @@ public:
   Fl_Button *aniLineButton;
   Fl_Text_Display *toolHelp;
   Fl_Scroll *bigScroll;
-  Flu_Tree_Browser *revisionsTree;
-  Flu_Tree_Browser *notesTree;
+  Fl_Tree *revisionsTree;
+  Fl_Tree *notesTree;
   Fl_Input *name;
   Fl_Value_Input *rangeStart;
   Fl_Value_Input *rangeEnd;

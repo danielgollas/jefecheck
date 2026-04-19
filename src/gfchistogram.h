@@ -2,7 +2,7 @@
 #define GFCHISTOGRAM_H
 
 #include <vector>
-#include "glew.h"
+#include <glad/glad.h>
 #include "gfcpicknotifee.h"
 
 /**

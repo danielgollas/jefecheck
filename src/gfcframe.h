@@ -2,12 +2,16 @@
 #define GFCFRAME_H
 
 #include <string.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 #ifdef WIN32 
 #include <map> 
 #else 
 #include <map> 
 #endif //for metadata
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/Fl_Box.H>
 #include "UIConstants.h"
 #include "dpxslice.h"
@@ -15,12 +19,10 @@
 #include "gfcStructures.h"
 #include "gfcloadparams.h"
 #include "gfcimageloader.h"
-#include <boost/thread/thread.hpp>
-#include <boost/thread/mutex.hpp>
 
-#include "gfcimageloadergfl.h"
+#include "gfcpixelbuffer.h"
 #include "gfcimageloaderdpx.h"
-#include "gfcimageloaderfil.h"
+#include "gfcimageloaderoiio.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>

@@ -2,27 +2,24 @@
 #define GFCSTRUCTURES_H
 
 #include <string>
+#include <filesystem>
 #include <vector>
 #include <queue>
 #include <FL/filename.H>
 #include <FL/Fl_Preferences.H>
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/gl.h>
 #include "UIConstants.h"
 #include "xmlParser.h"
 
 #include "gfcrenderparams.h"
-#define JEFE_VERSION "1.5.3" 
+#define JEFE_VERSION "1.7.0"
 #include <sstream> //for stingstream
-#include <boost/filesystem/path.hpp>
 
 class gfcPlaylistItemProgramState;
 
 //#include "gfcfxstack.h"
 #pragma warning( disable: 4275 4305 4244 )
-#include <botan/botan.h>
-#include <botan/look_pk.h>
-#include <botan/dsa.h>
 
 /*#ifndef max
 #define max(a,b)            (((a) > (b)) ? (a) : (b))
@@ -70,10 +67,7 @@ class gfcPlaylistItemProgramState;
 #define        glCheckFBO()
 #endif
 
-#include "boost/filesystem/operations.hpp"
-#include "boost/filesystem/path.hpp"
-#include "boost/filesystem/convenience.hpp"
-#define FILE_EXISTS(name) boost::filesystem::exists(boost::filesystem::path(name))
+#define FILE_EXISTS(name) std::filesystem::exists(std::filesystem::path(name))
 #define GFC_MAX_FAVORITE_STACKS 5
 #define GFC_MAX_FAVORITE_COLOR_CORRECTION_STACKS 5
 
@@ -114,15 +108,6 @@ std::vector<std::string> getMACAddress();
 std::string getHostname();
 
 std::string stripVersion(std::string fullVersion);
-float maximumVersionForThisLicense(float theVersion);
-
-std::string getSHA1(std::string message);
-Botan::SecureVector<Botan::byte> b64_decode(const std::string& in);
-std::string hex_encode(const std::string& in);
-Botan::SecureVector<Botan::byte> hex_decode(const std::string& in);
-
-int checkValidEmail(std::string email);
-
 std::string upperCase(std::string s);
 std::string lowerCase(std::string s);
 
@@ -482,10 +467,10 @@ void
 swabUInt32(unsigned int* lp);
 
 void
-swabArrayOfUInt16(unsigned short* wp, register size_t n);
+swabArrayOfUInt16(unsigned short* wp, size_t n);
 
 void
-swabArrayOfUInt32(register unsigned int* lp, register size_t n);
+swabArrayOfUInt32(unsigned int* lp, size_t n);
 
 void
 swabFloat(float *fp);
@@ -497,7 +482,7 @@ void
 swabDouble(double *dp);
 
 void
-swabArrayOfDouble(double* dp, register size_t n);
+swabArrayOfDouble(double* dp, size_t n);
 
 #define MSBImportOctets(scanline,packed_u32) \
 { \
@@ -601,7 +586,7 @@ ReadWordU32State;
   static inline unsigned int BitStreamMSBRead(BitStreamReadHandle *bit_stream,
                                               const unsigned int requested_bits)
   {
-    register unsigned int
+    unsigned int
       remaining_quantum_bits,
       quantum;
 
@@ -610,7 +595,7 @@ ReadWordU32State;
 
     while (remaining_quantum_bits > 0)
       {
-        register unsigned int
+        unsigned int
           octet_bits;
 
         octet_bits = remaining_quantum_bits;
@@ -680,7 +665,7 @@ ReadWordU32State;
   static inline unsigned int WordStreamLSBRead(WordStreamReadHandle *word_stream,
                                                const unsigned int requested_bits)
   {
-    register unsigned int
+    unsigned int
       remaining_quantum_bits,
       quantum;
     
@@ -689,7 +674,7 @@ ReadWordU32State;
     
     while (remaining_quantum_bits > 0)
       {
-        register unsigned int
+        unsigned int
           word_bits;
         
         if (word_stream->bits_remaining == 0)

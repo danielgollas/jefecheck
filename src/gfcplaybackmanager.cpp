@@ -1,7 +1,7 @@
 #include "gfcplaybackmanager.h"
 #include "gfcplaybackgui_fltk.h"
 
-#include "glew.h"
+#include <glad/glad.h>
 #ifdef __APPLE__
 #include <GLUT/glut.h>
 #else

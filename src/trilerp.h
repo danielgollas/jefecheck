@@ -7,7 +7,7 @@
 #include <windows.h> 
 #endif
 
-#include "glew.h"
+#include <glad/glad.h>
 #include "vec3d.h"
 #include <FL/Fl_Progress.H>
 #include <stdio.h>

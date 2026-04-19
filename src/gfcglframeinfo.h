@@ -1,7 +1,7 @@
 #ifndef GFCGLFRAMEINFO_H
 #define GFCGLFRAMEINFO_H
 
-#include "glew.h"
+#include <glad/glad.h>
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>

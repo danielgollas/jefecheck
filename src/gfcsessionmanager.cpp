@@ -247,6 +247,7 @@ bool gfcSessionManager::checkCrashedSession()
 {
 	if(sett.enableCrashRecoverySession)
 		return fileExists(crashSessionName);
+	return false;
 }
 
 void gfcSessionManager::loadCrashedSession()

@@ -31,7 +31,7 @@ class AboutWindow {open
         xywh {199 160 50 10} labelcolor 29
       }
       Fl_Box versionLabel {
-        label {v.1.1.0}
+        label {v.1.7.0}
         xywh {199 177 50 11} labelfont 1 labelsize 16 labelcolor 29
       }
       Fl_Box {} {

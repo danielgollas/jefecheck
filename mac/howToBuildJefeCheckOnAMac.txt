@@ -1,0 +1,18 @@
+How to build JefeCheck on a mac
+
+Non-Demo
+-------------
+update the SVN
+run sh macOSXBuildScript.sh [PPC, x86]
+this will build the app, create a bundle, copy the app into the MacResources/JefeCheck_Architecture_Apple_Installation folder along with the Architecturelibs/lib folder, finaly it will create a tar.gz file from that and leave it in the MacResources folder
+commit to SVN and copy the tarball into dgollas/JEFECHECK/V1.0/MAC
+
+Demo
+-------------
+update the SVN
+run sh macOSXBuildScript.sh [PPC, x86] _Demo (yes that is _Demo as the second parameter)
+this will build the app, create a bundle, copy the app into the MacResources/JefeCheckDemo_Architecture_Apple_Installation folder along with the Architecturelibs/lib folder, finaly it will create a tar.gz file from that and leave it in the MacResources folder
+commit to SVN and copy the tarball into dgollas/JEFECHECK/V1.0/MAC
+
+
+of course, the Architecturelibs/lib folder should contain all the necesary libs for that architecture.

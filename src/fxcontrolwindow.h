@@ -3,7 +3,7 @@
 
 #include "gfcStructures.h"
 
-#include "glew.h"
+#include <glad/glad.h>
 #include "gfcfx.h"
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
@@ -18,7 +18,6 @@
 #include <FL/Fl_Choice.H>
 #include <FL/Fl_Tile.H>
 #include <FL/Fl_Menu_Bar.H>
-//#include <FLU/Flu_Collapsable_Group.h>
 
 
 

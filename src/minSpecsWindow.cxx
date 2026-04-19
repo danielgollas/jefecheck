@@ -9,8 +9,8 @@ MinSpecsWindow::MinSpecsWindow(int x, int y, int wi, int height, const char* l) 
 
 Fl_Double_Window* MinSpecsWindow::make_window() {
   { minSpecsWindow = new Fl_Double_Window(281, 353, "JefeCheck Host System Specs");
-    minSpecsWindow->color(FL_FOREGROUND_COLOR);
-    minSpecsWindow->selection_color(FL_FOREGROUND_COLOR);
+    minSpecsWindow->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));
+    minSpecsWindow->selection_color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));
     minSpecsWindow->labelcolor(FL_BACKGROUND2_COLOR);
     minSpecsWindow->user_data((void*)(this));
     { Fl_Box* o = new Fl_Box(0, -8, 619, 553, "label");
@@ -28,7 +28,7 @@ Fl_Double_Window* MinSpecsWindow::make_window() {
       o->type(1);
       { Fl_Scroll* o = new Fl_Scroll(0, 25, 315, 340);
         o->box(FL_FLAT_BOX);
-        o->color(FL_FOREGROUND_COLOR);
+        o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));
         { Fl_Pack* o = new Fl_Pack(0, 25, 315, 330);
           { glVersion = new Fl_Box(20, 32, 270, 16, "label");
             glVersion->labelsize(12);

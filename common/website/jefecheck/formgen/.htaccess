@@ -1,9 +1,0 @@
-
-AuthType Basic
-
-AuthName "frmgen"
-
-AuthUserFile "/home/jefeco5/.htpasswds/jefecheck/formgen/passwd"
-
-
-require valid-user

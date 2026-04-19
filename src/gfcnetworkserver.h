@@ -19,8 +19,6 @@
 #include "RakAssert.h"
 #include "RakSleep.h"
 #include "BitStream.h"
-#include "demoversion.h"
-
 #include "gfcnetworklog.h"
 #include "gfcnetworkservergui.h"
 
@@ -28,13 +26,8 @@
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>
 */
 
-#ifdef DEMO_VERSION
-#define GFCNET_MAX_CLIENTS 2
-#define GFCNET_VERSION 0
-#else
 #define GFCNET_MAX_CLIENTS 50
 #define GFCNET_VERSION 1
-#endif
 
 class gfcNetworkServer{
 public:

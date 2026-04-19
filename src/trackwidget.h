@@ -1,6 +1,6 @@
 #ifndef TRACKWIDGET_H
 #define TRACKWIDGET_H
-#include "glew.h"
+#include <glad/glad.h>
 #include <FL/Fl_Box.H>
 #include <FL/Fl.H>
 #include <FL/Fl_Progress.H>

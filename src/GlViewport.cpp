@@ -1,13 +1,10 @@
-#define GLEW_STATIC
-#include "glew.h"
-
-#ifdef WIN32
-#include "wglew.h"
-#endif
+#include <glad/glad.h>
+#include <functional>
 
 
 #ifdef __APPLE__
 #include <OpenGL/OpenGL.h>
+#include <functional>
 #endif
 
 #include "GlViewport.h"
@@ -24,8 +21,6 @@
 #include <math.h>
 #include <FL/Fl.H>
 #include <FL/Fl_Menu_Window.H>
-#include <boost/thread/thread.hpp>
-#include <boost/thread/condition.hpp>
 #include <FL/Fl_Color_Chooser.H>
 #include <vector>
 #include <string>
@@ -76,7 +71,7 @@ extern RemoteWindow rmw;
 extern void* gGLContext;
 float timeStep;
 int timeLineValue;
-boost::mutex gGLMutex;
+std::mutex gGLMutex;
 extern MainWindow mw;
 extern LoadWindow lw;
 extern PreferencesWindow pw;
@@ -87,11 +82,11 @@ extern int gRangeEnd;
 extern int gRangeBegin;
 extern bool gOutOfMemory;
 extern bool gLoadingMemoryError;
-extern boost::try_mutex loadingOutOfRamMutex;
+extern std::mutex loadingOutOfRamMutex;
 //memory mutex and stuff
 extern bool gOutOfMemory;
-extern boost::mutex gNoMoreRamMutex;
-extern boost::condition gNoMoreRamCondition;
+extern std::mutex gNoMoreRamMutex;
+extern std::condition_variable gNoMoreRamCondition;
 
 bool rotateActive=false;
 float tmpCount=0;
@@ -223,6 +218,15 @@ void GlViewport::size ( int x, int y, int he, int wh ) { //like glut resize func
 }*/
 
 void GlViewport::draw() {
+    // Initialize GLAD on first draw (GL context must exist)
+    static bool gladInitialized = false;
+    if (!gladInitialized) {
+        if (!gladLoadGL()) {
+            fprintf(stderr, "Failed to initialize GLAD\n");
+            return;
+        }
+        gladInitialized = true;
+    }
 
     /*if ( gRendering )
         return;*/
@@ -258,38 +262,14 @@ void GlViewport::draw() {
 
 
 
-#ifdef linux 
-#include "glxew.h"
-#endif
 void GlViewport::setVsync(int value)
 {
 #ifdef WIN32
-		if (wglewIsSupported("WGL_EXT_swap_control"))
-		{
-			//printf("Setting vsync to %i\n",value);
-			wglSwapIntervalEXT(value);
-		}
-		else
-		{
-			//printf("NO WGL_EXT_swap_control (%i)\n",value);
-		}
-		
+		// TODO: implement vsync with platform-specific API (wglSwapIntervalEXT)
 #endif
 
 #ifdef linux
-		/*if(glewIsSupported("GLX_SGI_swap_control")){
-		
-		}*/		
-
-		if(glxewIsSupported("GLX_SGI_swap_control"))
-		{
-			//printf("Setting vsync to %i\n",value);
-			glXSwapIntervalSGI(value);
-		}
-		else
-		{
-			printf("NO GLX_SGI_swap_control (%i)\n",value);
-		}
+		// TODO: implement vsync with GLX_SGI_swap_control or GLX_EXT_swap_control
 		
 #endif
 #ifdef __APPLE__

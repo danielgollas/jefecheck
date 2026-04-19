@@ -1,6 +1,6 @@
 #include "gfcpickmanager.h"
 #include <algorithm>
-#include "glew.h"
+#include <glad/glad.h>
 #include <stdio.h>
 gfcPickManager::gfcPickManager()
 {

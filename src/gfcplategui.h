@@ -1,7 +1,7 @@
 #ifndef GFCPLATEGUI_H
 #define GFCPLATEGUI_H
 
-#include "glew.h"
+#include <glad/glad.h>
 #include <string>
 #include "gfcrectang.h"
 

@@ -131,7 +131,7 @@ struct RAK_DLL_EXPORT ThreadPool
 protected:
 	// It is valid to cancel input before it is processed.  To do so, lock the inputQueue with inputQueueMutex,
 	// Scan the list, and remove the item you don't want.
-	SimpleMutex inputQueueMutex, outputQueueMutex, workingThreadCountMutex, runThreadsMutex;
+	mutable SimpleMutex inputQueueMutex, outputQueueMutex, workingThreadCountMutex, runThreadsMutex;
 
 	void* (*perThreadDataFactory)();
 	void (*perThreadDataDestructor)(void*);

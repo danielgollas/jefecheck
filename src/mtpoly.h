@@ -15,14 +15,13 @@
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
 */
-using namespace std;
 class MtPoly
 {
 public:
   MtPoly();
   ~MtPoly();
 
-  vector<Vec3D> points;
+  std::vector<Vec3D> points;
   void addPoint(Vec3D, int index=-1);
   void addPoint(float x, float y, float z, int index=-1);
   void insertPoint();

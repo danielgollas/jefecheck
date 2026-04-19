@@ -2,7 +2,11 @@
 #define GFCIMAGELOADER_H
 
 #include "gfcpeekinfo.h"
-#include "gfcimageprocessor.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
+
 #include "gfcloadparams.h"
 #include <string>
 #ifdef WIN32 
@@ -12,8 +16,8 @@
 #endif //for metadata
 #include "gfcglframeinfo.h"
 
-#include <boost/thread/mutex.hpp>
-#include <boost/thread/condition.hpp>
+// Forward declaration - processor removed, kept for interface compatibility
+class gfcImageProcessor {};
 
 /**
 All image loaders derive from this one
@@ -22,7 +26,7 @@ All image loaders derive from this one
 */
 class gfcImageLoader{
 public:
-    
+
 	virtual ~gfcImageLoader(){};
 
     int sizeX;
@@ -31,34 +35,31 @@ public:
     int originalBitDepth;
     int numOfComponents;
     int originalNumOfComponents;
-    
+
     int quadSizeX;
     int quadSizeY;
     gfcRectangf texCoords;
-    
-    
-    //std::string metaData;
-   
-    
+
+
     std::string format;
     std::string formatDescription;
     std::string compressionDescription;
     std::multimap<std::string,std::string> metaData;
     std::string loadErrorString;
-	
+
     virtual int load(gfcLoadParams params)=0;
     virtual int peek(gfcLoadParams params, gfcPeekInfo *results)=0;
-    virtual int fillProcessor(gfcImageProcessor &processor)=0;
+    virtual int fillProcessor(gfcImageProcessor &processor) { return 0; }
     virtual void* getPixelPointer()=0;
     virtual void releaseMemory()=0;
-    virtual std::vector<std::string> getChannelNames()=0; //this is really the same for all of them, it just helps us remind that we need to fill the channelNames.
+    virtual std::vector<std::string> getChannelNames()=0;
     
     gfcGLFrameInfo getFrameInfo();
     
     protected:
     std::vector<std::string> channelNames;
     gfcGLFrameInfo frameInfo;
-	boost::condition balanceReadCond;
+	std::condition_variable balanceReadCond;
 
 };
 

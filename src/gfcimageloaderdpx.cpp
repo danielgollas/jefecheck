@@ -1,6 +1,8 @@
 #include "gfcimageloaderdpx.h"
+#include <functional>
 
 #include <iostream>
+#include <functional>
 #include <sstream>
 #include <iomanip>
 #include "gfcStructures.h"
@@ -10,8 +12,6 @@
 #include "gfctrackmanager.h"
 //#include <FL/Fl_ask.H>
 
-#include <boost/thread/thread.hpp>
-#include <boost/bind.hpp>
 
 extern gfcTrackManager trackManager;
 
@@ -830,7 +830,7 @@ int gfcImageLoaderDPX::readSlice(long startOffset, long numLines, long bitmapSto
     	fs.read((char*)testScanline,bytesPerRow*howManyScanlines);
     for (int i=0;i<numLines/howManyScanlines-1;i++) {
         //start a bunch of threads.
-        boost::thread* myThread=new boost::thread ( boost::bind ( &testThread,this,&i,testScanline) );
+        std::thread* myThread=new std::thread ( std::bind ( &testThread,this,&i,testScanline) );
         fs.read((char*)testScanline,bytesPerRow*howManyScanlines);
         myThread->join();
         
@@ -855,7 +855,7 @@ int gfcImageLoaderDPX::readSlice(long startOffset, long numLines, long bitmapSto
 		if (sett.balanceReads)
 		{
 			//printf("Checking read condition\n");
-			boost::try_mutex::scoped_lock lock ( trackManager.readMutex );
+			std::lock_guard<std::mutex> lock ( trackManager.readMutex );
 			while (trackManager.ioBusy!=0)
 			{
 			//printf("Waiting for read condition\n");
@@ -891,7 +891,7 @@ int gfcImageLoaderDPX::readSlice(long startOffset, long numLines, long bitmapSto
 				ReadRowSamplesRGBFilled10(&rawBytes[bytesPerRow*i],pixelIndexStart);
 				pixelIndexStart+=pixelIndexOffsetPerLine;
 												
-			/*boost::thread* myThread=new boost::thread ( boost::bind ( &testThread,this,&i) );
+			/*std::thread* myThread=new std::thread ( std::bind ( &testThread,this,&i) );
 			myThread->join(); */
 			
             }
@@ -908,7 +908,7 @@ int gfcImageLoaderDPX::readSlice(long startOffset, long numLines, long bitmapSto
 					ReadRowSamplesRGBAFilled10(&rawBytes[bytesPerRow*i],pixelIndexStart);
 					pixelIndexStart+=pixelIndexOffsetPerLine;
 
-					/*boost::thread* myThread=new boost::thread ( boost::bind ( &testThread,this,&i) );
+					/*std::thread* myThread=new std::thread ( std::bind ( &testThread,this,&i) );
 					myThread->join(); */
 
 				}

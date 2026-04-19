@@ -1,0 +1,33 @@
+﻿<?xml version="1.0"?>
+<root comment="This is a JefeCheck XML formated Session File">
+	<settings framingMode="3" bgColor="38" filtering="1" loopMode="2" loopPriority="0" targetFPS="60" from="1" to="1"/>
+	<plates>
+		<plate plateID="0" trackID="0" tX="0" tY="0" rZ="0" scale="1" flip="0" flop="0" crop="1" aspect="original" r="1" g="1" b="1" a="0" gamma="1" exposure="0" brightness="1" contrast="1" saturation="1" lut="No LUT">
+			<stack>
+				<FXS/>
+			</stack>
+		</plate>
+		<plate plateID="1" trackID="1" tX="0" tY="0" rZ="0" scale="1" flip="0" flop="0" crop="1" aspect="original" r="1" g="1" b="1" a="0" gamma="1" exposure="0" brightness="1" contrast="1" saturation="1" lut="No LUT">
+			<stack>
+				<FXS/>
+			</stack>
+		</plate>
+		<plate plateID="2" trackID="2" tX="0" tY="0" rZ="0" scale="1" flip="0" flop="0" crop="1" aspect="original" r="1" g="1" b="1" a="0" gamma="1" exposure="0" brightness="1" contrast="1" saturation="1" lut="No LUT">
+			<stack>
+				<FXS/>
+			</stack>
+		</plate>
+		<plate plateID="3" trackID="0" tX="0" tY="0" rZ="0" scale="1" flip="0" flop="0" crop="1" aspect="original" r="1" g="1" b="1" a="0" gamma="1" exposure="0" brightness="1" contrast="1" saturation="1" lut="No LUT">
+			<stack>
+				<FXS/>
+			</stack>
+		</plate>
+	</plates>
+	<tracks>
+		<track trackID="0" filename="/Users/dgollas/projects/openexr-images/ScanLines/MtTamWest.exr" from="1" to="0" mode="0" scale="100" filter="0" crop="0" aoiX="0" aoiY="0" aoiW="1214" aoiH="732" depth="0" offset="0" holdMode="0" holdFrame="0"/>
+		<track trackID="1" filename="" from="0" to="0" mode="0" scale="100" filter="0" crop="0" aoiX="-1" aoiY="-1" aoiW="-1" aoiH="-1" depth="0" offset="0" holdMode="0" holdFrame="0"/>
+		<track trackID="2" filename="" from="0" to="0" mode="0" scale="100" filter="0" crop="0" aoiX="-1" aoiY="-1" aoiW="-1" aoiH="-1" depth="0" offset="0" holdMode="0" holdFrame="0"/>
+		<track trackID="3" filename="" from="0" to="0" mode="0" scale="100" filter="0" crop="0" aoiX="-1" aoiY="-1" aoiW="-1" aoiH="-1" depth="0" offset="0" holdMode="0" holdFrame="0"/>
+	</tracks>
+	<playlist/>
+</root>
