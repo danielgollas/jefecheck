@@ -7,29 +7,29 @@ title: Home
   .hero {
     text-align: center;
     padding: 4rem 1rem 3rem;
-    background: linear-gradient(180deg, rgba(232,160,32,0.08) 0%, transparent 100%);
-    border-bottom: 1px solid var(--border);
+    background: #000;
     margin: -2rem -2rem 2rem -2rem;
+    border-bottom: 1px solid var(--border);
   }
-  .hero h1 {
-    font-size: 3.5rem;
-    font-weight: 800;
-    color: var(--accent);
-    margin: 0 0 0.5rem;
-    border: none;
-    padding: 0;
-    letter-spacing: 1px;
+  .hero .logo {
+    max-width: 420px;
+    width: 80%;
+    height: auto;
+    margin: 0 auto 1rem;
+    display: block;
   }
   .hero .tagline {
-    font-size: 1.5rem;
-    color: var(--text-secondary);
-    margin-bottom: 1rem;
-    font-weight: 300;
+    max-width: 240px;
+    width: 50%;
+    height: auto;
+    margin: 0 auto 2rem;
+    display: block;
+    opacity: 0.9;
   }
   .hero .description {
     font-size: 1.1rem;
-    color: var(--text-primary);
-    max-width: 600px;
+    color: var(--text-secondary);
+    max-width: 640px;
     margin: 0 auto 2rem;
     line-height: 1.6;
   }
@@ -38,6 +38,7 @@ title: Home
     gap: 1rem;
     justify-content: center;
     flex-wrap: wrap;
+    margin-bottom: 2rem;
   }
   .hero .cta-buttons a {
     display: inline-block;
@@ -47,31 +48,42 @@ title: Home
     font-size: 1rem;
     transition: background 0.2s, color 0.2s;
   }
-  .btn-primary {
-    background: var(--accent);
-    color: #121212 !important;
-  }
-  .btn-primary:hover {
-    background: #f0c060;
-    text-decoration: none !important;
-    color: #121212 !important;
-  }
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    color: var(--text-primary) !important;
+  .btn-primary { background: var(--accent); color: #121212 !important; }
+  .btn-primary:hover { background: #f0c060; text-decoration: none !important; color: #121212 !important; }
+  .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary) !important; border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); text-decoration: none !important; color: var(--text-primary) !important; }
+
+  .demo-video {
+    max-width: 900px;
+    margin: 0 auto 2rem;
+    border-radius: 8px;
+    overflow: hidden;
     border: 1px solid var(--border);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
   }
-  .btn-secondary:hover {
-    background: var(--border);
-    text-decoration: none !important;
-    color: var(--text-primary) !important;
+  .demo-video video {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #000;
+  }
+
+  .screenshot-showcase {
+    margin: 3rem 0;
+    text-align: center;
+  }
+  .screenshot-showcase img {
+    max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 0;
   }
 
   .features {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 1.5rem;
-    margin: 2rem 0 3rem;
+    margin: 3rem 0;
   }
   .feature-card {
     background: var(--bg-card);
@@ -84,15 +96,12 @@ title: Home
     border-color: var(--accent-dim);
     box-shadow: 0 0 20px var(--accent-glow);
   }
-  .feature-card .icon {
-    font-size: 2rem;
-    margin-bottom: 0.75rem;
-    display: block;
-  }
   .feature-card h3 {
     color: var(--accent);
-    margin: 0 0 0.5rem;
-    font-size: 1.2rem;
+    margin: 0 0 0.75rem;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
   }
   .feature-card p {
     color: var(--text-secondary);
@@ -101,18 +110,42 @@ title: Home
     line-height: 1.6;
   }
 
+  .screenshot-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+  }
+  .screenshot-gallery figure {
+    margin: 0;
+    text-align: center;
+  }
+  .screenshot-gallery img {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin: 0 0 0.5rem;
+  }
+  .screenshot-gallery figcaption {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+
   .download-section {
     text-align: center;
     padding: 2.5rem 1rem;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 8px;
-    margin: 2rem 0;
+    margin: 3rem 0 2rem;
   }
   .download-section h2 {
     color: var(--text-primary) !important;
     border: none;
     margin: 0 0 0.75rem;
+    font-size: 1.75rem;
   }
   .download-section p {
     color: var(--text-secondary);
@@ -123,77 +156,160 @@ title: Home
     gap: 1rem;
     justify-content: center;
     flex-wrap: wrap;
+    align-items: center;
   }
   .platform-badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1.25rem;
+    gap: 0.6rem;
+    padding: 0.6rem 1.25rem;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 6px;
     color: var(--text-primary) !important;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 500;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, transform 0.2s;
   }
   .platform-badge:hover {
     border-color: var(--accent);
     text-decoration: none !important;
+    transform: translateY(-2px);
+  }
+  .platform-badge img { height: 24px; width: auto; border: none; margin: 0; }
+
+  .mexico-badge {
+    display: inline-block;
+    margin: 1rem 0 0;
+  }
+  .mexico-badge img {
+    height: 64px;
+    width: auto;
+    border: none;
+    margin: 0;
   }
 
   .links-section {
     display: flex;
-    gap: 1.5rem;
+    gap: 2rem;
     justify-content: center;
     flex-wrap: wrap;
-    margin: 2.5rem 0;
+    margin: 3rem 0 2rem;
+    padding: 1.5rem;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
   }
   .links-section a {
     font-weight: 500;
+    font-size: 1rem;
   }
 
   @media (max-width: 700px) {
-    .hero h1 { font-size: 2.5rem; }
-    .hero .tagline { font-size: 1.2rem; }
+    .hero { padding: 2.5rem 1rem 2rem; }
+    .hero .logo { width: 90%; }
   }
 </style>
 
 <div class="hero">
-  <h1>JefeCheck</h1>
-  <p class="tagline">Play. Process. Share.</p>
-  <p class="description">Professional image sequence player for film and TV post-production. Free and open source.</p>
+  <img src="{{ '/assets/images/JefeCheck_LogoTiny.png' | relative_url }}" alt="JefeCheck" class="logo">
+  <img src="{{ '/assets/images/playprocessshare.jpg' | relative_url }}" alt="Play. Process. Share." class="tagline">
+  <p class="description">
+    A free, easy-to-use yet highly flexible high-res image flipbook for film and TV post work.
+    Artist, TD, and budget friendly.
+  </p>
   <div class="cta-buttons">
     <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary">Download</a>
     <a href="{{ '/quick-start' | relative_url }}" class="btn-secondary">Quick Start</a>
   </div>
 </div>
 
+<div class="demo-video">
+  <video controls poster="{{ '/assets/images/ScreenShotHome.jpg' | relative_url }}" preload="metadata">
+    <source src="{{ '/assets/DemoVideo.mp4' | relative_url }}" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+</div>
+
 <div class="features">
   <div class="feature-card">
-    <span class="icon">&#9654;</span>
-    <h3>Play</h3>
-    <p>Load and play back HD, 2K, and higher resolution image sequences at full quality. Support for EXR, DPX, TIFF, JPEG, PNG, and more. Up to 4 tracks with flexible multi-viewport layouts.</p>
+    <h3>PLAY</h3>
+    <p>
+      The core of JefeCheck. Load up an image sequence and play it back at full resolution.
+      Load more than one, load up to four. Look at them, compare them, move them around,
+      look closer, play them faster, play them slower, scrutinize every frame to make sure
+      you are looking at exactly what you expected to see.
+    </p>
   </div>
   <div class="feature-card">
-    <span class="icon">&#9881;</span>
-    <h3>Process</h3>
-    <p>Real-time GLSL shader effects, 3D LUT support, gamma/exposure/BCS controls, and a powerful plug-in system. Non-destructive processing at full resolution with GPU acceleration.</p>
+    <h3>PROCESS</h3>
+    <p>
+      The first thing that sets JefeCheck apart from the rest. Process your images (non
+      destructively of course) in any way you can think of with a powerful, easy to use
+      plug-in system based on a well known shading language. Apply 3D Lookup Tables,
+      adjust brightness, contrast, saturation and gamma, composite one sequence over another.
+      <strong>All in real time and in full resolution.</strong>
+    </p>
   </div>
   <div class="feature-card">
-    <span class="icon">&#127760;</span>
-    <h3>Share</h3>
-    <p>Start remote sessions over LAN or Internet. Synchronized playback, shared FX and LUTs, text chat, and remote pointers. Like a virtual screening room.</p>
+    <h3>SHARE</h3>
+    <p>
+      So you're having fun playing back and modifying your images, but playing alone is no fun.
+      Start a remote session with any other JefeCheck enabled computer over a local area network
+      or over the Internet and play together. It's like being in your own virtual screening room.
+      Everything you do is mirrored on their JefeCheck and vice versa. Text chat, plug-in and
+      Lookup Table sharing, remote pointers and other tools help you show everybody in the
+      remote session exactly what you want them to know.
+    </p>
   </div>
+</div>
+
+<div class="screenshot-showcase">
+  <img src="{{ '/assets/images/ScreenShotHomeBig.JPG' | relative_url }}" alt="JefeCheck main interface">
+</div>
+
+<div class="screenshot-gallery">
+  <figure>
+    <img src="{{ '/assets/images/ss_GreenKM31.jpg' | relative_url }}" alt="Quick and dirty realtime 2K chromas">
+    <figcaption>Quick and dirty realtime 2K chromas</figcaption>
+  </figure>
+  <figure>
+    <img src="{{ '/assets/images/ss_mount.jpg' | relative_url }}" alt="Load 16 bit OpenEXR sequences">
+    <figcaption>Load 16 bit OpenEXR sequences</figcaption>
+  </figure>
+  <figure>
+    <img src="{{ '/assets/images/ss_colibriOver.jpg' | relative_url }}" alt="Real Time 2K Over pre-comps">
+    <figcaption>Real Time 2K Over pre-comps</figcaption>
+  </figure>
+  <figure>
+    <img src="{{ '/assets/images/ss_exrRange.jpg' | relative_url }}" alt="Adjust exposure in EXRs with High Dynamic Range">
+    <figcaption>Adjust exposure in EXRs with High Dynamic Range</figcaption>
+  </figure>
+  <figure>
+    <img src="{{ '/assets/images/ss_dpxMetadata.jpg' | relative_url }}" alt="Read embedded DPX, EXIF or OpenEXR metadata">
+    <figcaption>Read embedded DPX, EXIF or OpenEXR metadata</figcaption>
+  </figure>
+  <figure>
+    <img src="{{ '/assets/images/ss_colibriAlpha.jpg' | relative_url }}" alt="Different Views of the same track">
+    <figcaption>Different views of the same track</figcaption>
+  </figure>
 </div>
 
 <div class="download-section">
   <h2>Download JefeCheck</h2>
-  <p>Pre-built binaries for all major platforms.</p>
+  <p>Free and open source. Available for all major platforms.</p>
   <div class="platform-badges">
-    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">macOS (ARM64)</a>
-    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">Linux (x64)</a>
-    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">Windows (x64)</a>
+    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">
+      <img src="{{ '/assets/images/Mac-lightblue-32.png' | relative_url }}" alt="macOS"> macOS (ARM64)
+    </a>
+    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">
+      <img src="{{ '/assets/images/109px-Tux-G2-32x32.png' | relative_url }}" alt="Linux"> Linux (x64)
+    </a>
+    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">
+      <img src="{{ '/assets/images/Windows-32.png' | relative_url }}" alt="Windows"> Windows (x64)
+    </a>
+  </div>
+  <div class="mexico-badge">
+    <img src="{{ '/assets/images/hecho-en-mexico1.jpg' | relative_url }}" alt="Hecho en México">
   </div>
 </div>
 
