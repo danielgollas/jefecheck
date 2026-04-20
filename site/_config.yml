@@ -1,0 +1,7 @@
+title: JefeCheck
+description: "Professional image sequence player for film and TV post-production"
+baseurl: "/jefecheck"
+url: "https://danielgollas.github.io"
+theme: null
+plugins:
+  - jekyll-seo-tag

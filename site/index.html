@@ -1,0 +1,205 @@
+---
+layout: default
+title: Home
+---
+
+<style>
+  .hero {
+    text-align: center;
+    padding: 4rem 1rem 3rem;
+    background: linear-gradient(180deg, rgba(232,160,32,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+    margin: -2rem -2rem 2rem -2rem;
+  }
+  .hero h1 {
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    margin: 0 0 0.5rem;
+    border: none;
+    padding: 0;
+    letter-spacing: 1px;
+  }
+  .hero .tagline {
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    font-weight: 300;
+  }
+  .hero .description {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    max-width: 600px;
+    margin: 0 auto 2rem;
+    line-height: 1.6;
+  }
+  .hero .cta-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .hero .cta-buttons a {
+    display: inline-block;
+    padding: 0.75rem 1.75rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: background 0.2s, color 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #121212 !important;
+  }
+  .btn-primary:hover {
+    background: #f0c060;
+    text-decoration: none !important;
+    color: #121212 !important;
+  }
+  .btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover {
+    background: var(--border);
+    text-decoration: none !important;
+    color: var(--text-primary) !important;
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0 3rem;
+  }
+  .feature-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.75rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .feature-card:hover {
+    border-color: var(--accent-dim);
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+  .feature-card .icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+  .feature-card h3 {
+    color: var(--accent);
+    margin: 0 0 0.5rem;
+    font-size: 1.2rem;
+  }
+  .feature-card p {
+    color: var(--text-secondary);
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .download-section {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 2rem 0;
+  }
+  .download-section h2 {
+    color: var(--text-primary) !important;
+    border: none;
+    margin: 0 0 0.75rem;
+  }
+  .download-section p {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+  }
+  .platform-badges {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .platform-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1.25rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary) !important;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: border-color 0.2s;
+  }
+  .platform-badge:hover {
+    border-color: var(--accent);
+    text-decoration: none !important;
+  }
+
+  .links-section {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 2.5rem 0;
+  }
+  .links-section a {
+    font-weight: 500;
+  }
+
+  @media (max-width: 700px) {
+    .hero h1 { font-size: 2.5rem; }
+    .hero .tagline { font-size: 1.2rem; }
+  }
+</style>
+
+<div class="hero">
+  <h1>JefeCheck</h1>
+  <p class="tagline">Play. Process. Share.</p>
+  <p class="description">Professional image sequence player for film and TV post-production. Free and open source.</p>
+  <div class="cta-buttons">
+    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary">Download</a>
+    <a href="{{ '/quick-start' | relative_url }}" class="btn-secondary">Quick Start</a>
+  </div>
+</div>
+
+<div class="features">
+  <div class="feature-card">
+    <span class="icon">&#9654;</span>
+    <h3>Play</h3>
+    <p>Load and play back HD, 2K, and higher resolution image sequences at full quality. Support for EXR, DPX, TIFF, JPEG, PNG, and more. Up to 4 tracks with flexible multi-viewport layouts.</p>
+  </div>
+  <div class="feature-card">
+    <span class="icon">&#9881;</span>
+    <h3>Process</h3>
+    <p>Real-time GLSL shader effects, 3D LUT support, gamma/exposure/BCS controls, and a powerful plug-in system. Non-destructive processing at full resolution with GPU acceleration.</p>
+  </div>
+  <div class="feature-card">
+    <span class="icon">&#127760;</span>
+    <h3>Share</h3>
+    <p>Start remote sessions over LAN or Internet. Synchronized playback, shared FX and LUTs, text chat, and remote pointers. Like a virtual screening room.</p>
+  </div>
+</div>
+
+<div class="download-section">
+  <h2>Download JefeCheck</h2>
+  <p>Pre-built binaries for all major platforms.</p>
+  <div class="platform-badges">
+    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">macOS (ARM64)</a>
+    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">Linux (x64)</a>
+    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">Windows (x64)</a>
+  </div>
+</div>
+
+<div class="links-section">
+  <a href="{{ '/quick-start' | relative_url }}">Quick Start Guide</a>
+  <a href="{{ '/manual' | relative_url }}">Full Manual</a>
+  <a href="{{ '/building' | relative_url }}">Build from Source</a>
+  <a href="https://github.com/danielgollas/jefecheck">GitHub Repository</a>
+</div>
