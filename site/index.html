@@ -48,6 +48,19 @@ title: Home
     font-size: 1rem;
     transition: background 0.2s, color 0.2s;
   }
+  .open-source-badge {
+    display: inline-block;
+    margin-top: 1.5rem;
+    padding: 0.4rem 1rem;
+    background: rgba(232, 160, 32, 0.12);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
   .btn-primary { background: var(--accent); color: #121212 !important; }
   .btn-primary:hover { background: #f0c060; text-decoration: none !important; color: #121212 !important; }
   .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary) !important; border: 1px solid var(--border); }
@@ -125,8 +138,7 @@ title: Home
   }
   .screenshot-showcase img {
     max-width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    border: none;
     margin: 0;
   }
 
@@ -174,7 +186,7 @@ title: Home
   .screenshot-gallery img {
     width: 100%;
     height: auto;
-    border: 1px solid var(--border);
+    border: none;
     border-radius: 4px;
     margin: 0 0 0.5rem;
   }
@@ -272,6 +284,7 @@ title: Home
     <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary">Download</a>
     <a href="{{ '/quick-start' | relative_url }}" class="btn-secondary">Quick Start</a>
   </div>
+  <div><span class="open-source-badge">Now Fully Open Source</span></div>
 </div>
 
 <div class="demo-video" id="demoVideoContainer">
