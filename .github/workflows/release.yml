@@ -93,6 +93,7 @@ jobs:
             mingw-w64-x86_64-freeglut
             mingw-w64-x86_64-fmt
             mingw-w64-x86_64-freetype
+            zip
 
       - name: Build
         run: |
@@ -109,7 +110,8 @@ jobs:
           cp -r src/fonts "$PACKAGE/"
           # Bundle MinGW runtime DLLs
           ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
-          7z a -tzip jefecheck-windows-x64.zip "$PACKAGE"
+          # MSYS2 ships zip; use it instead of 7z which isn't installed by default
+          zip -r jefecheck-windows-x64.zip "$PACKAGE"
 
       - uses: actions/upload-artifact@v4
         with:
