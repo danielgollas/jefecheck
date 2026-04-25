@@ -47,11 +47,17 @@ title: Home
     background: rgba(232, 160, 32, 0.12);
     border: 1px solid var(--accent);
     border-radius: 999px;
-    color: var(--accent);
+    color: var(--accent) !important;
     font-size: 0.9rem;
     font-weight: 600;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .open-source-badge:hover {
+    background: rgba(232, 160, 32, 0.25);
+    text-decoration: none !important;
+    transform: translateY(-1px);
   }
   .btn-primary { background: var(--accent); color: #121212 !important; }
   .btn-primary:hover { background: #f0c060; text-decoration: none !important; color: #121212 !important; }
@@ -153,6 +159,25 @@ title: Home
     margin: 0;
     font-size: 0.95rem;
     line-height: 1.6;
+  }
+  .feature-card ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+  .feature-card li {
+    padding: 0.25rem 0 0.25rem 1.25rem;
+    position: relative;
+  }
+  .feature-card li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-size: 0.85rem;
   }
 
   .screenshot-gallery {
@@ -265,7 +290,7 @@ title: Home
     <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary">Download</a>
     <a href="{{ '/quick-start' | relative_url }}" class="btn-secondary">Quick Start</a>
   </div>
-  <div><span class="open-source-badge">Now Fully Open Source</span></div>
+  <div><a href="https://github.com/danielgollas/jefecheck" class="open-source-badge">Now Fully Open Source</a></div>
 </div>
 
 <div class="demo-video" id="demoVideoContainer">
@@ -297,33 +322,33 @@ title: Home
 <div class="features">
   <div class="feature-card">
     <h3>PLAY</h3>
-    <p>
-      The core of JefeCheck. Load up an image sequence and play it back at full resolution.
-      Load more than one, load up to four. Look at them, compare them, move them around,
-      look closer, play them faster, play them slower, scrutinize every frame to make sure
-      you are looking at exactly what you expected to see.
-    </p>
+    <ul>
+      <li>Up to 4 sequences side by side</li>
+      <li>Full resolution, no proxies</li>
+      <li>Compare, scrub, zoom, pan</li>
+      <li>Variable playback speed</li>
+      <li>Frame-accurate inspection</li>
+    </ul>
   </div>
   <div class="feature-card">
     <h3>PROCESS</h3>
-    <p>
-      The first thing that sets JefeCheck apart from the rest. Process your images (non
-      destructively of course) in any way you can think of with a powerful, easy to use
-      plug-in system based on a well known shading language. Apply 3D Lookup Tables,
-      adjust brightness, contrast, saturation and gamma, composite one sequence over another.
-      <strong>All in real time and in full resolution.</strong>
-    </p>
+    <ul>
+      <li>Non-destructive, real-time, full resolution</li>
+      <li>GLSL shader plug-in system</li>
+      <li>3D Lookup Tables (LUTs)</li>
+      <li>Brightness, contrast, saturation, gamma</li>
+      <li>Composite sequences over each other</li>
+    </ul>
   </div>
   <div class="feature-card">
     <h3>SHARE</h3>
-    <p>
-      So you're having fun playing back and modifying your images, but playing alone is no fun.
-      Start a remote session with any other JefeCheck enabled computer over a local area network
-      or over the Internet and play together. It's like being in your own virtual screening room.
-      Everything you do is mirrored on their JefeCheck and vice versa. Text chat, plug-in and
-      Lookup Table sharing, remote pointers and other tools help you show everybody in the
-      remote session exactly what you want them to know.
-    </p>
+    <ul>
+      <li>Remote sessions over LAN or Internet</li>
+      <li>Synchronized playback &amp; controls</li>
+      <li>Shared FX stacks and LUTs</li>
+      <li>Text chat</li>
+      <li>Remote pointers</li>
+    </ul>
   </div>
 </div>
 
