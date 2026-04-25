@@ -60,12 +60,63 @@ title: Home
     overflow: hidden;
     border: 1px solid var(--border);
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    position: relative;
+    cursor: pointer;
   }
   .demo-video video {
     display: block;
     width: 100%;
     height: auto;
     background: #000;
+  }
+  .play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    transition: background 0.2s, opacity 0.3s;
+  }
+  .demo-video:hover .play-overlay {
+    background: rgba(0, 0, 0, 0.15);
+  }
+  .play-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .play-button {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: rgba(232, 160, 32, 0.95);
+    box-shadow: 0 0 40px rgba(232, 160, 32, 0.6),
+                0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background 0.2s;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .demo-video:hover .play-button {
+    transform: scale(1.08);
+    background: #f0c060;
+  }
+  .play-button::before {
+    content: "";
+    display: block;
+    width: 0;
+    height: 0;
+    margin-left: 8px;
+    border-style: solid;
+    border-width: 22px 0 22px 36px;
+    border-color: transparent transparent transparent #121212;
+  }
+  @media (max-width: 700px) {
+    .play-button { width: 80px; height: 80px; }
+    .play-button::before { border-width: 16px 0 16px 26px; margin-left: 6px; }
   }
 
   .screenshot-showcase {
@@ -223,12 +274,31 @@ title: Home
   </div>
 </div>
 
-<div class="demo-video">
-  <video controls poster="{{ '/assets/images/ScreenShotHome.jpg' | relative_url }}" preload="metadata">
+<div class="demo-video" id="demoVideoContainer">
+  <video id="demoVideo" poster="{{ '/assets/images/ScreenShotHome.jpg' | relative_url }}" preload="metadata" playsinline>
     <source src="{{ '/assets/DemoVideo.mp4' | relative_url }}" type="video/mp4">
     Your browser does not support the video tag.
   </video>
+  <div class="play-overlay" id="playOverlay">
+    <button class="play-button" aria-label="Play demo video"></button>
+  </div>
 </div>
+
+<script>
+  (function() {
+    var container = document.getElementById('demoVideoContainer');
+    var video = document.getElementById('demoVideo');
+    var overlay = document.getElementById('playOverlay');
+    function startVideo(e) {
+      if (e) e.stopPropagation();
+      overlay.classList.add('hidden');
+      video.controls = true;
+      video.play();
+    }
+    container.addEventListener('click', startVideo);
+    video.addEventListener('play', function() { overlay.classList.add('hidden'); });
+  })();
+</script>
 
 <div class="features">
   <div class="feature-card">
