@@ -15,16 +15,8 @@ title: Home
     max-width: 420px;
     width: 80%;
     height: auto;
-    margin: 0 auto 1rem;
-    display: block;
-  }
-  .hero .tagline {
-    max-width: 240px;
-    width: 50%;
-    height: auto;
     margin: 0 auto 2rem;
     display: block;
-    opacity: 0.9;
   }
   .hero .description {
     font-size: 1.1rem;
@@ -48,6 +40,25 @@ title: Home
     font-size: 1rem;
     transition: background 0.2s, color 0.2s;
   }
+  .open-source-badge {
+    display: inline-block;
+    margin-top: 1.5rem;
+    padding: 0.4rem 1rem;
+    background: rgba(232, 160, 32, 0.12);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent) !important;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .open-source-badge:hover {
+    background: rgba(232, 160, 32, 0.25);
+    text-decoration: none !important;
+    transform: translateY(-1px);
+  }
   .btn-primary { background: var(--accent); color: #121212 !important; }
   .btn-primary:hover { background: #f0c060; text-decoration: none !important; color: #121212 !important; }
   .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary) !important; border: 1px solid var(--border); }
@@ -60,6 +71,8 @@ title: Home
     overflow: hidden;
     border: 1px solid var(--border);
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    position: relative;
+    cursor: pointer;
   }
   .demo-video video {
     display: block;
@@ -67,16 +80,54 @@ title: Home
     height: auto;
     background: #000;
   }
-
-  .screenshot-showcase {
-    margin: 3rem 0;
-    text-align: center;
+  .play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    transition: background 0.2s, opacity 0.3s;
   }
-  .screenshot-showcase img {
-    max-width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin: 0;
+  .demo-video:hover .play-overlay {
+    background: rgba(0, 0, 0, 0.15);
+  }
+  .play-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .play-button {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: rgba(232, 160, 32, 0.95);
+    box-shadow: 0 0 40px rgba(232, 160, 32, 0.6),
+                0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background 0.2s;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .demo-video:hover .play-button {
+    transform: scale(1.08);
+    background: #f0c060;
+  }
+  .play-button::before {
+    content: "";
+    display: block;
+    width: 0;
+    height: 0;
+    margin-left: 8px;
+    border-style: solid;
+    border-width: 22px 0 22px 36px;
+    border-color: transparent transparent transparent #121212;
+  }
+  @media (max-width: 700px) {
+    .play-button { width: 80px; height: 80px; }
+    .play-button::before { border-width: 16px 0 16px 26px; margin-left: 6px; }
   }
 
   .features {
@@ -109,6 +160,25 @@ title: Home
     font-size: 0.95rem;
     line-height: 1.6;
   }
+  .feature-card ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+  .feature-card li {
+    padding: 0.25rem 0 0.25rem 1.25rem;
+    position: relative;
+  }
+  .feature-card li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-size: 0.85rem;
+  }
 
   .screenshot-gallery {
     display: grid;
@@ -123,7 +193,7 @@ title: Home
   .screenshot-gallery img {
     width: 100%;
     height: auto;
-    border: 1px solid var(--border);
+    border: none;
     border-radius: 4px;
     margin: 0 0 0.5rem;
   }
@@ -212,7 +282,6 @@ title: Home
 
 <div class="hero">
   <img src="{{ '/assets/images/JefeCheck_LogoTiny.png' | relative_url }}" alt="JefeCheck" class="logo">
-  <img src="{{ '/assets/images/playprocessshare.jpg' | relative_url }}" alt="Play. Process. Share." class="tagline">
   <p class="description">
     A free, easy-to-use yet highly flexible high-res image flipbook for film and TV post work.
     Artist, TD, and budget friendly.
@@ -221,50 +290,66 @@ title: Home
     <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary">Download</a>
     <a href="{{ '/quick-start' | relative_url }}" class="btn-secondary">Quick Start</a>
   </div>
+  <div><a href="https://github.com/danielgollas/jefecheck" class="open-source-badge">Now Fully Open Source</a></div>
 </div>
 
-<div class="demo-video">
-  <video controls poster="{{ '/assets/images/ScreenShotHome.jpg' | relative_url }}" preload="metadata">
+<div class="demo-video" id="demoVideoContainer">
+  <video id="demoVideo" poster="{{ '/assets/images/ScreenShotHome.jpg' | relative_url }}" preload="metadata" playsinline>
     <source src="{{ '/assets/DemoVideo.mp4' | relative_url }}" type="video/mp4">
     Your browser does not support the video tag.
   </video>
+  <div class="play-overlay" id="playOverlay">
+    <button class="play-button" aria-label="Play demo video"></button>
+  </div>
 </div>
+
+<script>
+  (function() {
+    var container = document.getElementById('demoVideoContainer');
+    var video = document.getElementById('demoVideo');
+    var overlay = document.getElementById('playOverlay');
+    function startVideo(e) {
+      if (e) e.stopPropagation();
+      overlay.classList.add('hidden');
+      video.controls = true;
+      video.play();
+    }
+    container.addEventListener('click', startVideo);
+    video.addEventListener('play', function() { overlay.classList.add('hidden'); });
+  })();
+</script>
 
 <div class="features">
   <div class="feature-card">
     <h3>PLAY</h3>
-    <p>
-      The core of JefeCheck. Load up an image sequence and play it back at full resolution.
-      Load more than one, load up to four. Look at them, compare them, move them around,
-      look closer, play them faster, play them slower, scrutinize every frame to make sure
-      you are looking at exactly what you expected to see.
-    </p>
+    <ul>
+      <li>Up to 4 sequences side by side</li>
+      <li>Full resolution, no proxies</li>
+      <li>Compare, scrub, zoom, pan</li>
+      <li>Variable playback speed</li>
+      <li>Frame-accurate inspection</li>
+    </ul>
   </div>
   <div class="feature-card">
     <h3>PROCESS</h3>
-    <p>
-      The first thing that sets JefeCheck apart from the rest. Process your images (non
-      destructively of course) in any way you can think of with a powerful, easy to use
-      plug-in system based on a well known shading language. Apply 3D Lookup Tables,
-      adjust brightness, contrast, saturation and gamma, composite one sequence over another.
-      <strong>All in real time and in full resolution.</strong>
-    </p>
+    <ul>
+      <li>Non-destructive, real-time, full resolution</li>
+      <li>GLSL shader plug-in system</li>
+      <li>3D Lookup Tables (LUTs)</li>
+      <li>Brightness, contrast, saturation, gamma</li>
+      <li>Composite sequences over each other</li>
+    </ul>
   </div>
   <div class="feature-card">
     <h3>SHARE</h3>
-    <p>
-      So you're having fun playing back and modifying your images, but playing alone is no fun.
-      Start a remote session with any other JefeCheck enabled computer over a local area network
-      or over the Internet and play together. It's like being in your own virtual screening room.
-      Everything you do is mirrored on their JefeCheck and vice versa. Text chat, plug-in and
-      Lookup Table sharing, remote pointers and other tools help you show everybody in the
-      remote session exactly what you want them to know.
-    </p>
+    <ul>
+      <li>Remote sessions over LAN or Internet</li>
+      <li>Synchronized playback &amp; controls</li>
+      <li>Shared FX stacks and LUTs</li>
+      <li>Text chat</li>
+      <li>Remote pointers</li>
+    </ul>
   </div>
-</div>
-
-<div class="screenshot-showcase">
-  <img src="{{ '/assets/images/ScreenShotHomeBig.JPG' | relative_url }}" alt="JefeCheck main interface">
 </div>
 
 <div class="screenshot-gallery">
@@ -316,6 +401,7 @@ title: Home
 <div class="links-section">
   <a href="{{ '/quick-start' | relative_url }}">Quick Start Guide</a>
   <a href="{{ '/manual' | relative_url }}">Full Manual</a>
+  <a href="{{ '/integration' | relative_url }}">Pipeline Integration</a>
   <a href="{{ '/building' | relative_url }}">Build from Source</a>
   <a href="https://github.com/danielgollas/jefecheck">GitHub Repository</a>
 </div>

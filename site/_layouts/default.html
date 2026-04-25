@@ -88,7 +88,7 @@
     .content td { background: var(--bg-secondary); }
 
     /* Images */
-    .content img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--border); margin: 1rem 0; display: block; }
+    .content img { max-width: 100%; height: auto; border-radius: 6px; margin: 1rem 0; display: block; }
 
     /* Footer */
     footer {
@@ -121,6 +121,7 @@
         <li><a href="{{ '/' | relative_url }}" {% if page.url == '/' %}class="active"{% endif %}>Home</a></li>
         <li><a href="{{ '/quick-start' | relative_url }}" {% if page.url contains 'quick-start' %}class="active"{% endif %}>Quick Start</a></li>
         <li><a href="{{ '/manual' | relative_url }}" {% if page.url contains 'manual' %}class="active"{% endif %}>Manual</a></li>
+        <li><a href="{{ '/integration' | relative_url }}" {% if page.url contains 'integration' %}class="active"{% endif %}>Pipeline</a></li>
         <li><a href="{{ '/building' | relative_url }}" {% if page.url contains 'building' %}class="active"{% endif %}>Build</a></li>
         <li><a href="https://github.com/danielgollas/jefecheck" target="_blank">GitHub</a></li>
       </ul>
