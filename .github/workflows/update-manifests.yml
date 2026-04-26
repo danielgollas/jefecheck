@@ -1,0 +1,117 @@
+name: Update packaging manifests
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute SHAs and update manifests
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -e
+          VERSION="${TAG#v}"
+
+          DMG_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/jefecheck-macos-arm64.dmg"
+          ZIP_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/jefecheck-windows-x64.zip"
+
+          curl -sLf "$DMG_URL" -o /tmp/dmg
+          curl -sLf "$ZIP_URL" -o /tmp/zip
+
+          DMG_SHA=$(sha256sum /tmp/dmg | awk '{print $1}')
+          ZIP_SHA=$(sha256sum /tmp/zip | awk '{print $1}')
+          ZIP_SHA_UPPER=$(echo "$ZIP_SHA" | tr 'a-f' 'A-F')
+
+          echo "Version: $VERSION"
+          echo "DMG SHA256: $DMG_SHA"
+          echo "ZIP SHA256: $ZIP_SHA"
+
+          # Update Homebrew Cask
+          sed -i -E "s/^  version \".*\"/  version \"${VERSION}\"/" Casks/jefecheck.rb
+          sed -i -E "s/^  sha256 \".*\"/  sha256 \"${DMG_SHA}\"/" Casks/jefecheck.rb
+
+          # Create new winget manifest dir for this version
+          MANIFEST_DIR="packaging/winget/manifests/d/danielgollas/JefeCheck/${VERSION}"
+          mkdir -p "$MANIFEST_DIR"
+
+          cat > "${MANIFEST_DIR}/danielgollas.JefeCheck.installer.yaml" << EOF
+          PackageIdentifier: danielgollas.JefeCheck
+          PackageVersion: ${VERSION}
+          InstallerType: zip
+          NestedInstallerType: portable
+          NestedInstallerFiles:
+          - RelativeFilePath: jefecheck-${VERSION}-windows-x64\jefecheck.exe
+            PortableCommandAlias: jefecheck
+          Installers:
+          - Architecture: x64
+            InstallerUrl: ${ZIP_URL}
+            InstallerSha256: ${ZIP_SHA_UPPER}
+          ManifestType: installer
+          ManifestVersion: 1.6.0
+          EOF
+
+          cat > "${MANIFEST_DIR}/danielgollas.JefeCheck.locale.en-US.yaml" << EOF
+          PackageIdentifier: danielgollas.JefeCheck
+          PackageVersion: ${VERSION}
+          PackageLocale: en-US
+          Publisher: Daniel Gollas
+          PublisherUrl: https://github.com/danielgollas
+          PublisherSupportUrl: https://github.com/danielgollas/jefecheck/issues
+          PackageName: JefeCheck
+          PackageUrl: https://github.com/danielgollas/jefecheck
+          License: GPL-2.0
+          LicenseUrl: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+          ShortDescription: Video frame processing and playback for color correction
+          Description: |-
+            JefeCheck is a video frame processing and playback application for color correction,
+            effects processing, and real-time playback of digital cinema content. Supports DPX,
+            EXR, JPEG, PNG, TIFF and other formats with GPU-accelerated playback, multi-plate
+            layouts, FX stacks, and LUT support.
+          Tags:
+          - vfx
+          - video
+          - playback
+          - color-correction
+          - post-production
+          - dpx
+          - exr
+          ReleaseNotesUrl: https://github.com/${{ github.repository }}/releases/tag/${TAG}
+          ManifestType: defaultLocale
+          ManifestVersion: 1.6.0
+          EOF
+
+          cat > "${MANIFEST_DIR}/danielgollas.JefeCheck.yaml" << EOF
+          PackageIdentifier: danielgollas.JefeCheck
+          PackageVersion: ${VERSION}
+          DefaultLocale: en-US
+          ManifestType: version
+          ManifestVersion: 1.6.0
+          EOF
+
+      - name: Open PR with updated manifests
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: bump packaging manifests to ${{ github.event.release.tag_name }}"
+          title: "chore: bump packaging manifests to ${{ github.event.release.tag_name }}"
+          body: |
+            Automatic manifest update for release ${{ github.event.release.tag_name }}.
+
+            - Updates `Casks/jefecheck.rb` with new version + DMG SHA256
+            - Adds `packaging/winget/manifests/d/danielgollas/JefeCheck/<version>/` for winget submission
+
+            After merge:
+            - **Homebrew tap users:** new version is live as soon as the `homebrew-jefecheck` tap repo syncs from this Cask file.
+            - **Winget:** submit the manifests to `microsoft/winget-pkgs` via PR (or use `wingetcreate` / `winget-releaser` action).
+          branch: bump-manifests-${{ github.event.release.tag_name }}
+          delete-branch: true

@@ -1,0 +1,27 @@
+PackageIdentifier: danielgollas.JefeCheck
+PackageVersion: 1.7.2
+PackageLocale: en-US
+Publisher: Daniel Gollas
+PublisherUrl: https://github.com/danielgollas
+PublisherSupportUrl: https://github.com/danielgollas/jefecheck/issues
+PackageName: JefeCheck
+PackageUrl: https://github.com/danielgollas/jefecheck
+License: GPL-2.0
+LicenseUrl: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+ShortDescription: Video frame processing and playback for color correction
+Description: |-
+  JefeCheck is a video frame processing and playback application for color correction,
+  effects processing, and real-time playback of digital cinema content. Supports DPX,
+  EXR, JPEG, PNG, TIFF and other formats with GPU-accelerated playback, multi-plate
+  layouts, FX stacks, and LUT support.
+Tags:
+- vfx
+- video
+- playback
+- color-correction
+- post-production
+- dpx
+- exr
+ReleaseNotesUrl: https://github.com/danielgollas/jefecheck/releases/tag/v1.7.2
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

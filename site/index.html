@@ -438,14 +438,18 @@ title: Home
   </div>
   <details class="install-notes">
     <summary>Installation notes</summary>
-    <h4>macOS</h4>
-    <p>JefeCheck is ad-hoc signed but not notarized (no Apple Developer ID). On first launch, macOS will warn about an unidentified developer. Right-click the app and choose <strong>Open</strong> to bypass.</p>
-    <p>If you see <em>"JefeCheck is damaged and can't be opened"</em>, drag the app to <code>/Applications</code>, then run:</p>
+    <h4>macOS — Homebrew (recommended)</h4>
+    <pre><code>brew install --cask danielgollas/jefecheck/jefecheck</code></pre>
+    <p>Installs to <code>/Applications</code> with quarantine stripped — launches cleanly with no Gatekeeper warnings.</p>
+    <h4>macOS — direct .dmg download</h4>
+    <p>The app is ad-hoc signed but not notarized. On first launch, right-click the app and choose <strong>Open</strong> to bypass the unidentified-developer warning.</p>
+    <p>If you see <em>"JefeCheck is damaged and can't be opened"</em>, drag the app to <code>/Applications</code> then run:</p>
     <pre><code>xattr -dr com.apple.quarantine /Applications/JefeCheck.app</code></pre>
+    <h4>Windows — Winget</h4>
+    <pre><code>winget install danielgollas.JefeCheck</code></pre>
+    <p>Or download the zip, extract, and run <code>jefecheck.exe</code>. All required DLLs are bundled.</p>
     <h4>Linux</h4>
     <p>Extract the tarball and run <code>./install.sh</code>, or run <code>./jefecheck</code> directly from the extracted folder.</p>
-    <h4>Windows</h4>
-    <p>Extract the zip and run <code>jefecheck.exe</code>. All required DLLs are bundled.</p>
   </details>
   <div class="mexico-badge">
     <img src="{{ '/assets/images/hecho-en-mexico1.jpg' | relative_url }}" alt="Hecho en México">
