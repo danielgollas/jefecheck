@@ -19,12 +19,6 @@
 #include <vector>
 #include <queue>
 
-#ifdef __APPLE__
-#include <GLUT/glut.h>
-#else
-#  include <GL/glut.h>
-#endif
-
 #include <FL/Fl_Box.H>
 #include "UIConstants.h"
 #include "gfcPlate.h"

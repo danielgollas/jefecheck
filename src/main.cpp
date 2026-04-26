@@ -359,10 +359,7 @@ int main(int argc, char *argv[]) {
 	printf("ok\n");
 #endif
 #endif 
-    printf("Initializing GLUT...");
-    glutInit(&argc,argv);
-    printf("ok\n");
-    gfcTimer testTimer ( "testTimer" );    
+    gfcTimer testTimer ( "testTimer" );
     testTimer.start();
 	testTimer.print();
     fc= new NativeFileChooser(".",NULL,0,"Choose a file");

@@ -86,8 +86,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_link_libraries(jefecheck PRIVATE
             glu32 opengl32 ws2_32 winmm iphlpapi
         )
-        find_package(GLUT REQUIRED)
-        target_link_libraries(jefecheck PRIVATE GLUT::GLUT)
     endif()
 endif()
 
@@ -131,8 +129,6 @@ if(APPLE)
         "-framework IOKit"
         "-framework CoreFoundation"
     )
-    # GLUT is available as a system framework on macOS
-    target_link_libraries(jefecheck PRIVATE "-framework GLUT")
 endif()
 
 # Linux
@@ -144,7 +140,4 @@ if(UNIX AND NOT APPLE)
         X11::X11
         GLU
     )
-    # Find GLUT on Linux
-    find_package(GLUT REQUIRED)
-    target_link_libraries(jefecheck PRIVATE GLUT::GLUT)
 endif()

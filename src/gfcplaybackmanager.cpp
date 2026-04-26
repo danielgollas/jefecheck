@@ -2,11 +2,6 @@
 #include "gfcplaybackgui_fltk.h"
 
 #include <glad/glad.h>
-#ifdef __APPLE__
-#include <GLUT/glut.h>
-#else
-#  include <GL/glut.h>
-#endif
 
 #include "mainWindow.h"
 

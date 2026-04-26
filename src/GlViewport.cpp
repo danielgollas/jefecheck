@@ -14,11 +14,6 @@
 #include "loadWindow.h"
 #include "preferencesWindow.h"
 #include "fxcontrolwindow.h"
-#ifdef __APPLE__
-#include <GLUT/glut.h>
-#else
-#include <GL/glut.h>
-#endif
 #include <math.h>
 #include <FL/Fl.H>
 #include <FL/Fl_Menu_Window.H>
@@ -70,7 +65,6 @@ extern RenderWindow rw;
 extern RemoteWindow rmw;
 
 extern void* gGLContext;
-float timeStep;
 int timeLineValue;
 std::mutex gGLMutex;
 extern MainWindow mw;
@@ -91,7 +85,6 @@ extern std::condition_variable gNoMoreRamCondition;
 
 bool rotateActive=false;
 float tmpCount=0;
-float gFPS;
 
 
 
@@ -152,42 +145,6 @@ int getGFCPICKFLAGSfromFLTK()
 	}
 	return result;
 }
-
-float fps() {
-   /* static long baseTime=glutGet ( GLUT_ELAPSED_TIME );
-    static long currentTime;
-    static int frameCount=0;
-    static char fps[15];
-    frameCount++;
-    currentTime=glutGet ( GLUT_ELAPSED_TIME );
-    long timeDelta=currentTime-baseTime;
-
-    if ( timeDelta>500 ) {
-        //printf("fps:%f\n",frameCount*1000.0/(double)timeDelta);
-        sprintf ( fps,"%.0f",frameCount*1000.0/ ( double ) timeDelta );
-        frameCount=0;
-        baseTime=currentTime;
-    }
-
-
-    return atof ( fps );*/
-	return 0;
-
-}
-
-void TimeStep() {
-    static long tsBaseTime=glutGet ( GLUT_ELAPSED_TIME );
-    static long currentTime;
-    currentTime=glutGet ( GLUT_ELAPSED_TIME );
-
-    timeStep= ( currentTime-tsBaseTime ) /1000.0; //timestep in seconds
-
-    //tsBaseTime=glutGet ( GLUT_ELAPSED_TIME );
-
-}
-
-
-
 
 
 

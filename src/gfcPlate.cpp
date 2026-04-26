@@ -34,14 +34,12 @@ extern LutWindow lutw;
 extern RenderWindow rw;
 //extern std::vector<CubeLUT> lutArray;
 extern bool npotTextures;
-extern float gFPS;
 extern GLint gFilteringModeMin;
 extern GLint gFilteringModeMag;
 extern std::vector<gfcFX> fxArray;
 extern std::vector<gfcFX> fxApplied[4];
 extern std::vector<int> fxArrayActiveCount; //how many fx are active for each quadrant.
 extern int numberOfActiveEffects[4];
-extern float timeStep;
 
 extern bool gConnected;
 extern std::vector<std::string> chatLog;

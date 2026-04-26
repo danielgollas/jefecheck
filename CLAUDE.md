@@ -24,7 +24,7 @@ cmake -B build && cmake --build build
 ```bash
 bash build_linux.sh
 # Or manually:
-sudo apt install cmake build-essential libfltk1.3-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev freeglut3-dev libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libopencv-dev libfreetype6-dev
+sudo apt install cmake build-essential libfltk1.3-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libopencv-dev libfreetype6-dev
 cmake -B build && cmake --build build -j$(nproc)
 ```
 
@@ -154,7 +154,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 - `using namespace std;` in headers causes `std::byte` vs Windows `byte` conflict. Removed from `mtpoly.h`.
 - `alloca.h` doesn't exist — use `malloc.h`. Guard: `#if (defined(__GNUC__) || defined(__GCCXML__)) && !defined(_WIN32)`
 - `GLhandleARB` casts require `(GLuint)(uintptr_t)` on 64-bit.
-- Link: `glu32 opengl32 ws2_32 winmm iphlpapi` + GLUT.
+- Link: `glu32 opengl32 ws2_32 winmm iphlpapi`.
 - `-fpermissive` needed for `void*` to `long` casts in FLTK callbacks.
 - `#include <windows.h>` must come before `<GL/glu.h>` (GLU callbacks need Windows types).
 
