@@ -4,20 +4,8 @@
 
 
 #include <glad/glad.h>
-#include <FL/Fl_Choice.H>
-#include <FL/Fl_Light_Button.H>
 #include "gfcSequence.h"
 #include <FL/Fl.H>
-#include <FL/Fl_Double_Window.H>
-#include <FL/Fl_Box.H>
-#include <FL/Fl_Group.H>
-#include <FL/Fl_File_Input.H>
-#include <FL/Fl_Value_Slider.H>
-#include <FL/Fl_Choice.H>
-#include <FL/Fl_Input_Choice.H>
-#include <FL/Fl_Button.H>
-#include <FL/Fl_Check_Button.H>
-#include <FL/Fl_Value_Input.H>
 #include "trilerp.h"
 #include "platefxparams.h"
 #include "UICallbacks.h"
@@ -39,7 +27,6 @@
 
 class gfcRenderParams;
 struct GFLC_BITMAP;
-class Fl_Input_Choice;
 class gfcSequence;
 class gfcFrame;
 class GlViewport;
@@ -231,11 +218,6 @@ class gfcPlate: public gfcPickNotifee
         float aspect;
         int cropMode;
         bool cropOn;
-        Fl_Choice* choice;
-	Fl_Input_Choice* aspectChoice;
-	Fl_Button* crop;
-	Fl_Check_Button* loadCrop;
-	Fl_Button* cropAlignment;
 	gfcSequence *sequence;
         bool active;
         void resetTransforms(void);
@@ -253,12 +235,6 @@ class gfcPlate: public gfcPickNotifee
 	bool showVectorscope;
 	int numSlices;
 	GlViewport *vp; //pointer to the vp that this plate belongs too, same with all widgets under that
-	Fl_Value_Slider *loadFromSpinner;
-	Fl_Value_Slider *loadToSpinner;
-	Fl_File_Input *fileNameInput;
-	Fl_Input_Choice *scaleChooser;
-	Fl_Choice *filterChooser;
-	Fl_Value_Input *gammaSlider;
 	gfcFrame *tf;
 	CubeLUT cube;
 	
