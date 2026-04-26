@@ -4,6 +4,8 @@
 #include <math.h>
 #include <FL/fl_draw.H>
 #include "gfcStructures.h"
+#include "ui/IEventSystem.h"
+namespace { jefe::ui::IEventSystem& evt() { return jefe::ui::IEventSystem::instance(); } }
 
 TrackWidget::TrackWidget(int x, int y, int w, int h)
         : Fl_Group(x,y,w,h)/*,
@@ -224,7 +226,7 @@ int TrackWidget::handle(int e)
             	break;
             	
             	case FL_PASTE:              // handle actual drop (paste) operation
-            	std::string pastedText=Fl::event_text();
+            	std::string pastedText=evt().currentText().c_str();
 				std::cout<<"pasted text: "<<GetFilenameNoFilePrefix(RemoveNewLine(pastedText))<<std::endl<<"nextLine"<<std::endl;
             	//printf("\nDropped %s (%s) into track\n",pastedText.c_str(),RemoveNewLine(pastedText).c_str());
                 do_callback();
@@ -238,7 +240,7 @@ int TrackWidget::handle(int e)
 
 int TrackWidget::getClickedFrame()
 {
-	int result=((Fl::event_x()-x())/frameSize)+1-visibleStart-offset; //+1 accounts for the visibleStart that is offset by 1.
+	int result=((evt().mouseX()-x())/frameSize)+1-visibleStart-offset; //+1 accounts for the visibleStart that is offset by 1.
 	return result>=0?result:0; 
 }
 

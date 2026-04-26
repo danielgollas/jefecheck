@@ -1,6 +1,8 @@
 #include "UICallbacks.h"
 #include <FL/Fl_Browser.H>
 #include "stdio.h"
+#include "ui/IEventSystem.h"
+namespace { jefe::ui::IEventSystem& evt() { return jefe::ui::IEventSystem::instance(); } }
 #include "mainWindow.h"
 #include "loadWindow.h"
 #include "lutWindow.h"
@@ -369,12 +371,12 @@ void tracksBarCB(Fl_Widget* o , void* v) {
 	static int dragging=false;
 	static int dragAmount=0;
 	static int whatTrackDragging=-1;
-	switch (Fl::event()) {
-	case FL_PUSH: {
-		prevX=Fl::event_x();
-		if (Fl::event_button1()) {
+	switch (evt().currentEventType()) {
+	case jefe::ui::EventType::Push: {
+		prevX=evt().mouseX();
+		if (evt().isMouseButtonDown(jefe::ui::MouseButton::Left)) {
 
-			if (Fl::event_alt()) {
+			if (evt().isAlt()) {
 				printf("clicked on %i\n",((TrackWidget*)o)->getClickedFrame());
 				trackManager.startLoadingSequenceAt(long(v),((TrackWidget*)o)->getClickedFrame());
 			}
@@ -383,7 +385,7 @@ void tracksBarCB(Fl_Widget* o , void* v) {
 			whatTrackDragging=( long )v;
 		}
 
-		if (Fl::event_button3()) {
+		if (evt().isMouseButtonDown(jefe::ui::MouseButton::Right)) {
 			moPopup.ID=(long)v+'A';
 			moPopup.frameOffset->value (trackManager.getSequence(long(v))->getOffset());
 			moPopup.holdFrame->value((trackManager.getSequence(long(v))->getHoldMode()));
@@ -396,14 +398,14 @@ void tracksBarCB(Fl_Widget* o , void* v) {
 				  break;
 
 
-	case FL_RELEASE:
+	case jefe::ui::EventType::Release:
 		dragging=false;
 		dragAmount=0;
 		break;
 
-	case FL_DRAG:
+	case jefe::ui::EventType::Drag:
 		if (dragging) {
-			dragAmount+=Fl::event_x()-prevX;
+			dragAmount+=evt().mouseX()-prevX;
 			float dragLimit=playbackManager.getGUIFrameSize();
 			//printf("DragLimit=%i\n",dragLimit);
 			if (dragAmount>dragLimit || dragAmount<-dragLimit) {
@@ -417,28 +419,28 @@ void tracksBarCB(Fl_Widget* o , void* v) {
 
 			}
 
-			prevX=Fl::event_x();
+			prevX=evt().mouseX();
 
 		}
 		break;
 
-	case FL_PASTE: {
-		std::string pastedText=Fl::event_text();
+	case jefe::ui::EventType::Paste: {
+		std::string pastedText=evt().currentText().c_str();
 		std::cout<<"pasted text: "<<GetFilenameNoFilePrefix(RemoveNewLine(pastedText))<<std::endl<<"nextLine"<<std::endl;
 
-		//printf("\nDropped %s into track\n",RemoveNewLine(GetFilenameNoFilePrefix(Fl::event_text())).c_str());
+		//printf("\nDropped %s into track\n",RemoveNewLine(GetFilenameNoFilePrefix(evt().currentText().c_str())).c_str());
 		int trackID=trackManager.getTrackIDfromWidget(o);
 		if (trackID!=-1) {
-			/*if(strcmp(Fl::event_text(),"") && strcmp(Fl::event_text()," "))*/{
+			/*if(strcmp(evt().currentText().c_str(),"") && strcmp(evt().currentText().c_str()," "))*/{
 				//#ifdef linux
 				trackManager.getSequence(trackID)->myGUI->setFilename(getFirstSequenceInDirectory(GetFilenameNoFilePrefix(RemoveNewLine(pastedText))));
-				if (Fl::event_shift() || Fl::event_state(FL_SHIFT)) {
+				if (evt().isShift() || evt().isShift()) {
 					trackManager.getSequence(trackID)->myGUI->setScale("50");
 				} else {
 					trackManager.getSequence(trackID)->myGUI->setScale("100");
 				}
 				//#else
-				//trackManager.getSequence(trackID)->myGUI->setFilename(Fl::event_text());
+				//trackManager.getSequence(trackID)->myGUI->setFilename(evt().currentText().c_str());
 				//#endif
 
 			}
@@ -548,7 +550,7 @@ void controlBarCB ( Fl_Widget* o , void* v ) {
 
 		playbackManager.updateTimelineValueFromGUI();
 		playbackManager.updateInOutFromGUI();
-		if (Fl::event_alt() && Fl::event()==FL_PUSH) {
+		if (evt().isAlt() && evt().currentEventType()==jefe::ui::EventType::Push) {
 			printf("Load all tracks from this point on %i!\n",playbackManager.getCurrentFrame());
 			trackManager.startLoadingAllAt(playbackManager.getCurrentFrame()-1); //this functions expects frames that start at 0
 		}
@@ -1416,14 +1418,14 @@ int globalCB ( int e ) {
 
 
 
-			if (Fl::event_state(FL_CTRL)) {
-				switch ( Fl::event_key() ) {
+			if (evt().isCtrl()) {
+				switch ( static_cast<int>(evt().currentKey()) ) {
 
 					case '1':{
-						if (Fl::event_shift())
+						if (evt().isShift())
 							{
 							//	printf("Save Color Settings 1\n");
-								plateManager.saveFavoriteColorCorrectionFromPlate(Fl::event_key()-'1');
+								plateManager.saveFavoriteColorCorrectionFromPlate(static_cast<int>(evt().currentKey())-'1');
 							} 
 							else
 							{
@@ -1437,10 +1439,10 @@ int globalCB ( int e ) {
 							 break;
 
 					case '2':{
-						if (Fl::event_shift())
+						if (evt().isShift())
 						{
 							//printf("Save Color Settings 2\n");
-							plateManager.saveFavoriteColorCorrectionFromPlate(Fl::event_key()-'1');
+							plateManager.saveFavoriteColorCorrectionFromPlate(static_cast<int>(evt().currentKey())-'1');
 						} 
 						else
 						{
@@ -1451,10 +1453,10 @@ int globalCB ( int e ) {
 							 return 1;
 							 break;
 					case '3':{
-						if (Fl::event_shift())
+						if (evt().isShift())
 						{
 							//printf("Save Color Settings 3\n");
-							plateManager.saveFavoriteColorCorrectionFromPlate(Fl::event_key()-'1');
+							plateManager.saveFavoriteColorCorrectionFromPlate(static_cast<int>(evt().currentKey())-'1');
 						} 
 						else
 						{
@@ -1465,10 +1467,10 @@ int globalCB ( int e ) {
 							 return 1;
 							 break;
 					case '4':{
-						if (Fl::event_shift())
+						if (evt().isShift())
 						{
 							//printf("Save Color Settings 4\n");
-							plateManager.saveFavoriteColorCorrectionFromPlate(Fl::event_key()-'1');
+							plateManager.saveFavoriteColorCorrectionFromPlate(static_cast<int>(evt().currentKey())-'1');
 						} 
 						else
 						{
@@ -1481,10 +1483,10 @@ int globalCB ( int e ) {
 					
 					case '5':
 						{
-							if (Fl::event_shift())
+							if (evt().isShift())
 							{
 								//printf("Save Color Settings 5\n");
-								plateManager.saveFavoriteColorCorrectionFromPlate(Fl::event_key()-'1');
+								plateManager.saveFavoriteColorCorrectionFromPlate(static_cast<int>(evt().currentKey())-'1');
 							} 
 							else
 							{
@@ -1496,7 +1498,7 @@ int globalCB ( int e ) {
 						break;
 
 					case '8':{
-						if (Fl::event_state(FL_ALT))
+						if (evt().isAlt())
 						{
 							plateManager.toggleFlipAll();
 						}
@@ -1508,7 +1510,7 @@ int globalCB ( int e ) {
 							 return 1;
 							 break;
 					case '9':{
-						if (Fl::event_state(FL_ALT))
+						if (evt().isAlt())
 						{
 							plateManager.toggleFlopAll();
 						}
@@ -1524,8 +1526,8 @@ int globalCB ( int e ) {
 
 			}
 			//HERE IS WHERE WE HANDLE THE GLOBAL KEYBOARD SHORTCUTS
-			//    printf("key handler %c!\n",Fl::event_key());
-			switch ( Fl::event_key() ) {
+			//    printf("key handler %c!\n",static_cast<int>(evt().currentKey()));
+			switch ( static_cast<int>(evt().currentKey()) ) {
 
 		case FL_Escape:
 			return 1;
@@ -1600,15 +1602,15 @@ int globalCB ( int e ) {
 
 			/*Viewport-track selection*/
 		case '1':
-			if (Fl::event_shift())
+			if (evt().isShift())
 			{
 				//load color
-				//printf("Load Color Settings %i\n",Fl::event_key()-'1');
-				plateManager.setFavoriteColorCorrectionOnPlate(Fl::event_key()-'1');
+				//printf("Load Color Settings %i\n",static_cast<int>(evt().currentKey())-'1');
+				plateManager.setFavoriteColorCorrectionOnPlate(static_cast<int>(evt().currentKey())-'1');
 			} 
 			else
 			{
-				plateManager.setTrackOnPlate(plateManager.getActiveQuad(),Fl::event_key()-'1');
+				plateManager.setTrackOnPlate(plateManager.getActiveQuad(),static_cast<int>(evt().currentKey())-'1');
 				//plateManager.updateAllFromGUI(); //this send the network message.
 				mw.vp->invalidate();
 				
@@ -1616,43 +1618,43 @@ int globalCB ( int e ) {
 			break;
 			
 		case '2':
-			if (Fl::event_shift())
+			if (evt().isShift())
 			{
 				//load color
-				//printf("Load Color Settings %i\n",Fl::event_key()-'1');
-				plateManager.setFavoriteColorCorrectionOnPlate(Fl::event_key()-'1');
+				//printf("Load Color Settings %i\n",static_cast<int>(evt().currentKey())-'1');
+				plateManager.setFavoriteColorCorrectionOnPlate(static_cast<int>(evt().currentKey())-'1');
 			} 
 			else
 			{
-			plateManager.setTrackOnPlate(plateManager.getActiveQuad(),Fl::event_key()-'1');
+			plateManager.setTrackOnPlate(plateManager.getActiveQuad(),static_cast<int>(evt().currentKey())-'1');
 			//plateManager.updateAllFromGUI(); //this send the network message.
 			mw.vp->invalidate();
 			}
 			break;
 		case '3':
-			if (Fl::event_shift())
+			if (evt().isShift())
 			{
 				//load color
-				//printf("Load Color Settings %i\n",Fl::event_key()-'1');
-				plateManager.setFavoriteColorCorrectionOnPlate(Fl::event_key()-'1');
+				//printf("Load Color Settings %i\n",static_cast<int>(evt().currentKey())-'1');
+				plateManager.setFavoriteColorCorrectionOnPlate(static_cast<int>(evt().currentKey())-'1');
 			} 
 			else
 			{
-			plateManager.setTrackOnPlate(plateManager.getActiveQuad(),Fl::event_key()-'1');
+			plateManager.setTrackOnPlate(plateManager.getActiveQuad(),static_cast<int>(evt().currentKey())-'1');
 			//plateManager.updateAllFromGUI(); //this send the network message.
 			mw.vp->invalidate();
 			}
 			break;
 		case '4':
-			if (Fl::event_shift())
+			if (evt().isShift())
 			{
 				//load color
-				//printf("Load Color Settings %i\n",Fl::event_key()-'1');
-				plateManager.setFavoriteColorCorrectionOnPlate(Fl::event_key()-'1');
+				//printf("Load Color Settings %i\n",static_cast<int>(evt().currentKey())-'1');
+				plateManager.setFavoriteColorCorrectionOnPlate(static_cast<int>(evt().currentKey())-'1');
 			} 
 			else
 			{
-			plateManager.setTrackOnPlate(plateManager.getActiveQuad(),Fl::event_key()-'1');
+			plateManager.setTrackOnPlate(plateManager.getActiveQuad(),static_cast<int>(evt().currentKey())-'1');
 			//plateManager.updateAllFromGUI(); //this send the network message.
 			mw.vp->invalidate();
 			}
@@ -1660,11 +1662,11 @@ int globalCB ( int e ) {
 			/****************/
 		 
 		case '5':
-			if (Fl::event_shift())
+			if (evt().isShift())
 			{
 				//load color
-				//printf("Load Color Settings %i\n",Fl::event_key()-'1');
-				plateManager.setFavoriteColorCorrectionOnPlate(Fl::event_key()-'1');
+				//printf("Load Color Settings %i\n",static_cast<int>(evt().currentKey())-'1');
+				plateManager.setFavoriteColorCorrectionOnPlate(static_cast<int>(evt().currentKey())-'1');
 			} 
 			else
 			{
@@ -1675,7 +1677,7 @@ int globalCB ( int e ) {
 
 		case 'l':
 			{
-				if (Fl::event_ctrl())
+				if (evt().isCtrl())
 				{
 					lw.loadWindow->show();
 					plateManager.updateAllFromGUI();
@@ -1687,13 +1689,13 @@ int globalCB ( int e ) {
 
 			/*set in and out points with i/o*/
 		case 'i':{
-			if (Fl::event_alt())
+			if (evt().isAlt())
 			{
 				int currentFrame=playbackManager.getCurrentFrame();
 				trackManager.startLoadingAllAt(currentFrame-1);
 				playbackManager.setInPoint(currentFrame);
 			}else{
-				if (Fl::event_shift()){
+				if (evt().isShift()){
 					playbackManager.setInPoint(1);
 				}
 				else{
@@ -1705,7 +1707,7 @@ int globalCB ( int e ) {
 				 }
 		case 'o':{
 
-			if (Fl::event_shift())
+			if (evt().isShift())
 			{
 				//playbackManager.setToFrame(trackManager.getMaxTrackLength());
 				playbackManager.setOutPoint(trackManager.getMaxTrackLength());
@@ -1728,21 +1730,21 @@ int globalCB ( int e ) {
 		case FL_F+5 :
 			{
 
-				int whichOne=Fl::event_key()-FL_F-1;
+				int whichOne=static_cast<int>(evt().currentKey())-FL_F-1;
 
-				if(Fl::event_shift() && Fl::event_ctrl()){
+				if(evt().isShift() && evt().isCtrl()){
 					printf("SAVING FX STACK TO FAVORITE %i\n",whichOne);
 					plateManager.saveFavoriteFromPlate(whichOne);
 				}
 				else
 				{
-					if(Fl::event_ctrl())
+					if(evt().isCtrl())
 					{
 						printf("Appending FX STACK FROM FAVORITE %i\n",whichOne);
 						plateManager.appendFavoriteOnPlate(whichOne);
 					}
 					else{
-						if(Fl::event_shift()){
+						if(evt().isShift()){
 							printf("LOADING FX STACK FROM FAVORITE %i\n",whichOne);
 							plateManager.setFavoriteOnPlate(whichOne);
 						}
@@ -1757,19 +1759,19 @@ int globalCB ( int e ) {
 		case 'r': {
 
 			//printf("reset from keyboard?\n");
-			if (Fl::event_alt() && Fl::event_ctrl()) {
+			if (evt().isAlt() && evt().isCtrl()) {
 				plateManager.resetAllPlates();
 				return 1;
 			} else {
-					if(Fl::event_ctrl()){
+					if(evt().isCtrl()){
 						plateManager.resetPlate(plateManager.getActiveQuad());
 						return 1;
 					}
 					else
 					{
-						if (Fl::event_shift())
+						if (evt().isShift())
 						{
-							if (Fl::event_alt())
+							if (evt().isAlt())
 							{
 								plateManager.resetAllColorCorrections();
 								return 1;
@@ -1782,7 +1784,7 @@ int globalCB ( int e ) {
 
 						}
 						else{
-							if (!Fl::event_alt())
+							if (!evt().isAlt())
 							{
 								//here we should do color channel filtering
 								int whatPlate=plateManager.getActiveQuad();//mw.vp->startQuad-1;
@@ -1800,7 +1802,7 @@ int globalCB ( int e ) {
 
 		case 'g':
 			{
-				if (!Fl::event_alt() && !Fl::event_ctrl())
+				if (!evt().isAlt() && !evt().isCtrl())
 				{
 					int whatPlate=plateManager.getActiveQuad();
 					plateManager.toggleChannelG(whatPlate);
@@ -1810,7 +1812,7 @@ int globalCB ( int e ) {
 			break;
 
 		case 'b':
-			if (!Fl::event_alt() && !Fl::event_ctrl()){
+			if (!evt().isAlt() && !evt().isCtrl()){
 				int whatPlate=plateManager.getActiveQuad();
 				plateManager.toggleChannelB(whatPlate);
 				return 1;
@@ -1818,7 +1820,7 @@ int globalCB ( int e ) {
 			break;
 
 		case 'a':
-			if (!Fl::event_alt() && !Fl::event_ctrl()){
+			if (!evt().isAlt() && !evt().isCtrl()){
 				int whatPlate=plateManager.getActiveQuad();
 				plateManager.toggleChannelA(whatPlate);
 				return 1;
@@ -1829,7 +1831,7 @@ int globalCB ( int e ) {
 			/************/
 		case 't':
 
-			if ( Fl::event_state ( FL_ALT ) ) {
+			if ( evt().isAlt() ) {
 				plateManager.toggleTextModeAll();
 			} else {
 				plateManager.toggleTextMode(plateManager.getActiveQuad());
@@ -1838,8 +1840,8 @@ int globalCB ( int e ) {
 			break;
 
 		case 'h':
-			if (Fl::event_state ( FL_CTRL )) {
-				if ( Fl::event_state ( FL_ALT ) ) {
+			if (evt().isCtrl()) {
+				if ( evt().isAlt() ) {
 					plateManager.toggleHistogramModeAll();
 				} else {
 					plateManager.toggleHistogramMode(plateManager.getActiveQuad());
@@ -1856,7 +1858,7 @@ int globalCB ( int e ) {
 
 			/*quit*/
 		case 'q': {
-			if (Fl::event_ctrl()) {
+			if (evt().isCtrl()) {
 				quitNow=confirmQuit();
 			}
 			return 1;
@@ -1866,16 +1868,16 @@ int globalCB ( int e ) {
 
 		case 'f':
 			//hide/show the gui if ctrl+alt are pressed
-			if (Fl::event_state(FL_ALT) && Fl::event_state(FL_CTRL)) {
+			if (evt().isAlt() && evt().isCtrl()) {
 				//printf("hide GUI from keyboard!\n");
 				mw.toggleHideControls();
 			}
 			else{
-				if (!Fl::event_state(FL_CTRL)) 
+				if (!evt().isCtrl()) 
 				{
 
 					//fit plates to viewport
-					if(Fl::event_state(FL_ALT))
+					if(evt().isAlt())
 					{
 						plateManager.fitToViewportAll();
 					}
@@ -1902,7 +1904,7 @@ int globalCB ( int e ) {
 
 		case 'y': {
 
-			if ( Fl::event_state ( FL_CTRL ) ) {
+			if ( evt().isCtrl() ) {
 				if ( networkManager.chatFadeCounter>networkManager.chatOpacity )
 					networkManager.chatFadeCounter=networkManager.chatOpacity;
 				else
@@ -1921,7 +1923,7 @@ int globalCB ( int e ) {
 
 		default:
 			//printf ( "Unhandled event\n" );
-			//printf ( "Unhandled key event: %c (%i)\n", Fl::event_key(),Fl::event_key() );
+			//printf ( "Unhandled key event: %c (%i)\n", static_cast<int>(evt().currentKey()),static_cast<int>(evt().currentKey()) );
 			return 0;
 			break;
 			}

@@ -38,6 +38,7 @@ target_include_directories(cli11 INTERFACE third_party/cli11)
 file(GLOB JEFECHECK_SOURCES
     src/*.cpp
     src/*.cxx
+    src/ui/*.cpp
 )
 
 # Backend filtering: include only the active backend's *_fltk / *_qt files,

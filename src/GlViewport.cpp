@@ -8,6 +8,7 @@
 #endif
 
 #include "GlViewport.h"
+#include "ui/IEventSystem.h"
 #include <stdio.h>
 #include "mainWindow.h"
 #include "loadWindow.h"
@@ -100,6 +101,8 @@ bool gResizeTrigger;
 #include "gfcplatemanager.h"
 extern gfcPlateManager plateManager;
 
+namespace { jefe::ui::IEventSystem& evt() { return jefe::ui::IEventSystem::instance(); } }
+
 void PopupWindow::SizeToText() {
     int W=0, H=0;
     fl_font ( output->labelfont(), output->labelsize() );
@@ -117,32 +120,32 @@ void PopupWindow::setColor ( int r, int g, int b ) {
 int getGFCPICKFLAGSfromFLTK()
 {
 	int result=0;
-	if (Fl::event_ctrl())
+	if (evt().isCtrl())
 	{
 		//printf("control clicked!\n");
 		result|= GFC_PICK_MODIFIER_CTRL;
 	}
-	if (Fl::event_alt())
+	if (evt().isAlt())
 	{
 		//printf("alt clicked!\n");
 		result|= GFC_PICK_MODIFIER_ALT;
 	}
-	if (Fl::event_shift())
+	if (evt().isShift())
 	{
 		//printf("shift clicked!\n");
 		result|= GFC_PICK_MODIFIER_SHIFT;
 	}
-	if (Fl::event_button1())
+	if (evt().isMouseButtonDown(jefe::ui::MouseButton::Left))
 	{
 		
 		result|=GFC_PICK_MODIFIER_BUTTON1;
 	}
-	if (Fl::event_button2())
+	if (evt().isMouseButtonDown(jefe::ui::MouseButton::Middle))
 	{
 		
 		result|=GFC_PICK_MODIFIER_BUTTON2;
 	}
-	if (Fl::event_button3())
+	if (evt().isMouseButtonDown(jefe::ui::MouseButton::Right))
 	{
 		
 		result|=GFC_PICK_MODIFIER_BUTTON3;
@@ -401,8 +404,8 @@ int GlViewport::handle ( int e ) {
     case FL_DND_ENTER:          // return(1) for these events to 'accept' dnd
     case FL_DND_DRAG:
     case FL_DND_RELEASE:
-        pastedXPos=Fl::event_x();
-        pastedYPos=Fl::event_y();
+        pastedXPos=evt().mouseX();
+        pastedYPos=evt().mouseY();
         return(1);
         break;
 
@@ -413,7 +416,7 @@ int GlViewport::handle ( int e ) {
         break;
 
     case FL_MOVE: {
-        int eventX=Fl::event_x(), eventY=Fl::event_y();
+        int eventX=evt().mouseX(), eventY=evt().mouseY();
 
 
 
@@ -422,14 +425,14 @@ int GlViewport::handle ( int e ) {
     break;
 
     case FL_DRAG: {
-        int eventX=Fl::event_x(), eventY=Fl::event_y();
+        int eventX=evt().mouseX(), eventY=evt().mouseY();
 
         int somethingPicked=pickManager.doPicking(GFC_PICK_EVENT_DRAG, getGFCPICKFLAGSfromFLTK(), eventX, h()-eventY, prevX-eventX,prevY-eventY);
 		
 		if (!somethingPicked)
 		{
 		
-        if (Fl::event_button1()) { //LEFT MOUSE BUTTON
+        if (evt().isMouseButtonDown(jefe::ui::MouseButton::Left)) { //LEFT MOUSE BUTTON
             if ((Fl::get_key ( FL_Shift_L)) || (Fl::get_key ( FL_Shift_R))) {
 				//this will scrub, we should map the total timeline lenght to half the width of the viewport. So going middle to edge should scrub the whole thing.
 				int tlLenght= playbackManager.getToFrame()-playbackManager.getFromFrame();
@@ -465,9 +468,9 @@ int GlViewport::handle ( int e ) {
 				
 			
 			if ((Fl::get_key ( FL_Control_L ) || Fl::get_key ( FL_Control_R ))) {
-                zoomSpeed=Fl::event_state ( FL_SHIFT ) ?0.001:0.005;
+                zoomSpeed=evt().isShift() ?0.001:0.005;
 				
-                if (Fl::event_key( FL_Alt_L ) || Fl::event_key( FL_Alt_R )) {
+                if (evt().isKeyDown(jefe::ui::Key::AltL) || evt().isKeyDown(jefe::ui::Key::AltR)) {
                     plateManager.zoomAllPlates((prevY-eventY) *zoomSpeed);
                 } else {
                     plateManager.zoomPlate(startQuad-1,(prevY-eventY) *zoomSpeed);
@@ -478,9 +481,9 @@ int GlViewport::handle ( int e ) {
 							
 //				printf("adjustmentValue %f\n",adjustmentValue);
 
-				if (Fl::event_key('W'))
+				if (evt().isKeyDown(static_cast<jefe::ui::Key>('W')))
 				{
-					if (Fl::event_alt())
+					if (evt().isAlt())
 					{
 						plateManager.setGammaAll(adjustmentValue,1);
 					} 
@@ -492,9 +495,9 @@ int GlViewport::handle ( int e ) {
 				}
 				else
 				{
-					if ( Fl::event_key('E'))
+					if ( evt().isKeyDown(static_cast<jefe::ui::Key>('E')))
 					{
-						if (Fl::event_alt())
+						if (evt().isAlt())
 						{
 							plateManager.setExposureAll(adjustmentValue,1);
 						} 
@@ -506,9 +509,9 @@ int GlViewport::handle ( int e ) {
 					} 
 					else
 					{
-						if (Fl::event_key('Q'))
+						if (evt().isKeyDown(static_cast<jefe::ui::Key>('Q')))
 						{
-							if (Fl::event_alt())
+							if (evt().isAlt())
 							{
 								plateManager.setBrightnessAll(adjustmentValue,1);
 							
@@ -520,9 +523,9 @@ int GlViewport::handle ( int e ) {
 						} 
 						else
 						{
-							if (Fl::event_key('D'))
+							if (evt().isKeyDown(static_cast<jefe::ui::Key>('D')))
 							{
-								if (Fl::event_alt())
+								if (evt().isAlt())
 								{
 										plateManager.setContrastAll(adjustmentValue,1);
 								}
@@ -534,9 +537,9 @@ int GlViewport::handle ( int e ) {
 							} 
 							else
 							{
-								if (Fl::event_key('S'))
+								if (evt().isKeyDown(static_cast<jefe::ui::Key>('S')))
 								{
-									if (Fl::event_alt())
+									if (evt().isAlt())
 									{
 										plateManager.setSaturationAll(adjustmentValue,1);
 									} 
@@ -552,7 +555,7 @@ int GlViewport::handle ( int e ) {
 										//handle drag operations with keyboard.
 
 										//if no keys were pressed then just pan
-										if (Fl::event_key( FL_Alt_L ) || Fl::event_key( FL_Alt_R )) {
+										if (evt().isKeyDown(jefe::ui::Key::AltL) || evt().isKeyDown(jefe::ui::Key::AltR)) {
 											plateManager.panAllPlates(prevX-eventX,prevY-eventY);
 										} else {
 											plateManager.panPlate(startQuad-1,prevX-eventX,prevY-eventY);
@@ -568,10 +571,10 @@ int GlViewport::handle ( int e ) {
 			}
         }
 
-        if (Fl::event_button3()) { //RIGHT MOUSE BUTTON
+        if (evt().isMouseButtonDown(jefe::ui::MouseButton::Right)) { //RIGHT MOUSE BUTTON
 
             if (!lw.loadWindow->visible()) {
-                if (Fl::event_ctrl()) {
+                if (evt().isCtrl()) {
                     char tmpPopupText[2048];
                     GLint viewport[4];
                     GLubyte pixel[3];
@@ -623,7 +626,7 @@ int GlViewport::handle ( int e ) {
                 }
 
             } else { //if the load window is on, then we move the aoi
-                if (Fl::event_key(FL_Shift_L)) {
+                if (evt().isKeyDown(jefe::ui::Key::ShiftL)) {
                     trackManager.getSequence(startQuad-1)->setAOI(0,0,eventX-prevX,prevY-eventY,true);
                 } else {
                     trackManager.getSequence(startQuad-1)->setAOI(eventX-prevX,prevY-eventY,0,0,true);
@@ -647,25 +650,25 @@ int GlViewport::handle ( int e ) {
 
 
     case FL_MOUSEWHEEL: {
-        zoomSpeed=Fl::event_state ( FL_SHIFT ) ?0.01:0.1;
-        //    	printf("Fl::event_dy() %i\n",Fl::event_dy());
-        scale+=Fl::event_dy() *zoomSpeed;
+        zoomSpeed=evt().isShift() ?0.01:0.1;
+        //    	printf("evt().wheelDeltaY() %i\n",evt().wheelDeltaY());
+        scale+=evt().wheelDeltaY() *zoomSpeed;
         //printf("scale=%f\n", scale);
         zooming=true;
         if ( scale<=0 )
             scale=0.001;
         if ( this->ID==LOADVP_ID ) {
-            tp.scale+=Fl::event_dy() *zoomSpeed;
+            tp.scale+=evt().wheelDeltaY() *zoomSpeed;
             if ( tp.scale<0 )
                 tp.scale=0.001;
         } else {
-            if ( !Fl::event_state ( FL_ALT ) ) {
+            if ( !evt().isAlt() ) {
 
-                plateManager.zoomPlate(startQuad-1,Fl::event_dy() *zoomSpeed);
+                plateManager.zoomPlate(startQuad-1,evt().wheelDeltaY() *zoomSpeed);
 
                 switch ( sett.framingMode ) {
                 case FRAMINGSINGLE_ID:
-                    q1.scale+=Fl::event_dy() *zoomSpeed;
+                    q1.scale+=evt().wheelDeltaY() *zoomSpeed;
                     if ( q1.scale<0 )
                         q1.scale=0.001;
                     break;
@@ -674,12 +677,12 @@ int GlViewport::handle ( int e ) {
                 case FRAMINGDOUBLE_ID:
                     switch ( startQuad ) {
                     case 1:
-                        q1.scale+=Fl::event_dy() *zoomSpeed;
+                        q1.scale+=evt().wheelDeltaY() *zoomSpeed;
                         if ( q1.scale<0 )
                             q1.scale=0.001;
                         break;
                     case 2:
-                        q2.scale+=Fl::event_dy() *zoomSpeed;
+                        q2.scale+=evt().wheelDeltaY() *zoomSpeed;
                         if ( q2.scale<0 )
                             q2.scale=0.001;
 
@@ -690,24 +693,24 @@ int GlViewport::handle ( int e ) {
                 case FRAMINGQUAD_ID:
                     switch ( startQuad ) {
                     case 1:
-                        q1.scale+=Fl::event_dy() *zoomSpeed;
+                        q1.scale+=evt().wheelDeltaY() *zoomSpeed;
                         if ( q1.scale<0 )
                             q1.scale=0.001;
 
                         break;
                     case 2:
-                        q2.scale+=Fl::event_dy() *zoomSpeed;
+                        q2.scale+=evt().wheelDeltaY() *zoomSpeed;
                         if ( q2.scale<0 )
                             q2.scale=0.001;
                         break;
                     case 3:
-                        q3.scale+=Fl::event_dy() *zoomSpeed;
+                        q3.scale+=evt().wheelDeltaY() *zoomSpeed;
                         if ( q3.scale<0 )
                             q3.scale=0.001;
 
                         break;
                     case 4:
-                        q4.scale+=Fl::event_dy() *zoomSpeed;
+                        q4.scale+=evt().wheelDeltaY() *zoomSpeed;
                         if ( q4.scale<0 )
                             q4.scale=0.001;
 
@@ -718,18 +721,18 @@ int GlViewport::handle ( int e ) {
                 }
             } else {
 
-                plateManager.zoomAllPlates(Fl::event_dy() *zoomSpeed);
+                plateManager.zoomAllPlates(evt().wheelDeltaY() *zoomSpeed);
 
-                /*q1.scale+=Fl::event_dy() *zoomSpeed;
+                /*q1.scale+=evt().wheelDeltaY() *zoomSpeed;
                 if ( q1.scale<0 )
                 	q1.scale=0.001;
-                q2.scale+=Fl::event_dy() *zoomSpeed;
+                q2.scale+=evt().wheelDeltaY() *zoomSpeed;
                 if ( q2.scale<0 )
                 	q2.scale=0.001;
-                q3.scale+=Fl::event_dy() *zoomSpeed;
+                q3.scale+=evt().wheelDeltaY() *zoomSpeed;
                 if ( q3.scale<0 )
                 	q3.scale=0.001;
-                q4.scale+=Fl::event_dy() *zoomSpeed;
+                q4.scale+=evt().wheelDeltaY() *zoomSpeed;
                 if ( q4.scale<0 )
                 	q4.scale=0.001;*/
 
@@ -745,8 +748,8 @@ int GlViewport::handle ( int e ) {
     break;
 
     case FL_PUSH: {
-        int eventX=Fl::event_x(), eventY=Fl::event_y();
-        // printf("click on X,Y: %i,%i",Fl::event_x(),Fl::event_y());
+        int eventX=evt().mouseX(), eventY=evt().mouseY();
+        // printf("click on X,Y: %i,%i",evt().mouseX(),evt().mouseY());
         dragging=true;
 
         //TODO: Create the flags DWORD
@@ -755,21 +758,21 @@ int GlViewport::handle ( int e ) {
 
 
         //swap_buffers(); //this is only here to debug picking so we can see the back buffer.
-        if ( Fl::event_button1() ) {
-            if (Fl::event_ctrl())
+        if ( evt().isMouseButtonDown(jefe::ui::MouseButton::Left) ) {
+            if (evt().isCtrl())
                 fl_cursor(FL_CURSOR_NS);
             else
                 fl_cursor ( FL_CURSOR_MOVE );
         }
 
-        if ( Fl::event_button3()) { //show information on the track
+        if ( evt().isMouseButtonDown(jefe::ui::MouseButton::Right)) { //show information on the track
             if (lw.loadWindow->visible()) {
                 //NOTE: We do nothing here, this is because when loading, we use the 3rd mouse button to resize and move the AOI
                 //printf("Load window visible??\n");
             } else {
 
                 //show information on the track if "ctrl" is pressed
-                if (Fl::event_ctrl()) {
+                if (evt().isCtrl()) {
                     fl_cursor ( FL_CURSOR_CROSS );
                     char tmpPopupText[2048];
 
@@ -777,7 +780,7 @@ int GlViewport::handle ( int e ) {
 
                     //glGetIntegerv ( GL_VIEWPORT,viewport );
                     glReadBuffer(GL_FRONT);
-                    glReadPixels ( Fl::event_x(),h()-Fl::event_y(),1,1,
+                    glReadPixels ( evt().mouseX(),h()-evt().mouseY(),1,1,
                                    GL_RGB,GL_UNSIGNED_BYTE, ( void * ) pixel );
                     glReadBuffer(GL_BACK);
 
@@ -814,9 +817,9 @@ int GlViewport::handle ( int e ) {
 
         Fl::focus ( this );
 
-        prevX=Fl::event_x();
-        prevY=Fl::event_y();
-        startQuad=this->getQuadFromMousePos(Fl::event_x(),Fl::event_y());
+        prevX=evt().mouseX();
+        prevY=evt().mouseY();
+        startQuad=this->getQuadFromMousePos(evt().mouseX(),evt().mouseY());
 		
 		plateManager.setActiveQuad(startQuad-1);
 	
@@ -835,7 +838,7 @@ int GlViewport::handle ( int e ) {
 
 
     case FL_RELEASE: {
-        int eventX=Fl::event_x(), eventY=Fl::event_y();
+        int eventX=evt().mouseX(), eventY=evt().mouseY();
         pickManager.doPicking(GFC_PICK_EVENT_CLICK_UP, getGFCPICKFLAGSfromFLTK(), eventX, h()-eventY, 0,0);
         popup->hide();
         fl_cursor ( FL_CURSOR_DEFAULT );
@@ -849,10 +852,10 @@ int GlViewport::handle ( int e ) {
     case FL_PASTE: {
         //*****HANDLE DRAG AND DROP********//
         if (networkManager.gChatMode==0) { //this is probably a drag and drop event, so we load the sequence
-            std::string pastedText=Fl::event_text();
+            std::string pastedText=evt().currentText().c_str();
             std::cout<<"pasted text: "<<GetFilenameNoFilePrefix(RemoveNewLine(pastedText))<<std::endl<<"nextLine"<<std::endl;
 
-            //printf("\nDropped %s into track\n",RemoveNewLine(GetFilenameNoFilePrefix(Fl::event_text())).c_str());
+            //printf("\nDropped %s into track\n",RemoveNewLine(GetFilenameNoFilePrefix(evt().currentText().c_str())).c_str());
             int quadFromMouse=getQuadFromMousePos(pastedXPos,pastedYPos)-1;
             int trackID=plateManager.getTrackOnPlate(quadFromMouse);
             //printf("DnD: quad:%i, trackID: %i\n",quadFromMouse,trackID);
@@ -898,7 +901,7 @@ int GlViewport::handle ( int e ) {
 								cleanText=getFirstSequenceInDirectory(cleanText); //if it's a directory we get the first file, otherwise we return the same name.
 
                                 trackManager.getSequence(trackID)->myGUI->setFilename(cleanText);
-                                if (Fl::event_shift() || Fl::event_state(FL_SHIFT)) {
+                                if (evt().isShift() || evt().isShift()) {
                                     trackManager.getSequence(trackID)->myGUI->setScale("50");
                                 } else {
                                     trackManager.getSequence(trackID)->myGUI->setScale("100");
@@ -923,7 +926,7 @@ int GlViewport::handle ( int e ) {
 
             }
         } else if (networkManager.gChatMode==1) {	//TODO: paste into chat!
-            printf("Pasted into chat!: %s\n",Fl::event_text());
+            printf("Pasted into chat!: %s\n",evt().currentText().c_str());
         }
 
 
@@ -937,23 +940,23 @@ int GlViewport::handle ( int e ) {
 
                 plateManager.setChanged();
 
-                switch (Fl::event_key()) {
+                switch (static_cast<int>(evt().currentKey())) {
                                
                 
                 case FL_F+2:
-                if(!Fl::event_shift() && !Fl::event_ctrl()){
+                if(!evt().isShift() && !evt().isCtrl()){
                     fxControlWindow1.theWindow->show();
                     return 1;}
                     break;
 
                 case FL_F+3:
-                if(!Fl::event_shift() && !Fl::event_ctrl()){
+                if(!evt().isShift() && !evt().isCtrl()){
                     fxw.fxWindow->show();
                     return 1;}
                     break;
 
                 case FL_F+4:
-                if(!Fl::event_shift() && !Fl::event_ctrl()){
+                if(!evt().isShift() && !evt().isCtrl()){
                     lutw.lutWindow->show();
 
                     return 1;
@@ -961,7 +964,7 @@ int GlViewport::handle ( int e ) {
                     break;
 
                 case FL_F+5:
-                if(!Fl::event_shift() && !Fl::event_ctrl()){
+                if(!evt().isShift() && !evt().isCtrl()){
                     rmw.remoteWindow->show();
                     
                     return 1;
@@ -991,7 +994,7 @@ int GlViewport::handle ( int e ) {
 
                 case FL_Up: {
 					
-					if (Fl::event_key('L'))
+					if (evt().isKeyDown(static_cast<jefe::ui::Key>('L')))
 					{ //if L is pressed, change LUTs
 						plateManager.scrollLUT(plateManager.getActiveQuad(),-1);
 					} 
@@ -1009,7 +1012,7 @@ int GlViewport::handle ( int e ) {
                 break;
 
                 case FL_Down: {
-					if (Fl::event_key('L'))
+					if (evt().isKeyDown(static_cast<jefe::ui::Key>('L')))
 					{ //if L is pressed, change LUTs
 						plateManager.scrollLUT(plateManager.getActiveQuad(),1);
 					} 
@@ -1023,13 +1026,13 @@ int GlViewport::handle ( int e ) {
                 break;
                 }
 
-                //printf("Returning 0 from no chat mode event %c (%i)\n",Fl::event_key(),Fl::event_key());
+                //printf("Returning 0 from no chat mode event %c (%i)\n",static_cast<int>(evt().currentKey()),static_cast<int>(evt().currentKey()));
                 return 0;
             }
             plateManager.setChanged();
             //handle special ctrl keyboard events, otherwise return 0 to pass down the line in fltk (to open the prefs window with ctrl-p for example)
-            if (Fl::event_state(FL_CTRL)) {
-                switch ( Fl::event_key() ) {
+            if (evt().isCtrl()) {
+                switch ( static_cast<int>(evt().currentKey()) ) {
 				
 		                case 'v': {
                     printf("Paste from clipboard?!\n");
@@ -1061,7 +1064,7 @@ int GlViewport::handle ( int e ) {
 
             }
 
-            switch ( Fl::event_key() ) {
+            switch ( static_cast<int>(evt().currentKey()) ) {
 
 
 
@@ -1069,7 +1072,7 @@ int GlViewport::handle ( int e ) {
 
                 //printf ( "FL_ENTER PRESSED\n" );
                 //if ctrl+enter wass pressed, dont leave chat mode
-                networkManager.gChatMode=Fl::event_ctrl() ?0:1;
+                networkManager.gChatMode=evt().isCtrl() ?0:1;
                 networkManager.sendChatMessage();
                 networkManager.gChatTextString.clear();
                 networkManager.chatPosOffset=0;
@@ -1130,7 +1133,7 @@ int GlViewport::handle ( int e ) {
                     return 1;
                 }
 
-                if ( strcmp ( "@",Fl::event_text() ) ==0 ) {
+                if ( strcmp ( "@",evt().currentText().c_str() ) ==0 ) {
                     //at shoud be handled differently due to fltks use of it for symbols. Append two @@ to cancell
                     networkManager.gChatTextString.insert(networkManager.chatPosOffset,"@@");
                     networkManager.chatPosOffset+=2;
@@ -1148,13 +1151,13 @@ int GlViewport::handle ( int e ) {
 
 
                 /*printf("\nchatPosOffset=%i\n",networkManager.chatPosOffset);
-                printf("eventText=%s\n",Fl::event_text());
-                printf("event_lenght=%i\n",Fl::event_length());*/
+                printf("eventText=%s\n",evt().currentText().c_str());
+                printf("event_lenght=%i\n",static_cast<int>(evt().currentText().size()));*/
 
-                if (Fl::event_length()>0 && Fl::event_text()!=NULL)
-                    networkManager.gChatTextString.insert(networkManager.chatPosOffset,Fl::event_text());
+                if (static_cast<int>(evt().currentText().size())>0 && evt().currentText().c_str()!=NULL)
+                    networkManager.gChatTextString.insert(networkManager.chatPosOffset,evt().currentText().c_str());
 
-                networkManager.chatPosOffset+=Fl::event_length();
+                networkManager.chatPosOffset+=static_cast<int>(evt().currentText().size());
                 if (networkManager.chatPosOffset>=networkManager.gChatTextString.size())
                     networkManager.chatPosOffset=networkManager.gChatTextString.size();
 
