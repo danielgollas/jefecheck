@@ -3,8 +3,30 @@ name: Build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'site/**'
+      - 'docs/**'
+      - 'packaging/**'
+      - 'Casks/**'
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/update-manifests.yml'
+      - '.github/workflows/pages.yml'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'site/**'
+      - 'docs/**'
+      - 'packaging/**'
+      - 'Casks/**'
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/update-manifests.yml'
+      - '.github/workflows/pages.yml'
 
 jobs:
   build-linux:
