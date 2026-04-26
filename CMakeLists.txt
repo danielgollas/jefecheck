@@ -5,9 +5,20 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# UI backend selection (FLTK is the current default; Qt is in-progress).
+# See docs/MIGRATION.md for the FLTK->Qt migration plan and current state.
+option(USE_QT "Build with Qt6 instead of FLTK" OFF)
+
 # Find system packages
 find_package(OpenGL REQUIRED)
-find_package(FLTK REQUIRED)
+if(USE_QT)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
+    set(CMAKE_AUTOMOC ON)
+    set(CMAKE_AUTORCC ON)
+    set(CMAKE_AUTOUIC ON)
+else()
+    find_package(FLTK REQUIRED)
+endif()
 find_package(OpenImageIO REQUIRED)
 find_package(OpenEXR REQUIRED)
 find_package(CURL REQUIRED)
@@ -28,6 +39,16 @@ file(GLOB JEFECHECK_SOURCES
     src/*.cpp
     src/*.cxx
 )
+
+# Backend filtering: include only the active backend's *_fltk / *_qt files,
+# and pull in src/qt/*.cpp on USE_QT.
+if(USE_QT)
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_fltk\\.cpp$")
+    file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
+    list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
+else()
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_qt\\.cpp$")
+endif()
 
 # Platform-specific exclusions
 if(NOT WIN32)
@@ -86,15 +107,21 @@ target_link_libraries(jefecheck PRIVATE
     cli11
     Freetype::Freetype
     OpenGL::GL
-    ${FLTK_LIBRARIES}
     OpenImageIO::OpenImageIO
     OpenEXR::OpenEXR
     CURL::libcurl
     ZLIB::ZLIB
 )
 
-# FLTK include dirs
-target_include_directories(jefecheck PRIVATE ${FLTK_INCLUDE_DIR})
+# Backend-specific includes / libs
+if(USE_QT)
+    target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
+    target_link_libraries(jefecheck PRIVATE Qt6::Widgets Qt6::OpenGLWidgets)
+else()
+    target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_FLTK=1)
+    target_link_libraries(jefecheck PRIVATE ${FLTK_LIBRARIES})
+    target_include_directories(jefecheck PRIVATE ${FLTK_INCLUDE_DIR})
+endif()
 
 # macOS
 if(APPLE)
