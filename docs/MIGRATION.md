@@ -24,7 +24,7 @@ original detailed plan. Summary:
 |---|---|---|---|
 | 0A | Define abstract UI interfaces in `src/ui/` | done in #16 | ✅ on `main` |
 | 0B | Remove `gfcPlate`'s direct FLTK widget pointers | 1 wk | ✅ on `qt-migration` |
-| 0C | Extract `gfcPlateManagerGUI` abstraction | 3 days | not started |
+| 0C | Extract `gfcPlateManagerGUI` abstraction | 3 days | ✅ on `qt-migration` |
 | 0D | Wrap `GlViewport` behind `IGLViewport` (still FLTK-backed) | 1 wk | not started |
 | 1 | Decouple core: split `UICallbacks`, `AppContext`, replace `Fl::check/wait`, drop GLUT | 4-5 wks | not started |
 | 2A | CMake `USE_QT` option | done | ⏳ this PR |

@@ -1,4 +1,5 @@
 #include "gfcplatemanager.h"
+#include "gfcplatemanagergui_fltk.h"
 #include "gfcTextRenderer.h"
 
 #include <FL/fl_ask.H>
@@ -37,7 +38,7 @@ extern RenderWindow rw;
 #define min(a,b)            (((a) < (b)) ? (a) : (b))
 #endif
 
-gfcPlateManager::gfcPlateManager() {
+gfcPlateManager::gfcPlateManager() : myGUI(nullptr) {
     plates.resize(GFC_MAX_PLATES);
     framingMode=FRAMINGSINGLE_ID;
     showHelp=false;
@@ -58,6 +59,7 @@ gfcPlateManager::gfcPlateManager() {
 
 
 gfcPlateManager::~gfcPlateManager() {
+    delete myGUI;
 }
 
 void gfcPlateManager::drawPlate(int whichOne) {
@@ -222,22 +224,15 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
     int w,h,x,y;
 
-    w=layoutsGroup->w();
-    h=layoutsGroup->h();
-    x=layoutsGroup->x();
-    y=layoutsGroup->y();
-
-
-	
-    /*this->layout1x1->value(pframingMode==FRAMINGSINGLE_ID);
-    this->layout2x1->value(pframingMode==FRAMINGDOUBLE_ID);
-    this->layout1x2->value(pframingMode==FRAMINGDOUBLEVERT_ID);
-    this->layout2x2->value(pframingMode==FRAMINGQUAD_ID);*/
+    w=myGUI->getLayoutGroupW();
+    h=myGUI->getLayoutGroupH();
+    x=myGUI->getLayoutGroupX();
+    y=myGUI->getLayoutGroupY();
 
     switch ( framingMode ) {
     case FRAMINGSINGLE_ID: {
 
-		layoutChoice->value(0);
+		myGUI->setLayoutChoice(0);
 		
 		this->setActiveQuad(0);
 		
@@ -259,7 +254,7 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
     case FRAMINGDOUBLE_ID: {
 
-		layoutChoice->value(1);
+		myGUI->setLayoutChoice(1);
 
 		if (activeQuad==2 || activeQuad==3)
 		{
@@ -285,8 +280,8 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
 
     case FRAMINGDOUBLEVERT_ID: {
-		
-		layoutChoice->value(2);
+
+		myGUI->setLayoutChoice(2);
 
 		if (activeQuad==2 || activeQuad==3)
 		{
@@ -310,7 +305,7 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
     case FRAMINGQUAD_ID: {
 
-		layoutChoice->value(3);
+		myGUI->setLayoutChoice(3);
 		
 		plates[0].myGUI->setActiveVisible(1);
 		plates[1].myGUI->setActiveVisible(1);
@@ -329,7 +324,7 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
     }
 
     mw.vp->invalidate();
-    layoutsGroup->redraw();
+    myGUI->redrawLayoutGroup();
 
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
 
@@ -610,13 +605,9 @@ void gfcPlateManager::initializeWidgets() {
         plates[i].quadID=i;
     }
 
-    layoutsGroup=mw.layoutsGroup;
-    /*this->layout1x1=mw.frameModeSingleRadio;
-    this->layout2x1=mw.frameModeDoubleRadio;
-    this->layout2x2=mw.frameModeQuadRadio;
-    this->layout1x2=mw.frameModeDoubleVertRadio;*/
-
-	this->layoutChoice=mw.viewportLayoutChoice;
+    myGUI = new gfcPlateManagerGUI_FLTK;
+    myGUI->assignLayoutGroupWidget(mw.layoutsGroup);
+    myGUI->assignLayoutChoiceWidget(mw.viewportLayoutChoice);
 
     plates[0].myGUI->assignZoom(mw.q1Scale);
     plates[0].myGUI->assignTXWidget(mw.q1X);
@@ -784,9 +775,9 @@ void gfcPlateManager::updateAllFromGUI() {
     setChanged();
 
 	//update the layout
-	if (layoutChoice)
+	if (myGUI)
 	{
-		setFramingMode(layoutChoice->value()+FRAMINGSINGLE_ID);
+		setFramingMode(myGUI->getLayoutChoice()+FRAMINGSINGLE_ID);
 	}
 	
 	
