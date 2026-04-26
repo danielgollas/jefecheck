@@ -1379,26 +1379,7 @@ void loadCB ( Fl_Widget* o , void* v ) {
 
 	case LOADFROM_ID:
 	case LOADTO_ID:
-		//TODO: Set the range so that FROM is not smaller than TO etc.     
-		break;
-
-		/*        case LOADEXR_ID:
-		ew.exrWindow->show();
-		scale = atoi(ptrToPlate->scaleChooser->value());
-		if(ew.exrWindow->visible())
-		ptrToPlate->vp->tf.loadFrame('P',ptrToPlate->fileNameInput->value(),scale,ptrToPlate->filterChooser->value(), ptrToPlate->gammaSlider->value(),ew.exposureSlider->value(),ew.defogSlider->value(),ew.kneeLowSlider->value(), ew.kneeHighSlider->value(), ew.exrPreview->value());
-		else
-		ptrToPlate->vp->tf.loadFrame('P',ptrToPlate->fileNameInput->value(),scale,ptrToPlate->filterChooser->value(),ptrToPlate->gammaSlider->value());
-		break;
-
-		case EXRPREVIEW_ID:
-
-		exrPreviewItem=ew.exrPreview->value();
-		ptrToPlate->vp->tf.loadFrame('P',ptrToPlate->fileNameInput->value(),scale,ptrToPlate->filterChooser->value(), ptrToPlate->gammaSlider->value(),ew.exposureSlider->value(),ew.defogSlider->value(),ew.kneeLowSlider->value(), ew.kneeHighSlider->value(), exrPreviewItem);
-
-		break;*/
-
-
+		//TODO: Set the range so that FROM is not smaller than TO etc.
 		break;
 
 	case LOADUPDATEPREVIEW_ID: {
