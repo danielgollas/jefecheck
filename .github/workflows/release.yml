@@ -21,7 +21,7 @@ jobs:
             libfltk1.3-dev libopenimageio-dev openimageio-tools \
             libopenexr-dev libilmbase-dev libimath-dev \
             libcurl4-openssl-dev zlib1g-dev \
-            freeglut3-dev libgl-dev libglu1-mesa-dev \
+            libgl-dev libglu1-mesa-dev \
             libx11-dev libxext-dev libxft-dev libxinerama-dev \
             libxcursor-dev libxrender-dev libxfixes-dev \
             libopencv-dev libfreetype6-dev
@@ -90,7 +90,6 @@ jobs:
             mingw-w64-x86_64-imath
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-freeglut
             mingw-w64-x86_64-fmt
             mingw-w64-x86_64-freetype
             zip

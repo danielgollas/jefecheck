@@ -48,7 +48,6 @@ jobs:
             libimath-dev \
             libcurl4-openssl-dev \
             zlib1g-dev \
-            freeglut3-dev \
             libgl-dev \
             libglu1-mesa-dev \
             libx11-dev \
@@ -104,7 +103,6 @@ jobs:
             mingw-w64-x86_64-imath
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-freeglut
             mingw-w64-x86_64-fmt
             mingw-w64-x86_64-freetype
 

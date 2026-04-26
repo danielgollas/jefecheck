@@ -801,7 +801,12 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 
 			originalGammaExists=true;
 		}
-		gw.gammaWindow->position ( glutGet ( GLUT_SCREEN_WIDTH ) /2-gw.gammaWindow->w() /2,glutGet ( GLUT_SCREEN_HEIGHT ) /2-gw.gammaWindow->h() /2 );
+		{
+			int sx, sy, sw, sh;
+			Fl::screen_xywh(sx, sy, sw, sh, 0);
+			gw.gammaWindow->position(sx + sw/2 - gw.gammaWindow->w()/2,
+			                         sy + sh/2 - gw.gammaWindow->h()/2);
+		}
 #ifdef linux
 
 		gw.gammaBar->when ( FL_WHEN_RELEASE );
@@ -1006,7 +1011,12 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 
 		aw.make_window();
 
-		aw.aboutWindow->position ( glutGet ( GLUT_SCREEN_WIDTH ) /2-aw.aboutWindow->w() /2,glutGet ( GLUT_SCREEN_HEIGHT ) /2-aw.aboutWindow->h() /2 );
+		{
+			int sx, sy, sw, sh;
+			Fl::screen_xywh(sx, sy, sw, sh, 0);
+			aw.aboutWindow->position(sx + sw/2 - aw.aboutWindow->w()/2,
+			                         sy + sh/2 - aw.aboutWindow->h()/2);
+		}
 
 
 		aw.aboutWindow->position(mw.mainWindow->x()+mw.mainWindow->w()/2-aw.aboutWindow->w()/2,mw.mainWindow->y()+200);
