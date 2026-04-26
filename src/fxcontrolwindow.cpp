@@ -3,6 +3,8 @@
 #endif
 
 #include "fxcontrolwindow.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "fxWindow.h"
 #include <string>
 #include <map>
@@ -214,7 +216,7 @@ void fxMenuCB(Fl_Widget* o, void* data) {
             fc->type(Fl_File_Chooser::SINGLE);
             fc->show();
             while (fc->shown())
-                Fl::wait();
+                app().waitForEvents();
 
             if (fc->count()) {
 
@@ -235,7 +237,7 @@ void fxMenuCB(Fl_Widget* o, void* data) {
             fc->type(Fl_File_Chooser::CREATE);
             fc->show();
             while (fc->shown())
-                Fl::wait();
+                app().waitForEvents();
 
             if (fc->count()) {
                 plateManager.saveStackToFile(quadrant,fc->value(0));
@@ -321,7 +323,7 @@ void FXControlWindow::createWindow(int pquadrant) {
                 bottomPaneScroll->end();
 
                 bottomPaneScroll->redraw();
-                Fl::check();
+                app().processEvents();
                 theWindow->resizable(bottomPaneScroll);
 
             }
@@ -339,7 +341,7 @@ void generalFXGUICB(Fl_Widget* o, void* data) {
     if (plateManager.handleFXGUICB(fxControlWindow1.quadrant, o, data))
         cw->scheduleUpdateWindow(fxControlWindow1.quadrant);
 
-    Fl::check();
+    app().processEvents();
 }
 
 void FXControlWindow::updateWindow() { //clears the scroll, creates the applied FXs guis, adds the available FXs to the menu,  and sets the title, does not destroy the control theWindow.
@@ -477,7 +479,7 @@ void FXControlWindow::createParticularControls(gfcFX &theFX,Fl_Group* theGroup) 
         widgetGroupDummy->end();
         widgetGroup->init_sizes();
         widgetGroup->redraw();
-        Fl::check();
+        app().processEvents();
         theGroup->add(widgetGroupDummy);
         theGroup->add(widgetGroup);
 
@@ -691,7 +693,7 @@ void FXControlWindow::createParticularControls(gfcFX &theFX,Fl_Group* theGroup) 
                     fxParamInfo info(fxCount,quadrant,tmpWidget.varName.c_str(),groupsIter->second.name.c_str(),FX_GUI_LUT);
                     theStack->addFXGUIInfo(info,o);
                     hPack->add(o);
-					Fl::check();
+					app().processEvents();
 					o->do_callback(o,(this));
                 }
                 break;

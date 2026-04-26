@@ -1,4 +1,6 @@
 #include "gfcplaybackmanager.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcplaybackgui_fltk.h"
 
 #include <glad/glad.h>
@@ -81,16 +83,16 @@ void gfcPlaybackManager::update() {
 /*
 
 #ifdef WIN32
-                    Fl::wait(0.001);
+                    app().waitForEvents(0.001);
 #endif
 
 #ifdef __APPLE__
                     //on mac we have to sleep a whole lot apparently
-                    Fl::wait(0.02);
+                    app().waitForEvents(0.02);
 #endif
 
 #ifdef linux
-                    Fl::wait(0.0001);
+                    app().waitForEvents(0.0001);
 #endif*/
         intraFrameCount=0;
 		fpsTimerCount=0;
@@ -164,16 +166,16 @@ void gfcPlaybackManager::update() {
 			boundCurrentFrameToLimits();
 			
 		/*	#ifdef WIN32
-                    Fl::wait(0.001);
+                    app().waitForEvents(0.001);
 #endif
 
 #ifdef __APPLE__
                     //on mac we have to sleep a whole lot apparently
-                    Fl::wait(0.002);
+                    app().waitForEvents(0.002);
 #endif
 
 #ifdef linux
-                    Fl::wait(0.001);
+                    app().waitForEvents(0.001);
 #endif*/
         }
 		

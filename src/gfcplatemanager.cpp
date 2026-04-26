@@ -1,4 +1,6 @@
 #include "gfcplatemanager.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcplatemanagergui_fltk.h"
 #include "gfcTextRenderer.h"
 
@@ -1557,7 +1559,7 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
 
     Fl::ready();
 #ifndef __APPLE__xxx
-    Fl::check();
+    app().processEvents();
 #endif
 
     for ( int i=params.from; i<=params.to;i++ ) {
@@ -1586,7 +1588,7 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         }
         Fl::ready();
 #ifndef __APPLE__xxx
-        Fl::check();
+        app().processEvents();
 #endif
     }
 
