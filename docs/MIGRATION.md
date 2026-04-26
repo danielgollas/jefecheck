@@ -26,7 +26,7 @@ original detailed plan. Summary:
 | 0B | Remove `gfcPlate`'s direct FLTK widget pointers | 1 wk | ✅ on `qt-migration` |
 | 0C | Extract `gfcPlateManagerGUI` abstraction | 3 days | ✅ on `qt-migration` |
 | 0D | Wrap `GlViewport` behind `IGLViewport`, route 159 `Fl::event_*` calls through `IEventSystem` | 1 wk | ✅ on `qt-migration` |
-| 1A | Split `UICallbacks` into domain modules | 1 wk | not started |
+| 1A | Split `UICallbacks` into domain modules | 1 wk | ✅ on `qt-migration` |
 | 1B | Replace ~25 globals with `AppContext` singleton | 1 wk | not started |
 | 1C | Replace `Fl::check`/`wait` with `IApplication` | 3 days | ✅ on `qt-migration` |
 | 1D | Drop GLUT (timing dead code + screen size queries via `Fl::screen_xywh`) | 1 day | ✅ on `qt-migration` |
