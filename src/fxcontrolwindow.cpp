@@ -872,16 +872,21 @@ void FXControlWindow::createAvailableFXMenu() {//Creates the top panel of the FX
 		int recentOnes=sett.recentFXs.size();
 		for (int i=recentOnes-1; i>=0;i--)
 		{
+			// Skip recents that aren't currently loaded — getFXIndexByName returns -1
+			// for missing FXs, and -(-1) collides with FX_MENU_CLOSE in the cb-data
+			// encoding (loaded FXs use non-positive data; menu actions use positive).
+			int recentIndex=fxManager.getFXIndexByName(sett.recentFXs[i]);
+			if (recentIndex<0) continue;
+
 			std::string tmpMenuName="Available FX/";
 			if (i==0)
 			{ //last one, add separator
 				tmpMenuName+="_";
 			}
 			tmpMenuName+=sett.recentFXs[i];
-			
 
 			menuBar->add
-				(tmpMenuName.c_str(),0,(Fl_Callback*)fxMenuCB,(void*)-fxManager.getFXIndexByName(sett.recentFXs[i]),0);
+				(tmpMenuName.c_str(),0,(Fl_Callback*)fxMenuCB,(void*)(intptr_t)-recentIndex,0);
 		}
 
 		
