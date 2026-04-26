@@ -248,6 +248,49 @@ title: Home
   }
   .platform-badge img { height: 24px; width: auto; border: none; margin: 0; }
 
+  .install-notes {
+    margin: 1.5rem auto 0;
+    max-width: 640px;
+    text-align: left;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+  .install-notes summary {
+    cursor: pointer;
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+  .install-notes summary:hover { color: var(--accent); }
+  .install-notes h4 {
+    margin: 1rem 0 0.4rem;
+    color: var(--accent);
+    font-size: 0.9rem;
+  }
+  .install-notes h4:first-of-type { margin-top: 0.75rem; }
+  .install-notes code {
+    background: var(--code-bg);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    font-size: 0.85em;
+    font-family: "SF Mono", Consolas, monospace;
+    color: #d4976c;
+  }
+  .install-notes pre {
+    background: var(--code-bg);
+    padding: 0.6rem 0.8rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 0.4rem 0;
+    border: 1px solid var(--border);
+    font-size: 0.8rem;
+  }
+  .install-notes pre code { background: none; padding: 0; color: var(--text-primary); }
+
   .mexico-badge {
     display: inline-block;
     margin: 1rem 0 0;
@@ -393,6 +436,17 @@ title: Home
       <img src="{{ '/assets/images/Windows-32.png' | relative_url }}" alt="Windows"> Windows (x64)
     </a>
   </div>
+  <details class="install-notes">
+    <summary>Installation notes</summary>
+    <h4>macOS</h4>
+    <p>JefeCheck is ad-hoc signed but not notarized (no Apple Developer ID). On first launch, macOS will warn about an unidentified developer. Right-click the app and choose <strong>Open</strong> to bypass.</p>
+    <p>If you see <em>"JefeCheck is damaged and can't be opened"</em>, drag the app to <code>/Applications</code>, then run:</p>
+    <pre><code>xattr -dr com.apple.quarantine /Applications/JefeCheck.app</code></pre>
+    <h4>Linux</h4>
+    <p>Extract the tarball and run <code>./install.sh</code>, or run <code>./jefecheck</code> directly from the extracted folder.</p>
+    <h4>Windows</h4>
+    <p>Extract the zip and run <code>jefecheck.exe</code>. All required DLLs are bundled.</p>
+  </details>
   <div class="mexico-badge">
     <img src="{{ '/assets/images/hecho-en-mexico1.jpg' | relative_url }}" alt="Hecho en México">
   </div>
