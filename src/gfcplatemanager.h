@@ -6,8 +6,6 @@
 #include <vector>
 #include "gfcNetworkStructures.h"
 
-#include <FL/Fl_Group.H>
-
 #ifndef GFC_MAX_PLATES
 #define GFC_MAX_PLATES 4
 #endif
@@ -16,7 +14,7 @@
 #include "gfcrenderparams.h"
 #include "gfcpickdrawee.h"
 #include "gfcpicknotifee.h"
-#include "Fl_Choice_gfc.h"
+#include "gfcplatemanagergui.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
@@ -218,9 +216,7 @@ private:
     int framingMode;
     bool textModeReset;
     bool histogramModeReset;
-    Fl_Group* layoutsGroup;
-	Fl_Choice_gfc* layoutChoice;
-    Fl_Round_Button* layout1x1,*layout1x2,*layout2x2,*layout2x1;
+    gfcPlateManagerGUI* myGUI;
     bool showHelp;
     void drawHelp(int w=0, int h=0);
 	std::string helpMessage;
