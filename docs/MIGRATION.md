@@ -35,7 +35,7 @@ original detailed plan. Summary:
 | 2C | `*_qt` skeletons for the 5 existing GUI abstractions | done | ⏳ this PR |
 | 2D | Dark VFX QSS theme | done | ⏳ this PR |
 | 2E | Port FLUID windows to Qt (MainWindow, Load, Preferences, FX, etc.) | 4-6 wks | not started |
-| 2F | Replace `Fl::run()` with `QApplication::exec()` | 1 wk | not started |
+| 2F | Replace `Fl::run()` with `QApplication::exec()` | 1 wk | ✅ minimal Qt build runs (skeleton) |
 | 3 | Feature parity validation per window | 4-6 wks | not started |
 | 4 | Remove FLTK and `*_fltk` files; simplify | 2-3 wks | not started |
 
