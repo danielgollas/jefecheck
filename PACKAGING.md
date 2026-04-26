@@ -24,7 +24,7 @@ Homebrew auto-taps the repo, downloads the .dmg, copies `JefeCheck.app` to `/App
 
 **Source of truth:** `Casks/jefecheck.rb` in *this* repo. The `sync-tap.yml` workflow auto-pushes changes to the tap repo whenever the Cask file changes on `main`.
 
-**One-time setup for auto-sync:** the workflow needs a Personal Access Token with `contents: write` access to `danielgollas/homebrew-jefecheck`, stored as the `TAP_TOKEN` secret on this repo. Generate at https://github.com/settings/tokens (fine-grained PAT, scope to the tap repo, "Contents: Read and write"). Without this secret, the workflow no-ops and you'd need to manually sync the Cask file.
+**Auth:** uses a deploy key (ed25519 SSH keypair) — the public key is registered on `danielgollas/homebrew-jefecheck` as a deploy key with write access; the private key is stored as the `TAP_DEPLOY_KEY` secret on this repo. Deploy keys are scoped to one repo, so this is more locked-down than a PAT. To rotate: generate a new keypair, update both the deploy key (on the tap repo) and the secret (on this repo), then delete the old deploy key.
 
 **Submission to homebrew-cask main (future):** for the even cleaner `brew install --cask jefecheck` (no tap), open a PR against [homebrew/homebrew-cask](https://github.com/Homebrew/homebrew-cask). Reviewers usually want notarized apps for unsigned-binary submissions, so this likely needs an Apple Developer ID first.
 
