@@ -12,6 +12,7 @@ mkdir -p "$APP/Contents/Resources"
 cp build/jefecheck "$APP/Contents/MacOS/"
 cp -r src/FX "$APP/Contents/Resources/"
 cp -r src/fonts "$APP/Contents/Resources/"
+cp packaging/macos/JefeCheck.icns "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -30,6 +31,8 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <string>${VERSION}</string>
     <key>CFBundleExecutable</key>
     <string>jefecheck</string>
+    <key>CFBundleIconFile</key>
+    <string>JefeCheck.icns</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>NSHighResolutionCapable</key>
