@@ -39,6 +39,7 @@ file(GLOB JEFECHECK_SOURCES
     src/*.cpp
     src/*.cxx
     src/ui/*.cpp
+    src/callbacks/*.cpp
 )
 
 # Backend filtering: include only the active backend's *_fltk / *_qt files,
