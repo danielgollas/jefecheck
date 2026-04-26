@@ -248,6 +248,50 @@ title: Home
   }
   .platform-badge img { height: 24px; width: auto; border: none; margin: 0; }
 
+  .install-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin: 0 0 1.5rem;
+    text-align: left;
+  }
+  @media (max-width: 800px) { .install-grid { grid-template-columns: 1fr; } }
+  .install-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .install-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  .install-card-header img { height: 22px; width: auto; border: none; margin: 0; }
+  .install-card-cmd {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.55rem 0.75rem;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .install-card-fallback {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: auto;
+  }
+  .install-card-fallback a { color: var(--text-secondary); }
+
   .install-notes {
     margin: 1.5rem auto 0;
     max-width: 640px;
@@ -423,33 +467,45 @@ title: Home
 </div>
 
 <div class="download-section">
-  <h2>Download JefeCheck</h2>
-  <p>Free and open source. Available for all major platforms.</p>
-  <div class="platform-badges">
-    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">
-      <img src="{{ '/assets/images/Mac-lightblue-32.png' | relative_url }}" alt="macOS"> macOS (ARM64)
-    </a>
-    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">
-      <img src="{{ '/assets/images/109px-Tux-G2-32x32.png' | relative_url }}" alt="Linux"> Linux (x64)
-    </a>
-    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="platform-badge">
-      <img src="{{ '/assets/images/Windows-32.png' | relative_url }}" alt="Windows"> Windows (x64)
-    </a>
+  <h2>Install JefeCheck</h2>
+  <p>Free and open source. One-line install on all major platforms.</p>
+  <div class="install-grid">
+    <div class="install-card">
+      <div class="install-card-header">
+        <img src="{{ '/assets/images/Mac-lightblue-32.png' | relative_url }}" alt=""> macOS (ARM64)
+      </div>
+      <div class="install-card-cmd">brew install --cask danielgollas/jefecheck/jefecheck</div>
+      <div class="install-card-fallback">
+        Auto-taps <a href="https://github.com/danielgollas/homebrew-jefecheck">danielgollas/homebrew-jefecheck</a>, strips quarantine. Or <a href="https://github.com/danielgollas/jefecheck/releases/latest">download .dmg</a>.
+      </div>
+    </div>
+    <div class="install-card">
+      <div class="install-card-header">
+        <img src="{{ '/assets/images/Windows-32.png' | relative_url }}" alt=""> Windows (x64)
+      </div>
+      <div class="install-card-cmd">winget install danielgollas.JefeCheck</div>
+      <div class="install-card-fallback">
+        Or <a href="https://github.com/danielgollas/jefecheck/releases/latest">download .zip</a> and run <code>jefecheck.exe</code>.
+      </div>
+    </div>
+    <div class="install-card">
+      <div class="install-card-header">
+        <img src="{{ '/assets/images/109px-Tux-G2-32x32.png' | relative_url }}" alt=""> Linux (x64)
+      </div>
+      <div class="install-card-cmd">curl -L https://github.com/danielgollas/jefecheck/releases/latest/download/jefecheck-linux-x64.tar.gz | tar xz</div>
+      <div class="install-card-fallback">
+        Then <code>cd jefecheck-* && ./install.sh</code>. Or <a href="https://github.com/danielgollas/jefecheck/releases/latest">download tarball</a>.
+      </div>
+    </div>
   </div>
   <details class="install-notes">
-    <summary>Installation notes</summary>
-    <h4>macOS — Homebrew (recommended)</h4>
-    <pre><code>brew install --cask danielgollas/jefecheck/jefecheck</code></pre>
-    <p>Installs to <code>/Applications</code> with quarantine stripped — launches cleanly with no Gatekeeper warnings. Auto-taps <a href="https://github.com/danielgollas/homebrew-jefecheck">danielgollas/homebrew-jefecheck</a>. Update with <code>brew upgrade --cask jefecheck</code>.</p>
-    <h4>macOS — direct .dmg download</h4>
-    <p>The app is ad-hoc signed but not notarized. On first launch, right-click the app and choose <strong>Open</strong> to bypass the unidentified-developer warning.</p>
-    <p>If you see <em>"JefeCheck is damaged and can't be opened"</em>, drag the app to <code>/Applications</code> then run:</p>
+    <summary>Troubleshooting</summary>
+    <h4>macOS .dmg shows "JefeCheck is damaged"</h4>
+    <p>Only happens with the direct .dmg download (the Homebrew install avoids this). Drag the app to <code>/Applications</code>, then run:</p>
     <pre><code>xattr -dr com.apple.quarantine /Applications/JefeCheck.app</code></pre>
-    <h4>Windows — Winget</h4>
-    <pre><code>winget install danielgollas.JefeCheck</code></pre>
-    <p>Or download the zip, extract, and run <code>jefecheck.exe</code>. All required DLLs are bundled.</p>
-    <h4>Linux</h4>
-    <p>Extract the tarball and run <code>./install.sh</code>, or run <code>./jefecheck</code> directly from the extracted folder.</p>
+    <p>The app is ad-hoc signed but not notarized; the first launch will still show an unidentified-developer warning — right-click the app and choose <strong>Open</strong> to bypass.</p>
+    <h4>Winget submission pending</h4>
+    <p>The <code>winget</code> command is in review at <a href="https://github.com/microsoft/winget-pkgs">microsoft/winget-pkgs</a>. Until accepted, download the .zip directly from the releases page.</p>
   </details>
   <div class="mexico-badge">
     <img src="{{ '/assets/images/hecho-en-mexico1.jpg' | relative_url }}" alt="Hecho en México">
