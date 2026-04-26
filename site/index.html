@@ -250,12 +250,12 @@ title: Home
 
   .install-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
     margin: 0 0 1.5rem;
     text-align: left;
   }
-  @media (max-width: 800px) { .install-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 800px) { .install-grid { grid-template-columns: minmax(0, 1fr); } }
   .install-card {
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
@@ -264,6 +264,7 @@ title: Home
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+    min-width: 0;
   }
   .install-card-header {
     display: flex;
