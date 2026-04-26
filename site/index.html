@@ -439,8 +439,8 @@ title: Home
   <details class="install-notes">
     <summary>Installation notes</summary>
     <h4>macOS — Homebrew (recommended)</h4>
-    <pre><code>brew install --cask https://raw.githubusercontent.com/danielgollas/jefecheck/main/Casks/jefecheck.rb</code></pre>
-    <p>Installs to <code>/Applications</code> with quarantine stripped — launches cleanly with no Gatekeeper warnings.</p>
+    <pre><code>brew install --cask danielgollas/jefecheck/jefecheck</code></pre>
+    <p>Installs to <code>/Applications</code> with quarantine stripped — launches cleanly with no Gatekeeper warnings. Auto-taps <a href="https://github.com/danielgollas/homebrew-jefecheck">danielgollas/homebrew-jefecheck</a>. Update with <code>brew upgrade --cask jefecheck</code>.</p>
     <h4>macOS — direct .dmg download</h4>
     <p>The app is ad-hoc signed but not notarized. On first launch, right-click the app and choose <strong>Open</strong> to bypass the unidentified-developer warning.</p>
     <p>If you see <em>"JefeCheck is damaged and can't be opened"</em>, drag the app to <code>/Applications</code> then run:</p>

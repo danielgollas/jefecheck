@@ -4,7 +4,7 @@ JefeCheck ships through three channels:
 
 | Platform | Channel | Install command |
 |---|---|---|
-| macOS | Homebrew Cask (direct URL) | `brew install --cask https://raw.githubusercontent.com/danielgollas/jefecheck/main/Casks/jefecheck.rb` |
+| macOS | Homebrew Cask | `brew install --cask danielgollas/jefecheck/jefecheck` |
 | Windows | Winget | `winget install danielgollas.JefeCheck` |
 | Linux | Tarball + `install.sh` | Download from [Releases](https://github.com/danielgollas/jefecheck/releases) |
 
@@ -14,25 +14,19 @@ The Cask and Winget manifests are version-controlled in this repo (`Casks/jefech
 
 ### Homebrew Cask
 
-Three escalating options:
+Distributed via the personal tap [`danielgollas/homebrew-jefecheck`](https://github.com/danielgollas/homebrew-jefecheck). Users install with:
 
-**1. Direct URL install (current — no tap repo needed):**
 ```bash
-brew install --cask https://raw.githubusercontent.com/danielgollas/jefecheck/main/Casks/jefecheck.rb
+brew install --cask danielgollas/jefecheck/jefecheck
 ```
-The Cask file in this repo is the source of truth. Homebrew downloads the .dmg, copies `JefeCheck.app` to `/Applications`, and strips quarantine — launches cleanly with no Gatekeeper warnings. The `update-manifests.yml` workflow keeps the SHA up to date on every release. Slight downside: long URL.
 
-**2. Personal tap (cleaner command, requires new repo):**
-1. Create a new GitHub repo named `homebrew-jefecheck` (Homebrew requires the `homebrew-` prefix).
-2. Copy `Casks/jefecheck.rb` from this repo into the tap repo's root (or `Casks/` subdir).
-3. Users install with:
-   ```bash
-   brew install --cask danielgollas/jefecheck/jefecheck
-   ```
-4. Sync the file from this repo to the tap on each release (manually or via PAT-secured workflow).
+Homebrew auto-taps the repo, downloads the .dmg, copies `JefeCheck.app` to `/Applications`, and strips the quarantine xattr — launches cleanly with no Gatekeeper warnings.
 
-**3. Submission to homebrew-cask (cleanest UX, hardest to get accepted):**
-Cleanest command: `brew install --cask jefecheck` (no tap, no URL). Open a PR against [homebrew/homebrew-cask](https://github.com/Homebrew/homebrew-cask) using `Casks/jefecheck.rb`. Reviewers generally want notarized apps for unsigned-binary submissions, so this likely needs an Apple Developer ID first.
+**Source of truth:** `Casks/jefecheck.rb` in *this* repo. The `sync-tap.yml` workflow auto-pushes changes to the tap repo whenever the Cask file changes on `main`.
+
+**One-time setup for auto-sync:** the workflow needs a Personal Access Token with `contents: write` access to `danielgollas/homebrew-jefecheck`, stored as the `TAP_TOKEN` secret on this repo. Generate at https://github.com/settings/tokens (fine-grained PAT, scope to the tap repo, "Contents: Read and write"). Without this secret, the workflow no-ops and you'd need to manually sync the Cask file.
+
+**Submission to homebrew-cask main (future):** for the even cleaner `brew install --cask jefecheck` (no tap), open a PR against [homebrew/homebrew-cask](https://github.com/Homebrew/homebrew-cask). Reviewers usually want notarized apps for unsigned-binary submissions, so this likely needs an Apple Developer ID first.
 
 ### Winget
 

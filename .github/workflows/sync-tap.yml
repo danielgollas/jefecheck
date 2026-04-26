@@ -1,0 +1,53 @@
+name: Sync Cask to Homebrew tap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Casks/jefecheck.rb'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for TAP_TOKEN secret
+        id: check
+        env:
+          TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "TAP_TOKEN not set; skipping sync. See PACKAGING.md for setup."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip == 'false'
+        with:
+          path: source
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip == 'false'
+        with:
+          repository: danielgollas/homebrew-jefecheck
+          path: tap
+          token: ${{ secrets.TAP_TOKEN }}
+
+      - name: Copy Cask and push
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          set -e
+          cp source/Casks/jefecheck.rb tap/Casks/jefecheck.rb
+          cd tap
+          if git diff --quiet; then
+            echo "No changes to sync."
+            exit 0
+          fi
+          VERSION=$(grep -E '^  version' Casks/jefecheck.rb | sed -E 's/.*"([^"]+)".*/\1/')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/jefecheck.rb
+          git commit -m "sync: JefeCheck v${VERSION} from upstream"
+          git push
