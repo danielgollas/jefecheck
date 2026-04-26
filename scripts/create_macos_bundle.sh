@@ -40,4 +40,7 @@ cat > "$APP/Contents/Info.plist" << PLIST
 </plist>
 PLIST
 
+echo "Ad-hoc signing $APP..."
+codesign --force --deep --sign - "$APP"
+
 echo "Created $APP"
