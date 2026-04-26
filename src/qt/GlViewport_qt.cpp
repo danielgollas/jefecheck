@@ -5,7 +5,7 @@
 #include <QKeyEvent>
 #include <QWheelEvent>
 
-#include <glad/glad.h>
+extern bool jefecheck_loadGladGL();
 
 GlViewport_Qt::GlViewport_Qt(QWidget* parent)
     : QOpenGLWidget(parent) {
@@ -49,7 +49,7 @@ void GlViewport_Qt::setCursorVisible(bool visible) {
 
 void GlViewport_Qt::initializeGL() {
     if (!gladLoaded_) {
-        gladLoaded_ = gladLoadGL() != 0;
+        gladLoaded_ = jefecheck_loadGladGL();
     }
     if (listener_) listener_->onGLInit();
 }
