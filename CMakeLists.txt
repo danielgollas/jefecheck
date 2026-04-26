@@ -35,41 +35,55 @@ add_library(cli11 INTERFACE)
 target_include_directories(cli11 INTERFACE third_party/cli11)
 
 # Collect source files
-file(GLOB JEFECHECK_SOURCES
-    src/*.cpp
-    src/*.cxx
-    src/ui/*.cpp
-    src/callbacks/*.cpp
-)
-
-# Backend filtering: include only the active backend's *_fltk / *_qt files,
-# and pull in src/qt/*.cpp on USE_QT.
 if(USE_QT)
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_fltk\\.cpp$")
+    # Phase 2F: minimal Qt build. The vast majority of the codebase still
+    # depends on FLTK (FLUID-generated *.cxx, all of src/callbacks/, every
+    # gfc*manager.cpp, etc.), so the Qt build is intentionally tiny: just
+    # the abstract UI interfaces, the Qt skeleton implementations, and a
+    # main_qt.cpp shim that opens a window.
+    set(JEFECHECK_SOURCES
+        src/main_qt.cpp
+        src/ui/IApplication.cpp
+        src/ui/IEventSystem.cpp
+        src/gfcrectang.cpp
+        src/gfcplategui.cpp
+        src/gfcplatemanagergui.cpp
+        src/gfcplaybackgui.cpp
+        src/gfcsequencegui.cpp
+        src/gfcnetworkclientgui.cpp
+        src/gfcnetworkservergui.cpp
+    )
     file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
     list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
 else()
+    file(GLOB JEFECHECK_SOURCES
+        src/*.cpp
+        src/*.cxx
+        src/ui/*.cpp
+        src/callbacks/*.cpp
+    )
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_qt\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "main_qt\\.cpp$")
+
+    # Platform-specific exclusions
+    if(NOT WIN32)
+        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "WSAStartupSingleton")
+        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
+    endif()
+
+    # _FindFirst provides POSIX implementations of Windows FindFirst/FindNext API
+    # Needed on Linux and macOS; excluded only on actual Windows
+    if(WIN32)
+        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
+    endif()
+
+    # gfcTrack.cpp is a duplicate of gfcSequence.cpp (same symbols)
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
+
+    # Exclude custom EXR loader/saver - OIIO handles EXR natively
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
 endif()
-
-# Platform-specific exclusions
-if(NOT WIN32)
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "WSAStartupSingleton")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
-endif()
-
-# _FindFirst provides POSIX implementations of Windows FindFirst/FindNext API
-# Needed on Linux and macOS; excluded only on actual Windows
-if(WIN32)
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
-endif()
-
-# gfcTrack.cpp is a duplicate of gfcSequence.cpp (same symbols)
-list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
-
-# Exclude custom EXR loader/saver - OIIO handles EXR natively
-list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
-list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
 
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
