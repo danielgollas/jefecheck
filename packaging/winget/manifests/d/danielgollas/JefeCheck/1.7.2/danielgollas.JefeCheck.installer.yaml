@@ -1,0 +1,13 @@
+PackageIdentifier: danielgollas.JefeCheck
+PackageVersion: 1.7.2
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+- RelativeFilePath: jefecheck-1.7.2-windows-x64\jefecheck.exe
+  PortableCommandAlias: jefecheck
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/danielgollas/jefecheck/releases/download/v1.7.2/jefecheck-windows-x64.zip
+  InstallerSha256: D7F95DEA2F0D440FCC1ABB44A469CF29502DB2F1B99E0D732087FE838EE020BC
+ManifestType: installer
+ManifestVersion: 1.6.0
