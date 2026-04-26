@@ -1,4 +1,6 @@
 #include "gfclutmanager.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "UIConstants.h"
 #include "gfcStructures.h"
 #include <FL/Fl_File_Chooser.H>
@@ -67,7 +69,7 @@ void lutManagerCB_OTHERS(Fl_Widget * o, void * v) {
         fc->show();
         fc->directory ( sett.lutPath.c_str() );
         while ( fc->shown() )
-            Fl::wait();
+            app().waitForEvents();
 
         lutManager.saveScrollPosition();
 
@@ -289,7 +291,7 @@ void gfcLUTManager::fillLoadedScroll() {
 
     }
 #ifndef __APPLE__
-    Fl::check();
+    app().processEvents();
 #endif
 }
 

@@ -7,6 +7,8 @@
 #include <glad/glad.h>
 #include <functional>
 #include "gfcSequence.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <string.h>
 #include <stdio.h>
 #include <vector>
@@ -711,7 +713,7 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 
 	sldr->setRange ( rangeBegin,rangeEnd,mw.timeLine->w() / ( mw.playUpToInput->value()-mw.playFromInput->value() ) );
 	sldr->damage();
-	Fl::check();
+	app().processEvents();
 	}
 	}
 	*/

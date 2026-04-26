@@ -49,7 +49,10 @@
 #include "drawingToolsWindow.h"
 #include "gfcTextRenderer.h"
 #include "ieventsystem_fltk.h"
+#include "iapplication_fltk.h"
 #include <FL/Fl_Text_Buffer.H>
+
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 
 #ifdef WIN32
 //stuff needed to set the program icon on windows
@@ -313,6 +316,8 @@ int main(int argc, char *argv[]) {
     // event handling. Static lifetime; outlives main() naturally.
     static IEventSystem_FLTK g_event_system_fltk;
     jefe::ui::IEventSystem::setInstance(&g_event_system_fltk);
+    static IApplication_FLTK g_application_fltk;
+    jefe::ui::IApplication::setInstance(&g_application_fltk);
 
     printf("--------------------\nJefeCheck %s \nDaniel Gollas Gilman\n--------------------\n",JEFE_VERSION);
 
@@ -379,7 +384,7 @@ int main(int argc, char *argv[]) {
     //mw.mainWindow->show(1, &argv[0]);
     mw.mainWindow->show();
 
-    Fl::check();
+    app().processEvents();
     fxControlWindow1.createWindow(0);
     plw.createWindow();
     aboutWindow.aboutWindow->position(mw.mainWindow->x()+mw.mainWindow->w()/2-aboutWindow.aboutWindow->w()/2,mw.mainWindow->y()+200);
@@ -416,7 +421,7 @@ int main(int argc, char *argv[]) {
         printf("%i\n",glGetString(GL_VERSION));
         mw.mainWindow->redraw();
         mw.vp->redraw();
-        Fl::check();
+        app().processEvents();
     }
 
 
@@ -545,15 +550,15 @@ int main(int argc, char *argv[]) {
 
 
     printf("--------------------------------------------\n");
-    Fl::check();
+    app().processEvents();
 
     //npotTextures=false; //JUST TO TEST NPOT PERFORMANCE, COMMENT AFTER DEBBUGING
-    Fl::check();
+    app().processEvents();
     gGLContext=mw.vp->context();
     glReady=true;
     printf("Initializing OpenGL\n");
     initOpenGL();
-    Fl::check();
+    app().processEvents();
 
     // Initialize text renderer
     {
@@ -577,7 +582,7 @@ int main(int argc, char *argv[]) {
     if (sett.glsl) {
         printf("Initializing Shader Objects\n");
         GLhandleARB testProgramObject=glCreateProgramObjectARB();
-        Fl::check();
+        app().processEvents();
         //printf("glCreateProgramObjectARB checked\n");
         int waitingForTestProgramCounter=0;
         int testProgramCounterLimit=50;
@@ -588,7 +593,7 @@ int main(int argc, char *argv[]) {
             //printf("main window redrawn \n");
             mw.vp->redraw();
             //printf("vp redrawn \n");
-            Fl::check();
+            app().processEvents();
             //printf("checked \n");
             testProgramObject=glCreateProgramObjectARB();
             //printf(" Test Program Object=%i\n",testProgramObject);
@@ -761,7 +766,7 @@ int main(int argc, char *argv[]) {
     while (!quitNow && mw.mainWindow->shown()) {
         {
             //We always update the managers no matter what we do.
-            Fl::check();
+            app().processEvents();
             {
                 if (plateManager.getChanged() ) {
 
@@ -777,16 +782,16 @@ int main(int argc, char *argv[]) {
 
 #ifdef WIN32
 										
-                    Fl::wait(0.001);
+                    app().waitForEvents(0.001);
 #endif
 
 #ifdef __APPLE__
                     //on mac we have to sleep a whole lot apparently
-                    Fl::wait(0.0001);
+                    app().waitForEvents(0.0001);
 #endif
 
 #ifdef linux
-                    Fl::wait(0.0001);
+                    app().waitForEvents(0.0001);
 #endif
 					}
 					else
@@ -798,16 +803,16 @@ int main(int argc, char *argv[]) {
 						
 #ifdef WIN32
 
-						Fl::wait(0.0005);
+						app().waitForEvents(0.0005);
 #endif
 
 #ifdef __APPLE__
 						//on mac we have to sleep a whole lot apparently
-						Fl::wait(0.0001);
+						app().waitForEvents(0.0001);
 #endif
 
 #ifdef linux
-						Fl::wait(0.0001);
+						app().waitForEvents(0.0001);
 #endif
 						}
 					}
@@ -824,7 +829,7 @@ int main(int argc, char *argv[]) {
 		//apple needs it's sleep, even if we are not playing back.
 		#ifdef __APPLE__
             //on mac we have to sleep a whole lot apparently
-          Fl::wait(0.01);
+          app().waitForEvents(0.01);
 		#endif
 
 		}
@@ -835,7 +840,7 @@ int main(int argc, char *argv[]) {
         plateManager.updateAnimations();
         plw.updateWindow();
         fxControlWindow1.updateWindow();
-	//Fl::wait();
+	//app().waitForEvents();
     }
 
     // licenseClient.Disconnect(30);

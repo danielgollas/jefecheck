@@ -2,7 +2,9 @@
 #include <FL/Fl_Browser.H>
 #include "stdio.h"
 #include "ui/IEventSystem.h"
+#include "ui/IApplication.h"
 namespace { jefe::ui::IEventSystem& evt() { return jefe::ui::IEventSystem::instance(); } }
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "mainWindow.h"
 #include "loadWindow.h"
 #include "lutWindow.h"
@@ -675,7 +677,7 @@ void controlBarCB ( Fl_Widget* o , void* v ) {
 
 	////Fl::focus ( mw.vp );
 #ifndef __APPLE__
-	Fl::check();
+	app().processEvents();
 #endif
 
 	Fl::redraw();
@@ -709,7 +711,7 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 		sprintf ( gFilename,"" );
 		fc->show();
 		while ( fc->shown() )
-			Fl::wait();
+			app().waitForEvents();
 
 		if (fc->count())
 			networkManager.saveChatLog(fc->value(0));
@@ -745,7 +747,7 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 		printf ( "FileChooser Type is %i\n",fc->type() );
 		fc->show();
 		while ( fc->shown() )
-			Fl::wait();
+			app().waitForEvents();
 
 		if (fc->count()) {
 			sessionManager.saveSession ( fc->value(0));
@@ -762,7 +764,7 @@ void menuCB ( Fl_Menu_* o , void* v ) {
 		printf ( "FileChooser Type is %i\n",fc->type() );
 		fc->show();
 		while ( fc->shown() )
-			Fl::wait();
+			app().waitForEvents();
 
 		if (fc->count()) {
 			std::string tmpStringName=fc->value(0);
@@ -1373,7 +1375,7 @@ void loadCB ( Fl_Widget* o , void* v ) {
 
 		fc->show();
 		while ( fc->shown() )
-			Fl::wait();
+			app().waitForEvents();
 
 
 		int trackID=trackManager.getTrackIDfromWidget(o);
@@ -2113,7 +2115,7 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 		fc->show();
 		fc->show();
 		while ( fc->shown() )
-			Fl::wait();
+			app().waitForEvents();
 
 		if (fc->count()) {
 			pw.defaultBrowsePath->value ( fc->value(0));
@@ -2133,7 +2135,7 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 		fc->show();
 		fc->show();
 		while ( fc->shown() )
-			Fl::wait();
+			app().waitForEvents();
 
 		if (fc->count()) {
 			/*pw.defaultBrowsePath->value ( fc->value(0));
@@ -2408,7 +2410,7 @@ void PreferencesCB ( Fl_Widget* o , void* v ) {
 		fc->type ( Fl_File_Chooser::DIRECTORY );
 		fc->show();
 		while ( fc->shown() )
-			Fl::wait();
+			app().waitForEvents();
 		rw.path->value ( gFilename );
 		fc->type ( Fl_File_Chooser::SINGLE );
 

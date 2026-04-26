@@ -8,6 +8,8 @@
 #endif
 
 #include "GlViewport.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "ui/IEventSystem.h"
 #include <stdio.h>
 #include "mainWindow.h"
@@ -783,7 +785,7 @@ int GlViewport::handle ( int e ) {
         if ( fxControlWindow1.theWindow->shown() ) {
             fxControlWindow1.scheduleUpdateWindow ( startQuad-1 );
             //Fl::focus ( this );
-            Fl::check();
+            app().processEvents();
         }
 
 

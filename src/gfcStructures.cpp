@@ -1,4 +1,6 @@
 #include "gfcStructures.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "mainWindow.h"
 #include "loadWindow.h"
 #include "lutWindow.h"
@@ -620,7 +622,7 @@ char splitterChar;
 					statusString="Loading LUT: ";
 					statusString+=GetFilenameNoPath ( tempLutName );
 					aboutWindow.status->value(statusString.c_str());
-					Fl::check();
+					app().processEvents();
 					fflush ( stdout );
 					/*if ( fileExists ( tempLutName.c_str() ) && strcmp ( tempLutName.c_str(), "(null)" ) && tempLutName[strlen ( tempLutName.c_str() )-1]!='/' && tempLutName.c_str() !=NULL )*/
 					{
@@ -692,7 +694,7 @@ void loadFXsFromPath(std::string thePath) {
             statusString="Loading FX: ";
             statusString+=GetFilenameNoPath ( tempFXName );
             aboutWindow.status->value(statusString.c_str());
-            Fl::check();
+            app().processEvents();
             {
                 fxManager.loadFX(tempFXName);
             }
@@ -742,7 +744,7 @@ void readSettings ( gfcSettings &sett ) {
     std::string statusString;
 	
     aboutWindow.status->value("Reading Settings...");
-    Fl::check();
+    app().processEvents();
     printf ( "\n--------------------------------------------\n");
     printf ( "Reading user preferences:\n" );
     std::string appDataPath,settingsFilename;
@@ -954,7 +956,7 @@ void readSettings ( gfcSettings &sett ) {
         statusString="Loading LUT: ";
         statusString+=GetFilenameNoPath ( tempLutName );
         aboutWindow.status->value(statusString.c_str());
-        Fl::check();
+        app().processEvents();
         fflush ( stdout );
         //for each one, we have to read into a tmp CubeLUT and store in the lutArray and make available from tracks and lutWindow
         if ( fileExists ( tempLutName.c_str() ) && strcmp ( tempLutName.c_str(), "(null)" ) && tempLutName[strlen ( tempLutName.c_str() )-1]!='/' && tempLutName.c_str() !=NULL ) {
@@ -992,7 +994,7 @@ void readSettings ( gfcSettings &sett ) {
             statusString="Loading FX: ";
             statusString+=GetFilenameNoPath ( tmp );
             aboutWindow.status->value(statusString.c_str());
-            Fl::check();
+            app().processEvents();
             fxManager.loadFX(tmp);
         }
     }
@@ -1000,7 +1002,7 @@ void readSettings ( gfcSettings &sett ) {
 	
 	
     aboutWindow.status->value("Reading recent sessions...");
-    Fl::check();
+    app().processEvents();
     //Read max recent amounts
     int numRecentFXStacks=xRecentStacksNode.nChildNode ( "stack" );
     int xmlStackIter=0;
@@ -1141,7 +1143,7 @@ void readSettings ( gfcSettings &sett ) {
 	
     printf ( "--------------------------------------------\n" );
     aboutWindow.status->value("Done reading settings, starting up...");
-    Fl::check();
+    app().processEvents();
 }
 
 std::string GetPathFromFilename ( const std::string& filename ) {

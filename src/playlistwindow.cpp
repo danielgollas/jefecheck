@@ -4,6 +4,8 @@
 
 #include "playlistwindow.h"
 #include "ui/IEventSystem.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <string>
 #include <map>
 #include <vector>
@@ -522,7 +524,7 @@ void playlistMenuCB(Fl_Widget* o, void* data) {
 			fc->type(Fl_File_Chooser::SINGLE);
 			fc->show();
 			while (fc->shown())
-				Fl::wait();
+				app().waitForEvents();
 
 			if (fc->count()) {
 
@@ -546,7 +548,7 @@ void playlistMenuCB(Fl_Widget* o, void* data) {
 			fc->type(Fl_File_Chooser::CREATE);
 			fc->show();
 			while (fc->shown())
-				Fl::wait();
+				app().waitForEvents();
 
 			if (fc->count()) {
 				playlistManager.savePlaylist(fc->value(0));
@@ -647,7 +649,7 @@ void PlaylistWindow::createWindow() {
 				plScroll->color(fl_rgb_color(48,48,48));
 				plScroll->end();
 				plScroll->init_sizes();
-				Fl::check();
+				app().processEvents();
 				theWindow->resizable(menuBar);
 				theWindow->resizable(plScroll);
 				plScroll->parentWindow=this;

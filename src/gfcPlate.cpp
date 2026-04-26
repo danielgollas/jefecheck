@@ -1,5 +1,7 @@
 #include <glad/glad.h>
 #include "gfcPlate.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
@@ -1218,7 +1220,7 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
 
                     /*if ( forRender ) {
                         rw.progress->copy_label ( "Loading and Rendering" );
-                        Fl::check();
+                        app().processEvents();
                     }*/
 
                     //if ( polySizeX!=fboVP.w || polySizeY!=fboVP.h ) 
