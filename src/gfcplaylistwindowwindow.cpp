@@ -1,4 +1,7 @@
 #include "gfcplaylistwindowwindow.h"
+#include "ui/IEventSystem.h"
+
+namespace { jefe::ui::IEventSystem& evt() { return jefe::ui::IEventSystem::instance(); } }
 
 #include "gfcplaylistmanager.h"
 extern gfcPlaylistManager playlistManager;
@@ -37,7 +40,7 @@ int gfcPlaylistWindowWindow::handle(int e)
 	
 	case FL_KEYDOWN:
 		{
-			switch (Fl::event_key()) {
+			switch (static_cast<int>(evt().currentKey())) {
 
 				case FL_Enter:
 
@@ -53,7 +56,7 @@ int gfcPlaylistWindowWindow::handle(int e)
 					break;
 
 				case FL_Up:
-					if (Fl::event_shift())
+					if (evt().isShift())
 					{
 						playlistManager.movePlaylistItem(playlistManager.selectedItem,1);	
 					}
@@ -67,7 +70,7 @@ int gfcPlaylistWindowWindow::handle(int e)
 					break;
 
 				case FL_Down:
-					if (Fl::event_shift())
+					if (evt().isShift())
 					{
 						playlistManager.movePlaylistItem(playlistManager.selectedItem,-1);
 					}

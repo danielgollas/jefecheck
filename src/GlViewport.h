@@ -30,6 +30,7 @@
 #define GlViewport_h
 
 #  include <FL/Fl_Gl_Window.H>
+#include "ui/IGLViewport.h"
 #include <glad/glad.h>
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -106,7 +107,7 @@ class PopupWindow : public Fl_Menu_Window
 };
 
 
-class GlViewport : public Fl_Gl_Window
+class GlViewport : public Fl_Gl_Window, public jefe::ui::IGLViewport
 {
 
 	public:
@@ -140,6 +141,18 @@ class GlViewport : public Fl_Gl_Window
 		int getQuadFromMousePos(int x, int y);
 		int handle ( int );
 		void setVsync(int value);
+
+		// IGLViewport implementation. Delegates to Fl_Gl_Window methods.
+		void requestRedraw() override { redraw(); }
+		void makeCurrent() override { make_current(); }
+		void swapBuffers() override {}  // FLTK swaps automatically after draw()
+		int width() const override { return Fl_Gl_Window::w(); }
+		int height() const override { return Fl_Gl_Window::h(); }
+		float pixelsPerUnit() const override {
+			return static_cast<float>(const_cast<GlViewport*>(this)->Fl_Gl_Window::pixels_per_unit());
+		}
+		void setListener(jefe::ui::IGLViewportListener* /*l*/) override {}  // not used yet
+		void setCursorVisible(bool v) override { cursor(v ? FL_CURSOR_DEFAULT : FL_CURSOR_NONE); }
 		/*gfcSequence trackA;
 		gfcSequence trackB;
 		gfcSequence trackC;

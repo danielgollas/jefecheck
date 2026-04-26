@@ -48,6 +48,7 @@
 #include "remoteWindow.h"
 #include "drawingToolsWindow.h"
 #include "gfcTextRenderer.h"
+#include "ieventsystem_fltk.h"
 #include <FL/Fl_Text_Buffer.H>
 
 #ifdef WIN32
@@ -307,6 +308,11 @@ void parseArguments(int argc, char *argv[]) {
  */
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL); // disable buffering for debug output
+
+    // Register the FLTK backend for jefe::ui::IEventSystem before any UI
+    // event handling. Static lifetime; outlives main() naturally.
+    static IEventSystem_FLTK g_event_system_fltk;
+    jefe::ui::IEventSystem::setInstance(&g_event_system_fltk);
 
     printf("--------------------\nJefeCheck %s \nDaniel Gollas Gilman\n--------------------\n",JEFE_VERSION);
 

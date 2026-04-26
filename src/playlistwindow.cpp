@@ -3,11 +3,14 @@
 #endif 
 
 #include "playlistwindow.h"
+#include "ui/IEventSystem.h"
 #include <string>
 #include <map>
 #include <vector>
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
+
+namespace { jefe::ui::IEventSystem& evt() { return jefe::ui::IEventSystem::instance(); } }
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Scroll.H>
 #include <FL/Fl_Pack.H>
@@ -224,7 +227,7 @@ int PlaylistItemWidgetBrowser::handle(int e)
 	case FL_PASTE:
 		{
 			// *****HANDLE DRAG AND DROP******** //
-			std::string pastedText=Fl::event_text();
+			std::string pastedText=evt().currentText().c_str();
 			std::cout<<"pasted text into browser widget!: "<<GetFilenameNoFilePrefix(RemoveNewLine(pastedText))<<std::endl<<"nextLine"<<std::endl;
 			//TODO: Create a playlist item with the track, loading all default values, but we need to calculate the range at least.
 			std::vector<std::string> filenames=GetFilenamesFromPastedText(pastedText);
@@ -278,7 +281,7 @@ int PlaylistItemWidget::handle(int e)
 	/*case FL_PASTE:
 		{
 			// *****HANDLE DRAG AND DROP******** //
-			std::string pastedText=Fl::event_text();
+			std::string pastedText=evt().currentText().c_str();
 			std::cout<<"pasted text into widget!: "<<GetFilenameNoFilePrefix(RemoveNewLine(pastedText))<<std::endl<<"nextLine"<<std::endl;
 			//TODO: Create a playlist item with the track, loading all default values, but we need to calculate the range at least.
 			std::vector<std::string> filenames;
@@ -363,7 +366,7 @@ int PlaylistScroll::handle(int e)
 	case FL_PASTE:
 		{
 			// *****HANDLE DRAG AND DROP******** //
-			std::string pastedText=Fl::event_text();
+			std::string pastedText=evt().currentText().c_str();
 			std::cout<<"pasted text: "<<GetFilenameNoFilePrefix(RemoveNewLine(pastedText))<<std::endl<<"nextLine"<<std::endl;
 			//TODO: Create a playlist item with the track, loading all default values, but we need to calculate the range at least.
 			std::vector<std::string> filenames=GetFilenamesFromPastedText(pastedText);
@@ -434,7 +437,7 @@ void updateRecentlyLoadedPlaylists(std::string pfileName)
 void playlistItemCB(Fl_Widget* o, void* data){
 	
 	//printf("playlistItemCB %i\n",(long)data);
-	if(Fl::event_clicks()){
+	if(evt().clickCount()){
 		//printf("clicked on playlist item %i\n",(int)data);
 		trackManager.setPlaylistItem(playlistManager.getItem((long)data));
 		playlistManager.setSelectedItem((long)data);
