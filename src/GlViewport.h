@@ -31,6 +31,7 @@
 
 #  include <FL/Fl_Gl_Window.H>
 #include "ui/IGLViewport.h"
+#include "GlViewportCore.h"
 #include <glad/glad.h>
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -107,36 +108,31 @@ class PopupWindow : public Fl_Menu_Window
 };
 
 
-class GlViewport : public Fl_Gl_Window, public jefe::ui::IGLViewport
+class GlViewport : public Fl_Gl_Window, public jefe::ui::IGLViewport, public GlViewportCore
 {
 
 	public:
 
-		GlViewport ( int x,int y,int w,int h,const char *l=0 ) : Fl_Gl_Window ( x,y,w,h,l ), ID ( 0 )
-				, framingMode ( FRAMINGSINGLE_ID )
+		GlViewport ( int x,int y,int w,int h,const char *l=0 ) : Fl_Gl_Window ( x,y,w,h,l )
 		{
+			// Most state defaults come from GlViewportCore's constructor.
+			// We only need the FLTK-specific bits and the few fields that
+			// require enum values from UIConstants here.
+			ID = 0;
+			framingMode = FRAMINGSINGLE_ID;
+			loopMode = LOOPMODELOOP_ID;
 
-			play=false;
-			targetFPS=24;
-			loopMode=LOOPMODELOOP_ID;
-			scale=1;
-			transX=transY=prevX=prevY=0;
-			//bgColorR=bgColorG=bgColorB=0.0;//0.18;
 			mode ( FL_STENCIL | FL_RGB | FL_ALPHA );
-			bgColorR[0]=bgColorG[0]=bgColorB[0]=0;
-			bgColorR[1]=bgColorG[1]=bgColorB[1]=0.5;
-			showChat=true;
 			popup = new PopupWindow();
 			popup->text ( "This is a test\nSo is this, a much longer line of text." );
 
 			end();
 		}
 
-		
+
 		void draw();
 		void size ( int X,int Y,int W,int H );
 		//void resize ( int X,int Y,int W,int H ); //resize now handled with "valid" in idle func
-		int showChat;
 		void layout();
 		int getQuadFromMousePos(int x, int y);
 		int handle ( int );
@@ -153,48 +149,13 @@ class GlViewport : public Fl_Gl_Window, public jefe::ui::IGLViewport
 		}
 		void setListener(jefe::ui::IGLViewportListener* /*l*/) override {}  // not used yet
 		void setCursorVisible(bool v) override { cursor(v ? FL_CURSOR_DEFAULT : FL_CURSOR_NONE); }
-		/*gfcSequence trackA;
-		gfcSequence trackB;
-		gfcSequence trackC;
-		gfcSequence trackD;*/
-
-		int targetFPS;
-		int currentFrame;
-
-		gfcFrame tf; //test frame
-		RawFrame trf; //test raw frame for preview
-		gfcPlate tp; //test plate for preview
-		int loopMode;
-		bool play;
-		int transX;
-		int transY;
-		int prevX;
-		int prevY;
-		float scale;
-		int startQuad;
 
 		void reLayout ( void );
 		std::string updateTimecode ( void );
 		int getMaxTrackLenght ( void );
-		int ID;
-		int framingMode;
-		bool resized;
-		gfcPlate q1;
-		gfcPlate q2;
-		gfcPlate q3;
-		gfcPlate q4;
-
-		gfcFrame previewFrameA;
-		gfcFrame previewFrameB;
-		gfcFrame previewFrameC;
-		gfcFrame previewFrameD;
 
 		PopupWindow *popup;
 		// Fl_Rectangle rec;
 		void setBGColor ( float r, float g, float b );
-	private:
-		float bgColorR[2];
-		float bgColorG[2];
-		float bgColorB[2];
 };
 #endif
