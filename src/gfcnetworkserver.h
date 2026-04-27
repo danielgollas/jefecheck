@@ -3,7 +3,9 @@
 
 //#include "network.h"
 #include <stdio.h>
+#ifdef JEFECHECK_USE_FLTK
 #include "mainWindow.h"
+#endif
 #include "RakPeerInterface.h"
 #include <string>
 #include <vector>
@@ -21,6 +23,7 @@
 #include "BitStream.h"
 #include "gfcnetworklog.h"
 #include "gfcnetworkservergui.h"
+#include "gfcNetworkStructures.h"
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>

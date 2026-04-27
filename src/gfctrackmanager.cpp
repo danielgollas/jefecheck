@@ -1,6 +1,7 @@
 
 
 #include "gfctrackmanager.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "gfcsequencegui_fltk.h"
 #include <FL/fl_ask.H>
 
@@ -11,6 +12,7 @@ extern LoadWindow lw;
 
 #include "preferencesWindow.h"
 extern PreferencesWindow pw;
+#endif
 
 #include "gfcsessionmanager.h"
 extern gfcSessionManager sessionManager;
@@ -103,8 +105,13 @@ void gfcTrackManager::setPlaylistItem(gfcPlaylistItem item, bool fromNetwork){
 		}
 		message+="\nWould you like to load this item too?";
 
-		int answer=fl_choice(message.c_str(),
-			"Yes", "Yes, and auto accept the requests in the future", "No,thank you");
+#ifdef JEFECHECK_USE_FLTK
+		int answer=fl_choice("%s", "Yes", "Yes, and auto accept the requests in the future", "No,thank you", message.c_str());
+#else
+		// No interactive prompt in the Qt build yet — accept silently.
+		int answer = 0;
+		(void)message;
+#endif
 
 		switch ( answer ) {
 		case 0:
@@ -114,7 +121,9 @@ void gfcTrackManager::setPlaylistItem(gfcPlaylistItem item, bool fromNetwork){
 		case 1:
 			//load the item and set autoload
 			sessionManager.loadCrashedSession();
+#ifdef JEFECHECK_USE_FLTK
 			pw.remoteAutoAcceptLoadRequests->value(true);
+#endif
 			setAutoAcceptRemoteLoadRequests(true);
 			break;
 
@@ -147,10 +156,14 @@ void gfcTrackManager::setPlaylistItem(gfcPlaylistItem item, bool fromNetwork){
 	
 	setCurrentProgramState(item.programState);
 
+#ifdef JEFECHECK_USE_FLTK
 	if(!lw.loadWindow->visible())
 	{
 		startLoadingAll();
 	}
+#else
+	startLoadingAll();
+#endif
 	networkManager.sendPlaylistItem(itemToSend);
 }
 
@@ -210,6 +223,7 @@ int testHandle()
 
 void gfcTrackManager::initializeWidgets()
 {
+#ifdef JEFECHECK_USE_FLTK
 	/*
 	For now, the track manager instances the sequence object's sequenceGUI objects to sequenceGUI_FLTK objects.
 	*/
@@ -300,6 +314,7 @@ void gfcTrackManager::initializeWidgets()
 	sequences[3].myGUI->assignMoreOptionsButton(mw.menuD);
 	sequences[3].myGUI->assignChannelOptionsWidget(lw.channelsChoiceD);
 	sequences[3].myGUI->assignStartButtonWidget(lw.startD);
+#endif
 }
 
 void gfcTrackManager::stopLoadingAll()
@@ -632,7 +647,9 @@ void gfcTrackManager::loadFromFilename(int whichOne, gfcLoadParams params)
 		tmp->myGUI->setToFrame(params.toFrame);
 		
 		startLoadingSequence(whichOne);
+#ifdef JEFECHECK_USE_FLTK
 		lw.loadWindow->hide();
+#endif
 	}
 	else
 	{

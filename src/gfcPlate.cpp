@@ -9,16 +9,21 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include <FL/x.H>
 #endif
 #include "gfcSequence.h"
+#ifdef JEFECHECK_USE_FLTK
+// FLUID-generated FLTK windows — only included in the FLTK build. Their
+// global instances (`mw`, `lw`, `lutw`, `rw`) are FLTK-only too; the few
+// places this TU touches them are gated below.
 #include "mainWindow.h"
 #include "loadWindow.h"
 #include "lutWindow.h"
-#ifdef JEFECHECK_USE_FLTK
 #include "FL/fl_ask.H"
 #endif
 #include "gfcfx.h"
 #include <string>
 #include "platefxparams.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "renderWindow.h"
+#endif
 //#include "network.h"
 #include "gfcplatedrawparams.h"
 
@@ -38,11 +43,11 @@ namespace {
 // whatever FLTK reports (including any custom palette overrides). In other
 // builds we fall back to a static table for the named colors and white for
 // out-of-range indices.
-inline void gfcLookupPointerColor(int colorIdx, uchar& r, uchar& g, uchar& b) {
+inline void gfcLookupPointerColor(int colorIdx, unsigned char& r, unsigned char& g, unsigned char& b) {
 #ifdef JEFECHECK_USE_FLTK
     Fl::get_color(Fl_Color(colorIdx), r, g, b);
 #else
-    static const uchar table[8][3] = {
+    static const unsigned char table[8][3] = {
         {  0,  0,  0}, {255,  0,  0}, {  0,255,  0}, {255,255,  0},
         {  0,  0,255}, {255,  0,255}, {  0,255,255}, {255,255,255}
     };
@@ -59,10 +64,12 @@ inline void gfcLookupPointerColor(int colorIdx, uchar& r, uchar& g, uchar& b) {
 
 
 
+#ifdef JEFECHECK_USE_FLTK
 extern MainWindow mw;
 extern LoadWindow lw;
 extern LutWindow lutw;
 extern RenderWindow rw;
+#endif
 //extern std::vector<CubeLUT> lutArray;
 extern bool npotTextures;
 extern GLint gFilteringModeMin;
@@ -211,7 +218,14 @@ void gfcPlate::capturePointerCoords() {	//TEST CAPTURING THE GL COORDINATES FROM
         glGetDoublev( GL_MODELVIEW_MATRIX,modelView );
         glGetDoublev( GL_PROJECTION_MATRIX,projection );
 
+#ifdef JEFECHECK_USE_FLTK
         gluUnProject ( mw.vp->prevX, mw.vp->h()-mw.vp->prevY, -1, modelView, projection, viewport, &posX, &posY, &posZ );
+#else
+        // Qt build doesn't have a `mw` global yet; remote-pointer
+        // capture isn't wired. Single-plate Qt rendering will route
+        // viewport coords through the active GlViewport_Qt directly.
+        return;
+#endif
         prevPointerX=posX;
         prevPointerY=posY;
 
@@ -848,7 +862,7 @@ void gfcPlate::drawRemotePointers() {
             pIter=nickIter->second.begin();
             pEnd=nickIter->second.end();
             int maxPointer=nickIter->second.size();
-			uchar red, green, blue;
+			unsigned char red, green, blue;
 			gfcLookupPointerColor(pIter->color, red, green, blue);
 
             if (pIter!=pEnd) {

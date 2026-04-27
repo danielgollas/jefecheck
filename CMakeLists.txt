@@ -36,29 +36,57 @@ target_include_directories(cli11 INTERFACE third_party/cli11)
 
 # Collect source files
 if(USE_QT)
-    # Phase 2F: minimal Qt build. The vast majority of the codebase still
-    # depends on FLTK (FLUID-generated *.cxx, all of src/callbacks/, every
-    # gfc*manager.cpp, etc.), so the Qt build is intentionally tiny: just
-    # the abstract UI interfaces, the Qt skeleton implementations, and a
-    # main_qt.cpp shim that opens a window.
-    set(JEFECHECK_SOURCES
-        src/main_qt.cpp
-        src/ui/IApplication.cpp
-        src/ui/IEventSystem.cpp
-        src/gfcrectang.cpp
-        src/gfcplategui.cpp
-        src/gfcplatemanagergui.cpp
-        src/gfcplaybackgui.cpp
-        src/gfcsequencegui.cpp
-        src/gfcnetworkclientgui.cpp
-        src/gfcnetworkservergui.cpp
-        # Image loading: OIIO-backed loader and the pixel-buffer helper.
-        # FLTK-free; pulled in for the Qt build to render real images.
-        src/gfcimageloaderoiio.cpp
-        src/gfcloadparams.cpp
-        src/gfcglframeinfo.cpp
-        src/gfcimageloader.cpp
+    # Qt build: include the whole codebase, then exclude the FLTK-only TUs.
+    # Files that compile in both backends keep their FLTK touchpoints
+    # gated behind JEFECHECK_USE_FLTK; files that are wholly FLTK (FLUID
+    # windows, the callback shims, gfcStructures, etc.) are excluded
+    # outright and replaced by the Qt-side equivalents in src/qt/.
+    file(GLOB JEFECHECK_SOURCES
+        src/*.cpp
+        src/ui/*.cpp
     )
+    # FLUID-generated FLTK window definitions and dropins.
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "Window\\.cpp$")
+    # Concrete FLTK GUI implementations (have *_qt.cpp counterparts in src/qt/).
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_fltk\\.cpp$")
+    # FLTK app entry point and the FLTK Fl_Gl_Window itself.
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "main\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "GlViewport\\.cpp$")
+    # gfcStructures.cpp stays in the build — it has many FLTK-free utility
+    # functions (ftos, ReadTextFileIntoString, swabFloat, gfcTimer, etc.)
+    # that the rest of the chain links against. Its FLTK touchpoints are
+    # gated behind JEFECHECK_USE_FLTK.
+    # File chooser, text renderer, UI callbacks, etc. — FLTK-only.
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcfilechooser\\.cpp$")
+    # gfcTextRenderer is FLTK-free despite the comment in its header;
+    # leave it in the build so gfcplatemanager.cpp's text overlays link.
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "UICallbacks\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "trackwidget\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfctimer\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcui_fltk\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "iapplication_fltk\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfctrackmanagergui\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "Fl_.*\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "fxcontrolwindow\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "playlistwindow\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "renderwindow\\.cpp$")
+    # Custom FLTK widget subclasses — pure FLTK Fl_Widget/Fl_Group/etc. extensions.
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcFXControlBase\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcSliderInput\\.cpp$")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcplaylistwindowwindow\\.cpp$")
+    # Same exclusions as the FLTK build for non-Windows / duplicated /
+    # disabled files.
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
+    if(NOT WIN32)
+        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "WSAStartupSingleton")
+        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
+    endif()
+    if(WIN32)
+        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
+    endif()
+
     file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
     list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
 else()

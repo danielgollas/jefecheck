@@ -3,9 +3,13 @@
 
 #include <vector>
 #include <map>
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/Fl_Scroll.H>
 #include <FL/Fl_Progress.H>
 #include <FL/Fl_Button.H>
+#else
+#include "qt/qt_fltk_stubs.h"
+#endif
 #include "trilerp.h"
 
 /**

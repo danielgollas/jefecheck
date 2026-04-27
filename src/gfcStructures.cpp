@@ -1,29 +1,39 @@
 #include "gfcStructures.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
+#ifdef JEFECHECK_USE_FLTK
 #include "mainWindow.h"
 #include "loadWindow.h"
 #include "lutWindow.h"
 #include "fxWindow.h"
+#endif
 #include "UIConstants.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "UICallbacks.h"
+#endif
 #include "gfcfx.h"
 #include "gfcfxstack.h"
 #include "trilerp.h"
 #include <vector>
+#ifdef JEFECHECK_USE_FLTK
 #include "UICallbacks.h"
 #include <FL/filename.H>
+#endif
 #include <fstream>
 #include <sstream> //for stingstream
 #include "xmlParser.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "remoteWindow.h"
+#endif
 
 
 #include <cstdlib> //for getenv
 #include <iostream>
 
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/filename.H>
 #include <FL/fl_ask.H>
+#endif
 
 #include <sys/stat.h> //for stat
 
@@ -31,11 +41,13 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include <string>
 #include <algorithm>
 
+#ifdef JEFECHECK_USE_FLTK
 GLuint defaultTexture=0;
 #include "aboutWindow.h"
 extern AboutWindow aboutWindow;
 
 #include "preferencesWindow.h"
+#endif
 
 //STUFF TO GET THE MAC ADDRESS on linux
 #ifdef linux
@@ -59,12 +71,14 @@ extern AboutWindow aboutWindow;
 
 
 
+#ifdef JEFECHECK_USE_FLTK
 extern PreferencesWindow pw;
 extern MainWindow mw;
 extern LoadWindow lw;
 extern LutWindow lutw;
 extern FXWindow fxw;
 extern RemoteWindow rmw;
+#endif
 extern bool npotTextures;
 //extern std::vector<CubeLUT> lutArray;
 //extern std::vector<gfcFX> fxArray;
@@ -206,10 +220,13 @@ void gfcTimer::print() {
 int confirmQuit()
 {
 	std::string message="Do you really want to quit?";
-	
+
+#ifdef JEFECHECK_USE_FLTK
 	int answer=fl_choice(message.c_str(),
 						 "No, I'll stick around","Yes, Quit",NULL);
-	
+#else
+	int answer=1;
+#endif
 	switch ( answer ) {
 		case 0:
 			return 0;
@@ -336,6 +353,7 @@ std::string ftos(float value,int precision)
 template void saveSetting<char>(std::string name, char, XMLNode&);
 
 void saveSettings ( const gfcSettings *sett ) {
+#ifdef JEFECHECK_USE_FLTK
     std::string appDataPath,settingsFilename;
 	
     appDataPath=getApplicationDataPath();
@@ -536,9 +554,10 @@ void saveSettings ( const gfcSettings *sett ) {
         printf ( "Settings saved to %s\n",settingsFilename.c_str() );
     }
 
-	
-	
-	
+
+
+
+#endif  // JEFECHECK_USE_FLTK
 }
 
 
@@ -571,7 +590,8 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 void loadLUTsFromPath(std::string thePath) {
-	
+#ifdef JEFECHECK_USE_FLTK
+
 	//0.0 First split the path, maybe more than one is in there, they should be splitted with ':'
 char splitterChar;
 #ifdef WIN32
@@ -641,10 +661,12 @@ char splitterChar;
 			free((void*)list);
 		}
 	}
+#endif  // JEFECHECK_USE_FLTK
 }
 
 void loadFXsFromPath(std::string thePath) {
-	
+#ifdef JEFECHECK_USE_FLTK
+
 	//0.0 First split the path, maybe more than one is in there, they should be splitted with ':'
 	char splitterChar;
 #ifdef WIN32
@@ -711,6 +733,7 @@ void loadFXsFromPath(std::string thePath) {
     free((void*)list);
 	}
 	}
+#endif  // JEFECHECK_USE_FLTK
 }
 
 void gfcSettings::addToRecentFXs(std::string pname)
@@ -741,8 +764,9 @@ void gfcSettings::addToRecentFXs(std::string pname)
 }
 
 void readSettings ( gfcSettings &sett ) {
+#ifdef JEFECHECK_USE_FLTK
     std::string statusString;
-	
+
     aboutWindow.status->value("Reading Settings...");
     app().processEvents();
     printf ( "\n--------------------------------------------\n");
@@ -1144,6 +1168,7 @@ void readSettings ( gfcSettings &sett ) {
     printf ( "--------------------------------------------\n" );
     aboutWindow.status->value("Done reading settings, starting up...");
     app().processEvents();
+#endif  // JEFECHECK_USE_FLTK
 }
 
 std::string GetPathFromFilename ( const std::string& filename ) {
@@ -1270,10 +1295,11 @@ std::string RemoveNewLine( const std::string& filename ) {
 }
 
 std::string GetFilenameNoPath ( const std::string& filename ) {
-	
+#ifdef JEFECHECK_USE_FLTK
     return fl_filename_name ( filename.c_str() );
-	;
-	
+#else
+    return std::filesystem::path(filename).filename().string();
+#endif
 }
 
 // Simple hash function for FX/LUT caching (not cryptographic)
@@ -1286,15 +1312,18 @@ std::string GetMD5Hash ( std::string theString ) {
 }
 
 void UpdateRecentIPsButtons() {
+#ifdef JEFECHECK_USE_FLTK
     rmw.remoteRecent->clear();
     for ( int i=sett.recentIPs.size()-1;i>=0;i-- ) {
         std::string tmpIP=sett.recentIPs[i];
         rmw.remoteRecent->add
 			( tmpIP.c_str(),0, ( Fl_Callback* ) remoteCB, ( void* ) REMOTE_RECENT_ID,0 );
     }
+#endif
 }
 
 void UpdateRecentBrowsedButtons ( int alreadyReplacedSlashes ) {
+#ifdef JEFECHECK_USE_FLTK
 	
     lw.recentButtonA->clear();
     for ( int i=trackManager.recentBrowsed.size()-1;i>=0;i-- ) {
@@ -1326,8 +1355,9 @@ void UpdateRecentBrowsedButtons ( int alreadyReplacedSlashes ) {
         ReplaceWindowsSlash ( tmpFilename );
         lw.recentButtonD->add
 			( tmpFilename.c_str(),0, ( Fl_Callback* ) loadCB, ( void* ) LOADRECENT_ID,0 );
-		
+
     }
+#endif  // JEFECHECK_USE_FLTK
 }
 
 
@@ -1627,10 +1657,12 @@ std::string CreateRenderFilename ( gfcRenderParams params ) {
 
 
 void refreshSearchPathsBrowser() {
+#ifdef JEFECHECK_USE_FLTK
     pw.searchPaths->clear();
     for (int i=sett.searchPaths.size()-1;i>=0;i--) {
         pw.searchPaths->add(sett.searchPaths[i].c_str());
     }
+#endif
 }
 
 std::vector<std::string> GetFilenamesFromPastedText(const std::string& str)

@@ -14,17 +14,21 @@ extern gfcPlaybackManager playbackManager;
 #include "gfcplaylistmanager.h"
 extern gfcPlaylistManager playlistManager;
 
+#ifdef JEFECHECK_USE_FLTK
 #include "loadWindow.h"
 extern LoadWindow lw;
 
 #include "preferencesWindow.h"
 extern PreferencesWindow pw;
+#endif
 
 #include "gfcStructures.h"
 extern gfcSettings sett;
 
+#ifdef JEFECHECK_USE_FLTK
 #include "mainWindow.h"
 extern MainWindow mw;
+#endif
 
 
 void rebuildRecentSessionsMenu();
@@ -53,7 +57,9 @@ void gfcSessionManager::loadSession(std::string filename)
     
     //Prepare the program to receive the session.
     trackManager.stopLoadingAll();
+#ifdef JEFECHECK_USE_FLTK
     lw.loadWindow->show();
+#endif
     
     //1. Parse and check the XML File
     XMLNode xMainNode=XMLNode::openFileHelper ( filename.c_str() );
@@ -71,7 +77,9 @@ void gfcSessionManager::loadSession(std::string filename)
     XMLNode settingsNode=xRootNode.getChildNode ( "settings" );
     
     plateManager.setFramingMode(readAttributeFromNode<int>("framingMode",settingsNode,0)+FRAMINGSINGLE_ID);
+#ifdef JEFECHECK_USE_FLTK
     pw.bgColor->value(readAttributeFromNode<int>("bgColor",settingsNode,48));
+#endif
     sett.filterMin=sett.filterMax=readAttributeFromNode<int>("filtering",settingsNode,0)+GL_NEAREST;
     playbackManager.setPlaybackMode(readAttributeFromNode<int>("loopMode",settingsNode,0)+LOOPMODEONCE_ID);
     playbackManager.setLoopPriority(readAttributeFromNode<int>("loopPriority",settingsNode,0));
@@ -79,8 +87,10 @@ void gfcSessionManager::loadSession(std::string filename)
     playbackManager.setFromFrame(readAttributeFromNode<int>("from",settingsNode,1));
     playbackManager.setToFrame(readAttributeFromNode<int>("to",settingsNode,1));
 
+#ifdef JEFECHECK_USE_FLTK
     //we call this to update all the prefs window values to the corresponding places easily.
     PreferencesCB((Fl_Widget*)pw.bgColor,NULL); // is an arbitrary choice only because we need to call the CB and it needs a widget.
+#endif
 
     /****************/
     /*LOAD PLATES   */
@@ -167,7 +177,11 @@ if ( filename.empty() ) {
     XMLNode settingsNode=xRootNode.addChild ( "settings" );
     
     saveSetting("framingMode",plateManager.getFramingMode()-FRAMINGSINGLE_ID,settingsNode);
+#ifdef JEFECHECK_USE_FLTK
     saveSetting("bgColor",pw.bgColor->value(),settingsNode);
+#else
+    saveSetting("bgColor",48,settingsNode);
+#endif
     saveSetting("filtering",sett.filterMin-GL_NEAREST,settingsNode); //filter min and max are always the same now
     saveSetting("loopMode",playbackManager.getPlaybackMode()-LOOPMODEONCE_ID,settingsNode);
     saveSetting("loopPriority",playbackManager.getLoopPriority(),settingsNode);
@@ -265,6 +279,7 @@ void gfcSessionManager::removeCrashSession()
 
 
 void rebuildRecentSessionsMenu() {
+#ifdef JEFECHECK_USE_FLTK
     static int firstRecentMenu=-1;
     //printf("Rebuilding recentSession\n");
 
@@ -289,4 +304,5 @@ void rebuildRecentSessionsMenu() {
             ( tmpName,0, ( Fl_Callback* ) menuCB, ( void* ) MENUFILEOPENRECENTSESSION_ID,0 );
         }
     }
+#endif
 }
