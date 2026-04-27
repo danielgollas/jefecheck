@@ -18,7 +18,19 @@ int   gfcSequenceGUI_Qt::getWindowVisible()     { return 0; }
 int   gfcSequenceGUI_Qt::getChannel()           { return channel_; }
 std::string gfcSequenceGUI_Qt::getChannelName() { return channelName_; }
 
-void gfcSequenceGUI_Qt::setFromToBounds(int, int, bool) {}
+void gfcSequenceGUI_Qt::setFromToBounds(int Min, int Max, bool setToMinAndMax) {
+    // gfcSequence::findSequenceFiles calls this with the discovered
+    // sequence range. Without storing it, getFrom()/getTo() keep
+    // their constructor defaults (1,1) and loadSequence loads only the
+    // first frame. The FLTK impl writes the range onto its spinner
+    // widgets; here we just stash it onto from_/to_ when the caller
+    // asks for clamp-to-bounds (the only path that flows through
+    // findSequenceFiles).
+    if (setToMinAndMax) {
+        from_ = Min;
+        to_   = Max;
+    }
+}
 void gfcSequenceGUI_Qt::setToFrame(int v)               { to_ = v; }
 void gfcSequenceGUI_Qt::setFromFrame(int v)             { from_ = v; }
 void gfcSequenceGUI_Qt::setFilename(std::string s)      { filename_ = std::move(s); }
