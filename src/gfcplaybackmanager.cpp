@@ -39,8 +39,8 @@ gfcPlaybackManager::~gfcPlaybackManager() {
         delete myGUI;
 }
 
-void gfcPlaybackManager::initializeWidgets(MainWindow &mw) {
 #ifdef JEFECHECK_USE_FLTK
+void gfcPlaybackManager::initializeWidgets(MainWindow &mw) {
     myGUI=new gfcPlaybackGUI_FLTK;
 
 
@@ -67,15 +67,15 @@ void gfcPlaybackManager::initializeWidgets(MainWindow &mw) {
     this->setToFrame(100);
     this->setCurrentFrame(1);
 	this->myGUI->setPlayFwdLabel(0);
+}
 #else
-    (void)mw;
+void gfcPlaybackManager::initializeWidgets() {
     myGUI=new gfcPlaybackGUI_Qt;
     this->setFromFrame(1);
     this->setToFrame(100);
     this->setCurrentFrame(1);
-#endif
-
 }
+#endif
 
 int gfcPlaybackManager::isPlaying()
 {

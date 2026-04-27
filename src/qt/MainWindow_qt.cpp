@@ -17,6 +17,7 @@
 #include <QMenuBar>
 #include <QSettings>
 #include <QStatusBar>
+#include <QTimer>
 
 namespace {
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
@@ -53,6 +54,20 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     buildMenuBar();
     buildDocks();
     restoreLayout();
+
+    // ~60Hz tick that drives playbackManager's timestep + frame advance.
+    // playbackManager.update() is cheap when nothing's playing, so a
+    // steady tick is fine. The interval is the upper bound on playback
+    // jitter; the tight FPS targeting happens inside the manager.
+    playbackTimer_ = new QTimer(this);
+    playbackTimer_->setInterval(16);
+    connect(playbackTimer_, &QTimer::timeout, this, [this]() {
+        const bool dirty = jefe::qt::tickPlayback();
+        if (dirty && viewport_) {
+            viewport_->update();
+        }
+    });
+    playbackTimer_->start();
 }
 
 // Out-of-line destructor: lets the unique_ptr<RenderBridge_Qt> see the

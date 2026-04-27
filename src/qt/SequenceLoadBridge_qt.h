@@ -17,6 +17,13 @@ namespace jefe::qt {
 // call once at app startup; calling again would leak the previous GUIs.
 void initializeRenderingChain();
 
+// Per-frame tick. Drives the playback engine and reads back
+// plateManager's "dirty" flag (setChanged was called). Caller should
+// schedule this on a QTimer at ~60 Hz and ask the viewport to repaint
+// when the return value is true. Cheap when nothing's playing — just
+// a timestep update + a flag swap.
+bool tickPlayback();
+
 // Hands back the gfcPlateGUI_Qt that gfcPlate reads its rendering
 // state from for plate `whichPlate`. PlateCard_Qt binds its widgets
 // to this so user edits land on the plate the viewport is drawing,

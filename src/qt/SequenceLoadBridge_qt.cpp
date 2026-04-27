@@ -19,6 +19,22 @@ namespace jefe::qt {
 void initializeRenderingChain() {
     plateManager.initializeWidgets();
     trackManager.initializeWidgets();
+    playbackManager.initializeWidgets();
+}
+
+bool tickPlayback() {
+    // playbackManager.update() is the heart of the playback engine —
+    // advances currentFrame at target FPS, calls plateManager.setChanged()
+    // when a new frame should display. Networking + texture upload run
+    // alongside in the FLTK loop; the Qt build wires those in later.
+    playbackManager.update();
+
+    // Drain the dirty flag here so callers know when to redraw without
+    // having to query plateManager themselves. Any future input path
+    // (drop handler, key shortcuts) that calls setChanged() will get
+    // picked up on the next tick.
+    const bool dirty = plateManager.getChanged();
+    return dirty;
 }
 
 gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate) {
