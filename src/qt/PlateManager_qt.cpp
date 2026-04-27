@@ -25,7 +25,13 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QScrollArea(parent) {
         // Falls back to an owned GUI when running without the chain so
         // the dock still renders for tests / dev.
         auto* externalGui = jefe::qt::getPlateGUIQt(i);
-        cards_.append(new PlateCard_Qt(i, externalGui, inner_));
+        auto* card = new PlateCard_Qt(i, externalGui, inner_);
+        connect(card, &PlateCard_Qt::clicked,
+                this, [this](int id) {
+                    jefe::qt::setActivePlate(id);
+                    refreshAllCards();
+                });
+        cards_.append(card);
     }
 
     setWidget(inner_);
@@ -62,7 +68,10 @@ void PlateManager_Qt::reflow(int viewportWidth) {
 }
 
 void PlateManager_Qt::refreshAllCards() {
+    const int active = jefe::qt::getActivePlate();
     for (auto* card : cards_) {
-        if (card) card->refreshFromState();
+        if (!card) continue;
+        card->refreshFromState();
+        card->setActiveHighlight(card->id() == active);
     }
 }

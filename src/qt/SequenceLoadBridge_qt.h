@@ -31,6 +31,13 @@ bool tickPlayback();
 // has run, or when the plate index is out of range.
 gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate);
 
+// Active-plate selection. The viewport-side keyboard shortcuts (fit,
+// flip, flop, track-cycle) target the active plate; clicking a plate
+// card calls setActivePlate to choose which one. Out-of-range indices
+// are silently ignored.
+void setActivePlate(int whichPlate);
+int  getActivePlate();
+
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering
 // chain picks up the new frame on the next draw call. Caller is

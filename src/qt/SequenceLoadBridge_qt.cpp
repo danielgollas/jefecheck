@@ -41,6 +41,15 @@ gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate) {
     return dynamic_cast<gfcPlateGUI_Qt*>(plateManager.getPlateGUI(whichPlate));
 }
 
+void setActivePlate(int whichPlate) {
+    plateManager.setActiveQuad(whichPlate);
+    plateManager.setChanged();
+}
+
+int getActivePlate() {
+    return plateManager.getActiveQuad();
+}
+
 void panActivePlate(float dx, float dy) {
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;

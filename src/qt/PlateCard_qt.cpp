@@ -6,6 +6,7 @@
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
@@ -199,6 +200,33 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
 }
 
 PlateCard_Qt::~PlateCard_Qt() = default;
+
+void PlateCard_Qt::mousePressEvent(QMouseEvent* e) {
+    // Child widgets (spinboxes, combos, buttons) handle their own
+    // events first; this only fires when the user clicks on the card's
+    // background or a label.
+    if (e->button() == Qt::LeftButton) {
+        emit clicked(id_);
+    }
+    QFrame::mousePressEvent(e);
+}
+
+void PlateCard_Qt::setActiveHighlight(bool on) {
+    // Border-only cue. The orange matches the FLTK build's accent
+    // color (and the dark-VFX theme's active-state color). 1px is
+    // enough to read at the card's compact height without crowding
+    // the spinboxes inside.
+    if (on) {
+        setStyleSheet(styleSheet() +
+            " PlateCard_Qt { border: 1px solid #d4771e; }");
+    } else {
+        // Strip our injected border by rebuilding the base stylesheet.
+        setStyleSheet(
+            "QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox, "
+            "QComboBox QAbstractItemView, QAbstractSpinBox { font-size: 10pt; }"
+        );
+    }
+}
 
 void PlateCard_Qt::refreshFromState() {
     if (!gui_) return;
