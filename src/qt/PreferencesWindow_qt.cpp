@@ -25,12 +25,17 @@ extern gfcSettings sett;
 
 PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
+    setObjectName("preferences.dialog");
+    setAccessibleName("Preferences");
     setModal(true);
     resize(640, 480);
 
     sidebar_ = new QListWidget(this);
     sidebar_->setFixedWidth(140);
+    sidebar_->setObjectName("preferences.sidebar");
+    sidebar_->setAccessibleName("Section list");
     pages_ = new QStackedWidget(this);
+    pages_->setObjectName("preferences.pages");
 
     // The stacked widget only changes pages when the sidebar selection
     // does — Qt gives us currentRowChanged for free.
@@ -48,7 +53,10 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
+    buttons->setObjectName("preferences.buttons");
     buttons->button(QDialogButtonBox::Save)->setText("Done");
+    buttons->button(QDialogButtonBox::Save)->setObjectName("preferences.done.button");
+    buttons->button(QDialogButtonBox::Cancel)->setObjectName("preferences.cancel.button");
     connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
         // FLTK's prefs window does this on the Done callback. Persists
         // to the JefeCheck XML in getApplicationDataPath().
@@ -95,6 +103,8 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     // Background color — clickable swatch button that pops a color picker.
     auto* bgBtn = new QPushButton(page);
     bgBtn->setFixedSize(60, 22);
+    bgBtn->setObjectName("preferences.general.bgcolor.button");
+    bgBtn->setAccessibleName("Background color");
     auto applyBg = [bgBtn]() {
         const QColor c = bgColorToQ();
         bgBtn->setStyleSheet(QString("background: %1;").arg(c.name()));
@@ -112,6 +122,8 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     form->addRow("Background color", bgBtn);
 
     auto* browsePath = new QLineEdit(QString::fromStdString(sett.defaultBrowsePath), page);
+    browsePath->setObjectName("preferences.general.browsepath.edit");
+    browsePath->setAccessibleName("Default browse path");
     connect(browsePath, &QLineEdit::editingFinished, page, [browsePath]() {
         sett.defaultBrowsePath = browsePath->text().toStdString();
     });
@@ -119,18 +131,24 @@ void PreferencesWindow_Qt::buildGeneralPage() {
 
     auto* fullscreen = new QCheckBox("Start in fullscreen", page);
     fullscreen->setChecked(sett.startFullscreen != 0);
+    fullscreen->setObjectName("preferences.general.fullscreen.check");
+    fullscreen->setAccessibleName("Start in fullscreen");
     connect(fullscreen, &QCheckBox::toggled, page,
             [](bool on) { sett.startFullscreen = on ? 1 : 0; });
     form->addRow(QString(), fullscreen);
 
     auto* showLoad = new QCheckBox("Open Load window at startup", page);
     showLoad->setChecked(sett.openLoadWindowAtStartup != 0);
+    showLoad->setObjectName("preferences.general.openloadatstart.check");
+    showLoad->setAccessibleName("Open Load window at startup");
     connect(showLoad, &QCheckBox::toggled, page,
             [](bool on) { sett.openLoadWindowAtStartup = on ? 1 : 0; });
     form->addRow(QString(), showLoad);
 
     auto* recovery = new QCheckBox("Enable crash recovery session", page);
     recovery->setChecked(sett.enableCrashRecoverySession != 0);
+    recovery->setObjectName("preferences.general.recovery.check");
+    recovery->setAccessibleName("Enable crash recovery session");
     connect(recovery, &QCheckBox::toggled, page,
             [](bool on) { sett.enableCrashRecoverySession = on ? 1 : 0; });
     form->addRow(QString(), recovery);
@@ -139,6 +157,8 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     aspect->setRange(0.0, 1.0);
     aspect->setSingleStep(0.05);
     aspect->setValue(sett.aspectBarsOpacity);
+    aspect->setObjectName("preferences.general.aspectopacity.spin");
+    aspect->setAccessibleName("Aspect-bar opacity");
     connect(aspect, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             page, [](double v) { sett.aspectBarsOpacity = float(v); });
     form->addRow("Aspect-bar opacity", aspect);
@@ -146,6 +166,8 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* procPri = new QSpinBox(page);
     procPri->setRange(0, 10);
     procPri->setValue(sett.processorPriority);
+    procPri->setObjectName("preferences.general.priority.spin");
+    procPri->setAccessibleName("Processor priority");
     connect(procPri, QOverload<int>::of(&QSpinBox::valueChanged),
             page, [](int v) { sett.processorPriority = v; });
     form->addRow("Processor priority", procPri);
@@ -160,12 +182,16 @@ void PreferencesWindow_Qt::buildEnginePage() {
     auto* engine = new QComboBox(page);
     engine->addItems({"3D", "2D"});
     engine->setCurrentIndex(sett.renderingEngine == 0 ? 0 : 1);
+    engine->setObjectName("preferences.engine.engine.combo");
+    engine->setAccessibleName("Rendering engine");
     connect(engine, QOverload<int>::of(&QComboBox::currentIndexChanged),
             page, [](int idx) { sett.renderingEngine = idx; });
     form->addRow("Rendering engine", engine);
 
     auto* vsync = new QCheckBox("VSync", page);
     vsync->setChecked(sett.vsync != 0);
+    vsync->setObjectName("preferences.engine.vsync.check");
+    vsync->setAccessibleName("VSync");
     connect(vsync, &QCheckBox::toggled, page,
             [](bool on) { sett.vsync = on ? 1 : 0; });
     form->addRow(QString(), vsync);
@@ -173,6 +199,8 @@ void PreferencesWindow_Qt::buildEnginePage() {
     auto* queue = new QSpinBox(page);
     queue->setRange(0, 32);
     queue->setValue(sett.maximumFramesInQueue);
+    queue->setObjectName("preferences.engine.queue.spin");
+    queue->setAccessibleName("Max frames in raw queue");
     connect(queue, QOverload<int>::of(&QSpinBox::valueChanged),
             page, [](int v) { sett.maximumFramesInQueue = v; });
     form->addRow("Max frames in raw queue", queue);
@@ -180,12 +208,16 @@ void PreferencesWindow_Qt::buildEnginePage() {
     auto* partitions = new QSpinBox(page);
     partitions->setRange(1, 16);
     partitions->setValue(sett.numOfPartitions);
+    partitions->setObjectName("preferences.engine.partitions.spin");
+    partitions->setAccessibleName("Loader partitions");
     connect(partitions, QOverload<int>::of(&QSpinBox::valueChanged),
             page, [](int v) { sett.numOfPartitions = v; });
     form->addRow("Loader partitions", partitions);
 
     auto* balance = new QCheckBox("Balance read mutex across tracks", page);
     balance->setChecked(sett.balanceReads != 0);
+    balance->setObjectName("preferences.engine.balance.check");
+    balance->setAccessibleName("Balance read mutex across tracks");
     connect(balance, &QCheckBox::toggled, page,
             [](bool on) { sett.balanceReads = on ? 1 : 0; });
     form->addRow(QString(), balance);
@@ -193,6 +225,8 @@ void PreferencesWindow_Qt::buildEnginePage() {
     auto* pbo = new QSpinBox(page);
     pbo->setRange(0, 4);
     pbo->setValue(sett.forcePBO);
+    pbo->setObjectName("preferences.engine.pbo.spin");
+    pbo->setAccessibleName("Force PBO mode");
     connect(pbo, QOverload<int>::of(&QSpinBox::valueChanged),
             page, [](int v) { sett.forcePBO = v; });
     form->addRow("Force PBO mode", pbo);
@@ -206,32 +240,50 @@ void PreferencesWindow_Qt::buildFormatsPage() {
 
     auto* exrIgnoreDisplay = new QCheckBox("EXR: ignore display window", page);
     exrIgnoreDisplay->setChecked(sett.exrIgnoreDisplayWindow != 0);
+    exrIgnoreDisplay->setObjectName("preferences.formats.exrignoredisplay.check");
+    exrIgnoreDisplay->setAccessibleName("EXR: ignore display window");
     connect(exrIgnoreDisplay, &QCheckBox::toggled, page,
             [](bool on) { sett.exrIgnoreDisplayWindow = on ? 1 : 0; });
     form->addRow(QString(), exrIgnoreDisplay);
 
     auto* exrIgnoreAspect = new QCheckBox("EXR: ignore header aspect ratio", page);
     exrIgnoreAspect->setChecked(sett.exrIgnoreHeadersAspectRatio != 0);
+    exrIgnoreAspect->setObjectName("preferences.formats.exrignoreaspect.check");
+    exrIgnoreAspect->setAccessibleName("EXR: ignore header aspect ratio");
     connect(exrIgnoreAspect, &QCheckBox::toggled, page,
             [](bool on) { sett.exrIgnoreHeadersAspectRatio = on ? 1 : 0; });
     form->addRow(QString(), exrIgnoreAspect);
 
-    auto makeEXRSpin = [page](float& field, double min_, double max_, double step) {
+    auto makeEXRSpin = [page](float& field, double min_, double max_, double step,
+                              const QString& objectName,
+                              const QString& accessibleName) {
         auto* s = new QDoubleSpinBox(page);
         s->setRange(min_, max_);
         s->setSingleStep(step);
         s->setDecimals(3);
         s->setValue(field);
+        s->setObjectName(objectName);
+        s->setAccessibleName(accessibleName);
         QObject::connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                          page, [&field](double v) { field = float(v); });
         return s;
     };
 
-    form->addRow("EXR exposure", makeEXRSpin(sett.exrExposure, -20.0, 20.0, 0.1));
-    form->addRow("EXR defog",    makeEXRSpin(sett.exrDefog, 0.0, 1.0, 0.01));
-    form->addRow("EXR gamma",    makeEXRSpin(sett.exrGamma, 0.1, 5.0, 0.05));
-    form->addRow("EXR knee low", makeEXRSpin(sett.exrKneeLow, -10.0, 10.0, 0.1));
-    form->addRow("EXR knee high",makeEXRSpin(sett.exrKneeHigh, -10.0, 10.0, 0.1));
+    form->addRow("EXR exposure", makeEXRSpin(sett.exrExposure, -20.0, 20.0, 0.1,
+                                             "preferences.formats.exrexposure.spin",
+                                             "EXR exposure"));
+    form->addRow("EXR defog",    makeEXRSpin(sett.exrDefog, 0.0, 1.0, 0.01,
+                                             "preferences.formats.exrdefog.spin",
+                                             "EXR defog"));
+    form->addRow("EXR gamma",    makeEXRSpin(sett.exrGamma, 0.1, 5.0, 0.05,
+                                             "preferences.formats.exrgamma.spin",
+                                             "EXR gamma"));
+    form->addRow("EXR knee low", makeEXRSpin(sett.exrKneeLow, -10.0, 10.0, 0.1,
+                                             "preferences.formats.exrkneelow.spin",
+                                             "EXR knee low"));
+    form->addRow("EXR knee high",makeEXRSpin(sett.exrKneeHigh, -10.0, 10.0, 0.1,
+                                             "preferences.formats.exrkneehigh.spin",
+                                             "EXR knee high"));
 
     addPage("Formats", page);
 }

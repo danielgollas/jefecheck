@@ -12,30 +12,44 @@
 #include <QVBoxLayout>
 
 FXStackPanel_Qt::FXStackPanel_Qt(QWidget* parent) : QWidget(parent) {
+    setObjectName("fxstack.panel");
+    setAccessibleName("FX Stack");
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
-    layout->addWidget(new QLabel("FX Stack — placeholder", this));
+    auto* placeholder = new QLabel("FX Stack — placeholder", this);
+    placeholder->setObjectName("fxstack.placeholder.label");
+    layout->addWidget(placeholder);
     layout->addStretch(1);
 }
 
 LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
+    setObjectName("lut.panel");
+    setAccessibleName("LUT browser");
     setAcceptDrops(true);
 
     list_ = new QListWidget(this);
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
     list_->setAlternatingRowColors(true);
+    list_->setObjectName("lut.list");
+    list_->setAccessibleName("LUT list");
     // Double-click is "apply"; matches the FLTK LUT browser's UX.
     connect(list_, &QListWidget::itemDoubleClicked,
             this, [this](QListWidgetItem*) { applySelected(); });
 
     auto* applyBtn = new QPushButton("Apply to active plate", this);
+    applyBtn->setObjectName("lut.apply.button");
+    applyBtn->setAccessibleName("Apply LUT to active plate");
     connect(applyBtn, &QPushButton::clicked, this, [this]() { applySelected(); });
 
     auto* refreshBtn = new QPushButton("Refresh", this);
+    refreshBtn->setObjectName("lut.refresh.button");
+    refreshBtn->setAccessibleName("Refresh LUT list");
     connect(refreshBtn, &QPushButton::clicked, this, &LUTPanel_Qt::refreshList);
 
     status_ = new QLabel("Drop .lut / .cube / .cub files here to load.", this);
     status_->setStyleSheet("color: #888; font-style: italic;");
+    status_->setObjectName("lut.status.label");
+    status_->setAccessibleName("LUT status");
 
     auto* row = new QHBoxLayout();
     row->setContentsMargins(0, 0, 0, 0);

@@ -127,14 +127,18 @@ MainWindow_Qt::~MainWindow_Qt() = default;
 
 void MainWindow_Qt::buildMenuBar() {
     auto* mb = menuBar();
+    mb->setObjectName("menubar");
 
     auto* fileMenu = mb->addMenu("&File");
+    fileMenu->setObjectName("menu.file");
     fileMenu->addAction("&Load Sequence…",
                         QKeySequence(Qt::CTRL | Qt::Key_O),
-                        []() { /* TODO: wire to load callback */ });
+                        []() { /* TODO: wire to load callback */ })
+            ->setObjectName("menu.file.load");
     fileMenu->addAction("&Render…",
                         QKeySequence(Qt::CTRL | Qt::Key_R),
-                        []() { /* TODO */ });
+                        []() { /* TODO */ })
+            ->setObjectName("menu.file.render");
     fileMenu->addSeparator();
     fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
@@ -143,13 +147,16 @@ void MainWindow_Qt::buildMenuBar() {
                             // saveSettings(&sett) inside the dialog.
                             PreferencesWindow_Qt dlg(this);
                             dlg.exec();
-                        });
+                        })
+            ->setObjectName("menu.file.preferences");
     fileMenu->addSeparator();
     fileMenu->addAction("&Quit",
                         QKeySequence::Quit,
-                        []() { QApplication::quit(); });
+                        []() { QApplication::quit(); })
+            ->setObjectName("menu.file.quit");
 
     auto* viewMenu = mb->addMenu("&View");
+    viewMenu->setObjectName("menu.view");
     // Toggle actions for each dock. createDockWidget() exposes a built-in
     // toggleViewAction() that flips visibility and tracks state for us.
     auto rememberDockToggle = [viewMenu](QDockWidget* d) {
@@ -159,13 +166,14 @@ void MainWindow_Qt::buildMenuBar() {
     // Filled in after buildDocks() runs, see below.
     (void)rememberDockToggle;
 
-    mb->addMenu("&Help");
+    mb->addMenu("&Help")->setObjectName("menu.help");
 }
 
 void MainWindow_Qt::buildDocks() {
     // Plate Manager — bottom-left of the bottom dock area.
     plateDock_ = new QDockWidget("Plate Manager", this);
-    plateDock_->setObjectName("PlateManagerDock");
+    plateDock_->setObjectName("dock.platemanager");
+    plateDock_->setAccessibleName("Plate Manager dock");
     plateManagerWidget_ = new PlateManager_Qt(plateDock_);
     plateDock_->setWidget(plateManagerWidget_);
     plateDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -210,7 +218,8 @@ void MainWindow_Qt::buildDocks() {
 
     // Timeline + Transport — bottom-right; split alongside the plate dock.
     timelineDock_ = new QDockWidget("Timeline", this);
-    timelineDock_->setObjectName("TimelineDock");
+    timelineDock_->setObjectName("dock.timeline");
+    timelineDock_->setAccessibleName("Timeline dock");
     timelinePanelWidget_ = new TimelinePanel_Qt(timelineDock_);
     timelineDock_->setWidget(timelinePanelWidget_);
     timelineDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -222,13 +231,15 @@ void MainWindow_Qt::buildDocks() {
 
     // FX Stack and LUTs — right side, stacked as tabs.
     fxDock_ = new QDockWidget("FX Stack", this);
-    fxDock_->setObjectName("FXStackDock");
+    fxDock_->setObjectName("dock.fxstack");
+    fxDock_->setAccessibleName("FX Stack dock");
     fxDock_->setWidget(new FXStackPanel_Qt(fxDock_));
     fxDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, fxDock_);
 
     lutDock_ = new QDockWidget("LUTs", this);
-    lutDock_->setObjectName("LUTDock");
+    lutDock_->setObjectName("dock.luts");
+    lutDock_->setAccessibleName("LUT browser dock");
     lutPanelWidget_ = new LUTPanel_Qt(lutDock_);
     lutDock_->setWidget(lutPanelWidget_);
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
