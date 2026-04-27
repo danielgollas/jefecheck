@@ -769,6 +769,32 @@ gfcPlateGUI* gfcPlateManager::getPlateGUI(int whichOne) {
     return plates[whichOne].myGUI;
 }
 
+int gfcPlateManager::getPlateAtPosition(int vx, int vy, int w, int h) {
+    if (w <= 0 || h <= 0) return -1;
+    // Mirror drawPlates' viewport partitioning. The cases below match
+    // the rectangles set up there per framingMode. Coordinates come in
+    // top-down (Qt-style); each branch picks the plate whose viewport
+    // covers (vx, vy).
+    switch (framingMode) {
+        case FRAMINGSINGLE_ID:
+            return 0;
+        case FRAMINGDOUBLE_ID:
+            // Split horizontally: left = plate 0, right = plate 1.
+            return (vx < w / 2) ? 0 : 1;
+        case FRAMINGDOUBLEVERT_ID:
+            // Split vertically (drawPlates puts plate 0 on top).
+            return (vy < h / 2) ? 0 : 1;
+        case FRAMINGQUAD_ID:
+            // 2x2: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right.
+            if (vx < w / 2 && vy < h / 2) return 0;
+            if (vx >= w / 2 && vy < h / 2) return 1;
+            if (vx < w / 2 && vy >= h / 2) return 2;
+            return 3;
+        default:
+            return 0;
+    }
+}
+
 void gfcPlateManager::setPlateShowPreview(int whichOne, bool value) {
     if (whichOne < 0 || whichOne >= (int)plates.size() || !plates[whichOne].myGUI) {
         return;
@@ -886,7 +912,7 @@ void gfcPlateManager::toggleFlipAll()
 {
 	setChanged();
 	for (int i=plates.size()-1;i>=0;i--) {
-		plates[i].toggleFlop();
+		plates[i].toggleFlip();
 	}
 	networkManager.notifyEvent(GFCNETEVENT_TRANSFORMS);
 }
@@ -895,7 +921,7 @@ void gfcPlateManager::toggleFlopAll()
 {
 	setChanged();
 	for (int i=plates.size()-1;i>=0;i--) {
-		plates[i].toggleFlip();
+		plates[i].toggleFlop();
 	}
 	networkManager.notifyEvent(GFCNETEVENT_TRANSFORMS);
 }

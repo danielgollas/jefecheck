@@ -18,6 +18,13 @@ namespace jefe::qt {
 // call once at app startup; calling again would leak the previous GUIs.
 void initializeRenderingChain();
 
+// Walks the install-time LUT path (sett.lutPath, falling back to
+// <Resources>/FX/, then ./FX/) and loads every .lut/.cube/.cub/.tga
+// via lutManager. Each load may call glGenTextures, so the caller
+// MUST make the GL context current before invoking. Called from
+// MainWindow_Qt once the QOpenGLWidget is alive.
+void initializeInstallLUTs();
+
 // Per-frame tick. Drives the playback engine and reads back
 // plateManager's "dirty" flag (setChanged was called). Caller should
 // schedule this on a QTimer at ~60 Hz and ask the viewport to repaint
@@ -68,7 +75,8 @@ bool isPlaying();
 void autoloadLUTs(const std::string& path);
 std::vector<std::string> getLutNames();
 bool loadLUTFile(const std::string& path);
-void applyLUTToActivePlate(int lutIndex);
+void applyLUTToActivePlate(int guiLutIndex);
+void applyLUTToPlate(int plateIdx, int guiLutIndex);
 int  getLUTOnActivePlate();
 
 // Loads the file into sequence `whichSequence` as a preview frame and
@@ -88,12 +96,16 @@ bool loadFileIntoPlate(const std::string& path,
                        bool kickOffSequenceLoad = true);
 
 // Pan / zoom hooks called from GlViewport_Qt's mouse handlers. They
-// drive the active plate's transform through plateManager. dx/dy are
+// drive a specific plate's transform through plateManager. dx/dy are
 // the per-event delta in pixels; zoomDelta is the wheel scroll amount
-// (positive zooms in). Both call plateManager.setChanged() so the next
-// paintGL pass picks up the change.
-void panActivePlate(float dx, float dy);
-void zoomActivePlate(float zoomDelta);
+// (positive zooms in). All three call plateManager.setChanged() so
+// the next paintGL pass picks up the change.
+void panPlate(int plateIdx, float dx, float dy);
+void zoomPlate(int plateIdx, float zoomDelta);
+
+// Hit-test for the plate under viewport pixel (x, y). y is top-down
+// in Qt's coord system. Falls back to 0 in single-plate mode.
+int plateAtViewportPos(int x, int y, int viewportW, int viewportH);
 
 // Keyboard-shortcut hooks. `framingMode` is one of UIConstants.h's
 // FRAMING*_ID values; the others operate on the currently-active

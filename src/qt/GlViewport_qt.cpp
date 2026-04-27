@@ -69,7 +69,13 @@ void GlViewport_Qt::initializeGL() {
 }
 
 void GlViewport_Qt::resizeGL(int w, int h) {
-    if (listener_) listener_->onResize(w, h);
+    // Qt passes the size in logical pixels here. The QOpenGLWidget's
+    // backing framebuffer is allocated at logical * devicePixelRatio
+    // (2× on macOS Retina), so glViewport-bound rendering needs the
+    // framebuffer dimensions — using the raw w/h would leave only the
+    // bottom-left quarter of the FBO rendered.
+    const float dpr = devicePixelRatioF();
+    if (listener_) listener_->onResize(int(w * dpr), int(h * dpr));
 }
 
 void GlViewport_Qt::paintGL() {
@@ -85,25 +91,43 @@ void GlViewport_Qt::paintGL() {
 
 void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
     if (e->button() == Qt::LeftButton) {
-        // Anchor for the drag delta we'll feed to panActivePlate.
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
+        // Hit-test which plate the click landed on so drag pan and
+        // (in single mode) keyboard shortcuts target it. The current
+        // viewport size matches what plateManager.draw saw last, so
+        // the partitioning lines up.
+        dragPlate_ = jefe::qt::plateAtViewportPos(
+            int(lastMouseX_), int(lastMouseY_), width(), height());
+        if (dragPlate_ >= 0) {
+            // Sync the active-plate concept (used by plate-card highlight
+            // and a couple of remaining keyboard paths) with the user's
+            // most recent click.
+            jefe::qt::setActivePlate(dragPlate_);
+            emit plateStateChanged();
+        }
     }
     if (listener_) listener_->onEvent(jefe::ui::EventType::Push);
 }
 
 void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
+    dragPlate_ = -1;
     if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
 }
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
-    if (e->buttons() & Qt::LeftButton) {
+    if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {
         // FLTK's GlViewport pans by (prevX - eventX, prevY - eventY) so
-        // dragging right shifts the plate left. Match that sign here so
-        // the keyboard/mouse shortcuts behave the same in both backends.
-        const float dx = static_cast<float>(lastMouseX_ - e->position().x());
-        const float dy = static_cast<float>(lastMouseY_ - e->position().y());
-        jefe::qt::panActivePlate(dx, dy);
+        // dragging right shifts the plate left. Match that sign so the
+        // mouse behaves the same in both backends. Multiply by dpr —
+        // gfcPlate's pan is in world-space units which are now in
+        // framebuffer pixels, but Qt mouse positions are logical, so
+        // a 1-px drag would otherwise move the image only 1/dpr px on
+        // Retina.
+        const float dpr = devicePixelRatioF();
+        const float dx = (lastMouseX_ - float(e->position().x())) * dpr;
+        const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
+        jefe::qt::panPlate(dragPlate_, dx, dy);
         update();
         emit plateStateChanged();
         lastMouseX_ = e->position().x();
@@ -127,8 +151,12 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
         deltaY = static_cast<float>(e->angleDelta().y()) / 120.0f;
     }
     if (deltaY != 0.0f) {
+        // Wheel zooms whichever plate the cursor is over, regardless of
+        // active state. Click sets active separately.
+        const int plate = jefe::qt::plateAtViewportPos(
+            int(e->position().x()), int(e->position().y()), width(), height());
         // 0.1 matches FLTK's default zoomSpeed for the un-shifted wheel.
-        jefe::qt::zoomActivePlate(deltaY * 0.1f);
+        jefe::qt::zoomPlate(plate, deltaY * 0.1f);
         update();
         emit plateStateChanged();
     }

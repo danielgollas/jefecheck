@@ -116,6 +116,11 @@ public:
     // reads it from a widget).
     void setShowPreview(bool v) { showPreview_ = v; }
 
+    // Read the current LUT name list. plateManager.updateAllGUILUTWidgets
+    // calls clearLUTs + addLUTOption to populate it; PlateCard_Qt reads
+    // it back during refreshFromState to rebuild its LUT combo.
+    const std::vector<std::string>& getLUTOptions() const { return lutOptions_; }
+
 private:
     int plateIndex_ = -1;
 

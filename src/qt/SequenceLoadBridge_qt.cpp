@@ -13,6 +13,7 @@
 #include "gfcplategui_qt.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 
 extern gfcPlateManager plateManager;
@@ -33,13 +34,47 @@ void initializeRenderingChain() {
     // we factor a Qt-friendly version, default the path here so the LUT
     // browser has content to show on first run. Any preferences the
     // user saves later override this on the next launch.
+    // Defer LUT autoload — it walks every .lut/.cub on disk and each
+    // calls glGenTextures, which requires a current GL context. The
+    // viewport's QOpenGLWidget context isn't ready until after the
+    // window is shown and the first paintGL fires. MainWindow_Qt calls
+    // initializeInstallLUTs() once the GL context is alive.
     if (sett.lutPath.empty()) {
         sett.lutPath = ::getApplicationDataPath() + "FX/";
     }
-    autoloadLUTs(sett.lutPath);
+}
 
-    // The plates' LUT dropdowns mirror lutManager's name list. Need to
-    // refill them now that we've loaded the actual LUTs.
+void initializeInstallLUTs() {
+    // LUT autoload path resolution. Try, in order:
+    //   1. sett.lutPath (whatever readSettings or the prefs window saved)
+    //   2. <bundle Resources>/FX/  (release/install convention)
+    //   3. ./FX/                   (CLAUDE.md dev-mode symlink)
+    // First match wins. Logged so the user can tell from the terminal
+    // which one the binary picked up.
+    namespace fs = std::filesystem;
+    std::vector<std::string> candidates;
+    if (!sett.lutPath.empty()) candidates.push_back(sett.lutPath);
+    candidates.push_back(::getApplicationDataPath() + "FX/");
+    candidates.push_back("FX/");
+    std::string chosen;
+    std::error_code ec;
+    for (const auto& p : candidates) {
+        if (p.empty()) continue;
+        if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
+            chosen = p;
+            break;
+        }
+    }
+    if (chosen.empty()) {
+        fprintf(stderr, "[jefecheck] No LUT/FX directory found. Tried:\n");
+        for (const auto& p : candidates) {
+            fprintf(stderr, "    - %s\n", p.c_str());
+        }
+        return;
+    }
+    fprintf(stderr, "[jefecheck] Loading LUTs/FX from %s\n", chosen.c_str());
+    sett.lutPath = chosen;
+    autoloadLUTs(chosen);
     plateManager.updateAllGUILUTWidgets();
 }
 
@@ -48,6 +83,12 @@ bool tickPlayback() {
     // advances currentFrame at target FPS, calls plateManager.setChanged()
     // when a new frame should display.
     playbackManager.update();
+
+    // Drives the per-plate flip/flop rotations and any other smoothly-
+    // animated state. Without this, gfcPlate::updateRot never runs, so
+    // pressing H/V toggles the flag but rX/rY stay at 0 and the
+    // rotation never plays — flip/flop look like no-ops.
+    plateManager.updateAnimations();
 
     // Drain one frame from each sequence's rawFrames queue and upload
     // it to a GL texture. The loader thread fills the queue; this call
@@ -180,6 +221,9 @@ void autoloadLUTs(const std::string& path) {
     for (const auto& f : files) {
         lutManager.loadLUT(f);
     }
+    fprintf(stderr, "[jefecheck] Loaded %zu LUT file(s) from %s\n",
+            files.size(), path.c_str());
+    fflush(stderr);
 }
 
 std::vector<std::string> getLutNames() {
@@ -192,32 +236,46 @@ bool loadLUTFile(const std::string& path) {
     return true;
 }
 
-void applyLUTToActivePlate(int lutIndex) {
+void applyLUTToActivePlate(int guiLutIndex) {
+    // The Qt panel uses GUI-style indexing: row 0 = "(No LUT)",
+    // row 1+ = lutManager array entries offset by 1. gfcPlate::setLUT
+    // takes the raw lutManager index (-1 means "no LUT" — getLUT(-1)
+    // returns an empty CubeLUT with texture id 0, which gives gfcPlate
+    // a no-bind path).
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;
-    plateManager.setLUT(q, lutIndex);
+    plateManager.setLUT(q, guiLutIndex - 1);
+    plateManager.setChanged();
+}
+
+void applyLUTToPlate(int plateIdx, int guiLutIndex) {
+    if (plateIdx < 0) return;
+    plateManager.setLUT(plateIdx, guiLutIndex - 1);
     plateManager.setChanged();
 }
 
 int getLUTOnActivePlate() {
+    // Returns the GUI index (matches the Qt panel's row).
     const int q = plateManager.getActiveQuad();
     if (q < 0) return 0;
     auto* gui = plateManager.getPlateGUI(q);
     return gui ? gui->getLUT() : 0;
 }
 
-void panActivePlate(float dx, float dy) {
-    const int q = plateManager.getActiveQuad();
-    if (q < 0) return;
-    plateManager.panPlate(q, dx, dy);
+void panPlate(int plateIdx, float dx, float dy) {
+    if (plateIdx < 0) return;
+    plateManager.panPlate(plateIdx, dx, dy);
     plateManager.setChanged();
 }
 
-void zoomActivePlate(float zoomDelta) {
-    const int q = plateManager.getActiveQuad();
-    if (q < 0) return;
-    plateManager.zoomPlate(q, zoomDelta);
+void zoomPlate(int plateIdx, float zoomDelta) {
+    if (plateIdx < 0) return;
+    plateManager.zoomPlate(plateIdx, zoomDelta);
     plateManager.setChanged();
+}
+
+int plateAtViewportPos(int x, int y, int viewportW, int viewportH) {
+    return plateManager.getPlateAtPosition(x, y, viewportW, viewportH);
 }
 
 void setFramingMode(int framingMode) {

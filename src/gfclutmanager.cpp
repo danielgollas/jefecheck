@@ -27,11 +27,28 @@ extern gfcPlateManager plateManager;
 
 gfcLUTManager lutManager;
 
-gfcLUTManager::gfcLUTManager() {
+gfcLUTManager::gfcLUTManager()
+    : loadedScroll(nullptr),
+      autoloadAllButton(nullptr),
+#ifdef JEFECHECK_USE_FLTK
+      progress(nullptr),
+#else
+      // The Qt build's Fl_Progress is a no-op stub class. Allocating a
+      // single owned instance keeps loadLUT and the trilerp loaders
+      // (which dereference `progress` on every status tick) safe to
+      // call, without auditing every `progress->...` call site.
+      progress(new Fl_Progress),
+#endif
+      scrollPosY(0),
+      scrollPosX(0) {
 }
 
 
 gfcLUTManager::~gfcLUTManager() {
+#ifndef JEFECHECK_USE_FLTK
+    // Owned in the Qt build; FLTK ones are owned by their parent group.
+    delete progress;
+#endif
 }
 
 #ifdef JEFECHECK_USE_FLTK
@@ -167,8 +184,14 @@ void gfcLUTManager::loadLUT(std::string fileName) {
     //1. Check that this LUT or one with the same name is already loaded
     for ( int i=0;i<lutArray.size();i++ ) {
         if ( GetFilenameNoPath ( lutArray[i].filename ) ==GetFilenameNoPath ( fileName ) ) {
-            progress->color ( fl_rgb_color(42,42,0) );
-            progress->copy_label ( " LUT Already Loaded, unload before reloading" );
+            // The Qt build runs without a real progress widget — calling
+            // through a null pointer here was crashing on every LUT
+            // autoload. Skip the status update; the load result still
+            // returns cleanly via the `return` below.
+            if (progress) {
+                progress->color ( fl_rgb_color(42,42,0) );
+                progress->copy_label ( " LUT Already Loaded, unload before reloading" );
+            }
             return;
         }
     }
