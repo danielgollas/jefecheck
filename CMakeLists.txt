@@ -173,11 +173,51 @@ endif()
 
 # macOS
 if(APPLE)
+    # Objective-C++ TU for the NSBundle-backed bundle Resources lookup.
+    # Compiled on every macOS build (Qt and FLTK), used by
+    # getApplicationDataPath in src/gfcStructures.cpp.
+    target_sources(jefecheck PRIVATE src/macos_bundle_path.mm)
+    set_source_files_properties(src/macos_bundle_path.mm PROPERTIES
+        COMPILE_FLAGS "-fobjc-arc")
+
     target_link_libraries(jefecheck PRIVATE
         "-framework Cocoa"
         "-framework IOKit"
         "-framework CoreFoundation"
+        "-framework Foundation"
     )
+
+    # Build a proper .app bundle for the Qt build. CFBundleName and
+    # CFBundleIdentifier flow into the AXApplication root's title and
+    # identifier, which is what assistive tech (and Appium's mac2 driver)
+    # query. Also fixes the dock app name and is required for codesign /
+    # notarization down the line.
+    if(USE_QT)
+        configure_file(
+            ${CMAKE_SOURCE_DIR}/packaging/macos/Info.plist.in
+            ${CMAKE_BINARY_DIR}/Info.plist
+            @ONLY)
+        set_target_properties(jefecheck PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/Info.plist
+            OUTPUT_NAME "jefecheck")
+
+        # Copy runtime resources into the bundle so getApplicationDataPath
+        # (= argv[0]/../../Resources/) finds FX/ and fonts/ without the
+        # workspace symlinks dev builds used to need. Icon goes alongside
+        # so CFBundleIconFile resolves.
+        set(_app_resources $<TARGET_FILE_DIR:jefecheck>/../Resources)
+        add_custom_command(TARGET jefecheck POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${_app_resources}
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    ${CMAKE_SOURCE_DIR}/src/FX ${_app_resources}/FX
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    ${CMAKE_SOURCE_DIR}/src/fonts ${_app_resources}/fonts
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${CMAKE_SOURCE_DIR}/packaging/macos/JefeCheck.icns
+                    ${_app_resources}/JefeCheck.icns
+            VERBATIM)
+    endif()
 endif()
 
 # Linux

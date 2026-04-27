@@ -308,18 +308,20 @@ std::string getApplicationDataPath() {
 #endif
 	
 #ifdef __APPLE__
-	
-	//TODO: Fix the apple path to be relative to the executable, not Applications which can vary from one installation to the other.
-	
-	//initial_path() should return the path to JefeCheck.app/Contents/MacOS/jefecheck
-	
-	/*std::filesystem::path tmpPath = std::filesystem::initial_path().parent_path()/"Resources";
-	std::cout << "tmpPath" << tmpPath.string() <<std::endl;
-	return tmpPath.string()+"/";*/
-	
+
+	// Prefer the actual loaded bundle's Resources path when running as a
+	// .app — robust against symlinks and chdir, and the canonical Cocoa
+	// path. Falls through to the argv[0]-derived path for raw-binary
+	// dev builds (USE_QT=OFF without bundling, or running the binary
+	// directly out of build_qt/jefecheck.app/Contents/MacOS/).
+	{
+		extern std::string getMacBundleResourcePath();
+		std::string bundlePath = getMacBundleResourcePath();
+		if (!bundlePath.empty()) return bundlePath;
+	}
+
 	std::filesystem::path tmpPath(gMacExecutablePath);
 	tmpPath=tmpPath.parent_path().parent_path()/"Resources";
-	//std::cout << "tmpPath" << tmpPath.string() <<std::endl;
 	return tmpPath.string()+"/";
 	/*
 #ifdef DEMO_VERSION
