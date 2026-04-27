@@ -1,7 +1,11 @@
 #ifndef GFCPLAYBACKMANAGER_H
 #define GFCPLAYBACKMANAGER_H
 #include "gfcplaybackgui.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "mainWindow.h"
+#else
+class MainWindow;
+#endif
 #include "gfcNetworkStructures.h"
 #include "gfcStructures.h"
 

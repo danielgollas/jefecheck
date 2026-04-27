@@ -3,16 +3,20 @@
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "UIConstants.h"
 #include "gfcStructures.h"
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/Fl_File_Chooser.H>
 #include <FL/Fl_Pack.H>
+#endif
 
 extern gfcSettings sett;
+#ifdef JEFECHECK_USE_FLTK
 #include "gfcfilechooser.h"
 extern NativeFileChooser *fc;
 extern void save_input_file ( Fl_File_Chooser *w, void *userdata );
 
 #include "lutWindow.h"
 extern LutWindow lutw;
+#endif
 
 
 #include "gfcnetworkmanager.h"
@@ -30,9 +34,9 @@ gfcLUTManager::gfcLUTManager() {
 gfcLUTManager::~gfcLUTManager() {
 }
 
+#ifdef JEFECHECK_USE_FLTK
 void lutManagerCB_OTHERS(Fl_Widget * o, void * v) {
 
-    
 	switch ( (long)v ) {
 	
 	case LUTDEFAULTLUT_ID:
@@ -104,17 +108,21 @@ void lutManagerCB_OTHERS(Fl_Widget * o, void * v) {
 		lutw.lutWindow->hide();
 		break;
     }
-
 }
+#endif
 
+#ifdef JEFECHECK_USE_FLTK
 void lutManagerCB_DELETE(Fl_Widget * o, void * v) {
     printf("Delete LUT %i\n",(long)v);
     lutManager.deleteLUT((long)v);
 }
+#endif
 
+#ifdef JEFECHECK_USE_FLTK
 void lutManagerCB_AUTOLOAD(Fl_Widget * o, void * v) {
     lutManager.setAutoLoad((long)v,((Fl_Button*)o)->value());
 }
+#endif
 
 void gfcLUTManager::setAutoLoad(int index, bool autoload) {
     if (index<lutArray.size()) {
@@ -191,16 +199,18 @@ void gfcLUTManager::rebuildLUTHashMap() {
     std::vector<CubeLUT>::iterator iter=lutArray.begin(),end=lutArray.end();
     int counter=0;
 
+#ifdef JEFECHECK_USE_FLTK
     lutw.loadedLuts->clear();
 	lutw.defaultLUT->clear();
 	lutw.defaultLUT->add("No LUT");
-
+#endif
 
     lutHashMap.erase ( lutHashMap.begin(),lutHashMap.end() );
     for ( iter;iter!=end ;iter++ ) {
         //printf ( "Adding %i as (%s):%s\n",counter,iter->name, iter->md5Hash.c_str() );
         lutHashMap[iter->md5Hash]=counter;
 
+#ifdef JEFECHECK_USE_FLTK
         //printf ( "LUT ARRAY SIZE=%i\n",lutArray.size() );
         lutw.loadedLuts->add
         ( GetFilenameNoPath ( iter->filename ).c_str() );
@@ -209,14 +219,17 @@ void gfcLUTManager::rebuildLUTHashMap() {
 			( GetFilenameNoPath ( iter->filename ).c_str() );
 
         lutw.loadedLuts->redraw();
+#endif
 
         counter++;
 
 
     }
 
+#ifdef JEFECHECK_USE_FLTK
 	//after that, set the default LUT to what it is
 	lutw.defaultLUT->value(lutManager.getLutIndexByName(sett.defaultLUTName)+1); //+1 to account for the No LUT option
+#endif
 }
 
 void gfcLUTManager::fillLoadedScroll() {
@@ -224,6 +237,7 @@ void gfcLUTManager::fillLoadedScroll() {
         printf("NO GUI ASSIGNED TO LUT MANAGER!\n");
         return;
     }
+#ifdef JEFECHECK_USE_FLTK
     //printf("Filling FX Manager window\n");
 
 
@@ -293,12 +307,15 @@ void gfcLUTManager::fillLoadedScroll() {
 #ifndef __APPLE__
     app().processEvents();
 #endif
+#endif  // JEFECHECK_USE_FLTK
 }
 
 void gfcLUTManager::initWidgets() {
+#ifdef JEFECHECK_USE_FLTK
     progress=lutw.progress;
     loadedScroll=lutw.scrollLoaded;
     autoloadAllButton=lutw.autoLoadAllButton;
+#endif
 }
 
 void gfcLUTManager::deleteLUT(int index) {

@@ -3,8 +3,11 @@
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "UIConstants.h"
 #include "gfcStructures.h"
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/Fl_File_Chooser.H>
+#endif
 extern gfcSettings sett;
+#ifdef JEFECHECK_USE_FLTK
 #include "gfcfilechooser.h"
 extern NativeFileChooser *fc;
 extern void save_input_file ( Fl_File_Chooser *w, void *userdata );
@@ -14,6 +17,7 @@ extern FXWindow fxw;
 
 #include "fxcontrolwindow.h"
 extern FXControlWindow fxControlWindow1;
+#endif
 
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
@@ -90,8 +94,10 @@ void gfcFXManager::loadFX(std::string fileName) {
     }
     //4. Update the FX Manager Window to show the new FX
     fillLoadedScroll();
+#ifdef JEFECHECK_USE_FLTK
     //5. Update the FX Control Window to show the newly loaded FX in the add menu.
     fxControlWindow1.scheduleUpdateWindow(fxControlWindow1.quadrant);
+#endif
 }
 
 void gfcFXManager::deleteFX(int index) {
@@ -134,6 +140,7 @@ void gfcFXManager::fillLoadedScroll() {
         printf("NO GUI ASSIGNED TO FX MANAGER!\n");
         return;
     }
+#ifdef JEFECHECK_USE_FLTK
     //printf("Filling FX Manager window\n");
 
 
@@ -218,8 +225,10 @@ void gfcFXManager::fillLoadedScroll() {
 #ifndef __APPLE__
     app().processEvents();
 #endif
+#endif  // JEFECHECK_USE_FLTK
 }
 
+#ifdef JEFECHECK_USE_FLTK
 void fxManagerCB_OTHERS(Fl_Widget * o, void * v) {
     printf("Others\n");
 
@@ -296,6 +305,7 @@ void fxManagerCB_AUTOLOAD(Fl_Widget * o, void * v) {
     fxManager.setAutoLoad((long)v,((Fl_Button*)o)->value());
 
 }
+#endif  // JEFECHECK_USE_FLTK
 
 void gfcFXManager::autoLoadAll(bool autoload) {
     printf("Autoloading All!\n");
@@ -309,9 +319,11 @@ void gfcFXManager::autoLoadAll(bool autoload) {
 }
 
 void gfcFXManager::initWidgets() {
+#ifdef JEFECHECK_USE_FLTK
     progress=fxw.progress;
     loadedScroll=fxw.scrollLoaded;
     autoloadAllButton=fxw.autoLoadAllButton;
+#endif
 }
 
 void gfcFXManager::saveScrollPosition() {

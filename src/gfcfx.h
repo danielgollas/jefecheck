@@ -12,9 +12,15 @@ enum GFC_FX_GUI_TYPE{FX_GUI_UNKNOWN=0, FX_GUI_FLOAT,FX_GUI_TEXTURE,FX_GUI_CUBE,F
 #include <map>
 #include <vector>
 #include <string>
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/Fl_Progress.H>
+#else
+#include "qt/qt_fltk_stubs.h"
+#endif
 #include "platefxparams.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "fxcontrolwindow.h"
+#endif
 #include "vec3d.h"
 //#include "gfcStructures.h"
 #include "UIConstants.h"

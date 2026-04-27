@@ -2,7 +2,9 @@
 #define GFCNETWORKCLIENT_H
 
 #include <stdio.h>
+#ifdef JEFECHECK_USE_FLTK
 #include "mainWindow.h"
+#endif
 #include "RakPeerInterface.h"
 #include <string>
 #include <vector>

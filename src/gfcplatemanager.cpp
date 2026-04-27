@@ -1,18 +1,16 @@
 #include "gfcplatemanager.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
-#include "gfcplatemanagergui_fltk.h"
 #include "gfcTextRenderer.h"
-
 #ifdef JEFECHECK_USE_FLTK
+#include "gfcplatemanagergui_fltk.h"
 #include <FL/fl_ask.H>
-#endif
-
 #include "mainWindow.h"
 extern MainWindow mw;
 
 #include "loadWindow.h"
 extern LoadWindow lw;
+#endif
 
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
@@ -26,13 +24,17 @@ extern gfcPickManager pickManager;
 #include "gfclutmanager.h"
 extern gfcLUTManager lutManager;
 
+#ifdef JEFECHECK_USE_FLTK
 #include "fxcontrolwindow.h"
 extern FXControlWindow fxControlWindow1;
+#endif
 
 #include "gfcrenderparams.h"
 
+#ifdef JEFECHECK_USE_FLTK
 #include "renderWindow.h"
 extern RenderWindow rw;
+#endif
 
 #ifndef max
 #define max(a,b)            (((a) > (b)) ? (a) : (b))
@@ -327,7 +329,9 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
     break;
     }
 
+#ifdef JEFECHECK_USE_FLTK
     mw.vp->invalidate();
+#endif
     myGUI->redrawLayoutGroup();
 
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
@@ -604,6 +608,7 @@ void gfcPlateManager::resetPlate(int whichOne) {
 }
 
 void gfcPlateManager::initializeWidgets() {
+#ifdef JEFECHECK_USE_FLTK
     for (int i=plates.size()-1;i>=0;i--) {
         plates[i].myGUI=new gfcPlateGUI_FLTK;
         plates[i].quadID=i;
@@ -737,6 +742,7 @@ void gfcPlateManager::initializeWidgets() {
 	plates[3].myGUI->assignBrightnessWidget(mw.q4Brightness);
 	plates[3].myGUI->assignContrastWidget(mw.q4Contrast);
 	plates[3].myGUI->assignSaturationWidget(mw.q4Saturation);
+#endif
 }
 
 void gfcPlateManager::updateAllGUILUTWidgets()
@@ -1021,7 +1027,9 @@ void gfcPlateManager::addFXToPlate(int whichOne, gfcFX theFX) {
 		sett.addToRecentFXs(theFX.name);
 
         plates[whichOne].fxStack.addFX(theFX);
+#ifdef JEFECHECK_USE_FLTK
         fxControlWindow1.scheduleUpdateWindow(whichOne);
+#endif
 	this->clearHistogramCache(whichOne);
 	
         //send fx
@@ -1050,7 +1058,9 @@ void gfcPlateManager::setFXStack(gfcFXStack theStack, int whichOne)
         return;
     } else {
         plates[whichOne].fxStack=theStack;
+#ifdef JEFECHECK_USE_FLTK
         fxControlWindow1.scheduleUpdateWindow(whichOne);
+#endif
 
 		//send notification that a stack was loaded
 		gfcNetFXStackMessage message;
@@ -1358,7 +1368,9 @@ void gfcPlateManager::processNetFXAttribInfo(gfcNetFXAttribInfo &info) {
         printf("gfcPlateManager::processNetFXAttribInfo: requested plate out of range\n");
     } else {
         plates[info.id.quadID].processNetFXAttribInfo(info);
+#ifdef JEFECHECK_USE_FLTK
         fxControlWindow1.scheduleUpdateWindow(info.id.quadID);
+#endif
     }
 }
 
@@ -1368,7 +1380,9 @@ void gfcPlateManager::processNetFXCommonInfo(gfcNetFXCommonInfo &info) {
         printf("gfcPlateManager::processNetFXCommonInfo: requested plate out of range\n");
     } else {
         plates[info.id.quadID].processNetFXCommonInfo(info);
+#ifdef JEFECHECK_USE_FLTK
         fxControlWindow1.scheduleUpdateWindow(info.id.quadID);
+#endif
     }
 }
 
@@ -1425,8 +1439,10 @@ void gfcPlateManager::loadStackFromFile(int whichOne, std::string filename) {
 		gfcFXStack tmp;
 		std::vector<std::string> result=tmp.loadStackFromFile(filename);
 		this->setFXStack(tmp,whichOne);
+#ifdef JEFECHECK_USE_FLTK
 	updateRecentlyLoadedStacks(filename);
         fxControlWindow1.scheduleUpdateWindow(whichOne);
+#endif
         if (result.size()>0) {
             for (int i=0; i<result.size(); i++) {
 #ifdef JEFECHECK_USE_FLTK
@@ -1563,10 +1579,10 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         return;
 
     gfcPlate* ptrToPlate=&plates[params.quadrant];
+#ifdef JEFECHECK_USE_FLTK
     rw.progress->maximum ( params.to-params.from );
 
     Fl::ready();
-#ifndef __APPLE__xxx
     app().processEvents();
 #endif
 
@@ -1576,17 +1592,20 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         playbackManager.setCurrentFrame(i);
         params.frame=i;
         params.filename=CreateRenderFilename ( params );
-		
+
 		if(renderNames)
 			renderNames->push_back(params.filename);
-        
+
+#ifdef JEFECHECK_USE_FLTK
 		rw.progress->label ( params.filename.c_str() );
+#endif
         ptrToPlate->renderParams=params;
 
         ptrToPlate->draw ( );
 
         ptrToPlate->forRender=false;
 
+#ifdef JEFECHECK_USE_FLTK
         rw.progress->value ( i );
 
         //draw(); //update the screen
@@ -1595,16 +1614,21 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
             break;
         }
         Fl::ready();
-#ifndef __APPLE__xxx
         app().processEvents();
+#else
+        if ( stopRendering) break;
 #endif
     }
 
     printf ( "Done rendering\n\a" );
+#ifdef JEFECHECK_USE_FLTK
     rw.progress->label ( !stopRendering?"Done Rendering!":"Render Aborted" );
     stopRendering=true;
     rw.render->label ( "Render" );
     rw.render->color ( FL_BLACK );
+#else
+    stopRendering=true;
+#endif
 }
 
 void gfcPlateManager::setFeedbackMessage(std::string theMessage)

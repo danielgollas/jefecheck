@@ -21,7 +21,11 @@
 
 #include "UIConstants.h"
 #include "gfcPlate.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "trackwidget.h"
+#else
+class TrackWidget;
+#endif
 
 
 #include "gfcpixelbuffer.h"

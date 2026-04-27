@@ -1,12 +1,16 @@
 #include "gfcframe.h"
 
+#ifdef JEFECHECK_USE_FLTK
 #include "exrWindow.h"
+#endif
 
 #include <iostream>
 #include <sstream>
 #include <iomanip>
 
+#ifdef JEFECHECK_USE_FLTK
 extern ExrWindow ew;
+#endif
 extern bool mainWindowExists;
 extern bool npotTextures;
 extern std::mutex gGLMutex;

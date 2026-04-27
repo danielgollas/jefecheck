@@ -3,6 +3,7 @@
 #include <string>
 #include "gfctrackmanager.h"
 /*OTHER MANAGERS AND WINDOWS*/
+#ifdef JEFECHECK_USE_FLTK
 #include "mainWindow.h"
 extern MainWindow mw;
 
@@ -11,6 +12,7 @@ extern PlaylistWindow plw;
 
 #include "loadWindow.h"
 extern LoadWindow lw;
+#endif
 
 #include "gfcsessionmanager.h"
 extern gfcSessionManager sessionManager;
@@ -44,7 +46,9 @@ void gfcPlaylistManager::appendTracksToItem(const std::vector<std::string> &file
 	{
 		entries[index].appendTracks(files);
 	}
+#ifdef JEFECHECK_USE_FLTK
 	plw.scheduleWindowUpdate();
+#endif
 	networkManager.sendPlaylist(this->getPlaylistAsString());
 }
 
@@ -108,7 +112,9 @@ void gfcPlaylistManager::setSelectedItem(int index)
 		
 	}
 
+#ifdef JEFECHECK_USE_FLTK
 	plw.scheduleWindowUpdate();
+#endif
 }
 
 int gfcPlaylistManager::addItemlist(gfcPlaylistItem theItem, int noRepeat)
@@ -164,21 +170,23 @@ std::vector<gfcPlaylistItem> * gfcPlaylistManager::getPlaylist()
 	return &entries;
 }
 
-void gfcPlaylistManager::addPLIGUIInfo(PlaylistParamInfo info, Fl_Widget* o)
+void gfcPlaylistManager::addPLIGUIInfo(PlaylistParamInfo info, void* widgetHandle)
 {
-	this->guiToPlaylistItem[o]=info;
+	this->guiToPlaylistItem[widgetHandle]=info;
 }
 
-void gfcPlaylistManager::handlePLIGUICB(Fl_Widget*o, void* data)
+void gfcPlaylistManager::handlePLIGUICB(void* widgetHandle, void* data)
 {
-	PlaylistParamInfo info = guiToPlaylistItem[o];
+	PlaylistParamInfo info = guiToPlaylistItem[widgetHandle];
 
 	switch(info.type)
 	{
 	case PL_GUI_LOAD:
 		{
 			//printf("Here we load this playlist item %i!\n",info.plIndex);
-			plw.scheduleWindowUpdate();
+		#ifdef JEFECHECK_USE_FLTK
+	plw.scheduleWindowUpdate();
+#endif
 			//here we do something with the track manager I guess.
 		}
 		break;
@@ -187,7 +195,9 @@ void gfcPlaylistManager::handlePLIGUICB(Fl_Widget*o, void* data)
 		{
 			//printf("Here we delete this playlist item %i!\n",info.plIndex);
 			this->removePlaylistItem(info.plIndex);
-			plw.scheduleWindowUpdate();
+		#ifdef JEFECHECK_USE_FLTK
+	plw.scheduleWindowUpdate();
+#endif
 		}
 		break;
 
@@ -195,7 +205,9 @@ void gfcPlaylistManager::handlePLIGUICB(Fl_Widget*o, void* data)
 		{
 			//printf("Here we move this playlist item down %i!\n",info.plIndex);
 			movePlaylistItem(info.plIndex,-1);
-			plw.scheduleWindowUpdate();
+		#ifdef JEFECHECK_USE_FLTK
+	plw.scheduleWindowUpdate();
+#endif
 		}
 		break;
 
@@ -203,7 +215,9 @@ void gfcPlaylistManager::handlePLIGUICB(Fl_Widget*o, void* data)
 		{
 			//printf("Here we move this playlist item up %i!\n",info.plIndex);
 			movePlaylistItem(info.plIndex,1);
-			plw.scheduleWindowUpdate();
+		#ifdef JEFECHECK_USE_FLTK
+	plw.scheduleWindowUpdate();
+#endif
 		}
 		break;
 
@@ -300,7 +314,9 @@ void gfcPlaylistManager::movePlaylistItem(int index, int direction)
 void gfcPlaylistManager::clearPlaylist(int notifyNetwork)
 {
 	entries.clear();
+#ifdef JEFECHECK_USE_FLTK
 	plw.scheduleWindowUpdate();
+#endif
 	if(notifyNetwork){
 		networkManager.sendPlaylist(this->getPlaylistAsString());
 	}
@@ -463,7 +479,9 @@ void gfcPlaylistManager::loadPlaylistParameters(XMLNode &plNode, int replace, in
 		this->addItemlist(item,noRepeats);
 	}
 
+#ifdef JEFECHECK_USE_FLTK
 	plw.scheduleWindowUpdate();
+#endif
 
 	networkManager.sendPlaylist(this->getPlaylistAsString());
 	

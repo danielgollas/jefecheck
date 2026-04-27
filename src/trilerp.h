@@ -9,7 +9,11 @@
 
 #include <glad/glad.h>
 #include "vec3d.h"
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/Fl_Progress.H>
+#else
+#include "qt/qt_fltk_stubs.h"
+#endif
 #include <stdio.h>
 #include <vector>
 

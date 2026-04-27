@@ -14,6 +14,7 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include <vector>
 #include <ctype.h>
 #include <sys/stat.h>
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/Fl.H>
 #include "loadWindow.h"
 #include "mainWindow.h"
@@ -22,6 +23,7 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include <FL/Fl_Progress.H>
 #include <FL/fl_ask.H>
 #include "GlViewport.h"
+#endif
 //#include "gfcframeslice.h"
 #ifdef WIN32
 #else
@@ -49,9 +51,11 @@ extern gfcNetworkManager networkManager;
 #include "gfcplatemanager.h"
 extern gfcPlateManager plateManager;
 
+#ifdef JEFECHECK_USE_FLTK
 extern LoadWindow lw;
 extern MainWindow mw;
 extern ExrWindow ew;
+#endif
 extern bool mainWindowExists;
 extern bool npotTextures;
 extern std::mutex gGLMutex;
@@ -607,6 +611,7 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 
 
 	//if(!gOutOfMemory)
+#ifdef JEFECHECK_USE_FLTK
 	if ( mw.infinitePlaybackToggle->value() )
 	{
 	int frameToFree=5;
@@ -627,6 +632,9 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 	mw.vp->trackD.loadingCanceled=true;
 	break;
 	}
+#else
+	break;
+#endif
 
 	}
 	break;
@@ -1643,7 +1651,9 @@ std::string gfcSequence::loadPreview() {
 	gfcLoadParams params=getLoadParamsFromGUI();
 
 	previewTimer.name="Load Preview";
+#ifdef JEFECHECK_USE_FLTK
 	fl_cursor(FL_CURSOR_WAIT);
+#endif
 	//Fl::ready();
 	std::string previousSelectedChannel;
 
@@ -1717,7 +1727,9 @@ std::string gfcSequence::loadPreview() {
 
 	//aoi.set(previewFrame.sizeX/4,previewFrame.sizeY/4,previewFrame.sizeX/2,previewFrame.sizeY/2);
 	updateEstimates();
+#ifdef JEFECHECK_USE_FLTK
 	fl_cursor(FL_CURSOR_DEFAULT);
+#endif
 	if (previewFrame.loaded)
 		return params.fileName;
 

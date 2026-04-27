@@ -1,11 +1,17 @@
 #include "gfcplaybackmanager.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
+#ifdef JEFECHECK_USE_FLTK
 #include "gfcplaybackgui_fltk.h"
+#else
+#include "qt/gfcplaybackgui_qt.h"
+#endif
 
 #include <glad/glad.h>
 
+#ifdef JEFECHECK_USE_FLTK
 #include "mainWindow.h"
+#endif
 
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
@@ -34,6 +40,7 @@ gfcPlaybackManager::~gfcPlaybackManager() {
 }
 
 void gfcPlaybackManager::initializeWidgets(MainWindow &mw) {
+#ifdef JEFECHECK_USE_FLTK
     myGUI=new gfcPlaybackGUI_FLTK;
 
 
@@ -60,6 +67,13 @@ void gfcPlaybackManager::initializeWidgets(MainWindow &mw) {
     this->setToFrame(100);
     this->setCurrentFrame(1);
 	this->myGUI->setPlayFwdLabel(0);
+#else
+    (void)mw;
+    myGUI=new gfcPlaybackGUI_Qt;
+    this->setFromFrame(1);
+    this->setToFrame(100);
+    this->setCurrentFrame(1);
+#endif
 
 }
 
