@@ -8,12 +8,21 @@
 
 #include <string>
 
+class gfcPlateGUI_Qt;
+
 namespace jefe::qt {
 
 // Wires up gfcPlateGUI_Qt and gfcSequenceGUI_Qt instances on every
 // plate / sequence and constructs the gfcPlateManagerGUI_Qt. Safe to
 // call once at app startup; calling again would leak the previous GUIs.
 void initializeRenderingChain();
+
+// Hands back the gfcPlateGUI_Qt that gfcPlate reads its rendering
+// state from for plate `whichPlate`. PlateCard_Qt binds its widgets
+// to this so user edits land on the plate the viewport is drawing,
+// not a parallel copy. Returns null until initializeRenderingChain()
+// has run, or when the plate index is out of range.
+gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate);
 
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering

@@ -105,6 +105,7 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         const float dy = static_cast<float>(lastMouseY_ - e->position().y());
         jefe::qt::panActivePlate(dx, dy);
         update();
+        emit plateStateChanged();
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
     }
@@ -129,6 +130,7 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
         // 0.1 matches FLTK's default zoomSpeed for the un-shifted wheel.
         jefe::qt::zoomActivePlate(deltaY * 0.1f);
         update();
+        emit plateStateChanged();
     }
     if (listener_) listener_->onEvent(jefe::ui::EventType::Wheel);
 }
@@ -143,6 +145,7 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
 
     auto handled = [&]() {
         update();
+        emit plateStateChanged();
         if (listener_) listener_->onEvent(jefe::ui::EventType::KeyDown);
     };
 

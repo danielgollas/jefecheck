@@ -94,9 +94,15 @@ void MainWindow_Qt::buildDocks() {
     // Plate Manager — bottom-left of the bottom dock area.
     plateDock_ = new QDockWidget("Plate Manager", this);
     plateDock_->setObjectName("PlateManagerDock");
-    plateDock_->setWidget(new PlateManager_Qt(plateDock_));
+    plateManagerWidget_ = new PlateManager_Qt(plateDock_);
+    plateDock_->setWidget(plateManagerWidget_);
     plateDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
+
+    // Mirror viewport-driven plate edits (drag pan, wheel zoom, keyboard
+    // shortcuts) back into the plate cards so the spinboxes stay in sync.
+    connect(viewport_, &GlViewport_Qt::plateStateChanged,
+            plateManagerWidget_, &PlateManager_Qt::refreshAllCards);
 
     // The 2x2 minimum (wide + tall) applies only when the dock is on the
     // top or bottom edge. Floating, or docked to a side edge, drops to a

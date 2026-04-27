@@ -763,6 +763,11 @@ void gfcPlateManager::initializeWidgets() {
 #endif
 }
 
+gfcPlateGUI* gfcPlateManager::getPlateGUI(int whichOne) {
+    if (whichOne < 0 || whichOne >= (int)plates.size()) return nullptr;
+    return plates[whichOne].myGUI;
+}
+
 void gfcPlateManager::setPlateShowPreview(int whichOne, bool value) {
     if (whichOne < 0 || whichOne >= (int)plates.size() || !plates[whichOne].myGUI) {
         return;

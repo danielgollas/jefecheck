@@ -8,6 +8,7 @@
 #include "../gfctrackmanager.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
+#include "gfcplategui_qt.h"
 
 extern gfcPlateManager plateManager;
 extern gfcPlaybackManager playbackManager;
@@ -18,6 +19,10 @@ namespace jefe::qt {
 void initializeRenderingChain() {
     plateManager.initializeWidgets();
     trackManager.initializeWidgets();
+}
+
+gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate) {
+    return dynamic_cast<gfcPlateGUI_Qt*>(plateManager.getPlateGUI(whichPlate));
 }
 
 void panActivePlate(float dx, float dy) {

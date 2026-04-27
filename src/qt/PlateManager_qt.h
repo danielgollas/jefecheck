@@ -15,6 +15,13 @@ class PlateManager_Qt : public QScrollArea {
 public:
     explicit PlateManager_Qt(QWidget* parent = nullptr);
 
+public slots:
+    // Pulls fresh state from each card's bound gfcPlateGUI_Qt and pushes
+    // it back into the spinboxes. Called when the viewport mutates plate
+    // state outside the cards (mouse drag, wheel zoom, keyboard
+    // shortcuts), so the user can see the values they're editing.
+    void refreshAllCards();
+
 protected:
     void resizeEvent(QResizeEvent* e) override;
 
