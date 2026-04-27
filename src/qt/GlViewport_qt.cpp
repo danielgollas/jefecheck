@@ -1,6 +1,7 @@
-// Qt implementation of IGLViewport. Holds an embedded GlImageRenderer for
-// the standalone "show me an image" path while listener-driven rendering
-// is wired up incrementally.
+// Qt implementation of IGLViewport. Pure listener relay — paintGL,
+// initializeGL, and resizeGL are forwarded to the registered
+// IGLViewportListener (typically RenderBridge_Qt). The widget itself
+// holds no rendering state.
 #include "GlViewport_qt.h"
 
 #include <QDragEnterEvent>
@@ -12,8 +13,6 @@
 #include <QUrl>
 #include <QWheelEvent>
 
-#include <cstring>
-
 extern bool jefecheck_loadGladGL();
 
 GlViewport_Qt::GlViewport_Qt(QWidget* parent)
@@ -23,15 +22,7 @@ GlViewport_Qt::GlViewport_Qt(QWidget* parent)
     setAcceptDrops(true);
 }
 
-GlViewport_Qt::~GlViewport_Qt() {
-    // Best-effort GL resource cleanup. If the widget is destroyed before
-    // its context, makeCurrent() lets us free the texture cleanly.
-    if (renderer_.hasImage()) {
-        makeCurrent();
-        renderer_.releaseGL();
-        doneCurrent();
-    }
-}
+GlViewport_Qt::~GlViewport_Qt() = default;
 
 void GlViewport_Qt::requestRedraw() {
     update();
@@ -65,25 +56,6 @@ void GlViewport_Qt::setCursorVisible(bool visible) {
     setCursor(visible ? Qt::ArrowCursor : Qt::BlankCursor);
 }
 
-void GlViewport_Qt::setImage(const void* bgra8Pixels, int w, int h) {
-    if (!bgra8Pixels || w <= 0 || h <= 0) return;
-
-    const size_t bytes = (size_t)w * (size_t)h * 4u;
-    pendingPixels_.resize(bytes);
-    std::memcpy(pendingPixels_.data(), bgra8Pixels, bytes);
-    pendingW_ = w;
-    pendingH_ = h;
-
-    if (gladLoaded_) {
-        // Context already initialized: upload immediately.
-        makeCurrent();
-        renderer_.uploadBGRA8(pendingPixels_.data(), pendingW_, pendingH_);
-        doneCurrent();
-        pendingPixels_.clear();
-    }
-    update();
-}
-
 void GlViewport_Qt::initializeGL() {
     if (!gladLoaded_) {
         gladLoaded_ = jefecheck_loadGladGL();
@@ -98,18 +70,12 @@ void GlViewport_Qt::resizeGL(int w, int h) {
 void GlViewport_Qt::paintGL() {
     if (listener_) {
         listener_->onDraw();
-        return;
+    } else {
+        // No listener attached — clear the framebuffer so we don't show
+        // garbage from an uninitialized backing store.
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
     }
-
-    // Standalone path: drain any pending upload, then render the image.
-    if (!pendingPixels_.empty()) {
-        renderer_.uploadBGRA8(pendingPixels_.data(), pendingW_, pendingH_);
-        pendingPixels_.clear();
-    }
-
-    const int dpr = (int)devicePixelRatioF();
-    renderer_.render(QOpenGLWidget::width() * dpr,
-                     QOpenGLWidget::height() * dpr);
 }
 
 void GlViewport_Qt::mousePressEvent(QMouseEvent*) {

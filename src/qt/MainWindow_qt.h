@@ -12,13 +12,18 @@
 
 #include <QMainWindow>
 
+#include <memory>
+
 class QDockWidget;
 class GlViewport_Qt;
+
+namespace jefe::qt { class RenderBridge_Qt; }
 
 class MainWindow_Qt : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow_Qt(QWidget* parent = nullptr);
+    ~MainWindow_Qt() override;
 
     GlViewport_Qt* viewport() { return viewport_; }
 
@@ -39,6 +44,8 @@ private:
     QDockWidget* timelineDock_ = nullptr;
     QDockWidget* fxDock_ = nullptr;
     QDockWidget* lutDock_ = nullptr;
+
+    std::unique_ptr<jefe::qt::RenderBridge_Qt> renderBridge_;
 };
 
 #endif

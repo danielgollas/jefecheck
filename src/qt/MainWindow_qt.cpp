@@ -4,6 +4,7 @@
 #include "GlViewport_qt.h"
 #include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
+#include "RenderBridge_qt.h"
 #include "TimelinePanel_qt.h"
 
 #include <QAction>
@@ -28,6 +29,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     viewport_ = new GlViewport_Qt(this);
     setCentralWidget(viewport_);
 
+    // Wire the JefeCheck rendering chain into the Qt viewport. The bridge
+    // owns no state; it forwards onDraw/onResize to plateManager.draw().
+    // Until PR-10 wires content loading through gfcSequence/gfcPlate, the
+    // plate stack is empty and the chain renders the clear color.
+    renderBridge_ = std::make_unique<jefe::qt::RenderBridge_Qt>();
+    viewport_->setListener(renderBridge_.get());
+
     statusBar()->showMessage("Drop an image onto the viewport to load it.");
 
     connect(viewport_, &GlViewport_Qt::fileDropped,
@@ -41,6 +49,11 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     buildDocks();
     restoreLayout();
 }
+
+// Out-of-line destructor: lets the unique_ptr<RenderBridge_Qt> see the
+// full RenderBridge_Qt definition (included above) when generating the
+// deleter, instead of forcing the header to include RenderBridge_qt.h.
+MainWindow_Qt::~MainWindow_Qt() = default;
 
 void MainWindow_Qt::buildMenuBar() {
     auto* mb = menuBar();
@@ -197,22 +210,12 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
 void MainWindow_Qt::onFileDropped(const QString& path) {
     if (!viewport_ || path.isEmpty()) return;
 
+    // PR-10 will route the dropped file through gfcSequence so the plate
+    // can display it. Until then, drops just acknowledge in the status
+    // bar — the rendering chain is wired (RenderBridge → plateManager)
+    // but no plate has a frame to draw.
     const QString name = QFileInfo(path).fileName();
-    statusBar()->showMessage(QString("Loading %1…").arg(name));
-
-    std::vector<unsigned char> bytes;
-    int w = 0, h = 0;
-    std::string err;
-    const std::string p = path.toStdString();
-
-    if (!jefe::qt::loadImageBGRA8(p, bytes, w, h, err)) {
-        statusBar()->showMessage(
-            QString("Load failed: %1").arg(QString::fromStdString(err)),
-            5000);
-        return;
-    }
-
-    viewport_->setImage(bytes.data(), w, h);
     statusBar()->showMessage(
-        QString("%1  —  %2 × %3").arg(name).arg(w).arg(h));
+        QString("Drop received: %1 — sequence loading wires up in PR-10").arg(name),
+        5000);
 }
