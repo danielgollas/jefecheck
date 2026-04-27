@@ -1,7 +1,12 @@
 #include "gfcfxstack.h"
 //#include "network.h"
 
+// fxcontrolwindow.h transitively pulls all the FLTK widget headers used by
+// handleGUICB below. Only needed in the FLTK build; the rest of this file
+// (storage, networking, save/load) is FLTK-free.
+#ifdef JEFECHECK_USE_FLTK
 #include "fxcontrolwindow.h"
+#endif
 #include "trilerp.h"
 
 #include "gfclutmanager.h"
@@ -41,8 +46,8 @@ gfcFX gfcFXStack::getFX(int index) {
     }
 }
 
-void gfcFXStack::addFXGUIInfo(fxParamInfo theInfo, Fl_Widget* o) {
-    guiToFX[o]=theInfo;
+void gfcFXStack::addFXGUIInfo(fxParamInfo theInfo, void* widgetHandle) {
+    guiToFX[widgetHandle]=theInfo;
 }
 
 /**
@@ -51,9 +56,10 @@ void gfcFXStack::addFXGUIInfo(fxParamInfo theInfo, Fl_Widget* o) {
  * @param data
  * @return Returns 1 if the fxControl window needs updating, otherwise 0
  */
-int gfcFXStack::handleGUICB(Fl_Widget * o, void * data) {
-
-    fxParamInfo info=guiToFX[o];
+int gfcFXStack::handleGUICB(void * widgetHandle, void * data) {
+#ifdef JEFECHECK_USE_FLTK
+    Fl_Widget * o = static_cast<Fl_Widget*>(widgetHandle);
+    fxParamInfo info=guiToFX[widgetHandle];
 
 
 
@@ -333,6 +339,11 @@ int gfcFXStack::handleGUICB(Fl_Widget * o, void * data) {
     }
 
     return 0;
+#else
+    // Non-FLTK builds: FX widget callbacks are not yet wired up.
+    (void)widgetHandle; (void)data;
+    return 0;
+#endif
 }
 
 int gfcFXStack::getNumOfActiveFXs() {

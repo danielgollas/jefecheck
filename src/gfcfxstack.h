@@ -2,6 +2,7 @@
 #define GFCFXSTACK_H
 
 #include "gfcfx.h"
+#include <map>
 #include <vector>
 #include "gfcNetworkStructures.h"
 #include "xmlParser.h"
@@ -27,8 +28,12 @@ public:
     
     int getNumOfFXs();
     int getNumOfActiveFXs();
-    void addFXGUIInfo(fxParamInfo theInfo,Fl_Widget* o);
-    int handleGUICB(Fl_Widget* o, void *data);
+    // FX-control widget callbacks. The handle is opaque so the model class
+    // doesn't pull a UI toolkit's headers; in the FLTK build it's an
+    // Fl_Widget*, and in the Qt build it'll be the corresponding QWidget*.
+    // handleGUICB is FLTK-specific today and is a no-op outside USE_FLTK.
+    void addFXGUIInfo(fxParamInfo theInfo, void* widgetHandle);
+    int handleGUICB(void* widgetHandle, void* data);
     void processNetFXAttribInfo(gfcNetFXAttribInfo &info);
     void processNetFXCommonInfo(gfcNetFXCommonInfo &info);
     void saveStackToNode(XMLNode &pnode) const;
@@ -47,7 +52,7 @@ public:
     
 private:
 std::vector<gfcFX> fxs;
-std::map<Fl_Widget*,fxParamInfo> guiToFX; //maps each widget to info about the FX it belong to.
+std::map<void*, fxParamInfo> guiToFX; // map keyed by opaque widget handle (see API doc).
 int numOfActiveFX;
 };
 
