@@ -4,11 +4,13 @@
 #include "SequenceLoadBridge_qt.h"
 
 #include "../gfcplatemanager.h"
+#include "../gfcplaybackmanager.h"
 #include "../gfctrackmanager.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
 
 extern gfcPlateManager plateManager;
+extern gfcPlaybackManager playbackManager;
 extern gfcTrackManager trackManager;
 
 namespace jefe::qt {
@@ -30,6 +32,70 @@ void zoomActivePlate(float zoomDelta) {
     if (q < 0) return;
     plateManager.zoomPlate(q, zoomDelta);
     plateManager.setChanged();
+}
+
+void setFramingMode(int framingMode) {
+    plateManager.setFramingMode(framingMode);
+    plateManager.setChanged();
+}
+
+void fitActivePlate() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.fitToViewport(q);
+    plateManager.setChanged();
+}
+
+void fitAllPlates() {
+    plateManager.fitToViewportAll();
+    plateManager.setChanged();
+}
+
+void toggleFlipActive() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.toggleFlip(q);
+    plateManager.setChanged();
+}
+
+void toggleFlopActive() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.toggleFlop(q);
+    plateManager.setChanged();
+}
+
+void toggleFlipAll() {
+    plateManager.toggleFlipAll();
+    plateManager.setChanged();
+}
+
+void toggleFlopAll() {
+    plateManager.toggleFlopAll();
+    plateManager.setChanged();
+}
+
+void cycleTrackOnActivePlate(int direction) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    int track = plateManager.getTrackOnPlate(q);
+    track += (direction >= 0 ? 1 : -1);
+    if (track < 0) track = 3;
+    if (track > 3) track = 0;
+    plateManager.setTrackOnPlate(q, track);
+    plateManager.setChanged();
+}
+
+void pausePlayback() {
+    playbackManager.pause();
+}
+
+void stepFrame(int direction) {
+    if (direction >= 0) {
+        playbackManager.oneFrameFwd();
+    } else {
+        playbackManager.oneFrameRev();
+    }
 }
 
 bool loadFileIntoPlate(const std::string& path, int whichSequence) {

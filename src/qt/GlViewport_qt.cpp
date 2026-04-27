@@ -5,6 +5,10 @@
 #include "GlViewport_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
+// FRAMING*_ID constants for layout shortcuts. UIConstants.h has no
+// FLTK dependencies, so it's safe to pull into the Qt TU directly.
+#include "../UIConstants.h"
+
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
@@ -129,8 +133,111 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
     if (listener_) listener_->onEvent(jefe::ui::EventType::Wheel);
 }
 
-void GlViewport_Qt::keyPressEvent(QKeyEvent*) {
+void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
+    // Plate-control shortcuts. Any unhandled key falls through to the
+    // listener and Qt's default propagation so menu mnemonics, dialog
+    // accelerators, etc. still work.
+    const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
+    const bool ctrl  = e->modifiers().testFlag(Qt::ControlModifier);
+    const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
+
+    auto handled = [&]() {
+        update();
+        if (listener_) listener_->onEvent(jefe::ui::EventType::KeyDown);
+    };
+
+    switch (e->key()) {
+        // Layout cycling: Ctrl+1..4 → single / horiz-split / vert-split / quad.
+        case Qt::Key_1:
+            if (ctrl) { jefe::qt::setFramingMode(FRAMINGSINGLE_ID);     handled(); return; }
+            break;
+        case Qt::Key_2:
+            if (ctrl) { jefe::qt::setFramingMode(FRAMINGDOUBLE_ID);     handled(); return; }
+            break;
+        case Qt::Key_3:
+            if (ctrl) { jefe::qt::setFramingMode(FRAMINGDOUBLEVERT_ID); handled(); return; }
+            break;
+        case Qt::Key_4:
+            if (ctrl) { jefe::qt::setFramingMode(FRAMINGQUAD_ID);       handled(); return; }
+            break;
+
+        // Fit-to-viewport. F = active plate; Shift+F = all plates.
+        case Qt::Key_F:
+            if (!ctrl && !alt) {
+                if (shift) jefe::qt::fitAllPlates();
+                else       jefe::qt::fitActivePlate();
+                handled();
+                return;
+            }
+            break;
+
+        // Mirror flips. H = horizontal (flop); V = vertical (flip).
+        // Shift extends the toggle to all plates.
+        case Qt::Key_H:
+            if (!ctrl && !alt) {
+                if (shift) jefe::qt::toggleFlopAll();
+                else       jefe::qt::toggleFlopActive();
+                handled();
+                return;
+            }
+            break;
+        case Qt::Key_V:
+            if (!ctrl && !alt) {
+                if (shift) jefe::qt::toggleFlipAll();
+                else       jefe::qt::toggleFlipActive();
+                handled();
+                return;
+            }
+            break;
+
+        // Track cycling on active plate (matches FLTK's Up/Down handler).
+        case Qt::Key_Up:
+            if (!ctrl && !alt) {
+                jefe::qt::cycleTrackOnActivePlate(-1);
+                handled();
+                return;
+            }
+            break;
+        case Qt::Key_Down:
+            if (!ctrl && !alt) {
+                jefe::qt::cycleTrackOnActivePlate(+1);
+                handled();
+                return;
+            }
+            break;
+
+        // Playback. Space pauses; arrows step a frame. Frame stepping
+        // is a no-op until the Qt build runs the playback loop, but
+        // wiring it here keeps the surface symmetric with FLTK.
+        case Qt::Key_Space:
+            if (!ctrl && !alt) {
+                jefe::qt::pausePlayback();
+                handled();
+                return;
+            }
+            break;
+        case Qt::Key_Left:
+            if (!ctrl && !alt) {
+                jefe::qt::stepFrame(-1);
+                handled();
+                return;
+            }
+            break;
+        case Qt::Key_Right:
+            if (!ctrl && !alt) {
+                jefe::qt::stepFrame(+1);
+                handled();
+                return;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    // Unhandled — pass through to listener / parent.
     if (listener_) listener_->onEvent(jefe::ui::EventType::KeyDown);
+    QOpenGLWidget::keyPressEvent(e);
 }
 
 void GlViewport_Qt::keyReleaseEvent(QKeyEvent*) {
