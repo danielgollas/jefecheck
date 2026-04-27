@@ -3,14 +3,18 @@
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
 #include <FL/x.H>
+#endif
 #include "gfcSequence.h"
 #include "mainWindow.h"
 #include "loadWindow.h"
 #include "lutWindow.h"
+#ifdef JEFECHECK_USE_FLTK
 #include "FL/fl_ask.H"
+#endif
 #include "gfcfx.h"
 #include <string>
 #include "platefxparams.h"
@@ -27,6 +31,31 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include "gfcimagesaver.h"
 
 #include "gfchistogram.h"
+
+namespace {
+// Looks up an FLTK-compatible color index in the standard 8-color palette.
+// In the FLTK build we defer to Fl::get_color so the colors match exactly
+// whatever FLTK reports (including any custom palette overrides). In other
+// builds we fall back to a static table for the named colors and white for
+// out-of-range indices.
+inline void gfcLookupPointerColor(int colorIdx, uchar& r, uchar& g, uchar& b) {
+#ifdef JEFECHECK_USE_FLTK
+    Fl::get_color(Fl_Color(colorIdx), r, g, b);
+#else
+    static const uchar table[8][3] = {
+        {  0,  0,  0}, {255,  0,  0}, {  0,255,  0}, {255,255,  0},
+        {  0,  0,255}, {255,  0,255}, {  0,255,255}, {255,255,255}
+    };
+    if (colorIdx >= 0 && colorIdx < 8) {
+        r = table[colorIdx][0];
+        g = table[colorIdx][1];
+        b = table[colorIdx][2];
+    } else {
+        r = g = b = 255;
+    }
+#endif
+}
+}  // namespace
 
 
 
@@ -820,7 +849,7 @@ void gfcPlate::drawRemotePointers() {
             pEnd=nickIter->second.end();
             int maxPointer=nickIter->second.size();
 			uchar red, green, blue;
-			Fl::get_color(Fl_Color(pIter->color), red, green, blue);
+			gfcLookupPointerColor(pIter->color, red, green, blue);
 
             if (pIter!=pEnd) {
 
