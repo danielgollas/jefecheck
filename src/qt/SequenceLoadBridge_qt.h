@@ -22,6 +22,14 @@ void initializeRenderingChain();
 // uploads in the calling thread. Returns true on success.
 bool loadFileIntoPlate(const std::string& path, int whichSequence);
 
+// Pan / zoom hooks called from GlViewport_Qt's mouse handlers. They
+// drive the active plate's transform through plateManager. dx/dy are
+// the per-event delta in pixels; zoomDelta is the wheel scroll amount
+// (positive zooms in). Both call plateManager.setChanged() so the next
+// paintGL pass picks up the change.
+void panActivePlate(float dx, float dy);
+void zoomActivePlate(float zoomDelta);
+
 }  // namespace jefe::qt
 
 #endif

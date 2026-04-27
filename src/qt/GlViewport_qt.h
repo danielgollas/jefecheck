@@ -58,6 +58,12 @@ protected:
 private:
     jefe::ui::IGLViewportListener* listener_ = nullptr;
     bool gladLoaded_ = false;
+
+    // Drag anchor for pan: the mouse position at the last move/press
+    // event in widget-local pixel coordinates. Used to compute per-event
+    // deltas without holding a Qt event reference.
+    float lastMouseX_ = 0.0f;
+    float lastMouseY_ = 0.0f;
 };
 
 #endif

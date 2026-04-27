@@ -3,6 +3,7 @@
 // IGLViewportListener (typically RenderBridge_Qt). The widget itself
 // holds no rendering state.
 #include "GlViewport_qt.h"
+#include "SequenceLoadBridge_qt.h"
 
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
@@ -78,7 +79,12 @@ void GlViewport_Qt::paintGL() {
     }
 }
 
-void GlViewport_Qt::mousePressEvent(QMouseEvent*) {
+void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
+    if (e->button() == Qt::LeftButton) {
+        // Anchor for the drag delta we'll feed to panActivePlate.
+        lastMouseX_ = e->position().x();
+        lastMouseY_ = e->position().y();
+    }
     if (listener_) listener_->onEvent(jefe::ui::EventType::Push);
 }
 
@@ -87,13 +93,32 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
 }
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
+    if (e->buttons() & Qt::LeftButton) {
+        // FLTK's GlViewport pans by (prevX - eventX, prevY - eventY) so
+        // dragging right shifts the plate left. Match that sign here so
+        // the keyboard/mouse shortcuts behave the same in both backends.
+        const float dx = static_cast<float>(lastMouseX_ - e->position().x());
+        const float dy = static_cast<float>(lastMouseY_ - e->position().y());
+        jefe::qt::panActivePlate(dx, dy);
+        update();
+        lastMouseX_ = e->position().x();
+        lastMouseY_ = e->position().y();
+    }
     auto type = (e->buttons() == Qt::NoButton)
         ? jefe::ui::EventType::Move
         : jefe::ui::EventType::Drag;
     if (listener_) listener_->onEvent(type);
 }
 
-void GlViewport_Qt::wheelEvent(QWheelEvent*) {
+void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
+    // angleDelta() is in eighths of a degree. FLTK's wheelDeltaY is
+    // typically ±1 per notch; divide by 120 to get the same units.
+    const int notches = e->angleDelta().y() / 120;
+    if (notches != 0) {
+        // 0.1 matches FLTK's default zoomSpeed for the un-shifted wheel.
+        jefe::qt::zoomActivePlate(static_cast<float>(notches) * 0.1f);
+        update();
+    }
     if (listener_) listener_->onEvent(jefe::ui::EventType::Wheel);
 }
 

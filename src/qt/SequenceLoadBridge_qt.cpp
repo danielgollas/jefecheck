@@ -18,6 +18,20 @@ void initializeRenderingChain() {
     trackManager.initializeWidgets();
 }
 
+void panActivePlate(float dx, float dy) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.panPlate(q, dx, dy);
+    plateManager.setChanged();
+}
+
+void zoomActivePlate(float zoomDelta) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.zoomPlate(q, zoomDelta);
+    plateManager.setChanged();
+}
+
 bool loadFileIntoPlate(const std::string& path, int whichSequence) {
     auto* seq = trackManager.getSequence(whichSequence);
     if (!seq || !seq->myGUI || path.empty()) {
