@@ -1,8 +1,21 @@
-// Qt skeleton for gfcPlateGUI. All methods stubbed. See docs/MIGRATION.md.
+// Stateful Qt implementation of gfcPlateGUI. Replaces the previous all-
+// stubs version: each setX() updates an internal field; getX() returns
+// it. The model class (gfcPlate) reads its state through this interface,
+// so a PlateCard_Qt can drive a real plate by calling these setters from
+// its widget signals — no bridge between Qt widgets and the rendering
+// pipeline beyond this object.
+//
+// The "assign*Widget" methods are no-ops in the Qt backend. Their FLTK
+// counterparts cache widget pointers so the FLTK GUI subclass can read
+// values directly; on the Qt side the widgets push values into us via
+// setters, so we don't need the back-pointer.
 #ifndef GFCPLATEGUI_QT_H
 #define GFCPLATEGUI_QT_H
 
 #include "gfcplategui.h"
+
+#include <string>
+#include <vector>
 
 class gfcPlateGUI_Qt : public gfcPlateGUI {
 public:
@@ -91,6 +104,51 @@ public:
     void assignBrightnessWidget(void *widget) override;
     void assignContrastWidget(void *widget) override;
     void assignSaturationWidget(void *widget) override;
+
+    // Plate id (0..3). Only used by the optional debug log so the user
+    // can see which plate's controls fired during smoke-tests; not part
+    // of the abstract gfcPlateGUI surface.
+    void setPlateIndex(int idx) { plateIndex_ = idx; }
+
+private:
+    int plateIndex_ = -1;
+
+    // Identity / source
+    int   active_ = 0;
+    int   trackChoice_ = -1;
+
+    // Aspect
+    std::string aspectString_ = "original";
+    float aspect_ = 1.0f;
+
+    // Transforms
+    int   tx_ = 0;
+    int   ty_ = 0;
+    float scale_ = 1.0f;
+    float rz_ = 0.0f;
+    int   flip_ = 0;
+    int   flop_ = 0;
+    int   crop_ = 0;
+    int   offset_ = 0;
+
+    // Channel masks
+    int   rgba_ = 0;
+    bool  channelR_ = true;
+    bool  channelG_ = true;
+    bool  channelB_ = true;
+    bool  channelA_ = true;
+
+    // Preview
+    bool  showPreview_ = false;
+
+    // Color correction
+    int   lut_ = 0;
+    std::vector<std::string> lutOptions_;
+    float gamma_ = 1.0f;
+    float exposure_ = 0.0f;
+    float brightness_ = 0.0f;
+    float contrast_ = 1.0f;
+    float saturation_ = 1.0f;
 };
 
 #endif
