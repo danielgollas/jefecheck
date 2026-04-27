@@ -49,6 +49,7 @@ extern RenderWindow rw;
 
 gfcPlateManager::gfcPlateManager() : myGUI(nullptr) {
     plates.resize(GFC_MAX_PLATES);
+    activeQuad=0;
     framingMode=FRAMINGSINGLE_ID;
     showHelp=false;
     helpMessage="\n\n\nQuickHelp\n(toggle on/off with 'h')\n-------------\n\nVIEWPORT LAYOUTS\nSingle - ctrl+1\nSide by Side - ctrl+2\nTop and Bottom - ctrl+3\n2x2 - ctrl+4\n\nGUI\nToggle Fullscreen Modes - Ctrl+F\nHide Control Bar and Menu - Ctrl+Alt+F\n\nPLAYBACK\nPlay/Pause - Space\nPlay Direction - < or >\nBack/Forward one frame - x/c\nFirst/Last Frame - z/v\nSet Timeline IN Point - i (+Shift to reset, +Alt to start loading there)\nSet Timeline OUT Point - o (+Shift to reset)\nLoad from this point on- Alt+LMB ( on the track or the timeline to load all tracks from this point on)\n\nTRANSFORMS\nFit to screen - f (+Alt Fit all to screen)\nPan - LMB drag (+Alt for gang zoom)\nZoom - Mouse Wheel or Ctrl+LMB drag (+Alt for gang zoom)\n\nOTHERS\nColor Picker: Ctrl+RMB\n\n\nREMOTE SESSIONS\nRemote Pointer - RMB drag\nEnter/Exit Chat Mode - y/Escape\nShow Chat - Ctrl+y";

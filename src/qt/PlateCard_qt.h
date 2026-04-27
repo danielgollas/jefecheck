@@ -37,6 +37,7 @@ public:
     ~PlateCard_Qt() override;
 
     gfcPlateGUI_Qt* gui() { return gui_; }
+    int id() const { return id_; }
 
     // Pulls all values from gui_ and pushes them into the spinboxes /
     // combos / toggles, with widget signals temporarily blocked so the
@@ -44,6 +45,20 @@ public:
     // their spinbox-rounded representations. Cheap; safe to call on
     // every paint.
     void refreshFromState();
+
+    // Toggles the active-plate styling. Called by the parent dock when
+    // it knows the active plate index has changed (either from a click
+    // on a different card or via plateManager.setActiveQuad()).
+    void setActiveHighlight(bool on);
+
+signals:
+    // Emitted on left-click anywhere on the card body that isn't
+    // already a child widget. The dock listens and sets this card's
+    // plate as the active plate.
+    void clicked(int id);
+
+protected:
+    void mousePressEvent(QMouseEvent* e) override;
 
 private:
     int id_;
