@@ -25,14 +25,28 @@ void initializeRenderingChain() {
 bool tickPlayback() {
     // playbackManager.update() is the heart of the playback engine —
     // advances currentFrame at target FPS, calls plateManager.setChanged()
-    // when a new frame should display. Networking + texture upload run
-    // alongside in the FLTK loop; the Qt build wires those in later.
+    // when a new frame should display.
     playbackManager.update();
 
+    // Drain one frame from each sequence's rawFrames queue and upload
+    // it to a GL texture. The loader thread fills the queue; this call
+    // is what makes those frames visible to the renderer. Cheap when
+    // queues are empty (early return on try_lock fail). Caller MUST
+    // make the viewport's GL context current before calling — texture
+    // uploads happen on the calling thread.
+    trackManager.generateTextures();
+
+    // Pushes per-track widget state (visible range, current frame, etc.)
+    // into the gfcSequenceGUI for each sequence. In the Qt build the
+    // GUI methods are mostly stubs today, but calling this keeps the
+    // surface symmetric with FLTK so wiring a real timeline later is
+    // a matter of filling in stubs, not threading the call.
+    trackManager.updateTrackWidgets();
+
     // Drain the dirty flag here so callers know when to redraw without
-    // having to query plateManager themselves. Any future input path
-    // (drop handler, key shortcuts) that calls setChanged() will get
-    // picked up on the next tick.
+    // having to query plateManager themselves. Any input path that calls
+    // setChanged() (drop, keys, mouse, playback frame advance) gets
+    // picked up here.
     const bool dirty = plateManager.getChanged();
     return dirty;
 }
