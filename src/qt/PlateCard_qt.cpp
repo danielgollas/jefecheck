@@ -1,4 +1,5 @@
 #include "PlateCard_qt.h"
+#include "gfcplategui_qt.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -39,12 +40,14 @@ QPushButton* makeToggle(QWidget* parent, const QString& text,
 }
 }  // namespace
 
-PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent) : QFrame(parent) {
+PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent)
+    : QFrame(parent),
+      id_(id),
+      gui_(std::make_unique<gfcPlateGUI_Qt>()) {
+    gui_->setPlateIndex(id);
+
     setFrameShape(QFrame::StyledPanel);
     setFrameShadow(QFrame::Plain);
-    // 3 rows now (title gone, row 4 merged into row 1). PlateManager_Qt
-    // uses a QGridLayout to lay cards out in 1-or-2 columns based on dock
-    // width, so cards are free to stretch horizontally to fill their cell.
     setMinimumSize(280, 84);
 
     setStyleSheet(
@@ -52,9 +55,6 @@ PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent) : QFrame(parent) {
         "QComboBox QAbstractItemView, QAbstractSpinBox { font-size: 10pt; }"
     );
 
-    // Plate ID (1-4) replaces the previous "Trk" label, doubling as the card
-    // identifier now that the "Plate A/B/C/D" title is gone. The combo to its
-    // right still chooses the source track (A/B/C/D).
     auto* plateId = new QLabel(QString::number(id + 1), this);
     plateId->setStyleSheet("font-weight: bold; font-size: 12pt; color: #ccc;");
     plateId->setFixedWidth(14);
@@ -64,6 +64,7 @@ PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent) : QFrame(parent) {
     track->addItems({"A", "B", "C", "D"});
     track->setCurrentIndex(id);
     track->setFixedWidth(40);
+    gui_->setTrackChoice(id);
 
     auto* aspect = new QComboBox(this);
     aspect->setEditable(true);
@@ -75,11 +76,11 @@ PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent) : QFrame(parent) {
     auto* flop = makeToggle(this, "Flop", "Flop horizontally", 32);
 
     auto* rgba = new QPushButton("RGB", this);
+    rgba->setCheckable(true);
     rgba->setToolTip("Cycle RGBA channel display (shortcuts r/g/b/a)");
     rgba->setFixedHeight(20);
     rgba->setMinimumWidth(36);
 
-    // Row 1 — identity + format toggles + channel: # / Track / Aspect / Crop / Flip / Flop / RGB
     auto* row1 = new QHBoxLayout();
     row1->setSpacing(4);
     row1->addWidget(plateId);
@@ -90,7 +91,6 @@ PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent) : QFrame(parent) {
     row1->addWidget(flop);
     row1->addWidget(rgba);
 
-    // Row 2 — transform + LUT: Zoom / X / Y / R / LUT
     auto* zoom = makeSpin(this, 0.01,    99.99, 0.01, 1.0, 46);
     auto* panX = makeSpin(this, -9999.0, 9999.0, 1.0,  0.0, 50);
     auto* panY = makeSpin(this, -9999.0, 9999.0, 1.0,  0.0, 50);
@@ -116,7 +116,6 @@ PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent) : QFrame(parent) {
     row2->addWidget(makeInlineLabel(this, "LUT"));
     row2->addWidget(lut, 1);
 
-    // Row 3 — color: γ / Ex / Cn / Br / St
     auto* gamma      = makeSpin(this, 0.01,   99.99, 0.01, 1.0, 44);
     auto* exposure   = makeSpin(this, -99.99, 99.99, 0.01, 0.0, 48);
     auto* contrast   = makeSpin(this, 0.01,   99.99, 0.01, 1.0, 44);
@@ -144,5 +143,51 @@ PlateCard_Qt::PlateCard_Qt(int id, QWidget* parent) : QFrame(parent) {
     outer->addLayout(row2);
     outer->addLayout(row3);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
+    // Wire signals to the GUI state object. gfcPlate reads through the
+    // same interface, so each connect() below is the actual control →
+    // rendering pipeline link.
+    auto* g = gui_.get();
+    using QDS = QDoubleSpinBox;
+    using QCB = QComboBox;
+
+    connect(track,   QOverload<int>::of(&QCB::currentIndexChanged),
+            this, [g](int idx) { g->setTrackChoice(idx); });
+    connect(aspect,  &QCB::currentTextChanged,
+            this, [g](const QString& s) { g->setAspectChoice(s.toStdString()); });
+
+    connect(crop, &QPushButton::toggled, this, [g](bool on) { g->setCrop(on ? 1 : 0); });
+    connect(flip, &QPushButton::toggled, this, [g](bool on) { g->setFlip(on ? 1 : 0); });
+    connect(flop, &QPushButton::toggled, this, [g](bool on) { g->setFlop(on ? 1 : 0); });
+    connect(rgba, &QPushButton::clicked, this, [g]() {
+        // Cycle RGBA mode 0..3 each click. The FLTK build calls a similar
+        // toggle from a single button.
+        const int next = (g->getRGBA() + 1) % 4;
+        g->setRGBA(next);
+    });
+
+    connect(zoom, QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setScale((float)v); });
+    connect(panX, QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setTX((float)v); });
+    connect(panY, QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setTY((float)v); });
+    connect(rot,  QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setRZ((float)v); });
+
+    connect(lut,  QOverload<int>::of(&QCB::currentIndexChanged),
+            this, [g](int idx) { g->setLUT(idx); });
+
+    connect(gamma,      QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setGamma((float)v); });
+    connect(exposure,   QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setExposure((float)v); });
+    connect(contrast,   QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setContrast((float)v); });
+    connect(brightness, QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setBrightness((float)v); });
+    connect(saturation, QOverload<double>::of(&QDS::valueChanged),
+            this, [g](double v) { g->setSaturation((float)v); });
 }
 
+PlateCard_Qt::~PlateCard_Qt() = default;
