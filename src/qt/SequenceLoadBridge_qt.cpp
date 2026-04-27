@@ -142,7 +142,9 @@ void stepFrame(int direction) {
     }
 }
 
-bool loadFileIntoPlate(const std::string& path, int whichSequence) {
+bool loadFileIntoPlate(const std::string& path,
+                       int whichSequence,
+                       bool kickOffSequenceLoad) {
     auto* seq = trackManager.getSequence(whichSequence);
     if (!seq || !seq->myGUI || path.empty()) {
         return false;
@@ -162,6 +164,21 @@ bool loadFileIntoPlate(const std::string& path, int whichSequence) {
     // so the plate would otherwise keep its uninitialized showPreview
     // and never render the preview frame we just loaded.
     plateManager.updateAllFromGUI();
+
+    // loadPreview() runs findSequenceFiles, which clamps from_/to_ on
+    // the gfcSequenceGUI_Qt to the discovered range. If that range is
+    // > 1, kick off the async multi-frame loader so playback can step
+    // through the whole sequence. Going through trackManager (rather
+    // than seq->startLoading directly) also bumps playbackManager's
+    // from/to to the track length, so Left/Right + Space land on real
+    // frames. The thread uses try_lock on the rawFrames queue; the
+    // per-tick generateTextures() drain (PR-16) puts frames on the
+    // GPU. Without this, dropping an EXR stack would only ever show
+    // frame 1.
+    if (kickOffSequenceLoad && seq->getNumPreviewFrames() > 1) {
+        trackManager.startLoadingSequence(whichSequence);
+    }
+
     return true;
 }
 

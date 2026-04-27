@@ -11,6 +11,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDir>
 #include <QDockWidget>
 #include <QFileInfo>
 #include <QMenu>
@@ -241,17 +242,45 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
 void MainWindow_Qt::onFileDropped(const QString& path) {
     if (!viewport_ || path.isEmpty()) return;
 
-    const QString name = QFileInfo(path).fileName();
+    QString resolved = path;
+
+    // Folder drop → pick the first image-like file inside (alpha-sorted).
+    // gfcSequence::findSequenceFiles will then discover the rest of the
+    // numbered sequence from that one file. We accept anything OIIO
+    // probably handles plus DPX/EXR explicitly; leave actually-loadable
+    // checks to the loader so we don't have to keep this list in sync.
+    if (QFileInfo(resolved).isDir()) {
+        static const QStringList kImageFilters{
+            "*.exr", "*.EXR",
+            "*.dpx", "*.DPX",
+            "*.png", "*.PNG",
+            "*.jpg", "*.JPG", "*.jpeg", "*.JPEG",
+            "*.tif", "*.TIF", "*.tiff", "*.TIFF",
+            "*.tga", "*.TGA",
+            "*.bmp", "*.BMP",
+        };
+        QDir dir(resolved);
+        const QStringList entries =
+            dir.entryList(kImageFilters, QDir::Files, QDir::Name);
+        if (entries.isEmpty()) {
+            statusBar()->showMessage(
+                QString("No image files in %1").arg(resolved), 5000);
+            return;
+        }
+        resolved = dir.absoluteFilePath(entries.first());
+    }
+
+    const QString name = QFileInfo(resolved).fileName();
 
     // GL texture uploads happen inside loadPreview, so the viewport's
     // context must be current on the calling thread.
     viewport_->makeCurrent();
-    const bool ok = jefe::qt::loadFileIntoPlate(path.toStdString(), 0);
+    const bool ok = jefe::qt::loadFileIntoPlate(resolved.toStdString(), 0);
     viewport_->doneCurrent();
 
     if (!ok) {
         statusBar()->showMessage(
-            QString("Load failed: %1").arg(path), 5000);
+            QString("Load failed: %1").arg(resolved), 5000);
         return;
     }
 

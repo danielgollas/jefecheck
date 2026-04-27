@@ -43,7 +43,16 @@ int  getActivePlate();
 // chain picks up the new frame on the next draw call. Caller is
 // responsible for making the GL context current — generateTexture()
 // uploads in the calling thread. Returns true on success.
-bool loadFileIntoPlate(const std::string& path, int whichSequence);
+//
+// `kickOffSequenceLoad`: when the previewed file turns out to be part
+// of a numbered image sequence (findSequenceFiles found > 1 file),
+// also start the async multi-frame load via gfcSequence::startLoading.
+// Frames flow into the rawFrames queue; tickPlayback() drains them
+// onto the GPU. Defaults to true so dropping a single image of a
+// sequence does the obvious thing — load the whole sequence.
+bool loadFileIntoPlate(const std::string& path,
+                       int whichSequence,
+                       bool kickOffSequenceLoad = true);
 
 // Pan / zoom hooks called from GlViewport_Qt's mouse handlers. They
 // drive the active plate's transform through plateManager. dx/dy are
