@@ -1,9 +1,18 @@
-// Qt skeleton for the OpenGL viewport. SKELETON — most bodies are empty.
+// Qt implementation of IGLViewport. Holds an embedded GlImageRenderer for
+// the standalone "show me an image" path while listener-driven rendering
+// is wired up incrementally.
 #include "GlViewport_qt.h"
 
-#include <QMouseEvent>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QKeyEvent>
+#include <QMimeData>
+#include <QMouseEvent>
+#include <QUrl>
 #include <QWheelEvent>
+
+#include <cstring>
 
 extern bool jefecheck_loadGladGL();
 
@@ -11,9 +20,18 @@ GlViewport_Qt::GlViewport_Qt(QWidget* parent)
     : QOpenGLWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    setAcceptDrops(true);
 }
 
-GlViewport_Qt::~GlViewport_Qt() = default;
+GlViewport_Qt::~GlViewport_Qt() {
+    // Best-effort GL resource cleanup. If the widget is destroyed before
+    // its context, makeCurrent() lets us free the texture cleanly.
+    if (renderer_.hasImage()) {
+        makeCurrent();
+        renderer_.releaseGL();
+        doneCurrent();
+    }
+}
 
 void GlViewport_Qt::requestRedraw() {
     update();
@@ -47,6 +65,25 @@ void GlViewport_Qt::setCursorVisible(bool visible) {
     setCursor(visible ? Qt::ArrowCursor : Qt::BlankCursor);
 }
 
+void GlViewport_Qt::setImage(const void* bgra8Pixels, int w, int h) {
+    if (!bgra8Pixels || w <= 0 || h <= 0) return;
+
+    const size_t bytes = (size_t)w * (size_t)h * 4u;
+    pendingPixels_.resize(bytes);
+    std::memcpy(pendingPixels_.data(), bgra8Pixels, bytes);
+    pendingW_ = w;
+    pendingH_ = h;
+
+    if (gladLoaded_) {
+        // Context already initialized: upload immediately.
+        makeCurrent();
+        renderer_.uploadBGRA8(pendingPixels_.data(), pendingW_, pendingH_);
+        doneCurrent();
+        pendingPixels_.clear();
+    }
+    update();
+}
+
 void GlViewport_Qt::initializeGL() {
     if (!gladLoaded_) {
         gladLoaded_ = jefecheck_loadGladGL();
@@ -59,7 +96,20 @@ void GlViewport_Qt::resizeGL(int w, int h) {
 }
 
 void GlViewport_Qt::paintGL() {
-    if (listener_) listener_->onDraw();
+    if (listener_) {
+        listener_->onDraw();
+        return;
+    }
+
+    // Standalone path: drain any pending upload, then render the image.
+    if (!pendingPixels_.empty()) {
+        renderer_.uploadBGRA8(pendingPixels_.data(), pendingW_, pendingH_);
+        pendingPixels_.clear();
+    }
+
+    const int dpr = (int)devicePixelRatioF();
+    renderer_.render(QOpenGLWidget::width() * dpr,
+                     QOpenGLWidget::height() * dpr);
 }
 
 void GlViewport_Qt::mousePressEvent(QMouseEvent*) {
@@ -95,4 +145,39 @@ void GlViewport_Qt::enterEvent(QEnterEvent*) {
 
 void GlViewport_Qt::leaveEvent(QEvent*) {
     if (listener_) listener_->onEvent(jefe::ui::EventType::Leave);
+}
+
+void GlViewport_Qt::dragEnterEvent(QDragEnterEvent* e) {
+    if (e->mimeData()->hasUrls()) {
+        for (const QUrl& u : e->mimeData()->urls()) {
+            if (u.isLocalFile()) {
+                e->acceptProposedAction();
+                return;
+            }
+        }
+    }
+    e->ignore();
+}
+
+void GlViewport_Qt::dragMoveEvent(QDragMoveEvent* e) {
+    if (e->mimeData()->hasUrls()) {
+        e->acceptProposedAction();
+    } else {
+        e->ignore();
+    }
+}
+
+void GlViewport_Qt::dropEvent(QDropEvent* e) {
+    if (!e->mimeData()->hasUrls()) {
+        e->ignore();
+        return;
+    }
+    for (const QUrl& u : e->mimeData()->urls()) {
+        if (u.isLocalFile()) {
+            emit fileDropped(u.toLocalFile());
+            e->acceptProposedAction();
+            return;
+        }
+    }
+    e->ignore();
 }

@@ -2,6 +2,7 @@
 
 #include "FXLutPanel_qt.h"
 #include "GlViewport_qt.h"
+#include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
 #include "TimelinePanel_qt.h"
 
@@ -9,9 +10,11 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QFileInfo>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSettings>
+#include <QStatusBar>
 
 namespace {
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
@@ -24,6 +27,11 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
 
     viewport_ = new GlViewport_Qt(this);
     setCentralWidget(viewport_);
+
+    statusBar()->showMessage("Drop an image onto the viewport to load it.");
+
+    connect(viewport_, &GlViewport_Qt::fileDropped,
+            this, &MainWindow_Qt::onFileDropped);
 
     setDockOptions(QMainWindow::AnimatedDocks
                    | QMainWindow::AllowNestedDocks
@@ -184,4 +192,27 @@ void MainWindow_Qt::saveLayout() {
 void MainWindow_Qt::closeEvent(QCloseEvent* e) {
     saveLayout();
     QMainWindow::closeEvent(e);
+}
+
+void MainWindow_Qt::onFileDropped(const QString& path) {
+    if (!viewport_ || path.isEmpty()) return;
+
+    const QString name = QFileInfo(path).fileName();
+    statusBar()->showMessage(QString("Loading %1…").arg(name));
+
+    std::vector<unsigned char> bytes;
+    int w = 0, h = 0;
+    std::string err;
+    const std::string p = path.toStdString();
+
+    if (!jefe::qt::loadImageBGRA8(p, bytes, w, h, err)) {
+        statusBar()->showMessage(
+            QString("Load failed: %1").arg(QString::fromStdString(err)),
+            5000);
+        return;
+    }
+
+    viewport_->setImage(bytes.data(), w, h);
+    statusBar()->showMessage(
+        QString("%1  —  %2 × %3").arg(name).arg(w).arg(h));
 }
