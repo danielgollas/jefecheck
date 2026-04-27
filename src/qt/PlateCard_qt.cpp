@@ -1,4 +1,5 @@
 #include "PlateCard_qt.h"
+#include "SequenceLoadBridge_qt.h"
 #include "gfcplategui_qt.h"
 
 #include <QCheckBox>
@@ -182,8 +183,15 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     connect(rotSpin_,  QOverload<double>::of(&QDS::valueChanged),
             this, [g](double v) { g->setRZ((float)v); });
 
+    // Route LUT change through the bridge so plates[id_].setLUT actually
+    // binds the new GL texture and recompiles the super-shader. Calling
+    // gui_->setLUT alone only writes the GUI value; the rendering path
+    // wouldn't see it until a separate updateValuesFromGUI cycle.
+    const int boundPlateId = id_;
     connect(lutBox_,  QOverload<int>::of(&QCB::currentIndexChanged),
-            this, [g](int idx) { g->setLUT(idx); });
+            this, [boundPlateId](int idx) {
+                jefe::qt::applyLUTToPlate(boundPlateId, idx);
+            });
 
     connect(gammaSpin_,      QOverload<double>::of(&QDS::valueChanged),
             this, [g](double v) { g->setGamma((float)v); });
@@ -277,6 +285,25 @@ void PlateCard_Qt::refreshFromState() {
     panYSpin_->setValue(gui_->getTY());
     rotSpin_->setValue(gui_->getRZ());
 
+    // Rebuild the LUT combo if the gui's LUT list changed (it grows after
+    // initializeInstallLUTs runs the autoload). Cheap to compare; saves a
+    // user-visible flicker when the names already match.
+    const auto& opts = gui_->getLUTOptions();
+    bool listChanged = (lutBox_->count() != int(opts.size()));
+    if (!listChanged) {
+        for (int i = 0; i < int(opts.size()); ++i) {
+            if (lutBox_->itemText(i).toStdString() != opts[i]) {
+                listChanged = true;
+                break;
+            }
+        }
+    }
+    if (listChanged) {
+        lutBox_->clear();
+        for (const auto& name : opts) {
+            lutBox_->addItem(QString::fromStdString(name));
+        }
+    }
     const int lut = gui_->getLUT();
     if (lut >= 0 && lut < lutBox_->count()) {
         lutBox_->setCurrentIndex(lut);

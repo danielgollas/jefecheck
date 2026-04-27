@@ -189,6 +189,14 @@ public:
 	// renders from (created in initializeWidgets()). Returns nullptr for
 	// out-of-range indices.
 	gfcPlateGUI* getPlateGUI(int whichOne);
+
+	// Hit-tests the plate under viewport pixel (vx, vy) given the
+	// current framingMode and the viewport's logical size. vx is from
+	// the left edge, vy is from the TOP edge (typical Qt mouse coords).
+	// Returns 0..3, or -1 if the position is somehow out of any plate.
+	// Used by the Qt mouse handlers so drag/zoom act on whichever plate
+	// the cursor is over in multi-plate layouts.
+	int getPlateAtPosition(int vx, int vy, int viewportW, int viewportH);
 	
 	
 	

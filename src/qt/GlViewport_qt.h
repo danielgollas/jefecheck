@@ -70,6 +70,11 @@ private:
     // deltas without holding a Qt event reference.
     float lastMouseX_ = 0.0f;
     float lastMouseY_ = 0.0f;
+
+    // Plate index hit-tested at the start of the current drag. Mouse
+    // motion sticks to whichever plate the press landed on, even if
+    // the cursor wanders into a neighboring quadrant mid-drag.
+    int dragPlate_ = -1;
 };
 
 #endif

@@ -9,6 +9,8 @@
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
 
+#include "../UIConstants.h"
+
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
@@ -18,6 +20,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QSettings>
+#include <QShortcut>
 #include <QStatusBar>
 #include <QTimer>
 
@@ -56,6 +59,40 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     buildMenuBar();
     buildDocks();
     restoreLayout();
+
+    // Window-scoped layout shortcuts. Qt's QShortcut delivers regardless
+    // of whether the viewport, a dock widget, or the menu bar has focus —
+    // GlViewport_Qt's keyPressEvent only fires when the viewport itself
+    // has keyboard focus, which it usually doesn't after the user clicks
+    // on a plate card or spinbox.
+    auto bindLayout = [this](QKeySequence seq, int framingMode) {
+        auto* sc = new QShortcut(seq, this);
+        sc->setContext(Qt::WindowShortcut);
+        connect(sc, &QShortcut::activated, this, [this, framingMode]() {
+            jefe::qt::setFramingMode(framingMode);
+            if (viewport_) viewport_->update();
+            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        });
+    };
+    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_1), FRAMINGSINGLE_ID);
+    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_2), FRAMINGDOUBLE_ID);
+    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_3), FRAMINGDOUBLEVERT_ID);
+    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_4), FRAMINGQUAD_ID);
+
+    // LUT autoload after the event loop spins up the GL context. Each
+    // CubeLUT::create3DTexture calls glGenTextures, so doing this in
+    // the constructor (before paintGL has fired) crashed the app.
+    QTimer::singleShot(0, this, [this]() {
+        if (!viewport_) return;
+        viewport_->makeCurrent();
+        jefe::qt::initializeInstallLUTs();
+        viewport_->doneCurrent();
+        // Both panels were built before autoload finished; refresh so
+        // the loaded LUTs show up in the dock and the plate-card combos
+        // without requiring a manual click on Refresh.
+        if (lutPanelWidget_) lutPanelWidget_->refreshList();
+        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+    });
 
     // ~60Hz tick that drives playbackManager's timestep + frame advance.
     // playbackManager.update() is cheap when nothing's playing, so a
@@ -192,7 +229,8 @@ void MainWindow_Qt::buildDocks() {
 
     lutDock_ = new QDockWidget("LUTs", this);
     lutDock_->setObjectName("LUTDock");
-    lutDock_->setWidget(new LUTPanel_Qt(lutDock_));
+    lutPanelWidget_ = new LUTPanel_Qt(lutDock_);
+    lutDock_->setWidget(lutPanelWidget_);
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, lutDock_);
 
