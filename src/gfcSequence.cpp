@@ -1589,8 +1589,8 @@ void gfcSequence::stopLoading() {
 	myThread=NULL;
 	clearRawQueue();
 
-	if (abortButton)
-		abortButton->deactivate();
+	if (myGUI)
+		myGUI->deactivateAbortButton();
 
 	gResizeTrigger=true;
 }
