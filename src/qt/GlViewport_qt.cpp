@@ -111,12 +111,19 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
 }
 
 void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
-    // angleDelta() is in eighths of a degree. FLTK's wheelDeltaY is
-    // typically ±1 per notch; divide by 120 to get the same units.
-    const int notches = e->angleDelta().y() / 120;
-    if (notches != 0) {
+    // macOS trackpads report pixelDelta (smooth scroll); discrete-notch
+    // mice report angleDelta (eighths of a degree, 120 per notch).
+    // Convert both to FLTK-style "wheelDeltaY" units (~±1 per notch)
+    // before scaling by zoomSpeed.
+    float deltaY = 0.0f;
+    if (!e->pixelDelta().isNull()) {
+        deltaY = static_cast<float>(e->pixelDelta().y()) / 120.0f;
+    } else if (!e->angleDelta().isNull()) {
+        deltaY = static_cast<float>(e->angleDelta().y()) / 120.0f;
+    }
+    if (deltaY != 0.0f) {
         // 0.1 matches FLTK's default zoomSpeed for the un-shifted wheel.
-        jefe::qt::zoomActivePlate(static_cast<float>(notches) * 0.1f);
+        jefe::qt::zoomActivePlate(deltaY * 0.1f);
         update();
     }
     if (listener_) listener_->onEvent(jefe::ui::EventType::Wheel);

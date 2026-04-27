@@ -45,6 +45,13 @@ bool loadFileIntoPlate(const std::string& path, int whichSequence) {
     }
 
     plateManager.setPlateShowPreview(whichSequence, true);
+
+    // gfcPlate::showPreview, scale, track, channel masks etc. are read
+    // from members that updateValuesFromGUI copies out of myGUI. The
+    // FLTK build calls this once on startup; the Qt build never does,
+    // so the plate would otherwise keep its uninitialized showPreview
+    // and never render the preview frame we just loaded.
+    plateManager.updateAllFromGUI();
     return true;
 }
 

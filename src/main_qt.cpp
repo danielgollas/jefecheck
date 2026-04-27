@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
+#include <QSurfaceFormat>
 
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
@@ -30,6 +31,19 @@ static void applyDarkTheme(QApplication& qapp) {
 }
 
 int main(int argc, char* argv[]) {
+    // gfcPlate's renderer relies on the fixed-function GL pipeline:
+    // glBegin/glEnd quads, GL_TEXTURE_RECTANGLE_ARB, glColor4f, ARB
+    // shader objects. macOS only exposes that pipeline through legacy
+    // OpenGL 2.1; Qt defaults to Core 3.2/4.1, where every fixed-
+    // function call is removed and the polygon ends up rendering an
+    // untextured white quad. NoProfile + 2.1 on macOS gives us the
+    // same context FLTK uses (Apple's deprecated compatibility GL).
+    QSurfaceFormat fmt;
+    fmt.setProfile(QSurfaceFormat::NoProfile);
+    fmt.setVersion(2, 1);
+    fmt.setDepthBufferSize(24);
+    QSurfaceFormat::setDefaultFormat(fmt);
+
     QApplication qapp(argc, argv);
     qapp.setApplicationName("JefeCheck");
     qapp.setOrganizationName("JefeCheck");

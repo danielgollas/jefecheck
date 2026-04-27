@@ -749,9 +749,13 @@ void gfcPlateManager::initializeWidgets() {
     // Qt: each plate gets a stateful gfcPlateGUI_Qt. Widgets push state
     // into it via setters (no Fl_Widget pointers to assign). The plate
     // manager itself uses gfcPlateManagerGUI_Qt for layout-mode tracking.
+    // Default plate i to track i (matches the FLTK pairing of
+    // plate 0↔track A, plate 1↔track B, …) so getFrameAndSequence picks
+    // up sequences[i] instead of trackManager's dummy sequence.
     for (int i = (int)plates.size() - 1; i >= 0; --i) {
         auto* g = new gfcPlateGUI_Qt;
         g->setPlateIndex(i);
+        g->setTrackChoice(i);
         plates[i].myGUI = g;
         plates[i].quadID = i;
     }

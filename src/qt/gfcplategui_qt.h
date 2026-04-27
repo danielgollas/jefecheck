@@ -123,9 +123,12 @@ private:
     int   active_ = 0;
     int   trackChoice_ = -1;
 
-    // Aspect
+    // Aspect. -1 is the "use file's original aspect" sentinel that
+    // gfcPlate::calculatePolySizesCropEtc keys off; any other value
+    // forces a target aspect ratio and would otherwise render the
+    // texture as a square (1.0) or other fixed ratio.
     std::string aspectString_ = "original";
-    float aspect_ = 1.0f;
+    float aspect_ = -1.0f;
 
     // Transforms
     int   tx_ = 0;
@@ -137,22 +140,27 @@ private:
     int   crop_ = 0;
     int   offset_ = 0;
 
-    // Channel masks
+    // Channel masks. Defaults match gfcPlate's constructor — RGB on,
+    // alpha off. Flipping any of the first three off, or alpha on,
+    // arms the super-shader's per-channel-isolation path; with the
+    // "all four on" default it would sum to >1 and render white.
     int   rgba_ = 0;
     bool  channelR_ = true;
     bool  channelG_ = true;
     bool  channelB_ = true;
-    bool  channelA_ = true;
+    bool  channelA_ = false;
 
     // Preview
     bool  showPreview_ = false;
 
-    // Color correction
+    // Color correction. Neutral defaults match FLTK's setBCS reset
+    // values — the super-shader multiplies texel*Brightness, so 0.0 here
+    // would render every plate black.
     int   lut_ = 0;
     std::vector<std::string> lutOptions_;
     float gamma_ = 1.0f;
     float exposure_ = 0.0f;
-    float brightness_ = 0.0f;
+    float brightness_ = 1.0f;
     float contrast_ = 1.0f;
     float saturation_ = 1.0f;
 };
