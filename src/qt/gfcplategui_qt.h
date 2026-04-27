@@ -110,6 +110,12 @@ public:
     // of the abstract gfcPlateGUI surface.
     void setPlateIndex(int idx) { plateIndex_ = idx; }
 
+    // Drives gfcPlate::draw3Drect's preview-vs-loaded branch. The Qt
+    // build flips this on for plates pointing at a sequence with a
+    // preview frame loaded. Not part of the abstract surface (FLTK
+    // reads it from a widget).
+    void setShowPreview(bool v) { showPreview_ = v; }
+
 private:
     int plateIndex_ = -1;
 

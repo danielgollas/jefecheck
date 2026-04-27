@@ -10,6 +10,9 @@ extern MainWindow mw;
 
 #include "loadWindow.h"
 extern LoadWindow lw;
+#else
+#include "qt/gfcplategui_qt.h"
+#include "qt/gfcplatemanagergui_qt.h"
 #endif
 
 #include "gfcnetworkmanager.h"
@@ -742,6 +745,30 @@ void gfcPlateManager::initializeWidgets() {
 	plates[3].myGUI->assignBrightnessWidget(mw.q4Brightness);
 	plates[3].myGUI->assignContrastWidget(mw.q4Contrast);
 	plates[3].myGUI->assignSaturationWidget(mw.q4Saturation);
+#else
+    // Qt: each plate gets a stateful gfcPlateGUI_Qt. Widgets push state
+    // into it via setters (no Fl_Widget pointers to assign). The plate
+    // manager itself uses gfcPlateManagerGUI_Qt for layout-mode tracking.
+    for (int i = (int)plates.size() - 1; i >= 0; --i) {
+        auto* g = new gfcPlateGUI_Qt;
+        g->setPlateIndex(i);
+        plates[i].myGUI = g;
+        plates[i].quadID = i;
+    }
+    myGUI = new gfcPlateManagerGUI_Qt;
+#endif
+}
+
+void gfcPlateManager::setPlateShowPreview(int whichOne, bool value) {
+    if (whichOne < 0 || whichOne >= (int)plates.size() || !plates[whichOne].myGUI) {
+        return;
+    }
+#ifndef JEFECHECK_USE_FLTK
+    if (auto* g = dynamic_cast<gfcPlateGUI_Qt*>(plates[whichOne].myGUI)) {
+        g->setShowPreview(value);
+    }
+#else
+    (void)value;
 #endif
 }
 

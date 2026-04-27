@@ -177,6 +177,12 @@ public:
 	gfcFXStack* getFXStack(int whichOne);
 	void setFXStack(gfcFXStack theStack, int whichOne);
 	void appendFXStack(gfcFXStack theStack, int whichOne);
+
+	// Flips a plate's GUI into preview mode so gfcPlate::draw3Drect
+	// picks the previewFrame branch. Used by the Qt drop handler after
+	// loading an image into the sequence; FLTK drives this from the
+	// load-window callbacks. No-op if `whichOne` is out of range.
+	void setPlateShowPreview(int whichOne, bool value);
 	
 	
 	

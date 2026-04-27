@@ -12,6 +12,8 @@ extern LoadWindow lw;
 
 #include "preferencesWindow.h"
 extern PreferencesWindow pw;
+#else
+#include "qt/gfcsequencegui_qt.h"
 #endif
 
 #include "gfcsessionmanager.h"
@@ -314,6 +316,14 @@ void gfcTrackManager::initializeWidgets()
 	sequences[3].myGUI->assignMoreOptionsButton(mw.menuD);
 	sequences[3].myGUI->assignChannelOptionsWidget(lw.channelsChoiceD);
 	sequences[3].myGUI->assignStartButtonWidget(lw.startD);
+#else
+    // Qt: each sequence gets a stateful gfcSequenceGUI_Qt. The drop
+    // handler / future load panel will push filename + load params via
+    // setters; loadPreview reads them back through getXxx().
+    for (int i = 0; i < GFC_MAX_SEQUENCES; ++i) {
+        sequences[i].myGUI  = new gfcSequenceGUI_Qt;
+        sequences[i].trackID = 'A' + i;
+    }
 #endif
 }
 
