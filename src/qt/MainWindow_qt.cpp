@@ -4,6 +4,7 @@
 #include "GlViewport_qt.h"
 #include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
+#include "PreferencesWindow_qt.h"
 #include "RenderBridge_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
@@ -98,7 +99,14 @@ void MainWindow_Qt::buildMenuBar() {
                         QKeySequence(Qt::CTRL | Qt::Key_R),
                         []() { /* TODO */ });
     fileMenu->addSeparator();
-    fileMenu->addAction("&Preferences…", []() { /* TODO */ });
+    fileMenu->addAction("&Preferences…",
+                        QKeySequence(Qt::CTRL | Qt::Key_P),
+                        this, [this]() {
+                            // Modal — settings persist on Done via
+                            // saveSettings(&sett) inside the dialog.
+                            PreferencesWindow_Qt dlg(this);
+                            dlg.exec();
+                        });
     fileMenu->addSeparator();
     fileMenu->addAction("&Quit",
                         QKeySequence::Quit,
