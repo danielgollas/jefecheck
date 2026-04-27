@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QSurfaceFormat>
 
+#include "gfcStructures.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
@@ -32,6 +33,14 @@ static void applyDarkTheme(QApplication& qapp) {
 
 int main(int argc, char* argv[]) {
     // gfcPlate's renderer relies on the fixed-function GL pipeline:
+    // (Sets the global gMacExecutablePath used by getApplicationDataPath
+    // on macOS to find the bundled Resources directory. The FLTK build
+    // does this in src/main.cpp; mirror it here so LUT/FX autoload from
+    // the install path works in the Qt build.)
+    if (argc > 0 && argv[0]) {
+        setMacExecutablePath(argv[0]);
+    }
+    // glPipeline notes:
     // glBegin/glEnd quads, GL_TEXTURE_RECTANGLE_ARB, glColor4f, ARB
     // shader objects. macOS only exposes that pipeline through legacy
     // OpenGL 2.1; Qt defaults to Core 3.2/4.1, where every fixed-

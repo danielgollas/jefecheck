@@ -6,13 +6,20 @@
 #include "../gfcplatemanager.h"
 #include "../gfcplaybackmanager.h"
 #include "../gfctrackmanager.h"
+#include "../gfclutmanager.h"
+#include "../gfcStructures.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
 #include "gfcplategui_qt.h"
 
+#include <algorithm>
+#include <filesystem>
+
 extern gfcPlateManager plateManager;
 extern gfcPlaybackManager playbackManager;
 extern gfcTrackManager trackManager;
+extern gfcLUTManager lutManager;
+extern gfcSettings sett;
 
 namespace jefe::qt {
 
@@ -20,6 +27,20 @@ void initializeRenderingChain() {
     plateManager.initializeWidgets();
     trackManager.initializeWidgets();
     playbackManager.initializeWidgets();
+
+    // FLTK's readSettings populates sett.lutPath and pre-loads LUTs from
+    // the install / env path; that whole function is FLTK-gated. Until
+    // we factor a Qt-friendly version, default the path here so the LUT
+    // browser has content to show on first run. Any preferences the
+    // user saves later override this on the next launch.
+    if (sett.lutPath.empty()) {
+        sett.lutPath = ::getApplicationDataPath() + "FX/";
+    }
+    autoloadLUTs(sett.lutPath);
+
+    // The plates' LUT dropdowns mirror lutManager's name list. Need to
+    // refill them now that we've loaded the actual LUTs.
+    plateManager.updateAllGUILUTWidgets();
 }
 
 bool tickPlayback() {
@@ -132,6 +153,57 @@ void setOutPoint(int frame) {
 
 bool isPlaying() {
     return playbackManager.isPlaying() != 0;
+}
+
+void autoloadLUTs(const std::string& path) {
+    // FLTK's loadLUTsFromPath uses fl_filename_list and is gated to the
+    // FLTK build. The Qt build uses std::filesystem instead so we don't
+    // pull FLTK back in just to enumerate a directory.
+    namespace fs = std::filesystem;
+    if (path.empty()) return;
+    std::error_code ec;
+    if (!fs::exists(path, ec) || !fs::is_directory(path, ec)) return;
+
+    std::vector<std::string> files;
+    for (const auto& entry : fs::directory_iterator(path, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        std::string ext = entry.path().extension().string();
+        // Lower-case to make the match case-insensitive.
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        if (ext == ".lut" || ext == ".cub" || ext == ".cube" || ext == ".tga") {
+            files.push_back(entry.path().string());
+        }
+    }
+    std::sort(files.begin(), files.end());
+    for (const auto& f : files) {
+        lutManager.loadLUT(f);
+    }
+}
+
+std::vector<std::string> getLutNames() {
+    return lutManager.getAllNames();
+}
+
+bool loadLUTFile(const std::string& path) {
+    if (path.empty()) return false;
+    lutManager.loadLUT(path);
+    return true;
+}
+
+void applyLUTToActivePlate(int lutIndex) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.setLUT(q, lutIndex);
+    plateManager.setChanged();
+}
+
+int getLUTOnActivePlate() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return 0;
+    auto* gui = plateManager.getPlateGUI(q);
+    return gui ? gui->getLUT() : 0;
 }
 
 void panActivePlate(float dx, float dy) {

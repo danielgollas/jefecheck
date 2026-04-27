@@ -7,6 +7,7 @@
 #define JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 
 #include <string>
+#include <vector>
 
 class gfcPlateGUI_Qt;
 
@@ -58,6 +59,17 @@ int  getOutPoint();
 void setInPoint(int frame);
 void setOutPoint(int frame);
 bool isPlaying();
+
+// LUT browser — backs the Qt LUT dock. Names mirror lutManager's
+// public API (getAllNames). loadLUTFile pulls a .lut/.cub/.cube/.tga
+// off disk; applyLUTToActivePlate(idx) calls plateManager.setLUT on
+// whichever plate is active. autoloadLUTs scans a directory and
+// loads everything matching the supported extensions.
+void autoloadLUTs(const std::string& path);
+std::vector<std::string> getLutNames();
+bool loadLUTFile(const std::string& path);
+void applyLUTToActivePlate(int lutIndex);
+int  getLUTOnActivePlate();
 
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering
