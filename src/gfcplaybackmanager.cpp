@@ -552,6 +552,14 @@ void gfcPlaybackManager::setFromFrame(int frame) {
 	plateManager.setChanged();
 }
 
+int gfcPlaybackManager::getInPoint() {
+    return inPoint;
+}
+
+int gfcPlaybackManager::getOutPoint() {
+    return outPoint;
+}
+
 void gfcPlaybackManager::setInPoint(int frame)
 {
 	inPoint=frame;

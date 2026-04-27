@@ -64,6 +64,76 @@ int getActivePlate() {
     return plateManager.getActiveQuad();
 }
 
+void togglePlayFwd() {
+    if (playbackManager.isPlaying()) {
+        playbackManager.pause();
+    } else {
+        playbackManager.startPlayFwd();
+    }
+    plateManager.setChanged();
+}
+
+void rewindPlayback() {
+    playbackManager.rew();
+}
+
+void fastFwdPlayback() {
+    playbackManager.ffwd();
+}
+
+void seekToFrame(int frame) {
+    playbackManager.setCurrentFrame(frame);
+    plateManager.setChanged();
+}
+
+void setLoopMode(int mode) {
+    playbackManager.setPlaybackMode(mode);
+}
+
+int getLoopMode() {
+    return playbackManager.getPlaybackMode();
+}
+
+void setTargetFPS(float fps) {
+    playbackManager.setTargetFPS(fps);
+}
+
+float getTargetFPS() {
+    return playbackManager.getTargetFPS();
+}
+
+int getCurrentFrame() {
+    return playbackManager.getCurrentFrame();
+}
+
+int getFromFrame() {
+    return playbackManager.getFromFrame();
+}
+
+int getToFrame() {
+    return playbackManager.getToFrame();
+}
+
+int getInPoint() {
+    return playbackManager.getInPoint();
+}
+
+int getOutPoint() {
+    return playbackManager.getOutPoint();
+}
+
+void setInPoint(int frame) {
+    playbackManager.setInPoint(frame);
+}
+
+void setOutPoint(int frame) {
+    playbackManager.setOutPoint(frame);
+}
+
+bool isPlaying() {
+    return playbackManager.isPlaying() != 0;
+}
+
 void panActivePlate(float dx, float dy) {
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;

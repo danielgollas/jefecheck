@@ -38,6 +38,27 @@ gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate);
 void setActivePlate(int whichPlate);
 int  getActivePlate();
 
+// Transport / timeline hooks. The Qt TimelinePanel widgets call into
+// these for play, step, scrub, in/out, FPS, and loop mode; the
+// per-tick refreshFromPlayback() reads the current state back so the
+// playhead and frame counter advance during playback.
+void togglePlayFwd();
+void rewindPlayback();
+void fastFwdPlayback();
+void seekToFrame(int frame);
+void setLoopMode(int mode);     // 0 once, 1 loop, 2 bounce
+int  getLoopMode();
+void setTargetFPS(float fps);
+float getTargetFPS();
+int  getCurrentFrame();
+int  getFromFrame();
+int  getToFrame();
+int  getInPoint();
+int  getOutPoint();
+void setInPoint(int frame);
+void setOutPoint(int frame);
+bool isPlaying();
+
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering
 // chain picks up the new frame on the next draw call. Caller is

@@ -64,6 +64,8 @@ public:
     
     int getFromFrame();
     int getToFrame();
+    int getInPoint();
+    int getOutPoint();
     std::string getTimecodeString();
     float getGUIFrameSize(); ///Kind of ugly design, but better to have it here than have external classes access private members. Returns the class size of a frame in the timeline in pixels, usefull to determine the effect of drag events in the gui with respect to the timeline.
     int getPlaybackMode();

@@ -72,6 +72,12 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         if (dirty) {
             viewport_->update();
         }
+        // Pull playback state into the timeline widgets every tick.
+        // Cheap (a handful of getters + signal-blocked setValues), and
+        // it's the only path that animates the playhead during play.
+        if (timelinePanelWidget_) {
+            timelinePanelWidget_->refreshFromPlayback();
+        }
     });
     playbackTimer_->start();
 }
@@ -160,7 +166,8 @@ void MainWindow_Qt::buildDocks() {
     // Timeline + Transport — bottom-right; split alongside the plate dock.
     timelineDock_ = new QDockWidget("Timeline", this);
     timelineDock_->setObjectName("TimelineDock");
-    timelineDock_->setWidget(new TimelinePanel_Qt(timelineDock_));
+    timelinePanelWidget_ = new TimelinePanel_Qt(timelineDock_);
+    timelineDock_->setWidget(timelinePanelWidget_);
     timelineDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
 
