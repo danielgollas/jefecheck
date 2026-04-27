@@ -17,6 +17,7 @@
 class QDockWidget;
 class GlViewport_Qt;
 class PlateManager_Qt;
+class TimelinePanel_Qt;
 class QTimer;
 
 namespace jefe::qt { class RenderBridge_Qt; }
@@ -47,6 +48,7 @@ private:
     QDockWidget* fxDock_ = nullptr;
     QDockWidget* lutDock_ = nullptr;
     PlateManager_Qt* plateManagerWidget_ = nullptr;
+    TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     QTimer* playbackTimer_ = nullptr;
 
     std::unique_ptr<jefe::qt::RenderBridge_Qt> renderBridge_;
