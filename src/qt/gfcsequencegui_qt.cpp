@@ -3,34 +3,34 @@
 gfcSequenceGUI_Qt::gfcSequenceGUI_Qt() {}
 gfcSequenceGUI_Qt::~gfcSequenceGUI_Qt() {}
 
-std::string gfcSequenceGUI_Qt::getFilename()    { return {}; }
-int   gfcSequenceGUI_Qt::getFrom()              { return 0; }
-int   gfcSequenceGUI_Qt::getTo()                { return 0; }
-float gfcSequenceGUI_Qt::getScale()             { return 1.0f; }
-float gfcSequenceGUI_Qt::getGamma()             { return 1.0f; }
+std::string gfcSequenceGUI_Qt::getFilename()    { return filename_; }
+int   gfcSequenceGUI_Qt::getFrom()              { return from_; }
+int   gfcSequenceGUI_Qt::getTo()                { return to_; }
+float gfcSequenceGUI_Qt::getScale()             { return scale_; }
+float gfcSequenceGUI_Qt::getGamma()             { return gamma_; }
 std::vector<int> gfcSequenceGUI_Qt::getLutList() { return {}; }
 int   gfcSequenceGUI_Qt::getStream()            { return 0; }
-int   gfcSequenceGUI_Qt::getCompression()       { return 0; }
-int   gfcSequenceGUI_Qt::getFilter()            { return 0; }
-int   gfcSequenceGUI_Qt::getAppendOption()      { return 0; }
-int   gfcSequenceGUI_Qt::getCrop()              { return 0; }
+int   gfcSequenceGUI_Qt::getCompression()       { return compression_; }
+int   gfcSequenceGUI_Qt::getFilter()            { return filter_; }
+int   gfcSequenceGUI_Qt::getAppendOption()      { return append_; }
+int   gfcSequenceGUI_Qt::getCrop()              { return crop_; }
 int   gfcSequenceGUI_Qt::getWindowVisible()     { return 0; }
-int   gfcSequenceGUI_Qt::getChannel()           { return 0; }
-std::string gfcSequenceGUI_Qt::getChannelName() { return {}; }
+int   gfcSequenceGUI_Qt::getChannel()           { return channel_; }
+std::string gfcSequenceGUI_Qt::getChannelName() { return channelName_; }
 
 void gfcSequenceGUI_Qt::setFromToBounds(int, int, bool) {}
-void gfcSequenceGUI_Qt::setToFrame(int) {}
-void gfcSequenceGUI_Qt::setFromFrame(int) {}
-void gfcSequenceGUI_Qt::setFilename(std::string) {}
-void gfcSequenceGUI_Qt::setScale(std::string) {}
-void gfcSequenceGUI_Qt::setEstimates(std::string) {}
-void gfcSequenceGUI_Qt::setAppendOption(int) {}
-void gfcSequenceGUI_Qt::setFilter(int) {}
-void gfcSequenceGUI_Qt::setCrop(int) {}
-void gfcSequenceGUI_Qt::setCompression(int) {}
+void gfcSequenceGUI_Qt::setToFrame(int v)               { to_ = v; }
+void gfcSequenceGUI_Qt::setFromFrame(int v)             { from_ = v; }
+void gfcSequenceGUI_Qt::setFilename(std::string s)      { filename_ = std::move(s); }
+void gfcSequenceGUI_Qt::setScale(std::string)           {}
+void gfcSequenceGUI_Qt::setEstimates(std::string)       {}
+void gfcSequenceGUI_Qt::setAppendOption(int v)          { append_ = v; }
+void gfcSequenceGUI_Qt::setFilter(int v)                { filter_ = v; }
+void gfcSequenceGUI_Qt::setCrop(int v)                  { crop_ = v; }
+void gfcSequenceGUI_Qt::setCompression(int v)           { compression_ = v; }
 void gfcSequenceGUI_Qt::setChannelOptions(std::vector<std::string>) {}
-void gfcSequenceGUI_Qt::setChannel(int) {}
-void gfcSequenceGUI_Qt::setChannel(std::string) {}
+void gfcSequenceGUI_Qt::setChannel(int v)               { channel_ = v; }
+void gfcSequenceGUI_Qt::setChannel(std::string s)       { channelName_ = std::move(s); }
 
 void gfcSequenceGUI_Qt::activateAbortButton() {}
 void gfcSequenceGUI_Qt::deactivateAbortButton() {}

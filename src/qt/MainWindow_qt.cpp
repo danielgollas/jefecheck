@@ -5,6 +5,7 @@
 #include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
 #include "RenderBridge_qt.h"
+#include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
 
 #include <QAction>
@@ -29,10 +30,14 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     viewport_ = new GlViewport_Qt(this);
     setCentralWidget(viewport_);
 
+    // Initialize the rendering pipeline's GUI bridges before the bridge
+    // starts driving paintGL. Routed through a Qt-free TU because the
+    // plateManager / trackManager headers pull glad, and Qt's
+    // QOpenGLWidget can't share a TU with glad on macOS.
+    jefe::qt::initializeRenderingChain();
+
     // Wire the JefeCheck rendering chain into the Qt viewport. The bridge
-    // owns no state; it forwards onDraw/onResize to plateManager.draw().
-    // Until PR-10 wires content loading through gfcSequence/gfcPlate, the
-    // plate stack is empty and the chain renders the clear color.
+    // forwards onDraw/onResize to plateManager.draw().
     renderBridge_ = std::make_unique<jefe::qt::RenderBridge_Qt>();
     viewport_->setListener(renderBridge_.get());
 
@@ -210,12 +215,21 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
 void MainWindow_Qt::onFileDropped(const QString& path) {
     if (!viewport_ || path.isEmpty()) return;
 
-    // PR-10 will route the dropped file through gfcSequence so the plate
-    // can display it. Until then, drops just acknowledge in the status
-    // bar — the rendering chain is wired (RenderBridge → plateManager)
-    // but no plate has a frame to draw.
     const QString name = QFileInfo(path).fileName();
+
+    // GL texture uploads happen inside loadPreview, so the viewport's
+    // context must be current on the calling thread.
+    viewport_->makeCurrent();
+    const bool ok = jefe::qt::loadFileIntoPlate(path.toStdString(), 0);
+    viewport_->doneCurrent();
+
+    if (!ok) {
+        statusBar()->showMessage(
+            QString("Load failed: %1").arg(path), 5000);
+        return;
+    }
+
+    viewport_->update();
     statusBar()->showMessage(
-        QString("Drop received: %1 — sequence loading wires up in PR-10").arg(name),
-        5000);
+        QString("%1 loaded into Track A").arg(name));
 }

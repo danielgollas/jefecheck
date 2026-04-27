@@ -76,6 +76,22 @@ public:
     void assignStartButtonWidget(void*) override;
 
     int widgetBelongsToMe(void* theWidget) override;
+
+private:
+    // Minimal state needed by gfcSequence::loadPreview /
+    // getLoadParamsFromGUI in the Qt build. Filled in from the drop
+    // handler / future Qt panels; reads come back via getXxx().
+    std::string filename_;
+    std::string channelName_;
+    int   from_         = 1;
+    int   to_           = 1;
+    int   filter_       = 0;
+    int   compression_  = 0;
+    int   append_       = 0;
+    int   crop_         = 0;
+    int   channel_      = -1;
+    float scale_        = 1.0f;
+    float gamma_        = 1.0f;
 };
 
 #endif
