@@ -30,6 +30,26 @@ bool loadFileIntoPlate(const std::string& path, int whichSequence);
 void panActivePlate(float dx, float dy);
 void zoomActivePlate(float zoomDelta);
 
+// Keyboard-shortcut hooks. `framingMode` is one of UIConstants.h's
+// FRAMING*_ID values; the others operate on the currently-active
+// plate (or all plates when the *All variant is used). All of them
+// flag plateManager dirty so the next paintGL picks up the change.
+void setFramingMode(int framingMode);
+void fitActivePlate();
+void fitAllPlates();
+void toggleFlipActive();
+void toggleFlopActive();
+void toggleFlipAll();
+void toggleFlopAll();
+void cycleTrackOnActivePlate(int direction);  // -1 prev, +1 next
+
+// Playback control. Only pause is wired today; oneFrameFwd / Rev
+// are no-ops until the Qt build runs the playback manager loop, but
+// stubbing them here lets the keyboard handler stay symmetric with
+// the FLTK reference.
+void pausePlayback();
+void stepFrame(int direction);  // -1 reverse, +1 forward
+
 }  // namespace jefe::qt
 
 #endif
