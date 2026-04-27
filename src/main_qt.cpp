@@ -3,14 +3,13 @@
 // + GlViewport_Qt + IApplication_Qt). The full feature port lives in later
 // phases (2E onward).
 #include <QApplication>
-#include <QMainWindow>
 #include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
 
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
-#include "qt/GlViewport_qt.h"
+#include "qt/MainWindow_qt.h"
 
 static void applyDarkTheme(QApplication& qapp) {
     // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`)
@@ -42,12 +41,7 @@ int main(int argc, char* argv[]) {
 
     applyDarkTheme(qapp);
 
-    QMainWindow window;
-    window.setWindowTitle("JefeCheck (Qt skeleton)");
-    window.resize(1024, 600);
-
-    auto* viewport = new GlViewport_Qt(&window);
-    window.setCentralWidget(viewport);
+    MainWindow_Qt window;
     window.show();
 
     return application.run();

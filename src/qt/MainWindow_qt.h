@@ -1,0 +1,41 @@
+// JefeCheck's Qt shell window. Single QMainWindow with:
+//   - Native menu bar (macOS pulls into system menu bar by default)
+//   - Central GlViewport_Qt
+//   - Plate Manager dock (bottom-left)
+//   - Timeline + Transport dock (bottom-right, split alongside Plate Manager)
+//   - FX Stack and LUT docks (right area, stacked into a tab group)
+//
+// Each dock is a standard QDockWidget — drag/float/redock comes free, and
+// QMainWindow::saveState() persists the user's layout to QSettings.
+#ifndef JEFECHECK_QT_MAIN_WINDOW_H
+#define JEFECHECK_QT_MAIN_WINDOW_H
+
+#include <QMainWindow>
+
+class QDockWidget;
+class GlViewport_Qt;
+
+class MainWindow_Qt : public QMainWindow {
+    Q_OBJECT
+public:
+    explicit MainWindow_Qt(QWidget* parent = nullptr);
+
+    GlViewport_Qt* viewport() { return viewport_; }
+
+protected:
+    void closeEvent(QCloseEvent* e) override;
+
+private:
+    void buildMenuBar();
+    void buildDocks();
+    void restoreLayout();
+    void saveLayout();
+
+    GlViewport_Qt* viewport_ = nullptr;
+    QDockWidget* plateDock_ = nullptr;
+    QDockWidget* timelineDock_ = nullptr;
+    QDockWidget* fxDock_ = nullptr;
+    QDockWidget* lutDock_ = nullptr;
+};
+
+#endif
