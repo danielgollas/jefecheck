@@ -1,6 +1,7 @@
 
 
 #include "gfctrackmanager.h"
+#include "gfcsequencegui_fltk.h"
 #include <FL/fl_ask.H>
 
 #include "mainWindow.h"

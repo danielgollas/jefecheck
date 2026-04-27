@@ -2,7 +2,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "gfcsequencegui_fltk.h"
+#include "gfcsequencegui.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -19,13 +19,11 @@
 #include <vector>
 #include <queue>
 
-#include <FL/Fl_Box.H>
 #include "UIConstants.h"
 #include "gfcPlate.h"
 #include "trackwidget.h"
 
 
-#include <FL/Fl_Value_Slider.H>
 #include "gfcpixelbuffer.h"
 #include "dpxslice.h"
 #include <vector>
@@ -41,7 +39,6 @@ class RawFrame;
 
 class ExrChannelInfo;
 extern gfcSettings sett;
-void findSequence(std::vector<std::string> &refFiles, const char *str,char *label, int *firstFrame,Fl_Value_Slider *loadFromSpinner,Fl_Value_Slider *loadToSpinner);
 std::vector<ExrChannelInfo> getExrChannels(const char fileName[]);
 void resizeTimeLine();
 void resizeAllSldrs();
@@ -254,7 +251,6 @@ public:
     int pboY;
     
     TrackWidget *sldr;
-    Fl_Button *abortButton;
     char trackID;
     char label[5000];
     int loadSequence(std::string fileName, int scale=100, Rectang* aoi=NULL, int filterType=FILTERLANCZOS_ID, bool append=false, float gamma=1, int fromFrame=0, int toFrame=0, int loadingFromTimeLine=0, float exposition = 1, float defog = 0, float kneeH =0, float kneeL=0, int channel=-1);
@@ -340,8 +336,6 @@ public:
     Rectang *taoi;
     std::mutex rawQueueMutex;
     bool loadingCanceled;
-    Fl_Value_Slider *loadFromSpinner;
-    Fl_Value_Slider *loadToSpinner;
     int rangeBegin;
     int rangeEnd;
     int maxFramesToLoad; //how many frames should be loaded for this sequence, assigned dynamicaly depending on how many tracks are being loaded and how many fit in ram.
