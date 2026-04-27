@@ -52,6 +52,12 @@ if(USE_QT)
         src/gfcsequencegui.cpp
         src/gfcnetworkclientgui.cpp
         src/gfcnetworkservergui.cpp
+        # Image loading: OIIO-backed loader and the pixel-buffer helper.
+        # FLTK-free; pulled in for the Qt build to render real images.
+        src/gfcimageloaderoiio.cpp
+        src/gfcloadparams.cpp
+        src/gfcglframeinfo.cpp
+        src/gfcimageloader.cpp
     )
     file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
     list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})

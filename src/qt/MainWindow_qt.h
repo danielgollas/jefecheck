@@ -25,6 +25,9 @@ public:
 protected:
     void closeEvent(QCloseEvent* e) override;
 
+private slots:
+    void onFileDropped(const QString& path);
+
 private:
     void buildMenuBar();
     void buildDocks();
