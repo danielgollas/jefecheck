@@ -181,7 +181,10 @@ public:
 	
 	
 	void addFXToPlate(int plate, gfcFX theFX);
-	int handleFXGUICB(int whichOne, Fl_Widget* o, void* data);
+	// FX widget callback. The handle is opaque so this header doesn't drag
+	// in FLTK widget definitions; it forwards through to gfcFXStack
+	// (which now also takes an opaque handle).
+	int handleFXGUICB(int whichOne, void* widgetHandle, void* data);
 	
 	std::vector<gfcNetTransformationInfo> getTransformations();
 	void setTransformations(std::vector< gfcNetTransformationInfo > transformations);

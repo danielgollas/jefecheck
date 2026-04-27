@@ -4,7 +4,9 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include "gfcplatemanagergui_fltk.h"
 #include "gfcTextRenderer.h"
 
+#ifdef JEFECHECK_USE_FLTK
 #include <FL/fl_ask.H>
+#endif
 
 #include "mainWindow.h"
 extern MainWindow mw;
@@ -1063,7 +1065,7 @@ void gfcPlateManager::setFXStack(gfcFXStack theStack, int whichOne)
 	
 }
 
-int gfcPlateManager::handleFXGUICB(int whichOne, Fl_Widget * o, void * data) {
+int gfcPlateManager::handleFXGUICB(int whichOne, void * widgetHandle, void * data) {
     setChanged();
 	if (whichOne>=plates.size()) {
         printf("gfcPlateManager::handleFXGUICB: requested plate out of range\n");
@@ -1071,7 +1073,7 @@ int gfcPlateManager::handleFXGUICB(int whichOne, Fl_Widget * o, void * data) {
 
     } else {
     	this->clearHistogramCache(whichOne);
-        return plates[whichOne].fxStack.handleGUICB(o,data);
+        return plates[whichOne].fxStack.handleGUICB(widgetHandle, data);
     }
 
 
@@ -1427,7 +1429,13 @@ void gfcPlateManager::loadStackFromFile(int whichOne, std::string filename) {
         fxControlWindow1.scheduleUpdateWindow(whichOne);
         if (result.size()>0) {
             for (int i=0; i<result.size(); i++) {
-                fl_alert(result[i].c_str());
+#ifdef JEFECHECK_USE_FLTK
+                fl_alert("%s", result[i].c_str());
+#else
+                // Non-FLTK builds don't have a popup wired yet; log instead.
+                fprintf(stderr, "FX stack load warning: %s\n",
+                        result[i].c_str());
+#endif
             }
         }
 
