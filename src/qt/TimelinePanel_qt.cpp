@@ -28,6 +28,8 @@ TimelineScrubber_Qt::TimelineScrubber_Qt(QWidget* parent) : QWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setMouseTracking(false);
     setCursor(Qt::PointingHandCursor);
+    setObjectName("timeline.scrubber");
+    setAccessibleName("Timeline scrubber");
 }
 
 void TimelineScrubber_Qt::setRange(int from, int to) {
@@ -112,6 +114,8 @@ void TimelineScrubber_Qt::mouseMoveEvent(QMouseEvent* e) {
 TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(96);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setObjectName("timeline.tracks");
+    setAccessibleName("Timeline tracks");
 }
 
 void TimelineTracks_Qt::setTimelineRange(int from, int to) {
@@ -143,14 +147,21 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
 // ---- TimelinePanel_Qt ----
 
 TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
+    setObjectName("timeline.panel");
+    setAccessibleName("Timeline and transport");
+
     auto* transport = new QHBoxLayout();
     transport->setContentsMargins(4, 2, 4, 2);
     transport->setSpacing(2);
 
-    auto makeButton = [this](const QString& text, const QString& tip) {
+    auto makeButton = [this](const QString& text, const QString& tip,
+                              const QString& objectName,
+                              const QString& accessibleName) {
         auto* b = new QPushButton(text, this);
         b->setToolTip(tip);
         b->setFixedSize(26, 22);
+        b->setObjectName(objectName);
+        b->setAccessibleName(accessibleName);
         return b;
     };
 
@@ -160,20 +171,29 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         return l;
     };
 
-    auto makeSpin = [this](int minVal, int maxVal, int width) {
+    auto makeSpin = [this](int minVal, int maxVal, int width,
+                            const QString& objectName,
+                            const QString& accessibleName) {
         auto* s = new QSpinBox(this);
         s->setRange(minVal, maxVal);
         s->setFixedWidth(width);
         s->setAlignment(Qt::AlignRight);
         s->setButtonSymbols(QAbstractSpinBox::NoButtons);
+        s->setObjectName(objectName);
+        s->setAccessibleName(accessibleName);
         return s;
     };
 
-    rewBtn_      = makeButton("⏮", "Rewind to start");
-    stepBackBtn_ = makeButton("◀", "Step back one frame");
-    playBtn_     = makeButton("▶", "Play / Pause");
-    stepFwdBtn_  = makeButton("▶|", "Step forward one frame");
-    ffwdBtn_     = makeButton("⏭", "Fast forward to end");
+    rewBtn_      = makeButton("⏮", "Rewind to start",
+                              "transport.rewind.button", "Rewind to start");
+    stepBackBtn_ = makeButton("◀", "Step back one frame",
+                              "transport.stepback.button", "Step back");
+    playBtn_     = makeButton("▶", "Play / Pause",
+                              "transport.play.button", "Play / Pause");
+    stepFwdBtn_  = makeButton("▶|", "Step forward one frame",
+                              "transport.stepforward.button", "Step forward");
+    ffwdBtn_     = makeButton("⏭", "Fast forward to end",
+                              "transport.fastforward.button", "Fast forward");
 
     transport->addWidget(rewBtn_);
     transport->addWidget(stepBackBtn_);
@@ -184,21 +204,26 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     loopMode_ = new QComboBox(this);
     loopMode_->addItems({"Once", "Loop", "Bounce"});
     loopMode_->setFixedWidth(74);
+    loopMode_->setObjectName("transport.loop.combo");
+    loopMode_->setAccessibleName("Loop mode");
     transport->addSpacing(4);
     transport->addWidget(loopMode_);
 
     transport->addSpacing(6);
     transport->addWidget(makeSmallLabel("F"));
-    frameSpin_ = makeSpin(1, 99999, 56);
+    frameSpin_ = makeSpin(1, 99999, 56,
+                          "transport.frame.spin", "Current frame");
     transport->addWidget(frameSpin_);
 
     transport->addSpacing(4);
     transport->addWidget(makeSmallLabel("In"));
-    inSpin_ = makeSpin(1, 99999, 50);
+    inSpin_ = makeSpin(1, 99999, 50,
+                       "transport.in.spin", "In point");
     transport->addWidget(inSpin_);
 
     transport->addWidget(makeSmallLabel("Out"));
-    outSpin_ = makeSpin(1, 99999, 50);
+    outSpin_ = makeSpin(1, 99999, 50,
+                        "transport.out.spin", "Out point");
     transport->addWidget(outSpin_);
 
     transport->addStretch(1);
@@ -211,6 +236,8 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     fpsSpin_->setFixedWidth(56);
     fpsSpin_->setAlignment(Qt::AlignRight);
     fpsSpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    fpsSpin_->setObjectName("transport.fps.spin");
+    fpsSpin_->setAccessibleName("Target FPS");
     transport->addWidget(fpsSpin_);
 
     scrubber_ = new TimelineScrubber_Qt(this);

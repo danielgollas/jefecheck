@@ -64,30 +64,50 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
         "QComboBox QAbstractItemView, QAbstractSpinBox { font-size: 10pt; }"
     );
 
+    // Plate-card object names follow `plate.<idx>.<role>` so UI tests can
+    // target a specific plate without depending on tab order. Setting
+    // setAccessibleName as well so the AX label matches the on-screen text.
+    const QString objPrefix = QStringLiteral("plate.%1").arg(id);
+    setObjectName(objPrefix + ".card");
+    setAccessibleName(QStringLiteral("Plate %1").arg(id + 1));
+
     auto* plateId = new QLabel(QString::number(id + 1), this);
     plateId->setStyleSheet("font-weight: bold; font-size: 12pt; color: #ccc;");
     plateId->setFixedWidth(14);
     plateId->setAlignment(Qt::AlignCenter);
+    plateId->setObjectName(objPrefix + ".id.label");
 
     trackBox_ = new QComboBox(this);
     trackBox_->addItems({"A", "B", "C", "D"});
     trackBox_->setCurrentIndex(gui_->getSequenceID() >= 0 ? gui_->getSequenceID() : id);
     trackBox_->setFixedWidth(40);
+    trackBox_->setObjectName(objPrefix + ".track.combo");
+    trackBox_->setAccessibleName("Track");
 
     aspectBox_ = new QComboBox(this);
     aspectBox_->setEditable(true);
     aspectBox_->addItems({"original", "16:9", "4:3", "2.39:1", "2.35:1", "1.85:1", "1.37:1"});
     aspectBox_->setMinimumWidth(60);
+    aspectBox_->setObjectName(objPrefix + ".aspect.combo");
+    aspectBox_->setAccessibleName("Aspect ratio");
 
     cropBtn_ = makeToggle(this, "Crop", "Toggle crop bars (aspect-ratio letterbox)", 36);
+    cropBtn_->setObjectName(objPrefix + ".crop.button");
+    cropBtn_->setAccessibleName("Crop");
     flipBtn_ = makeToggle(this, "Flip", "Flip vertically", 32);
+    flipBtn_->setObjectName(objPrefix + ".flip.button");
+    flipBtn_->setAccessibleName("Flip");
     flopBtn_ = makeToggle(this, "Flop", "Flop horizontally", 32);
+    flopBtn_->setObjectName(objPrefix + ".flop.button");
+    flopBtn_->setAccessibleName("Flop");
 
     rgbaBtn_ = new QPushButton("RGB", this);
     rgbaBtn_->setCheckable(true);
     rgbaBtn_->setToolTip("Cycle RGBA channel display (shortcuts r/g/b/a)");
     rgbaBtn_->setFixedHeight(20);
     rgbaBtn_->setMinimumWidth(36);
+    rgbaBtn_->setObjectName(objPrefix + ".rgba.button");
+    rgbaBtn_->setAccessibleName("RGBA channel");
 
     auto* row1 = new QHBoxLayout();
     row1->setSpacing(4);
@@ -100,13 +120,23 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     row1->addWidget(rgbaBtn_);
 
     zoomSpin_ = makeSpin(this, 0.01,    99.99, 0.01, 1.0, 46);
+    zoomSpin_->setObjectName(objPrefix + ".zoom.spin");
+    zoomSpin_->setAccessibleName("Zoom");
     panXSpin_ = makeSpin(this, -9999.0, 9999.0, 1.0,  0.0, 50);
+    panXSpin_->setObjectName(objPrefix + ".panx.spin");
+    panXSpin_->setAccessibleName("Pan X");
     panYSpin_ = makeSpin(this, -9999.0, 9999.0, 1.0,  0.0, 50);
+    panYSpin_->setObjectName(objPrefix + ".pany.spin");
+    panYSpin_->setAccessibleName("Pan Y");
     rotSpin_  = makeSpin(this, -360.0,  360.0,  0.01, 0.0, 56);
+    rotSpin_->setObjectName(objPrefix + ".rotation.spin");
+    rotSpin_->setAccessibleName("Rotation");
 
     lutBox_ = new QComboBox(this);
     lutBox_->addItem("No LUT");
     lutBox_->setMinimumWidth(70);
+    lutBox_->setObjectName(objPrefix + ".lut.combo");
+    lutBox_->setAccessibleName("LUT");
 
     auto* row2 = new QHBoxLayout();
     row2->setSpacing(2);
@@ -125,10 +155,20 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     row2->addWidget(lutBox_, 1);
 
     gammaSpin_      = makeSpin(this, 0.01,   99.99, 0.01, 1.0, 44);
+    gammaSpin_->setObjectName(objPrefix + ".gamma.spin");
+    gammaSpin_->setAccessibleName("Gamma");
     exposureSpin_   = makeSpin(this, -99.99, 99.99, 0.01, 0.0, 48);
+    exposureSpin_->setObjectName(objPrefix + ".exposure.spin");
+    exposureSpin_->setAccessibleName("Exposure");
     contrastSpin_   = makeSpin(this, 0.01,   99.99, 0.01, 1.0, 44);
+    contrastSpin_->setObjectName(objPrefix + ".contrast.spin");
+    contrastSpin_->setAccessibleName("Contrast");
     brightnessSpin_ = makeSpin(this, -99.99, 99.99, 0.01, 0.0, 48);
+    brightnessSpin_->setObjectName(objPrefix + ".brightness.spin");
+    brightnessSpin_->setAccessibleName("Brightness");
     saturationSpin_ = makeSpin(this, 0.0,    99.99, 0.01, 1.0, 44);
+    saturationSpin_->setObjectName(objPrefix + ".saturation.spin");
+    saturationSpin_->setAccessibleName("Saturation");
 
     auto* row3 = new QHBoxLayout();
     row3->setSpacing(2);

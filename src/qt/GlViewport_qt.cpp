@@ -25,6 +25,9 @@ GlViewport_Qt::GlViewport_Qt(QWidget* parent)
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setAcceptDrops(true);
+    setObjectName("viewport");
+    setAccessibleName("Viewport");
+    setAccessibleDescription("OpenGL plate viewport");
 }
 
 GlViewport_Qt::~GlViewport_Qt() = default;

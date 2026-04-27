@@ -3,15 +3,22 @@
 // + GlViewport_Qt + IApplication_Qt). The full feature port lives in later
 // phases (2E onward).
 #include <QApplication>
+#include <QByteArray>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
+#include <QSettings>
 #include <QSurfaceFormat>
+
+#include <cstring>
 
 #include "gfcStructures.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
+
+extern gfcSettings sett;
 
 static void applyDarkTheme(QApplication& qapp) {
     // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`)
@@ -31,7 +38,27 @@ static void applyDarkTheme(QApplication& qapp) {
     }
 }
 
+// Resolve --config-dir <path> from argv, falling back to the
+// JEFECHECK_CONFIG_DIR env var. UI tests use this to keep QSettings,
+// session XML, and LUT autoload path inside a temp dir per test, so
+// they never touch the user's real preferences.
+static QString resolveConfigDir(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--config-dir") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    const QByteArray env = qgetenv("JEFECHECK_CONFIG_DIR");
+    if (!env.isEmpty()) return QString::fromLocal8Bit(env);
+    return QString();
+}
+
 int main(int argc, char* argv[]) {
+    // Make Qt's accessibility bridge live before QApplication touches
+    // anything. On macOS this routes QAccessible → NSAccessibility,
+    // which is what Appium's mac2 driver introspects.
+    qputenv("QT_ACCESSIBILITY", "1");
+
     // gfcPlate's renderer relies on the fixed-function GL pipeline:
     // (Sets the global gMacExecutablePath used by getApplicationDataPath
     // on macOS to find the bundled Resources directory. The FLTK build
@@ -57,6 +84,24 @@ int main(int argc, char* argv[]) {
     qapp.setApplicationName("JefeCheck");
     qapp.setOrganizationName("JefeCheck");
 
+    // Test-mode isolation: redirect QSettings + LUT autoload path into a
+    // caller-supplied directory. Must run BEFORE any QSettings is
+    // constructed (MainWindow_Qt::restoreLayout creates the first one).
+    const QString configDir = resolveConfigDir(argc, argv);
+    if (!configDir.isEmpty()) {
+        QDir().mkpath(configDir);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           configDir);
+        // sett is the global gfcSettings; sett.lutPath drives the
+        // install-LUT autoload in SequenceLoadBridge_qt. Point it at
+        // the test fixture dir if one's been seeded.
+        const QString fxDir = configDir + "/FX/";
+        if (QFileInfo(fxDir).isDir()) {
+            sett.lutPath = fxDir.toStdString();
+        }
+    }
+
     static IApplication_Qt application(&qapp);
     static IEventSystem_Qt events;
     jefe::ui::IApplication::setInstance(&application);
@@ -65,6 +110,7 @@ int main(int argc, char* argv[]) {
     applyDarkTheme(qapp);
 
     MainWindow_Qt window;
+    window.setObjectName("MainWindow");
     window.show();
 
     return application.run();

@@ -13,7 +13,10 @@ constexpr int kTwoColumnThreshold = 600;
 }  // namespace
 
 PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QScrollArea(parent) {
+    setObjectName("platemanager.scroll");
+    setAccessibleName("Plate Manager");
     inner_ = new QWidget(this);
+    inner_->setObjectName("platemanager.grid");
     grid_ = new QGridLayout(inner_);
     grid_->setContentsMargins(6, 6, 6, 6);
     grid_->setSpacing(8);
