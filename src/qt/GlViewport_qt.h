@@ -34,6 +34,12 @@ public:
 signals:
     void fileDropped(const QString& path);
 
+    // Emitted when the viewport mutates plate state outside the plate
+    // cards — drag pan, wheel zoom, keyboard layout/fit/flip/flop, and
+    // track-cycle. The Plate Manager dock listens and refreshes its
+    // spinboxes so the user can read back the values they just edited.
+    void plateStateChanged();
+
 protected:
     // QOpenGLWidget hooks
     void initializeGL() override;

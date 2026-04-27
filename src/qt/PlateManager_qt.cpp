@@ -1,5 +1,6 @@
 #include "PlateManager_qt.h"
 #include "PlateCard_qt.h"
+#include "SequenceLoadBridge_qt.h"
 
 #include <QGridLayout>
 #include <QResizeEvent>
@@ -19,7 +20,12 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QScrollArea(parent) {
     inner_->setLayout(grid_);
 
     for (int i = 0; i < 4; ++i) {
-        cards_.append(new PlateCard_Qt(i, inner_));
+        // Bind to the rendering chain's plate GUI when it's available
+        // (set up by initializeRenderingChain() before docks are built).
+        // Falls back to an owned GUI when running without the chain so
+        // the dock still renders for tests / dev.
+        auto* externalGui = jefe::qt::getPlateGUIQt(i);
+        cards_.append(new PlateCard_Qt(i, externalGui, inner_));
     }
 
     setWidget(inner_);
@@ -53,4 +59,10 @@ void PlateManager_Qt::reflow(int viewportWidth) {
     // possible column index up to the previous max.
     grid_->setColumnStretch(0, 1);
     grid_->setColumnStretch(1, cols == 2 ? 1 : 0);
+}
+
+void PlateManager_Qt::refreshAllCards() {
+    for (auto* card : cards_) {
+        if (card) card->refreshFromState();
+    }
 }

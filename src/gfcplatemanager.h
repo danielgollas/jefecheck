@@ -183,6 +183,12 @@ public:
 	// loading an image into the sequence; FLTK drives this from the
 	// load-window callbacks. No-op if `whichOne` is out of range.
 	void setPlateShowPreview(int whichOne, bool value);
+
+	// Direct access to a plate's GUI surface. The Qt build needs this so
+	// PlateCard_Qt can reach the same gfcPlateGUI_Qt instance the plate
+	// renders from (created in initializeWidgets()). Returns nullptr for
+	// out-of-range indices.
+	gfcPlateGUI* getPlateGUI(int whichOne);
 	
 	
 	
