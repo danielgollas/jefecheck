@@ -62,8 +62,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     playbackTimer_ = new QTimer(this);
     playbackTimer_->setInterval(16);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
+        // tickPlayback() drains a frame from each sequence's queue and
+        // uploads it via glTexImage2D, so the GL context must be current.
+        if (!viewport_) return;
+        viewport_->makeCurrent();
         const bool dirty = jefe::qt::tickPlayback();
-        if (dirty && viewport_) {
+        viewport_->doneCurrent();
+        if (dirty) {
             viewport_->update();
         }
     });
