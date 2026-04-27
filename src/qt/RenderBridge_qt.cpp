@@ -13,9 +13,8 @@ RenderBridge_Qt::~RenderBridge_Qt() = default;
 
 void RenderBridge_Qt::onGLInit() {
     // GLAD is loaded by GlViewport_Qt before the first listener call.
-    // The plate manager is initialized lazily — its initializeWidgets
-    // path is FLTK-only and gated out, so the Qt build relies on plates
-    // being added later (PR-10) when sequences are loaded.
+    // The plate manager is initialized by MainWindow_Qt via the
+    // SequenceLoadBridge before this fires.
 }
 
 void RenderBridge_Qt::onResize(int newWidth, int newHeight) {

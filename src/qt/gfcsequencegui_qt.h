@@ -90,7 +90,10 @@ private:
     int   append_       = 0;
     int   crop_         = 0;
     int   channel_      = -1;
-    float scale_        = 1.0f;
+    // params.scale is a percentage (100 = full size). FLTK's load window
+    // defaults the slider to 100; mirror that here so dropped images
+    // load at full resolution instead of getting resized to 1%.
+    float scale_        = 100.0f;
     float gamma_        = 1.0f;
 };
 
