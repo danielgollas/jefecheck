@@ -12,6 +12,9 @@ BUNDLE_ID = "com.danielgollas.jefecheck.qt"
 WINDOW = "MainWindow"
 VIEWPORT = "viewport"
 
+# Status-bar widgets (permanent right-aligned indicators)
+STATUSBAR_LAYOUT = "statusbar.layout.label"
+
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
 DOCK_TIMELINE = "dock.timeline"

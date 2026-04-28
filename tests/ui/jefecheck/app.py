@@ -56,7 +56,12 @@ class JefeCheckApp:
         opts.set_capability("appium:wdaConnectionTimeout", 240000)
 
         driver = webdriver.Remote(appium_url, options=opts)
-        return cls(driver, config_dir)
+        instance = cls(driver, config_dir)
+        # Synchronize on the main window being AX-visible before returning.
+        # Without this the first synthesized keystroke after launch can
+        # race the app's window-activation phase and silently no-op.
+        instance.main_window()
+        return instance
 
     def quit(self) -> None:
         try:
@@ -94,3 +99,67 @@ class JefeCheckApp:
         return self.driver.find_element(
             AppiumBy.IOS_PREDICATE,
             "elementType == 4 AND title == 'JefeCheck'")
+
+    # XCUIKeyModifierFlags — see Apple docs.
+    MOD_SHIFT   = 1 << 17
+    MOD_CONTROL = 1 << 18
+    MOD_OPTION  = 1 << 19
+    MOD_COMMAND = 1 << 20
+
+    def send_keys(self, key: str, modifier_flags: int = 0) -> None:
+        """Send a single keystroke at the application level.
+
+        `key` is a literal character (e.g. '1', 'f') or an XCUIKeyboardKey
+        token (e.g. '' for Return).
+        """
+        self.driver.execute_script(
+            "macos: keys",
+            {"keys": [{"key": key, "modifierFlags": modifier_flags}]})
+
+    def send_shortcut(self, combo: str) -> None:
+        """Send a Cmd/Ctrl/Shift/Opt-modified shortcut to JefeCheck.
+
+        Format: 'cmd+1', 'shift+f', 'cmd+,', etc. Only one main key.
+
+        Routes through System Events / AppleScript instead of XCTest's
+        UIKeyEvent synthesis. Mac2's `macos: keys` doesn't reliably
+        deliver Cmd+modifier shortcuts to Qt's QShortcut on macOS
+        (synthesized events don't propagate through Qt's window event
+        filter chain), but System Events keystroke does — it's the same
+        mechanism used by GUI scripting.
+        """
+        parts = [p.strip().lower() for p in combo.split("+")]
+        modifiers: list[str] = []
+        key: Optional[str] = None
+        for part in parts:
+            if part in ("cmd", "command", "meta"):
+                modifiers.append("command down")
+            elif part in ("ctrl", "control"):
+                modifiers.append("control down")
+            elif part == "shift":
+                modifiers.append("shift down")
+            elif part in ("opt", "option", "alt"):
+                modifiers.append("option down")
+            else:
+                key = part
+        if key is None:
+            raise ValueError(f"send_shortcut: no main key in {combo!r}")
+        using_clause = ""
+        if modifiers:
+            using_clause = " using {" + ", ".join(modifiers) + "}"
+        # Force the JefeCheck process frontmost via System Events (more
+        # immediate than `tell application to activate`, which returns
+        # before the activation actually completes), wait long enough
+        # for the AppKit window-server handoff to settle, then deliver
+        # the keystroke. The settling time matters: the first
+        # synthesized keystroke after a fresh launch races the focus
+        # transition and silently no-ops if delivered too soon.
+        script = (
+            'tell application "System Events"\n'
+            '  set frontmost of (first process whose '
+            f'    bundle identifier is "{locators.BUNDLE_ID}") to true\n'
+            '  delay 0.4\n'
+            f'  keystroke "{key}"{using_clause}\n'
+            'end tell'
+        )
+        self.driver.execute_script("macos: appleScript", {"script": script})
