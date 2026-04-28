@@ -56,6 +56,20 @@ source .venv/bin/activate
 JEFECHECK_BIN=$(pwd)/../../build_qt/jefecheck.app pytest
 ```
 
+### Watching the suite drive the app (`--slow-mo`)
+
+Mac2 fires AX press actions back-to-back in well under a second, so by
+default the UI changes flicker by faster than the eye can follow. Pass
+`--slow-mo SECONDS` to pause after every click / keystroke / shortcut:
+
+```bash
+pytest test_plate_ops.py::test_flip_button_toggles_when_clicked --slow-mo 1.0
+```
+
+Pure debugging aid — assertions never check timing, so a non-zero
+slow-mo doesn't change pass/fail. Drag the JefeCheck window into a
+visible spot before the test launches WDA and you'll see each toggle.
+
 ## Architecture
 
 - `conftest.py` — pytest fixtures. Auto-starts an Appium server on

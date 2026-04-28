@@ -22,12 +22,53 @@ from . import locators
 DEFAULT_APPIUM_URL = "http://127.0.0.1:4723"
 
 
+class _SlowElement:
+    """Proxy around a Mac2 WebElement that pauses after each interaction.
+
+    Active only when --slow-mo > 0 is passed to pytest. Lets a human
+    watching the screen catch each click/toggle before the next one
+    happens — by default Mac2 fires AX press actions back-to-back in
+    well under a second, faster than the eye can follow.
+
+    The proxy delegates everything to the underlying element via
+    __getattr__; only the interaction methods listed in `_SLOW_METHODS`
+    sleep after they return. Read-only attribute access (`get_attribute`,
+    `text`, etc.) goes through unchanged so assertion timing is untouched.
+    """
+
+    _SLOW_METHODS = ("click", "send_keys", "clear", "submit")
+
+    def __init__(self, element: WebElement, slow_mo: float):
+        # Underscore-prefixed so `__getattr__` still triggers for the
+        # delegated members (Python skips __getattr__ for things found
+        # on the proxy itself).
+        self._element = element
+        self._slow_mo = slow_mo
+
+    def __getattr__(self, name: str):
+        attr = getattr(self._element, name)
+        if name in self._SLOW_METHODS and self._slow_mo > 0 and callable(attr):
+            slow = self._slow_mo
+            def wrapped(*args, **kwargs):
+                result = attr(*args, **kwargs)
+                time.sleep(slow)
+                return result
+            return wrapped
+        return attr
+
+
 class JefeCheckApp:
     """A live JefeCheck instance under Appium control."""
 
-    def __init__(self, driver: webdriver.Remote, config_dir: Path):
+    def __init__(self, driver: webdriver.Remote, config_dir: Path,
+                 slow_mo: float = 0.0):
         self.driver = driver
         self.config_dir = config_dir
+        # Inserted between every Mac2 interaction (click, key, shortcut)
+        # so a human watching the screen can follow what each step does.
+        # 0 disables the pause entirely; non-zero only slows the suite —
+        # nothing in the assertions depends on timing.
+        self.slow_mo = slow_mo
 
     @classmethod
     def launch(
@@ -35,6 +76,7 @@ class JefeCheckApp:
         binary: Path,
         appium_url: str = DEFAULT_APPIUM_URL,
         config_dir: Optional[Path] = None,
+        slow_mo: float = 0.0,
     ) -> "JefeCheckApp":
         """Start the app under Appium and return a wrapped client."""
         if config_dir is None:
@@ -56,7 +98,7 @@ class JefeCheckApp:
         opts.set_capability("appium:wdaConnectionTimeout", 240000)
 
         driver = webdriver.Remote(appium_url, options=opts)
-        instance = cls(driver, config_dir)
+        instance = cls(driver, config_dir, slow_mo=slow_mo)
         # Synchronize on the main window being AX-visible before returning.
         # Without this the first synthesized keystroke after launch can
         # race the app's window-activation phase and silently no-op.
@@ -68,6 +110,12 @@ class JefeCheckApp:
             self.driver.quit()
         finally:
             shutil.rmtree(self.config_dir, ignore_errors=True)
+
+    def _wrap(self, element: WebElement):
+        """Wrap with a slow-mo proxy when --slow-mo is active."""
+        if self.slow_mo > 0:
+            return _SlowElement(element, self.slow_mo)
+        return element
 
     def by_object_name(self, name: str, timeout: float = 5.0) -> WebElement:
         """Find a widget whose AXIdentifier ends with `name`.
@@ -81,7 +129,8 @@ class JefeCheckApp:
         last_err: Optional[Exception] = None
         while time.monotonic() < deadline:
             try:
-                return self.driver.find_element(AppiumBy.IOS_PREDICATE, predicate)
+                el = self.driver.find_element(AppiumBy.IOS_PREDICATE, predicate)
+                return self._wrap(el)
             except Exception as e:  # noqa: BLE001
                 last_err = e
                 time.sleep(0.2)
@@ -115,6 +164,8 @@ class JefeCheckApp:
         self.driver.execute_script(
             "macos: keys",
             {"keys": [{"key": key, "modifierFlags": modifier_flags}]})
+        if self.slow_mo > 0:
+            time.sleep(self.slow_mo)
 
     def send_shortcut(self, combo: str) -> None:
         """Send a Cmd/Ctrl/Shift/Opt-modified shortcut to JefeCheck.
@@ -163,3 +214,5 @@ class JefeCheckApp:
             'end tell'
         )
         self.driver.execute_script("macos: appleScript", {"script": script})
+        if self.slow_mo > 0:
+            time.sleep(self.slow_mo)

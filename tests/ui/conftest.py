@@ -107,13 +107,36 @@ def jefecheck_binary() -> Path:
     )
 
 
+def pytest_addoption(parser):
+    # --slow-mo SECONDS: pause after every Mac2 click / keystroke so a
+    # human watching the screen can see what each step does. Defaults to
+    # 0 (CI / dev runs untouched). Pure debugging aid — nothing in the
+    # suite asserts on timing, so a non-zero value never changes pass/fail.
+    parser.addoption(
+        "--slow-mo",
+        action="store",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="Pause this many seconds after every UI interaction (click, "
+             "send_keys, send_shortcut). Useful for watching the suite "
+             "drive the app. Default: 0.",
+    )
+
+
+@pytest.fixture(scope="session")
+def slow_mo(request) -> float:
+    return float(request.config.getoption("--slow-mo"))
+
+
 @pytest.fixture
-def app(appium_server, jefecheck_binary, tmp_path):
+def app(appium_server, jefecheck_binary, tmp_path, slow_mo):
     """Per-test launch: fresh app, isolated config dir, torn down after."""
     instance = JefeCheckApp.launch(
         binary=jefecheck_binary,
         appium_url=appium_server,
         config_dir=tmp_path / "jefecheck-config",
+        slow_mo=slow_mo,
     )
     yield instance
     instance.quit()
