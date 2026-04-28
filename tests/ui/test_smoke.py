@@ -11,23 +11,43 @@ def test_app_launches_and_main_window_visible(app):
     assert window.get_attribute("title") == "JefeCheck"
 
 
-def test_plate_zero_card_widgets_present(app):
-    """A handful of representative widgets across plate 0 should be findable.
+def test_plate_zero_card_widgets_resolvable(app):
+    """All plate-0 widgets should resolve via the objectName predicate.
 
-    If any of these break, our locator strategy or the accessibility
-    naming pass regressed — which is exactly what the test is here to
-    catch.
+    Title-vs-value mapping varies by XCUITest element type (buttons
+    return label, combos return selected value), so this test only
+    asserts on locator resolution. Per-widget attribute checks live in
+    Phase C's feature tests.
     """
-    expected_titles = {
-        locators.plate(0, "gamma.spin"): "Gamma",
-        locators.plate(0, "exposure.spin"): "Exposure",
-        locators.plate(0, "lut.combo"): "LUT",
+    expected = [
+        locators.plate(0, "gamma.spin"),
+        locators.plate(0, "exposure.spin"),
+        locators.plate(0, "contrast.spin"),
+        locators.plate(0, "brightness.spin"),
+        locators.plate(0, "saturation.spin"),
+        locators.plate(0, "lut.combo"),
+        locators.plate(0, "flip.button"),
+        locators.plate(0, "flop.button"),
+        locators.plate(0, "crop.button"),
+    ]
+    for object_name in expected:
+        app.by_object_name(object_name)
+
+
+def test_plate_button_titles_reflect_accessible_name(app):
+    """For button widgets, AXTitle should match the Qt accessibleName.
+
+    This verifies the Phase A naming pass actually reaches the AX layer
+    (and that Appium can read it) for the widget type that maps cleanly.
+    """
+    expected = {
         locators.plate(0, "flip.button"): "Flip",
         locators.plate(0, "flop.button"): "Flop",
+        locators.plate(0, "crop.button"): "Crop",
     }
-    for object_name, expected_title in expected_titles.items():
+    for object_name, title in expected.items():
         widget = app.by_object_name(object_name)
-        assert widget.get_attribute("title") == expected_title, object_name
+        assert widget.get_attribute("title") == title, object_name
 
 
 def test_transport_play_button_present(app):

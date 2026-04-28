@@ -7,7 +7,7 @@ which are robust against widget reparenting and tab-order changes.
 Each constant here is just the trailing piece (the leaf objectName).
 """
 
-BUNDLE_ID = "com.danielgollas.jefecheck"
+BUNDLE_ID = "com.danielgollas.jefecheck.qt"
 
 WINDOW = "MainWindow"
 VIEWPORT = "viewport"

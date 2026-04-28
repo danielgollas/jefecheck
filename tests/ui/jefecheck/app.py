@@ -91,5 +91,6 @@ class JefeCheckApp:
             return None
 
     def main_window(self) -> WebElement:
-        return self.driver.find_element(AppiumBy.IOS_PREDICATE,
-                                        "elementType == 1")  # XCUIElementTypeWindow
+        return self.driver.find_element(
+            AppiumBy.IOS_PREDICATE,
+            "elementType == 4 AND title == 'JefeCheck'")
