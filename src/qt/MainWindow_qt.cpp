@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QFileInfo>
+#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSettings>
@@ -49,6 +50,15 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
 
     statusBar()->showMessage("Drop an image onto the viewport to load it.");
 
+    // Permanent right-aligned label that always reflects the current
+    // framing mode. Status-bar text exposes via NSAccessibility (the
+    // QOpenGLWidget viewport doesn't, so we can't hang the hint there),
+    // and a permanent widget never gets clobbered by transient messages
+    // like the file-drop status updates.
+    layoutStatusLabel_ = new QLabel(this);
+    layoutStatusLabel_->setObjectName("statusbar.layout.label");
+    statusBar()->addPermanentWidget(layoutStatusLabel_);
+
     connect(viewport_, &GlViewport_Qt::fileDropped,
             this, &MainWindow_Qt::onFileDropped);
 
@@ -65,19 +75,58 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // GlViewport_Qt's keyPressEvent only fires when the viewport itself
     // has keyboard focus, which it usually doesn't after the user clicks
     // on a plate card or spinbox.
-    auto bindLayout = [this](QKeySequence seq, int framingMode) {
+    auto layoutName = [](int framingMode) -> const char* {
+        switch (framingMode) {
+            case FRAMINGSINGLE_ID:     return "single";
+            case FRAMINGDOUBLE_ID:     return "double-horizontal";
+            case FRAMINGDOUBLEVERT_ID: return "double-vertical";
+            case FRAMINGQUAD_ID:       return "quad";
+            default:                   return "unknown";
+        }
+    };
+    auto announceLayout = [this, layoutName](int framingMode) {
+        if (layoutStatusLabel_) {
+            layoutStatusLabel_->setText(
+                QStringLiteral("Layout: %1").arg(layoutName(framingMode)));
+        }
+    };
+    auto bindLayout = [this, announceLayout](QKeySequence seq, int framingMode) {
         auto* sc = new QShortcut(seq, this);
         sc->setContext(Qt::WindowShortcut);
-        connect(sc, &QShortcut::activated, this, [this, framingMode]() {
+        connect(sc, &QShortcut::activated, this,
+                [this, framingMode, announceLayout]() {
             jefe::qt::setFramingMode(framingMode);
             if (viewport_) viewport_->update();
             if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+            announceLayout(framingMode);
         });
     };
     bindLayout(QKeySequence(Qt::CTRL | Qt::Key_1), FRAMINGSINGLE_ID);
     bindLayout(QKeySequence(Qt::CTRL | Qt::Key_2), FRAMINGDOUBLE_ID);
     bindLayout(QKeySequence(Qt::CTRL | Qt::Key_3), FRAMINGDOUBLEVERT_ID);
     bindLayout(QKeySequence(Qt::CTRL | Qt::Key_4), FRAMINGQUAD_ID);
+    announceLayout(FRAMINGSINGLE_ID);
+
+    // Two shortcuts open Preferences: Cmd+P (legacy from the FLTK
+    // build) and Cmd+, (the macOS-standard convention). Both route
+    // through the same lambda. macOS's system Print handler intercepts
+    // synthesized Cmd+P delivery in some contexts (Appium / Mac2),
+    // so tests prefer Cmd+, — real users get either.
+    auto openPrefs = [this]() {
+        PreferencesWindow_Qt dlg(this);
+        dlg.exec();
+    };
+    auto bindPrefsShortcut = [this, openPrefs](QKeySequence seq) {
+        auto* sc = new QShortcut(seq, this);
+        // ApplicationShortcut so the binding fires regardless of
+        // whether the main window or a dock widget has keyboard focus —
+        // synthesized keystrokes (Mac2 driver / AppleScript) don't
+        // always land on the focused QMainWindow's event filter.
+        sc->setContext(Qt::ApplicationShortcut);
+        connect(sc, &QShortcut::activated, this, openPrefs);
+    };
+    bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
+    bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
 
     // LUT autoload after the event loop spins up the GL context. Each
     // CubeLUT::create3DTexture calls glGenTextures, so doing this in
@@ -140,15 +189,21 @@ void MainWindow_Qt::buildMenuBar() {
                         []() { /* TODO */ })
             ->setObjectName("menu.file.render");
     fileMenu->addSeparator();
-    fileMenu->addAction("&Preferences…",
+    auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
                         this, [this]() {
                             // Modal — settings persist on Done via
                             // saveSettings(&sett) inside the dialog.
                             PreferencesWindow_Qt dlg(this);
                             dlg.exec();
-                        })
-            ->setObjectName("menu.file.preferences");
+                        });
+    prefsAction->setObjectName("menu.file.preferences");
+    // Suppress Qt's auto-detection of "Preferences..." titles. By
+    // default Qt moves such actions into the macOS Application menu
+    // and steals Cmd+, as the bound shortcut, which then races our
+    // window-level QShortcut for Cmd+, and intermittently no-ops on
+    // synthesized keystrokes (UI tests).
+    prefsAction->setMenuRole(QAction::NoRole);
     fileMenu->addSeparator();
     fileMenu->addAction("&Quit",
                         QKeySequence::Quit,

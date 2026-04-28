@@ -64,7 +64,14 @@ def appium_server():
     log_path = Path(__file__).parent / "appium-server.log"
     log_file = log_path.open("w", buffering=1)
     proc = subprocess.Popen(
-        [appium_bin, "--address", APPIUM_HOST, "--port", str(APPIUM_PORT)],
+        [
+            appium_bin, "--address", APPIUM_HOST, "--port", str(APPIUM_PORT),
+            # AppleScript is gated as an "insecure" feature; UI tests need
+            # it because Mac2's macos:keys can't deliver Cmd+modifier
+            # shortcuts to Qt's QShortcut on macOS, but System Events
+            # keystroke (via AppleScript) does.
+            "--allow-insecure", "mac2:apple_script",
+        ],
         stdout=log_file, stderr=subprocess.STDOUT,
     )
     try:
