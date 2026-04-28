@@ -107,6 +107,14 @@ void zoomPlate(int plateIdx, float zoomDelta);
 // in Qt's coord system. Falls back to 0 in single-plate mode.
 int plateAtViewportPos(int x, int y, int viewportW, int viewportH);
 
+// Basename of the sequence currently bound to plate `plateIdx`, or
+// empty string if no frame has been loaded yet. Reads through
+// trackManager → gfcSequence::filenameGeneric, which is the source
+// path the loader populates from --open-file or drag-and-drop. Used
+// by the status-bar "Loaded:" label and by behavioral tests that
+// need to verify the load actually reached gfcSequence.
+std::string getLoadedSequenceName(int plateIdx);
+
 // Keyboard-shortcut hooks. `framingMode` is one of UIConstants.h's
 // FRAMING*_ID values; the others operate on the currently-active
 // plate (or all plates when the *All variant is used). All of them
