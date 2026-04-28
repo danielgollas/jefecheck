@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Gate release-tag pushes on the Qt UI test suite.
+#
+# Wire up once per clone:
+#   git config core.hooksPath scripts/git-hooks
+#
+# Behavior:
+#   - Branch push  → no-op, returns 0 immediately. Day-to-day pushes
+#                    are unblocked.
+#   - Tag push     → builds the Qt app and runs the full Appium suite
+#                    via `cmake --build build_qt --target qt-uitests`.
+#                    A failed test or build aborts the push.
+#
+# Tag-push detection: git supplies the refs being pushed on stdin, one
+# line per ref: `<local-ref> <local-sha> <remote-ref> <remote-sha>`.
+# We treat any `refs/tags/...` ref as triggering the gate (release tags
+# are the primary use case, but pushing any tag warrants UI verification).
+
+set -euo pipefail
+
+is_tag_push=0
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    case "$remote_ref" in
+        refs/tags/*) is_tag_push=1 ;;
+    esac
+done
+
+if [ "$is_tag_push" -eq 0 ]; then
+    exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+build_dir="$repo_root/build_qt"
+
+echo "==> pre-push: tag push detected, running Qt UI tests"
+
+# Appium 3 requires Node 22+. Detect by version since which `appium`
+# resolves to whichever is on PATH (commonly the wrong nvm version).
+if ! command -v appium >/dev/null 2>&1; then
+    echo "ERROR: appium not on PATH. Run \`nvm use 22\` (or equivalent)" >&2
+    echo "       then \`npm i -g appium && appium driver install mac2\`." >&2
+    exit 1
+fi
+node_major="$(node -v 2>/dev/null | sed -E 's/v([0-9]+)\..*/\1/')"
+if [ "${node_major:-0}" -lt 22 ]; then
+    echo "ERROR: appium 3 needs Node >= 22 (active: $(node -v))." >&2
+    echo "       Run \`nvm use 22\` and re-push." >&2
+    exit 1
+fi
+
+if [ ! -d "$build_dir" ]; then
+    echo "==> $build_dir not found, configuring..."
+    cmake -S "$repo_root" -B "$build_dir" -DUSE_QT=ON
+fi
+
+# qt-uitests already depends on jefecheck, so this builds + runs.
+cmake --build "$build_dir" --target qt-uitests
+
+echo "==> pre-push: Qt UI tests passed, allowing tag push"

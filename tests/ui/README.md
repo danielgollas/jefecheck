@@ -75,6 +75,23 @@ Pure debugging aid — assertions never check timing, so a non-zero
 slow-mo doesn't change pass/fail. Drag the JefeCheck window into a
 visible spot before the test launches WDA and you'll see each toggle.
 
+## Pre-push hook (release-tag gate)
+
+The repo ships a pre-push hook that runs the full UI suite (behavioral +
+visual) when you push a tag — typically a release tag like `v1.7.0`.
+Branch pushes pass through without running the suite.
+
+Wire it up once per clone:
+
+```bash
+git config core.hooksPath scripts/git-hooks
+```
+
+After that, `git push origin v1.7.0` builds the Qt app and runs
+`cmake --build build_qt --target qt-uitests` before the push leaves your
+machine. A failed test aborts the push. Make sure `nvm use 22` is active
+in the shell you push from — Appium 3 needs Node 22+.
+
 ## Visual regression tests
 
 `test_visual.py` boots the app with a committed test pattern preloaded
