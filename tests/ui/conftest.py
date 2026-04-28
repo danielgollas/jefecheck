@@ -129,13 +129,24 @@ def slow_mo(request) -> float:
     return float(request.config.getoption("--slow-mo"))
 
 
-@pytest.fixture
-def app(appium_server, jefecheck_binary, tmp_path, slow_mo):
-    """Per-test launch: fresh app, isolated config dir, torn down after."""
+@pytest.fixture(scope="module")
+def app(appium_server, jefecheck_binary, tmp_path_factory, slow_mo):
+    """Module-scoped launch: one JefeCheck per test file.
+
+    Pays the ~15s WDA + Mac2 cold-start once per module instead of once
+    per test. Trade-off: tests in the same module share state, so any
+    test that mutates app state (layout, active plate, toggle buttons)
+    must restore the default before completing — or rely on a module-
+    level `reset_app_state` autouse fixture in that file.
+
+    The app's QSettings live in a per-module temp dir, so settings
+    written by one module never leak into another.
+    """
+    config_dir = tmp_path_factory.mktemp("jefecheck-config")
     instance = JefeCheckApp.launch(
         binary=jefecheck_binary,
         appium_url=appium_server,
-        config_dir=tmp_path / "jefecheck-config",
+        config_dir=config_dir,
         slow_mo=slow_mo,
     )
     yield instance
