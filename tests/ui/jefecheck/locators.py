@@ -14,6 +14,7 @@ VIEWPORT = "viewport"
 
 # Status-bar widgets (permanent right-aligned indicators)
 STATUSBAR_LAYOUT = "statusbar.layout.label"
+STATUSBAR_TRACK = "statusbar.track.label"
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"

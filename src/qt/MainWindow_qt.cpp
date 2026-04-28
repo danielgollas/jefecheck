@@ -59,6 +59,17 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     layoutStatusLabel_->setObjectName("statusbar.layout.label");
     statusBar()->addPermanentWidget(layoutStatusLabel_);
 
+    // Mirrors the layout label, but for the active plate's currently-bound
+    // track. Refreshed each tick so combo edits, keyboard cycle, and
+    // active-plate clicks all flow into the visible label without each
+    // path having to remember to update it. Test surface for the plate-
+    // card track combo: combo title shows the GUI selection, this label
+    // shows what gfcPlate::track is actually rendering — when the two
+    // disagree, the bridge has regressed.
+    trackStatusLabel_ = new QLabel(this);
+    trackStatusLabel_->setObjectName("statusbar.track.label");
+    statusBar()->addPermanentWidget(trackStatusLabel_);
+
     connect(viewport_, &GlViewport_Qt::fileDropped,
             this, &MainWindow_Qt::onFileDropped);
 
@@ -164,6 +175,26 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         // it's the only path that animates the playhead during play.
         if (timelinePanelWidget_) {
             timelinePanelWidget_->refreshFromPlayback();
+        }
+        // Active-plate track readout. Reading through the bridge so the
+        // value reflects gfcPlate::track (post-`updateValuesFromGUI`),
+        // not the GUI's parallel `trackChoice_`. Doing this in the tick
+        // sidesteps wiring change-signals from every path that mutates
+        // the active plate or its track.
+        if (trackStatusLabel_) {
+            const int active = jefe::qt::getActivePlate();
+            const int track = active >= 0
+                ? jefe::qt::getTrackOnPlate(active) : -1;
+            QString label;
+            if (active < 0 || track < 0 || track > 3) {
+                label = QStringLiteral("Track: -");
+            } else {
+                const QChar letter = QChar('A' + track);
+                label = QStringLiteral("Track: %1").arg(letter);
+            }
+            if (trackStatusLabel_->text() != label) {
+                trackStatusLabel_->setText(label);
+            }
         }
     });
     playbackTimer_->start();

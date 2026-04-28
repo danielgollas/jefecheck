@@ -756,9 +756,13 @@ void gfcPlateManager::initializeWidgets() {
     for (int i = (int)plates.size() - 1; i >= 0; --i) {
         auto* g = new gfcPlateGUI_Qt;
         g->setPlateIndex(i);
-        g->setTrackChoice(i);
         plates[i].myGUI = g;
         plates[i].quadID = i;
+        // setTrack writes both gfcPlate::track AND myGUI->trackChoice_,
+        // so the plate's renderer and the plate-card's combo agree from
+        // launch. Earlier this only set the GUI side; gfcPlate::track
+        // stayed 0 for every plate, so all four cards rendered track A.
+        plates[i].setTrack(i);
     }
     myGUI = new gfcPlateManagerGUI_Qt;
 #endif

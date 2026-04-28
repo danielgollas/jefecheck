@@ -330,6 +330,17 @@ void cycleTrackOnActivePlate(int direction) {
     plateManager.setChanged();
 }
 
+void setTrackOnPlate(int plateIdx, int trackIdx) {
+    if (plateIdx < 0 || trackIdx < 0 || trackIdx > 3) return;
+    plateManager.setTrackOnPlate(plateIdx, trackIdx);
+    plateManager.setChanged();
+}
+
+int getTrackOnPlate(int plateIdx) {
+    if (plateIdx < 0) return -1;
+    return plateManager.getTrackOnPlate(plateIdx);
+}
+
 void pausePlayback() {
     playbackManager.pause();
 }
