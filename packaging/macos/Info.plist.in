@@ -7,7 +7,7 @@
     <key>CFBundleDisplayName</key>
     <string>JefeCheck</string>
     <key>CFBundleIdentifier</key>
-    <string>com.danielgollas.jefecheck</string>
+    <string>com.danielgollas.jefecheck.qt</string>
     <key>CFBundleVersion</key>
     <string>@PROJECT_VERSION@</string>
     <key>CFBundleShortVersionString</key>
