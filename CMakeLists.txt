@@ -230,3 +230,30 @@ if(UNIX AND NOT APPLE)
         GLU
     )
 endif()
+
+# Appium-driven UI tests (macOS Qt build only). The pytest harness lives
+# in tests/ui/ and discovers the binary via JEFECHECK_BIN. Bootstrap the
+# venv once (or re-bootstrap when pyproject changes) before running.
+if(USE_QT AND APPLE)
+    set(_uitests_dir ${CMAKE_SOURCE_DIR}/tests/ui)
+    set(_uitests_venv ${_uitests_dir}/.venv)
+    set(_uitests_stamp ${CMAKE_BINARY_DIR}/uitests-venv.stamp)
+
+    add_custom_command(
+        OUTPUT ${_uitests_stamp}
+        COMMAND python3 -m venv ${_uitests_venv}
+        COMMAND ${_uitests_venv}/bin/pip install --quiet --upgrade pip
+        COMMAND ${_uitests_venv}/bin/pip install --quiet -e ${_uitests_dir}
+        COMMAND ${CMAKE_COMMAND} -E touch ${_uitests_stamp}
+        DEPENDS ${_uitests_dir}/pyproject.toml
+        COMMENT "Bootstrapping Python UI test venv")
+
+    add_custom_target(qt-uitests
+        COMMAND ${CMAKE_COMMAND} -E env
+                JEFECHECK_BIN=$<TARGET_BUNDLE_DIR:jefecheck>
+                ${_uitests_venv}/bin/pytest ${_uitests_dir}
+        DEPENDS jefecheck ${_uitests_stamp}
+        WORKING_DIRECTORY ${_uitests_dir}
+        USES_TERMINAL
+        VERBATIM)
+endif()
