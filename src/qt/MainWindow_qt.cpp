@@ -389,8 +389,9 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
     QMainWindow::closeEvent(e);
 }
 
-void MainWindow_Qt::onFileDropped(const QString& path) {
+void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
     if (!viewport_ || path.isEmpty()) return;
+    if (plateIdx < 0 || plateIdx > 3) return;
 
     QString resolved = path;
 
@@ -425,7 +426,8 @@ void MainWindow_Qt::onFileDropped(const QString& path) {
     // GL texture uploads happen inside loadPreview, so the viewport's
     // context must be current on the calling thread.
     viewport_->makeCurrent();
-    const bool ok = jefe::qt::loadFileIntoPlate(resolved.toStdString(), 0);
+    const bool ok =
+        jefe::qt::loadFileIntoPlate(resolved.toStdString(), plateIdx);
     viewport_->doneCurrent();
 
     if (!ok) {
@@ -435,6 +437,13 @@ void MainWindow_Qt::onFileDropped(const QString& path) {
     }
 
     viewport_->update();
+    static const char kPlateNames[4] = {'A', 'B', 'C', 'D'};
     statusBar()->showMessage(
-        QString("%1 loaded into Track A").arg(name));
+        QString("%1 loaded into Track %2")
+            .arg(name)
+            .arg(QChar(kPlateNames[plateIdx])));
+}
+
+void MainWindow_Qt::onFileDropped(const QString& path) {
+    loadFileIntoPlate(0, path);
 }

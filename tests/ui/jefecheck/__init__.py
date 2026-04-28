@@ -1,4 +1,4 @@
 from .app import JefeCheckApp
-from . import locators
+from . import locators, visual
 
-__all__ = ["JefeCheckApp", "locators"]
+__all__ = ["JefeCheckApp", "locators", "visual"]

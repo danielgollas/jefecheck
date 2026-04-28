@@ -252,49 +252,70 @@ Load fixture sequence:
 **Verification:** `cmake --build build_qt --target qt-uitests` is green
 locally on a clean checkout. Suite runs in under 90 seconds.
 
-## Phase D — Pixel diff for the GL viewport (1 PR, ~3 days)
+## Phase D — Pixel diff for the GL viewport
 
-Scheduled to land **immediately after Phase C is green** — not pushed
-indefinitely. The state-only assertions in Phase C don't catch a class of
-bugs that are exactly the ones we keep hitting (Retina viewport sized to
-quarter-window, flip/flop wired but not refreshed, LUT applied but not
-sampled). We need eyes on actual pixels.
+The state-only assertions in Phase C don't catch a class of bugs that
+are exactly the ones we keep hitting (Retina viewport sized to quarter-
+window, flip/flop wired but not refreshed, LUT applied but not sampled).
+We need eyes on actual pixels.
 
-### D1. Capture path
+### D1. Capture path — shipped
 
-`GlViewport_Qt::grabFramebuffer()` already exists on `QOpenGLWidget`. Add
-a helper on the Qt main window that returns it as PNG bytes via a
-non-public `QObject` slot the test harness can call through Mac2's
-`mobile: executeScript` (which can invoke a registered debug bridge).
-Cleaner alternative: a `--screenshot <plate-idx> <path>` CLI mode the
-harness can spawn, capture, exit. Pick whichever is less invasive once
-we benchmark the Mac2 round-trip.
+The harness uses **Appium's window-element screenshot** rather than a
+custom debug bridge or `--screenshot` CLI mode. Mac2 exposes
+`element.screenshot_as_png` on the QMainWindow AX node, which returns
+the entire window (chrome + viewport) as PNG bytes. The viewport itself
+is opaque to NSAccessibility — `QOpenGLWidget` doesn't expose an AX node
+— but the parent window does, and that's enough.
 
-### D2. Diffing
+Trade-off accepted: we compare the full window, not just the viewport.
+Window chrome is bit-stable between runs, so the diff still attributes
+regressions to the viewport. If we ever need viewport-only comparisons
+(e.g. to ignore a status-bar drift), wire `grabFramebuffer()` through a
+debug bridge then.
 
-Use [`pixelmatch-py`](https://pypi.org/project/pixelmatch/) (port of the
-Mapbox library): perceptual diff with anti-alias tolerance. Tolerance
-budget per assertion: <0.1% of pixels differing by >5/255 in any channel.
+### D2. Image loading at startup — shipped
 
-### D3. Baselines
+`--open-file <path>` (repeatable, fills plates 0..3) loads a fixture
+image deterministically before the screenshot. Without it the viewport
+would be empty for every test and the baseline wouldn't exercise the
+render path. Used by the `visual_app` fixture.
 
-`tests/ui/baselines/<test_name>/<assertion>.png`. Per-OS subdirs if
-needed once Linux/Windows tests come online. Updates require explicit
-opt-in: `pytest --update-baselines`.
+### D3. Diffing — shipped
 
-### D4. Initial coverage
+[`pixelmatch-py`](https://pypi.org/project/pixelmatch/) compares the
+captured PNG against a committed baseline with a per-pixel YIQ
+threshold (0.1) and a 0.5% diff-ratio budget. The budget absorbs
+font-hinting jitter around the layout-status label and any Qt
+focus-redraw artifacts; the test pattern's primary colors swing the
+diff well above budget if rendering actually breaks.
 
-Five visual assertions, chosen for highest-bug-yield surfaces:
+### D4. Baselines — shipped
 
-- Single-plate layout, fixture image loaded, neutral color correction.
-- 2×2 layout, four fixture images loaded.
+`tests/ui/baselines/<assertion>.png`. Updates require explicit opt-in:
+`pytest --update-baselines`. A failed diff also writes
+`<baseline>.actual.png` and `<baseline>.diff.png` next to the baseline
+so the developer can eyeball the regression without re-running.
+
+Per-OS subdirs deferred until Linux/Windows tests come online.
+
+### D5. Initial coverage — partial
+
+Shipped (PR-26):
+
+- Single-plate layout, test pattern loaded into plate 0.
+- Quad layout (Cmd+4), test pattern in plate 0, others empty.
+
+Follow-up (PR-26b, after FX/LUT panels port):
+
 - Plate 0 with `gamma2.4` LUT applied (verifies LUT actually samples).
 - Plate 0 flipped + flopped (verifies the toggle reaches the shader).
-- Retina viewport at 1×1 fills the entire viewport rect (the bug we
-  shipped twice).
+- 2×2 layout with four distinct fixtures loaded.
+- Retina viewport at 1×1 fills the entire viewport rect.
 
-**Verification:** intentionally regress one of the five (revert a small
-fix), confirm the suite catches it.
+**Verification budget:** intentionally regress a shipped fix once the
+follow-up assertions are in (the two-test floor isn't a robust enough
+canary on its own).
 
 ## Phase E — Per-PR test gate (ongoing)
 
@@ -337,14 +358,15 @@ Specifically for the remaining ports:
 
 ## Sequencing against in-flight work
 
-1. **Land PR-21** (input/render fixes — already in working tree). Tests
-   need a stable baseline.
-2. **PR-22 Phase A** (accessibility names + `--config-dir` flag).
-3. **PR-23 Phase B** (Appium harness scaffolding, smoke test only).
-4. **PR-24 Phase C** (the six baseline test files).
-5. **PR-25 Phase D** (pixel-diff for the five visual assertions).
-6. Resume Qt window porting (FX, render, remote, load) — each PR ships
-   with a test.
+1. **PR-21** input/render fixes — shipped.
+2. **PR-23 Phase A** accessibility names + `--config-dir` flag — shipped.
+3. **PR-24** macOS .app bundle — shipped.
+4. **PR-25 Phase B** Appium harness scaffolding — shipped.
+5. **PR-26 Phase C** baseline behavioral tests — shipped (22 passing).
+6. **PR-27 Phase D** pixel-diff harness — shipped (2 baseline assertions;
+   3 follow-ups gated on FX/LUT panel port).
+7. Resume Qt window porting (FX, render, remote, load) — each PR ships
+   with at least one behavioral test, plus a visual assertion when the
+   port introduces new on-screen rendering.
 
-Total Phase A + B + C + D: roughly 1.5–2 weeks of focused work, after
-which the ongoing tax is ~30–60 minutes per port PR.
+Ongoing tax once Phases A–D are in: ~30–60 minutes per port PR.
