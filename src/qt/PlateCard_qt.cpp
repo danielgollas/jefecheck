@@ -199,8 +199,16 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     using QDS = QDoubleSpinBox;
     using QCB = QComboBox;
 
+    // Route through the bridge (rather than g->setTrackChoice) so the
+    // change actually reaches gfcPlate::track. setTrackChoice on the GUI
+    // alone only updates the parallel GUI value object — gfcPlate's
+    // rendering path reads through plateManager.setTrackOnPlate, which
+    // also clears the histogram cache and pushes a feedback message.
+    const int boundPlateIdForTrack = id_;
     connect(trackBox_,  QOverload<int>::of(&QCB::currentIndexChanged),
-            this, [g](int idx) { g->setTrackChoice(idx); });
+            this, [boundPlateIdForTrack](int idx) {
+                jefe::qt::setTrackOnPlate(boundPlateIdForTrack, idx);
+            });
     connect(aspectBox_, &QCB::currentTextChanged,
             this, [g](const QString& s) { g->setAspectChoice(s.toStdString()); });
 

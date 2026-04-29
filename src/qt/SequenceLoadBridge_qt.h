@@ -120,6 +120,20 @@ void toggleFlipAll();
 void toggleFlopAll();
 void cycleTrackOnActivePlate(int direction);  // -1 prev, +1 next
 
+// Set the displayed track for `plateIdx` directly. Mirrors
+// `applyLUTToPlate` — drives plateManager.setTrackOnPlate (which
+// updates both the GUI and the plate's internal track field) and
+// flags the manager dirty so the next paintGL picks up the new
+// sequence. The plate-card's track combo routes through this so
+// combo changes actually swap the rendered sequence; without it the
+// GUI value object updates but gfcPlate::track stays stale.
+void setTrackOnPlate(int plateIdx, int trackIdx);
+
+// Track currently bound to plate `plateIdx` (0..3 for tracks A..D),
+// reading through plateManager so it reflects post-bridge state.
+// Returns -1 for invalid indices.
+int getTrackOnPlate(int plateIdx);
+
 // Playback control. Only pause is wired today; oneFrameFwd / Rev
 // are no-ops until the Qt build runs the playback manager loop, but
 // stubbing them here lets the keyboard handler stay symmetric with

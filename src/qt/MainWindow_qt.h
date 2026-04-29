@@ -53,6 +53,7 @@ private:
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
+    QLabel* trackStatusLabel_ = nullptr;
     QTimer* playbackTimer_ = nullptr;
 
     std::unique_ptr<jefe::qt::RenderBridge_Qt> renderBridge_;
