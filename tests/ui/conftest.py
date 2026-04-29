@@ -107,13 +107,47 @@ def jefecheck_binary() -> Path:
     )
 
 
-@pytest.fixture
-def app(appium_server, jefecheck_binary, tmp_path):
-    """Per-test launch: fresh app, isolated config dir, torn down after."""
+def pytest_addoption(parser):
+    # --slow-mo SECONDS: pause after every Mac2 click / keystroke so a
+    # human watching the screen can see what each step does. Defaults to
+    # 0 (CI / dev runs untouched). Pure debugging aid — nothing in the
+    # suite asserts on timing, so a non-zero value never changes pass/fail.
+    parser.addoption(
+        "--slow-mo",
+        action="store",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="Pause this many seconds after every UI interaction (click, "
+             "send_keys, send_shortcut). Useful for watching the suite "
+             "drive the app. Default: 0.",
+    )
+
+
+@pytest.fixture(scope="session")
+def slow_mo(request) -> float:
+    return float(request.config.getoption("--slow-mo"))
+
+
+@pytest.fixture(scope="module")
+def app(appium_server, jefecheck_binary, tmp_path_factory, slow_mo):
+    """Module-scoped launch: one JefeCheck per test file.
+
+    Pays the ~15s WDA + Mac2 cold-start once per module instead of once
+    per test. Trade-off: tests in the same module share state, so any
+    test that mutates app state (layout, active plate, toggle buttons)
+    must restore the default before completing — or rely on a module-
+    level `reset_app_state` autouse fixture in that file.
+
+    The app's QSettings live in a per-module temp dir, so settings
+    written by one module never leak into another.
+    """
+    config_dir = tmp_path_factory.mktemp("jefecheck-config")
     instance = JefeCheckApp.launch(
         binary=jefecheck_binary,
         appium_url=appium_server,
-        config_dir=tmp_path / "jefecheck-config",
+        config_dir=config_dir,
+        slow_mo=slow_mo,
     )
     yield instance
     instance.quit()

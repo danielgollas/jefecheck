@@ -56,6 +56,46 @@ source .venv/bin/activate
 JEFECHECK_BIN=$(pwd)/../../build_qt/jefecheck.app pytest
 ```
 
+### Watching the suite drive the app (`--slow-mo`)
+
+Mac2 fires AX press actions back-to-back in well under a second, so by
+default the UI changes flicker by faster than the eye can follow. Pass
+`--slow-mo SECONDS` to pause after every click / keystroke / shortcut:
+
+```bash
+pytest test_plate_ops.py::test_flip_button_toggles_when_clicked --slow-mo 1.0
+```
+
+Pure debugging aid — assertions never check timing, so a non-zero
+slow-mo doesn't change pass/fail. Drag the JefeCheck window into a
+visible spot before the test launches WDA and you'll see each toggle.
+
+## Test isolation (module-scoped `app`)
+
+The `app` fixture is **module-scoped** — one JefeCheck launch per
+`test_*.py` file, shared across every test in that file. Pays the
+~15s WDA + Mac2 cold start once per module instead of per test
+(suite went from ~8 min to ~2 min for the current 22 tests).
+
+This means tests in the same module **share state**. Three patterns
+keep tests safe:
+
+1. **Force the state you assert on.** Don't write
+   `assert layout == "single"` after a launch — write
+   `app.send_shortcut("cmd+1"); assert layout == "single"`.
+   Tests in `test_layouts.py` follow this pattern.
+2. **Add an autouse cleanup fixture in modules that mutate state.**
+   `test_plate_ops.py` resets every plate's flip/flop/crop to off
+   after each test, so a test that toggles flop on doesn't leak into
+   the next test that asserts flop=off.
+3. **First-test-runs-first for default-state assertions.** Pytest
+   collects tests in file order. A `test_default_*` style assertion
+   that depends on the just-launched state must be the first
+   function in the file.
+
+Read-only tests (smoke, transport, lut existence checks) don't need
+cleanup — nothing they do mutates state.
+
 ## Architecture
 
 - `conftest.py` — pytest fixtures. Auto-starts an Appium server on

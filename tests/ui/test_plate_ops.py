@@ -1,4 +1,6 @@
 """Plate-card toggle operations (flip, flop, crop) drive plate state."""
+import pytest
+
 from jefecheck import locators
 
 
@@ -11,6 +13,25 @@ def _checked(widget) -> bool:
     """
     val = widget.get_attribute("value")
     return val in ("1", "true", True)
+
+
+@pytest.fixture(autouse=True)
+def _reset_plate_toggles_after(app):
+    """Restore every plate's flip/flop/crop to off after each test.
+
+    The `app` fixture is module-scoped, so a test that leaves a toggle
+    on (e.g. `test_flop_button_toggles_when_clicked` only clicks once)
+    would leak state into the next test in the file. The cleanup
+    iterates every plate × every toggle but only clicks when actually
+    on, so the cost is one AX read per (plate, toggle) when nothing
+    has been changed — typically <100ms total.
+    """
+    yield
+    for plate_id in range(4):
+        for role in ("flip.button", "flop.button", "crop.button"):
+            btn = app.by_object_name(locators.plate(plate_id, role))
+            if _checked(btn):
+                btn.click()
 
 
 def test_flip_button_toggles_when_clicked(app):
