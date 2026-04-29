@@ -80,6 +80,16 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     loadedStatusLabel_->setObjectName("statusbar.loaded.label");
     statusBar()->addPermanentWidget(loadedStatusLabel_);
 
+    // "Startup:" label tracks the LUT/FX autoload phase. Goes through
+    // 'Loading…' → 'Ready (<N> FX, <M> LUT)' → 'Errors (<details>)'
+    // so the user sees a real health signal at launch and tests have
+    // an AX-stable surface to poll for autoload completion before
+    // asserting on panel contents.
+    startupStatusLabel_ = new QLabel(this);
+    startupStatusLabel_->setObjectName("statusbar.startup.label");
+    startupStatusLabel_->setText("Startup: Loading…");
+    statusBar()->addPermanentWidget(startupStatusLabel_);
+
     connect(viewport_, &GlViewport_Qt::fileDropped,
             this, &MainWindow_Qt::onFileDropped);
 
@@ -149,20 +159,17 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
 
-    // LUT autoload after the event loop spins up the GL context. Each
-    // CubeLUT::create3DTexture calls glGenTextures, so doing this in
-    // the constructor (before paintGL has fired) crashed the app.
-    QTimer::singleShot(0, this, [this]() {
-        if (!viewport_) return;
-        viewport_->makeCurrent();
-        jefe::qt::initializeInstallLUTs();
-        viewport_->doneCurrent();
-        // Both panels were built before autoload finished; refresh so
-        // the loaded LUTs show up in the dock and the plate-card combos
-        // without requiring a manual click on Refresh.
-        if (lutPanelWidget_) lutPanelWidget_->refreshList();
-        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-    });
+    // LUT + FX autoload runs after the window is shown and the AX
+    // system has had a chance to register it. The 250ms initial delay
+    // matters: with a 0ms QTimer the load lambda fires before AppKit
+    // finishes registering the window, and the WDA driver's launch
+    // handshake (find element by predicate `title == 'JefeCheck'`)
+    // returns 404 because the window isn't yet in the AX tree. Each
+    // step then loads ONE file and re-posts via QTimer::singleShot(0)
+    // so the event loop fully iterates between shader compiles —
+    // paint events fire, AX queries get answered, and the user
+    // sees the "Startup: Loading FXs (12/35)…" label tick forward.
+    QTimer::singleShot(250, this, [this]() { startAutoload(); });
 
     // ~60Hz tick that drives playbackManager's timestep + frame advance.
     // playbackManager.update() is cheap when nothing's playing, so a
@@ -348,7 +355,8 @@ void MainWindow_Qt::buildDocks() {
     fxDock_ = new QDockWidget("FX Stack", this);
     fxDock_->setObjectName("dock.fxstack");
     fxDock_->setAccessibleName("FX Stack dock");
-    fxDock_->setWidget(new FXStackPanel_Qt(fxDock_));
+    fxPanelWidget_ = new FXStackPanel_Qt(fxDock_);
+    fxDock_->setWidget(fxPanelWidget_);
     fxDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, fxDock_);
 
@@ -475,4 +483,98 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
 
 void MainWindow_Qt::onFileDropped(const QString& path) {
     loadFileIntoPlate(0, path);
+}
+
+void MainWindow_Qt::startAutoload() {
+    if (!viewport_) return;
+    const std::string dir = jefe::qt::resolveInstallPath();
+    if (dir.empty()) {
+        if (startupStatusLabel_) {
+            startupStatusLabel_->setText(
+                "Startup: No FX/LUT directory found");
+        }
+        autoloadPhase_ = AutoloadPhase::Done;
+        return;
+    }
+    lutPaths_ = jefe::qt::getInstallLUTPaths(dir);
+    fxPaths_ = jefe::qt::getInstallFXPaths(dir);
+    autoloadIdx_ = 0;
+    autoloadPhase_ = AutoloadPhase::LUTs;
+    if (startupStatusLabel_) {
+        startupStatusLabel_->setText(
+            QStringLiteral("Startup: Loading LUTs (0/%1)…")
+                .arg(lutPaths_.size()));
+    }
+    QTimer::singleShot(0, this, [this]() { autoloadStep(); });
+}
+
+void MainWindow_Qt::autoloadStep() {
+    if (!viewport_) return;
+
+    auto setStatus = [this](const QString& text) {
+        if (startupStatusLabel_) startupStatusLabel_->setText(text);
+    };
+
+    // GL context goes current per-step (rather than once around the
+    // whole autoload) so the viewport's paintGL still runs cleanly
+    // between our slot invocations — the per-step makeCurrent is
+    // cheap, the viewport's paintGL re-makes its own context.
+    viewport_->makeCurrent();
+
+    if (autoloadPhase_ == AutoloadPhase::LUTs) {
+        if (autoloadIdx_ < (int)lutPaths_.size()) {
+            jefe::qt::loadOneLUTFile(lutPaths_[autoloadIdx_]);
+            ++autoloadIdx_;
+            setStatus(QStringLiteral("Startup: Loading LUTs (%1/%2)…")
+                          .arg(autoloadIdx_).arg(lutPaths_.size()));
+            viewport_->doneCurrent();
+            QTimer::singleShot(0, this, [this]() { autoloadStep(); });
+            return;
+        }
+        // LUTs done — refresh visible LUT widgets so the panel and
+        // plate-card combos pick up everything loaded so far.
+        if (lutPanelWidget_) lutPanelWidget_->refreshList();
+        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        autoloadPhase_ = AutoloadPhase::FXs;
+        autoloadIdx_ = 0;
+        setStatus(QStringLiteral("Startup: Loading FXs (0/%1)…")
+                      .arg(fxPaths_.size()));
+        viewport_->doneCurrent();
+        QTimer::singleShot(0, this, [this]() { autoloadStep(); });
+        return;
+    }
+
+    if (autoloadPhase_ == AutoloadPhase::FXs) {
+        if (autoloadIdx_ < (int)fxPaths_.size()) {
+            jefe::qt::loadOneFXFile(fxPaths_[autoloadIdx_]);
+            ++autoloadIdx_;
+            setStatus(QStringLiteral("Startup: Loading FXs (%1/%2)…")
+                          .arg(autoloadIdx_).arg(fxPaths_.size()));
+            viewport_->doneCurrent();
+            QTimer::singleShot(0, this, [this]() { autoloadStep(); });
+            return;
+        }
+        // FX list fully populated — sortFXs + rebuildFXHashMap once,
+        // then health-check counts.
+        jefe::qt::finalizeFXLoad();
+        viewport_->doneCurrent();
+        autoloadPhase_ = AutoloadPhase::Done;
+
+        const int wantFX  = jefe::qt::getExpectedFXCount();
+        const int gotFX   = jefe::qt::getLoadedFXCount();
+        const int wantLUT = jefe::qt::getExpectedLUTCount();
+        const int gotLUT  = jefe::qt::getLoadedLUTCount();
+        if (gotFX == wantFX && gotLUT == wantLUT) {
+            setStatus(QStringLiteral("Startup: Ready (%1 FX, %2 LUT)")
+                          .arg(gotFX).arg(gotLUT));
+        } else {
+            setStatus(QStringLiteral(
+                "Startup: Errors (%1/%2 FX, %3/%4 LUT)")
+                .arg(gotFX).arg(wantFX)
+                .arg(gotLUT).arg(wantLUT));
+        }
+
+        if (fxPanelWidget_) fxPanelWidget_->refreshLists();
+        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+    }
 }

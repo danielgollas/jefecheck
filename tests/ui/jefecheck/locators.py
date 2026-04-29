@@ -16,6 +16,7 @@ VIEWPORT = "viewport"
 STATUSBAR_LAYOUT = "statusbar.layout.label"
 STATUSBAR_TRACK = "statusbar.track.label"
 STATUSBAR_LOADED = "statusbar.loaded.label"
+STATUSBAR_STARTUP = "statusbar.startup.label"
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
@@ -45,6 +46,14 @@ TRANSPORT_FPS = "transport.fps.spin"
 LUT_LIST = "lut.list"
 LUT_APPLY = "lut.apply.button"
 LUT_REFRESH = "lut.refresh.button"
+
+# FX Stack panel
+FXSTACK_AVAILABLE = "fxstack.available.list"
+FXSTACK_STACK = "fxstack.stack.list"
+FXSTACK_ADD = "fxstack.add.button"
+FXSTACK_REMOVE = "fxstack.remove.button"
+FXSTACK_REFRESH = "fxstack.refresh.button"
+FXSTACK_STATUS = "fxstack.status.label"
 
 # Preferences
 PREFERENCES_DIALOG = "preferences.dialog"

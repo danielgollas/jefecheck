@@ -1,8 +1,10 @@
 // FX Stack and LUT panels. Each is a QWidget hosted inside its own
 // QDockWidget; the two docks are stacked into a tab group at startup.
-// FX Stack stays a placeholder for now (PR follow-up). LUTPanel_Qt is
-// real: lists loaded LUTs from lutManager, accepts dropped LUT files,
-// and applies a selection to the active plate.
+// FX Stack lists loaded effects (browser) and the active plate's
+// stack; double-click or Add adds an effect, Remove deletes from the
+// stack. LUTPanel_Qt is real: lists loaded LUTs from lutManager,
+// accepts dropped LUT files, and applies a selection to the active
+// plate.
 #ifndef JEFECHECK_QT_FX_LUT_PANEL_H
 #define JEFECHECK_QT_FX_LUT_PANEL_H
 
@@ -13,11 +15,28 @@ class QDropEvent;
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
+class QPushButton;
 
 class FXStackPanel_Qt : public QWidget {
     Q_OBJECT
 public:
     explicit FXStackPanel_Qt(QWidget* parent = nullptr);
+
+public slots:
+    // Pulls the available-FX list from fxManager and the active
+    // plate's gfcFXStack; rebuilds both QListWidgets. Called at
+    // construction, after FX autoload, and on every add/remove.
+    void refreshLists();
+
+private:
+    void addSelected();
+    void removeSelected();
+
+    QListWidget* available_ = nullptr;
+    QListWidget* stack_ = nullptr;
+    QPushButton* addBtn_ = nullptr;
+    QPushButton* removeBtn_ = nullptr;
+    QLabel* status_ = nullptr;
 };
 
 class LUTPanel_Qt : public QWidget {
