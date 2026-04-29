@@ -7,6 +7,12 @@ dependencies = [
     "Appium-Python-Client>=4.1.0",
     "pytest>=8.0",
     "pytest-timeout>=2.3",
+    # Phase D: visual diff. Pillow loads the screenshot bytes Appium
+    # returns; pixelmatch compares actual vs. baseline pixel-by-pixel
+    # with a perceptual tolerance to absorb subtree rendering noise
+    # (font hinting jitter, GL driver-level rounding).
+    "Pillow>=10.0",
+    "pixelmatch>=0.3.0",
 ]
 
 [tool.pytest.ini_options]

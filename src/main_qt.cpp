@@ -9,7 +9,9 @@
 #include <QFileInfo>
 #include <QCoreApplication>
 #include <QSettings>
+#include <QStringList>
 #include <QSurfaceFormat>
+#include <QTimer>
 
 #include <cstring>
 
@@ -51,6 +53,20 @@ static QString resolveConfigDir(int argc, char* argv[]) {
     const QByteArray env = qgetenv("JEFECHECK_CONFIG_DIR");
     if (!env.isEmpty()) return QString::fromLocal8Bit(env);
     return QString();
+}
+
+// Resolve all --open-file <path> occurrences from argv. Each successive
+// occurrence loads into the next plate (plate 0, 1, 2, 3). Used by UI
+// tests to seed the viewport with a known image before screenshot diffs.
+static QStringList resolveOpenFiles(int argc, char* argv[]) {
+    QStringList paths;
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--open-file") == 0) {
+            paths.append(QString::fromLocal8Bit(argv[i + 1]));
+            ++i;
+        }
+    }
+    return paths;
 }
 
 int main(int argc, char* argv[]) {
@@ -112,6 +128,19 @@ int main(int argc, char* argv[]) {
     MainWindow_Qt window;
     window.setObjectName("MainWindow");
     window.show();
+
+    // Load each --open-file into the matching plate after the event
+    // loop has spun up the GL context. Deferred via QTimer::singleShot
+    // so paintGL has fired (initializing GLAD) before the bridge tries
+    // to upload a texture.
+    const QStringList openFiles = resolveOpenFiles(argc, argv);
+    for (int i = 0; i < openFiles.size() && i < 4; ++i) {
+        const int plateIdx = i;
+        const QString path = openFiles.at(i);
+        QTimer::singleShot(0, &window, [&window, plateIdx, path]() {
+            window.loadFileIntoPlate(plateIdx, path);
+        });
+    }
 
     return application.run();
 }

@@ -32,6 +32,12 @@ public:
 
     GlViewport_Qt* viewport() { return viewport_; }
 
+    // Load `path` into plate `plateIdx` (0..3). Resolves a folder drop to
+    // its first image, manages the viewport's GL context (texture uploads
+    // happen on the calling thread), and refreshes the status bar.
+    // Used by --open-file at startup and by drag-and-drop at runtime.
+    void loadFileIntoPlate(int plateIdx, const QString& path);
+
 protected:
     void closeEvent(QCloseEvent* e) override;
 

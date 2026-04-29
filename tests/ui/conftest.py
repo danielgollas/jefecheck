@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from jefecheck import JefeCheckApp
+from jefecheck.visual import fixtures_dir, make_test_pattern
 
 APPIUM_HOST = "127.0.0.1"
 APPIUM_PORT = 4723
@@ -148,6 +149,48 @@ def app(appium_server, jefecheck_binary, tmp_path_factory, slow_mo):
         appium_url=appium_server,
         config_dir=config_dir,
         slow_mo=slow_mo,
+    )
+    yield instance
+    instance.quit()
+
+
+# Phase D: visual regression -----------------------------------------
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--update-baselines",
+        action="store_true",
+        default=False,
+        help="Overwrite baseline screenshots in tests/ui/baselines/ "
+             "instead of comparing. Use after intentional UI changes.",
+    )
+
+
+@pytest.fixture(scope="session")
+def update_baselines(request) -> bool:
+    return bool(request.config.getoption("--update-baselines"))
+
+
+@pytest.fixture(scope="session")
+def test_pattern_image() -> Path:
+    """4-quadrant RGB test pattern (committed under tests/ui/fixtures/)."""
+    return make_test_pattern(fixtures_dir() / "test_pattern_64.png")
+
+
+@pytest.fixture
+def visual_app(appium_server, jefecheck_binary, tmp_path,
+               test_pattern_image):
+    """Launches JefeCheck with the test pattern preloaded into plate 0.
+
+    Visual tests use this instead of `app` so the viewport has known,
+    deterministic content (a fresh launch shows an empty black viewport
+    that produces no useful baseline).
+    """
+    instance = JefeCheckApp.launch(
+        binary=jefecheck_binary,
+        appium_url=appium_server,
+        config_dir=tmp_path / "jefecheck-config",
+        open_files=[test_pattern_image],
     )
     yield instance
     instance.quit()

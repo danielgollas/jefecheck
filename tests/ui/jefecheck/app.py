@@ -77,16 +77,28 @@ class JefeCheckApp:
         appium_url: str = DEFAULT_APPIUM_URL,
         config_dir: Optional[Path] = None,
         slow_mo: float = 0.0,
+        open_files: Optional[list[Path]] = None,
     ) -> "JefeCheckApp":
-        """Start the app under Appium and return a wrapped client."""
+        """Start the app under Appium and return a wrapped client.
+
+        `open_files`: paths to load into plates 0..3 in order. Used by
+        visual-diff tests so the viewport has known content before the
+        screenshot is taken (otherwise a fresh launch shows an empty
+        black viewport and every test would hit the same baseline).
+        """
         if config_dir is None:
             config_dir = Path(tempfile.mkdtemp(prefix="jefecheck-test-"))
         config_dir.mkdir(parents=True, exist_ok=True)
 
+        args = ["--config-dir", str(config_dir)]
+        if open_files:
+            for path in open_files:
+                args += ["--open-file", str(path)]
+
         opts = Mac2Options()
         opts.bundle_id = locators.BUNDLE_ID
         opts.app = str(binary)
-        opts.arguments = ["--config-dir", str(config_dir)]
+        opts.arguments = args
         opts.environment = {"JEFECHECK_CONFIG_DIR": str(config_dir)}
         # mac2 spends most of its time on the initial bundle path resolve
         # and a (slow) UI tree warm-up; give it room without hiding bugs.
@@ -216,3 +228,16 @@ class JefeCheckApp:
         self.driver.execute_script("macos: appleScript", {"script": script})
         if self.slow_mo > 0:
             time.sleep(self.slow_mo)
+
+    def window_screenshot(self) -> bytes:
+        """Capture the JefeCheck main window as PNG bytes.
+
+        Routes through the AX element's screenshot endpoint rather than
+        the whole-display capture so the result is independent of the
+        host's display arrangement (CI runners and dev machines have
+        different resolutions, menubar heights, dock positions). The
+        captured frame includes window chrome — the title bar and dock
+        separators are stable enough that the chrome doesn't dominate
+        the diff.
+        """
+        return self.main_window().screenshot_as_png

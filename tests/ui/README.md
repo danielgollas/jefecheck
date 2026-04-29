@@ -1,7 +1,12 @@
 # JefeCheck UI tests
 
-Appium-driven UI tests for the Qt build. Phase B scaffold — only a
-smoke test today; baseline tests land in Phase C.
+Appium-driven UI tests for the Qt build. Covers:
+
+- **Behavioral tests** (`test_layouts.py`, `test_plate_ops.py`,
+  `test_transport.py`, `test_lut.py`) — assert on AX attributes
+  exposed by Qt's QAccessible bridge.
+- **Visual regression tests** (`test_visual.py`) — pixel-diff the main
+  window against committed baselines under `baselines/`.
 
 ## One-time setup (macOS only)
 
@@ -69,6 +74,45 @@ pytest test_plate_ops.py::test_flip_button_toggles_when_clicked --slow-mo 1.0
 Pure debugging aid — assertions never check timing, so a non-zero
 slow-mo doesn't change pass/fail. Drag the JefeCheck window into a
 visible spot before the test launches WDA and you'll see each toggle.
+
+## Pre-push hook (release-tag gate)
+
+The repo ships a pre-push hook that runs the full UI suite (behavioral +
+visual) when you push a tag — typically a release tag like `v1.7.0`.
+Branch pushes pass through without running the suite.
+
+Wire it up once per clone:
+
+```bash
+git config core.hooksPath scripts/git-hooks
+```
+
+After that, `git push origin v1.7.0` builds the Qt app and runs
+`cmake --build build_qt --target qt-uitests` before the push leaves your
+machine. A failed test aborts the push. Make sure `nvm use 22` is active
+in the shell you push from — Appium 3 needs Node 22+.
+
+## Visual regression tests
+
+`test_visual.py` boots the app with a committed test pattern preloaded
+into plate 0 (via `--open-file`), captures the main window, and
+asserts it matches a baseline PNG under `baselines/`.
+
+When intentionally changing the UI (theme, layout, dock arrangement),
+regenerate baselines:
+
+```bash
+JEFECHECK_BIN=$(pwd)/../../build_qt/jefecheck.app \
+  pytest test_visual.py --update-baselines
+```
+
+A failed diff writes `<baseline>.actual.png` and `<baseline>.diff.png`
+next to the baseline so the developer can eyeball the regression.
+
+The fixture image (`fixtures/test_pattern_64.png`) is a 4-quadrant RGB
+pattern (red / green / blue / yellow). Flip / flop / rotate regressions
+swap the colored regions and produce huge diff ratios — well above the
+0.5% jitter budget.
 
 ## Test isolation (module-scoped `app`)
 
