@@ -722,7 +722,7 @@ int CubeLUT::getTypeFromExtension(const char* pfilename) {
         return JEFECHECK1D;
     }
 
-    if (strcmp(ext,"cub")==0 /*|| strcmp(ext,"cube")==0*/) { //Truelight 3D Cube
+    if (strcmp(ext,"cub")==0 || strcmp(ext,"cube")==0) { //Truelight 3D Cube
         return BASELIGHT3DCUBE;
     }
 
