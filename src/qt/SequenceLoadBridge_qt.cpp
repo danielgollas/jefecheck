@@ -14,6 +14,7 @@
 #include "../gfcsequencegui.h"
 #include "../ui/IApplication.h"
 #include "gfcplategui_qt.h"
+#include "gfcsequencegui_qt.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -613,6 +614,66 @@ std::string getLoadedSequenceName(int plateIdx) {
     namespace fs = std::filesystem;
     fs::path p(seq->filenameGeneric);
     return p.filename().string();
+}
+
+namespace {
+// Resolve a plate index to its track's gfcSequence — every layer-combo
+// op is really "operate on whichever track the plate is mapped to".
+gfcSequence* sequenceForPlate(int plateIdx) {
+    if (plateIdx < 0) return nullptr;
+    const int trackIdx = plateManager.getTrackOnPlate(plateIdx);
+    if (trackIdx < 0) return nullptr;
+    return trackManager.getSequence(trackIdx);
+}
+}  // namespace
+
+std::vector<std::string> getLayersOnPlate(int plateIdx) {
+    auto* seq = sequenceForPlate(plateIdx);
+    if (!seq || !seq->myGUI) return {};
+    auto* qtGUI = dynamic_cast<gfcSequenceGUI_Qt*>(seq->myGUI);
+    if (!qtGUI) return {};
+    return qtGUI->getChannelOptions();
+}
+
+std::string getActiveLayerOnPlate(int plateIdx) {
+    auto* seq = sequenceForPlate(plateIdx);
+    if (!seq || !seq->myGUI) return {};
+    return seq->myGUI->getChannelName();
+}
+
+void setLayerOnPlate(int plateIdx, const std::string& layerName) {
+    if (plateIdx < 0) return;
+    const int trackIdx = plateManager.getTrackOnPlate(plateIdx);
+    if (trackIdx < 0) return;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return;
+
+    // Order matters: setChannel(name) must land before loadPreview()
+    // because loadPreview only resets channel index to 0 when params.
+    // channel == -1; the string the OIIO loader uses to pick a layer is
+    // params.channelName, which getLoadParamsFromGUI pulls straight off
+    // myGUI->getChannelName(). Without the rewrite first, the preview
+    // would re-decode the previously-selected layer.
+    seq->myGUI->setChannel(layerName);
+
+    // Re-decode the preview frame against the new layer so the texture
+    // currently on screen reflects the choice immediately. The OIIO
+    // loader's layer pick is driven by params.channelName which we just
+    // set above.
+    seq->loadPreview();
+    plateManager.setPlateShowPreview(trackIdx, true);
+
+    // The async multi-frame loader caches the channel choice into each
+    // frame's load params at startLoadingSequence time, so a layer
+    // switch needs a full re-decode. Matches the FLTK shift-click-on-
+    // timeline behavior the user asked for. Cheap when the sequence is
+    // a single frame (the per-tick generateTextures drain handles the
+    // texture refresh from loadPreview alone).
+    if (seq->getNumPreviewFrames() > 1) {
+        trackManager.startLoadingSequence(trackIdx);
+    }
+
+    plateManager.setChanged();
 }
 
 bool loadFileIntoPlate(const std::string& path,

@@ -40,7 +40,14 @@ void gfcSequenceGUI_Qt::setAppendOption(int v)          { append_ = v; }
 void gfcSequenceGUI_Qt::setFilter(int v)                { filter_ = v; }
 void gfcSequenceGUI_Qt::setCrop(int v)                  { crop_ = v; }
 void gfcSequenceGUI_Qt::setCompression(int v)           { compression_ = v; }
-void gfcSequenceGUI_Qt::setChannelOptions(std::vector<std::string>) {}
+void gfcSequenceGUI_Qt::setChannelOptions(std::vector<std::string> opts) {
+    // gfcSequence::loadPreview pushes the discovered EXR layer list here
+    // every time a preview frame is decoded. Stash it so PlateCard_Qt's
+    // per-plate layer combo can populate from it. The base interface
+    // doesn't have a getter (FLTK reads directly off its widget), so
+    // this is a Qt-only side-channel that getChannelOptions() exposes.
+    channelOptions_ = std::move(opts);
+}
 void gfcSequenceGUI_Qt::setChannel(int v)               { channel_ = v; }
 void gfcSequenceGUI_Qt::setChannel(std::string s)       { channelName_ = std::move(s); }
 

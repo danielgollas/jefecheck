@@ -69,6 +69,7 @@ private:
 
     // Cached widget pointers — refreshFromState needs them.
     QComboBox* trackBox_ = nullptr;
+    QComboBox* layerBox_ = nullptr;
     QComboBox* aspectBox_ = nullptr;
     QPushButton* cropBtn_ = nullptr;
     QPushButton* flipBtn_ = nullptr;

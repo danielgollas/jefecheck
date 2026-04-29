@@ -77,12 +77,23 @@ public:
 
     int widgetBelongsToMe(void* theWidget) override;
 
+    // Qt-only: read the layer list that loadPreview() saw on the most
+    // recently previewed file. The base interface only has
+    // setChannelOptions (write), so we expose this concrete getter for
+    // PlateCard_Qt's per-plate layer combo. Empty until a sequence is
+    // loaded; for non-EXR / single-layer files this is a single empty
+    // string (the OIIO loader's "default layer" sentinel).
+    const std::vector<std::string>& getChannelOptions() const {
+        return channelOptions_;
+    }
+
 private:
     // Minimal state needed by gfcSequence::loadPreview /
     // getLoadParamsFromGUI in the Qt build. Filled in from the drop
     // handler / future Qt panels; reads come back via getXxx().
     std::string filename_;
     std::string channelName_;
+    std::vector<std::string> channelOptions_;
     int   from_         = 1;
     int   to_           = 1;
     int   filter_       = 0;
