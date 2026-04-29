@@ -173,8 +173,16 @@ def update_baselines(request) -> bool:
 
 @pytest.fixture(scope="session")
 def test_pattern_image() -> Path:
-    """4-quadrant RGB test pattern (committed under tests/ui/fixtures/)."""
-    return make_test_pattern(fixtures_dir() / "test_pattern_64.png")
+    """4-quadrant RGB test pattern (committed under tests/ui/fixtures/).
+
+    Filename intentionally has no trailing digits — gfcSequence's
+    findSequenceFiles treats trailing digits as a frame number and
+    replaces them with `#` in filenameGeneric (e.g. `foo_64.png` →
+    `foo_##.png`). The status-bar 'Loaded:' label reads filenameGeneric,
+    so a frame-number-looking suffix would make assertions read like
+    implementation details.
+    """
+    return make_test_pattern(fixtures_dir() / "test_pattern.png")
 
 
 @pytest.fixture

@@ -353,6 +353,22 @@ void stepFrame(int direction) {
     }
 }
 
+std::string getLoadedSequenceName(int plateIdx) {
+    if (plateIdx < 0) return {};
+    const int track = plateManager.getTrackOnPlate(plateIdx);
+    auto* seq = trackManager.getSequence(track);
+    if (!seq) return {};
+    // previewFrame.loaded is the cheap signal that loadPreview ran;
+    // filenameGeneric holds the source path (single image or
+    // numbered-sequence pattern). Empty = nothing's been loaded into
+    // this track's sequence yet — the launch-default state for any
+    // plate that --open-file didn't target.
+    if (!seq->getPreviewFrame().loaded) return {};
+    namespace fs = std::filesystem;
+    fs::path p(seq->filenameGeneric);
+    return p.filename().string();
+}
+
 bool loadFileIntoPlate(const std::string& path,
                        int whichSequence,
                        bool kickOffSequenceLoad) {

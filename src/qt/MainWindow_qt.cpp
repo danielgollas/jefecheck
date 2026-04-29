@@ -70,6 +70,16 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     trackStatusLabel_->setObjectName("statusbar.track.label");
     statusBar()->addPermanentWidget(trackStatusLabel_);
 
+    // "Loaded: <basename>" or "Loaded: -" for the active plate's
+    // sequence. Refreshed each tick (cheap — two field reads off
+    // gfcSequence). Permanent so the transient status-bar message
+    // ("Drop an image…") doesn't clobber it. Real user value (no more
+    // "what's loaded into the active plate?" guessing) plus an
+    // AX-stable surface for behavioral tests asserting on load state.
+    loadedStatusLabel_ = new QLabel(this);
+    loadedStatusLabel_->setObjectName("statusbar.loaded.label");
+    statusBar()->addPermanentWidget(loadedStatusLabel_);
+
     connect(viewport_, &GlViewport_Qt::fileDropped,
             this, &MainWindow_Qt::onFileDropped);
 
@@ -194,6 +204,25 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             }
             if (trackStatusLabel_->text() != label) {
                 trackStatusLabel_->setText(label);
+            }
+        }
+        // Active-plate "Loaded:" readout. Reading through the bridge
+        // so the value reflects gfcSequence's actual loaded state, not
+        // a parallel mirror — bug regressions in the load path will
+        // show up as the label staying on "Loaded: -" after a
+        // successful load. Doing this in the tick sidesteps wiring
+        // change-signals from every load path.
+        if (loadedStatusLabel_) {
+            const int active = jefe::qt::getActivePlate();
+            const std::string name = active >= 0
+                ? jefe::qt::getLoadedSequenceName(active)
+                : std::string{};
+            const QString label = name.empty()
+                ? QStringLiteral("Loaded: -")
+                : QStringLiteral("Loaded: %1")
+                      .arg(QString::fromStdString(name));
+            if (loadedStatusLabel_->text() != label) {
+                loadedStatusLabel_->setText(label);
             }
         }
     });
