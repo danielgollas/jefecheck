@@ -24,7 +24,15 @@ extern gfcNetworkManager networkManager;
 
 gfcFXManager fxManager;
 
-gfcFXManager::gfcFXManager() {
+gfcFXManager::gfcFXManager()
+    : loadedScroll(nullptr),
+      autoloadAllButton(nullptr),
+      progress(nullptr),
+      scrollPosY(0),
+      scrollPosX(0) {
+    // Same fix gfcLUTManager got in PR-21: zero-init the FLTK widget
+    // pointers so the Qt build can call loadFX before initWidgets has
+    // run. Each callsite below null-checks before dereferencing.
 }
 
 
@@ -52,10 +60,12 @@ void gfcFXManager::loadFX(std::string fileName) {
 	//TODO: THIS CHECK SHOULD NOT ONLY BE BASED ON NAME, BUT ON THE HASH OF THE LUT
     for ( int i=0;i<fxArray.size();i++ ) {
         //if ( GetFilenameNoPath ( fxArray[i].filename ) ==GetFilenameNoPath ( fileName ) ) 
-		if (  fxArray[i].md5Hash ==tmpFX.md5Hash) 
+		if (  fxArray[i].md5Hash ==tmpFX.md5Hash)
 		{
-            progress->color ( fl_rgb_color(42,42,0) );
-            progress->copy_label ( "Already Loaded, unload before reloading" );
+            if (progress) {
+                progress->color ( fl_rgb_color(42,42,0) );
+                progress->copy_label ( "Already Loaded, unload before reloading" );
+            }
             printf("Already Loaded, unload before reloading\n");
             return;
         }
@@ -113,8 +123,10 @@ void gfcFXManager::deleteFX(int index) {
     fxManager.saveScrollPosition();
     fillLoadedScroll();
     fxManager.restoreScrollPosition();
-    progress->value(0);
-    progress->copy_label("FX Unloaded");
+    if (progress) {
+        progress->value(0);
+        progress->copy_label("FX Unloaded");
+    }
     //3. Update the FX Control Window to not show the newly loaded FX in the add menu.
     //TODO: DO this
     //4. Rebuild the hash map.

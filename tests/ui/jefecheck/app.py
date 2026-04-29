@@ -161,6 +161,48 @@ class JefeCheckApp:
             AppiumBy.IOS_PREDICATE,
             "elementType == 4 AND title == 'JefeCheck'")
 
+    def wait_for_startup_ready(self, timeout: float = 30.0) -> str:
+        """Block until the app's startup status label reaches a terminal state.
+
+        The status walks through 'Loading LUTs…' → 'Loading FXs…' →
+        'Ready (X FX, Y LUT)' (or 'Errors (...)') as the autoload
+        finishes. Tests that read FX/LUT panel contents call this
+        before asserting so they don't race the load. Returns the
+        final label text so callers can assert on the FX/LUT counts
+        without re-querying.
+
+        Re-queries the element each iteration and tolerates
+        StaleElementReference / NoSuchElement: the label's text
+        updates rapidly (every ~16ms during FX autoload), and Mac2's
+        AX cache invalidates the element reference whenever the text
+        changes — a single resolve-then-read pattern races the
+        update and throws. Treat any read failure as "not yet
+        terminal" and try again.
+        """
+        from selenium.common.exceptions import (
+            StaleElementReferenceException,
+            NoSuchElementException,
+        )
+        deadline = time.monotonic() + timeout
+        last_text = ""
+        while time.monotonic() < deadline:
+            try:
+                label = self.by_object_name_optional(locators.STATUSBAR_STARTUP)
+                if label is not None:
+                    text = label.get_attribute("value") or label.text or ""
+                    last_text = text
+                    if text.startswith("Startup: Ready") or \
+                            text.startswith("Startup: Errors"):
+                        return text
+            except (StaleElementReferenceException,
+                    NoSuchElementException):
+                pass
+            time.sleep(0.2)
+        raise AssertionError(
+            f"Startup did not reach a terminal state within {timeout}s "
+            f"(last seen: {last_text!r})"
+        )
+
     # XCUIKeyModifierFlags — see Apple docs.
     MOD_SHIFT   = 1 << 17
     MOD_CONTROL = 1 << 18

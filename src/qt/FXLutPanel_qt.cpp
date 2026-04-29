@@ -14,12 +14,119 @@
 FXStackPanel_Qt::FXStackPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("fxstack.panel");
     setAccessibleName("FX Stack");
-    auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
-    auto* placeholder = new QLabel("FX Stack — placeholder", this);
-    placeholder->setObjectName("fxstack.placeholder.label");
-    layout->addWidget(placeholder);
-    layout->addStretch(1);
+
+    // Available list: every FX fxManager has loaded. Stack list: the
+    // FXs currently on the active plate, top-down in render order.
+    auto* availableLabel = new QLabel("Available FXs", this);
+    availableLabel->setStyleSheet("color: #888;");
+    availableLabel->setObjectName("fxstack.available.label");
+
+    available_ = new QListWidget(this);
+    available_->setSelectionMode(QAbstractItemView::SingleSelection);
+    available_->setAlternatingRowColors(true);
+    available_->setObjectName("fxstack.available.list");
+    available_->setAccessibleName("Available FXs");
+    connect(available_, &QListWidget::itemDoubleClicked,
+            this, [this](QListWidgetItem*) { addSelected(); });
+
+    auto* stackLabel = new QLabel("On active plate", this);
+    stackLabel->setStyleSheet("color: #888;");
+    stackLabel->setObjectName("fxstack.stack.label");
+
+    stack_ = new QListWidget(this);
+    stack_->setSelectionMode(QAbstractItemView::SingleSelection);
+    stack_->setAlternatingRowColors(true);
+    stack_->setObjectName("fxstack.stack.list");
+    stack_->setAccessibleName("Active plate FX stack");
+
+    addBtn_ = new QPushButton("Add to active plate", this);
+    addBtn_->setObjectName("fxstack.add.button");
+    addBtn_->setAccessibleName("Add FX to active plate");
+    connect(addBtn_, &QPushButton::clicked,
+            this, [this]() { addSelected(); });
+
+    removeBtn_ = new QPushButton("Remove from stack", this);
+    removeBtn_->setObjectName("fxstack.remove.button");
+    removeBtn_->setAccessibleName("Remove FX from stack");
+    connect(removeBtn_, &QPushButton::clicked,
+            this, [this]() { removeSelected(); });
+
+    auto* refreshBtn = new QPushButton("Refresh", this);
+    refreshBtn->setObjectName("fxstack.refresh.button");
+    refreshBtn->setAccessibleName("Refresh FX list");
+    connect(refreshBtn, &QPushButton::clicked,
+            this, &FXStackPanel_Qt::refreshLists);
+
+    status_ = new QLabel(this);
+    status_->setStyleSheet("color: #888; font-style: italic;");
+    status_->setObjectName("fxstack.status.label");
+    status_->setAccessibleName("FX status");
+
+    auto* row = new QHBoxLayout();
+    row->setContentsMargins(0, 0, 0, 0);
+    row->addWidget(addBtn_);
+    row->addWidget(removeBtn_);
+    row->addWidget(refreshBtn);
+    row->addStretch(1);
+
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(8, 8, 8, 8);
+    outer->setSpacing(6);
+    outer->addWidget(availableLabel);
+    outer->addWidget(available_, /*stretch*/ 1);
+    outer->addWidget(stackLabel);
+    outer->addWidget(stack_, /*stretch*/ 1);
+    outer->addLayout(row);
+    outer->addWidget(status_);
+
+    refreshLists();
+}
+
+void FXStackPanel_Qt::refreshLists() {
+    // Available FXs come from fxManager (loaded via initializeInstallFXs).
+    available_->clear();
+    for (const auto& name : jefe::qt::getAvailableFXNames()) {
+        available_->addItem(QString::fromStdString(name));
+    }
+
+    // Stack always reflects the *active* plate so the panel feels
+    // tied to whichever quadrant the user is editing — same UX as
+    // the LUT browser's "Apply to active plate".
+    stack_->clear();
+    const int active = jefe::qt::getActivePlate();
+    if (active >= 0) {
+        for (const auto& name : jefe::qt::getFXStackOnPlate(active)) {
+            stack_->addItem(QString::fromStdString(name));
+        }
+    }
+
+    // No fancy state on the buttons — the bridge tolerates an
+    // empty selection (returns early). Cheap, fewer signals to wire.
+}
+
+void FXStackPanel_Qt::addSelected() {
+    const int row = available_->currentRow();
+    if (row < 0) return;
+    jefe::qt::addFXToActivePlate(row);
+    refreshLists();
+    if (status_ && available_->item(row)) {
+        status_->setText(QString("Added: %1")
+                             .arg(available_->item(row)->text()));
+    }
+}
+
+void FXStackPanel_Qt::removeSelected() {
+    const int row = stack_->currentRow();
+    if (row < 0) return;
+    const int active = jefe::qt::getActivePlate();
+    if (active < 0) return;
+    const auto* item = stack_->item(row);
+    const QString removedName = item ? item->text() : QString();
+    jefe::qt::removeFXFromPlate(active, row);
+    refreshLists();
+    if (status_) {
+        status_->setText(QString("Removed: %1").arg(removedName));
+    }
 }
 
 LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {

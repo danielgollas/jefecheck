@@ -13,8 +13,11 @@
 #include <QMainWindow>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 class QDockWidget;
+class FXStackPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
 class PlateManager_Qt;
@@ -50,6 +53,9 @@ private:
     void restoreLayout();
     void saveLayout();
 
+    void startAutoload();
+    void autoloadStep();
+
     GlViewport_Qt* viewport_ = nullptr;
     QDockWidget* plateDock_ = nullptr;
     QDockWidget* timelineDock_ = nullptr;
@@ -58,10 +64,25 @@ private:
     PlateManager_Qt* plateManagerWidget_ = nullptr;
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
+    FXStackPanel_Qt* fxPanelWidget_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
     QLabel* trackStatusLabel_ = nullptr;
     QLabel* loadedStatusLabel_ = nullptr;
+    QLabel* startupStatusLabel_ = nullptr;
     QTimer* playbackTimer_ = nullptr;
+
+    // Incremental autoload state. The autoload walks LUT files first
+    // (cheap, just glGenTextures), then FX files (expensive, GLSL
+    // compile per .jfx). Each step processes one file and reposts via
+    // QTimer::singleShot(0) so the event loop runs between compiles —
+    // without that yield the AX system can't register the window for
+    // tests until the load finishes (5-10 seconds), breaking the WDA
+    // launch handshake.
+    enum class AutoloadPhase { Idle, LUTs, FXs, Done };
+    AutoloadPhase autoloadPhase_ = AutoloadPhase::Idle;
+    std::vector<std::string> lutPaths_;
+    std::vector<std::string> fxPaths_;
+    int autoloadIdx_ = 0;
 
     std::unique_ptr<jefe::qt::RenderBridge_Qt> renderBridge_;
 };

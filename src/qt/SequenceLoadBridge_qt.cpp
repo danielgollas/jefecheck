@@ -7,9 +7,12 @@
 #include "../gfcplaybackmanager.h"
 #include "../gfctrackmanager.h"
 #include "../gfclutmanager.h"
+#include "../gfcfxmanager.h"
+#include "../gfcfxstack.h"
 #include "../gfcStructures.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
+#include "../ui/IApplication.h"
 #include "gfcplategui_qt.h"
 
 #include <algorithm>
@@ -20,11 +23,22 @@ extern gfcPlateManager plateManager;
 extern gfcPlaybackManager playbackManager;
 extern gfcTrackManager trackManager;
 extern gfcLUTManager lutManager;
+extern gfcFXManager fxManager;
 extern gfcSettings sett;
 
 namespace jefe::qt {
 
 void initializeRenderingChain() {
+    // FLTK's main.cpp probes GL_ARB_shader_objects + GL_EXT_framebuffer_object
+    // and writes these flags. The Qt build skips that probe but uses the
+    // same render path (gfcPlate::draw, super-shader, gfcFX::load), all of
+    // which check the flags. Set them unconditionally — every macOS /
+    // Linux / Windows GL stack the Qt build supports has both extensions.
+    // Without this, gfcFX::load returns early with "FXs not Supported"
+    // and fxArray stays empty no matter how many .jfx files we hand it.
+    sett.glsl = true;
+    sett.fbo = true;
+
     plateManager.initializeWidgets();
     trackManager.initializeWidgets();
     playbackManager.initializeWidgets();
@@ -220,10 +234,242 @@ void autoloadLUTs(const std::string& path) {
     std::sort(files.begin(), files.end());
     for (const auto& f : files) {
         lutManager.loadLUT(f);
+        jefe::ui::IApplication::instance().processEvents();
     }
     fprintf(stderr, "[jefecheck] Loaded %zu LUT file(s) from %s\n",
             files.size(), path.c_str());
     fflush(stderr);
+}
+
+namespace {
+// Count files in `path` whose lower-cased extension is in `exts`.
+// Used by the expected-count checks; cheap (one directory scan).
+int countFilesByExt(const std::string& path,
+                    std::initializer_list<const char*> exts) {
+    namespace fs = std::filesystem;
+    if (path.empty()) return 0;
+    std::error_code ec;
+    if (!fs::exists(path, ec) || !fs::is_directory(path, ec)) return 0;
+    int n = 0;
+    for (const auto& entry : fs::directory_iterator(path, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        for (const char* want : exts) {
+            if (ext == want) { ++n; break; }
+        }
+    }
+    return n;
+}
+
+// Walk `path` and ask fxManager to load every .jfx file. fxManager's
+// loadFX compiles GLSL via ARB shader extensions, so a GL context
+// must be current before calling — same constraint as autoloadLUTs.
+// Files are loaded in alphabetical order so the user-facing list is
+// stable across runs.
+//
+// Yields the Qt event loop between each load. Without this, the
+// 35-shader compile pass blocks the main thread for 3-5 seconds
+// straight; AX queries (and the WDA "find main window" handshake
+// that precedes them) time out, breaking back-to-back test launches.
+void autoloadFXsFromPath(const std::string& path) {
+    namespace fs = std::filesystem;
+    if (path.empty()) return;
+    std::error_code ec;
+    if (!fs::exists(path, ec) || !fs::is_directory(path, ec)) return;
+
+    std::vector<std::string> files;
+    for (const auto& entry : fs::directory_iterator(path, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        if (ext == ".jfx") files.push_back(entry.path().string());
+    }
+    std::sort(files.begin(), files.end());
+    for (const auto& f : files) {
+        fxManager.loadFX(f);
+        // Pump pending events so AX queries get answered between
+        // shader compiles. Cheap when the queue is empty.
+        jefe::ui::IApplication::instance().processEvents();
+    }
+    fxManager.sortFXs();
+    fxManager.rebuildFXHashMap();
+    fprintf(stderr, "[jefecheck] Loaded %zu FX file(s) from %s\n",
+            files.size(), path.c_str());
+    fflush(stderr);
+}
+}  // namespace
+
+int getExpectedFXCount() {
+    return countFilesByExt(sett.lutPath, {".jfx"});
+}
+
+int getLoadedFXCount() {
+    // fxManager has no public count getter; getMenuNames is cheap
+    // (just iterates fxArray) and returns a vector we can size.
+    return (int)fxManager.getMenuNames().size();
+}
+
+int getExpectedLUTCount() {
+    // .tga / image-based LUT loading is disabled in this build (see
+    // CLAUDE.md "Known issues" — trilerp.cpp IMAGELUT2D returns -1
+    // pending OIIO image reading). Counting .tga files in the
+    // expected total would always show a mismatch on a healthy
+    // install, so we exclude them.
+    return countFilesByExt(sett.lutPath, {".lut", ".cub", ".cube"});
+}
+
+int getLoadedLUTCount() {
+    return (int)lutManager.getAllNames().size();
+}
+
+std::string resolveInstallPath() {
+    namespace fs = std::filesystem;
+    std::vector<std::string> candidates;
+    if (!sett.lutPath.empty()) candidates.push_back(sett.lutPath);
+    candidates.push_back(::getApplicationDataPath() + "FX/");
+    candidates.push_back("FX/");
+    std::error_code ec;
+    for (const auto& p : candidates) {
+        if (p.empty()) continue;
+        if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
+            sett.lutPath = p;
+            return p;
+        }
+    }
+    return {};
+}
+
+std::vector<std::string> getInstallLUTPaths(const std::string& dir) {
+    namespace fs = std::filesystem;
+    if (dir.empty()) return {};
+    std::error_code ec;
+    if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) return {};
+    std::vector<std::string> files;
+    for (const auto& entry : fs::directory_iterator(dir, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        // Skip .tga — image-based LUT loading is disabled (see
+        // getExpectedLUTCount).
+        if (ext == ".lut" || ext == ".cub" || ext == ".cube") {
+            files.push_back(entry.path().string());
+        }
+    }
+    std::sort(files.begin(), files.end());
+    return files;
+}
+
+std::vector<std::string> getInstallFXPaths(const std::string& dir) {
+    namespace fs = std::filesystem;
+    if (dir.empty()) return {};
+    std::error_code ec;
+    if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) return {};
+    std::vector<std::string> files;
+    for (const auto& entry : fs::directory_iterator(dir, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        if (ext == ".jfx") files.push_back(entry.path().string());
+    }
+    std::sort(files.begin(), files.end());
+    return files;
+}
+
+void loadOneLUTFile(const std::string& path) {
+    const int before = (int)lutManager.getAllNames().size();
+    lutManager.loadLUT(path);
+    const int after = (int)lutManager.getAllNames().size();
+    if (after == before) {
+        // lutManager.loadLUT prints a generic "Error loading LUT" with
+        // no filename; tag it with which file we were trying so the
+        // user can fix the .cube/.lut/.cub on disk (or strip it from
+        // the install dir).
+        fprintf(stderr, "[jefecheck] LUT failed to parse: %s\n",
+                path.c_str());
+        fflush(stderr);
+    }
+}
+
+void loadOneFXFile(const std::string& path) {
+    fxManager.loadFX(path);
+}
+
+void finalizeFXLoad() {
+    fxManager.sortFXs();
+    fxManager.rebuildFXHashMap();
+}
+
+void initializeInstallFXs() {
+    // Reuses sett.lutPath for resolution — historically LUTs and FXs
+    // ship from the same FX/ directory in the install bundle and the
+    // dev tree (see CLAUDE.md). initializeInstallLUTs sets sett.lutPath
+    // to the chosen directory; we simply scan it again for .jfx files.
+    if (!sett.lutPath.empty()) autoloadFXsFromPath(sett.lutPath);
+}
+
+std::vector<std::string> getAvailableFXNames() {
+    return fxManager.getMenuNames();
+}
+
+std::vector<std::string> getFXStackOnPlate(int plateIdx) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    if (!stack) return {};
+    std::vector<std::string> names;
+    const int n = stack->getNumOfFXs();
+    names.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        gfcFX fx = stack->getFX(i);
+        names.push_back(fx.menuName.empty() ? fx.name : fx.menuName);
+    }
+    return names;
+}
+
+void addFXToActivePlate(int fxIndex) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    auto* stack = plateManager.getFXStack(q);
+    if (!stack) return;
+    // fxManager::getFX returns a copy — gfcFXStack::addFX takes by
+    // value and stores its own copy. Out-of-range indices return a
+    // default-constructed gfcFX (no shaders), which renders as a
+    // pass-through; cheap to detect by checking name afterwards but
+    // not worth the extra bridge round-trip in the common path.
+    gfcFX fx = fxManager.getFX(fxIndex);
+    if (fx.name.empty() && fx.menuName.empty()) return;
+    stack->addFX(fx);
+    plateManager.setChanged();
+}
+
+void removeFXFromPlate(int plateIdx, int stackIndex) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    if (!stack) return;
+    auto all = stack->getAllFXs();
+    if (stackIndex < 0 || stackIndex >= (int)all.size()) return;
+    // gfcFXStack lacks a single-FX remove — clear the stack and
+    // re-add everything except the removed entry. Cheap; stacks rarely
+    // exceed a few FXs and addFX is just a vector push.
+    stack->clearStack();
+    for (int i = 0; i < (int)all.size(); ++i) {
+        if (i == stackIndex) continue;
+        stack->addFX(all[i]);
+    }
+    plateManager.setChanged();
+}
+
+void clearFXStackOnPlate(int plateIdx) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    if (!stack) return;
+    stack->clearStack();
+    plateManager.setChanged();
 }
 
 std::vector<std::string> getLutNames() {

@@ -79,6 +79,64 @@ void applyLUTToActivePlate(int guiLutIndex);
 void applyLUTToPlate(int plateIdx, int guiLutIndex);
 int  getLUTOnActivePlate();
 
+// FX browser / stack — backs the Qt FX Stack dock. Each FX is a
+// shader effect (.jfx + .frag/.vert) loaded into fxManager; each
+// plate has its own gfcFXStack of selected effects in render order.
+//
+// initializeInstallFXs scans the standard FX directory (same path
+// resolution as initializeInstallLUTs) and calls fxManager.loadFX on
+// every .jfx; like LUTs the load compiles GLSL via the ARB shader
+// extensions, so a GL context must be current when called.
+//
+// addFXToActivePlate / removeFXFromActivePlate operate on whichever
+// plate is currently active. The stack-side functions
+// (getFXStackOnPlate, removeFXFromPlate) take an explicit plate idx
+// for tests and the per-card UI.
+void initializeInstallFXs();
+std::vector<std::string> getAvailableFXNames();
+std::vector<std::string> getFXStackOnPlate(int plateIdx);
+void addFXToActivePlate(int fxIndex);
+void removeFXFromPlate(int plateIdx, int stackIndex);
+void clearFXStackOnPlate(int plateIdx);
+
+// Startup health checks. The main window's "Startup:" status label
+// reads these to render Loading / Ready / Errors. Tests poll for
+// "Ready" before driving the panel so they don't race the autoload.
+//
+// Expected counts are computed by walking the install directory (the
+// same path initializeInstallLUTs/FXs use); loaded counts query
+// fxManager / lutManager. A discrepancy means a .jfx or .lut/.cube
+// failed parsing or shader compile — the user gets a status hint, the
+// suite catches the regression.
+int getExpectedFXCount();
+int getLoadedFXCount();
+int getExpectedLUTCount();
+int getLoadedLUTCount();
+
+// Incremental autoload — used by MainWindow_Qt to drive the LUT/FX
+// load one file per QTimer::singleShot(0, ...) iteration. Returning
+// to the event loop between each shader compile keeps the main
+// thread responsive: the AX system can register the window, paint
+// events fire, and Mac2 driver queries (find main window, find
+// element by predicate) get answered while the load is still in
+// progress. The monolithic autoloadFXsFromPath was blocking the
+// main thread for 5-10 seconds — long enough to break the WDA
+// launch handshake on test runs.
+//
+// resolveInstallPath returns the directory the install bundle ships
+// LUTs/FXs in, with the same fallback chain as initializeInstallLUTs.
+// Empty string means no directory was found. getInstall*Paths return
+// the list of files to load, sorted alphabetically. loadOne*File
+// performs the load (GL context must be current). finalizeFXLoad
+// runs sortFXs + rebuildFXHashMap once after the FX list is fully
+// populated.
+std::string resolveInstallPath();
+std::vector<std::string> getInstallLUTPaths(const std::string& dir);
+std::vector<std::string> getInstallFXPaths(const std::string& dir);
+void loadOneLUTFile(const std::string& path);
+void loadOneFXFile(const std::string& path);
+void finalizeFXLoad();
+
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering
 // chain picks up the new frame on the next draw call. Caller is
