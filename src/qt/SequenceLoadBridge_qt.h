@@ -204,6 +204,15 @@ void toggleFlipAll();
 void toggleFlopAll();
 void cycleTrackOnActivePlate(int direction);  // -1 prev, +1 next
 
+// Cycle the active plate's text-overlay mode through 0=off, 1=basic,
+// 2=extended (filename + resolution + format + EXIF metadata). The
+// `*All` variant cycles every plate in lockstep; both the active and
+// all-plate paths reset to mode 0 if all plates were already past
+// mode 2, mirroring the FLTK behavior. textMode is per-plate so
+// users can keep one plate clean while another shows metadata.
+void toggleTextModeActive();
+void toggleTextModeAll();
+
 // Set the displayed track for `plateIdx` directly. Mirrors
 // `applyLUTToPlate` — drives plateManager.setTrackOnPlate (which
 // updates both the GUI and the plate's internal track field) and

@@ -606,6 +606,18 @@ void toggleFlopAll() {
     plateManager.setChanged();
 }
 
+void toggleTextModeActive() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.toggleTextMode(q);
+    plateManager.setChanged();
+}
+
+void toggleTextModeAll() {
+    plateManager.toggleTextModeAll();
+    plateManager.setChanged();
+}
+
 void cycleTrackOnActivePlate(int direction) {
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;

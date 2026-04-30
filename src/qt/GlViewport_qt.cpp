@@ -224,6 +224,20 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             }
             break;
 
+        // Text overlay mode. T = cycle on active plate; Alt+T = cycle
+        // every plate in lockstep. Modes: 0 off, 1 basic (Track + frame
+        // counter), 2 extended (also format / EXIF). gfcPlate's
+        // labelString render path requires the GfcTextRenderer to be
+        // initialized — see PR-12 for that wiring.
+        case Qt::Key_T:
+            if (!ctrl) {
+                if (alt) jefe::qt::toggleTextModeAll();
+                else     jefe::qt::toggleTextModeActive();
+                handled();
+                return;
+            }
+            break;
+
         // Track cycling on active plate (matches FLTK's Up/Down handler).
         case Qt::Key_Up:
             if (!ctrl && !alt) {
