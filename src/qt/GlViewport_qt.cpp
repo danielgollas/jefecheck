@@ -195,48 +195,13 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             if (ctrl) { jefe::qt::setFramingMode(FRAMINGQUAD_ID);       handled(); return; }
             break;
 
-        // Fit-to-viewport. F = active plate; Shift+F = all plates.
-        case Qt::Key_F:
-            if (!ctrl && !alt) {
-                if (shift) jefe::qt::fitAllPlates();
-                else       jefe::qt::fitActivePlate();
-                handled();
-                return;
-            }
-            break;
-
-        // Mirror flips. H = horizontal (flop); V = vertical (flip).
-        // Shift extends the toggle to all plates.
-        case Qt::Key_H:
-            if (!ctrl && !alt) {
-                if (shift) jefe::qt::toggleFlopAll();
-                else       jefe::qt::toggleFlopActive();
-                handled();
-                return;
-            }
-            break;
-        case Qt::Key_V:
-            if (!ctrl && !alt) {
-                if (shift) jefe::qt::toggleFlipAll();
-                else       jefe::qt::toggleFlipActive();
-                handled();
-                return;
-            }
-            break;
-
-        // Text overlay mode. T = cycle on active plate; Alt+T = cycle
-        // every plate in lockstep. Modes: 0 off, 1 basic (Track + frame
-        // counter), 2 extended (also format / EXIF). gfcPlate's
-        // labelString render path requires the GfcTextRenderer to be
-        // initialized — see PR-12 for that wiring.
-        case Qt::Key_T:
-            if (!ctrl) {
-                if (alt) jefe::qt::toggleTextModeAll();
-                else     jefe::qt::toggleTextModeActive();
-                handled();
-                return;
-            }
-            break;
+        // F / Shift+F (fit), H / Shift+H (flop), V / Shift+V (flip),
+        // T / Alt+T (text mode) all live as ApplicationShortcut bindings
+        // in MainWindow_Qt — they need to fire regardless of whether the
+        // viewport, a dock widget, a spinbox, or the menu bar has focus.
+        // Keeping a duplicate handler here would either steal focus-
+        // dependent keystrokes from the focused input widget OR fire
+        // both the QShortcut and the viewport handler.
 
         // Track cycling on active plate (matches FLTK's Up/Down handler).
         case Qt::Key_Up:

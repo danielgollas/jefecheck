@@ -159,6 +159,48 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
 
+    // Plate-control shortcuts. Promoted from GlViewport_Qt's keyPressEvent
+    // to QShortcut at ApplicationShortcut context so they fire regardless
+    // of which widget has focus — clicking a plate-card spinbox or the
+    // timeline shouldn't disable Fit / Flip / Flop / Text-mode the way
+    // viewport-scoped handling did. Qt automatically suppresses these
+    // when the focused widget consumes the key (text editors emit
+    // ShortcutOverride for printable chars they're about to insert), so
+    // typing 'f' into the aspect combo still works.
+    //
+    // Arrow keys, Space, and Left/Right step are deliberately left in
+    // the viewport handler — those compete with widget-level meanings
+    // (spinbox value adjust, button-press activation, text-caret motion)
+    // where promoting would break expected widget behavior.
+    auto bindPlateAction = [this](QKeySequence seq, std::function<void()> action) {
+        auto* sc = new QShortcut(seq, this);
+        sc->setContext(Qt::ApplicationShortcut);
+        connect(sc, &QShortcut::activated, this, [this, action]() {
+            action();
+            if (viewport_) viewport_->update();
+            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        });
+    };
+    // Fit-to-viewport: F = active plate, Shift+F = all plates.
+    bindPlateAction(QKeySequence(Qt::Key_F),
+                    []() { jefe::qt::fitActivePlate(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_F),
+                    []() { jefe::qt::fitAllPlates(); });
+    // Mirror flips: H = horizontal (flop), V = vertical (flip).
+    bindPlateAction(QKeySequence(Qt::Key_H),
+                    []() { jefe::qt::toggleFlopActive(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_H),
+                    []() { jefe::qt::toggleFlopAll(); });
+    bindPlateAction(QKeySequence(Qt::Key_V),
+                    []() { jefe::qt::toggleFlipActive(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_V),
+                    []() { jefe::qt::toggleFlipAll(); });
+    // Text overlay cycle: T = active plate, Alt+T = all plates.
+    bindPlateAction(QKeySequence(Qt::Key_T),
+                    []() { jefe::qt::toggleTextModeActive(); });
+    bindPlateAction(QKeySequence(Qt::ALT | Qt::Key_T),
+                    []() { jefe::qt::toggleTextModeAll(); });
+
     // LUT + FX autoload runs after the window is shown and the AX
     // system has had a chance to register it. The 250ms initial delay
     // matters: with a 0ms QTimer the load lambda fires before AppKit
