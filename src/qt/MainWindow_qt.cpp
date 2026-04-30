@@ -309,9 +309,11 @@ void MainWindow_Qt::buildMenuBar() {
                         QKeySequence(Qt::CTRL | Qt::Key_O),
                         []() { /* TODO: wire to load callback */ })
             ->setObjectName("menu.file.load");
-    fileMenu->addAction("&Render…",
-                        QKeySequence(Qt::CTRL | Qt::Key_R),
-                        []() { /* TODO */ })
+    // Render… is a stub for the future Render Manager dock. No
+    // shortcut yet — the FLTK build uses F4 for it (0xffc3 in the
+    // FLUID menu), but adding it here would shadow the plate-reset
+    // Cmd+R binding via QAction's automatic shortcut handling.
+    fileMenu->addAction("&Render…", []() { /* TODO */ })
             ->setObjectName("menu.file.render");
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
