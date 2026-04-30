@@ -24,11 +24,20 @@ DOCK_TIMELINE = "dock.timeline"
 DOCK_FXSTACK = "dock.fxstack"
 DOCK_LUTS = "dock.luts"
 
-# Menus / actions
+# Menus / actions. Note: macOS folds Qt's QMenuBar into the system
+# menu bar, which lives in a separate AX tree from the application
+# window — `by_object_name(menu.*)` does NOT resolve via Mac2.
+# These constants are kept as documentation of the canonical
+# objectNames; functional menu testing happens via the keyboard
+# shortcut bound to each action instead.
 MENU_FILE = "menu.file"
 MENU_FILE_LOAD = "menu.file.load"
 MENU_FILE_PREFERENCES = "menu.file.preferences"
 MENU_FILE_QUIT = "menu.file.quit"
+MENU_VIEW = "menu.view"
+MENU_VIEW_FULLSCREEN = "menu.view.fullscreen"
+MENU_HELP = "menu.help"
+MENU_HELP_ABOUT = "menu.help.about"
 
 # Transport
 TRANSPORT_PLAY = "transport.play.button"

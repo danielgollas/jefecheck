@@ -20,6 +20,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QSettings>
 #include <QShortcut>
 #include <QStatusBar>
@@ -339,6 +340,33 @@ void MainWindow_Qt::buildMenuBar() {
 
     auto* viewMenu = mb->addMenu("&View");
     viewMenu->setObjectName("menu.view");
+    // Fullscreen toggle: F11 (cross-platform) + Cmd+Ctrl+F (macOS
+    // native standard). FLTK uses Cmd+F (0x40066), but Cmd+F is
+    // already conventionally Find on macOS — the F11 / Cmd+Ctrl+F
+    // pairing is what every modern macOS app uses, and we have no
+    // Find functionality to conflict with anyway.
+    auto* fullscreenAction = viewMenu->addAction("&Fullscreen",
+        this, [this]() {
+            if (isFullScreen()) {
+                showNormal();
+            } else {
+                showFullScreen();
+            }
+        });
+    fullscreenAction->setObjectName("menu.view.fullscreen");
+    fullscreenAction->setShortcuts({
+        QKeySequence(Qt::Key_F11),
+        QKeySequence(Qt::CTRL | Qt::META | Qt::Key_F),
+    });
+    fullscreenAction->setCheckable(true);
+    // Keep the menu checkmark in sync with the actual window state —
+    // user can also toggle via the macOS green window-zoom button or
+    // the system menu's Enter Full Screen, and the action's check
+    // mark would otherwise drift.
+    connect(fullscreenAction, &QAction::triggered, this, [fullscreenAction, this]() {
+        fullscreenAction->setChecked(isFullScreen());
+    });
+    viewMenu->addSeparator();
     // Toggle actions for each dock. createDockWidget() exposes a built-in
     // toggleViewAction() that flips visibility and tracks state for us.
     auto rememberDockToggle = [viewMenu](QDockWidget* d) {
@@ -348,7 +376,33 @@ void MainWindow_Qt::buildMenuBar() {
     // Filled in after buildDocks() runs, see below.
     (void)rememberDockToggle;
 
-    mb->addMenu("&Help")->setObjectName("menu.help");
+    auto* helpMenu = mb->addMenu("&Help");
+    helpMenu->setObjectName("menu.help");
+    auto* aboutAction = helpMenu->addAction("&About JefeCheck",
+        this, [this]() {
+            QMessageBox::about(this, tr("About JefeCheck"),
+                tr("<h3>JefeCheck %1</h3>"
+                   "<p>Professional video frame review and color correction.</p>"
+                   "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
+                   "Originally written 2006-2014, modernized 2026 for "
+                   "open-source release under GPL v2.</p>"
+                   "<p><a href='https://github.com/danielgollas/jefecheck'>"
+                   "github.com/danielgollas/jefecheck</a></p>"
+                   "<p style='font-size:small;color:gray'>Built %2 %3</p>")
+                // Hardcoded copy of gfcStructures.h's JEFE_VERSION —
+                // can't include the header here because it pulls glad,
+                // which doesn't share a TU with Qt's QtGui on macOS.
+                // Bumped together with the source-of-truth define and
+                // CMakeLists.txt's project() VERSION, per CLAUDE.md.
+                .arg(QStringLiteral("1.7.0"))
+                .arg(QStringLiteral(__DATE__))
+                .arg(QStringLiteral(__TIME__)));
+        });
+    aboutAction->setObjectName("menu.help.about");
+    // Suppress Qt's macOS auto-promotion of "About …" actions into
+    // the application menu — that would steal the action and the
+    // bundled copy in Help would silently disappear.
+    aboutAction->setMenuRole(QAction::NoRole);
 }
 
 void MainWindow_Qt::buildDocks() {
