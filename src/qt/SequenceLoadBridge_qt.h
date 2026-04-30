@@ -213,6 +213,20 @@ void cycleTrackOnActivePlate(int direction);  // -1 prev, +1 next
 void toggleTextModeActive();
 void toggleTextModeAll();
 
+// Plate reset shortcuts. `resetActivePlate` clears every per-plate
+// override on the active plate (zoom, pan, rotation, flip/flop,
+// channel masks, color correction) — same scope as the FLTK Ctrl+R.
+// `resetAllPlates` runs that across the four plates. The color-only
+// variants leave transformations alone and only reset gamma /
+// exposure / contrast / brightness / saturation, mirroring FLTK's
+// Shift+R behavior. All four flag plateManager dirty so the next
+// paint shows the cleaned state, and call refreshAllCards via the
+// caller so the plate-card spinboxes pick up the new values.
+void resetActivePlate();
+void resetAllPlates();
+void resetActiveColorCorrection();
+void resetAllColorCorrections();
+
 // Set the displayed track for `plateIdx` directly. Mirrors
 // `applyLUTToPlate` — drives plateManager.setTrackOnPlate (which
 // updates both the GUI and the plate's internal track field) and

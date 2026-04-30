@@ -200,6 +200,22 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                     []() { jefe::qt::toggleTextModeActive(); });
     bindPlateAction(QKeySequence(Qt::ALT | Qt::Key_T),
                     []() { jefe::qt::toggleTextModeAll(); });
+    // Plate reset: Ctrl+R clears every per-plate override on the active
+    // plate (zoom, pan, rotation, flip/flop, channel masks, color
+    // correction); Ctrl+Alt+R does the same across all plates. Shift+R /
+    // Shift+Alt+R reset only color correction (gamma, exposure, BCS),
+    // mirroring FLTK's MenuCallbacks.cpp shortcuts. The bare `r` key
+    // FLTK uses for "toggle red channel" is intentionally NOT promoted
+    // — a printable letter at app scope would block typing 'r' into
+    // any text input.
+    bindPlateAction(QKeySequence(Qt::CTRL | Qt::Key_R),
+                    []() { jefe::qt::resetActivePlate(); });
+    bindPlateAction(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_R),
+                    []() { jefe::qt::resetAllPlates(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_R),
+                    []() { jefe::qt::resetActiveColorCorrection(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_R),
+                    []() { jefe::qt::resetAllColorCorrections(); });
 
     // LUT + FX autoload runs after the window is shown and the AX
     // system has had a chance to register it. The 250ms initial delay

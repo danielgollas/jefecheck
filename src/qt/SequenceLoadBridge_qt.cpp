@@ -618,6 +618,30 @@ void toggleTextModeAll() {
     plateManager.setChanged();
 }
 
+void resetActivePlate() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.resetPlate(q);
+    plateManager.setChanged();
+}
+
+void resetAllPlates() {
+    plateManager.resetAllPlates();
+    plateManager.setChanged();
+}
+
+void resetActiveColorCorrection() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.resetColorCorrection(q);
+    plateManager.setChanged();
+}
+
+void resetAllColorCorrections() {
+    plateManager.resetAllColorCorrections();
+    plateManager.setChanged();
+}
+
 void cycleTrackOnActivePlate(int direction) {
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;
