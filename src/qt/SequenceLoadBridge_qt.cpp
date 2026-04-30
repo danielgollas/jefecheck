@@ -565,6 +565,22 @@ void toggleFlopAll() {
     plateManager.setChanged();
 }
 
+void setTrackOnPlate(int plateIdx, int trackIdx) {
+    if (plateIdx < 0 || trackIdx < 0 || trackIdx > 3) return;
+    plateManager.setTrackOnPlate(plateIdx, trackIdx);
+    // Enable preview rendering on this plate. Each plate has its own
+    // showPreview flag; the loadFileIntoPlate path only set it on the
+    // plate that received the --open-file. So if the user pointed
+    // plate 2 at track A after --open-file plate 0, plate 2 sat with
+    // showPreview=false and gfcPlate::draw skipped rendering even
+    // though track A had a loaded sequence. A track switch is an
+    // explicit "show me this content" gesture, so we always flip the
+    // flag — gfcPlate's draw path still guards on theFrame.loaded so
+    // pointing at an empty track stays blank rather than crashing.
+    plateManager.setPlateShowPreview(plateIdx, true);
+    plateManager.setChanged();
+}
+
 void cycleTrackOnActivePlate(int direction) {
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;
@@ -572,14 +588,10 @@ void cycleTrackOnActivePlate(int direction) {
     track += (direction >= 0 ? 1 : -1);
     if (track < 0) track = 3;
     if (track > 3) track = 0;
-    plateManager.setTrackOnPlate(q, track);
-    plateManager.setChanged();
-}
-
-void setTrackOnPlate(int plateIdx, int trackIdx) {
-    if (plateIdx < 0 || trackIdx < 0 || trackIdx > 3) return;
-    plateManager.setTrackOnPlate(plateIdx, trackIdx);
-    plateManager.setChanged();
+    // Route through setTrackOnPlate so the showPreview-on-track-change
+    // logic stays in one place (keyboard cycle and combo selection
+    // both end up here).
+    setTrackOnPlate(q, track);
 }
 
 int getTrackOnPlate(int plateIdx) {
