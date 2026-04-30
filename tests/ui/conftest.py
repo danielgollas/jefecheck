@@ -123,6 +123,16 @@ def pytest_addoption(parser):
              "send_keys, send_shortcut). Useful for watching the suite "
              "drive the app. Default: 0.",
     )
+    # --update-baselines: regenerate visual-diff baselines after an
+    # intentional UI change (theme, layout, dock arrangement). Without
+    # this flag, test_visual.py compares against committed baselines.
+    parser.addoption(
+        "--update-baselines",
+        action="store_true",
+        default=False,
+        help="Overwrite baseline screenshots in tests/ui/baselines/ "
+             "instead of comparing. Use after intentional UI changes.",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -155,16 +165,6 @@ def app(appium_server, jefecheck_binary, tmp_path_factory, slow_mo):
 
 
 # Phase D: visual regression -----------------------------------------
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--update-baselines",
-        action="store_true",
-        default=False,
-        help="Overwrite baseline screenshots in tests/ui/baselines/ "
-             "instead of comparing. Use after intentional UI changes.",
-    )
-
 
 @pytest.fixture(scope="session")
 def update_baselines(request) -> bool:

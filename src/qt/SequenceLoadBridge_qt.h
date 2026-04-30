@@ -25,6 +25,24 @@ void initializeRenderingChain();
 // MainWindow_Qt once the QOpenGLWidget is alive.
 void initializeInstallLUTs();
 
+// Loads Roboto Regular + Bold from the install bundle's fonts/ dir
+// (with a dev-mode fallback to ./fonts/, matching CLAUDE.md's symlink
+// convention) and configures the GfcTextRenderer's DPI / shadow
+// defaults. The renderer's drawText path short-circuits when no font
+// is loaded, so without this every gfc_gl_draw call from gfcPlate
+// (plate label, frame number, AOI corner readouts) is a silent no-op.
+//
+// `dpiScale` is the QOpenGLWidget's devicePixelRatioF() — the renderer
+// bakes glyph atlases at fontSize * dpiScale texels and renders in a
+// pixel-exact ortho projection, so the value must match the framebuffer's
+// physical:logical pixel ratio (2 on macOS Retina).
+//
+// The bundled fonts are tiny (~170KB each) and FreeType reads them into
+// a std::vector — no GL state is touched on first call. The atlas
+// caches are cleared on font reload, which DOES call glDeleteTextures,
+// so the caller MUST make the GL context current before invoking.
+void initializeTextRenderer(float dpiScale);
+
 // Per-frame tick. Drives the playback engine and reads back
 // plateManager's "dirty" flag (setChanged was called). Caller should
 // schedule this on a QTimer at ~60 Hz and ask the viewport to repaint
@@ -185,6 +203,29 @@ void toggleFlopActive();
 void toggleFlipAll();
 void toggleFlopAll();
 void cycleTrackOnActivePlate(int direction);  // -1 prev, +1 next
+
+// Cycle the active plate's text-overlay mode through 0=off, 1=basic,
+// 2=extended (filename + resolution + format + EXIF metadata). The
+// `*All` variant cycles every plate in lockstep; both the active and
+// all-plate paths reset to mode 0 if all plates were already past
+// mode 2, mirroring the FLTK behavior. textMode is per-plate so
+// users can keep one plate clean while another shows metadata.
+void toggleTextModeActive();
+void toggleTextModeAll();
+
+// Plate reset shortcuts. `resetActivePlate` clears every per-plate
+// override on the active plate (zoom, pan, rotation, flip/flop,
+// channel masks, color correction) — same scope as the FLTK Ctrl+R.
+// `resetAllPlates` runs that across the four plates. The color-only
+// variants leave transformations alone and only reset gamma /
+// exposure / contrast / brightness / saturation, mirroring FLTK's
+// Shift+R behavior. All four flag plateManager dirty so the next
+// paint shows the cleaned state, and call refreshAllCards via the
+// caller so the plate-card spinboxes pick up the new values.
+void resetActivePlate();
+void resetAllPlates();
+void resetActiveColorCorrection();
+void resetAllColorCorrections();
 
 // Set the displayed track for `plateIdx` directly. Mirrors
 // `applyLUTToPlate` — drives plateManager.setTrackOnPlate (which

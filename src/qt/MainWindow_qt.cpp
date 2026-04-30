@@ -159,6 +159,64 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
 
+    // Plate-control shortcuts. Promoted from GlViewport_Qt's keyPressEvent
+    // to QShortcut at ApplicationShortcut context so they fire regardless
+    // of which widget has focus — clicking a plate-card spinbox or the
+    // timeline shouldn't disable Fit / Flip / Flop / Text-mode the way
+    // viewport-scoped handling did. Qt automatically suppresses these
+    // when the focused widget consumes the key (text editors emit
+    // ShortcutOverride for printable chars they're about to insert), so
+    // typing 'f' into the aspect combo still works.
+    //
+    // Arrow keys, Space, and Left/Right step are deliberately left in
+    // the viewport handler — those compete with widget-level meanings
+    // (spinbox value adjust, button-press activation, text-caret motion)
+    // where promoting would break expected widget behavior.
+    auto bindPlateAction = [this](QKeySequence seq, std::function<void()> action) {
+        auto* sc = new QShortcut(seq, this);
+        sc->setContext(Qt::ApplicationShortcut);
+        connect(sc, &QShortcut::activated, this, [this, action]() {
+            action();
+            if (viewport_) viewport_->update();
+            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        });
+    };
+    // Fit-to-viewport: F = active plate, Shift+F = all plates.
+    bindPlateAction(QKeySequence(Qt::Key_F),
+                    []() { jefe::qt::fitActivePlate(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_F),
+                    []() { jefe::qt::fitAllPlates(); });
+    // Mirror flips: H = horizontal (flop), V = vertical (flip).
+    bindPlateAction(QKeySequence(Qt::Key_H),
+                    []() { jefe::qt::toggleFlopActive(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_H),
+                    []() { jefe::qt::toggleFlopAll(); });
+    bindPlateAction(QKeySequence(Qt::Key_V),
+                    []() { jefe::qt::toggleFlipActive(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_V),
+                    []() { jefe::qt::toggleFlipAll(); });
+    // Text overlay cycle: T = active plate, Alt+T = all plates.
+    bindPlateAction(QKeySequence(Qt::Key_T),
+                    []() { jefe::qt::toggleTextModeActive(); });
+    bindPlateAction(QKeySequence(Qt::ALT | Qt::Key_T),
+                    []() { jefe::qt::toggleTextModeAll(); });
+    // Plate reset: Ctrl+R clears every per-plate override on the active
+    // plate (zoom, pan, rotation, flip/flop, channel masks, color
+    // correction); Ctrl+Alt+R does the same across all plates. Shift+R /
+    // Shift+Alt+R reset only color correction (gamma, exposure, BCS),
+    // mirroring FLTK's MenuCallbacks.cpp shortcuts. The bare `r` key
+    // FLTK uses for "toggle red channel" is intentionally NOT promoted
+    // — a printable letter at app scope would block typing 'r' into
+    // any text input.
+    bindPlateAction(QKeySequence(Qt::CTRL | Qt::Key_R),
+                    []() { jefe::qt::resetActivePlate(); });
+    bindPlateAction(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_R),
+                    []() { jefe::qt::resetAllPlates(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_R),
+                    []() { jefe::qt::resetActiveColorCorrection(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_R),
+                    []() { jefe::qt::resetAllColorCorrections(); });
+
     // LUT + FX autoload runs after the window is shown and the AX
     // system has had a chance to register it. The 250ms initial delay
     // matters: with a 0ms QTimer the load lambda fires before AppKit
@@ -251,9 +309,11 @@ void MainWindow_Qt::buildMenuBar() {
                         QKeySequence(Qt::CTRL | Qt::Key_O),
                         []() { /* TODO: wire to load callback */ })
             ->setObjectName("menu.file.load");
-    fileMenu->addAction("&Render…",
-                        QKeySequence(Qt::CTRL | Qt::Key_R),
-                        []() { /* TODO */ })
+    // Render… is a stub for the future Render Manager dock. No
+    // shortcut yet — the FLTK build uses F4 for it (0xffc3 in the
+    // FLUID menu), but adding it here would shadow the plate-reset
+    // Cmd+R binding via QAction's automatic shortcut handling.
+    fileMenu->addAction("&Render…", []() { /* TODO */ })
             ->setObjectName("menu.file.render");
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
@@ -487,6 +547,18 @@ void MainWindow_Qt::onFileDropped(const QString& path) {
 
 void MainWindow_Qt::startAutoload() {
     if (!viewport_) return;
+
+    // Text renderer init runs once before the LUT/FX autoload — it's
+    // cheap (FreeType reads ~170KB into memory; no atlas bake yet) and
+    // gating it behind makeCurrent matches the LUT-load contract: any
+    // path that may touch GL state runs with the viewport's context
+    // current. Without this, gfc_gl_draw calls from gfcPlate (plate
+    // label, frame number, AOI corner readouts) silently early-return
+    // because GfcTextRenderer::fontLoaded stays false.
+    viewport_->makeCurrent();
+    jefe::qt::initializeTextRenderer(viewport_->devicePixelRatioF());
+    viewport_->doneCurrent();
+
     const std::string dir = jefe::qt::resolveInstallPath();
     if (dir.empty()) {
         if (startupStatusLabel_) {

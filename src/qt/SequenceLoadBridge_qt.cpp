@@ -12,6 +12,7 @@
 #include "../gfcStructures.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
+#include "../gfcTextRenderer.h"
 #include "../ui/IApplication.h"
 #include "gfcplategui_qt.h"
 
@@ -56,6 +57,46 @@ void initializeRenderingChain() {
     if (sett.lutPath.empty()) {
         sett.lutPath = ::getApplicationDataPath() + "FX/";
     }
+}
+
+void initializeTextRenderer(float dpiScale) {
+    namespace fs = std::filesystem;
+    // Path resolution mirrors the FX/LUT autoload: prefer the bundled
+    // path, fall back to the dev-mode `./fonts/` symlink. FLTK's
+    // main.cpp tries both in the same order; we keep the convention so
+    // a CLAUDE.md-style dev setup (symlink fonts → src/fonts) keeps
+    // working in the Qt build too.
+    const std::string bundled = ::getApplicationDataPath() + "fonts/";
+    const std::string dev     = "fonts/";
+    const std::string regularName = "Roboto-Regular.ttf";
+    const std::string boldName    = "Roboto-Bold.ttf";
+
+    auto tryLoadRegular = [&](const std::string& dir) -> bool {
+        const std::string p = dir + regularName;
+        std::error_code ec;
+        if (!fs::exists(p, ec)) return false;
+        return textRenderer().loadFont(p);
+    };
+    auto tryLoadBold = [&](const std::string& dir) -> bool {
+        const std::string p = dir + boldName;
+        std::error_code ec;
+        if (!fs::exists(p, ec)) return false;
+        return textRenderer().loadBoldFont(p);
+    };
+
+    if (!tryLoadRegular(bundled)) tryLoadRegular(dev);
+    if (!tryLoadBold(bundled))    tryLoadBold(dev);
+
+    // DPI scale drives the atlas bake size (fontSize * dpiScale texels)
+    // so glyphs stay crisp on Retina. The shadow offset is in physical
+    // pixels — 1 logical pixel down-right matches FLTK's default and
+    // gives plate labels a readable drop without the blurry feel of a
+    // larger blur radius.
+    textRenderer().setDPIScale(dpiScale);
+    textRenderer().setShadowEnabled(true);
+    textRenderer().setShadowOffset(dpiScale, -dpiScale);
+    textRenderer().setShadowColor(0, 0, 0, 0.5f);
+    textRenderer().setShadowBlur(0);
 }
 
 void initializeInstallLUTs() {
@@ -590,6 +631,42 @@ void toggleFlipAll() {
 
 void toggleFlopAll() {
     plateManager.toggleFlopAll();
+    plateManager.setChanged();
+}
+
+void toggleTextModeActive() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.toggleTextMode(q);
+    plateManager.setChanged();
+}
+
+void toggleTextModeAll() {
+    plateManager.toggleTextModeAll();
+    plateManager.setChanged();
+}
+
+void resetActivePlate() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.resetPlate(q);
+    plateManager.setChanged();
+}
+
+void resetAllPlates() {
+    plateManager.resetAllPlates();
+    plateManager.setChanged();
+}
+
+void resetActiveColorCorrection() {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.resetColorCorrection(q);
+    plateManager.setChanged();
+}
+
+void resetAllColorCorrections() {
+    plateManager.resetAllColorCorrections();
     plateManager.setChanged();
 }
 
