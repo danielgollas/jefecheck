@@ -112,6 +112,34 @@ bool tickPlayback() {
     // uploads happen on the calling thread.
     trackManager.generateTextures();
 
+    // After uploading, walk the plates to flip any that are still in
+    // showPreview mode but whose sequence now has at least one playback
+    // frame on the GPU. The drop / loadFileIntoPlate path enables
+    // showPreview so the previewFrame paints immediately; without this
+    // flip the plate would never advance to the playback path
+    // (gfcPlate::getFrameAndSequence's `if (showPreview)` branch never
+    // resolves). FLTK gets the flip for free because its
+    // `getShowPreview()` reads `loadWindow->visible()` — closing the
+    // Load dialog implicitly switches the plate. Qt has no Load dialog,
+    // so we have to drive the transition explicitly here.
+    //
+    // Single-frame "sequences" stay in showPreview = true: the preview
+    // frame *is* the displayed image, and the playback path would just
+    // re-load the same texture for no visual benefit. Detected by
+    // numPreviewFrames == 1 (multi-image discovery from
+    // findSequenceFiles).
+    for (int p = 0; p < GFC_MAX_PLATES; ++p) {
+        auto* gui = dynamic_cast<gfcPlateGUI_Qt*>(plateManager.getPlateGUI(p));
+        if (!gui || !gui->getShowPreview()) continue;
+        const int trackIdx = plateManager.getTrackOnPlate(p);
+        auto* seq = trackManager.getSequence(trackIdx);
+        if (!seq) continue;
+        if (seq->getNumPreviewFrames() <= 1) continue;
+        if (seq->getRangeEnd() <= 0) continue;  // no frames uploaded yet
+        plateManager.setPlateShowPreview(p, false);
+        plateManager.setChanged();
+    }
+
     // Pushes per-track widget state (visible range, current frame, etc.)
     // into the gfcSequenceGUI for each sequence. In the Qt build the
     // GUI methods are mostly stubs today, but calling this keeps the
