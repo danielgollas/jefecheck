@@ -25,6 +25,24 @@ void initializeRenderingChain();
 // MainWindow_Qt once the QOpenGLWidget is alive.
 void initializeInstallLUTs();
 
+// Loads Roboto Regular + Bold from the install bundle's fonts/ dir
+// (with a dev-mode fallback to ./fonts/, matching CLAUDE.md's symlink
+// convention) and configures the GfcTextRenderer's DPI / shadow
+// defaults. The renderer's drawText path short-circuits when no font
+// is loaded, so without this every gfc_gl_draw call from gfcPlate
+// (plate label, frame number, AOI corner readouts) is a silent no-op.
+//
+// `dpiScale` is the QOpenGLWidget's devicePixelRatioF() — the renderer
+// bakes glyph atlases at fontSize * dpiScale texels and renders in a
+// pixel-exact ortho projection, so the value must match the framebuffer's
+// physical:logical pixel ratio (2 on macOS Retina).
+//
+// The bundled fonts are tiny (~170KB each) and FreeType reads them into
+// a std::vector — no GL state is touched on first call. The atlas
+// caches are cleared on font reload, which DOES call glDeleteTextures,
+// so the caller MUST make the GL context current before invoking.
+void initializeTextRenderer(float dpiScale);
+
 // Per-frame tick. Drives the playback engine and reads back
 // plateManager's "dirty" flag (setChanged was called). Caller should
 // schedule this on a QTimer at ~60 Hz and ask the viewport to repaint

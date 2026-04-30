@@ -487,6 +487,18 @@ void MainWindow_Qt::onFileDropped(const QString& path) {
 
 void MainWindow_Qt::startAutoload() {
     if (!viewport_) return;
+
+    // Text renderer init runs once before the LUT/FX autoload — it's
+    // cheap (FreeType reads ~170KB into memory; no atlas bake yet) and
+    // gating it behind makeCurrent matches the LUT-load contract: any
+    // path that may touch GL state runs with the viewport's context
+    // current. Without this, gfc_gl_draw calls from gfcPlate (plate
+    // label, frame number, AOI corner readouts) silently early-return
+    // because GfcTextRenderer::fontLoaded stays false.
+    viewport_->makeCurrent();
+    jefe::qt::initializeTextRenderer(viewport_->devicePixelRatioF());
+    viewport_->doneCurrent();
+
     const std::string dir = jefe::qt::resolveInstallPath();
     if (dir.empty()) {
         if (startupStatusLabel_) {
