@@ -16,12 +16,14 @@
 #include <QCloseEvent>
 #include <QDir>
 #include <QDockWidget>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSettings>
 #include <QShortcut>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QTimer>
 
@@ -305,10 +307,37 @@ void MainWindow_Qt::buildMenuBar() {
 
     auto* fileMenu = mb->addMenu("&File");
     fileMenu->setObjectName("menu.file");
-    fileMenu->addAction("&Load Sequence…",
+    // Pick one file via QFileDialog and route it into the active
+    // plate using the same path drag-drop uses (loadFileIntoPlate →
+    // loadPreview → optional async sequence load). The dialog opens
+    // at the directory of the most recently loaded file (persisted in
+    // QSettings) so the user can step through a folder of takes
+    // without re-navigating each time. A fully-featured Load Manager
+    // (per-track frame range, scale, gamma, channel picker à la the
+    // FLTK loadWindow) is intentionally deferred — UX revision needed
+    // first, per the migration plan's PR-LAST note.
+    auto* loadAction = fileMenu->addAction("&Load Sequence…",
                         QKeySequence(Qt::CTRL | Qt::Key_O),
-                        []() { /* TODO: wire to load callback */ })
-            ->setObjectName("menu.file.load");
+                        this, [this]() {
+        QSettings settings;
+        const QString lastDir = settings.value(
+            "MainWindow/lastLoadDir",
+            QStandardPaths::writableLocation(
+                QStandardPaths::PicturesLocation)).toString();
+        const QString filter = tr(
+            "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff "
+            "*.tga *.bmp);;All files (*)");
+        const QString chosen = QFileDialog::getOpenFileName(
+            this, tr("Load Sequence"), lastDir, filter);
+        if (chosen.isEmpty()) return;
+        settings.setValue("MainWindow/lastLoadDir",
+                          QFileInfo(chosen).absolutePath());
+        const int plate = jefe::qt::getActivePlate();
+        // Active plate is 0-based and getActivePlate clamps to a valid
+        // index (default 0) — no out-of-range path to guard.
+        loadFileIntoPlate(plate, chosen);
+    });
+    loadAction->setObjectName("menu.file.load");
     // Render… is a stub for the future Render Manager dock. No
     // shortcut yet — the FLTK build uses F4 for it (0xffc3 in the
     // FLUID menu), but adding it here would shadow the plate-reset
