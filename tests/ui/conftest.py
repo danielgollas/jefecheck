@@ -202,3 +202,45 @@ def visual_app(appium_server, jefecheck_binary, tmp_path,
     )
     yield instance
     instance.quit()
+
+
+@pytest.fixture(scope="session")
+def multiview_sequence() -> Path:
+    """Path to the first frame of the committed multi-view EXR sequence.
+
+    The fixture is a 4-frame, 64×64 numbered EXR sequence with two named
+    layers: the default RGB and a `right` view (channel names
+    `R, G, B, right.R, right.G, right.B`). Synthesized once with
+    `oiiotool` (see scripts/gen_multiview_fixture.sh in the test plan
+    docs); committed because regenerating from oiiotool isn't
+    deterministic enough to leave un-committed in CI.
+
+    Pointing at frame 0001 lets gfcSequence::findSequenceFiles discover
+    the rest of the sequence — the test for layer-switch reload depends
+    on getNumPreviewFrames() > 1 so the bridge actually runs the async
+    re-decode (single frames take a different code path).
+    """
+    seq_dir = fixtures_dir() / "multiview_seq"
+    first_frame = seq_dir / "multiview.0001.exr"
+    if not first_frame.exists():
+        pytest.skip(f"Multi-view EXR sequence missing at {seq_dir}")
+    return first_frame
+
+
+@pytest.fixture
+def multiview_app(appium_server, jefecheck_binary, tmp_path,
+                  multiview_sequence):
+    """Launches JefeCheck with the multi-view EXR sequence preloaded.
+
+    Layer-combo tests use this so plate 0's track has > 1 named layer
+    AND > 1 frame — exercises the full layer-switch path including the
+    async sequence reload.
+    """
+    instance = JefeCheckApp.launch(
+        binary=jefecheck_binary,
+        appium_url=appium_server,
+        config_dir=tmp_path / "jefecheck-config",
+        open_files=[multiview_sequence],
+    )
+    yield instance
+    instance.quit()
