@@ -139,7 +139,11 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     startupStatusLabel_->setText("Startup: Loading…");
     statusBar()->addPermanentWidget(startupStatusLabel_);
 
-    connect(viewport_, &GlViewport_Qt::fileDropped,
+    // Drag-drop reports a load-time scale (Shift = 0.5, Shift+Cmd = 0.25);
+    // wire to the scale-aware slot. The legacy fileDropped signal is
+    // still emitted by the viewport but we don't connect it — the
+    // scale-aware handler covers all drag cases.
+    connect(viewport_, &GlViewport_Qt::fileDroppedWithScale,
             this, &MainWindow_Qt::onFileDropped);
 
     setDockOptions(QMainWindow::AnimatedDocks
@@ -616,6 +620,11 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
 }
 
 void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
+    loadFileIntoPlate(plateIdx, path, 1.0f);
+}
+
+void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
+                                      float scale) {
     if (!viewport_ || path.isEmpty()) return;
     if (plateIdx < 0 || plateIdx > 3) return;
 
@@ -653,7 +662,9 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
     // context must be current on the calling thread.
     viewport_->makeCurrent();
     const bool ok =
-        jefe::qt::loadFileIntoPlate(resolved.toStdString(), plateIdx);
+        jefe::qt::loadFileIntoPlate(resolved.toStdString(), plateIdx,
+                                    /*kickOffSequenceLoad=*/true,
+                                    scale);
     viewport_->doneCurrent();
 
     if (!ok) {
@@ -664,14 +675,29 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
 
     viewport_->update();
     static const char kPlateNames[4] = {'A', 'B', 'C', 'D'};
-    statusBar()->showMessage(
-        QString("%1 loaded into Track %2")
-            .arg(name)
-            .arg(QChar(kPlateNames[plateIdx])));
+    if (scale < 0.999f) {
+        // Flash a 3-second message so the Shift / Shift+Cmd modifier
+        // isn't invisible — without this the user shift-drops and has
+        // no idea why their image looks different.
+        statusBar()->showMessage(
+            QString("%1 loaded into Track %2 at %3% scale")
+                .arg(name)
+                .arg(QChar(kPlateNames[plateIdx]))
+                .arg(int(scale * 100.0f + 0.5f)),
+            3000);
+    } else {
+        statusBar()->showMessage(
+            QString("%1 loaded into Track %2")
+                .arg(name)
+                .arg(QChar(kPlateNames[plateIdx])));
+    }
 }
 
-void MainWindow_Qt::onFileDropped(const QString& path) {
-    loadFileIntoPlate(0, path);
+void MainWindow_Qt::onFileDropped(const QString& path, float scale) {
+    // Active-plate target preserved from the pre-scale behavior — drag
+    // always goes to plate 0 today; PR-after-this can extend to "the
+    // plate under the drop point" once we factor that out.
+    loadFileIntoPlate(0, path, scale);
 }
 
 void MainWindow_Qt::startAutoload() {

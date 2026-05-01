@@ -41,12 +41,13 @@ public:
     // happen on the calling thread), and refreshes the status bar.
     // Used by --open-file at startup and by drag-and-drop at runtime.
     void loadFileIntoPlate(int plateIdx, const QString& path);
+    void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
 protected:
     void closeEvent(QCloseEvent* e) override;
 
 private slots:
-    void onFileDropped(const QString& path);
+    void onFileDropped(const QString& path, float scale);
 
 private:
     void buildMenuBar();
