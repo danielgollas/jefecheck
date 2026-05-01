@@ -21,6 +21,7 @@ class FXStackPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
 class PlateManager_Qt;
+class QComboBox;
 class QLabel;
 class TimelinePanel_Qt;
 class QTimer;
@@ -65,6 +66,7 @@ private:
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
     FXStackPanel_Qt* fxPanelWidget_ = nullptr;
+    QComboBox* depthCombo_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
     QLabel* trackStatusLabel_ = nullptr;
     QLabel* loadedStatusLabel_ = nullptr;

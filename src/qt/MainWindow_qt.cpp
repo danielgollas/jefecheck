@@ -14,6 +14,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDir>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -52,6 +53,43 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     viewport_->setListener(renderBridge_.get());
 
     statusBar()->showMessage("Drop an image onto the viewport to load it.");
+
+    // Bit depth combo — selects the texture format used for new loads.
+    // Persists in QSettings; existing plates keep their depth until
+    // reloaded. Routes through the SequenceLoadBridge accessors so
+    // we don't pull gfcStructures.h (which drags glad) into this TU.
+    depthCombo_ = new QComboBox(this);
+    depthCombo_->setObjectName("statusbar.depth.combo");
+    depthCombo_->setAccessibleName("Default bit depth for new loads");
+    depthCombo_->setToolTip(tr(
+        "Bit depth used when loading new sequences. Existing plates "
+        "keep their current depth until reloaded."));
+    // Pairs are <display label, GFC_*BPC enum value>. GFC_4BPC is a
+    // historical misnomer in UIConstants.h — actually 4 bytes per
+    // component = 32-bit float. We label it "32-float" and silently
+    // use the misnamed enum. GFC_S3TCDX1 is intentionally omitted
+    // (storage optimization, not a quality choice).
+    depthCombo_->addItem("8",        QVariant::fromValue<int>(GFC_8BPC));
+    depthCombo_->addItem("16",       QVariant::fromValue<int>(GFC_16BPC));
+    depthCombo_->addItem("16-half",  QVariant::fromValue<int>(GFC_16HALF));
+    depthCombo_->addItem("32-float", QVariant::fromValue<int>(GFC_4BPC));
+    {
+        QSettings settings;
+        const int saved = settings.value("Engine/defaultTextureFormat",
+                                         GFC_16HALF).toInt();
+        const int idx = depthCombo_->findData(QVariant::fromValue<int>(saved));
+        depthCombo_->setCurrentIndex(idx >= 0 ? idx : 2);  // 2 = 16-half
+        jefe::qt::setDefaultTextureFormat(
+            depthCombo_->currentData().toInt());
+    }
+    connect(depthCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        const int v = depthCombo_->currentData().toInt();
+        jefe::qt::setDefaultTextureFormat(v);
+        QSettings settings;
+        settings.setValue("Engine/defaultTextureFormat", v);
+    });
+    statusBar()->addPermanentWidget(depthCombo_);
 
     // Permanent right-aligned label that always reflects the current
     // framing mode. Status-bar text exposes via NSAccessibility (the

@@ -29,6 +29,14 @@ extern gfcSettings sett;
 
 namespace jefe::qt {
 
+int getDefaultTextureFormat() {
+    return sett.defaultTextureFormat;
+}
+
+void setDefaultTextureFormat(int format) {
+    sett.defaultTextureFormat = format;
+}
+
 void initializeRenderingChain() {
     // FLTK's main.cpp probes GL_ARB_shader_objects + GL_EXT_framebuffer_object
     // and writes these flags. The Qt build skips that probe but uses the
