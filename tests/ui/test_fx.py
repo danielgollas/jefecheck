@@ -42,6 +42,23 @@ def ready_app(app):
     return app
 
 
+@pytest.fixture(autouse=True)
+def _clean_fx_stack(app):
+    # Module-scoped `app` shares state across tests in this file. A
+    # test that Adds without Removing would leak an entry into the
+    # next test's stack count. Clear before each test so order doesn't
+    # matter. Idempotent: a no-op when the stack is already empty.
+    app.wait_for_startup_ready()
+    while True:
+        stack = app.by_object_name(locators.FXSTACK_STACK)
+        rows = _list_items(stack)
+        if not rows:
+            break
+        rows[0].click()
+        app.by_object_name(locators.FXSTACK_REMOVE).click()
+    yield
+
+
 def test_startup_status_reaches_terminal_state(app):
     """The autoload pipeline must reach a terminal status — Ready or
     Errors — within the timeout. Validates that the autoload doesn't
