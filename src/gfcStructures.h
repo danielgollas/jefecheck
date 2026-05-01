@@ -295,7 +295,9 @@ public:
 		feedbackMessageFadeDelay=2.0;
 		feedbackMessageOn=1;
 		feedbackMessageSize=12;
-    
+
+		defaultTextureFormat=GFC_16HALF;
+
 	}
     int startFullscreen;
     int playbackOnLoad;
@@ -326,6 +328,11 @@ public:
     bool glsl;
     bool fbo;
     int fp16;
+    int defaultTextureFormat; // GFC_8BPC / GFC_16BPC / GFC_16HALF / GFC_4BPC.
+                              // Default for the Qt bridge's drag-drop / Cmd+O
+                              // load path. FLTK's per-track Load window writes
+                              // straight to gfcSequenceGUI::setCompression and
+                              // doesn't read this field.
     int forcePBO;
     int renderingEngine;
     int renderingEngineFlag; //since the renderingEngine can't be changed on the fly, it has to be changed on application start. this flag is copied to the renderingEngine on start, and it is modified when the program starts in the initial settings read.
