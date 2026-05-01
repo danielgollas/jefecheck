@@ -18,6 +18,14 @@ namespace jefe::qt {
 // call once at app startup; calling again would leak the previous GUIs.
 void initializeRenderingChain();
 
+// Default texture format (bit depth) used by the Qt drag-drop / Cmd+O
+// load path. Mirrors gfcSettings::defaultTextureFormat. The Qt status
+// bar's depth combo reads/writes through these accessors so
+// MainWindow_qt.cpp doesn't need to include gfcStructures.h directly
+// — that header pulls glad and won't share a TU with QtGui on macOS.
+int  getDefaultTextureFormat();
+void setDefaultTextureFormat(int format);
+
 // Walks the install-time LUT path (sett.lutPath, falling back to
 // <Resources>/FX/, then ./FX/) and loads every .lut/.cube/.cub/.tga
 // via lutManager. Each load may call glGenTextures, so the caller
@@ -167,9 +175,14 @@ void finalizeFXLoad();
 // Frames flow into the rawFrames queue; tickPlayback() drains them
 // onto the GPU. Defaults to true so dropping a single image of a
 // sequence does the obvious thing — load the whole sequence.
+// `scale` is a 0..1 multiplier applied to the per-sequence load scale
+// (the FLTK loadWindow's scale chooser stored "100", "50", "25").
+// Drag-drop maps Shift = 0.5 and Shift+Cmd = 0.25; plain drop and
+// Cmd+O pass 1.0. Out-of-range values clamp to (0, 1].
 bool loadFileIntoPlate(const std::string& path,
                        int whichSequence,
-                       bool kickOffSequenceLoad = true);
+                       bool kickOffSequenceLoad = true,
+                       float scale = 1.0f);
 
 // Pan / zoom hooks called from GlViewport_Qt's mouse handlers. They
 // drive a specific plate's transform through plateManager. dx/dy are

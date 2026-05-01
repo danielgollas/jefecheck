@@ -17,6 +17,7 @@ STATUSBAR_LAYOUT = "statusbar.layout.label"
 STATUSBAR_TRACK = "statusbar.track.label"
 STATUSBAR_LOADED = "statusbar.loaded.label"
 STATUSBAR_STARTUP = "statusbar.startup.label"
+STATUSBAR_DEPTH = "statusbar.depth.combo"
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"

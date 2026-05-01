@@ -21,6 +21,7 @@ class FXStackPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
 class PlateManager_Qt;
+class QComboBox;
 class QLabel;
 class TimelinePanel_Qt;
 class QTimer;
@@ -40,12 +41,13 @@ public:
     // happen on the calling thread), and refreshes the status bar.
     // Used by --open-file at startup and by drag-and-drop at runtime.
     void loadFileIntoPlate(int plateIdx, const QString& path);
+    void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
 protected:
     void closeEvent(QCloseEvent* e) override;
 
 private slots:
-    void onFileDropped(const QString& path);
+    void onFileDropped(const QString& path, float scale);
 
 private:
     void buildMenuBar();
@@ -65,6 +67,7 @@ private:
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
     FXStackPanel_Qt* fxPanelWidget_ = nullptr;
+    QComboBox* depthCombo_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
     QLabel* trackStatusLabel_ = nullptr;
     QLabel* loadedStatusLabel_ = nullptr;

@@ -61,9 +61,13 @@ class JefeCheckApp:
     """A live JefeCheck instance under Appium control."""
 
     def __init__(self, driver: webdriver.Remote, config_dir: Path,
-                 slow_mo: float = 0.0):
+                 slow_mo: float = 0.0, owns_config_dir: bool = True):
         self.driver = driver
         self.config_dir = config_dir
+        # When the caller supplies their own config_dir (e.g. the
+        # cross-launch persistence test), they own its lifecycle.
+        # Otherwise quit() clears the temp dir we created.
+        self.owns_config_dir = owns_config_dir
         # Inserted between every Mac2 interaction (click, key, shortcut)
         # so a human watching the screen can follow what each step does.
         # 0 disables the pause entirely; non-zero only slows the suite —
@@ -86,6 +90,7 @@ class JefeCheckApp:
         screenshot is taken (otherwise a fresh launch shows an empty
         black viewport and every test would hit the same baseline).
         """
+        owns_config_dir = config_dir is None
         if config_dir is None:
             config_dir = Path(tempfile.mkdtemp(prefix="jefecheck-test-"))
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -110,7 +115,8 @@ class JefeCheckApp:
         opts.set_capability("appium:wdaConnectionTimeout", 240000)
 
         driver = webdriver.Remote(appium_url, options=opts)
-        instance = cls(driver, config_dir, slow_mo=slow_mo)
+        instance = cls(driver, config_dir, slow_mo=slow_mo,
+                       owns_config_dir=owns_config_dir)
         # Synchronize on the main window being AX-visible before returning.
         # Without this the first synthesized keystroke after launch can
         # race the app's window-activation phase and silently no-op.
@@ -121,7 +127,8 @@ class JefeCheckApp:
         try:
             self.driver.quit()
         finally:
-            shutil.rmtree(self.config_dir, ignore_errors=True)
+            if self.owns_config_dir:
+                shutil.rmtree(self.config_dir, ignore_errors=True)
 
     def _wrap(self, element: WebElement):
         """Wrap with a slow-mo proxy when --slow-mo is active."""

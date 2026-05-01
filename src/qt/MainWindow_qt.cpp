@@ -14,6 +14,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDir>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -52,6 +53,51 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     viewport_->setListener(renderBridge_.get());
 
     statusBar()->showMessage("Drop an image onto the viewport to load it.");
+
+    // Bit depth combo — selects the texture format used for new loads.
+    // Persists in QSettings; existing plates keep their depth until
+    // reloaded. Routes through the SequenceLoadBridge accessors so
+    // we don't pull gfcStructures.h (which drags glad) into this TU.
+    depthCombo_ = new QComboBox(this);
+    depthCombo_->setObjectName("statusbar.depth.combo");
+    depthCombo_->setAccessibleName("Default bit depth for new loads");
+    depthCombo_->setToolTip(tr(
+        "Bit depth used when loading new sequences. Existing plates "
+        "keep their current depth until reloaded."));
+    // Pairs are <display label, GFC_*BPC enum value>. GFC_4BPC is a
+    // historical misnomer in UIConstants.h — actually 4 bytes per
+    // component = 32-bit float. We label it "32-float" and silently
+    // use the misnamed enum. GFC_S3TCDX1 is intentionally omitted
+    // (storage optimization, not a quality choice).
+    depthCombo_->addItem("8",        QVariant::fromValue<int>(GFC_8BPC));
+    depthCombo_->addItem("16",       QVariant::fromValue<int>(GFC_16BPC));
+    depthCombo_->addItem("16-half",  QVariant::fromValue<int>(GFC_16HALF));
+    depthCombo_->addItem("32-float", QVariant::fromValue<int>(GFC_4BPC));
+    {
+        QSettings settings;
+        const int saved = settings.value("Engine/defaultTextureFormat",
+                                         GFC_16HALF).toInt();
+        // Fallback: if the persisted value isn't one of our combo
+        // entries (e.g. a future enum churn dropped the value the user
+        // saved), fall back to the GFC_16HALF item rather than coupling
+        // to its addItem position. findData on the default returns the
+        // item's index since GFC_16HALF is in the combo.
+        int idx = depthCombo_->findData(QVariant::fromValue<int>(saved));
+        if (idx < 0) {
+            idx = depthCombo_->findData(QVariant::fromValue<int>(GFC_16HALF));
+        }
+        depthCombo_->setCurrentIndex(idx);
+        jefe::qt::setDefaultTextureFormat(
+            depthCombo_->currentData().toInt());
+    }
+    connect(depthCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        const int v = depthCombo_->currentData().toInt();
+        jefe::qt::setDefaultTextureFormat(v);
+        QSettings settings;
+        settings.setValue("Engine/defaultTextureFormat", v);
+    });
+    statusBar()->addPermanentWidget(depthCombo_);
 
     // Permanent right-aligned label that always reflects the current
     // framing mode. Status-bar text exposes via NSAccessibility (the
@@ -93,7 +139,11 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     startupStatusLabel_->setText("Startup: Loading…");
     statusBar()->addPermanentWidget(startupStatusLabel_);
 
-    connect(viewport_, &GlViewport_Qt::fileDropped,
+    // Drag-drop reports a load-time scale (Shift = 0.5, Shift+Cmd = 0.25);
+    // wire to the scale-aware slot. The legacy fileDropped signal is
+    // still emitted by the viewport but we don't connect it — the
+    // scale-aware handler covers all drag cases.
+    connect(viewport_, &GlViewport_Qt::fileDroppedWithScale,
             this, &MainWindow_Qt::onFileDropped);
 
     setDockOptions(QMainWindow::AnimatedDocks
@@ -570,6 +620,11 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
 }
 
 void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
+    loadFileIntoPlate(plateIdx, path, 1.0f);
+}
+
+void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
+                                      float scale) {
     if (!viewport_ || path.isEmpty()) return;
     if (plateIdx < 0 || plateIdx > 3) return;
 
@@ -607,7 +662,9 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
     // context must be current on the calling thread.
     viewport_->makeCurrent();
     const bool ok =
-        jefe::qt::loadFileIntoPlate(resolved.toStdString(), plateIdx);
+        jefe::qt::loadFileIntoPlate(resolved.toStdString(), plateIdx,
+                                    /*kickOffSequenceLoad=*/true,
+                                    scale);
     viewport_->doneCurrent();
 
     if (!ok) {
@@ -618,14 +675,29 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
 
     viewport_->update();
     static const char kPlateNames[4] = {'A', 'B', 'C', 'D'};
-    statusBar()->showMessage(
-        QString("%1 loaded into Track %2")
-            .arg(name)
-            .arg(QChar(kPlateNames[plateIdx])));
+    if (scale < 0.999f) {
+        // Flash a 3-second message so the Shift / Shift+Cmd modifier
+        // isn't invisible — without this the user shift-drops and has
+        // no idea why their image looks different.
+        statusBar()->showMessage(
+            QString("%1 loaded into Track %2 at %3% scale")
+                .arg(name)
+                .arg(QChar(kPlateNames[plateIdx]))
+                .arg(int(scale * 100.0f + 0.5f)),
+            3000);
+    } else {
+        statusBar()->showMessage(
+            QString("%1 loaded into Track %2")
+                .arg(name)
+                .arg(QChar(kPlateNames[plateIdx])));
+    }
 }
 
-void MainWindow_Qt::onFileDropped(const QString& path) {
-    loadFileIntoPlate(0, path);
+void MainWindow_Qt::onFileDropped(const QString& path, float scale) {
+    // Active-plate target preserved from the pre-scale behavior — drag
+    // always goes to plate 0 today; PR-after-this can extend to "the
+    // plate under the drop point" once we factor that out.
+    loadFileIntoPlate(0, path, scale);
 }
 
 void MainWindow_Qt::startAutoload() {
