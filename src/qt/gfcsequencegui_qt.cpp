@@ -34,7 +34,24 @@ void gfcSequenceGUI_Qt::setFromToBounds(int Min, int Max, bool setToMinAndMax) {
 void gfcSequenceGUI_Qt::setToFrame(int v)               { to_ = v; }
 void gfcSequenceGUI_Qt::setFromFrame(int v)             { from_ = v; }
 void gfcSequenceGUI_Qt::setFilename(std::string s)      { filename_ = std::move(s); }
-void gfcSequenceGUI_Qt::setScale(std::string)           {}
+void gfcSequenceGUI_Qt::setScale(std::string s) {
+    // FLTK's gfcSequenceGUI_FLTK::setScale stores the percentage
+    // string from the Choice widget ("100" / "50" / "25"); getScale()
+    // returns the float for the loader. Mirror that contract here so
+    // the SequenceLoadBridge's Shift-drop scale modifier actually
+    // takes effect — without this body the bridge writes a string
+    // that's silently dropped, and getScale keeps returning the
+    // constructor's default of 100.0f.
+    if (s.empty()) {
+        scale_ = 100.0f;
+        return;
+    }
+    try {
+        scale_ = std::stof(s);
+    } catch (...) {
+        scale_ = 100.0f;
+    }
+}
 void gfcSequenceGUI_Qt::setEstimates(std::string)       {}
 void gfcSequenceGUI_Qt::setAppendOption(int v)          { append_ = v; }
 void gfcSequenceGUI_Qt::setFilter(int v)                { filter_ = v; }

@@ -742,8 +742,14 @@ bool loadFileIntoPlate(const std::string& path,
     // a > 1.0 doesn't try to upsample (the loader doesn't support it).
     if (scale <= 0.0f) scale = 1.0f;
     if (scale > 1.0f) scale = 1.0f;
+    int pct = int(scale * 100.0f + 0.5f);
+    // Defend against sub-1% inputs that round to 0 — the float
+    // clamp catches scale<=0 but not scale=0.001 → "0%". The loader
+    // has no defined behavior for 0% scale.
+    if (pct < 1)   pct = 100;
+    if (pct > 100) pct = 100;
     char scaleBuf[8];
-    std::snprintf(scaleBuf, sizeof(scaleBuf), "%d", int(scale * 100.0f + 0.5f));
+    std::snprintf(scaleBuf, sizeof(scaleBuf), "%d", pct);
     seq->myGUI->setScale(scaleBuf);
 
     const std::string loaded = seq->loadPreview();
