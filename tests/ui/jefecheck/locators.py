@@ -38,7 +38,22 @@ MENU_FILE_QUIT = "menu.file.quit"
 MENU_VIEW = "menu.view"
 MENU_VIEW_FULLSCREEN = "menu.view.fullscreen"
 MENU_HELP = "menu.help"
+# NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's
+# objectName — every menu item appears with `identifier='qt_itemFired:'`
+# under Mac2. Look up menu items by `title` instead (see test_minspecs.py
+# for the elementType==54 + title pattern). The QAction objectNames
+# below are kept for future Linux/Windows runs where Qt's QMenu does
+# expose them via AT-SPI / UIA.
 MENU_HELP_ABOUT = "menu.help.about"
+MENU_HELP_SPECS = "menu.help.specs"
+
+# Min Specs dialog (Help → System Specs). The dialog itself is a real
+# QDialog so its child widgets DO surface objectNames as identifiers.
+DIALOG_MINSPECS = "dialog.minspecs"
+DIALOG_MINSPECS_GLVERSION = "dialog.minspecs.glversion"
+DIALOG_MINSPECS_GLVENDOR = "dialog.minspecs.glvendor"
+DIALOG_MINSPECS_GLRENDERER = "dialog.minspecs.glrenderer"
+DIALOG_MINSPECS_BUTTONS = "dialog.minspecs.buttons"
 
 # Transport
 TRANSPORT_PLAY = "transport.play.button"

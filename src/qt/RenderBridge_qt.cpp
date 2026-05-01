@@ -2,6 +2,7 @@
 
 #include <glad/glad.h>
 
+#include "GLSystemInfo.h"
 #include "../gfcplatemanager.h"
 
 extern gfcPlateManager plateManager;
@@ -15,6 +16,12 @@ void RenderBridge_Qt::onGLInit() {
     // GLAD is loaded by GlViewport_Qt before the first listener call.
     // The plate manager is initialized by MainWindow_Qt via the
     // SequenceLoadBridge before this fires.
+    //
+    // Capture GL system specs (version, extensions, max sizes) here —
+    // we have a current GL context. The Help → System Specs dialog
+    // reads the snapshot rather than re-querying, since glGetString
+    // requires the context to be current.
+    captureGLSystemInfo();
 }
 
 void RenderBridge_Qt::onResize(int newWidth, int newHeight) {

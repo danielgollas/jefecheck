@@ -4,6 +4,7 @@
 #include "GlViewport_qt.h"
 #include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
+#include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
 #include "RenderBridge_qt.h"
 #include "SequenceLoadBridge_qt.h"
@@ -482,6 +483,18 @@ void MainWindow_Qt::buildMenuBar() {
     // the application menu — that would steal the action and the
     // bundled copy in Help would silently disappear.
     aboutAction->setMenuRole(QAction::NoRole);
+
+    auto* specsAction = helpMenu->addAction("&System Specs…",
+        this, [this]() {
+            // Modal — read-only snapshot. The capture happens once on
+            // first paintGL (RenderBridge_Qt::onGLInit), so opening
+            // the dialog before the viewport renders shows a "not yet
+            // captured" warning instead of empty fields.
+            MinSpecsDialog_Qt dlg(this);
+            dlg.exec();
+        });
+    specsAction->setObjectName("menu.help.specs");
+    specsAction->setMenuRole(QAction::NoRole);
 }
 
 void MainWindow_Qt::buildDocks() {
