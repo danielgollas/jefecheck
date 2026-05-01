@@ -300,7 +300,10 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
     // who hit it accidentally.
     const auto mods = e->keyboardModifiers();
     const bool shift = mods.testFlag(Qt::ShiftModifier);
-    const bool cmd   = mods.testFlag(Qt::ControlModifier);  // macOS: ControlModifier == Cmd
+    // Qt::ControlModifier == Cmd on macOS, Ctrl on Linux/Windows.
+    // The "Shift+Ctrl = 25%" gesture works fine on either since neither
+    // platform binds it to a drag-drop convention.
+    const bool cmd = mods.testFlag(Qt::ControlModifier);
     float scale = 1.0f;
     if (shift && cmd) {
         scale = 0.25f;
