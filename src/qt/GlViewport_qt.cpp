@@ -290,9 +290,29 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
         e->ignore();
         return;
     }
+    // Scale modifier mapping mirrors the spec:
+    //   plain     -> 1.0
+    //   Shift     -> 0.5
+    //   Shift+Cmd -> 0.25
+    // Any other modifier combo (Cmd-only, Alt-only, etc.) keeps the
+    // default 1.0 — Cmd-only is reserved for future "load into a
+    // specific plate" gestures, so no surprise behavior for users
+    // who hit it accidentally.
+    const auto mods = e->keyboardModifiers();
+    const bool shift = mods.testFlag(Qt::ShiftModifier);
+    const bool cmd   = mods.testFlag(Qt::ControlModifier);  // macOS: ControlModifier == Cmd
+    float scale = 1.0f;
+    if (shift && cmd) {
+        scale = 0.25f;
+    } else if (shift) {
+        scale = 0.5f;
+    }
+
     for (const QUrl& u : e->mimeData()->urls()) {
         if (u.isLocalFile()) {
-            emit fileDropped(u.toLocalFile());
+            const QString path = u.toLocalFile();
+            emit fileDroppedWithScale(path, scale);
+            emit fileDropped(path);  // legacy, see header comment
             e->acceptProposedAction();
             return;
         }

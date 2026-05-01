@@ -32,7 +32,16 @@ public:
     void setCursorVisible(bool visible) override;
 
 signals:
+    // Legacy single-arg signal — kept so any existing connections that
+    // don't care about scale (e.g. future logging hooks) still work.
+    // Emitted alongside fileDroppedWithScale(path, 1.0) on plain drops.
     void fileDropped(const QString& path);
+
+    // Scale is the load-time downsample factor read from
+    // keyboardModifiers in dropEvent: plain = 1.0, Shift = 0.5,
+    // Shift+Cmd = 0.25. MainWindow_Qt threads this through to
+    // jefe::qt::loadFileIntoPlate.
+    void fileDroppedWithScale(const QString& path, float scale);
 
     // Emitted when the viewport mutates plate state outside the plate
     // cards — drag pan, wheel zoom, keyboard layout/fit/flip/flop, and
