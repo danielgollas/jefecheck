@@ -52,6 +52,22 @@ def test_default_active_plate_loaded_label_starts_empty(app):
     assert _loaded_label(app) == "Loaded: -"
 
 
+def test_depth_combo_default_is_16_half(app):
+    """Fresh launch (per-module config_dir, no saved Engine/defaultTextureFormat)
+    shows the spec's default of 16-half on the status-bar depth combo.
+
+    QComboBox exposes its currently-selected text via `title`, not
+    `value` — same convention as TRANSPORT_LOOP. Verified in PR-30's
+    layer-combo tests.
+
+    Must run before any test that spawns a separate JefeCheck instance
+    (e.g. `visual_app`): Mac2 driver is single-session, so a second
+    launch invalidates this module's `app` WDA session.
+    """
+    combo = app.by_object_name(locators.STATUSBAR_DEPTH)
+    assert combo.get_attribute("title") == "16-half"
+
+
 def test_visual_app_loads_test_pattern_into_plate_zero(visual_app):
     """visual_app fixture preloads test_pattern_64.png into plate 0.
 
@@ -66,18 +82,6 @@ def test_visual_app_loads_test_pattern_into_plate_zero(visual_app):
     assert label == "Loaded: test_pattern.png", (
         f"Expected 'Loaded: test_pattern.png', got {label!r}"
     )
-
-
-def test_depth_combo_default_is_16_half(app):
-    """Fresh launch (per-module config_dir, no saved Engine/defaultTextureFormat)
-    shows the spec's default of 16-half on the status-bar depth combo.
-
-    QComboBox exposes its currently-selected text via `title`, not
-    `value` — same convention as TRANSPORT_LOOP. Verified in PR-30's
-    layer-combo tests.
-    """
-    combo = app.by_object_name(locators.STATUSBAR_DEPTH)
-    assert combo.get_attribute("title") == "16-half"
 
 
 @pytest.fixture
@@ -105,15 +109,17 @@ def test_depth_combo_persists_across_launch(
     )
     try:
         combo = first.by_object_name(locators.STATUSBAR_DEPTH)
-        # XCUITest exposes a QComboBox's options as descendant cells
-        # accessible via the value. macOS native combos use a
-        # AXMenuButton + AXMenu; the simplest cross-driver way is to
-        # click the combo, then click the "8" option text.
+        # Qt's QComboBox shows its dropdown via QComboBoxListView, which
+        # Mac2 exposes as an XCUIElementTypeMenuButton with descendant
+        # XCUIElementTypeStaticText rows (not MenuItem — that's reserved
+        # for native NSMenu items). Scope the lookup to the combo's
+        # listview identifier so a stray '8' label elsewhere doesn't win.
         combo.click()
-        # The popup is a transient overlay; grab the menu item by its
-        # visible text and click it.
         opt_8 = first.driver.find_element(
-            By.XPATH, "//XCUIElementTypeMenuItem[@title='8']")
+            By.XPATH,
+            "//XCUIElementTypeStaticText"
+            "[contains(@identifier, 'depth.combo.QComboBoxListView') "
+            "and @title='8']")
         opt_8.click()
         # Confirm the change took before quitting.
         assert combo.get_attribute("title") == "8"
