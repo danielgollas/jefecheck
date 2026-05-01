@@ -3,9 +3,8 @@
 #include <glad/glad.h>
 
 #include "GLSystemInfo.h"
+#include "../AppContext.h"
 #include "../gfcplatemanager.h"
-
-extern gfcPlateManager plateManager;
 
 namespace jefe::qt {
 
@@ -37,7 +36,7 @@ void RenderBridge_Qt::onDraw() {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    plateManager.draw(width_, height_, sizeDirty_);
+    AppContext::instance().plates().draw(width_, height_, sizeDirty_);
     sizeDirty_ = false;
 }
 
