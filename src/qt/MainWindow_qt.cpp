@@ -77,8 +77,16 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         QSettings settings;
         const int saved = settings.value("Engine/defaultTextureFormat",
                                          GFC_16HALF).toInt();
-        const int idx = depthCombo_->findData(QVariant::fromValue<int>(saved));
-        depthCombo_->setCurrentIndex(idx >= 0 ? idx : 2);  // 2 = 16-half
+        // Fallback: if the persisted value isn't one of our combo
+        // entries (e.g. a future enum churn dropped the value the user
+        // saved), fall back to the GFC_16HALF item rather than coupling
+        // to its addItem position. findData on the default returns the
+        // item's index since GFC_16HALF is in the combo.
+        int idx = depthCombo_->findData(QVariant::fromValue<int>(saved));
+        if (idx < 0) {
+            idx = depthCombo_->findData(QVariant::fromValue<int>(GFC_16HALF));
+        }
+        depthCombo_->setCurrentIndex(idx);
         jefe::qt::setDefaultTextureFormat(
             depthCombo_->currentData().toInt());
     }
