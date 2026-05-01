@@ -1,197 +1,178 @@
-# FLTK-to-Qt Migration Plan
+# FLTK-to-Qt Migration Plan — Status & Remaining Work
+
+> **Re-evaluated 2026-05-01** after PR-35 (bit depth + scale) and PR-36 (System Specs dialog) merged into `qt-migration` (HEAD: `56463ac`). Original 6-phase plan superseded by this version; phases retained as section headers for traceability.
 
 ## Context
 
-JefeCheck has used FLTK since 2006. The UI toolkit is showing its age — limited widget styling, no native dark mode, bitmap-based text rendering, and poor HiDPI support. Qt provides modern widget capabilities, proper GL integration via QOpenGLWidget, signal/slot architecture, and native platform integration.
+JefeCheck has been running on FLTK since 2006. Phases 0, most of 1, and the bulk of Phase 2 (Qt implementation) are now in place: the Qt build boots, renders multi-plate via QOpenGLWidget, drives playback through the manager tick, has the dark VFX theme, and ships a working menu bar / docks / preferences / status bar. The remaining work is a focused list of dialog ports, one decoupling refactor, parity tests, and Phase 4 deletion of FLTK assets — in that order.
 
-The codebase already has a partial GUI abstraction layer: 5 subsystems (`gfcPlateGUI`, `gfcPlaybackGUI`, `gfcSequenceGUI`, `gfcNetworkClientGUI`, `gfcNetworkServerGUI`) use abstract base classes with `*_fltk` concrete implementations. This plan extends that existing pattern to cover all remaining FLTK dependencies, then builds Qt implementations behind the same interfaces.
+**Goal (unchanged):** Replace FLTK with Qt6 while maintaining a working app throughout the transition. Dark VFX-industry theme (matching Nuke/DaVinci Resolve aesthetic).
 
-**Goal:** Replace FLTK with Qt6 while maintaining a working app throughout the transition. Dark VFX-industry theme (matching Nuke/DaVinci Resolve aesthetic).
+## Original Scope Snapshot (April 2026)
 
-## Scope
+- 76 of 404 source files used FLTK (19%)
+- 354 callback instances, 85 `Fl::check()/wait()` calls, 150+ `Fl::event_*` calls
+- 14 active FLUID-generated windows (~7,700+ lines of `.cxx`)
+- 6 custom `Fl_*_gfc` widgets
 
-- **76 of 404 source files** use FLTK (19%)
-- **354 callback instances**, **85 Fl::check()/wait() calls**, **150+ Fl::event_* calls**
-- **14 active FLUID-generated windows** (~7,700+ lines of .cxx)
-- **6 custom Fl_*_gfc widgets**
-- **~8,000-10,000 lines** are already FLTK-free (reusable as-is)
+Most of this surface is now behind the abstractions or already deleted from the Qt build via CMake exclusions.
 
-## Existing Abstraction Pattern (template for migration)
+## Existing Abstraction Pattern
 
 ```
 src/gfcplategui.h           ← abstract interface
 src/gfcplategui.cpp         ← shared logic
 src/gfcplategui_fltk.h      ← FLTK implementation
 src/gfcplategui_fltk.cpp
+src/qt/gfcplategui_qt.h     ← Qt implementation (now exists for all six)
+src/qt/gfcplategui_qt.cpp
 ```
 
-Same pattern exists for: `gfcplaybackgui`, `gfcsequencegui`, `gfcnetworkclientgui`, `gfcnetworkservergui`
+Same pattern lives for `gfcplaybackgui`, `gfcsequencegui`, `gfcnetworkclientgui`, `gfcnetworkservergui`, `gfcplatemanagergui`.
 
 ---
 
-## Phase 0: Complete the UI Abstraction Layer (3-4 weeks)
+## Current Status
 
-### 0A. Define missing interface classes
+### Phase 0 — UI abstraction layer ✅ DONE
+- All six interfaces in `src/ui/`: `IGLViewport.h`, `IEventSystem.h`, `IMainWindow.h`, `IApplication.h`, `IFileChooser.h`, `IMessageDialog.h`.
+- `gfcPlate`'s 23 direct widget pointers extracted (PR-2). `gfcPlateManagerGUI` triplet exists (PR-6). `GlViewport` dual-inherits `IGLViewport` (PR-5).
 
-Create in `src/ui/`:
-- **IGLViewport.h** — Abstract GL rendering surface (draw, handle events, makeCurrent, geometry queries, pixelsPerUnit)
-- **IEventSystem.h** — Replaces 150+ `Fl::event_*` calls (mouseX/Y, isCtrl/Shift/Alt, isKeyDown, mouseButton)
-- **IMainWindow.h** — Replaces concrete MainWindow (show, hide, getViewport, toggleFullscreen)
-- **IApplication.h** — Replaces Fl:: namespace (processEvents, wait, run, screenGeometry, quit)
-- **IFileChooser.h** — Replaces NativeFileChooser wrapper
-- **IMessageDialog.h** — Replaces fl_alert/fl_choice/fl_message
+### Phase 1 — decouple core logic ⚠️ MOSTLY DONE
+- **1A** UICallbacks split → `src/callbacks/{Playback,Load,LUT,Network,Preferences,Menu,Render}Callbacks.cpp`. Original plan listed 9 modules; actual implementation consolidated to 7 (Plate/FX merged into Menu and Playback).
+- **1B AppContext singleton — NOT DONE.** ~25 `extern` globals still live in `src/main.cpp`/`src/main_qt.cpp`. **Sequenced as PR-37 (next).**
+- **1C** Qt event loop has zero `Fl::check()/wait()` calls; runs through `IApplication_Qt` + `QApplication::exec()` (`src/qt/iapplication_qt.cpp`).
+- **1D** GLUT replaced; no `glutGet`/`glutInit` in active source.
 
-### 0B. Extract gfcPlate's direct FLTK widget pointers
+### Phase 2 — Qt implementation ⚠️ 75% DONE
+- **2A–2D** ✅ done: `USE_QT` CMake option (default `OFF`), QOpenGLWidget viewport, all six `gfc*GUI_qt`, dark theme at `src/qt/theme/jefecheck_dark.qss`.
+- **2E** Window ports — see remaining work below.
+- **2F** ✅ done: `QApplication::exec()` + `QTimer` playback tick.
 
-`gfcPlate.h` lines 234-261 hold 23 FLTK widget pointers directly (Fl_Choice*, Fl_Value_Slider*, etc.) despite already having `gfcPlateGUI* myGUI`. Remove direct pointers, route through myGUI.
+### Phase 3 — parity validation ⚠️ 70% TESTED
+Tests exist for: smoke launch, transport, plate ops/reset, load (incl. depth combo persistence), track, FX stack add/remove, LUT panel, preferences, layouts, visual diff, MinSpecs menu wiring. Untested: per-FX param editing, render, remote, playlist (because their Qt counterparts don't exist yet — tests land with each port).
 
-### 0C. Create gfcPlateManagerGUI abstraction
-
-`gfcPlateManager` holds Fl_Group*, Fl_Choice_gfc*, Fl_Round_Button* directly. Extract into abstract `gfcPlateManagerGUI` + `gfcPlateManagerGUI_fltk`.
-
-### 0D. Wrap GlViewport behind IGLViewport
-
-GlViewport currently inherits Fl_Gl_Window. Make it implement IGLViewport. Route all Fl::event_* through IEventSystem.
-
-**Files to create:** `src/ui/IGLViewport.h`, `src/ui/IEventSystem.h`, `src/ui/IMainWindow.h`, `src/ui/IApplication.h`, `src/ui/IFileChooser.h`, `src/ui/IMessageDialog.h`, `src/gfcplatemanagergui.h`, `src/gfcplatemanagergui_fltk.h/.cpp`
-
-**Files to modify:** `src/gfcPlate.h/.cpp`, `src/gfcplatemanager.h/.cpp`, `src/GlViewport.h/.cpp`
-
-**Verification:** App compiles and runs identically on FLTK. All FLTK usage behind abstractions.
+### Phase 4 — cleanup ⏳ NOT STARTED
+Default backend still FLTK. Backup `.fl` files (`mainWindowBAK01`, `mainWindowNonPlastic`, `mainWindowTest`, `loadWindowOld`, `demoWatermarkDummy`) and dead-shell windows (`gammaWindow`, `drawingToolsWindow`, `moreOptionWindow`, `shorcutsWindow`, `splashWindow`, `exrWindow`) still on disk and in CMake's exclusion list.
 
 ---
 
-## Phase 1: Decouple Core Logic (4-5 weeks)
+## Remaining Work
 
-### 1A. Break UICallbacks.cpp (2,550 lines) into domain modules
+User-confirmed sequencing (2026-05-01):
+1. **PR-37 — AppContext singleton (Phase 1B).**
+2. **PR-38 — FX param editor (Phase 2E).** Top user-visible gap.
+3. **PR-39 — Render dialog.**
+4. **PR-40 — Playlist panel.**
+5. **PR-41 — Remote sessions.**
+6. **PR-42 — Flip USE_QT default to ON.**
+7. **PR-43+ — Phase 4 cleanup.**
 
-Split into `src/callbacks/`:
-- `PlaybackCallbacks.cpp` — play/pause/frame nav
-- `PlateCallbacks.cpp` — zoom/pan/color correction
-- `LoadCallbacks.cpp` — file loading
-- `FXCallbacks.cpp` — FX stack
-- `LUTCallbacks.cpp` — LUT management
-- `NetworkCallbacks.cpp` — remote sessions
-- `PreferencesCallbacks.cpp` — settings
-- `MenuCallbacks.cpp` — menu bar
-- `RenderCallbacks.cpp` — rendering
+### PR-37: `AppContext` singleton (Phase 1B)
 
-### 1B. Eliminate ~25 global extern objects
+**Why:** Decoupling refactor done now while both FLTK and Qt builds compile, so the abstraction settles before Phase 4 deletes the FLTK side.
 
-Replace with `AppContext` singleton:
-```cpp
-class AppContext {
-    static AppContext& instance();
-    IMainWindow& mainWindow();
-    IGLViewport& viewport();
-    gfcTrackManager& trackManager();
-    gfcPlateManager& plateManager();
-    // ... etc
-};
+**Approach:**
+- Create `src/AppContext.h/.cpp` with `AppContext::instance()` returning references to: `IMainWindow&`, `IGLViewport&`, `IApplication&`, `gfcTrackManager&`, `gfcPlateManager&`, `gfcPlaybackManager&`, `gfcNetworkManager&`, `gfcFXManager&`, `gfcLUTManager&`, `gfcSessionManager&`, `gfcPlaylistManager&`, `gfcSettings& sett()`.
+- Mechanical sweep: replace `extern X x;` declarations and uses in non-`_fltk` / non-`_qt` files with `AppContext::instance().X()`. Each backend keeps its own `extern` definitions in `main.cpp` / `main_qt.cpp` and registers them with `AppContext` at startup.
+- Both build configs (`USE_QT=OFF` and `USE_QT=ON`) must compile and pass the regression sweep at the end.
+
+**Verification:**
+```bash
+cmake -B build && cmake --build build && \
+cmake -B build_qt -DUSE_QT=ON && cmake --build build_qt && \
+cd tests/ui && JEFECHECK_BIN=../../build_qt/JefeCheck.app \
+  .venv/bin/pytest test_smoke.py test_layouts.py test_load.py \
+  test_plate_reset.py test_fx.py --timeout=120
 ```
 
-Mechanical refactor: `extern MainWindow mw;` → `AppContext::instance().mainWindow()`
+### PR-38: FX param editor (`FXParamPanel_qt`)
 
-### 1C. Replace Fl::check()/wait() with IApplication
+**Why:** `src/fxcontrolwindow.cpp` (1309 lines) is the per-FX parameter UI — sliders + value inputs once an FX is on a plate. The Qt build today has no way to tune FX parameters once added; most user-visible gap.
 
-85 scattered calls. Main loop becomes `IApplication::processEvents()` / `IApplication::waitForEvents(timeout)`.
+**Approach:**
+- `src/qt/FXParamPanel_qt.h/.cpp` as a right-side `QDockWidget` (`dock.fxparams`) sibling of the existing FX/LUT dock. No floating-window equivalent needed.
+- Read the FX parameter list from `gfcFXStack::getFX(i)` — params are `gfcFXParam` with `name`, `min`, `max`, `value`, `type` (slider, choice, checkbox). Map to QSlider + QDoubleSpinBox row, QComboBox, or QCheckBox.
+- Refresh the panel on the existing `plateStateChanged` signal and after `addFXToActivePlate` / `removeFXFromPlate` in `SequenceLoadBridge_qt`.
+- Param edits write back via a new `jefe::qt::setFXParam(plateIdx, fxIdx, paramIdx, value)` bridge mirroring the existing FX bridge pattern in `qt_globals.cpp`.
+- objectName scheme: `fxparams.fx<i>.param.<name>.{slider,spin,combo,check}`.
 
-### 1D. Replace GLUT timing with std::chrono
+**Files:** `src/qt/FXParamPanel_qt.h/.cpp` (new), `src/qt/MainWindow_qt.cpp` (add dock + View menu toggle), `src/qt/qt_globals.cpp` + `SequenceLoadBridge_qt.h` (param accessor), `tests/ui/jefecheck/locators.py`, `tests/ui/test_fx_params.py` (new).
 
-Remove GLUT dependency (`glutInit`, `glutGet(GLUT_ELAPSED_TIME)`) → `std::chrono::steady_clock`.
+### PR-39: Render dialog (`RenderDialog_qt`)
 
-**Verification:** App runs on FLTK. No FLTK headers in non-`_fltk` files. Business logic fully decoupled.
+**Why:** `src/renderwindow.cpp` (488 lines) drives offline export to JPEG/PNG/TIFF/movie with format/scale/range/quality knobs. Wired into `plateManager.startRender(gfcRenderParams)` (`src/callbacks/RenderCallbacks.cpp`). FLTK build has it; Qt build does not.
 
----
+**Approach:**
+- Modal `QDialog` triggered from File → Render… (slot already stubbed at `MainWindow_qt.cpp:396` with `/* TODO */`).
+- Fields: quadrant `QComboBox`, format `QComboBox` with format-specific subgroups (JPEG quality + progressive + optimize; PNG compression; TIFF compression), output `QLineEdit` + Browse, prefix/postfix `QLineEdit`, padding `QSpinBox`, frame range start/end, scale `QDoubleSpinBox`, video codec/quality, "Create movie" `QCheckBox`. Live preview label using `CreateRenderFilename(params)`.
+- Render/Cancel buttons drive `plateManager.startRender(params)` / `plateManager.abortRender()`. Disable form during render; show progress fed from `plateManager.isRendering()` polled on the existing playback `QTimer`.
+- objectName scheme: `dialog.render.<field>`.
 
-## Phase 2: Qt Implementation (6-8 weeks)
+**Files:** `src/qt/RenderDialog_qt.h/.cpp` (new), `src/qt/MainWindow_qt.cpp` (replace TODO stub), `tests/ui/test_render.py` (new — dialog opens, format combo populated, render button gated on path/range; full export run gated behind a slow marker).
 
-### 2A. CMake infrastructure
+### PR-40: Playlist panel (`PlaylistPanel_qt`)
 
-```cmake
-option(USE_QT "Build with Qt instead of FLTK" OFF)
-find_package(Qt6 COMPONENTS Widgets OpenGLWidgets QUIET)
-```
+**Why:** `src/playlistwindow.cpp` (`plw.theWindow->show()` invoked at startup `main.cpp:721` and from `LoadCallbacks.cpp:62`, `PlaybackCallbacks.cpp:149`, `MenuCallbacks.cpp:317`). Sequential playback queue.
 
-Compile `*_qt` files when ON, `*_fltk` files when OFF.
+**Approach:**
+- `QDockWidget` (matches existing dock paradigm) hosting `QListWidget` of items + add/remove/up/down/clear buttons + double-click to load. Mirror `gfcPlaylistManager::*` API (already FLTK-free).
+- Read `gfcPlaylistManager` directly via `AppContext` (post-PR-37).
+- File → Playlist menu toggle plus the existing `View` menu's auto-collected dock toggles.
+- objectName: `dock.playlist`, `playlist.list`, `playlist.{add,remove,up,down,clear}.button`.
 
-### 2B. QOpenGLWidget GL context (`src/qt/GlViewport_qt.h/.cpp`)
+**Files:** `src/qt/PlaylistPanel_qt.h/.cpp`, `src/qt/MainWindow_qt.cpp`, `tests/ui/test_playlist.py`.
 
-Implements IGLViewport. Key differences from Fl_Gl_Window:
-- `update()` instead of `redraw()`
-- `makeCurrent()` instead of `make_current()`
-- `devicePixelRatio()` instead of `pixels_per_unit()`
-- QOpenGLWidget renders to internal FBO — test with JefeCheck's own FBO pipeline
+### PR-41: Remote sessions (`RemotePanel_qt`)
 
-### 2C. Qt implementations of existing GUI abstractions
+**Why:** `src/remoteWindow.fl` + `src/callbacks/NetworkCallbacks.cpp` + `gfcNetworkManager` host the RakNet collaborative review feature. Real and shipped, just not yet on the Qt side.
 
-- `src/qt/gfcplategui_qt.h/.cpp`
-- `src/qt/gfcplaybackgui_qt.h/.cpp`
-- `src/qt/gfcsequencegui_qt.h/.cpp`
-- `src/qt/gfcnetworkclientgui_qt.h/.cpp`
-- `src/qt/gfcnetworkservergui_qt.h/.cpp`
-- `src/qt/gfcplatemanagergui_qt.h/.cpp`
+**Approach:**
+- `QDockWidget` "Remote" with two sub-tabs (Server / Client) each showing connection state, participant `QListWidget`, chat `QTextEdit` + input `QLineEdit`, Connect/Disconnect/Save-chat. The existing `gfcnetworkclientgui_qt` and `gfcnetworkservergui_qt` already implement the GUI abstractions; the dock is the host UI.
+- Wire menu IDs (`MENUREMOTEMANAGER_ID`, `MENUREMOTESAVECHAT_ID`) as Qt actions on a new "Remote" top-level menu.
+- Largest unknown: how `gfcnetwork*gui_qt` are currently instantiated/owned. PR will likely move ownership into `MainWindow_Qt`.
+- objectName scheme: `dock.remote`, `remote.{server,client}.tab`, `remote.chat.input`, etc.
 
-### 2D. Dark VFX theme (`src/qt/theme/jefecheck_dark.qss`)
+**Files:** `src/qt/RemotePanel_qt.h/.cpp`, `src/qt/MainWindow_qt.cpp`, possibly small edits to `src/qt/gfcnetwork{client,server}gui_qt.cpp` for parent-widget plumbing, `tests/ui/test_remote.py` (smoke only — full network test would need a paired second instance).
 
-Match current `GFC_BG_COLOR` (32,32,32) / `GFC_WIDGET_COLOR` (42,42,42) values. Orange accent (#d4771e) for active states. Flat buttons, dark inputs, Nuke-style aesthetics.
+### PR-42: Flip `USE_QT` default to `ON`
 
-### 2E. Qt dialog windows (priority order)
+**Why:** Phase 2E feature-complete after PR-41. Switching the default makes Qt the canonical build, reorients CI, unblocks Phase 4 deletion.
 
-1. MainWindow_qt (5,720 lines of FLUID → Qt Designer or programmatic)
-2. LoadWindow_qt
-3. PreferencesWindow_qt
-4. FX/LUT windows
-5. Remote/Playlist/Render windows
-6. Simple dialogs (About, MinSpecs, etc.)
+**Changes:** one line in `CMakeLists.txt` (`option(USE_QT ... ON)`), README/CLAUDE.md updates, CI matrix flip in `.github/workflows/build.yml` to build Qt by default and FLTK as secondary.
 
-### 2F. Main event loop
+### PR-43+: Phase 4 cleanup
 
-Replace `while(!quitNow) { Fl::check(); managers.update(); }` with:
-- `QApplication::exec()` as the main loop
-- `QTimer(0ms)` for playback manager updates
-- Qt signal-based scheduling for non-time-critical updates
+Run as one or two PRs once PR-42 is merged and the Qt build has soaked.
 
-**Verification:** `cmake -DUSE_QT=ON` builds and runs. Basic playback works in Qt.
+**Delete:**
+- All `*_fltk.cpp/.h` (network clients/servers, plate GUI, plate manager GUI, playback GUI, sequence GUI, GUI base, application, file chooser, message dialog, viewport).
+- All `.fl` files and their FLUID-generated `.cxx`/`.h` pairs: backups (`mainWindowBAK01`, `mainWindowNonPlastic`, `mainWindowTest`, `loadWindowOld`, `demoWatermarkDummy`); dead shells (`gammaWindow`, `drawingToolsWindow`, `moreOptionWindow`, `shorcutsWindow`, `splashWindow`, `exrWindow`); ported originals (`mainWindow`, `loadWindow`, `preferencesWindow`, `aboutWindow`, `minSpecsWindow`, `fxWindow`, `lutWindow`, `renderWindow`, `remoteWindow`, `playlistwindow`).
+- Custom widgets `Fl_Choice_gfc`, `Fl_Button_gfc`, `Fl_Button_RGBA_gfc`, `Fl_Spinner_gfc`, `Fl_Slider_Timeline_gfc`, `Fl_Input_Choice_gfc`, `Fl_DragBar`.
+- `src/UICallbacks.cpp` (already excluded from Qt build), `src/main.cpp` (FLTK entrypoint), `src/GlViewport.cpp`, `src/fxcontrolwindow.cpp`, `src/playlistwindow.cpp`, `src/renderwindow.cpp`, `src/trackwidget.cpp`, `src/checkmateResoucesWindow.cxx`.
+- FLTK from `CMakeLists.txt` (`find_package(FLTK)`, `target_link_libraries`), `USE_QT` option, all `list(FILTER ... EXCLUDE)` lines for FLTK files.
+- `gfctrackmanagergui.cpp` if no longer reachable (verify).
 
----
+**Simplify the abstraction layer where single-backend makes it pointless:** `IFileChooser` and `IMessageDialog` likely collapse to direct Qt calls; the `gfc*GUI` abstract bases stay because they've shaped the data flow but their pure-virtual nature can be loosened.
 
-## Phase 3: Feature Parity Validation (4-6 weeks)
+**Update:** `CLAUDE.md` (drop FLTK build instructions, GFL/FLU notes about FLTK interaction), `docs/manual.md`, `docs/quick-start.md`, GitHub Actions CI to drop FLTK platform matrix.
 
-Migrate and validate each window with full feature testing:
-1. Main window + viewport (keyboard shortcuts, multi-plate layouts, drag interactions)
-2. Load window (progress, abort, EXR channels)
-3. FX/LUT windows
-4. All remaining dialogs
-5. Custom widget Qt equivalents (timeline slider is most complex)
-
-**Verification:** Full feature parity between FLTK and Qt builds.
-
----
-
-## Phase 4: Cleanup (2-3 weeks)
-
-- Remove all `*_fltk` files, `.fl` FLUID files, Fl_*_gfc widgets
-- Remove FLTK from CMakeLists.txt and CI
-- Remove `USE_QT` option (Qt is the only backend)
-- Simplify abstraction layer where single-backend makes it unnecessary
-- Update CLAUDE.md and docs
-
-**Verification:** Clean Qt-only build on all 3 platforms. No FLTK remnants.
+**Verification:** clean build on macOS / Linux / Windows; full Phase C + visual-diff test sweep; manual run-through of every menu and every dock to confirm nothing was a hidden FLTK dependency.
 
 ---
 
 ## Critical Files
 
-| File | Lines | Migration Role |
-|------|-------|----------------|
-| `src/GlViewport.h/.cpp` | 1,263 | Highest risk — Fl_Gl_Window → QOpenGLWidget |
-| `src/gfcPlate.h/.cpp` | 3,246 | Remove 23 direct widget pointers |
-| `src/UICallbacks.cpp` | 2,550 | Split into ~10 domain modules |
-| `src/main.cpp` | 800+ | Replace globals + event loop |
-| `src/mainWindow.cxx` | 5,720 | FLUID-generated → Qt Designer |
-| `src/gfcplategui.h` | — | Template for all new abstractions |
+| File | Role |
+|---|---|
+| `src/qt/MainWindow_qt.{h,cpp}` | Hosts every menu, dock, and dialog wire-up — touched by every Phase 2E PR. |
+| `src/qt/qt_globals.cpp` + `SequenceLoadBridge_qt.{h,cpp}` | Bridge accessor pattern (`jefe::qt::*`). New ports add accessors here when they need to call into glad-using code. |
+| `src/callbacks/RenderCallbacks.cpp` | Reference for PR-39 (render param plumbing). |
+| `src/callbacks/NetworkCallbacks.cpp`, `src/gfcnetworkmanager.cpp` | Reference for PR-41. |
+| `src/playlistwindow.cpp` + `gfcplaylistmanager.{h,cpp}` | Reference for PR-40. |
+| `src/fxcontrolwindow.{h,cpp}` + `gfcfx.h` (`gfcFXParam` struct) | Reference for PR-38. |
+| `tests/ui/conftest.py` + `tests/ui/jefecheck/{app,locators}.py` | Test harness; each new port adds locators here and a `test_<feature>.py`. |
 
-## Estimated Total: 19-26 weeks (single developer)
+## Estimated Remaining: 4-6 weeks (single developer)
 
-Phase 0 and 1 can begin immediately without Qt installed. They improve code quality regardless of whether the Qt migration proceeds.
+Phase 1B + Phase 2E (PR-37 through PR-41) is the bulk: ~1 week per PR with tests. Phase 4 cleanup is mechanical (~1 week). Tighter if AppContext sweeps cleanly and remote-sessions reuses existing `gfcnetwork*gui_qt` plumbing.
