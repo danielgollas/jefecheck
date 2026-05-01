@@ -722,12 +722,29 @@ std::string getLoadedSequenceName(int plateIdx) {
 
 bool loadFileIntoPlate(const std::string& path,
                        int whichSequence,
-                       bool kickOffSequenceLoad) {
+                       bool kickOffSequenceLoad,
+                       float scale) {
     auto* seq = trackManager.getSequence(whichSequence);
     if (!seq || !seq->myGUI || path.empty()) {
         return false;
     }
     seq->myGUI->setFilename(path);
+
+    // Apply the global default bit depth before loadPreview reads it.
+    // gfcSequenceGUI::setCompression takes one of the
+    // GFC_*BPC / GFC_*HALF enum values; gfcSettings::defaultTextureFormat
+    // stores that enum directly (default GFC_16HALF).
+    seq->myGUI->setCompression(sett.defaultTextureFormat);
+
+    // Translate the 0..1 scale factor to the percentage string the
+    // FLTK Choice widget convention expects ("100", "50", "25"). Clamp
+    // to (0, 1] so a stray 0 or negative doesn't get sent through and
+    // a > 1.0 doesn't try to upsample (the loader doesn't support it).
+    if (scale <= 0.0f) scale = 1.0f;
+    if (scale > 1.0f) scale = 1.0f;
+    char scaleBuf[8];
+    std::snprintf(scaleBuf, sizeof(scaleBuf), "%d", int(scale * 100.0f + 0.5f));
+    seq->myGUI->setScale(scaleBuf);
 
     const std::string loaded = seq->loadPreview();
     if (loaded.empty()) {

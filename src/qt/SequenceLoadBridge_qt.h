@@ -167,9 +167,14 @@ void finalizeFXLoad();
 // Frames flow into the rawFrames queue; tickPlayback() drains them
 // onto the GPU. Defaults to true so dropping a single image of a
 // sequence does the obvious thing — load the whole sequence.
+// `scale` is a 0..1 multiplier applied to the per-sequence load scale
+// (the FLTK loadWindow's scale chooser stored "100", "50", "25").
+// Drag-drop maps Shift = 0.5 and Shift+Cmd = 0.25; plain drop and
+// Cmd+O pass 1.0. Out-of-range values clamp to (0, 1].
 bool loadFileIntoPlate(const std::string& path,
                        int whichSequence,
-                       bool kickOffSequenceLoad = true);
+                       bool kickOffSequenceLoad = true,
+                       float scale = 1.0f);
 
 // Pan / zoom hooks called from GlViewport_Qt's mouse handlers. They
 // drive a specific plate's transform through plateManager. dx/dy are
