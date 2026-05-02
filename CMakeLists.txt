@@ -52,7 +52,6 @@ if(USE_QT)
     # that the rest of the chain links against. Its FLTK touchpoints are
     # gated behind JEFECHECK_USE_FLTK.
     # Same exclusions as the FLTK build for duplicated / disabled files.
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
     if(NOT WIN32)
@@ -88,7 +87,6 @@ else()
     endif()
 
     # gfcTrack.cpp is a duplicate of gfcSequence.cpp (same symbols)
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
 
     # Exclude custom EXR loader/saver - OIIO handles EXR natively
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
