@@ -12,24 +12,25 @@ JefeCheck is a professional C++ video frame processing and playback application 
 
 ## Build System
 
-**CMake** is the single build system for all platforms. C++20 on macOS/Linux, C++20 on Windows (with `-fpermissive` for FLTK callback casts).
+**CMake** is the single build system for all platforms. C++20 on macOS/Linux/Windows.
+
+**UI backend:** Qt6 is the default as of PR-42. FLTK remains opt-in via `-DUSE_QT=OFF` for the duration of Phase 4 cleanup; the FLTK code path is removed entirely in PR-43+.
 
 ### macOS (primary development)
 ```bash
-brew install fltk openimageio openexr curl zlib cmake freetype
+brew install qt openimageio openexr curl zlib cmake freetype
 cmake -B build && cmake --build build
+# Opt into the legacy FLTK build with: cmake -B build -DUSE_QT=OFF
 ```
 
 ### Linux (Ubuntu 24.04)
 ```bash
-bash build_linux.sh
-# Or manually:
-sudo apt install cmake build-essential libfltk1.3-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libopencv-dev libfreetype6-dev
+sudo apt install cmake build-essential qt6-base-dev qt6-base-private-dev libqt6opengl6-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev libgl-dev libglu1-mesa-dev libfreetype6-dev
 cmake -B build && cmake --build build -j$(nproc)
 ```
 
 ### Windows (MinGW/MSYS2 via GitHub Actions)
-Uses MSYS2 with pre-built packages including `mingw-w64-x86_64-freetype`. See `.github/workflows/build.yml`.
+Uses MSYS2 with `mingw-w64-x86_64-qt6-base`, `mingw-w64-x86_64-qt6-tools`, and `mingw-w64-x86_64-freetype`. See `.github/workflows/build.yml`.
 
 ### Runtime Resources
 The app finds FX and fonts via `getApplicationDataPath()` (platform-specific install path). For development, symlink to the source tree:

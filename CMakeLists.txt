@@ -5,9 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# UI backend selection (FLTK is the current default; Qt is in-progress).
-# See docs/MIGRATION.md for the FLTK->Qt migration plan and current state.
-option(USE_QT "Build with Qt6 instead of FLTK" OFF)
+# UI backend selection. Qt6 is the canonical build as of PR-42; FLTK
+# remains opt-in via -DUSE_QT=OFF for the duration of Phase 4 cleanup
+# and is removed entirely once Phase 4 lands.
+# See docs/superpowers/plans/2026-04-19-fltk-to-qt-migration.md.
+option(USE_QT "Build with Qt6 (default). Set OFF to build with FLTK." ON)
 
 # Find system packages
 find_package(OpenGL REQUIRED)
