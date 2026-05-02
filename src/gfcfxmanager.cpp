@@ -3,6 +3,7 @@
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "UIConstants.h"
 #include "gfcStructures.h"
+#include <algorithm>  // std::sort — used to be transitive via FLTK headers
 extern gfcSettings sett;
 
 #include "gfcnetworkmanager.h"
