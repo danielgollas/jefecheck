@@ -8,12 +8,6 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include "gfcTextRenderer.h"
 #include <glad/glad.h>
 #include "vec3d.h"
-//#include <GL/gl.h>
-#ifdef __APPLE__
-#include <OpenGL/glu.h>
-#else
-#  include <GL/glu.h>
-#endif
 
 
 #ifdef WIN32

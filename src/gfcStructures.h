@@ -8,6 +8,11 @@
 #include <glad/glad.h>
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
+#elif defined(_WIN32)
+// GLU callbacks on Windows reference Win32 API types (CALLBACK, void*),
+// so windows.h must be included first or GL/glu.h fails to parse.
+#include <windows.h>
+#include <GL/glu.h>
 #else
 #include <GL/glu.h>
 #endif
