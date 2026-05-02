@@ -8,6 +8,7 @@
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
 #include "RenderBridge_qt.h"
+#include "RenderDialog_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
 
@@ -391,12 +392,15 @@ void MainWindow_Qt::buildMenuBar() {
         loadFileIntoPlate(plate, chosen);
     });
     loadAction->setObjectName("menu.file.load");
-    // Render… is a stub for the future Render Manager dock. No
-    // shortcut yet — the FLTK build uses F4 for it (0xffc3 in the
-    // FLUID menu), but adding it here would shadow the plate-reset
-    // Cmd+R binding via QAction's automatic shortcut handling.
-    fileMenu->addAction("&Render…", []() { /* TODO */ })
-            ->setObjectName("menu.file.render");
+    // File → Render… opens RenderDialog_Qt (PR-39a). Modal exec();
+    // synchronous renderPlate freezes the dialog until done — async
+    // + a worker thread come in PR-39b. No shortcut wired yet
+    // because the FLTK F4 binding would shadow plate-reset / fit on
+    // some keyboards.
+    fileMenu->addAction("&Render…", this, [this]() {
+        RenderDialog_Qt dlg(this);
+        dlg.exec();
+    })->setObjectName("menu.file.render");
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),

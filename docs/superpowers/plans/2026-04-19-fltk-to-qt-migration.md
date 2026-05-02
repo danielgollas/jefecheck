@@ -105,6 +105,8 @@ cd tests/ui && JEFECHECK_BIN=../../build_qt/JefeCheck.app \
 
 ### PR-39: Render dialog (`RenderDialog_qt`)
 
+**Status (PR-39a, in flight on `qt/39-render-dialog`):** Minimum-viable modal landed — quadrant / format / range / scale / output path / prefix / postfix / padding plus auto-range, output-path browse, live first/last filename preview, Render and Done buttons. New bridge accessors in `SequenceLoadBridge_qt`: `RenderParams` struct (Qt-friendly mirror of `gfcRenderParams`), `previewRenderFilename`, `triggerSyncRender`, plus `abortRender` / `isRendering` stubs (today only meaningful from a worker thread, wired for symmetry). Render runs synchronously on the GUI thread; the dialog freezes until done. Format-specific quality (jpeg/png/tiff/exr), video codec, and movie-creation pipeline (mencoder + clearFXStack + reload) come in PR-39b along with a QThread driver for cancel.
+
 **Why:** `src/renderwindow.cpp` (488 lines) drives offline export to JPEG/PNG/TIFF/movie with format/scale/range/quality knobs. Wired into `plateManager.startRender(gfcRenderParams)` (`src/callbacks/RenderCallbacks.cpp`). FLTK build has it; Qt build does not.
 
 **Approach:**
