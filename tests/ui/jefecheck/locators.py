@@ -85,6 +85,17 @@ DOCK_FXPARAMS = "dock.fxparams"
 FXPARAMS_PANEL = "fxparams.panel"
 FXPARAMS_STATUS = "fxparams.status.label"
 
+# Playlist dock (PR-40)
+DOCK_PLAYLIST = "dock.playlist"
+PLAYLIST_PANEL = "playlist.panel"
+PLAYLIST_LIST = "playlist.list"
+PLAYLIST_ADD = "playlist.add.button"
+PLAYLIST_REMOVE = "playlist.remove.button"
+PLAYLIST_UP = "playlist.up.button"
+PLAYLIST_DOWN = "playlist.down.button"
+PLAYLIST_CLEAR = "playlist.clear.button"
+PLAYLIST_STATUS = "playlist.status.label"
+
 # Render dialog (PR-39a — minimal: quadrant/format/range/scale/path/prefix)
 DIALOG_RENDER = "dialog.render"
 RENDER_QUADRANT = "dialog.render.quadrant.combo"

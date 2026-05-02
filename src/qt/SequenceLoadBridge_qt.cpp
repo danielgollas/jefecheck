@@ -11,6 +11,8 @@
 #include "../gfcfxstack.h"
 #include "../gfcStructures.h"
 #include "../gfcrenderparams.h"
+#include "../gfcplaylistmanager.h"
+#include "../gfcplaylistitem.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
@@ -23,6 +25,7 @@
 
 extern gfcPlateManager plateManager;
 extern gfcPlaybackManager playbackManager;
+extern gfcPlaylistManager playlistManager;
 extern gfcTrackManager trackManager;
 extern gfcLUTManager lutManager;
 extern gfcFXManager fxManager;
@@ -614,6 +617,60 @@ void abortRender() {
 
 bool isRendering() {
     return plateManager.isRendering();
+}
+
+namespace {
+std::string playlistItemDisplayName(const gfcPlaylistItem& item) {
+    if (item.loadParams.empty()) return "(empty item)";
+    const std::string& path = item.loadParams[0].fileName;
+    if (path.empty()) return "(unnamed)";
+    auto slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+}  // namespace
+
+std::vector<std::string> getPlaylistItemNames() {
+    std::vector<std::string> names;
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries) return names;
+    names.reserve(entries->size());
+    for (const auto& item : *entries) {
+        names.push_back(playlistItemDisplayName(item));
+    }
+    return names;
+}
+
+void addPlaylistFile(const std::string& path) {
+    if (path.empty()) return;
+    auto item = playlistManager.createPlaylistItemFrom({path});
+    playlistManager.addItemlist(item);
+}
+
+void removePlaylistItem(int index) {
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return;
+    playlistManager.removePlaylistItem(index);
+}
+
+void movePlaylistItem(int index, int direction) {
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return;
+    playlistManager.movePlaylistItem(index, direction);
+}
+
+void clearPlaylist() {
+    playlistManager.clearPlaylist();
+}
+
+void loadPlaylistItem(int index) {
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return;
+    trackManager.setPlaylistItem(playlistManager.getItem(index));
+    playlistManager.setSelectedItem(index);
+}
+
+int getSelectedPlaylistItem() {
+    return playlistManager.selectedItem;
 }
 
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {

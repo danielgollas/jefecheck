@@ -225,6 +225,27 @@ int triggerSyncRender(const RenderParams& params);
 void abortRender();
 bool isRendering();
 
+// Playlist (PR-40). The Qt PlaylistPanel calls these to drive
+// gfcPlaylistManager + gfcTrackManager without dragging glad in.
+//
+// `getPlaylistItemNames` returns one entry per playlist item; the
+// display name is the basename of the item's first track filename
+// (full paths visible in tooltips / status bar in PR-40b).
+//
+// `addPlaylistFile(path)` builds a single-track gfcPlaylistItem via
+// `gfcPlaylistManager::createPlaylistItemFrom({path})` and appends.
+//
+// `loadPlaylistItem(index)` mirrors the FLTK double-click handler —
+// `trackManager.setPlaylistItem(playlistManager.getItem(index))` —
+// so the chosen playlist entry replaces the active sequences.
+std::vector<std::string> getPlaylistItemNames();
+void addPlaylistFile(const std::string& path);
+void removePlaylistItem(int index);
+void movePlaylistItem(int index, int direction);  // -1 up, +1 down
+void clearPlaylist();
+void loadPlaylistItem(int index);
+int  getSelectedPlaylistItem();
+
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for
 // "Ready" before driving the panel so they don't race the autoload.

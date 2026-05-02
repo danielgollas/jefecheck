@@ -3,6 +3,7 @@
 #include "FXLutPanel_qt.h"
 #include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
+#include "PlaylistPanel_qt.h"
 #include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
 #include "MinSpecsDialog_qt.h"
@@ -604,6 +605,23 @@ void MainWindow_Qt::buildDocks() {
     tabifyDockWidget(fxDock_, lutDock_);
     fxDock_->raise();
 
+    // Playlist — left side, vertically split below FX Params.
+    // Tabifying with FX Params destabilized the AX bridge's view of
+    // the param-panel's editor widgets under sweep load (Mac2
+    // occasionally couldn't resolve fxparams.fx0.param.*.spin even
+    // though the panel had built them); splitting keeps both panels
+    // rendered and AX-visible without overlapping.
+    playlistDock_ = new QDockWidget("Playlist", this);
+    playlistDock_->setObjectName("dock.playlist");
+    playlistDock_->setAccessibleName("Playlist dock");
+    playlistPanelWidget_ = new PlaylistPanel_Qt(playlistDock_);
+    playlistDock_->setWidget(playlistPanelWidget_);
+    playlistDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    playlistPanelWidget_->setMinimumWidth(220);
+    playlistPanelWidget_->setMinimumHeight(140);
+    addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
+    splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
+
     // Refresh the FX param panel whenever viewport-driven plate edits
     // fire (this also catches active-plate changes — clicking a plate
     // card emits plateStateChanged via PlateManager_Qt's wiring).
@@ -631,6 +649,7 @@ void MainWindow_Qt::buildDocks() {
         found->addAction(timelineDock_->toggleViewAction());
         found->addAction(fxDock_->toggleViewAction());
         found->addAction(fxParamsDock_->toggleViewAction());
+        found->addAction(playlistDock_->toggleViewAction());
         found->addAction(lutDock_->toggleViewAction());
     }
 }
