@@ -119,6 +119,8 @@ cd tests/ui && JEFECHECK_BIN=../../build_qt/JefeCheck.app \
 
 ### PR-40: Playlist panel (`PlaylistPanel_qt`)
 
+**Status (PR-40, in flight on `qt/40-playlist-panel`):** `QDockWidget` "Playlist" landed on the left side, tabified with FX Params (FX Params raised by default). `QListWidget` of entries plus Add (file dialog) / Remove / ↑ / ↓ / Clear buttons; double-click invokes `trackManager.setPlaylistItem(playlistManager.getItem(idx))`. Bridge accessors in `SequenceLoadBridge_qt`: `getPlaylistItemNames`, `addPlaylistFile`, `removePlaylistItem`, `movePlaylistItem`, `clearPlaylist`, `loadPlaylistItem`, `getSelectedPlaylistItem`. Two Mac2 smoke tests in `tests/ui/test_playlist.py`. Drag-and-drop reorder, multi-track items per row, the FLTK "compact view" / "show full paths" / "scale override" submenus, and session-save integration come in PR-40b.
+
 **Why:** `src/playlistwindow.cpp` (`plw.theWindow->show()` invoked at startup `main.cpp:721` and from `LoadCallbacks.cpp:62`, `PlaybackCallbacks.cpp:149`, `MenuCallbacks.cpp:317`). Sequential playback queue.
 
 **Approach:**
