@@ -45,6 +45,7 @@ jobs:
             libqt6opengl6-dev \
             libopenimageio-dev \
             openimageio-tools \
+            libopencv-dev \
             libopenexr-dev \
             libilmbase-dev \
             libimath-dev \
