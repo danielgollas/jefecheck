@@ -243,28 +243,25 @@ void setMacExecutablePath(std::string thePath)
 }
 
 std::string getApplicationDataPath() {
-	
+
 #ifdef linux
-    char tmpPath[32000];
-    fl_filename_expand ( tmpPath,"~/.JefeCorp/JefeCheck/JefeCheck/" );
-    return tmpPath;
+    // Tilde-expansion via $HOME, replacing the previous fl_filename_expand.
+    const char* home = std::getenv("HOME");
+    if (home && *home) {
+        return std::string(home) + "/.JefeCorp/JefeCheck/JefeCheck/";
+    }
+    return "./.JefeCorp/JefeCheck/JefeCheck/";
 #endif
 
 #ifdef WIN32
-    Fl_Preferences app (Fl_Preferences::USER,"JefeCorp","JefeCheck/JefeCheck" );
-    char path[FL_PATH_MAX];
-    app.getUserdataPath ( path,sizeof ( path ) );
-    return path;
-	
-    /*#include <shlobj.h>    // for SHGetFolderPath
-		char szPath[32000];
-    SHGetFolderPath( NULL, CSIDL_COMMON_APPDATA,
-					 NULL, 0, szPath ) //\Documents and Settings\All Users\Application Data
-		std::string tmp;
-    tmp=szPath;
-    tmp+="/OllinStudio/JefeCheck/JefeCheck_1_5/";
-    return tmp;*/
-	
+    // %APPDATA% is the user's Roaming folder — same effective location
+    // Fl_Preferences::getUserdataPath returned. SHGetFolderPath would be
+    // more rigorous but the existing FLTK call wasn't either.
+    const char* appdata = std::getenv("APPDATA");
+    if (appdata && *appdata) {
+        return std::string(appdata) + "\\JefeCorp\\JefeCheck\\JefeCheck\\";
+    }
+    return ".\\JefeCorp\\JefeCheck\\JefeCheck\\";
 #endif
 	
 #ifdef __APPLE__
