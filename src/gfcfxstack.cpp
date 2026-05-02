@@ -50,6 +50,19 @@ void gfcFXStack::addFXGUIInfo(fxParamInfo theInfo, void* widgetHandle) {
     guiToFX[widgetHandle]=theInfo;
 }
 
+void gfcFXStack::setWidgetValue(int fxIndex,
+                                const std::string& groupName,
+                                const std::string& widgetName,
+                                float value) {
+    if (fxIndex < 0 || fxIndex >= (int)fxs.size()) return;
+    auto& fx = fxs[fxIndex];
+    auto gIt = fx.groups.find(groupName);
+    if (gIt == fx.groups.end()) return;
+    auto wIt = gIt->second.widgets.find(widgetName);
+    if (wIt == gIt->second.widgets.end()) return;
+    wIt->second.value = value;
+}
+
 /**
  *
  * @param o

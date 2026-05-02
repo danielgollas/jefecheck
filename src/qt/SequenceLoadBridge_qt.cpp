@@ -566,6 +566,17 @@ FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
 }
 }  // namespace
 
+void setFXParamValueOnPlate(int plateIdx,
+                            int fxIndex,
+                            const std::string& groupName,
+                            const std::string& widgetName,
+                            float value) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    if (!stack) return;
+    stack->setWidgetValue(fxIndex, groupName, widgetName, value);
+    plateManager.setChanged();
+}
+
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
     auto* stack = plateManager.getFXStack(plateIdx);
     if (!stack) return {};
