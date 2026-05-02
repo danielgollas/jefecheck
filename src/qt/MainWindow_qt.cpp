@@ -587,7 +587,13 @@ void MainWindow_Qt::buildDocks() {
     fxParamPanelWidget_ = new FXParamPanel_Qt(fxParamsDock_);
     fxParamsDock_->setWidget(fxParamPanelWidget_);
     fxParamsDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
-    fxParamPanelWidget_->setMinimumWidth(200);
+    // Both dimensions are needed: left-area docks default to zero
+    // height when no other dock claims that area, which collapses the
+    // scroll viewport and prunes the editor widgets from the Mac AX
+    // tree (the status label survives because it's outside the
+    // scroll area).
+    fxParamPanelWidget_->setMinimumWidth(220);
+    fxParamPanelWidget_->setMinimumHeight(240);
     addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
 
     // Tab FX Stack and LUTs together on the right.

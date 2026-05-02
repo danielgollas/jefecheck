@@ -44,6 +44,17 @@ public:
     void addFX(gfcFX theFX);
     gfcFX getFX(int index);
     std::vector< gfcFX > getAllFXs();
+
+    // Direct widget-value setter, mirroring processNetFXAttribInfo's
+    // mutation but without the network struct round-trip. The Qt FX
+    // param panel calls this to push slider / combo / checkbox edits
+    // back into gfcFX's group.widgets[name].value, which gfcFX::bind
+    // reads when the next frame composites. No-op when fxIndex is
+    // out of range, the group doesn't exist, or the widget doesn't.
+    void setWidgetValue(int fxIndex,
+                        const std::string& groupName,
+                        const std::string& widgetName,
+                        float value);
     
     int getNumOfFXs();
     int getNumOfActiveFXs();

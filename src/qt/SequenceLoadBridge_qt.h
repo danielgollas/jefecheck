@@ -173,6 +173,20 @@ struct FXMeta {
 // plateStateChanged or after add/remove. Empty for invalid plate idx.
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx);
 
+// Mutates an FX widget value on `plateIdx`'s stack. The Qt FX param
+// panel's editor widgets call this on user edit; gfcFX::bind reads
+// the new value at the next composite. Float widgets pass `value`
+// verbatim, bool widgets pass 0.0 / 1.0, choice widgets pass the
+// option index as a float (matching processNetFXAttribInfo). Texture
+// /cube/LUT slots are not yet wired — those rebind GL texture handles
+// rather than scalar uniforms and will land separately. Calls
+// plateManager.setChanged() so the next paintGL repaints.
+void setFXParamValueOnPlate(int plateIdx,
+                            int fxIndex,
+                            const std::string& groupName,
+                            const std::string& widgetName,
+                            float value);
+
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for
 // "Ready" before driving the panel so they don't race the autoload.
