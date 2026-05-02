@@ -2,18 +2,8 @@
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
-#ifdef JEFECHECK_USE_FLTK
-#include "gfcplatemanagergui_fltk.h"
-#include <FL/fl_ask.H>
-#include "mainWindow.h"
-extern MainWindow mw;
-
-#include "loadWindow.h"
-extern LoadWindow lw;
-#else
 #include "qt/gfcplategui_qt.h"
 #include "qt/gfcplatemanagergui_qt.h"
-#endif
 
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
@@ -27,17 +17,9 @@ extern gfcPickManager pickManager;
 #include "gfclutmanager.h"
 extern gfcLUTManager lutManager;
 
-#ifdef JEFECHECK_USE_FLTK
-#include "fxcontrolwindow.h"
-extern FXControlWindow fxControlWindow1;
-#endif
 
 #include "gfcrenderparams.h"
 
-#ifdef JEFECHECK_USE_FLTK
-#include "renderWindow.h"
-extern RenderWindow rw;
-#endif
 
 #ifndef max
 #define max(a,b)            (((a) > (b)) ? (a) : (b))
@@ -333,9 +315,6 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
     break;
     }
 
-#ifdef JEFECHECK_USE_FLTK
-    mw.vp->invalidate();
-#endif
     myGUI->redrawLayoutGroup();
 
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
@@ -612,141 +591,6 @@ void gfcPlateManager::resetPlate(int whichOne) {
 }
 
 void gfcPlateManager::initializeWidgets() {
-#ifdef JEFECHECK_USE_FLTK
-    for (int i=plates.size()-1;i>=0;i--) {
-        plates[i].myGUI=new gfcPlateGUI_FLTK;
-        plates[i].quadID=i;
-    }
-
-    myGUI = new gfcPlateManagerGUI_FLTK;
-    myGUI->assignLayoutGroupWidget(mw.layoutsGroup);
-    myGUI->assignLayoutChoiceWidget(mw.viewportLayoutChoice);
-
-    plates[0].myGUI->assignZoom(mw.q1Scale);
-    plates[0].myGUI->assignTXWidget(mw.q1X);
-    plates[0].myGUI->assignTYWidget(mw.q1Y);
-    plates[0].myGUI->assignRZWidget(mw.q1rZ);
-
-    plates[0].myGUI->assignFlipWidget(mw.q1Flip);
-    plates[0].myGUI->assignFlopWidget(mw.q1Flop);
-
-    plates[0].myGUI->assignCropWidget(mw.q1Crop);
-
-	plates[0].myGUI->assignRGBAWidget(mw.q1RGBA);
-    /*plates[0].myGUI->assignChannelRWidget(mw.q1R);
-    plates[0].myGUI->assignChannelGWidget(mw.q1G);
-    plates[0].myGUI->assignChannelBWidget(mw.q1B);
-    plates[0].myGUI->assignChannelAWidget(mw.q1A);*/
-
-    plates[0].myGUI->assignTrackChoiceWidget(mw.q1Choice);
-    plates[0].myGUI->assignAspectChoiceWidget(mw.q1AspectChoice);
-
-    plates[0].myGUI->assignGroupWidget(mw.layouts1);
-	plates[0].myGUI->assignActiveWidget(mw.activeViewport0);
-    plates[0].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[0].myGUI->assignLUTWidget(mw.q1LUT);
-	plates[0].myGUI->assignGammaWidget(mw.q1Gamma);
-	plates[0].myGUI->assignExposureWidget(mw.q1Exposure);
-	plates[0].myGUI->assignBrightnessWidget(mw.q1Brightness);
-	plates[0].myGUI->assignContrastWidget(mw.q1Contrast);
-	plates[0].myGUI->assignSaturationWidget(mw.q1Saturation);
-
-    /***********/
-
-    plates[1].myGUI->assignZoom(mw.q2Scale);
-    plates[1].myGUI->assignTXWidget(mw.q2X);
-    plates[1].myGUI->assignTYWidget(mw.q2Y);
-    plates[1].myGUI->assignRZWidget(mw.q2rZ);
-
-    plates[1].myGUI->assignFlipWidget(mw.q2Flip);
-    plates[1].myGUI->assignFlopWidget(mw.q2Flop);
-
-    plates[1].myGUI->assignCropWidget(mw.q2Crop);
-	
-	plates[1].myGUI->assignRGBAWidget(mw.q2RGBA);
-    /*plates[1].myGUI->assignChannelRWidget(mw.q2R);
-    plates[1].myGUI->assignChannelGWidget(mw.q2G);
-    plates[1].myGUI->assignChannelBWidget(mw.q2B);
-    plates[1].myGUI->assignChannelAWidget(mw.q2A);*/
-
-    plates[1].myGUI->assignTrackChoiceWidget(mw.q2Choice);
-    plates[1].myGUI->assignAspectChoiceWidget(mw.q2AspectChoice);
-	
-	plates[1].myGUI->assignActiveWidget(mw.activeViewport1);
-    plates[1].myGUI->assignGroupWidget(mw.layouts2);
-    plates[1].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[1].myGUI->assignLUTWidget(mw.q2LUT);
-	plates[1].myGUI->assignGammaWidget(mw.q2Gamma);
-	plates[1].myGUI->assignExposureWidget(mw.q2Exposure);
-	plates[1].myGUI->assignBrightnessWidget(mw.q2Brightness);
-	plates[1].myGUI->assignContrastWidget(mw.q2Contrast);
-	plates[1].myGUI->assignSaturationWidget(mw.q2Saturation);
-
-    /***********/
-
-	plates[2].myGUI->assignRGBAWidget(mw.q3RGBA);
-    plates[2].myGUI->assignZoom(mw.q3Scale);
-    plates[2].myGUI->assignTXWidget(mw.q3X);
-    plates[2].myGUI->assignTYWidget(mw.q3Y);
-    plates[2].myGUI->assignRZWidget(mw.q3rZ);
-
-    plates[2].myGUI->assignFlipWidget(mw.q3Flip);
-    plates[2].myGUI->assignFlopWidget(mw.q3Flop);
-
-    plates[2].myGUI->assignCropWidget(mw.q3Crop);
-
-    /*plates[2].myGUI->assignChannelRWidget(mw.q3R);
-    plates[2].myGUI->assignChannelGWidget(mw.q3G);
-    plates[2].myGUI->assignChannelBWidget(mw.q3B);
-    plates[2].myGUI->assignChannelAWidget(mw.q3A);*/
-
-    plates[2].myGUI->assignTrackChoiceWidget(mw.q3Choice);
-    plates[2].myGUI->assignAspectChoiceWidget(mw.q3AspectChoice);
-
-	plates[2].myGUI->assignActiveWidget(mw.activeViewport2);
-    plates[2].myGUI->assignGroupWidget(mw.layouts3);
-    plates[2].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[2].myGUI->assignLUTWidget(mw.q3LUT);
-	plates[2].myGUI->assignGammaWidget(mw.q3Gamma);
-	plates[2].myGUI->assignExposureWidget(mw.q3Exposure);
-	plates[2].myGUI->assignBrightnessWidget(mw.q3Brightness);
-	plates[2].myGUI->assignContrastWidget(mw.q3Contrast);
-	plates[2].myGUI->assignSaturationWidget(mw.q3Saturation);
-    /***********/
-
-    plates[3].myGUI->assignZoom(mw.q4Scale);
-    plates[3].myGUI->assignTXWidget(mw.q4X);
-    plates[3].myGUI->assignTYWidget(mw.q4Y);
-    plates[3].myGUI->assignRZWidget(mw.q4rZ);
-
-    plates[3].myGUI->assignFlipWidget(mw.q4Flip);
-    plates[3].myGUI->assignFlopWidget(mw.q4Flop);
-
-    plates[3].myGUI->assignCropWidget(mw.q4Crop);
-	
-	plates[3].myGUI->assignRGBAWidget(mw.q4RGBA);
-    /*plates[3].myGUI->assignChannelRWidget(mw.q4R);
-    plates[3].myGUI->assignChannelGWidget(mw.q4G);
-    plates[3].myGUI->assignChannelBWidget(mw.q4B);
-    plates[3].myGUI->assignChannelAWidget(mw.q4A);*/
-
-    plates[3].myGUI->assignTrackChoiceWidget(mw.q4Choice);
-    plates[3].myGUI->assignAspectChoiceWidget(mw.q4AspectChoice);
-
-	plates[3].myGUI->assignActiveWidget(mw.activeViewport3);
-    plates[3].myGUI->assignGroupWidget(mw.layouts4);
-    plates[3].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[3].myGUI->assignLUTWidget(mw.q4LUT);
-	plates[3].myGUI->assignGammaWidget(mw.q4Gamma);
-	plates[3].myGUI->assignExposureWidget(mw.q4Exposure);
-	plates[3].myGUI->assignBrightnessWidget(mw.q4Brightness);
-	plates[3].myGUI->assignContrastWidget(mw.q4Contrast);
-	plates[3].myGUI->assignSaturationWidget(mw.q4Saturation);
-#else
     // Qt: each plate gets a stateful gfcPlateGUI_Qt. Widgets push state
     // into it via setters (no Fl_Widget pointers to assign). The plate
     // manager itself uses gfcPlateManagerGUI_Qt for layout-mode tracking.
@@ -765,7 +609,6 @@ void gfcPlateManager::initializeWidgets() {
         plates[i].setTrack(i);
     }
     myGUI = new gfcPlateManagerGUI_Qt;
-#endif
 }
 
 gfcPlateGUI* gfcPlateManager::getPlateGUI(int whichOne) {
@@ -803,13 +646,9 @@ void gfcPlateManager::setPlateShowPreview(int whichOne, bool value) {
     if (whichOne < 0 || whichOne >= (int)plates.size() || !plates[whichOne].myGUI) {
         return;
     }
-#ifndef JEFECHECK_USE_FLTK
     if (auto* g = dynamic_cast<gfcPlateGUI_Qt*>(plates[whichOne].myGUI)) {
         g->setShowPreview(value);
     }
-#else
-    (void)value;
-#endif
 }
 
 void gfcPlateManager::updateAllGUILUTWidgets()
@@ -1094,9 +933,6 @@ void gfcPlateManager::addFXToPlate(int whichOne, gfcFX theFX) {
 		sett.addToRecentFXs(theFX.name);
 
         plates[whichOne].fxStack.addFX(theFX);
-#ifdef JEFECHECK_USE_FLTK
-        fxControlWindow1.scheduleUpdateWindow(whichOne);
-#endif
 	this->clearHistogramCache(whichOne);
 	
         //send fx
@@ -1125,9 +961,6 @@ void gfcPlateManager::setFXStack(gfcFXStack theStack, int whichOne)
         return;
     } else {
         plates[whichOne].fxStack=theStack;
-#ifdef JEFECHECK_USE_FLTK
-        fxControlWindow1.scheduleUpdateWindow(whichOne);
-#endif
 
 		//send notification that a stack was loaded
 		gfcNetFXStackMessage message;
@@ -1435,9 +1268,6 @@ void gfcPlateManager::processNetFXAttribInfo(gfcNetFXAttribInfo &info) {
         printf("gfcPlateManager::processNetFXAttribInfo: requested plate out of range\n");
     } else {
         plates[info.id.quadID].processNetFXAttribInfo(info);
-#ifdef JEFECHECK_USE_FLTK
-        fxControlWindow1.scheduleUpdateWindow(info.id.quadID);
-#endif
     }
 }
 
@@ -1447,9 +1277,6 @@ void gfcPlateManager::processNetFXCommonInfo(gfcNetFXCommonInfo &info) {
         printf("gfcPlateManager::processNetFXCommonInfo: requested plate out of range\n");
     } else {
         plates[info.id.quadID].processNetFXCommonInfo(info);
-#ifdef JEFECHECK_USE_FLTK
-        fxControlWindow1.scheduleUpdateWindow(info.id.quadID);
-#endif
     }
 }
 
@@ -1506,19 +1333,11 @@ void gfcPlateManager::loadStackFromFile(int whichOne, std::string filename) {
 		gfcFXStack tmp;
 		std::vector<std::string> result=tmp.loadStackFromFile(filename);
 		this->setFXStack(tmp,whichOne);
-#ifdef JEFECHECK_USE_FLTK
-	updateRecentlyLoadedStacks(filename);
-        fxControlWindow1.scheduleUpdateWindow(whichOne);
-#endif
         if (result.size()>0) {
             for (int i=0; i<result.size(); i++) {
-#ifdef JEFECHECK_USE_FLTK
-                fl_alert("%s", result[i].c_str());
-#else
                 // Non-FLTK builds don't have a popup wired yet; log instead.
                 fprintf(stderr, "FX stack load warning: %s\n",
                         result[i].c_str());
-#endif
             }
         }
 
@@ -1646,12 +1465,6 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         return;
 
     gfcPlate* ptrToPlate=&plates[params.quadrant];
-#ifdef JEFECHECK_USE_FLTK
-    rw.progress->maximum ( params.to-params.from );
-
-    Fl::ready();
-    app().processEvents();
-#endif
 
     for ( int i=params.from; i<=params.to;i++ ) {
 
@@ -1663,39 +1476,17 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
 		if(renderNames)
 			renderNames->push_back(params.filename);
 
-#ifdef JEFECHECK_USE_FLTK
-		rw.progress->label ( params.filename.c_str() );
-#endif
         ptrToPlate->renderParams=params;
 
         ptrToPlate->draw ( );
 
         ptrToPlate->forRender=false;
 
-#ifdef JEFECHECK_USE_FLTK
-        rw.progress->value ( i );
-
-        //draw(); //update the screen
-
-        if ( stopRendering) {
-            break;
-        }
-        Fl::ready();
-        app().processEvents();
-#else
         if ( stopRendering) break;
-#endif
     }
 
     printf ( "Done rendering\n\a" );
-#ifdef JEFECHECK_USE_FLTK
-    rw.progress->label ( !stopRendering?"Done Rendering!":"Render Aborted" );
     stopRendering=true;
-    rw.render->label ( "Render" );
-    rw.render->color ( FL_BLACK );
-#else
-    stopRendering=true;
-#endif
 }
 
 void gfcPlateManager::setFeedbackMessage(std::string theMessage)

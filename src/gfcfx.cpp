@@ -3,9 +3,6 @@
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <fstream>
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/Fl.H>
-#endif
 #include "trilerp.h"
 #include "xmlParser.h"
 #include "gfcStructures.h"

@@ -1,9 +1,6 @@
 #include "gfcnetworkmanager.h"
 #include "gfcTextRenderer.h"
 
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/fl_ask.H>
-#endif
 #include "gfcNetworkStructures.h"
 
 #include "gfcnetworklog.h"
@@ -73,9 +70,6 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
 {
 
 	if ( connected && !isServer) {
-#ifdef JEFECHECK_USE_FLTK
-            fl_alert ( "Can't start server when connected as client!" );
-#endif
             return;
         }
         

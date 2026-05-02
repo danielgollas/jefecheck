@@ -1,19 +1,11 @@
 #include "gfcnetworkserver.h"
-#ifdef JEFECHECK_USE_FLTK
-#include "gfcnetworkservergui_fltk.h"
-#else
 #include "qt/gfcnetworkservergui_qt.h"
-#endif
 #include "StringCompressor.h"
 
 #include <iostream>
 #include <sstream> //for stingstream
 #include <string>
 
-#ifdef JEFECHECK_USE_FLTK
-#include "remoteWindow.h"
-extern RemoteWindow rmw;
-#endif
 
 #include "gfcnetworklog.h"
 extern gfcNetworkLog networkLog;
@@ -34,11 +26,7 @@ extern gfcPlaylistManager playlistManager;
 extern gfcNetworkManager networkManager;
 
 gfcNetworkServer::gfcNetworkServer() {
-#ifdef JEFECHECK_USE_FLTK
-    myGUI=new gfcNetworkServerGUI_FLTK;
-#else
     myGUI=new gfcNetworkServerGUI_Qt;
-#endif
     peer = RakNetworkFactory::GetRakPeerInterface();
 	middleOfSync=false;
 }
@@ -91,14 +79,6 @@ void gfcNetworkServer::start(gfcServerParams * params) {
 }
 
 void gfcNetworkServer::initializeWidgets() {
-#ifdef JEFECHECK_USE_FLTK
-    myGUI->assignPortInputWidget(rmw.serverPort);
-    myGUI->assignIPOutputWidget(rmw.serverIP);
-    myGUI->assignNameInputWidget(rmw.serverName);
-    myGUI->assignPasswordWidget(rmw.serverPassword);
-    myGUI->assignStartStopButtonWidget(rmw.startButton);
-    myGUI->assignStatusWidget(rmw.status);
-#endif
 }
 
 void gfcNetworkServer::stop() {

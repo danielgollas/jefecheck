@@ -10,7 +10,6 @@
 #ifndef JEFECHECK_QT_FLTK_STUBS_H
 #define JEFECHECK_QT_FLTK_STUBS_H
 
-#ifndef JEFECHECK_USE_FLTK
 
 #include <glad/glad.h>
 
@@ -99,5 +98,4 @@ inline void gl_rect(int x, int y, int w, int h) {
     glEnd();
 }
 
-#endif  // !JEFECHECK_USE_FLTK
 #endif  // JEFECHECK_QT_FLTK_STUBS_H

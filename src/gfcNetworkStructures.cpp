@@ -1,9 +1,6 @@
 #include "gfcNetworkStructures.h"
 
 #include <stdio.h>
-#ifdef JEFECHECK_USE_FLTK
-#include "mainWindow.h"
-#endif
 #include "RakPeerInterface.h"
 #include <string>
 #include <vector>
@@ -21,15 +18,9 @@
 #include "BitStream.h"
 #include "StringCompressor.h"
 #include "gfcStructures.h"
-#ifdef JEFECHECK_USE_FLTK
-#include "mainWindow.h"
-#endif
 #include "gfcfx.h"
 #include "xmlParser.h"
 #include <fstream>
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/fl_ask.H>
-#endif
 #ifdef _WIN32
 #include <windows.h> // Sleep
 #else

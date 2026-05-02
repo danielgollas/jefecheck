@@ -1,20 +1,7 @@
 
 
 #include "gfctrackmanager.h"
-#ifdef JEFECHECK_USE_FLTK
-#include "gfcsequencegui_fltk.h"
-#include <FL/fl_ask.H>
-
-#include "mainWindow.h"
-extern MainWindow mw;
-#include "loadWindow.h"
-extern LoadWindow lw;
-
-#include "preferencesWindow.h"
-extern PreferencesWindow pw;
-#else
 #include "qt/gfcsequencegui_qt.h"
-#endif
 
 #include "gfcsessionmanager.h"
 extern gfcSessionManager sessionManager;
@@ -107,13 +94,9 @@ void gfcTrackManager::setPlaylistItem(gfcPlaylistItem item, bool fromNetwork){
 		}
 		message+="\nWould you like to load this item too?";
 
-#ifdef JEFECHECK_USE_FLTK
-		int answer=fl_choice("%s", "Yes", "Yes, and auto accept the requests in the future", "No,thank you", message.c_str());
-#else
 		// No interactive prompt in the Qt build yet — accept silently.
 		int answer = 0;
 		(void)message;
-#endif
 
 		switch ( answer ) {
 		case 0:
@@ -123,9 +106,6 @@ void gfcTrackManager::setPlaylistItem(gfcPlaylistItem item, bool fromNetwork){
 		case 1:
 			//load the item and set autoload
 			sessionManager.loadCrashedSession();
-#ifdef JEFECHECK_USE_FLTK
-			pw.remoteAutoAcceptLoadRequests->value(true);
-#endif
 			setAutoAcceptRemoteLoadRequests(true);
 			break;
 
@@ -158,14 +138,7 @@ void gfcTrackManager::setPlaylistItem(gfcPlaylistItem item, bool fromNetwork){
 	
 	setCurrentProgramState(item.programState);
 
-#ifdef JEFECHECK_USE_FLTK
-	if(!lw.loadWindow->visible())
-	{
-		startLoadingAll();
-	}
-#else
 	startLoadingAll();
-#endif
 	networkManager.sendPlaylistItem(itemToSend);
 }
 
@@ -225,98 +198,6 @@ int testHandle()
 
 void gfcTrackManager::initializeWidgets()
 {
-#ifdef JEFECHECK_USE_FLTK
-	/*
-	For now, the track manager instances the sequence object's sequenceGUI objects to sequenceGUI_FLTK objects.
-	*/
-	
-	for(int i=0;i<GFC_MAX_SEQUENCES;i++){
-		sequences[i].myGUI=new gfcSequenceGUI_FLTK;
-		sequences[i].trackID='A'+i;
-	}
-	
-	sequences[0].myGUI->assignFilenameWidget(lw.fileNameInputA);
-	sequences[0].myGUI->assignFromWidget(lw.loadFromSpinnerA);
-	sequences[0].myGUI->assignToWidget(lw.loadToSpinnerA);
-	sequences[0].myGUI->assignFilterWidget(lw.filterChooserA);
-	sequences[0].myGUI->assignAOIWidget(lw.cropA);
-	sequences[0].myGUI->assignAbortWidget(mw.abortA);
-	sequences[0].myGUI->assignStreamWidget(lw.loadModeA);
-	sequences[0].myGUI->assignScaleWidget(lw.scaleChooserA);
-	sequences[0].myGUI->assignGammaWidget(lw.gammaSliderA);
-	sequences[0].myGUI->assignCompressionWidget(lw.formatA);
-	sequences[0].myGUI->assignSliderWidget(mw.trackABar);
-	sequences[0].myGUI->assignBrowseWidget(lw.browseButtonA);
-	sequences[0].myGUI->assignWindowWidget(lw.loadWindow);
-	sequences[0].myGUI->assignEstimatesWidget(lw.estimatesA);
-	sequences[0].myGUI->assignRecentButton(lw.recentButtonA);
-	sequences[0].myGUI->assignUnloadAndClearButton(lw.unloadAndClearA);
-	sequences[0].myGUI->assignMoreOptionsButton(mw.menuA);
-	sequences[0].myGUI->assignChannelOptionsWidget(lw.channelsChoiceA);
-	sequences[0].myGUI->assignStartButtonWidget(lw.startA);
-	
-
-	
-	sequences[1].myGUI->assignFilenameWidget(lw.fileNameInputB);
-	sequences[1].myGUI->assignFromWidget(lw.loadFromSpinnerB);
-	sequences[1].myGUI->assignToWidget(lw.loadToSpinnerB);
-	sequences[1].myGUI->assignFilterWidget(lw.filterChooserB);
-	sequences[1].myGUI->assignAOIWidget(lw.cropB);
-	sequences[1].myGUI->assignAbortWidget(mw.abortB);
-	sequences[1].myGUI->assignStreamWidget(lw.loadModeB);
-	sequences[1].myGUI->assignScaleWidget(lw.scaleChooserB);
-	sequences[1].myGUI->assignGammaWidget(lw.gammaSliderB);
-	sequences[1].myGUI->assignCompressionWidget(lw.formatB);
-	sequences[1].myGUI->assignSliderWidget(mw.trackBBar);
-	sequences[1].myGUI->assignBrowseWidget(lw.browseButtonB);
-	sequences[1].myGUI->assignWindowWidget(lw.loadWindow);
-	sequences[1].myGUI->assignEstimatesWidget(lw.estimatesB);
-	sequences[1].myGUI->assignRecentButton(lw.recentButtonB);
-	sequences[1].myGUI->assignUnloadAndClearButton(lw.unloadAndClearB);
-	sequences[1].myGUI->assignMoreOptionsButton(mw.menuB);
-	sequences[1].myGUI->assignChannelOptionsWidget(lw.channelsChoiceB);
-	sequences[1].myGUI->assignStartButtonWidget(lw.startB);
-	
-	sequences[2].myGUI->assignFilenameWidget(lw.fileNameInputC);
-	sequences[2].myGUI->assignFromWidget(lw.loadFromSpinnerC);
-	sequences[2].myGUI->assignToWidget(lw.loadToSpinnerC);
-	sequences[2].myGUI->assignFilterWidget(lw.filterChooserC);
-	sequences[2].myGUI->assignAOIWidget(lw.cropC);
-	sequences[2].myGUI->assignAbortWidget(mw.abortC);
-	sequences[2].myGUI->assignStreamWidget(lw.loadModeC);
-	sequences[2].myGUI->assignScaleWidget(lw.scaleChooserC);
-	sequences[2].myGUI->assignGammaWidget(lw.gammaSliderC);
-	sequences[2].myGUI->assignCompressionWidget(lw.formatC);
-	sequences[2].myGUI->assignSliderWidget(mw.trackCBar);
-	sequences[2].myGUI->assignBrowseWidget(lw.browseButtonC);
-	sequences[2].myGUI->assignWindowWidget(lw.loadWindow);
-	sequences[2].myGUI->assignEstimatesWidget(lw.estimatesC);
-	sequences[2].myGUI->assignRecentButton(lw.recentButtonC);
-	sequences[2].myGUI->assignUnloadAndClearButton(lw.unloadAndClearC);
-	sequences[2].myGUI->assignMoreOptionsButton(mw.menuC);
-	sequences[2].myGUI->assignChannelOptionsWidget(lw.channelsChoiceC);
-	sequences[2].myGUI->assignStartButtonWidget(lw.startC);
-	
-	sequences[3].myGUI->assignFilenameWidget(lw.fileNameInputD);
-	sequences[3].myGUI->assignFromWidget(lw.loadFromSpinnerD);
-	sequences[3].myGUI->assignToWidget(lw.loadToSpinnerD);
-	sequences[3].myGUI->assignFilterWidget(lw.filterChooserD);
-	sequences[3].myGUI->assignAOIWidget(lw.cropD);
-	sequences[3].myGUI->assignAbortWidget(mw.abortD);
-	sequences[3].myGUI->assignStreamWidget(lw.loadModeD);
-	sequences[3].myGUI->assignScaleWidget(lw.scaleChooserD);
-	sequences[3].myGUI->assignGammaWidget(lw.gammaSliderD);
-	sequences[3].myGUI->assignCompressionWidget(lw.formatD);
-	sequences[3].myGUI->assignSliderWidget(mw.trackDBar);
-	sequences[3].myGUI->assignBrowseWidget(lw.browseButtonD);
-	sequences[3].myGUI->assignWindowWidget(lw.loadWindow);
-	sequences[3].myGUI->assignEstimatesWidget(lw.estimatesD);
-	sequences[3].myGUI->assignRecentButton(lw.recentButtonD);
-	sequences[3].myGUI->assignUnloadAndClearButton(lw.unloadAndClearD);
-	sequences[3].myGUI->assignMoreOptionsButton(mw.menuD);
-	sequences[3].myGUI->assignChannelOptionsWidget(lw.channelsChoiceD);
-	sequences[3].myGUI->assignStartButtonWidget(lw.startD);
-#else
     // Qt: each sequence gets a stateful gfcSequenceGUI_Qt. The drop
     // handler / future load panel will push filename + load params via
     // setters; loadPreview reads them back through getXxx().
@@ -324,7 +205,6 @@ void gfcTrackManager::initializeWidgets()
         sequences[i].myGUI  = new gfcSequenceGUI_Qt;
         sequences[i].trackID = 'A' + i;
     }
-#endif
 }
 
 void gfcTrackManager::stopLoadingAll()
@@ -657,9 +537,6 @@ void gfcTrackManager::loadFromFilename(int whichOne, gfcLoadParams params)
 		tmp->myGUI->setToFrame(params.toFrame);
 		
 		startLoadingSequence(whichOne);
-#ifdef JEFECHECK_USE_FLTK
-		lw.loadWindow->hide();
-#endif
 	}
 	else
 	{

@@ -1,17 +1,10 @@
 #include "gfcplaybackmanager.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
-#ifdef JEFECHECK_USE_FLTK
-#include "gfcplaybackgui_fltk.h"
-#else
 #include "qt/gfcplaybackgui_qt.h"
-#endif
 
 #include <glad/glad.h>
 
-#ifdef JEFECHECK_USE_FLTK
-#include "mainWindow.h"
-#endif
 
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
@@ -39,43 +32,12 @@ gfcPlaybackManager::~gfcPlaybackManager() {
         delete myGUI;
 }
 
-#ifdef JEFECHECK_USE_FLTK
-void gfcPlaybackManager::initializeWidgets(MainWindow &mw) {
-    myGUI=new gfcPlaybackGUI_FLTK;
-
-
-    myGUI->assignTimeLineWidget(mw.timeLine);
-    myGUI->assignCurrentFrameWidget(mw.timeLineInput);
-    myGUI->assignFromWidget(mw.playFromInput);
-    myGUI->assignToWidget(mw.playUpToInput);
-
-	myGUI->assignInPointWidget(mw.inPointInput);
-	myGUI->assignOutPointWidget(mw.outPointInput);
-
-    myGUI->assignTargetFPSWidget(mw.targetFPSInput);
-    myGUI->assignCurrentFPSWidget(mw.currentFPSOutput);
-    myGUI->assignSMPTWidget(mw.timeCodeOutput);
-    myGUI->assignPlayFwdButtonWidget(mw.playFwdButton);
-    myGUI->assignPlayRevButtonWidget(mw.playRevButton);
-    myGUI->assignFFwdButtonWidget(mw.ffButton);
-    myGUI->assignRwdButtonWidget(mw.rewindButton);
-    myGUI->assignOneBackButtonWidget(mw.backOneButton);
-    myGUI->assignOneFwdButtonWidget(mw.forwardOneButton);
-    myGUI->assignPlaybackModeWidgets(mw.loopOnceRadio,mw.loopLoopRadio,mw.loopBounceRadio);
-    myGUI->assignLoopPriorityWidget(mw.loopPriorityChoice);
-    this->setFromFrame(1);
-    this->setToFrame(100);
-    this->setCurrentFrame(1);
-	this->myGUI->setPlayFwdLabel(0);
-}
-#else
 void gfcPlaybackManager::initializeWidgets() {
     myGUI=new gfcPlaybackGUI_Qt;
     this->setFromFrame(1);
     this->setToFrame(100);
     this->setCurrentFrame(1);
 }
-#endif
 
 int gfcPlaybackManager::isPlaying()
 {
