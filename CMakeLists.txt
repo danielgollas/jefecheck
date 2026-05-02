@@ -55,6 +55,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         -Wno-register               # C++17 removed register keyword
     )
     if(WIN32)
+        # MinGW's stricter type checking trips on legacy xmlParser
+        # template instantiations (UNICODE / `const char*` ↔ `const
+        # wchar_t*` conversions in gfcStructures.h, gfcNetworkStructures.h)
+        # that the FLTK build accepted only because -fpermissive was set
+        # for FLTK callback casts. Keep the same flag on Windows so the
+        # MinGW build of the Qt port still compiles. Linux GCC and macOS
+        # Clang are stricter elsewhere but don't hit this path.
+        target_compile_options(jefecheck PRIVATE -fpermissive)
         target_link_libraries(jefecheck PRIVATE
             glu32 opengl32 ws2_32 winmm iphlpapi
         )

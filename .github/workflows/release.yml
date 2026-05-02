@@ -19,7 +19,7 @@ jobs:
           sudo apt-get install -y \
             cmake build-essential \
             qt6-base-dev qt6-base-private-dev libqt6opengl6-dev \
-            libopenimageio-dev openimageio-tools \
+            libopenimageio-dev openimageio-tools libopencv-dev \
             libopenexr-dev libilmbase-dev libimath-dev \
             libcurl4-openssl-dev zlib1g-dev \
             libgl-dev libglu1-mesa-dev libfreetype6-dev
