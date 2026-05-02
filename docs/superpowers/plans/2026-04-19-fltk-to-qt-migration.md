@@ -1,6 +1,27 @@
 # FLTK-to-Qt Migration Plan — Status & Remaining Work
 
-> **Re-evaluated 2026-05-01** after PR-35 (bit depth + scale) and PR-36 (System Specs dialog) merged into `qt-migration` (HEAD: `56463ac`). Original 6-phase plan superseded by this version; phases retained as section headers for traceability.
+> **2026-05-01 final status.** PR-37 → PR-43m landed on `qt-migration`, and PR #84 (qt-migration → main) brings the whole migration into `main` once review approval clears. Qt6 is the only backend; FLTK is fully gone from source, CMake, and CI. The "Remaining Work" sections below are kept for historical reference — none of the listed PRs are still open.
+
+## Final Headline
+
+| Wave | Sub-PRs | Effect |
+|---|---|---|
+| Phase 2E feature ports | #69 (PR-38a), #70 (PR-38b), #71 (PR-39a), #72 (PR-40), #73 (PR-41a) | FX param viewer + editor, Render dialog, Playlist dock, Remote Session modal |
+| AppContext scaffolding | #68 (PR-37) | `src/AppContext.{h,cpp}` (partial Phase 1B) |
+| CI flip | #74 (PR-42) | `option(USE_QT … ON)`; build/release/uitests workflows install Qt6 |
+| Phase 4 cleanup | #75–#82 (PR-43a–h) | 140+ FLTK files deleted; 132 `#ifdef JEFECHECK_USE_FLTK` blocks scrubbed (2237 lines) |
+| FLTK-out-of-CMake | #80 (PR-43f), #83 (PR-43i) | `option(USE_QT)` removed; `find_package(FLTK)` out; release/uitests workflows Qt-only |
+| Cross-platform fixups | #85–#88 (PR-43j–m) | macOS leftover FL/gl.h; Linux opencv4 + getenv fallback; Windows xmlParser UNICODE + GL/glu.h ordering + `<algorithm>` |
+
+Deferred follow-ups (still open as design questions, not blockers):
+
+- **PR-38c** — texture/cube/LUT slot editing in the FX param panel.
+- **PR-39b** — render moves to a worker `QThread`, format-specific quality controls, video codec, movie pipeline.
+- **PR-40b** — drag-and-drop reorder for the playlist, multi-track items per row, FLTK "compact view" / "show full paths" / "scale override" submenus, session-save integration.
+- **PR-41b** — remote chat log + chat input + participant list + per-event refresh signal + save chat + client-side `stopConnection` (declared but never defined in `gfcNetworkManager`).
+- **PR-LAST** — Qt load window (gated on UX revisions; the `File → Load Sequence` `QFileDialog` covers the basic flow today).
+
+---
 
 ## Context
 
