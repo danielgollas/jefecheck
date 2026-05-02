@@ -55,14 +55,20 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         -Wno-register               # C++17 removed register keyword
     )
     if(WIN32)
-        # MinGW's stricter type checking trips on legacy xmlParser
-        # template instantiations (UNICODE / `const char*` ↔ `const
-        # wchar_t*` conversions in gfcStructures.h, gfcNetworkStructures.h)
-        # that the FLTK build accepted only because -fpermissive was set
-        # for FLTK callback casts. Keep the same flag on Windows so the
-        # MinGW build of the Qt port still compiles. Linux GCC and macOS
-        # Clang are stricter elsewhere but don't hit this path.
-        target_compile_options(jefecheck PRIVATE -fpermissive)
+        # MinGW64 defines _UNICODE by default, which flips xmlParser
+        # (vendored in src/) into wchar_t* mode via its `#ifdef _UNICODE`
+        # gate. Our XML schema uses `const char*` literals throughout, so
+        # disable the macro globally on Windows to keep xmlParser in
+        # UTF-8/char* mode. Without this, the build hits a cascade of
+        # "cannot convert const char[N] to const wchar_t*" errors in
+        # gfcStructures.h / gfcNetworkStructures.h template instantiations.
+        target_compile_options(jefecheck PRIVATE
+            -UUNICODE -U_UNICODE
+            # -fpermissive keeps a few residual void*/long FLTK-callback
+            # conversions in legacy ports compiling on the stricter MinGW
+            # toolchain. Harmless on the Qt build; cheap to keep.
+            -fpermissive
+        )
         target_link_libraries(jefecheck PRIVATE
             glu32 opengl32 ws2_32 winmm iphlpapi
         )
