@@ -13,6 +13,7 @@
 #include "../gfcrenderparams.h"
 #include "../gfcplaylistmanager.h"
 #include "../gfcplaylistitem.h"
+#include "../gfcnetworkmanager.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
@@ -29,6 +30,7 @@ extern gfcPlaylistManager playlistManager;
 extern gfcTrackManager trackManager;
 extern gfcLUTManager lutManager;
 extern gfcFXManager fxManager;
+extern gfcNetworkManager networkManager;
 extern gfcSettings sett;
 
 namespace jefe::qt {
@@ -671,6 +673,47 @@ void loadPlaylistItem(int index) {
 
 int getSelectedPlaylistItem() {
     return playlistManager.selectedItem;
+}
+
+void connectAsServer(const RemoteServerParams& params) {
+    if (networkManager.getConnected()) return;
+    gfcServerParams sp;
+    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s",
+                  params.serverName.c_str());
+    std::snprintf(sp.password,   sizeof(sp.password),   "%s",
+                  params.password.c_str());
+    sp.port = params.port;
+    networkManager.startServer(&sp);
+}
+
+void connectAsClient(const RemoteClientParams& params) {
+    if (networkManager.getConnected()) return;
+    gfcConnectionParams cp;
+    cp.serverIP  = params.serverIP;
+    cp.port      = params.port;
+    cp.password  = params.password;
+    cp.nickname  = params.clientName;
+    networkManager.startConnection(&cp);
+}
+
+void disconnectRemote() {
+    if (!networkManager.getConnected()) return;
+    // gfcNetworkManager::stopConnection is declared but never defined
+    // — the FLTK side never wired client-side disconnect either, and
+    // RakNet itself tears the client peer down on app exit. Server-
+    // side stop is supported. PR-41b will fill in the client-side
+    // disconnect path (likely via the existing peer destructor).
+    if (networkManager.getIsServer()) {
+        networkManager.stopServer();
+    }
+}
+
+bool isRemoteConnected() {
+    return networkManager.getConnected();
+}
+
+bool isRemoteServer() {
+    return networkManager.getIsServer();
 }
 
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {

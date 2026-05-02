@@ -133,6 +133,8 @@ cd tests/ui && JEFECHECK_BIN=../../build_qt/JefeCheck.app \
 
 ### PR-41: Remote sessions (`RemotePanel_qt`)
 
+**Status (PR-41a, in flight on `qt/41-remote-panel`):** Scaffold landed. New `dock.remote` on the left side, vertically split below `dock.playlist`, with two `QGroupBox` form sections — host/server (name / port / password) and join/client (nickname / IP / port / password). Bridge accessors in `SequenceLoadBridge_qt`: `RemoteServerParams` / `RemoteClientParams` structs, `connectAsServer`, `connectAsClient`, `disconnectRemote`, `isRemoteConnected`, `isRemoteServer`. Status label tracks connection state; the panel disables "Start server" / "Connect" when already connected and enables "Disconnect" when active. Two Mac2 smoke tests. PR-41b adds: chat log + chat input + participant list + a per-event refresh signal (gfcNetworkManager doesn't currently expose one), the FLTK menu actions for `MENUREMOTESAVECHAT_ID`, and the client-side `stopConnection` (declared but not defined in `gfcNetworkManager` — needs RakNet peer teardown).
+
 **Why:** `src/remoteWindow.fl` + `src/callbacks/NetworkCallbacks.cpp` + `gfcNetworkManager` host the RakNet collaborative review feature. Real and shipped, just not yet on the Qt side.
 
 **Approach:**

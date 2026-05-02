@@ -85,6 +85,21 @@ DOCK_FXPARAMS = "dock.fxparams"
 FXPARAMS_PANEL = "fxparams.panel"
 FXPARAMS_STATUS = "fxparams.status.label"
 
+# Remote sessions dialog (PR-41a — modal File → Remote Session…)
+DIALOG_REMOTE = "dialog.remote"
+REMOTE_DONE = "remote.done.button"
+REMOTE_SERVER_NAME = "remote.server.name.edit"
+REMOTE_SERVER_PORT = "remote.server.port.spin"
+REMOTE_SERVER_PASSWORD = "remote.server.password.edit"
+REMOTE_SERVER_START = "remote.server.start.button"
+REMOTE_CLIENT_NAME = "remote.client.name.edit"
+REMOTE_CLIENT_IP = "remote.client.ip.edit"
+REMOTE_CLIENT_PORT = "remote.client.port.spin"
+REMOTE_CLIENT_PASSWORD = "remote.client.password.edit"
+REMOTE_CLIENT_CONNECT = "remote.client.connect.button"
+REMOTE_DISCONNECT = "remote.disconnect.button"
+REMOTE_STATUS = "remote.status.label"
+
 # Playlist dock (PR-40)
 DOCK_PLAYLIST = "dock.playlist"
 PLAYLIST_PANEL = "playlist.panel"

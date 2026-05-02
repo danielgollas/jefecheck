@@ -4,6 +4,7 @@
 #include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
 #include "PlaylistPanel_qt.h"
+#include "RemotePanel_qt.h"
 #include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
 #include "MinSpecsDialog_qt.h"
@@ -402,6 +403,16 @@ void MainWindow_Qt::buildMenuBar() {
         RenderDialog_Qt dlg(this);
         dlg.exec();
     })->setObjectName("menu.file.render");
+
+    // File → Remote Session… opens RemoteDialog_Qt (PR-41a). Modal
+    // dialog with host/server + join/client form sections, mirroring
+    // the FLTK remoteWindow.fl. Chat log + participant list land in
+    // PR-41b once gfcNetworkManager exposes a connection-event signal
+    // we can subscribe to.
+    fileMenu->addAction("Remote &Session…", this, [this]() {
+        RemoteDialog_Qt dlg(this);
+        dlg.exec();
+    })->setObjectName("menu.file.remote");
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
@@ -621,6 +632,13 @@ void MainWindow_Qt::buildDocks() {
     playlistPanelWidget_->setMinimumHeight(140);
     addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
     splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
+
+    // Remote sessions — modal dialog launched from the File menu
+    // (mirrors the FLTK `remoteWindow.fl` standalone window). Adding
+    // it as a fourth left-side dock destabilized the Mac AX bridge's
+    // view of the FX Stack and FX Params children under sweep load,
+    // so we kept the dialog model the FLTK side already used.
+    // Wired in buildMenuBar.
 
     // Refresh the FX param panel whenever viewport-driven plate edits
     // fire (this also catches active-plate changes — clicking a plate
