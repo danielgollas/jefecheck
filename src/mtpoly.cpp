@@ -9,11 +9,6 @@
 #include "UIConstants.h"
 #include "qt/qt_fltk_stubs.h"  // FL_COURIER used by gfc_gl_font
 #include <glad/glad.h>
-#ifdef __APPLE__
-#include <OpenGL/glu.h>
-#else
-#  include <GL/glu.h>
-#endif
 
 
 #define MIN(x,y) (x < y ? x : y)
