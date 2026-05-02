@@ -22,6 +22,7 @@ class FXStackPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
 class PlaylistPanel_Qt;
+class RemoteDialog_Qt;
 class PlateManager_Qt;
 class QComboBox;
 class QLabel;

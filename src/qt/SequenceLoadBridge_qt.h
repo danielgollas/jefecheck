@@ -225,6 +225,35 @@ int triggerSyncRender(const RenderParams& params);
 void abortRender();
 bool isRendering();
 
+// Remote sessions (PR-41). The Qt RemotePanel uses these to drive
+// gfcNetworkManager + the existing gfcNetworkClient/Server GUI
+// abstractions. PR-41a only ships the connect/status hooks; chat,
+// participant list, and saving the chat log come in PR-41b along
+// with a per-event refresh signal so the panel can react to remote
+// peers connecting/disconnecting in real time.
+//
+// `connectAsServer` calls gfcNetworkManager::startServer with the
+// supplied params; `connectAsClient` calls startConnection. Both
+// silently no-op if a session is already active in the other role.
+struct RemoteServerParams {
+    std::string serverName;
+    int port = 60000;
+    std::string password;
+};
+
+struct RemoteClientParams {
+    std::string clientName;
+    std::string serverIP;
+    int port = 60000;
+    std::string password;
+};
+
+void connectAsServer(const RemoteServerParams& params);
+void connectAsClient(const RemoteClientParams& params);
+void disconnectRemote();
+bool isRemoteConnected();
+bool isRemoteServer();
+
 // Playlist (PR-40). The Qt PlaylistPanel calls these to drive
 // gfcPlaylistManager + gfcTrackManager without dragging glad in.
 //

@@ -113,7 +113,8 @@ def _add_fx_by_title(app, title):
     import time
 
     last_err = None
-    for attempt in range(15):
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
         try:
             available = app.by_object_name(locators.FXSTACK_AVAILABLE)
             static_texts = available.find_elements(
@@ -138,7 +139,7 @@ def _add_fx_by_title(app, title):
             return
         except AssertionError as e:
             last_err = e
-            time.sleep(0.3)
+            time.sleep(0.5)
     raise AssertionError(f"_add_fx_by_title({title!r}) failed: {last_err}")
 
 
