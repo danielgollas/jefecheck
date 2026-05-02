@@ -187,6 +187,44 @@ void setFXParamValueOnPlate(int plateIdx,
                             const std::string& widgetName,
                             float value);
 
+// Render dialog (PR-39). Qt-friendly mirror of `gfcRenderParams`
+// without dragging glad / FLTK headers into the Qt TU. Format mirrors
+// the gfcRenderFormats enum: 0=JPEG, 1=EXR, 2=TIFF, 3=TGA, 4=BMP,
+// 5=PNG. PR-39a passes a small subset (path / prefix / postfix /
+// padding / range / scale / format / quadrant); the format-specific
+// quality fields, video codec, and movie-creation pipeline land in
+// PR-39b. Defaults match `gfcRenderParams`'s ctor values.
+struct RenderParams {
+    int quadrant = 0;
+    int format   = 0;        // gfcRenderFormats enum value
+    int from     = 1;
+    int to       = 1;
+    int padding  = 4;
+    float scale  = 1.0f;
+    std::string path;        // output directory (no trailing slash required)
+    std::string prefix;
+    std::string postfix;
+    std::string formatString;  // e.g. "jpg" — drives extension; CreateRenderFilename appends it
+};
+
+// Returns a sample filename built from `params` using the existing
+// `CreateRenderFilename` helper. Used by the dialog to render a live
+// "first frame: …" preview as the user edits path/prefix/format.
+std::string previewRenderFilename(const RenderParams& params);
+
+// Synchronously runs `plateManager.renderPlate(params)` on the GUI
+// thread. PR-39a accepts that the UI freezes during render — async
+// + cancel button comes in PR-39b along with a QThread driver. The
+// caller MUST have a current GL context (the Qt mainwindow's
+// QOpenGLWidget keeps one current). Returns the count of frames
+// the renderer wrote.
+int triggerSyncRender(const RenderParams& params);
+
+// Cancel hooks. Today only meaningful from a worker thread (PR-39b);
+// stubbed here for symmetry with the FLTK callback shape.
+void abortRender();
+bool isRendering();
+
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for
 // "Ready" before driving the panel so they don't race the autoload.

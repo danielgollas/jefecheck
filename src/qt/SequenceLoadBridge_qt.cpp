@@ -10,6 +10,7 @@
 #include "../gfcfxmanager.h"
 #include "../gfcfxstack.h"
 #include "../gfcStructures.h"
+#include "../gfcrenderparams.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
@@ -575,6 +576,44 @@ void setFXParamValueOnPlate(int plateIdx,
     if (!stack) return;
     stack->setWidgetValue(fxIndex, groupName, widgetName, value);
     plateManager.setChanged();
+}
+
+namespace {
+gfcRenderParams toCoreRenderParams(const RenderParams& src) {
+    gfcRenderParams p;
+    p.quadrant     = src.quadrant;
+    p.format       = src.format;
+    p.formatString = src.formatString;
+    p.from         = src.from;
+    p.to           = src.to;
+    p.frame        = src.from;
+    p.padding      = src.padding;
+    p.scale        = src.scale;
+    p.path         = src.path;
+    p.prefix       = src.prefix;
+    p.postfix      = src.postfix;
+    return p;
+}
+}  // namespace
+
+std::string previewRenderFilename(const RenderParams& params) {
+    gfcRenderParams p = toCoreRenderParams(params);
+    return CreateRenderFilename(p);
+}
+
+int triggerSyncRender(const RenderParams& params) {
+    gfcRenderParams p = toCoreRenderParams(params);
+    std::vector<std::string> rendered;
+    plateManager.renderPlate(p, &rendered);
+    return static_cast<int>(rendered.size());
+}
+
+void abortRender() {
+    plateManager.abortRender();
+}
+
+bool isRendering() {
+    return plateManager.isRendering();
 }
 
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
