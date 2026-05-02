@@ -47,33 +47,11 @@ if(USE_QT)
         src/*.cpp
         src/ui/*.cpp
     )
-    # FLUID-generated FLTK window definitions and dropins.
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "Window\\.cpp$")
-    # FLTK app entry point and the FLTK Fl_Gl_Window itself.
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "main\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "GlViewport\\.cpp$")
     # gfcStructures.cpp stays in the build — it has many FLTK-free utility
     # functions (ftos, ReadTextFileIntoString, swabFloat, gfcTimer, etc.)
     # that the rest of the chain links against. Its FLTK touchpoints are
     # gated behind JEFECHECK_USE_FLTK.
-    # File chooser, text renderer, UI callbacks, etc. — FLTK-only.
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcfilechooser\\.cpp$")
-    # gfcTextRenderer is FLTK-free despite the comment in its header;
-    # leave it in the build so gfcplatemanager.cpp's text overlays link.
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "UICallbacks\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "trackwidget\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfctimer\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfctrackmanagergui\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "Fl_.*\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "fxcontrolwindow\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "playlistwindow\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "renderwindow\\.cpp$")
-    # Custom FLTK widget subclasses — pure FLTK Fl_Widget/Fl_Group/etc. extensions.
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcFXControlBase\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcSliderInput\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcplaylistwindowwindow\\.cpp$")
-    # Same exclusions as the FLTK build for non-Windows / duplicated /
-    # disabled files.
+    # Same exclusions as the FLTK build for duplicated / disabled files.
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
