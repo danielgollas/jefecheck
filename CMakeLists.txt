@@ -5,22 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# UI backend selection. Qt6 is the canonical build as of PR-42; FLTK
-# remains opt-in via -DUSE_QT=OFF for the duration of Phase 4 cleanup
-# and is removed entirely once Phase 4 lands.
-# See docs/superpowers/plans/2026-04-19-fltk-to-qt-migration.md.
-option(USE_QT "Build with Qt6 (default). Set OFF to build with FLTK." ON)
-
 # Find system packages
 find_package(OpenGL REQUIRED)
-if(USE_QT)
-    find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
-    set(CMAKE_AUTOMOC ON)
-    set(CMAKE_AUTORCC ON)
-    set(CMAKE_AUTOUIC ON)
-else()
-    find_package(FLTK REQUIRED)
-endif()
+find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 find_package(OpenImageIO REQUIRED)
 find_package(OpenEXR REQUIRED)
 find_package(CURL REQUIRED)
@@ -37,61 +27,23 @@ add_library(cli11 INTERFACE)
 target_include_directories(cli11 INTERFACE third_party/cli11)
 
 # Collect source files
-if(USE_QT)
-    # Qt build: include the whole codebase, then exclude the FLTK-only TUs.
-    # Files that compile in both backends keep their FLTK touchpoints
-    # gated behind JEFECHECK_USE_FLTK; files that are wholly FLTK (FLUID
-    # windows, the callback shims, gfcStructures, etc.) are excluded
-    # outright and replaced by the Qt-side equivalents in src/qt/.
-    file(GLOB JEFECHECK_SOURCES
-        src/*.cpp
-        src/ui/*.cpp
-    )
-    # gfcStructures.cpp stays in the build — it has many FLTK-free utility
-    # functions (ftos, ReadTextFileIntoString, swabFloat, gfcTimer, etc.)
-    # that the rest of the chain links against. Its FLTK touchpoints are
-    # gated behind JEFECHECK_USE_FLTK.
-    # Same exclusions as the FLTK build for duplicated / disabled files.
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
-    if(NOT WIN32)
-        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "WSAStartupSingleton")
-        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
-    endif()
-    if(WIN32)
-        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
-    endif()
-
-    file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
-    list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
-else()
-    file(GLOB JEFECHECK_SOURCES
-        src/*.cpp
-        src/*.cxx
-        src/ui/*.cpp
-        src/callbacks/*.cpp
-    )
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_qt\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "main_qt\\.cpp$")
-
-    # Platform-specific exclusions
-    if(NOT WIN32)
-        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "WSAStartupSingleton")
-        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
-    endif()
-
-    # _FindFirst provides POSIX implementations of Windows FindFirst/FindNext API
-    # Needed on Linux and macOS; excluded only on actual Windows
-    if(WIN32)
-        list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
-    endif()
-
-    # gfcTrack.cpp is a duplicate of gfcSequence.cpp (same symbols)
-
-    # Exclude custom EXR loader/saver - OIIO handles EXR natively
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
+file(GLOB JEFECHECK_SOURCES
+    src/*.cpp
+    src/ui/*.cpp
+)
+# Custom EXR loader/saver — OIIO handles EXR natively.
+list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
+list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
+if(NOT WIN32)
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "WSAStartupSingleton")
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
 endif()
+if(WIN32)
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
+endif()
+
+file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
+list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
 
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
@@ -103,9 +55,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         -Wno-register               # C++17 removed register keyword
     )
     if(WIN32)
-        target_compile_options(jefecheck PRIVATE
-            -fpermissive             # void* to int casts in FLTK callbacks
-        )
         target_link_libraries(jefecheck PRIVATE
             glu32 opengl32 ws2_32 winmm iphlpapi
         )
@@ -133,23 +82,15 @@ target_link_libraries(jefecheck PRIVATE
     OpenEXR::OpenEXR
     CURL::libcurl
     ZLIB::ZLIB
+    Qt6::Widgets
+    Qt6::OpenGLWidgets
 )
-
-# Backend-specific includes / libs
-if(USE_QT)
-    target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
-    target_link_libraries(jefecheck PRIVATE Qt6::Widgets Qt6::OpenGLWidgets)
-else()
-    target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_FLTK=1)
-    target_link_libraries(jefecheck PRIVATE ${FLTK_LIBRARIES})
-    target_include_directories(jefecheck PRIVATE ${FLTK_INCLUDE_DIR})
-endif()
+target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
 
 # macOS
 if(APPLE)
     # Objective-C++ TU for the NSBundle-backed bundle Resources lookup.
-    # Compiled on every macOS build (Qt and FLTK), used by
-    # getApplicationDataPath in src/gfcStructures.cpp.
+    # Used by getApplicationDataPath in src/gfcStructures.cpp.
     target_sources(jefecheck PRIVATE src/macos_bundle_path.mm)
     set_source_files_properties(src/macos_bundle_path.mm PROPERTIES
         COMPILE_FLAGS "-fobjc-arc")
@@ -161,54 +102,50 @@ if(APPLE)
         "-framework Foundation"
     )
 
-    # Build a proper .app bundle for the Qt build. CFBundleName and
-    # CFBundleIdentifier flow into the AXApplication root's title and
-    # identifier, which is what assistive tech (and Appium's mac2 driver)
-    # query. Also fixes the dock app name and is required for codesign /
-    # notarization down the line.
-    if(USE_QT)
-        configure_file(
-            ${CMAKE_SOURCE_DIR}/packaging/macos/Info.plist.in
-            ${CMAKE_BINARY_DIR}/Info.plist
-            @ONLY)
-        set_target_properties(jefecheck PROPERTIES
-            MACOSX_BUNDLE TRUE
-            MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/Info.plist
-            OUTPUT_NAME "jefecheck")
+    # Build a proper .app bundle. CFBundleName and CFBundleIdentifier
+    # flow into the AXApplication root's title and identifier, which is
+    # what assistive tech (and Appium's mac2 driver) query. Also fixes
+    # the dock app name and is required for codesign / notarization
+    # down the line.
+    configure_file(
+        ${CMAKE_SOURCE_DIR}/packaging/macos/Info.plist.in
+        ${CMAKE_BINARY_DIR}/Info.plist
+        @ONLY)
+    set_target_properties(jefecheck PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/Info.plist
+        OUTPUT_NAME "jefecheck")
 
-        # Copy runtime resources into the bundle so getApplicationDataPath
-        # (= argv[0]/../../Resources/) finds FX/ and fonts/ without the
-        # workspace symlinks dev builds used to need. Icon goes alongside
-        # so CFBundleIconFile resolves.
-        set(_app_resources $<TARGET_FILE_DIR:jefecheck>/../Resources)
-        add_custom_command(TARGET jefecheck POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${_app_resources}
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    ${CMAKE_SOURCE_DIR}/src/FX ${_app_resources}/FX
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    ${CMAKE_SOURCE_DIR}/src/fonts ${_app_resources}/fonts
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${CMAKE_SOURCE_DIR}/packaging/macos/JefeCheck.icns
-                    ${_app_resources}/JefeCheck.icns
-            VERBATIM)
-    endif()
+    # Copy runtime resources into the bundle so getApplicationDataPath
+    # (= argv[0]/../../Resources/) finds FX/ and fonts/ without the
+    # workspace symlinks dev builds used to need. Icon goes alongside
+    # so CFBundleIconFile resolves.
+    set(_app_resources $<TARGET_FILE_DIR:jefecheck>/../Resources)
+    add_custom_command(TARGET jefecheck POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${_app_resources}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/FX ${_app_resources}/FX
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/fonts ${_app_resources}/fonts
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_SOURCE_DIR}/packaging/macos/JefeCheck.icns
+                ${_app_resources}/JefeCheck.icns
+        VERBATIM)
 endif()
 
 # Linux
 if(UNIX AND NOT APPLE)
     find_package(Threads REQUIRED)
-    find_package(X11 REQUIRED)
     target_link_libraries(jefecheck PRIVATE
         Threads::Threads
-        X11::X11
         GLU
     )
 endif()
 
-# Appium-driven UI tests (macOS Qt build only). The pytest harness lives
-# in tests/ui/ and discovers the binary via JEFECHECK_BIN. Bootstrap the
+# Appium-driven UI tests (macOS only). The pytest harness lives in
+# tests/ui/ and discovers the binary via JEFECHECK_BIN. Bootstrap the
 # venv once (or re-bootstrap when pyproject changes) before running.
-if(USE_QT AND APPLE)
+if(APPLE)
     set(_uitests_dir ${CMAKE_SOURCE_DIR}/tests/ui)
     set(_uitests_venv ${_uitests_dir}/.venv)
     set(_uitests_stamp ${CMAKE_BINARY_DIR}/uitests-venv.stamp)
