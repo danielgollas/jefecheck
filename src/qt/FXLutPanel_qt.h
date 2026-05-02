@@ -22,6 +22,13 @@ class FXStackPanel_Qt : public QWidget {
 public:
     explicit FXStackPanel_Qt(QWidget* parent = nullptr);
 
+signals:
+    // Emitted after add / remove mutates the active plate's FX stack.
+    // The FX param dock listens so its read-only view stays in sync —
+    // plateStateChanged from GlViewport_Qt only fires for viewport-side
+    // edits (drag, zoom, keyboard), not for stack mutations.
+    void stackChanged();
+
 public slots:
     // Pulls the available-FX list from fxManager and the active
     // plate's gfcFXStack; rebuilds both QListWidgets. Called at

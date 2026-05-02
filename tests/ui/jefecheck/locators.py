@@ -80,6 +80,11 @@ FXSTACK_REMOVE = "fxstack.remove.button"
 FXSTACK_REFRESH = "fxstack.refresh.button"
 FXSTACK_STATUS = "fxstack.status.label"
 
+# FX Params panel (read-only viewer of active plate's FX stack params)
+DOCK_FXPARAMS = "dock.fxparams"
+FXPARAMS_PANEL = "fxparams.panel"
+FXPARAMS_STATUS = "fxparams.status.label"
+
 # Preferences
 PREFERENCES_DIALOG = "preferences.dialog"
 PREFERENCES_SIDEBAR = "preferences.sidebar"

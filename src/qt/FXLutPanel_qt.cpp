@@ -109,6 +109,7 @@ void FXStackPanel_Qt::addSelected() {
     if (row < 0) return;
     jefe::qt::addFXToActivePlate(row);
     refreshLists();
+    emit stackChanged();
     if (status_ && available_->item(row)) {
         status_->setText(QString("Added: %1")
                              .arg(available_->item(row)->text()));
@@ -124,6 +125,7 @@ void FXStackPanel_Qt::removeSelected() {
     const QString removedName = item ? item->text() : QString();
     jefe::qt::removeFXFromPlate(active, row);
     refreshLists();
+    emit stackChanged();
     if (status_) {
         status_->setText(QString("Removed: %1").arg(removedName));
     }

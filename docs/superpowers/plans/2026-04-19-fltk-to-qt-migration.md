@@ -88,6 +88,8 @@ cd tests/ui && JEFECHECK_BIN=../../build_qt/JefeCheck.app \
 
 ### PR-38: FX param editor (`FXParamPanel_qt`)
 
+**Status (PR-38a, in flight on `qt/38-fx-param-panel`):** Read-only viewer landed. `FXParamType`/`FXParamMeta`/`FXMeta`/`getFXStackMetaOnPlate` added to `SequenceLoadBridge_qt.{h,cpp}`. `FXParamPanel_Qt` lives in the **left dock area** (right area was over-subscribed and the AX bridge was eliding the status text under tabified-behind / split-collapsed layouts). Refresh wired to `GlViewport_Qt::plateStateChanged` and a new `FXStackPanel_Qt::stackChanged` signal. Three Mac2 tests in `tests/ui/test_fx_params.py` (status label resolvable, empty-stack status text, after-add status reflects 1 FX). **Editing comes in PR-38b** (slider/spinbox/combo/check rows + a `setFXParam` bridge).
+
 **Why:** `src/fxcontrolwindow.cpp` (1309 lines) is the per-FX parameter UI — sliders + value inputs once an FX is on a plate. The Qt build today has no way to tune FX parameters once added; most user-visible gap.
 
 **Approach:**

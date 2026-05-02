@@ -549,6 +549,71 @@ void clearFXStackOnPlate(int plateIdx) {
     plateManager.setChanged();
 }
 
+namespace {
+FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
+    switch (t) {
+        case FX_GUI_FLOAT:   return FXParamType::Float;
+        case FX_GUI_BOOL:    return FXParamType::Bool;
+        case FX_GUI_CHOICE:  return FXParamType::Choice;
+        case FX_GUI_TEXTURE: return FXParamType::Texture;
+        case FX_GUI_CUBE:    return FXParamType::Cube;
+        case FX_GUI_LUT:     return FXParamType::LUT;
+        case FX_GUI_SPACER:  return FXParamType::Spacer;
+        case FX_GUI_NEWLINE: return FXParamType::Newline;
+        case FX_GUI_UNKNOWN: return FXParamType::Unknown;
+        default:             return FXParamType::Other;
+    }
+}
+}  // namespace
+
+std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    if (!stack) return {};
+    std::vector<FXMeta> result;
+    const int n = stack->getNumOfFXs();
+    result.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        gfcFX fx = stack->getFX(i);
+        FXMeta meta;
+        meta.name              = fx.name;
+        meta.menuName          = fx.menuName;
+        meta.author            = fx.author;
+        meta.version           = fx.version;
+        meta.description       = fx.description;
+        meta.active            = fx.active;
+        meta.loadedAndCompiled = fx.loadedAndCompiled;
+        // Walk groups in insertion order — the gfcFX side stores
+        // widgetsOrder per group but std::map iteration order on
+        // group names is alphabetical by key. The FLTK control
+        // window walked groups by name too, so this matches.
+        for (auto& kv : fx.groups) {
+            const std::string& groupName = kv.first;
+            gfcFXWidgetGroup& g = kv.second;
+            for (const std::string& wname : g.widgetsOrder) {
+                auto it = g.widgets.find(wname);
+                if (it == g.widgets.end()) continue;
+                const gfcFXWidget& w = it->second;
+                FXParamMeta p;
+                p.group        = groupName;
+                p.name         = wname;
+                p.label        = w.label;
+                p.varName      = w.varName;
+                p.tooltip      = w.tooltip;
+                p.type         = mapWidgetType(w.type);
+                p.value        = w.value;
+                p.minimum      = w.minimum;
+                p.maximum      = w.maximum;
+                p.step         = w.step;
+                p.defaultValue = w.defaultValue;
+                p.options      = w.options;
+                meta.params.push_back(std::move(p));
+            }
+        }
+        result.push_back(std::move(meta));
+    }
+    return result;
+}
+
 std::vector<std::string> getLutNames() {
     return lutManager.getAllNames();
 }
