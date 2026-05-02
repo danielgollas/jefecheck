@@ -23,13 +23,7 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #endif
 #include <math.h>
 #include <stdio.h>
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/gl.h>
-#endif
 #include <fstream>
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/Fl.H>
-#endif
 #include "gfcpixelbuffer.h"
 #include "gfcStructures.h"
 #include "xmlParser.h"

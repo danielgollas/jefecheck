@@ -5,20 +5,10 @@
 
 #include <glad/glad.h>
 #include "gfcSequence.h"
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/Fl.H>
-#endif
 #include "trilerp.h"
 #include "platefxparams.h"
-#ifdef JEFECHECK_USE_FLTK
-#include "UICallbacks.h"
-#endif
 #include "gfcStructures.h"
-#ifdef JEFECHECK_USE_FLTK
-#include "gfcplategui_fltk.h"
-#else
 #include "qt/gfcplategui_qt.h"
-#endif
 #include "gfcplatedrawparams.h"
 #include "gfcframe.h"
 #include "gfcfxstack.h"

@@ -5,19 +5,11 @@
 #include <filesystem>
 #include <vector>
 #include <queue>
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/filename.H>
-#include <FL/Fl_Preferences.H>
-#endif
 #include <glad/glad.h>
-#ifdef JEFECHECK_USE_FLTK
-#include <FL/gl.h>
-#else
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
 #else
 #include <GL/glu.h>
-#endif
 #endif
 #include "UIConstants.h"
 #include "xmlParser.h"
@@ -286,11 +278,7 @@ public:
 
 		processorPriority=1.0;
 
-#ifdef JEFECHECK_USE_FLTK
-		remotePointerColor=fl_rgb_color(128,128,128);
-#else
 		remotePointerColor=((128u&0xff)<<24) | ((128u&0xff)<<16) | ((128u&0xff)<<8);
-#endif
 
 		feedbackMessageFadeDelay=2.0;
 		feedbackMessageOn=1;

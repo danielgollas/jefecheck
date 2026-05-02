@@ -7,9 +7,6 @@
 #include "gfcNetworkStructures.h"
 #include "xmlParser.h"
 
-#ifdef JEFECHECK_USE_FLTK
-class fxParamInfo;
-#else
 // Defined in fxcontrolwindow.h in the FLTK build; redefined here for the
 // Qt build, which never pulls fxcontrolwindow.h.
 #include <string>
@@ -26,7 +23,6 @@ public:
     std::string variableName;
     GFC_FX_GUI_TYPE type;
 };
-#endif
 struct gfcNetFXAttribInfo;
 struct gfcNetFXCommonInfo;
 

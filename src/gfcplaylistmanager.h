@@ -3,9 +3,6 @@
 
 #include "gfcplaylistitem.h"
 #include "gfcStructures.h"  // GFC_PL_GUI_TYPE
-#ifdef JEFECHECK_USE_FLTK
-#include "playlistwindow.h"
-#else
 // Stand-in for the FLTK build's playlistwindow.h class. Same shape; we
 // just don't pull the FLTK widget hierarchy along with it.
 class PlaylistParamInfo {
@@ -16,7 +13,6 @@ public:
     int plIndex;
     GFC_PL_GUI_TYPE type;
 };
-#endif
 #include <vector>
 #include <map>
 

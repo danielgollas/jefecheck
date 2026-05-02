@@ -1,13 +1,6 @@
 #ifndef GFCPLAYBACKMANAGER_H
 #define GFCPLAYBACKMANAGER_H
 #include "gfcplaybackgui.h"
-#ifdef JEFECHECK_USE_FLTK
-#include "mainWindow.h"
-#else
-#ifdef JEFECHECK_USE_FLTK
-class MainWindow;
-#endif
-#endif
 #include "gfcNetworkStructures.h"
 #include "gfcStructures.h"
 
@@ -24,15 +17,11 @@ public:
 
     ~gfcPlaybackManager();
 
-#ifdef JEFECHECK_USE_FLTK
-    void initializeWidgets(MainWindow &mw);
-#else
     // Qt build has no MainWindow global. Constructs the stub
     // gfcPlaybackGUI_Qt and seeds the default frame range, mirroring the
     // Qt branch of the FLTK overload above. Safe to call once at app
     // startup.
     void initializeWidgets();
-#endif
 
     void update(); ///this one should run on every cycle, determines timestep, changes the current frame, checks playback boundries etc.
     float getTimestep(); ///gets the timestep for this cycle (from update i-1 to update i).
