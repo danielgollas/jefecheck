@@ -19,9 +19,10 @@ jobs:
           npm install -g appium
           appium driver install mac2
 
-      - name: Configure & build (Qt)
+      - name: Configure & build
         run: |
-          cmake -B build_qt -DUSE_QT=ON -DCMAKE_BUILD_TYPE=Release
+          export CMAKE_PREFIX_PATH="$(brew --prefix qt)"
+          cmake -B build_qt -DCMAKE_BUILD_TYPE=Release
           cmake --build build_qt -j$(sysctl -n hw.ncpu)
 
       - name: Run UI tests
