@@ -14,13 +14,12 @@ JefeCheck is a professional C++ video frame processing and playback application 
 
 **CMake** is the single build system for all platforms. C++20 on macOS/Linux/Windows.
 
-**UI backend:** Qt6 is the default as of PR-42. FLTK remains opt-in via `-DUSE_QT=OFF` for the duration of Phase 4 cleanup; the FLTK code path is removed entirely in PR-43+.
+**UI backend:** Qt6 is the only backend. The FLTK build path was removed in PR-43f after the migration completed.
 
 ### macOS (primary development)
 ```bash
 brew install qt openimageio openexr curl zlib cmake freetype
 cmake -B build && cmake --build build
-# Opt into the legacy FLTK build with: cmake -B build -DUSE_QT=OFF
 ```
 
 ### Linux (Ubuntu 24.04)
@@ -93,18 +92,17 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 - Image saving stubbed out (TODO: implement via OIIO)
 
 ### UI
-- **FLTK 1.4** GUI. Window layouts in `.fl` files (FLUID designer) → `.cxx`/`.h` pairs
-- Native file dialogs via `NativeFileChooser` wrapper (`src/gfcfilechooser.h`)
-- Custom widgets prefixed `Fl_*_gfc`
-- **Preferences window** uses sidebar (`Fl_Hold_Browser`) + panel layout with 6 sections: General, Text, Engine, Formats, Remote, Paths
-- Dark-themed `fl_alert`/`fl_choice`/`fl_message` dialogs — global FLTK colors set after splash window closes in `main.cpp`
-- System requirements window (`minSpecsWindow`) uses `GFC_BG_COLOR` for dark background
+- **Qt6** GUI hosted in `src/qt/`. Single `MainWindow_Qt` with native menu bar, central `GlViewport_Qt` (QOpenGLWidget), and dockable panels (Plate Manager, Timeline, FX Stack, FX Params, LUTs, Playlist).
+- Native file dialogs via `QFileDialog`.
+- Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Remote Session (`RemoteDialog_Qt`).
+- Dark VFX theme at `src/qt/theme/jefecheck_dark.qss`.
+- Object names follow the dotted-leaf scheme documented in `tests/ui/jefecheck/locators.py` so Mac2/XCUITest can resolve widgets via `identifier ENDSWITH '<leaf>'`.
 
 ## Key Dependencies
 
 | Library | Purpose | License |
 |---------|---------|---------|
-| FLTK 1.4 | GUI framework | LGPL v2 |
+| Qt6 | GUI framework (Widgets + OpenGLWidgets) | LGPL v3 |
 | OpenImageIO | Image I/O (all formats) | BSD |
 | FreeType | Font rasterization with hinting | FreeType License (BSD-like) |
 | GLAD | OpenGL loading (compatibility profile 3.3) | Public domain |
@@ -115,7 +113,7 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 | zlib | Compression | zlib |
 | xmlParser | XML parsing (vendored in src/) | BSD |
 
-**Removed dependencies:** GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
+**Removed dependencies:** FLTK 1.4 (replaced by Qt6 in PR-43f), GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
 
 **Bundled fonts:** Roboto Regular/Bold (Apache 2.0, default), Inter Regular/Bold (SIL OFL), DejaVu Sans Regular/Bold (Bitstream Vera)
 
