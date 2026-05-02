@@ -1,4 +1,5 @@
 #include "gfcplaylistmanager.h"
+#include <algorithm>
 #include <vector>
 #include <string>
 #include "gfctrackmanager.h"
