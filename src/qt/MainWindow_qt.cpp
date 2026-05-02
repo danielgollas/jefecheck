@@ -1,6 +1,7 @@
 #include "MainWindow_qt.h"
 
 #include "FXLutPanel_qt.h"
+#include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
 #include "ImageLoadBridge_qt.h"
 #include "PlateManager_qt.h"
@@ -574,9 +575,34 @@ void MainWindow_Qt::buildDocks() {
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, lutDock_);
 
-    // Tab them together.
+    // FX Params — read-only snapshot of the active plate's FX stack
+    // parameter values. Editing comes in PR-38b. Lives on the left
+    // side of the window so it doesn't have to compete with the FX
+    // Stack / LUT tab group for vertical real estate, and so the
+    // value-text propagates to AX (Mac's AX bridge can elide AXValue
+    // for 0-sized labels in tab-overflowed docks).
+    fxParamsDock_ = new QDockWidget("FX Params", this);
+    fxParamsDock_->setObjectName("dock.fxparams");
+    fxParamsDock_->setAccessibleName("FX parameters dock");
+    fxParamPanelWidget_ = new FXParamPanel_Qt(fxParamsDock_);
+    fxParamsDock_->setWidget(fxParamPanelWidget_);
+    fxParamsDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    fxParamPanelWidget_->setMinimumWidth(200);
+    addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
+
+    // Tab FX Stack and LUTs together on the right.
     tabifyDockWidget(fxDock_, lutDock_);
     fxDock_->raise();
+
+    // Refresh the FX param panel whenever viewport-driven plate edits
+    // fire (this also catches active-plate changes — clicking a plate
+    // card emits plateStateChanged via PlateManager_Qt's wiring).
+    connect(viewport_, &GlViewport_Qt::plateStateChanged,
+            fxParamPanelWidget_, &FXParamPanel_Qt::refresh);
+    // Also refresh after FX add/remove via the FX Stack panel — those
+    // mutate the stack but don't go through plateStateChanged.
+    connect(fxPanelWidget_, &FXStackPanel_Qt::stackChanged,
+            fxParamPanelWidget_, &FXParamPanel_Qt::refresh);
 
     // Hook each dock's toggle into the View menu now that they exist.
     auto* viewMenu = menuBar()->findChild<QMenu*>(QString(), Qt::FindDirectChildrenOnly);
@@ -594,6 +620,7 @@ void MainWindow_Qt::buildDocks() {
         found->addAction(plateDock_->toggleViewAction());
         found->addAction(timelineDock_->toggleViewAction());
         found->addAction(fxDock_->toggleViewAction());
+        found->addAction(fxParamsDock_->toggleViewAction());
         found->addAction(lutDock_->toggleViewAction());
     }
 }

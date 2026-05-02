@@ -17,6 +17,7 @@
 #include <vector>
 
 class QDockWidget;
+class FXParamPanel_Qt;
 class FXStackPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
@@ -62,11 +63,13 @@ private:
     QDockWidget* plateDock_ = nullptr;
     QDockWidget* timelineDock_ = nullptr;
     QDockWidget* fxDock_ = nullptr;
+    QDockWidget* fxParamsDock_ = nullptr;
     QDockWidget* lutDock_ = nullptr;
     PlateManager_Qt* plateManagerWidget_ = nullptr;
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
     FXStackPanel_Qt* fxPanelWidget_ = nullptr;
+    FXParamPanel_Qt* fxParamPanelWidget_ = nullptr;
     QComboBox* depthCombo_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
     QLabel* trackStatusLabel_ = nullptr;

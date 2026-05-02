@@ -125,6 +125,54 @@ void addFXToActivePlate(int fxIndex);
 void removeFXFromPlate(int plateIdx, int stackIndex);
 void clearFXStackOnPlate(int plateIdx);
 
+// FX parameter metadata, flattened across groups in declaration order.
+// Mirrors gfcFXWidget without dragging glad/gfcfx.h into Qt translation
+// units. The Qt FX param panel renders this list — read-only in PR-38;
+// PR-38b will add a setter and per-row editors.
+enum class FXParamType {
+    Unknown,
+    Float,
+    Bool,
+    Choice,
+    Texture,
+    Cube,
+    LUT,
+    Spacer,
+    Newline,
+    Other,
+};
+
+struct FXParamMeta {
+    std::string group;
+    std::string name;
+    std::string label;
+    std::string varName;
+    std::string tooltip;
+    FXParamType type = FXParamType::Unknown;
+    float value = 0.0f;
+    float minimum = 0.0f;
+    float maximum = 0.0f;
+    float step = 0.0f;
+    float defaultValue = 0.0f;
+    std::vector<std::string> options;
+};
+
+struct FXMeta {
+    std::string name;
+    std::string menuName;
+    std::string author;
+    std::string version;
+    std::string description;
+    bool active = false;
+    bool loadedAndCompiled = false;
+    std::vector<FXParamMeta> params;
+};
+
+// Returns the FX stack on `plateIdx` with full per-FX param metadata.
+// Walks gfcFXStack copies, so this is a snapshot — refresh on
+// plateStateChanged or after add/remove. Empty for invalid plate idx.
+std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx);
+
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for
 // "Ready" before driving the panel so they don't race the autoload.
