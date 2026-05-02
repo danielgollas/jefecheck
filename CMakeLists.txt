@@ -49,8 +49,6 @@ if(USE_QT)
     )
     # FLUID-generated FLTK window definitions and dropins.
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "Window\\.cpp$")
-    # Concrete FLTK GUI implementations (have *_qt.cpp counterparts in src/qt/).
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_fltk\\.cpp$")
     # FLTK app entry point and the FLTK Fl_Gl_Window itself.
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "main\\.cpp$")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "GlViewport\\.cpp$")
@@ -65,8 +63,6 @@ if(USE_QT)
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "UICallbacks\\.cpp$")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "trackwidget\\.cpp$")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfctimer\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcui_fltk\\.cpp$")
-    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "iapplication_fltk\\.cpp$")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfctrackmanagergui\\.cpp$")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "Fl_.*\\.cpp$")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "fxcontrolwindow\\.cpp$")
