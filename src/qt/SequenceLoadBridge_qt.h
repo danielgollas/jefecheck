@@ -313,6 +313,20 @@ void loadOneLUTFile(const std::string& path);
 void loadOneFXFile(const std::string& path);
 void finalizeFXLoad();
 
+// EXR layer selection — backs the per-plate layer combo on PlateCard_Qt.
+// `getLayersOnPlate` returns the EXR layer names the loader discovered
+// when the plate's current track was previewed (one entry per layer; an
+// empty vector if no sequence is loaded yet, or a single empty-string
+// entry for non-EXR files). `getActiveLayerOnPlate` returns the layer
+// name currently driving the OIIO loader's channel selection. `setLayer-
+// OnPlate` switches the layer and triggers a full async sequence reload
+// (matching the FLTK shift-click-on-timeline behavior); plate→track
+// resolution happens inside the bridge so the UI doesn't need to know
+// about gfcTrackManager.
+std::vector<std::string> getLayersOnPlate(int plateIdx);
+std::string getActiveLayerOnPlate(int plateIdx);
+void setLayerOnPlate(int plateIdx, const std::string& layerName);
+
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering
 // chain picks up the new frame on the next draw call. Caller is

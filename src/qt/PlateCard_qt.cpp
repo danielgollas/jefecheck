@@ -84,6 +84,18 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     trackBox_->setObjectName(objPrefix + ".track.combo");
     trackBox_->setAccessibleName("Track");
 
+    // EXR layer picker. Lives between Track and Aspect so it reads as
+    // "this track, this layer, this aspect". Hidden until the plate's
+    // current track has > 1 named layer (refreshFromState handles that
+    // toggle); for non-EXR / single-layer files there's nothing to
+    // choose so showing the combo would just be visual noise.
+    layerBox_ = new QComboBox(this);
+    layerBox_->setMinimumWidth(70);
+    layerBox_->setObjectName(objPrefix + ".layer.combo");
+    layerBox_->setAccessibleName("EXR layer");
+    layerBox_->setToolTip("EXR layer driving this plate");
+    layerBox_->setVisible(false);
+
     aspectBox_ = new QComboBox(this);
     aspectBox_->setEditable(true);
     aspectBox_->addItems({"original", "16:9", "4:3", "2.39:1", "2.35:1", "1.85:1", "1.37:1"});
@@ -113,6 +125,7 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     row1->setSpacing(4);
     row1->addWidget(plateId);
     row1->addWidget(trackBox_);
+    row1->addWidget(layerBox_);
     row1->addWidget(aspectBox_, 1);
     row1->addWidget(cropBtn_);
     row1->addWidget(flipBtn_);
@@ -212,6 +225,21 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     connect(aspectBox_, &QCB::currentTextChanged,
             this, [g](const QString& s) { g->setAspectChoice(s.toStdString()); });
 
+    // Layer change → bridge does the heavy lifting (rewrite the track's
+    // gfcSequenceGUI channel name, re-decode the preview, and kick off
+    // a full async sequence reload so every cached frame matches the
+    // newly-selected layer). The combo's items are layer name strings
+    // pulled from the OIIO loader's discovery, so the text round-trips
+    // unchanged.
+    {
+        const int boundPlateId = id_;
+        connect(layerBox_, &QCB::currentTextChanged,
+                this, [boundPlateId](const QString& s) {
+                    if (s.isEmpty()) return;
+                    jefe::qt::setLayerOnPlate(boundPlateId, s.toStdString());
+                });
+    }
+
     connect(cropBtn_, &QPushButton::toggled, this, [g](bool on) { g->setCrop(on ? 1 : 0); });
     connect(flipBtn_, &QPushButton::toggled, this, [g](bool on) { g->setFlip(on ? 1 : 0); });
     connect(flopBtn_, &QPushButton::toggled, this, [g](bool on) { g->setFlop(on ? 1 : 0); });
@@ -291,6 +319,7 @@ void PlateCard_Qt::refreshFromState() {
     // Without this, programmatic setValue() loops back into the setters
     // we just wired up, fighting the user's edits and re-rounding floats.
     const QSignalBlocker bTrack(trackBox_);
+    const QSignalBlocker bLayer(layerBox_);
     const QSignalBlocker bAspect(aspectBox_);
     const QSignalBlocker bCrop(cropBtn_);
     const QSignalBlocker bFlip(flipBtn_);
@@ -310,6 +339,47 @@ void PlateCard_Qt::refreshFromState() {
     const int track = gui_->getSequenceID();
     if (track >= 0 && track < trackBox_->count()) {
         trackBox_->setCurrentIndex(track);
+    }
+
+    // Layer combo: populate from the bridge's view of the plate's track.
+    // Hide the combo for files with no named layers (single-layer EXR,
+    // or any non-EXR format — the OIIO loader returns one entry with
+    // an empty name). Showing a one-item combo with a blank label
+    // would just be confusing.
+    {
+        const auto layers = jefe::qt::getLayersOnPlate(id_);
+        const std::string activeLayer = jefe::qt::getActiveLayerOnPlate(id_);
+        bool hasNamedLayers = false;
+        for (const auto& n : layers) {
+            if (!n.empty()) { hasNamedLayers = true; break; }
+        }
+        if (hasNamedLayers) {
+            // Only rebuild the item list if it actually changed —
+            // touching items causes the combo to flicker even with
+            // signals blocked.
+            bool listChanged = (layerBox_->count() != int(layers.size()));
+            if (!listChanged) {
+                for (int i = 0; i < int(layers.size()); ++i) {
+                    if (layerBox_->itemText(i).toStdString() != layers[i]) {
+                        listChanged = true;
+                        break;
+                    }
+                }
+            }
+            if (listChanged) {
+                layerBox_->clear();
+                for (const auto& name : layers) {
+                    layerBox_->addItem(QString::fromStdString(name));
+                }
+            }
+            const QString want = QString::fromStdString(activeLayer);
+            if (!want.isEmpty() && layerBox_->currentText() != want) {
+                layerBox_->setCurrentText(want);
+            }
+            layerBox_->setVisible(true);
+        } else {
+            layerBox_->setVisible(false);
+        }
     }
 
     const QString aspect = QString::fromStdString(gui_->getAspectString());
