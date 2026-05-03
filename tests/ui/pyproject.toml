@@ -1,0 +1,27 @@
+[project]
+name = "jefecheck-uitests"
+version = "0.1.0"
+description = "Appium-based UI tests for the JefeCheck Qt build"
+requires-python = ">=3.11"
+dependencies = [
+    "Appium-Python-Client>=4.1.0",
+    "pytest>=8.0",
+    "pytest-timeout>=2.3",
+    # Phase D: visual diff. Pillow loads the screenshot bytes Appium
+    # returns; pixelmatch compares actual vs. baseline pixel-by-pixel
+    # with a perceptual tolerance to absorb subtree rendering noise
+    # (font hinting jitter, GL driver-level rounding).
+    "Pillow>=10.0",
+    "pixelmatch>=0.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = "test_*.py"
+# 300s covers the WDA first-build on a clean machine; subsequent runs
+# are sub-10s. CI sets this lower via -o timeout=...
+timeout = 300
+addopts = "-v --tb=short"
+
+[tool.setuptools.packages.find]
+include = ["jefecheck*"]

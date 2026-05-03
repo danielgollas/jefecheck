@@ -1,6 +1,6 @@
 #include "gfchistogram.h"
 #include "gfcTextRenderer.h"
-#include <FL/gl.h>
+#include "qt/qt_fltk_stubs.h"  // FL_HELVETICA used by gfc_gl_font
 
 #include "gfcpickmanager.h"
 extern gfcPickManager pickManager;

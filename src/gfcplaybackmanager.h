@@ -1,7 +1,6 @@
 #ifndef GFCPLAYBACKMANAGER_H
 #define GFCPLAYBACKMANAGER_H
 #include "gfcplaybackgui.h"
-#include "mainWindow.h"
 #include "gfcNetworkStructures.h"
 #include "gfcStructures.h"
 
@@ -18,7 +17,11 @@ public:
 
     ~gfcPlaybackManager();
 
-    void initializeWidgets(MainWindow &mw);
+    // Qt build has no MainWindow global. Constructs the stub
+    // gfcPlaybackGUI_Qt and seeds the default frame range, mirroring the
+    // Qt branch of the FLTK overload above. Safe to call once at app
+    // startup.
+    void initializeWidgets();
 
     void update(); ///this one should run on every cycle, determines timestep, changes the current frame, checks playback boundries etc.
     float getTimestep(); ///gets the timestep for this cycle (from update i-1 to update i).
@@ -50,6 +53,8 @@ public:
     
     int getFromFrame();
     int getToFrame();
+    int getInPoint();
+    int getOutPoint();
     std::string getTimecodeString();
     float getGUIFrameSize(); ///Kind of ugly design, but better to have it here than have external classes access private members. Returns the class size of a frame in the timeline in pixels, usefull to determine the effect of drag events in the gui with respect to the timeline.
     int getPlaybackMode();

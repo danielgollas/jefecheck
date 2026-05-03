@@ -3,7 +3,6 @@
 
 //#include "network.h"
 #include <stdio.h>
-#include "mainWindow.h"
 #include "RakPeerInterface.h"
 #include <string>
 #include <vector>
@@ -21,6 +20,7 @@
 #include "BitStream.h"
 #include "gfcnetworklog.h"
 #include "gfcnetworkservergui.h"
+#include "gfcNetworkStructures.h"
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>

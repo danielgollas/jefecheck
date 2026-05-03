@@ -1,24 +1,25 @@
 #include "gfcfxmanager.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "UIConstants.h"
 #include "gfcStructures.h"
-#include <FL/Fl_File_Chooser.H>
+#include <algorithm>  // std::sort — used to be transitive via FLTK headers
 extern gfcSettings sett;
-#include "gfcfilechooser.h"
-extern NativeFileChooser *fc;
-extern void save_input_file ( Fl_File_Chooser *w, void *userdata );
-
-#include "fxWindow.h"
-extern FXWindow fxw;
-
-#include "fxcontrolwindow.h"
-extern FXControlWindow fxControlWindow1;
 
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
 
 gfcFXManager fxManager;
 
-gfcFXManager::gfcFXManager() {
+gfcFXManager::gfcFXManager()
+    : loadedScroll(nullptr),
+      autoloadAllButton(nullptr),
+      progress(nullptr),
+      scrollPosY(0),
+      scrollPosX(0) {
+    // Same fix gfcLUTManager got in PR-21: zero-init the FLTK widget
+    // pointers so the Qt build can call loadFX before initWidgets has
+    // run. Each callsite below null-checks before dereferencing.
 }
 
 
@@ -46,10 +47,12 @@ void gfcFXManager::loadFX(std::string fileName) {
 	//TODO: THIS CHECK SHOULD NOT ONLY BE BASED ON NAME, BUT ON THE HASH OF THE LUT
     for ( int i=0;i<fxArray.size();i++ ) {
         //if ( GetFilenameNoPath ( fxArray[i].filename ) ==GetFilenameNoPath ( fileName ) ) 
-		if (  fxArray[i].md5Hash ==tmpFX.md5Hash) 
+		if (  fxArray[i].md5Hash ==tmpFX.md5Hash)
 		{
-            progress->color ( fl_rgb_color(42,42,0) );
-            progress->copy_label ( "Already Loaded, unload before reloading" );
+            if (progress) {
+                progress->color ( fl_rgb_color(42,42,0) );
+                progress->copy_label ( "Already Loaded, unload before reloading" );
+            }
             printf("Already Loaded, unload before reloading\n");
             return;
         }
@@ -88,8 +91,6 @@ void gfcFXManager::loadFX(std::string fileName) {
     }
     //4. Update the FX Manager Window to show the new FX
     fillLoadedScroll();
-    //5. Update the FX Control Window to show the newly loaded FX in the add menu.
-    fxControlWindow1.scheduleUpdateWindow(fxControlWindow1.quadrant);
 }
 
 void gfcFXManager::deleteFX(int index) {
@@ -105,8 +106,10 @@ void gfcFXManager::deleteFX(int index) {
     fxManager.saveScrollPosition();
     fillLoadedScroll();
     fxManager.restoreScrollPosition();
-    progress->value(0);
-    progress->copy_label("FX Unloaded");
+    if (progress) {
+        progress->value(0);
+        progress->copy_label("FX Unloaded");
+    }
     //3. Update the FX Control Window to not show the newly loaded FX in the add menu.
     //TODO: DO this
     //4. Rebuild the hash map.
@@ -132,168 +135,8 @@ void gfcFXManager::fillLoadedScroll() {
         printf("NO GUI ASSIGNED TO FX MANAGER!\n");
         return;
     }
-    //printf("Filling FX Manager window\n");
-
-
-    //1. Clear the scroll group and begin it (remember to end it too)
-    loadedScroll->clear();
-    loadedScroll->begin();
-
-    int counter=0;
-    {
-        //2. Create a new packed group inside the scroll to tightly pack the FXs
-        Fl_Pack *p=new Fl_Pack ( loadedScroll->x() +5,loadedScroll->y() +5,loadedScroll->w()-20,5 );
-        p->box ( FL_DOWN_FRAME );
-
-
-        /*3. Iterate through all the loaded FXs and generate their entry in the GUI.
-        *Group to contain the rest of the widgets
-        *Name with a comprehensive tooltip
-		*Reload button
-        *Unload button
-        *Autoload button set to the correct value (the FXs value ORed with the Autoload All value)
-        The unload and autoload buttons have their calblacks set appropiately and send their index as user data
-        Remember to cloase the Group
-        */
-        std::vector<gfcFX>::iterator iter=fxArray.begin();
-        std::vector<gfcFX>::iterator end=fxArray.end();
-        for ( iter;iter<end;iter++ ) {
-            {
-                Fl_Group *g= new Fl_Group ( 0,0,40,20,"Hello" );
-                g->box ( FL_BORDER_BOX );
-				g->color( fl_rgb_color(GFC_BG_COLOR));
-
-                
-				if(iter->errorWhileLoading){
-					g->copy_label ( (iter->name+"(Load Error)").c_str() );
-					g->labelcolor ( fl_rgb_color(65,20,20) );
-				}
-				else{
-				g->copy_label ( iter->name.c_str() );
-				g->labelcolor ( fl_rgb_color(85,85,85) );
-				}
-                
-                g->align ( FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_TOP );
-                char *tmpTooltip=new char[4096];
-				sprintf ( tmpTooltip,"Name: %s\nAuthor:%s\nVersion:%s\nDescription: %s\nFile: %s\n%s%s",iter->name.c_str(),iter->author.c_str(),iter->version.c_str(),iter->description.c_str(),iter->filename.c_str(),iter->errorWhileLoading?"CompilationError":"",iter->errorWhileLoading?iter->compilationError.c_str():"" );
-                g->tooltip ( tmpTooltip );
-
-
-                {
-                    Fl_Button_gfc* o=new Fl_Button_gfc ( g->x() +g->w()-15,g->y() +2,5,15,"Reload" );
-                    o->callback ( ( Fl_Callback* ) fxManagerCB_RELOAD, ( void* ) counter);
-                }
-
-                {
-                    Fl_Check_Button* c=new Fl_Check_Button ( g->x() +g->w()-10, g->y() +2,  5,15, "Auto-Load" );
-                    c->value (iter->autoload);
-                    c->labelcolor ( fl_rgb_color(85,85,85) );
-					c->down_box(FL_FLAT_BOX);
-					c->color(fl_rgb_color(85,85,85));
-					c->selection_color(fl_rgb_color(160,160,160));
-                    c->callback ( ( Fl_Callback* ) fxManagerCB_AUTOLOAD, ( void* ) counter );
-                }
-				
-				{
-					Fl_Button_gfc* o=new Fl_Button_gfc ( g->x() +g->w()-2, g->y() +2, 2,15, "@1+" );
-					o->labelcolor ( fl_rgb_color(85,85,85) );
-					o->callback ( ( Fl_Callback* ) fxManagerCB_DELETE, ( void* ) counter );
-				}
-				
-                g->end();
-            }
-            counter++;
-        }
-        //4. Close pack
-        p->end();
-
-        //4. Close Scroll
-        loadedScroll->end();
-        loadedScroll->redraw();
-
-
-    }
-#ifndef __APPLE__
-    Fl::check();
-#endif
 }
 
-void fxManagerCB_OTHERS(Fl_Widget * o, void * v) {
-    printf("Others\n");
-
-
-    switch ( (long)v ) {
-
-    case FXDONE_ID:
-        fxw.fxWindow->hide();
-        break;
-    case FXBROWSE_ID: {
-        printf("Browse\n");
-
-        //printf ( " *Path: %s\n",sett.lutPath.c_str());
-        char oldPath[FL_PATH_MAX];
-        strcpy ( oldPath,fc->directory());
-        fc->callback ( NULL );
-        fc->preview ( 0 );
-        std::string prevDirectory=fc->directory();
-                
-        std::string prevFilter=fc->filter();
-        int prevType=fc->type();
-        fc->type(Fl_File_Chooser::MULTI);
-        fc->filter ( "JefeCheck FX(*.{jfx})" );
-	
-        fc->show();
-        fc->directory ( sett.lutPath.c_str() );
-        while ( fc->shown() )
-            Fl::wait();
-
-        fxManager.saveScrollPosition();
-        
-        for (int i=1;i<=fc->count();i++)
-            fxManager.loadFX(fc->value(i));
-
-        fxManager.restoreScrollPosition();
-        
-        networkManager.startFXSinc();
-        
-        fc->filter(prevFilter.c_str());
-        fc->directory ( prevDirectory.c_str() );
-        fc->type(prevType);
-    }
-
-    break;
-
-
-    case FXUNLOADALL_ID:
-        printf("Unload All\n");
-        fxManager.deleteAllFX();
-        break;
-
-
-    case FXAUTOLOADALL_ID:
-        printf("Autoload All %i\n",((Fl_Button*)o)->value());
-        fxManager.autoLoadAll(((Fl_Button*)o)->value());
-        break;
-    }
-}
-
-void fxManagerCB_RELOAD(Fl_Widget * o, void * v) {
-	printf("Reload FX %i\n",(long)v);
-	std::string filename=fxManager.getFX(long(v)).filename;
-	fxManager.deleteFX((long)v);
-	fxManager.loadFX(filename);
-}
-
-void fxManagerCB_DELETE(Fl_Widget * o, void * v) {
-    printf("Delete FX %i\n",(long)v);
-    fxManager.deleteFX((long)v);
-}
-
-void fxManagerCB_AUTOLOAD(Fl_Widget * o, void * v) {
-    printf("Autoload FX %i\n",(long)v);
-    fxManager.setAutoLoad((long)v,((Fl_Button*)o)->value());
-
-}
 
 void gfcFXManager::autoLoadAll(bool autoload) {
     printf("Autoloading All!\n");
@@ -307,9 +150,6 @@ void gfcFXManager::autoLoadAll(bool autoload) {
 }
 
 void gfcFXManager::initWidgets() {
-    progress=fxw.progress;
-    loadedScroll=fxw.scrollLoaded;
-    autoloadAllButton=fxw.autoLoadAllButton;
 }
 
 void gfcFXManager::saveScrollPosition() {

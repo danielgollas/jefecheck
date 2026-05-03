@@ -7,7 +7,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find system packages
 find_package(OpenGL REQUIRED)
-find_package(FLTK REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 find_package(OpenImageIO REQUIRED)
 find_package(OpenEXR REQUIRED)
 find_package(CURL REQUIRED)
@@ -26,27 +29,21 @@ target_include_directories(cli11 INTERFACE third_party/cli11)
 # Collect source files
 file(GLOB JEFECHECK_SOURCES
     src/*.cpp
-    src/*.cxx
+    src/ui/*.cpp
 )
-
-# Platform-specific exclusions
+# Custom EXR loader/saver — OIIO handles EXR natively.
+list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
+list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
 if(NOT WIN32)
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "WSAStartupSingleton")
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "ExtendedOverlappedPool")
 endif()
-
-# _FindFirst provides POSIX implementations of Windows FindFirst/FindNext API
-# Needed on Linux and macOS; excluded only on actual Windows
 if(WIN32)
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
 endif()
 
-# gfcTrack.cpp is a duplicate of gfcSequence.cpp (same symbols)
-list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcTrack\\.cpp")
-
-# Exclude custom EXR loader/saver - OIIO handles EXR natively
-list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimageloaderexr")
-list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcimagesaver_exr")
+file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
+list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
 
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
@@ -58,14 +55,23 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         -Wno-register               # C++17 removed register keyword
     )
     if(WIN32)
+        # MinGW64 defines _UNICODE by default, which flips xmlParser
+        # (vendored in src/) into wchar_t* mode via its `#ifdef _UNICODE`
+        # gate. Our XML schema uses `const char*` literals throughout, so
+        # disable the macro globally on Windows to keep xmlParser in
+        # UTF-8/char* mode. Without this, the build hits a cascade of
+        # "cannot convert const char[N] to const wchar_t*" errors in
+        # gfcStructures.h / gfcNetworkStructures.h template instantiations.
         target_compile_options(jefecheck PRIVATE
-            -fpermissive             # void* to int casts in FLTK callbacks
+            -UUNICODE -U_UNICODE
+            # -fpermissive keeps a few residual void*/long FLTK-callback
+            # conversions in legacy ports compiling on the stricter MinGW
+            # toolchain. Harmless on the Qt build; cheap to keep.
+            -fpermissive
         )
         target_link_libraries(jefecheck PRIVATE
             glu32 opengl32 ws2_32 winmm iphlpapi
         )
-        find_package(GLUT REQUIRED)
-        target_link_libraries(jefecheck PRIVATE GLUT::GLUT)
     endif()
 endif()
 
@@ -86,37 +92,93 @@ target_link_libraries(jefecheck PRIVATE
     cli11
     Freetype::Freetype
     OpenGL::GL
-    ${FLTK_LIBRARIES}
     OpenImageIO::OpenImageIO
     OpenEXR::OpenEXR
     CURL::libcurl
     ZLIB::ZLIB
+    Qt6::Widgets
+    Qt6::OpenGLWidgets
 )
-
-# FLTK include dirs
-target_include_directories(jefecheck PRIVATE ${FLTK_INCLUDE_DIR})
+target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
 
 # macOS
 if(APPLE)
+    # Objective-C++ TU for the NSBundle-backed bundle Resources lookup.
+    # Used by getApplicationDataPath in src/gfcStructures.cpp.
+    target_sources(jefecheck PRIVATE src/macos_bundle_path.mm)
+    set_source_files_properties(src/macos_bundle_path.mm PROPERTIES
+        COMPILE_FLAGS "-fobjc-arc")
+
     target_link_libraries(jefecheck PRIVATE
         "-framework Cocoa"
         "-framework IOKit"
         "-framework CoreFoundation"
+        "-framework Foundation"
     )
-    # GLUT is available as a system framework on macOS
-    target_link_libraries(jefecheck PRIVATE "-framework GLUT")
+
+    # Build a proper .app bundle. CFBundleName and CFBundleIdentifier
+    # flow into the AXApplication root's title and identifier, which is
+    # what assistive tech (and Appium's mac2 driver) query. Also fixes
+    # the dock app name and is required for codesign / notarization
+    # down the line.
+    configure_file(
+        ${CMAKE_SOURCE_DIR}/packaging/macos/Info.plist.in
+        ${CMAKE_BINARY_DIR}/Info.plist
+        @ONLY)
+    set_target_properties(jefecheck PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/Info.plist
+        OUTPUT_NAME "jefecheck")
+
+    # Copy runtime resources into the bundle so getApplicationDataPath
+    # (= argv[0]/../../Resources/) finds FX/ and fonts/ without the
+    # workspace symlinks dev builds used to need. Icon goes alongside
+    # so CFBundleIconFile resolves.
+    set(_app_resources $<TARGET_FILE_DIR:jefecheck>/../Resources)
+    add_custom_command(TARGET jefecheck POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${_app_resources}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/FX ${_app_resources}/FX
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/fonts ${_app_resources}/fonts
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_SOURCE_DIR}/packaging/macos/JefeCheck.icns
+                ${_app_resources}/JefeCheck.icns
+        VERBATIM)
 endif()
 
 # Linux
 if(UNIX AND NOT APPLE)
     find_package(Threads REQUIRED)
-    find_package(X11 REQUIRED)
     target_link_libraries(jefecheck PRIVATE
         Threads::Threads
-        X11::X11
         GLU
     )
-    # Find GLUT on Linux
-    find_package(GLUT REQUIRED)
-    target_link_libraries(jefecheck PRIVATE GLUT::GLUT)
+endif()
+
+# Appium-driven UI tests (macOS only). The pytest harness lives in
+# tests/ui/ and discovers the binary via JEFECHECK_BIN. Bootstrap the
+# venv once (or re-bootstrap when pyproject changes) before running.
+if(APPLE)
+    set(_uitests_dir ${CMAKE_SOURCE_DIR}/tests/ui)
+    set(_uitests_venv ${_uitests_dir}/.venv)
+    set(_uitests_stamp ${CMAKE_BINARY_DIR}/uitests-venv.stamp)
+
+    add_custom_command(
+        OUTPUT ${_uitests_stamp}
+        COMMAND python3 -m venv ${_uitests_venv}
+        COMMAND ${_uitests_venv}/bin/pip install --quiet --upgrade pip
+        COMMAND ${_uitests_venv}/bin/pip install --quiet -e ${_uitests_dir}
+        COMMAND ${CMAKE_COMMAND} -E touch ${_uitests_stamp}
+        DEPENDS ${_uitests_dir}/pyproject.toml
+        COMMENT "Bootstrapping Python UI test venv")
+
+    add_custom_target(qt-uitests
+        COMMAND ${CMAKE_COMMAND} -E env
+                JEFECHECK_BIN=$<TARGET_BUNDLE_DIR:jefecheck>
+                ${_uitests_venv}/bin/pytest ${_uitests_dir}
+        DEPENDS jefecheck ${_uitests_stamp}
+        WORKING_DIRECTORY ${_uitests_dir}
+        USES_TERMINAL
+        VERBATIM)
 endif()

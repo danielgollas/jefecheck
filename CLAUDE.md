@@ -12,24 +12,24 @@ JefeCheck is a professional C++ video frame processing and playback application 
 
 ## Build System
 
-**CMake** is the single build system for all platforms. C++20 on macOS/Linux, C++20 on Windows (with `-fpermissive` for FLTK callback casts).
+**CMake** is the single build system for all platforms. C++20 on macOS/Linux/Windows.
+
+**UI backend:** Qt6 is the only backend. The FLTK build path was removed in PR-43f after the migration completed.
 
 ### macOS (primary development)
 ```bash
-brew install fltk openimageio openexr curl zlib cmake freetype
+brew install qt openimageio openexr curl zlib cmake freetype
 cmake -B build && cmake --build build
 ```
 
 ### Linux (Ubuntu 24.04)
 ```bash
-bash build_linux.sh
-# Or manually:
-sudo apt install cmake build-essential libfltk1.3-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev freeglut3-dev libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libopencv-dev libfreetype6-dev
+sudo apt install cmake build-essential qt6-base-dev qt6-base-private-dev libqt6opengl6-dev libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev libgl-dev libglu1-mesa-dev libfreetype6-dev
 cmake -B build && cmake --build build -j$(nproc)
 ```
 
 ### Windows (MinGW/MSYS2 via GitHub Actions)
-Uses MSYS2 with pre-built packages including `mingw-w64-x86_64-freetype`. See `.github/workflows/build.yml`.
+Uses MSYS2 with `mingw-w64-x86_64-qt6-base`, `mingw-w64-x86_64-qt6-tools`, and `mingw-w64-x86_64-freetype`. See `.github/workflows/build.yml`.
 
 ### Runtime Resources
 The app finds FX and fonts via `getApplicationDataPath()` (platform-specific install path). For development, symlink to the source tree:
@@ -92,18 +92,17 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 - Image saving stubbed out (TODO: implement via OIIO)
 
 ### UI
-- **FLTK 1.4** GUI. Window layouts in `.fl` files (FLUID designer) → `.cxx`/`.h` pairs
-- Native file dialogs via `NativeFileChooser` wrapper (`src/gfcfilechooser.h`)
-- Custom widgets prefixed `Fl_*_gfc`
-- **Preferences window** uses sidebar (`Fl_Hold_Browser`) + panel layout with 6 sections: General, Text, Engine, Formats, Remote, Paths
-- Dark-themed `fl_alert`/`fl_choice`/`fl_message` dialogs — global FLTK colors set after splash window closes in `main.cpp`
-- System requirements window (`minSpecsWindow`) uses `GFC_BG_COLOR` for dark background
+- **Qt6** GUI hosted in `src/qt/`. Single `MainWindow_Qt` with native menu bar, central `GlViewport_Qt` (QOpenGLWidget), and dockable panels (Plate Manager, Timeline, FX Stack, FX Params, LUTs, Playlist).
+- Native file dialogs via `QFileDialog`.
+- Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Remote Session (`RemoteDialog_Qt`).
+- Dark VFX theme at `src/qt/theme/jefecheck_dark.qss`.
+- Object names follow the dotted-leaf scheme documented in `tests/ui/jefecheck/locators.py` so Mac2/XCUITest can resolve widgets via `identifier ENDSWITH '<leaf>'`.
 
 ## Key Dependencies
 
 | Library | Purpose | License |
 |---------|---------|---------|
-| FLTK 1.4 | GUI framework | LGPL v2 |
+| Qt6 | GUI framework (Widgets + OpenGLWidgets) | LGPL v3 |
 | OpenImageIO | Image I/O (all formats) | BSD |
 | FreeType | Font rasterization with hinting | FreeType License (BSD-like) |
 | GLAD | OpenGL loading (compatibility profile 3.3) | Public domain |
@@ -114,7 +113,7 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 | zlib | Compression | zlib |
 | xmlParser | XML parsing (vendored in src/) | BSD |
 
-**Removed dependencies:** GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
+**Removed dependencies:** FLTK 1.4 (replaced by Qt6 in PR-43f), GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
 
 **Bundled fonts:** Roboto Regular/Bold (Apache 2.0, default), Inter Regular/Bold (SIL OFL), DejaVu Sans Regular/Bold (Bitstream Vera)
 
@@ -154,7 +153,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 - `using namespace std;` in headers causes `std::byte` vs Windows `byte` conflict. Removed from `mtpoly.h`.
 - `alloca.h` doesn't exist — use `malloc.h`. Guard: `#if (defined(__GNUC__) || defined(__GCCXML__)) && !defined(_WIN32)`
 - `GLhandleARB` casts require `(GLuint)(uintptr_t)` on 64-bit.
-- Link: `glu32 opengl32 ws2_32 winmm iphlpapi` + GLUT.
+- Link: `glu32 opengl32 ws2_32 winmm iphlpapi`.
 - `-fpermissive` needed for `void*` to `long` casts in FLTK callbacks.
 - `#include <windows.h>` must come before `<GL/glu.h>` (GLU callbacks need Windows types).
 

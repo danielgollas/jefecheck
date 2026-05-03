@@ -1,5 +1,5 @@
 #include "gfcnetworkclient.h"
-#include "gfcnetworkclientgui_fltk.h"
+#include "qt/gfcnetworkclientgui_qt.h"
 
 
 #include "RakPeerInterface.h"
@@ -21,12 +21,7 @@
 #include "BitStream.h"
 #include "StringCompressor.h"
 #include "gfcNetworkStructures.h"
-#include "FL/fl_ask.H"
 
-#include "remoteWindow.h"
-
-
-extern RemoteWindow rmw;
 
 #include "gfcnetworklog.h"
 extern gfcNetworkLog networkLog;
@@ -53,7 +48,7 @@ extern gfcPlaybackManager playbackManager;
 extern gfcNetworkManager networkManager;
 
 gfcNetworkClient::gfcNetworkClient() {
-    myGUI=new gfcNetworkClientGUI_FLTK;
+    myGUI=new gfcNetworkClientGUI_Qt;
     peer = RakNetworkFactory::GetRakPeerInterface();
 	haveSentMyPlaylist=false;
 }
@@ -123,14 +118,6 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
 }
 
 void gfcNetworkClient::initializeWidgets() {
-    myGUI->assignStartStopButtonWidget(rmw.connectButton);
-    myGUI->assignPasswordWidget(rmw.password);
-    myGUI->assignNameInputWidget(rmw.nickname);
-    myGUI->assignPortInputWidget(rmw.port);
-    myGUI->assignIPInputWidget(rmw.ip);
-    myGUI->assignRemoteRecent(rmw.remoteRecent);
-    myGUI->assignStatusWidget(rmw.status);
-    myGUI->assignPeersInSessionWidget(rmw.peersInSession);
 }
 
 void gfcNetworkClient::saveCurrentToRecentIPs()
@@ -301,7 +288,6 @@ void gfcNetworkClient::Update() {
             break;
 
         case GFCNETID_NICKALREADYINUSE: {
-            fl_alert ( "Nick already taken!");
             networkLog.addToLog("Client: Could not connect to server, nickname already taken!",GFCNETLOGTYPE_ALERT);
             Disconnect();
         }

@@ -1,14 +1,10 @@
 #include "gfcplaybackmanager.h"
-#include "gfcplaybackgui_fltk.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
+#include "qt/gfcplaybackgui_qt.h"
 
 #include <glad/glad.h>
-#ifdef __APPLE__
-#include <GLUT/glut.h>
-#else
-#  include <GL/glut.h>
-#endif
 
-#include "mainWindow.h"
 
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
@@ -36,34 +32,11 @@ gfcPlaybackManager::~gfcPlaybackManager() {
         delete myGUI;
 }
 
-void gfcPlaybackManager::initializeWidgets(MainWindow &mw) {
-    myGUI=new gfcPlaybackGUI_FLTK;
-
-
-    myGUI->assignTimeLineWidget(mw.timeLine);
-    myGUI->assignCurrentFrameWidget(mw.timeLineInput);
-    myGUI->assignFromWidget(mw.playFromInput);
-    myGUI->assignToWidget(mw.playUpToInput);
-
-	myGUI->assignInPointWidget(mw.inPointInput);
-	myGUI->assignOutPointWidget(mw.outPointInput);
-
-    myGUI->assignTargetFPSWidget(mw.targetFPSInput);
-    myGUI->assignCurrentFPSWidget(mw.currentFPSOutput);
-    myGUI->assignSMPTWidget(mw.timeCodeOutput);
-    myGUI->assignPlayFwdButtonWidget(mw.playFwdButton);
-    myGUI->assignPlayRevButtonWidget(mw.playRevButton);
-    myGUI->assignFFwdButtonWidget(mw.ffButton);
-    myGUI->assignRwdButtonWidget(mw.rewindButton);
-    myGUI->assignOneBackButtonWidget(mw.backOneButton);
-    myGUI->assignOneFwdButtonWidget(mw.forwardOneButton);
-    myGUI->assignPlaybackModeWidgets(mw.loopOnceRadio,mw.loopLoopRadio,mw.loopBounceRadio);
-    myGUI->assignLoopPriorityWidget(mw.loopPriorityChoice);
+void gfcPlaybackManager::initializeWidgets() {
+    myGUI=new gfcPlaybackGUI_Qt;
     this->setFromFrame(1);
     this->setToFrame(100);
     this->setCurrentFrame(1);
-	this->myGUI->setPlayFwdLabel(0);
-
 }
 
 int gfcPlaybackManager::isPlaying()
@@ -86,16 +59,16 @@ void gfcPlaybackManager::update() {
 /*
 
 #ifdef WIN32
-                    Fl::wait(0.001);
+                    app().waitForEvents(0.001);
 #endif
 
 #ifdef __APPLE__
                     //on mac we have to sleep a whole lot apparently
-                    Fl::wait(0.02);
+                    app().waitForEvents(0.02);
 #endif
 
 #ifdef linux
-                    Fl::wait(0.0001);
+                    app().waitForEvents(0.0001);
 #endif*/
         intraFrameCount=0;
 		fpsTimerCount=0;
@@ -169,16 +142,16 @@ void gfcPlaybackManager::update() {
 			boundCurrentFrameToLimits();
 			
 		/*	#ifdef WIN32
-                    Fl::wait(0.001);
+                    app().waitForEvents(0.001);
 #endif
 
 #ifdef __APPLE__
                     //on mac we have to sleep a whole lot apparently
-                    Fl::wait(0.002);
+                    app().waitForEvents(0.002);
 #endif
 
 #ifdef linux
-                    Fl::wait(0.001);
+                    app().waitForEvents(0.001);
 #endif*/
         }
 		
@@ -539,6 +512,14 @@ void gfcPlaybackManager::setFromFrame(int frame) {
     trackManager.updateTrackWidgetsFromAndTo(from,to);
 	boundCurrentFrameToLimits();
 	plateManager.setChanged();
+}
+
+int gfcPlaybackManager::getInPoint() {
+    return inPoint;
+}
+
+int gfcPlaybackManager::getOutPoint() {
+    return outPoint;
 }
 
 void gfcPlaybackManager::setInPoint(int frame)

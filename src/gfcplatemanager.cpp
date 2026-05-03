@@ -1,13 +1,9 @@
 #include "gfcplatemanager.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
-
-#include <FL/fl_ask.H>
-
-#include "mainWindow.h"
-extern MainWindow mw;
-
-#include "loadWindow.h"
-extern LoadWindow lw;
+#include "qt/gfcplategui_qt.h"
+#include "qt/gfcplatemanagergui_qt.h"
 
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
@@ -21,13 +17,9 @@ extern gfcPickManager pickManager;
 #include "gfclutmanager.h"
 extern gfcLUTManager lutManager;
 
-#include "fxcontrolwindow.h"
-extern FXControlWindow fxControlWindow1;
 
 #include "gfcrenderparams.h"
 
-#include "renderWindow.h"
-extern RenderWindow rw;
 
 #ifndef max
 #define max(a,b)            (((a) > (b)) ? (a) : (b))
@@ -37,8 +29,9 @@ extern RenderWindow rw;
 #define min(a,b)            (((a) < (b)) ? (a) : (b))
 #endif
 
-gfcPlateManager::gfcPlateManager() {
+gfcPlateManager::gfcPlateManager() : myGUI(nullptr) {
     plates.resize(GFC_MAX_PLATES);
+    activeQuad=0;
     framingMode=FRAMINGSINGLE_ID;
     showHelp=false;
     helpMessage="\n\n\nQuickHelp\n(toggle on/off with 'h')\n-------------\n\nVIEWPORT LAYOUTS\nSingle - ctrl+1\nSide by Side - ctrl+2\nTop and Bottom - ctrl+3\n2x2 - ctrl+4\n\nGUI\nToggle Fullscreen Modes - Ctrl+F\nHide Control Bar and Menu - Ctrl+Alt+F\n\nPLAYBACK\nPlay/Pause - Space\nPlay Direction - < or >\nBack/Forward one frame - x/c\nFirst/Last Frame - z/v\nSet Timeline IN Point - i (+Shift to reset, +Alt to start loading there)\nSet Timeline OUT Point - o (+Shift to reset)\nLoad from this point on- Alt+LMB ( on the track or the timeline to load all tracks from this point on)\n\nTRANSFORMS\nFit to screen - f (+Alt Fit all to screen)\nPan - LMB drag (+Alt for gang zoom)\nZoom - Mouse Wheel or Ctrl+LMB drag (+Alt for gang zoom)\n\nOTHERS\nColor Picker: Ctrl+RMB\n\n\nREMOTE SESSIONS\nRemote Pointer - RMB drag\nEnter/Exit Chat Mode - y/Escape\nShow Chat - Ctrl+y";
@@ -58,6 +51,7 @@ gfcPlateManager::gfcPlateManager() {
 
 
 gfcPlateManager::~gfcPlateManager() {
+    delete myGUI;
 }
 
 void gfcPlateManager::drawPlate(int whichOne) {
@@ -222,22 +216,15 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
     int w,h,x,y;
 
-    w=layoutsGroup->w();
-    h=layoutsGroup->h();
-    x=layoutsGroup->x();
-    y=layoutsGroup->y();
-
-
-	
-    /*this->layout1x1->value(pframingMode==FRAMINGSINGLE_ID);
-    this->layout2x1->value(pframingMode==FRAMINGDOUBLE_ID);
-    this->layout1x2->value(pframingMode==FRAMINGDOUBLEVERT_ID);
-    this->layout2x2->value(pframingMode==FRAMINGQUAD_ID);*/
+    w=myGUI->getLayoutGroupW();
+    h=myGUI->getLayoutGroupH();
+    x=myGUI->getLayoutGroupX();
+    y=myGUI->getLayoutGroupY();
 
     switch ( framingMode ) {
     case FRAMINGSINGLE_ID: {
 
-		layoutChoice->value(0);
+		myGUI->setLayoutChoice(0);
 		
 		this->setActiveQuad(0);
 		
@@ -259,7 +246,7 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
     case FRAMINGDOUBLE_ID: {
 
-		layoutChoice->value(1);
+		myGUI->setLayoutChoice(1);
 
 		if (activeQuad==2 || activeQuad==3)
 		{
@@ -285,8 +272,8 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
 
     case FRAMINGDOUBLEVERT_ID: {
-		
-		layoutChoice->value(2);
+
+		myGUI->setLayoutChoice(2);
 
 		if (activeQuad==2 || activeQuad==3)
 		{
@@ -310,7 +297,7 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
 
     case FRAMINGQUAD_ID: {
 
-		layoutChoice->value(3);
+		myGUI->setLayoutChoice(3);
 		
 		plates[0].myGUI->setActiveVisible(1);
 		plates[1].myGUI->setActiveVisible(1);
@@ -328,8 +315,7 @@ void gfcPlateManager::setFramingMode(int pframingMode) {
     break;
     }
 
-    mw.vp->invalidate();
-    layoutsGroup->redraw();
+    myGUI->redrawLayoutGroup();
 
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
 
@@ -605,143 +591,64 @@ void gfcPlateManager::resetPlate(int whichOne) {
 }
 
 void gfcPlateManager::initializeWidgets() {
-    for (int i=plates.size()-1;i>=0;i--) {
-        plates[i].myGUI=new gfcPlateGUI_FLTK;
-        plates[i].quadID=i;
+    // Qt: each plate gets a stateful gfcPlateGUI_Qt. Widgets push state
+    // into it via setters (no Fl_Widget pointers to assign). The plate
+    // manager itself uses gfcPlateManagerGUI_Qt for layout-mode tracking.
+    // Default plate i to track i (matches the FLTK pairing of
+    // plate 0↔track A, plate 1↔track B, …) so getFrameAndSequence picks
+    // up sequences[i] instead of trackManager's dummy sequence.
+    for (int i = (int)plates.size() - 1; i >= 0; --i) {
+        auto* g = new gfcPlateGUI_Qt;
+        g->setPlateIndex(i);
+        plates[i].myGUI = g;
+        plates[i].quadID = i;
+        // setTrack writes both gfcPlate::track AND myGUI->trackChoice_,
+        // so the plate's renderer and the plate-card's combo agree from
+        // launch. Earlier this only set the GUI side; gfcPlate::track
+        // stayed 0 for every plate, so all four cards rendered track A.
+        plates[i].setTrack(i);
     }
+    myGUI = new gfcPlateManagerGUI_Qt;
+}
 
-    layoutsGroup=mw.layoutsGroup;
-    /*this->layout1x1=mw.frameModeSingleRadio;
-    this->layout2x1=mw.frameModeDoubleRadio;
-    this->layout2x2=mw.frameModeQuadRadio;
-    this->layout1x2=mw.frameModeDoubleVertRadio;*/
+gfcPlateGUI* gfcPlateManager::getPlateGUI(int whichOne) {
+    if (whichOne < 0 || whichOne >= (int)plates.size()) return nullptr;
+    return plates[whichOne].myGUI;
+}
 
-	this->layoutChoice=mw.viewportLayoutChoice;
+int gfcPlateManager::getPlateAtPosition(int vx, int vy, int w, int h) {
+    if (w <= 0 || h <= 0) return -1;
+    // Mirror drawPlates' viewport partitioning. The cases below match
+    // the rectangles set up there per framingMode. Coordinates come in
+    // top-down (Qt-style); each branch picks the plate whose viewport
+    // covers (vx, vy).
+    switch (framingMode) {
+        case FRAMINGSINGLE_ID:
+            return 0;
+        case FRAMINGDOUBLE_ID:
+            // Split horizontally: left = plate 0, right = plate 1.
+            return (vx < w / 2) ? 0 : 1;
+        case FRAMINGDOUBLEVERT_ID:
+            // Split vertically (drawPlates puts plate 0 on top).
+            return (vy < h / 2) ? 0 : 1;
+        case FRAMINGQUAD_ID:
+            // 2x2: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right.
+            if (vx < w / 2 && vy < h / 2) return 0;
+            if (vx >= w / 2 && vy < h / 2) return 1;
+            if (vx < w / 2 && vy >= h / 2) return 2;
+            return 3;
+        default:
+            return 0;
+    }
+}
 
-    plates[0].myGUI->assignZoom(mw.q1Scale);
-    plates[0].myGUI->assignTXWidget(mw.q1X);
-    plates[0].myGUI->assignTYWidget(mw.q1Y);
-    plates[0].myGUI->assignRZWidget(mw.q1rZ);
-
-    plates[0].myGUI->assignFlipWidget(mw.q1Flip);
-    plates[0].myGUI->assignFlopWidget(mw.q1Flop);
-
-    plates[0].myGUI->assignCropWidget(mw.q1Crop);
-
-	plates[0].myGUI->assignRGBAWidget(mw.q1RGBA);
-    /*plates[0].myGUI->assignChannelRWidget(mw.q1R);
-    plates[0].myGUI->assignChannelGWidget(mw.q1G);
-    plates[0].myGUI->assignChannelBWidget(mw.q1B);
-    plates[0].myGUI->assignChannelAWidget(mw.q1A);*/
-
-    plates[0].myGUI->assignTrackChoiceWidget(mw.q1Choice);
-    plates[0].myGUI->assignAspectChoiceWidget(mw.q1AspectChoice);
-
-    plates[0].myGUI->assignGroupWidget(mw.layouts1);
-	plates[0].myGUI->assignActiveWidget(mw.activeViewport0);
-    plates[0].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[0].myGUI->assignLUTWidget(mw.q1LUT);
-	plates[0].myGUI->assignGammaWidget(mw.q1Gamma);
-	plates[0].myGUI->assignExposureWidget(mw.q1Exposure);
-	plates[0].myGUI->assignBrightnessWidget(mw.q1Brightness);
-	plates[0].myGUI->assignContrastWidget(mw.q1Contrast);
-	plates[0].myGUI->assignSaturationWidget(mw.q1Saturation);
-
-    /***********/
-
-    plates[1].myGUI->assignZoom(mw.q2Scale);
-    plates[1].myGUI->assignTXWidget(mw.q2X);
-    plates[1].myGUI->assignTYWidget(mw.q2Y);
-    plates[1].myGUI->assignRZWidget(mw.q2rZ);
-
-    plates[1].myGUI->assignFlipWidget(mw.q2Flip);
-    plates[1].myGUI->assignFlopWidget(mw.q2Flop);
-
-    plates[1].myGUI->assignCropWidget(mw.q2Crop);
-	
-	plates[1].myGUI->assignRGBAWidget(mw.q2RGBA);
-    /*plates[1].myGUI->assignChannelRWidget(mw.q2R);
-    plates[1].myGUI->assignChannelGWidget(mw.q2G);
-    plates[1].myGUI->assignChannelBWidget(mw.q2B);
-    plates[1].myGUI->assignChannelAWidget(mw.q2A);*/
-
-    plates[1].myGUI->assignTrackChoiceWidget(mw.q2Choice);
-    plates[1].myGUI->assignAspectChoiceWidget(mw.q2AspectChoice);
-	
-	plates[1].myGUI->assignActiveWidget(mw.activeViewport1);
-    plates[1].myGUI->assignGroupWidget(mw.layouts2);
-    plates[1].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[1].myGUI->assignLUTWidget(mw.q2LUT);
-	plates[1].myGUI->assignGammaWidget(mw.q2Gamma);
-	plates[1].myGUI->assignExposureWidget(mw.q2Exposure);
-	plates[1].myGUI->assignBrightnessWidget(mw.q2Brightness);
-	plates[1].myGUI->assignContrastWidget(mw.q2Contrast);
-	plates[1].myGUI->assignSaturationWidget(mw.q2Saturation);
-
-    /***********/
-
-	plates[2].myGUI->assignRGBAWidget(mw.q3RGBA);
-    plates[2].myGUI->assignZoom(mw.q3Scale);
-    plates[2].myGUI->assignTXWidget(mw.q3X);
-    plates[2].myGUI->assignTYWidget(mw.q3Y);
-    plates[2].myGUI->assignRZWidget(mw.q3rZ);
-
-    plates[2].myGUI->assignFlipWidget(mw.q3Flip);
-    plates[2].myGUI->assignFlopWidget(mw.q3Flop);
-
-    plates[2].myGUI->assignCropWidget(mw.q3Crop);
-
-    /*plates[2].myGUI->assignChannelRWidget(mw.q3R);
-    plates[2].myGUI->assignChannelGWidget(mw.q3G);
-    plates[2].myGUI->assignChannelBWidget(mw.q3B);
-    plates[2].myGUI->assignChannelAWidget(mw.q3A);*/
-
-    plates[2].myGUI->assignTrackChoiceWidget(mw.q3Choice);
-    plates[2].myGUI->assignAspectChoiceWidget(mw.q3AspectChoice);
-
-	plates[2].myGUI->assignActiveWidget(mw.activeViewport2);
-    plates[2].myGUI->assignGroupWidget(mw.layouts3);
-    plates[2].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[2].myGUI->assignLUTWidget(mw.q3LUT);
-	plates[2].myGUI->assignGammaWidget(mw.q3Gamma);
-	plates[2].myGUI->assignExposureWidget(mw.q3Exposure);
-	plates[2].myGUI->assignBrightnessWidget(mw.q3Brightness);
-	plates[2].myGUI->assignContrastWidget(mw.q3Contrast);
-	plates[2].myGUI->assignSaturationWidget(mw.q3Saturation);
-    /***********/
-
-    plates[3].myGUI->assignZoom(mw.q4Scale);
-    plates[3].myGUI->assignTXWidget(mw.q4X);
-    plates[3].myGUI->assignTYWidget(mw.q4Y);
-    plates[3].myGUI->assignRZWidget(mw.q4rZ);
-
-    plates[3].myGUI->assignFlipWidget(mw.q4Flip);
-    plates[3].myGUI->assignFlopWidget(mw.q4Flop);
-
-    plates[3].myGUI->assignCropWidget(mw.q4Crop);
-	
-	plates[3].myGUI->assignRGBAWidget(mw.q4RGBA);
-    /*plates[3].myGUI->assignChannelRWidget(mw.q4R);
-    plates[3].myGUI->assignChannelGWidget(mw.q4G);
-    plates[3].myGUI->assignChannelBWidget(mw.q4B);
-    plates[3].myGUI->assignChannelAWidget(mw.q4A);*/
-
-    plates[3].myGUI->assignTrackChoiceWidget(mw.q4Choice);
-    plates[3].myGUI->assignAspectChoiceWidget(mw.q4AspectChoice);
-
-	plates[3].myGUI->assignActiveWidget(mw.activeViewport3);
-    plates[3].myGUI->assignGroupWidget(mw.layouts4);
-    plates[3].myGUI->assignShowPreviewWidget(lw.loadWindow);
-
-	plates[3].myGUI->assignLUTWidget(mw.q4LUT);
-	plates[3].myGUI->assignGammaWidget(mw.q4Gamma);
-	plates[3].myGUI->assignExposureWidget(mw.q4Exposure);
-	plates[3].myGUI->assignBrightnessWidget(mw.q4Brightness);
-	plates[3].myGUI->assignContrastWidget(mw.q4Contrast);
-	plates[3].myGUI->assignSaturationWidget(mw.q4Saturation);
+void gfcPlateManager::setPlateShowPreview(int whichOne, bool value) {
+    if (whichOne < 0 || whichOne >= (int)plates.size() || !plates[whichOne].myGUI) {
+        return;
+    }
+    if (auto* g = dynamic_cast<gfcPlateGUI_Qt*>(plates[whichOne].myGUI)) {
+        g->setShowPreview(value);
+    }
 }
 
 void gfcPlateManager::updateAllGUILUTWidgets()
@@ -784,9 +691,9 @@ void gfcPlateManager::updateAllFromGUI() {
     setChanged();
 
 	//update the layout
-	if (layoutChoice)
+	if (myGUI)
 	{
-		setFramingMode(layoutChoice->value()+FRAMINGSINGLE_ID);
+		setFramingMode(myGUI->getLayoutChoice()+FRAMINGSINGLE_ID);
 	}
 	
 	
@@ -848,7 +755,7 @@ void gfcPlateManager::toggleFlipAll()
 {
 	setChanged();
 	for (int i=plates.size()-1;i>=0;i--) {
-		plates[i].toggleFlop();
+		plates[i].toggleFlip();
 	}
 	networkManager.notifyEvent(GFCNETEVENT_TRANSFORMS);
 }
@@ -857,7 +764,7 @@ void gfcPlateManager::toggleFlopAll()
 {
 	setChanged();
 	for (int i=plates.size()-1;i>=0;i--) {
-		plates[i].toggleFlip();
+		plates[i].toggleFlop();
 	}
 	networkManager.notifyEvent(GFCNETEVENT_TRANSFORMS);
 }
@@ -1026,7 +933,6 @@ void gfcPlateManager::addFXToPlate(int whichOne, gfcFX theFX) {
 		sett.addToRecentFXs(theFX.name);
 
         plates[whichOne].fxStack.addFX(theFX);
-        fxControlWindow1.scheduleUpdateWindow(whichOne);
 	this->clearHistogramCache(whichOne);
 	
         //send fx
@@ -1055,7 +961,6 @@ void gfcPlateManager::setFXStack(gfcFXStack theStack, int whichOne)
         return;
     } else {
         plates[whichOne].fxStack=theStack;
-        fxControlWindow1.scheduleUpdateWindow(whichOne);
 
 		//send notification that a stack was loaded
 		gfcNetFXStackMessage message;
@@ -1070,7 +975,7 @@ void gfcPlateManager::setFXStack(gfcFXStack theStack, int whichOne)
 	
 }
 
-int gfcPlateManager::handleFXGUICB(int whichOne, Fl_Widget * o, void * data) {
+int gfcPlateManager::handleFXGUICB(int whichOne, void * widgetHandle, void * data) {
     setChanged();
 	if (whichOne>=plates.size()) {
         printf("gfcPlateManager::handleFXGUICB: requested plate out of range\n");
@@ -1078,7 +983,7 @@ int gfcPlateManager::handleFXGUICB(int whichOne, Fl_Widget * o, void * data) {
 
     } else {
     	this->clearHistogramCache(whichOne);
-        return plates[whichOne].fxStack.handleGUICB(o,data);
+        return plates[whichOne].fxStack.handleGUICB(widgetHandle, data);
     }
 
 
@@ -1363,7 +1268,6 @@ void gfcPlateManager::processNetFXAttribInfo(gfcNetFXAttribInfo &info) {
         printf("gfcPlateManager::processNetFXAttribInfo: requested plate out of range\n");
     } else {
         plates[info.id.quadID].processNetFXAttribInfo(info);
-        fxControlWindow1.scheduleUpdateWindow(info.id.quadID);
     }
 }
 
@@ -1373,7 +1277,6 @@ void gfcPlateManager::processNetFXCommonInfo(gfcNetFXCommonInfo &info) {
         printf("gfcPlateManager::processNetFXCommonInfo: requested plate out of range\n");
     } else {
         plates[info.id.quadID].processNetFXCommonInfo(info);
-        fxControlWindow1.scheduleUpdateWindow(info.id.quadID);
     }
 }
 
@@ -1430,11 +1333,11 @@ void gfcPlateManager::loadStackFromFile(int whichOne, std::string filename) {
 		gfcFXStack tmp;
 		std::vector<std::string> result=tmp.loadStackFromFile(filename);
 		this->setFXStack(tmp,whichOne);
-	updateRecentlyLoadedStacks(filename);
-        fxControlWindow1.scheduleUpdateWindow(whichOne);
         if (result.size()>0) {
             for (int i=0; i<result.size(); i++) {
-                fl_alert(result[i].c_str());
+                // Non-FLTK builds don't have a popup wired yet; log instead.
+                fprintf(stderr, "FX stack load warning: %s\n",
+                        result[i].c_str());
             }
         }
 
@@ -1562,12 +1465,6 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         return;
 
     gfcPlate* ptrToPlate=&plates[params.quadrant];
-    rw.progress->maximum ( params.to-params.from );
-
-    Fl::ready();
-#ifndef __APPLE__xxx
-    Fl::check();
-#endif
 
     for ( int i=params.from; i<=params.to;i++ ) {
 
@@ -1575,35 +1472,21 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         playbackManager.setCurrentFrame(i);
         params.frame=i;
         params.filename=CreateRenderFilename ( params );
-		
+
 		if(renderNames)
 			renderNames->push_back(params.filename);
-        
-		rw.progress->label ( params.filename.c_str() );
+
         ptrToPlate->renderParams=params;
 
         ptrToPlate->draw ( );
 
         ptrToPlate->forRender=false;
 
-        rw.progress->value ( i );
-
-        //draw(); //update the screen
-
-        if ( stopRendering) {
-            break;
-        }
-        Fl::ready();
-#ifndef __APPLE__xxx
-        Fl::check();
-#endif
+        if ( stopRendering) break;
     }
 
     printf ( "Done rendering\n\a" );
-    rw.progress->label ( !stopRendering?"Done Rendering!":"Render Aborted" );
     stopRendering=true;
-    rw.render->label ( "Render" );
-    rw.render->color ( FL_BLACK );
 }
 
 void gfcPlateManager::setFeedbackMessage(std::string theMessage)

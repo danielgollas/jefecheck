@@ -2,7 +2,6 @@
 #define GFCNETWORKCLIENT_H
 
 #include <stdio.h>
-#include "mainWindow.h"
 #include "RakPeerInterface.h"
 #include <string>
 #include <vector>

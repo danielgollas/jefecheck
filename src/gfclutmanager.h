@@ -3,9 +3,7 @@
 
 #include <vector>
 #include <map>
-#include <FL/Fl_Scroll.H>
-#include <FL/Fl_Progress.H>
-#include <FL/Fl_Button.H>
+#include "qt/qt_fltk_stubs.h"
 #include "trilerp.h"
 
 /**

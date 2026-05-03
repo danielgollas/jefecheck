@@ -9,7 +9,7 @@
 
 #include <glad/glad.h>
 #include "vec3d.h"
-#include <FL/Fl_Progress.H>
+#include "qt/qt_fltk_stubs.h"
 #include <stdio.h>
 #include <vector>
 

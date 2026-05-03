@@ -1,16 +1,10 @@
 #include "gfclutmanager.h"
+#include "ui/IApplication.h"
+namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "UIConstants.h"
 #include "gfcStructures.h"
-#include <FL/Fl_File_Chooser.H>
-#include <FL/Fl_Pack.H>
 
 extern gfcSettings sett;
-#include "gfcfilechooser.h"
-extern NativeFileChooser *fc;
-extern void save_input_file ( Fl_File_Chooser *w, void *userdata );
-
-#include "lutWindow.h"
-extern LutWindow lutw;
 
 
 #include "gfcnetworkmanager.h"
@@ -21,98 +15,26 @@ extern gfcPlateManager plateManager;
 
 gfcLUTManager lutManager;
 
-gfcLUTManager::gfcLUTManager() {
+gfcLUTManager::gfcLUTManager()
+    : loadedScroll(nullptr),
+      autoloadAllButton(nullptr),
+      // The Qt build's Fl_Progress is a no-op stub class. Allocating a
+      // single owned instance keeps loadLUT and the trilerp loaders
+      // (which dereference `progress` on every status tick) safe to
+      // call, without auditing every `progress->...` call site.
+      progress(new Fl_Progress),
+      scrollPosY(0),
+      scrollPosX(0) {
 }
 
 
 gfcLUTManager::~gfcLUTManager() {
+    // Owned in the Qt build; FLTK ones are owned by their parent group.
+    delete progress;
 }
 
-void lutManagerCB_OTHERS(Fl_Widget * o, void * v) {
-
-    
-	switch ( (long)v ) {
-	
-	case LUTDEFAULTLUT_ID:
-		sett.defaultLUTName=lutManager.getLUT(lutw.defaultLUT->value()-1).name; //-1 to account for No LUT option
-		sett.defaultLUTNameBackup=sett.defaultLUTName; //make this the save since we always save the backup.
-		break;
-
-	case LUTDONE_ID:
-		lutw.preview->value(false);
-        plateManager.setDrawLUTPreview(false,lutw.uniform->value(),lutw.loadedLuts->value());
-        lutw.lutWindow->hide();
-        break;
-        
-    case LUTCHANGEPREVIEW_ID:
-    case LUTPREVIEW_ID:
-    	plateManager.setDrawLUTPreview(lutw.preview->value(),lutw.uniform->value(),lutw.loadedLuts->value());
-    break;
-    
-    case LUTBROWSE_ID: {
-        printf("Browse\n");
-
-        //printf ( " *Path: %s\n",sett.lutPath.c_str());
-        char oldPath[FL_PATH_MAX];
-        strcpy ( oldPath,fc->directory());
-        fc->callback ( NULL );
-        fc->preview ( 0 );
-        std::string prevDirectory=fc->directory();
-        
-        std::string prevFilter=fc->filter();
-        int prevType=fc->type();
-        fc->type(Fl_File_Chooser::MULTI);
-        fc->filter ( "Supported LUT Files(*.{lut,tga,bmp,png,cube,cub})" );
-
-        fc->show();
-        fc->directory ( sett.lutPath.c_str() );
-        while ( fc->shown() )
-            Fl::wait();
-
-        lutManager.saveScrollPosition();
-
-        for (int i=1;i<=fc->count();i++)
-            lutManager.loadLUT(fc->value(i));
-
-        networkManager.startLUTSinc(); //when we load a new LUTs, the networkManager starts a sinc process if we are connected.
-
-        lutManager.restoreScrollPosition();
-        fc->filter(prevFilter.c_str());
-        fc->directory ( prevDirectory.c_str() );
-        fc->type(prevType);
-    }
-
-    break;
 
 
-    case LUTUNLOADALL_ID:
-        printf("Unload All\n");
-        lutManager.deleteAllLUTs();
-        break;
-
-
-    case LUTAUTOLOADALL_ID:
-        printf("Autoload All %i\n",((Fl_Button*)o)->value());
-        lutManager.autoLoadAll(((Fl_Button*)o)->value());
-        break;
-
-	default:
-		lutw.preview->value(false);
-		plateManager.setDrawLUTPreview(false,lutw.uniform->value(),lutw.loadedLuts->value());
-		lutw.lutWindow->hide();
-		break;
-    }
-
-}
-
-void lutManagerCB_DELETE(Fl_Widget * o, void * v) {
-    printf("Delete LUT %i\n",(long)v);
-    lutManager.deleteLUT((long)v);
-}
-
-void lutManagerCB_AUTOLOAD(Fl_Widget * o, void * v) {
-    lutManager.setAutoLoad((long)v,((Fl_Button*)o)->value());
-}
 
 void gfcLUTManager::setAutoLoad(int index, bool autoload) {
     if (index<lutArray.size()) {
@@ -157,8 +79,14 @@ void gfcLUTManager::loadLUT(std::string fileName) {
     //1. Check that this LUT or one with the same name is already loaded
     for ( int i=0;i<lutArray.size();i++ ) {
         if ( GetFilenameNoPath ( lutArray[i].filename ) ==GetFilenameNoPath ( fileName ) ) {
-            progress->color ( fl_rgb_color(42,42,0) );
-            progress->copy_label ( " LUT Already Loaded, unload before reloading" );
+            // The Qt build runs without a real progress widget — calling
+            // through a null pointer here was crashing on every LUT
+            // autoload. Skip the status update; the load result still
+            // returns cleanly via the `return` below.
+            if (progress) {
+                progress->color ( fl_rgb_color(42,42,0) );
+                progress->copy_label ( " LUT Already Loaded, unload before reloading" );
+            }
             return;
         }
     }
@@ -189,32 +117,18 @@ void gfcLUTManager::rebuildLUTHashMap() {
     std::vector<CubeLUT>::iterator iter=lutArray.begin(),end=lutArray.end();
     int counter=0;
 
-    lutw.loadedLuts->clear();
-	lutw.defaultLUT->clear();
-	lutw.defaultLUT->add("No LUT");
-
 
     lutHashMap.erase ( lutHashMap.begin(),lutHashMap.end() );
     for ( iter;iter!=end ;iter++ ) {
         //printf ( "Adding %i as (%s):%s\n",counter,iter->name, iter->md5Hash.c_str() );
         lutHashMap[iter->md5Hash]=counter;
 
-        //printf ( "LUT ARRAY SIZE=%i\n",lutArray.size() );
-        lutw.loadedLuts->add
-        ( GetFilenameNoPath ( iter->filename ).c_str() );
-
-		lutw.defaultLUT->add
-			( GetFilenameNoPath ( iter->filename ).c_str() );
-
-        lutw.loadedLuts->redraw();
 
         counter++;
 
 
     }
 
-	//after that, set the default LUT to what it is
-	lutw.defaultLUT->value(lutManager.getLutIndexByName(sett.defaultLUTName)+1); //+1 to account for the No LUT option
 }
 
 void gfcLUTManager::fillLoadedScroll() {
@@ -222,81 +136,9 @@ void gfcLUTManager::fillLoadedScroll() {
         printf("NO GUI ASSIGNED TO LUT MANAGER!\n");
         return;
     }
-    //printf("Filling FX Manager window\n");
-
-
-    //1. Clear the scroll group and begin it (remember to end it too)
-    loadedScroll->clear();
-    loadedScroll->begin();
-
-    int counter=0;
-    {
-        //2. Create a new packed group inside the scroll to tightly pack the LUTs
-        Fl_Pack *p=new Fl_Pack ( loadedScroll->x() +5,loadedScroll->y() +5,loadedScroll->w()-25,5 );
-        p->box ( FL_DOWN_FRAME );
-
-
-        /*3. Iterate through all the loaded LUTs and generate their entry in the GUI.
-        *Group to contain the rest of the widgets
-        *Name with a comprehensive tooltip
-        *Unload button
-        *Autoload button set to the correct value (the FXs value ORed with the Autoload All value)
-        The unload and autoload buttons have their calblacks set appropiately and send their index as user data
-        Remember to cloase the Group
-        */
-        std::vector<CubeLUT>::iterator iter=lutArray.begin();
-        std::vector<CubeLUT>::iterator end=lutArray.end();
-        for ( iter;iter<end;iter++ ) {
-            {
-                Fl_Group *g= new Fl_Group ( 0,0,40,20,"Hello" );
-				g->box ( FL_BORDER_BOX );
-				g->color( fl_rgb_color(GFC_BG_COLOR));
-
-                g->copy_label ( iter->getNameNoPath().c_str() );
-				
-				g->labelcolor ( fl_rgb_color(85,85,85) );
-                g->align ( FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_TOP );
-                char *tmpTooltip=new char[4096];
-                sprintf ( tmpTooltip,"Name: %s\nType:%i",iter->getNameNoPath().c_str(),iter->type );
-                g->tooltip ( tmpTooltip );
-
-
-                {
-                    Fl_Button_gfc* o=new Fl_Button_gfc ( g->x() +g->w()-15,g->y() +2,5,15,"Unload" );
-                    o->callback ( ( Fl_Callback* ) lutManagerCB_DELETE, ( void* ) counter);
-                }
-
-                {
-                    Fl_Check_Button* c=new Fl_Check_Button ( g->x() +g->w()-10, g->y() +2,  2,15, "Auto-Load" );
-                    c->value (iter->autoload);
-                    c->labelcolor ( fl_rgb_color(85,85,85) );
-					c->down_box(FL_FLAT_BOX);
-					c->color(fl_rgb_color(85,85,85));
-					c->selection_color(fl_rgb_color(160,160,160));
-                    c->callback ( ( Fl_Callback* ) lutManagerCB_AUTOLOAD, ( void* ) counter );
-                }
-                g->end();
-            }
-            counter++;
-        }
-        //4. Close pack
-        p->end();
-
-        //4. Close Scroll
-        loadedScroll->end();
-        loadedScroll->redraw();
-
-
-    }
-#ifndef __APPLE__
-    Fl::check();
-#endif
 }
 
 void gfcLUTManager::initWidgets() {
-    progress=lutw.progress;
-    loadedScroll=lutw.scrollLoaded;
-    autoloadAllButton=lutw.autoLoadAllButton;
 }
 
 void gfcLUTManager::deleteLUT(int index) {

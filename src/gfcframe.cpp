@@ -1,12 +1,10 @@
 #include "gfcframe.h"
 
-#include "exrWindow.h"
 
 #include <iostream>
 #include <sstream>
 #include <iomanip>
 
-extern ExrWindow ew;
 extern bool mainWindowExists;
 extern bool npotTextures;
 extern std::mutex gGLMutex;
@@ -222,8 +220,6 @@ GLuint gfcFrame::generateTexture()
 	glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 	glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
 	while (glGetError() != GL_NO_ERROR) {} // clear stale errors
-	printf("generateTexture: texID=%u target=0x%x internalFmt=0x%x size=%dx%d fmt=0x%x type=0x%x dataPtr=%p\n",
-		textureID, info.target, info.internalFormat, sizeX, sizeY, info.format, info.dataType, info.dataPointer);
 	glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
 	GLenum glErr = glGetError();
 	if (glErr != GL_NO_ERROR) printf("generateTexture: glTexImage2D error: 0x%x\n", glErr);

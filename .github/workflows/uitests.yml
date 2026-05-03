@@ -1,0 +1,38 @@
+name: UI tests (Appium)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  uitests:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt + native deps
+        run: |
+          brew install --quiet qt openimageio openexr curl zlib cmake freetype
+
+      - name: Install Appium + mac2 driver
+        run: |
+          npm install -g appium
+          appium driver install mac2
+
+      - name: Configure & build
+        run: |
+          export CMAKE_PREFIX_PATH="$(brew --prefix qt)"
+          cmake -B build_qt -DCMAKE_BUILD_TYPE=Release
+          cmake --build build_qt -j$(sysctl -n hw.ncpu)
+
+      - name: Run UI tests
+        run: |
+          cmake --build build_qt --target qt-uitests
+
+      - name: Upload Appium server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-server-log
+          path: tests/ui/appium-server.log
+          if-no-files-found: ignore

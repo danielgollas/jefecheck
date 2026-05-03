@@ -14,17 +14,10 @@ extern gfcPlaybackManager playbackManager;
 #include "gfcplaylistmanager.h"
 extern gfcPlaylistManager playlistManager;
 
-#include "loadWindow.h"
-extern LoadWindow lw;
-
-#include "preferencesWindow.h"
-extern PreferencesWindow pw;
 
 #include "gfcStructures.h"
 extern gfcSettings sett;
 
-#include "mainWindow.h"
-extern MainWindow mw;
 
 
 void rebuildRecentSessionsMenu();
@@ -53,7 +46,6 @@ void gfcSessionManager::loadSession(std::string filename)
     
     //Prepare the program to receive the session.
     trackManager.stopLoadingAll();
-    lw.loadWindow->show();
     
     //1. Parse and check the XML File
     XMLNode xMainNode=XMLNode::openFileHelper ( filename.c_str() );
@@ -71,7 +63,6 @@ void gfcSessionManager::loadSession(std::string filename)
     XMLNode settingsNode=xRootNode.getChildNode ( "settings" );
     
     plateManager.setFramingMode(readAttributeFromNode<int>("framingMode",settingsNode,0)+FRAMINGSINGLE_ID);
-    pw.bgColor->value(readAttributeFromNode<int>("bgColor",settingsNode,48));
     sett.filterMin=sett.filterMax=readAttributeFromNode<int>("filtering",settingsNode,0)+GL_NEAREST;
     playbackManager.setPlaybackMode(readAttributeFromNode<int>("loopMode",settingsNode,0)+LOOPMODEONCE_ID);
     playbackManager.setLoopPriority(readAttributeFromNode<int>("loopPriority",settingsNode,0));
@@ -79,8 +70,6 @@ void gfcSessionManager::loadSession(std::string filename)
     playbackManager.setFromFrame(readAttributeFromNode<int>("from",settingsNode,1));
     playbackManager.setToFrame(readAttributeFromNode<int>("to",settingsNode,1));
 
-    //we call this to update all the prefs window values to the corresponding places easily.
-    PreferencesCB((Fl_Widget*)pw.bgColor,NULL); // is an arbitrary choice only because we need to call the CB and it needs a widget.
 
     /****************/
     /*LOAD PLATES   */
@@ -167,7 +156,7 @@ if ( filename.empty() ) {
     XMLNode settingsNode=xRootNode.addChild ( "settings" );
     
     saveSetting("framingMode",plateManager.getFramingMode()-FRAMINGSINGLE_ID,settingsNode);
-    saveSetting("bgColor",pw.bgColor->value(),settingsNode);
+    saveSetting("bgColor",48,settingsNode);
     saveSetting("filtering",sett.filterMin-GL_NEAREST,settingsNode); //filter min and max are always the same now
     saveSetting("loopMode",playbackManager.getPlaybackMode()-LOOPMODEONCE_ID,settingsNode);
     saveSetting("loopPriority",playbackManager.getLoopPriority(),settingsNode);
@@ -265,28 +254,4 @@ void gfcSessionManager::removeCrashSession()
 
 
 void rebuildRecentSessionsMenu() {
-    static int firstRecentMenu=-1;
-    //printf("Rebuilding recentSession\n");
-
-    if ( firstRecentMenu!=-1 ) { //we already have a pointer to the first then delete the item and all the other ones
-        for ( int i=0;i<sett.recentSessions.size();i++ )
-            mw.menuBar->remove
-            ( firstRecentMenu );
-    }
-
-    for ( int i=sett.recentSessions.size()-1;i>=0;i-- ) {
-        char tmpName[3000];
-        std::string tmpStringFileName=sett.recentSessions[i];
-        AddMenuSlash(tmpStringFileName);
-        //sprintf(tmpName,"File/%s",sett.recentSessions[i].c_str());
-        sprintf ( tmpName,"File/%s",tmpStringFileName.c_str() );
-        if ( i==sett.recentSessions.size()-1 ) {
-
-            firstRecentMenu=mw.menuBar->add
-                            ( tmpName,0, ( Fl_Callback* ) menuCB, ( void* ) MENUFILEOPENRECENTSESSION_ID,0 );
-        } else {
-            mw.menuBar->add
-            ( tmpName,0, ( Fl_Callback* ) menuCB, ( void* ) MENUFILEOPENRECENTSESSION_ID,0 );
-        }
-    }
 }

@@ -1,13 +1,11 @@
 #include "gfcnetworkserver.h"
-#include "gfcnetworkservergui_fltk.h"
+#include "qt/gfcnetworkservergui_qt.h"
 #include "StringCompressor.h"
 
 #include <iostream>
 #include <sstream> //for stingstream
 #include <string>
 
-#include "remoteWindow.h"
-extern RemoteWindow rmw; 
 
 #include "gfcnetworklog.h"
 extern gfcNetworkLog networkLog;
@@ -28,7 +26,7 @@ extern gfcPlaylistManager playlistManager;
 extern gfcNetworkManager networkManager;
 
 gfcNetworkServer::gfcNetworkServer() {
-    myGUI=new gfcNetworkServerGUI_FLTK;
+    myGUI=new gfcNetworkServerGUI_Qt;
     peer = RakNetworkFactory::GetRakPeerInterface();
 	middleOfSync=false;
 }
@@ -81,12 +79,6 @@ void gfcNetworkServer::start(gfcServerParams * params) {
 }
 
 void gfcNetworkServer::initializeWidgets() {
-    myGUI->assignPortInputWidget(rmw.serverPort);
-    myGUI->assignIPOutputWidget(rmw.serverIP);
-    myGUI->assignNameInputWidget(rmw.serverName);
-    myGUI->assignPasswordWidget(rmw.serverPassword);
-    myGUI->assignStartStopButtonWidget(rmw.startButton);
-    myGUI->assignStatusWidget(rmw.status);
 }
 
 void gfcNetworkServer::stop() {
