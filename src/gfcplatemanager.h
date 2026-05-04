@@ -6,6 +6,8 @@
 #include <vector>
 #include "gfcNetworkStructures.h"
 
+#include <FL/Fl_Group.H>
+
 #ifndef GFC_MAX_PLATES
 #define GFC_MAX_PLATES 4
 #endif
@@ -14,7 +16,7 @@
 #include "gfcrenderparams.h"
 #include "gfcpickdrawee.h"
 #include "gfcpicknotifee.h"
-#include "gfcplatemanagergui.h"
+#include "Fl_Choice_gfc.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
@@ -177,34 +179,11 @@ public:
 	gfcFXStack* getFXStack(int whichOne);
 	void setFXStack(gfcFXStack theStack, int whichOne);
 	void appendFXStack(gfcFXStack theStack, int whichOne);
-
-	// Flips a plate's GUI into preview mode so gfcPlate::draw3Drect
-	// picks the previewFrame branch. Used by the Qt drop handler after
-	// loading an image into the sequence; FLTK drives this from the
-	// load-window callbacks. No-op if `whichOne` is out of range.
-	void setPlateShowPreview(int whichOne, bool value);
-
-	// Direct access to a plate's GUI surface. The Qt build needs this so
-	// PlateCard_Qt can reach the same gfcPlateGUI_Qt instance the plate
-	// renders from (created in initializeWidgets()). Returns nullptr for
-	// out-of-range indices.
-	gfcPlateGUI* getPlateGUI(int whichOne);
-
-	// Hit-tests the plate under viewport pixel (vx, vy) given the
-	// current framingMode and the viewport's logical size. vx is from
-	// the left edge, vy is from the TOP edge (typical Qt mouse coords).
-	// Returns 0..3, or -1 if the position is somehow out of any plate.
-	// Used by the Qt mouse handlers so drag/zoom act on whichever plate
-	// the cursor is over in multi-plate layouts.
-	int getPlateAtPosition(int vx, int vy, int viewportW, int viewportH);
 	
 	
 	
 	void addFXToPlate(int plate, gfcFX theFX);
-	// FX widget callback. The handle is opaque so this header doesn't drag
-	// in FLTK widget definitions; it forwards through to gfcFXStack
-	// (which now also takes an opaque handle).
-	int handleFXGUICB(int whichOne, void* widgetHandle, void* data);
+	int handleFXGUICB(int whichOne, Fl_Widget* o, void* data);
 	
 	std::vector<gfcNetTransformationInfo> getTransformations();
 	void setTransformations(std::vector< gfcNetTransformationInfo > transformations);
@@ -239,7 +218,9 @@ private:
     int framingMode;
     bool textModeReset;
     bool histogramModeReset;
-    gfcPlateManagerGUI* myGUI;
+    Fl_Group* layoutsGroup;
+	Fl_Choice_gfc* layoutChoice;
+    Fl_Round_Button* layout1x1,*layout1x2,*layout2x2,*layout2x1;
     bool showHelp;
     void drawHelp(int w=0, int h=0);
 	std::string helpMessage;

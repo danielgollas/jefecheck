@@ -3,11 +3,15 @@
 #define GL_GLEXT_PROTOTYPES
 
 #include "trilerp.h"
-#include "ui/IApplication.h"
-namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
 #include <glad/glad.h>
 #include "vec3d.h"
+//#include <GL/gl.h>
+#ifdef __APPLE__
+#include <OpenGL/glu.h>
+#else
+#  include <GL/glu.h>
+#endif
 
 
 #ifdef WIN32
@@ -17,7 +21,9 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #endif
 #include <math.h>
 #include <stdio.h>
+#include <FL/gl.h>
 #include <fstream>
+#include <FL/Fl.H>
 #include "gfcpixelbuffer.h"
 #include "gfcStructures.h"
 #include "xmlParser.h"
@@ -710,7 +716,7 @@ int CubeLUT::getTypeFromExtension(const char* pfilename) {
         return JEFECHECK1D;
     }
 
-    if (strcmp(ext,"cub")==0 || strcmp(ext,"cube")==0) { //Truelight 3D Cube
+    if (strcmp(ext,"cub")==0 /*|| strcmp(ext,"cube")==0*/) { //Truelight 3D Cube
         return BASELIGHT3DCUBE;
     }
 
@@ -1133,7 +1139,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
             #ifndef __APPLE__
             if (pprogress!=NULL && i%10==0) {
                 progress->value(i/(float)size);
-                app().processEvents();
+                Fl::check();
             }
             #endif;
             //lut[i].input=i;
@@ -1164,7 +1170,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
         if (pprogress!=NULL) {
             progress->copy_label("Opening file");
             progress->value(0);
-            app().processEvents();
+            Fl::check();
         }
         printf("Opening Cube %s...",pfilename);
         file.open(pfilename);
@@ -1195,7 +1201,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
                 if (pprogress!=NULL) {
                     progress->copy_label("File is not a Truelight Cube v2.0...cube not loaded");
                     progress->value(0);
-                    app().processEvents();
+                    Fl::check();
                 }
                 return 1;
             } else {
@@ -1221,7 +1227,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
             if (pprogress!=NULL) {
                 progress->copy_label("Could not find cube dimensions...cube not loaded");
                 progress->value(0);
-                app().processEvents();
+                Fl::check();
             }
             return 2;
         } else {
@@ -1251,7 +1257,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
             if (pprogress!=NULL) {
                 progress->copy_label("Could not find cube start...cube not loaded");
                 progress->value(0);
-                app().processEvents();
+                Fl::check();
             }
             return 3;
 
@@ -1266,7 +1272,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
                 //progress->copy_label("Loading triads...");
                 progress->value(0);
 
-                app().processEvents();
+                Fl::check();
             }
             while (!file.eof() && valueTriadCount<cubeSize*cubeSize*cubeSize) {
 
@@ -1292,7 +1298,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
                     progress->value(valueTriadCount/2);
 
     
-                        app().processEvents();
+                        Fl::check();
 #else
  
 #endif
@@ -1315,7 +1321,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
             progress->value(cubeSize*cubeSize*cubeSize/2);
             progress->maximum(cubeSize*cubeSize*cubeSize);
 #ifndef _APPLE_
-            app().processEvents();
+            Fl::check();
 #endif
         }*/
 
@@ -1339,7 +1345,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
                        /* if (pprogress!=NULL && i%10==0) {
                             progress->value((index1D+cubeSize*cubeSize*cubeSize)/2);
 #ifndef _APPLE_
-						app().processEvents();
+						Fl::check();
 #endif
       
                         }*/
@@ -1365,7 +1371,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
                         inputForMD5+=cube[k][j][i].z;
                         /*if (pprogress!=NULL && i%10==0) {
                             progress->value((index1D+cubeSize*cubeSize*cubeSize)/2);
-                            app().processEvents();
+                            Fl::check();
                         }*/
                         index1D++;
                     }
@@ -1380,7 +1386,7 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
             sprintf(tmpProgressLabel,"Done (loaded %ix%ix%i cube)",cubeSize,cubeSize,cubeSize);
             progress->copy_label(tmpProgressLabel);
             progress->value(progress->maximum());
-            app().processEvents();
+            Fl::check();
         }
         strcpy(filename,pfilename);
         size=cubeSize;
@@ -1401,7 +1407,7 @@ float CubeLUT::findMaximum(const char *pfilename, Fl_Progress *pprogress) {
     if (pprogress!=NULL) {
         progress->copy_label("Opening file");
         progress->value(0);
-        app().processEvents();
+        Fl::check();
     }
     //printf("Opening file %s...",pfilename);
     file.open(pfilename);
@@ -1432,7 +1438,7 @@ float CubeLUT::findMaximum(const char *pfilename, Fl_Progress *pprogress) {
             if (pprogress!=NULL) {
                 progress->copy_label("File is not a Truelight Cube v2.0...cube not loaded");
                 progress->value(0);
-                app().processEvents();
+                Fl::check();
             }
             return 1;
         } else {
@@ -1458,7 +1464,7 @@ float CubeLUT::findMaximum(const char *pfilename, Fl_Progress *pprogress) {
         if (pprogress!=NULL) {
             //progress->copy_label("Could not find cube dimensions...cube not loaded");
             progress->value(0);
-            app().processEvents();
+            Fl::check();
         }
         return 2;
     } else {
@@ -1488,7 +1494,7 @@ float CubeLUT::findMaximum(const char *pfilename, Fl_Progress *pprogress) {
         if (pprogress!=NULL) {
             progress->copy_label("Could not find cube start...cube not loaded");
             progress->value(0);
-            app().processEvents();
+            Fl::check();
         }
         return 3;
 
@@ -1503,7 +1509,7 @@ float CubeLUT::findMaximum(const char *pfilename, Fl_Progress *pprogress) {
             progress->maximum(cubeSize*cubeSize*cubeSize);
             progress->copy_label("Reading triads...");
             progress->value(0);
-            app().processEvents();
+            Fl::check();
         }
 
         while (!file.eof() && valueTriadCount<cubeSize*cubeSize*cubeSize) {
@@ -1529,7 +1535,7 @@ float CubeLUT::findMaximum(const char *pfilename, Fl_Progress *pprogress) {
 
             if (pprogress!=NULL && valueTriadCount%10==0) {
                 progress->value(valueTriadCount);
-                app().processEvents();
+                Fl::check();
             }
 
             valueTriadCount++;
@@ -1541,7 +1547,7 @@ float CubeLUT::findMaximum(const char *pfilename, Fl_Progress *pprogress) {
             sprintf(tmpProgressLabel,"Done. Found Maximum: %f",maximum);
             progress->copy_label(tmpProgressLabel);
             progress->value(progress->maximum());
-            app().processEvents();
+            Fl::check();
         }
         file.close();
         //printf("done\n");

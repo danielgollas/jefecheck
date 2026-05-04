@@ -1,0 +1,377 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0107 
+header_name {.h} 
+code_name {.cxx}
+class MainWindow {open
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  Function {MainWindow(int x, int y, int wi, int height, const char* l)} {open
+  } {}
+  Function {make_window()} {open
+  } {
+    Fl_Window mainWindow {
+      label {Jefe Check - Main Window} open
+      xywh {315 143 1080 745} type Double color 56 labelcolor 17 align 80 resizable visible
+    } {
+      Fl_Group controlBarGroup {
+        xywh {17 615 1062 173}
+      } {
+        Fl_Light_Button trackAActiveTogle {
+          user_data TRACKATOGGLE_ID user_data_type long
+          callback controlBarCB
+          xywh {101 641 15 15} value 1
+        }
+        Fl_Light_Button trackBActiveTogle {
+          user_data TRACKBTOGGLE_ID user_data_type long
+          callback controlBarCB
+          xywh {101 656 15 15} value 1
+        }
+        Fl_Light_Button trackCActiveTogle {
+          user_data TRACKCTOGGLE_ID user_data_type long
+          callback controlBarCB
+          xywh {101 672 15 15} value 1
+        }
+        Fl_Light_Button trackDActiveTogle {
+          user_data TRACKDTOGGLE_ID user_data_type long
+          callback controlBarCB
+          xywh {101 688 15 15} value 1
+        }
+        Fl_Box trackABar {
+          label {Track A} user_data_type long
+          xywh {114 641 811 15} box ROUND_DOWN_BOX color 33 selection_color 32 labelsize 10 labelcolor 19 align 64
+        }
+        Fl_Box trackBBar {
+          label {Track B}
+          xywh {114 656 811 15} box ROUND_DOWN_BOX color 33 selection_color 32 labelsize 10 labelcolor 19 align 64
+        }
+        Fl_Box trackCBar {
+          label {Track C}
+          xywh {114 671 811 15} box ROUND_DOWN_BOX color 33 selection_color 32 labelsize 10 labelcolor 19 align 64
+        }
+        Fl_Box trackDBar {
+          label {Track D}
+          xywh {114 686 811 15} box ROUND_DOWN_BOX color 33 selection_color 32 labelsize 10 labelcolor 19 align 64
+        }
+        Fl_Slider timeLine {
+          user_data TIMELINE_ID
+          callback controlBarCB
+          xywh {114 618 811 22} type Horizontal box THIN_DOWN_BOX color 32 selection_color 33 minimum 1 maximum 3 step 1 value 2 slider_size 1
+        }
+        Fl_Counter timeLineInput {
+          xywh {17 617 56 21} minimum 1 maximum 5 step 1 value 1
+        }
+        Fl_Button playButton {
+          label {@>}
+          user_data PLAY_ID user_data_type long
+          callback controlBarCB
+          xywh {600 715 20 20} shortcut 0x20 labelsize 18
+        }
+        Fl_Button ffButton {
+          label {@>>}
+          user_data FF_ID user_data_type long
+          callback controlBarCB
+          xywh {640 715 20 20} shortcut 0x2f labelsize 18
+        }
+        Fl_Button rewindButton {
+          label {@<<}
+          user_data REWIND_ID user_data_type long
+          callback controlBarCB
+          xywh {560 715 20 20} shortcut 0x6d labelsize 18
+        }
+        Fl_Button forwardOneButton {
+          label {@>|}
+          user_data FORWARDONE_ID user_data_type long
+          callback controlBarCB
+          xywh {620 715 20 20} shortcut 0x2e labelsize 18
+        }
+        Fl_Button backOneButton {
+          label {@|<}
+          user_data BACKONE_ID user_data_type long
+          callback controlBarCB
+          xywh {580 715 20 20} shortcut 0x2c labelsize 18
+        }
+        Fl_Value_Output currentFPSOutput {
+          label {Real FPS}
+          xywh {493 714 36 25} color 0 selection_color 27 labelsize 10 labelcolor 42 align 1 maximum 999999 textsize 12 textcolor 55
+        }
+        Fl_Output timeCodeOutput {
+          xywh {981 618 98 20}
+        }
+        Fl_Spinner targetFPSInput {
+          label FPS
+          user_data TARGETFPS_ID user_data_type long
+          callback controlBarCB
+          xywh {450 714 40 25} box DOWN_BOX color 7 selection_color 4 labelsize 10 labelcolor 42 align 1
+          code0 {targetFPSInput->maximum(9999);}
+        }
+        Fl_Group {} {
+          label {Framing Mode} open
+          xywh {92 717 213 71} labelcolor 19
+        } {
+          Fl_Round_Button frameModeSingleRadio {
+            user_data FRAMINGSINGLE_ID user_data_type long
+            callback controlBarCB selected
+            image {single.png} xywh {124 720 64 18} type Radio down_box PLASTIC_THIN_UP_BOX value 1
+          }
+          Fl_Round_Button frameModeDoubleRadio {
+            user_data FRAMINGDOUBLE_ID user_data_type long
+            callback controlBarCB
+            image {double.png} xywh {172 718 58 22} type Radio down_box ROUND_DOWN_BOX
+          }
+          Fl_Round_Button frameModeQuadRadio {
+            user_data FRAMINGQUAD_ID user_data_type long
+            callback controlBarCB
+            image {quad.png} xywh {220 718 27 22} type Radio down_box ROUND_DOWN_BOX
+          }
+        }
+        Fl_Spinner playFromInput {
+          user_data PLAYFROM_ID
+          callback controlBarCB
+          xywh {73 615 40 25}
+        }
+        Fl_Spinner playUpToInput {
+          user_data PLAYTO_ID
+          callback controlBarCB
+          xywh {927 618 55 22} color 34
+          code0 {playUpToInput->maximum(99999);}
+        }
+        Fl_Button channelRButton {
+          label R
+          user_data CHANNELMASKR_ID user_data_type long
+          callback controlBarCB
+          xywh {695 715 24 20} type Toggle box ROUND_UP_BOX down_box ROUND_DOWN_BOX shortcut 0x72 value 1 color 81 selection_color 80
+        }
+        Fl_Button channelGButton {
+          label G
+          user_data CHANNELMASKG_ID user_data_type long
+          callback controlBarCB
+          xywh {720 715 24 20} type Toggle box ROUND_UP_BOX down_box ROUND_DOWN_BOX shortcut 0x67 value 1 color 59 selection_color 58
+        }
+        Fl_Button channelBButton {
+          label B
+          user_data CHANNELMASKB_ID user_data_type long
+          callback controlBarCB
+          xywh {742 715 24 20} type Toggle box ROUND_UP_BOX down_box ROUND_DOWN_BOX shortcut 0x62 value 1 color 177 selection_color 136
+        }
+        Fl_Button channelAButton {
+          label A
+          user_data CHANNELMASKA_ID user_data_type long
+          callback controlBarCB
+          xywh {766 715 24 20} type Toggle box ROUND_UP_BOX down_box ROUND_DOWN_BOX shortcut 0x61 color 0 labelcolor 7
+        }
+        Fl_Choice q1Choice {open
+          xywh {282 706 33 16} down_box BORDER_BOX color 0 labelsize 11 labelcolor 42 textsize 12 textcolor 39
+        } {
+          MenuItem {} {
+            label A
+            xywh {60 60 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label B
+            xywh {70 70 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label C
+            xywh {80 80 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label D
+            xywh {90 90 31 21} labelsize 11
+          }
+        }
+        Fl_Choice q2Choice {open
+          xywh {318 706 31 15} down_box BORDER_BOX color 0 labelsize 11 labelcolor 42 textsize 12 textcolor 39
+        } {
+          MenuItem {} {
+            label A
+            xywh {70 70 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label B
+            xywh {80 80 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label C
+            xywh {90 90 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label D
+            xywh {100 100 31 21} labelsize 11
+          }
+        }
+        Fl_Choice q3Choice {open
+          xywh {283 726 33 15} down_box BORDER_BOX color 0 labelsize 11 labelcolor 42 textsize 12 textcolor 39
+        } {
+          MenuItem {} {
+            label A
+            xywh {80 80 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label B
+            xywh {90 90 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label C
+            xywh {100 100 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label D
+            xywh {110 110 31 21} labelsize 11
+          }
+        }
+        Fl_Choice q4Choice {open
+          xywh {318 726 31 15} down_box BORDER_BOX color 0 labelsize 11 labelcolor 42 textsize 12 textcolor 39
+        } {
+          MenuItem {} {
+            label A
+            xywh {90 90 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label B
+            xywh {100 100 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label C
+            xywh {110 110 31 21} labelsize 11
+          }
+          MenuItem {} {
+            label D
+            xywh {120 120 31 21} labelsize 11
+          }
+        }
+        Fl_Group {} {
+          label {Loop Mode} open
+          xywh {796 719 203 61} labelcolor 19
+        } {
+          Fl_Round_Button loopModeOnceRadio {
+            user_data LOOPMODEONCE_ID user_data_type long
+            callback controlBarCB
+            image {once.png} xywh {828 722 64 18} type Radio down_box ROUND_DOWN_BOX shortcut 0x38
+          }
+          Fl_Round_Button loopLoopRadio {
+            user_data LOOPMODELOOP_ID user_data_type long
+            callback controlBarCB
+            image {loop.png} xywh {876 719 58 23} type Radio down_box ROUND_DOWN_BOX shortcut 0x39 value 1
+          }
+          Fl_Round_Button loopModeRadio {
+            user_data LOOPMODEBOUNCE_ID user_data_type long
+            callback controlBarCB
+            image {bounce.png} xywh {924 719 27 23} type Radio down_box ROUND_DOWN_BOX shortcut 0x30
+          }
+        }
+      }
+      Fl_Group vp {
+        label GlViewport
+        callback controlBarCB
+        xywh {0 18 1081 589} box DOWN_BOX color 17 labelcolor 7 align 16 resizable
+        code0 {\#include "GlViewport.h"}
+        class GlViewport
+      } {}
+      Fl_Menu_Bar menuBar {open
+        xywh {-2 -2 1084 22} color 0 labelcolor 7 textcolor 7
+      } {
+        Submenu {} {
+          label File open
+          xywh {30 30 63 21} color 0 labelcolor 7
+        } {
+          MenuItem {} {
+            label Load
+            user_data MENUFILELOAD_ID
+            callback menuCB
+            xywh {30 30 31 21} shortcut 0x4006c color 0 labelcolor 7
+          }
+          MenuItem {} {
+            label Quit
+            user_data MENUFILEEXIT_ID
+            callback menuCB
+            xywh {40 40 31 21} shortcut 0x40071 color 0 labelcolor 7
+          }
+        }
+        Submenu {} {
+          label View open
+          xywh {0 0 63 21} color 0 labelcolor 7
+        } {
+          MenuItem {} {
+            label {Reset current view}
+            user_data MENURESETXFORM_ID
+            callback menuCB
+            xywh {5 5 31 21} shortcut 0x40072 color 0 labelcolor 7
+          }
+          MenuItem {} {
+            label {Reset all views}
+            user_data MENURESETXFORMALL_ID
+            callback menuCB
+            xywh {15 15 31 21} shortcut 0x80072 color 0 labelcolor 7
+          }
+          MenuItem {} {
+            label Fullscreen
+            user_data MENUFULLSCREEN_ID
+            callback menuCB
+            xywh {15 15 31 21} shortcut 0x40066 color 0 labelcolor 7
+          }
+          Submenu {} {
+            label Layout open
+            xywh {0 0 63 21} color 0 labelcolor 7
+          } {
+            MenuItem {} {
+              label Single
+              user_data FRAMINGSINGLE_ID
+              callback menuCB
+              image {single.png} xywh {25 25 31 21} shortcut 0x31 color 0 labelcolor 7
+            }
+            MenuItem {} {
+              label Double
+              user_data FRAMINGDOUBLE_ID
+              callback menuCB
+              image {double.png} xywh {35 35 31 21} shortcut 0x32 color 0 labelcolor 7
+            }
+            MenuItem {} {
+              label 2x2
+              user_data FRAMINGQUAD_ID
+              callback menuCB
+              image {quad.png} xywh {45 45 31 21} shortcut 0x33 color 0 labelcolor 7
+            }
+            MenuItem {} {
+              label {Double Vertical}
+              user_data FRAMINGDOUBLEVERT_ID
+              callback menuCB
+              image {doublevert.PNG} xywh {55 55 31 21} shortcut 0x34 color 0 labelcolor 7
+            }
+            MenuItem {} {
+              label Overlay
+              user_data FRAMINGOVERLAY_ID
+              callback menuCB
+              image {overlay.png} xywh {65 65 31 21} shortcut 0x35 color 0 labelcolor 7
+            }
+            MenuItem {} {
+              label Stereo
+              user_data FRAMINGSTEREO_ID
+              callback menuCB
+              image {stereo.png} xywh {75 75 31 21} shortcut 0x36 color 0 labelcolor 7
+            }
+          }
+        }
+        Submenu {} {
+          label Help open
+          xywh {50 50 63 21} color 0 labelcolor 7
+        } {
+          MenuItem {} {
+            label {About JefeCheck}
+            user_data MENUHELPABOUT_ID
+            callback menuCB
+            xywh {50 50 31 21} shortcut 0x4006c color 0 labelcolor 7
+          }
+        }
+      }
+    }
+    code {printf("Making Main Window...ok\\n");} {}
+    code {q1Choice->value(0);
+q2Choice->value(1);
+q3Choice->value(2);
+q4Choice->value(3);} {}
+    Fl_Window {} {open
+      xywh {487 599 100 100} type Double hide
+    } {}
+  }
+} 

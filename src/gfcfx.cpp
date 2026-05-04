@@ -1,8 +1,7 @@
 #include <glad/glad.h>
 #include "gfcfx.h"
-#include "ui/IApplication.h"
-namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <fstream>
+#include <FL/Fl.H>
 #include "trilerp.h"
 #include "xmlParser.h"
 #include "gfcStructures.h"
@@ -181,7 +180,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 		pprogress->label ( "FXs not Supported" );
 		pprogress->value ( 0 );
 		pprogress->selection_color ( fl_rgb_color(42,20,20));
-		app().processEvents();
+		Fl::check();
 		}
 		return 1;
 		
@@ -192,7 +191,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 		pprogress->label ( "Loading File" );
 		pprogress->value ( 0 );
 		pprogress->selection_color ( fl_rgb_color(42,42,20));
-		app().processEvents();
+		Fl::check();
 	}
 
 	/*switch(type)
@@ -216,7 +215,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 			pprogress->label ( "Error opening File!" );
 			pprogress->value ( 0 );
 			pprogress->selection_color (  fl_rgb_color(42,20,20) );
-			app().processEvents();
+			Fl::check();
 		}
 		return 1;
 	}
@@ -454,7 +453,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 					pprogress->label ( "Could not find vertex source" );
 					pprogress->value ( pprogress->maximum() );
 					pprogress->selection_color (  fl_rgb_color(42,20,20));
-					app().processEvents();
+					Fl::check();
 				}
 				return 1;
 			}
@@ -510,7 +509,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 						pprogress->label ( "Vertex Shader Error" );
 						pprogress->value ( 0 );
 						pprogress->selection_color (  fl_rgb_color(42,20,20) );
-						app().processEvents();
+						Fl::check();
 					}
 					errorWhileLoading=true;
 					//return 1;
@@ -529,7 +528,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 				//		pprogress->label ( "Vertex Shader Error" );
 				//		pprogress->value ( 0 );
 				//		pprogress->selection_color (  fl_rgb_color(42,20,20) );
-				//		app().processEvents();
+				//		Fl::check();
 				//	}
 				//	errorWhileLoading=true;
 				//	//return 1;
@@ -561,7 +560,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 					pprogress->label ( "Could not find fragment source" );
 					pprogress->value ( 0 );
 					pprogress->selection_color (  fl_rgb_color(42,20,20) );
-					app().processEvents();
+					Fl::check();
 				}
 				errorWhileLoading=true;
 				//return 1;
@@ -616,7 +615,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 						pprogress->label ( "Vertex Shader Error" );
 						pprogress->value ( 0 );
 						pprogress->selection_color (  fl_rgb_color(42,20,20) );
-						app().processEvents();
+						Fl::check();
 					}
 					errorWhileLoading=true;
 					//return 1;
@@ -635,7 +634,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 //						pprogress->label ( "Fragment Shader compilation error!" );
 //						pprogress->value ( pprogress->maximum() );
 //						pprogress->selection_color (  fl_rgb_color(42,20,20) );
-//						app().processEvents();
+//						Fl::check();
 //					}
 //					errorWhileLoading=true;
 //					//return 1;
@@ -685,7 +684,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 				pprogress->label ( "Shader Program Linking error!" );
 				pprogress->value ( pprogress->maximum() );
 				pprogress->selection_color (  fl_rgb_color(42,20,20) );
-				app().processEvents();
+				Fl::check();
 			}
 			errorWhileLoading=true;
 			//return 1;
@@ -705,7 +704,7 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 				pprogress->label ( "Shader Program compiled correctly, FX ready to use!" );
 				pprogress->value ( pprogress->maximum() );
 
-				app().processEvents();
+				Fl::check();
 			}
 			//printf ( " FX ready to use!\n" );
 		}

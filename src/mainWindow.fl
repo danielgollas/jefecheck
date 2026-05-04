@@ -1,0 +1,1767 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+class MainWindow {open
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  decl {\#include "Fl_Choice_gfc.h"} {public
+  }
+  decl {\#include "Fl_Input_Choice_gfc.h"} {public
+  }
+  decl {\#include "Fl_Slider_Timeline_gfc.h"} {}
+  decl {\#include "Fl_Button_gfc.h"} {}
+  decl {\#include "Fl_Button_RGBA_gfc.h"} {}
+  Function {MainWindow(int x, int y, int wi, int height, const char* l)} {open
+  } {}
+  decl {bool controlsHidden;} {}
+  decl {int fullscreenActive;} {global
+  }
+  Function {make_window()} {open
+  } {
+    code {controlsHidden=false;} {}
+    Fl_Window mainWindow {
+      label {JefeCheck - Main Window} open
+      xywh {460 189 1020 760} type Double color 0 selection_color 0 resizable size_range {1020 760 0 0} visible
+    } {
+      Fl_Box bgBox {
+        label label
+        xywh {0 0 1024 760} box FLAT_BOX color 0
+      }
+      Fl_Group controlBarGroup {
+        xywh {-1 615 1022 146}
+      } {
+        Fl_Group nonResizable {open
+          xywh {-1 618 457 143}
+        } {
+          Fl_Output timeCodeOutput {
+            xywh {5 621 66 16} box FLAT_BOX color 8 textsize 10 textcolor 8
+            code0 {o->color(fl_rgb_color(42,42,42));}
+          }
+          Fl_Group framingModes {
+            label Layout
+            xywh {370 672 46 71} labelfont 1 labelsize 10 labelcolor 19 hide
+          } {
+            Fl_Round_Button frameModeSingleRadio {
+              label 1x1
+              user_data FRAMINGSINGLE_ID user_data_type long
+              callback controlBarCB
+              tooltip {Select a Plate Layout} image {single.png} xywh {380 675 34 13} type Radio down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+            }
+            Fl_Round_Button frameModeDoubleRadio {
+              label 2x1
+              user_data FRAMINGDOUBLE_ID user_data_type long
+              callback controlBarCB
+              tooltip {Select a Plate Layout} image {double.png} xywh {380 693 34 13} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+            }
+            Fl_Round_Button frameModeDoubleVertRadio {
+              label 1x2
+              user_data FRAMINGDOUBLEVERT_ID user_data_type long
+              callback controlBarCB
+              tooltip {Select a Plate Layout} image {quad.png} xywh {380 711 34 13} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+            }
+            Fl_Round_Button frameModeQuadRadio {
+              label 2x2
+              user_data FRAMINGQUAD_ID user_data_type long
+              callback controlBarCB
+              tooltip {Select a Plate Layout} image {quad.png} xywh {380 730 34 13} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+            }
+          }
+          Fl_Group layoutsGroup {open
+            xywh {0 648 420 113} align 16
+          } {
+            Fl_Group layouts1 {open
+              xywh {15 672 400 74} box BORDER_FRAME color 8 selection_color 0 labelsize 12 labelcolor 8 align 5
+            } {
+              Fl_Choice q1Choice {
+                label Track
+                user_data PLATECONTROLS_ID
+                callback controlBarCB open
+                tooltip {Select what track you want to view on this plate} xywh {24 687 36 15} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(42,42,42));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label A
+                  xywh {75 75 31 21}
+                }
+                MenuItem {} {
+                  label B
+                  xywh {85 85 31 21}
+                }
+                MenuItem {} {
+                  label C
+                  xywh {95 95 31 21}
+                }
+                MenuItem {} {
+                  label D
+                  xywh {105 105 31 21}
+                }
+              }
+              Fl_Input_Choice q1AspectChoice {
+                label Aspect
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB open
+                tooltip {Select or type in the aspect ratio of the plate} xywh {68 687 63 15} box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 8 align 1 when 3 textsize 12
+                code0 {\#include "Fl_Input_Choice_gfc.h"}
+                code1 {o->value(0);o->input()->color(fl_rgb_color(42,42,42));}
+                code2 {o->menubutton()->color(fl_rgb_color(42,42,42));}
+                code3 {o->menubutton()->box(FL_FLAT_BOX); o->input()->selection_color(FL_BLACK);o->input()->textcolor(31);}
+                class Fl_Input_Choice_gfc
+              } {
+                MenuItem {} {
+                  label original
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {4:3}
+                  xywh {15 15 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {16:9}
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.39:1}
+                  xywh {35 35 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.35:1}
+                  xywh {45 45 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.85:1}
+                  xywh {55 55 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.37:1}
+                  xywh {65 65 30 20} labelsize 12 labelcolor 31
+                }
+              }
+              Fl_Button q1CropPos {
+                label {@line}
+                user_data CBCROPPOS_ID
+                callback controlBarCB
+                xywh {137 676 15 17} color 0 labelsize 7 hide
+              }
+              Fl_Value_Input q1Scale {
+                label Zoom
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Zoom the image by this amount (Ctrl+LMB Drag)} xywh {24 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum 0.01 maximum 999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q1X {
+                label X
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image horizontally by this amount (LMB Drag)} xywh {57 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q1Y {
+                label Y
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image vertically by this amount (LMB Drag)} xywh {90 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q1Crop {
+                label Crop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change the aspect ratio of the plate by placing black crop bars} xywh {134 687 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX value 1 color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Value_Input q1Gamma {
+                label Gamma
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Gamma (W+LMB Drag)} xywh {279 687 23 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q1Contrast {
+                label Contrast
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Contrast (D+LMB Drag)} xywh {231 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q1Brightness {
+                label Brightness
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Brightness (Q+LMB Drag)} xywh {184 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q1Saturation {
+                label Saturation
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Saturation (S+LMB Drag)} xywh {280 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q1Exposure {
+                label Exposure
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Exposure (E+LMB Drag)} xywh {321 687 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 0.01 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Choice q1LUT {
+                label LUT
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB open
+                tooltip {Select the LUT to apply on this viewport (L+Up Arrow/ Down Arrow)} xywh {184 687 82 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textsize 10 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label {No LUT}
+                  xywh {90 90 31 21} labelsize 10
+                }
+              }
+              Fl_Value_Input q1rZ {
+                label Rot
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Rotate Image by this amount} xywh {124 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q1RGBA {
+                label RGB
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change RGBA Channel Display (Shortcuts r,g,b,a)} xywh {371 687 35 15} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_RGBA_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_RGBA_gfc
+              }
+              Fl_Button q1Flip {
+                label Flip
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {332 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Button q1Flop {
+                label Flop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {372 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+            }
+            Fl_Group layouts2 {open
+              xywh {15 672 400 74} box BORDER_FRAME color 8 selection_color 0 labelsize 12 labelcolor 8 align 5 hide
+            } {
+              Fl_Choice q2Choice {
+                label Track
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Select what track you want to view on this plate} xywh {24 687 36 15} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(42,42,42));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label A
+                  xywh {75 75 31 21}
+                }
+                MenuItem {} {
+                  label B
+                  xywh {85 85 31 21}
+                }
+                MenuItem {} {
+                  label C
+                  xywh {95 95 31 21}
+                }
+                MenuItem {} {
+                  label D
+                  xywh {105 105 31 21}
+                }
+              }
+              Fl_Input_Choice q2AspectChoice {
+                label Aspect
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB open
+                tooltip {Select or type in the aspect ratio of the plate} xywh {68 687 63 15} box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 8 align 1 when 3 textsize 12
+                code0 {\#include "Fl_Input_Choice_gfc.h"}
+                code1 {o->value(0);o->input()->color(fl_rgb_color(42,42,42));}
+                code2 {o->menubutton()->color(fl_rgb_color(42,42,42));}
+                code3 {o->menubutton()->box(FL_FLAT_BOX); o->input()->selection_color(FL_BLACK);o->input()->textcolor(31);}
+                class Fl_Input_Choice_gfc
+              } {
+                MenuItem {} {
+                  label original
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {4:3}
+                  xywh {15 15 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {16:9}
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.39:1}
+                  xywh {35 35 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.35:1}
+                  xywh {45 45 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.85:1}
+                  xywh {55 55 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.37:1}
+                  xywh {65 65 30 20} labelsize 12 labelcolor 31
+                }
+              }
+              Fl_Button q2CropPos {
+                label {@line}
+                user_data CBCROPPOS_ID
+                callback controlBarCB
+                xywh {137 676 15 17} color 0 labelsize 7 hide
+              }
+              Fl_Value_Input q2Scale {
+                label Zoom
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Zoom the image by this amount (Ctrl+LMB Drag)} xywh {24 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum 0.01 maximum 999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q2X {
+                label X
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image horizontally by this amount (LMB Drag)} xywh {57 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q2Y {
+                label Y
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image vertically by this amount (LMB Drag)} xywh {90 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q2Crop {
+                label Crop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change the aspect ratio of the plate by placing black crop bars} xywh {134 687 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX value 1 color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Value_Input q2Gamma {
+                label Gamma
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Gamma (W+LMB Drag)} xywh {279 687 23 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q2Contrast {
+                label Contrast
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Contrast (D+LMB Drag)} xywh {231 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q2Brightness {
+                label Brightness
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Brightness (Q+LMB Drag)} xywh {184 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q2Saturation {
+                label Saturation
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Saturation (S+LMB Drag)} xywh {280 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q2Exposure {
+                label Exposure
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Exposure (E+LMB Drag)} xywh {321 687 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 0.01 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Choice q2LUT {
+                label LUT
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB open
+                tooltip {Select the LUT to apply on this viewport (L+Up Arrow/ Down Arrow)} xywh {184 687 82 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textsize 10 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label {No LUT}
+                  xywh {90 90 31 21} labelsize 10
+                }
+              }
+              Fl_Value_Input q2rZ {
+                label Rot
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Rotate Image by this amount} xywh {124 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q2RGBA {
+                label RGB
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change RGBA Channel Display (Shortcuts r,g,b,a)} xywh {371 687 35 15} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_RGBA_gfc
+              }
+              Fl_Button q2Flip {
+                label Flip
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {332 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Button q2Flop {
+                label Flop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {372 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+            }
+            Fl_Group layouts3 {open
+              xywh {15 672 400 74} box BORDER_FRAME color 8 selection_color 0 labelsize 12 labelcolor 8 align 5 hide
+            } {
+              Fl_Choice q3Choice {
+                label Track
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Select what track you want to view on this plate} xywh {24 687 36 15} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(42,42,42));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label A
+                  xywh {75 75 31 21}
+                }
+                MenuItem {} {
+                  label B
+                  xywh {85 85 31 21}
+                }
+                MenuItem {} {
+                  label C
+                  xywh {95 95 31 21}
+                }
+                MenuItem {} {
+                  label D
+                  xywh {105 105 31 21}
+                }
+              }
+              Fl_Input_Choice q3AspectChoice {
+                label Aspect
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB open
+                tooltip {Select or type in the aspect ratio of the plate} xywh {68 687 63 15} box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 8 align 1 when 3 textsize 12
+                code0 {\#include "Fl_Input_Choice_gfc.h"}
+                code1 {o->value(0);o->input()->color(fl_rgb_color(42,42,42));}
+                code2 {o->menubutton()->color(fl_rgb_color(42,42,42));}
+                code3 {o->menubutton()->box(FL_FLAT_BOX); o->input()->selection_color(FL_BLACK);o->input()->textcolor(31);}
+                class Fl_Input_Choice_gfc
+              } {
+                MenuItem {} {
+                  label original
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {4:3}
+                  xywh {15 15 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {16:9}
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.39:1}
+                  xywh {35 35 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.35:1}
+                  xywh {45 45 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.85:1}
+                  xywh {55 55 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.37:1}
+                  xywh {65 65 30 20} labelsize 12 labelcolor 31
+                }
+              }
+              Fl_Button q3CropPos {
+                label {@line}
+                user_data CBCROPPOS_ID
+                callback controlBarCB
+                xywh {137 676 15 17} color 0 labelsize 7 hide
+              }
+              Fl_Value_Input q3Scale {
+                label Zoom
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Zoom the image by this amount (Ctrl+LMB Drag)} xywh {24 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum 0.01 maximum 999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q3X {
+                label X
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image horizontally by this amount (LMB Drag)} xywh {57 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q3Y {
+                label Y
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image vertically by this amount (LMB Drag)} xywh {90 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q3Crop {
+                label Crop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change the aspect ratio of the plate by placing black crop bars} xywh {134 687 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX value 1 color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Value_Input q3Gamma {
+                label Gamma
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Gamma (W+LMB Drag)} xywh {279 687 23 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q3Contrast {
+                label Contrast
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Contrast (D+LMB Drag)} xywh {231 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q3Brightness {
+                label Brightness
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Brightness (Q+LMB Drag)} xywh {184 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q3Saturation {
+                label Saturation
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Saturation (S+LMB Drag)} xywh {280 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q3Exposure {
+                label Exposure
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Exposure (E+LMB Drag)} xywh {321 687 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 0.01 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Choice q3LUT {
+                label LUT
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB open
+                tooltip {Select the LUT to apply on this viewport (L+Up Arrow/ Down Arrow)} xywh {184 687 82 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textsize 10 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label {No LUT}
+                  xywh {90 90 31 21} labelsize 10
+                }
+              }
+              Fl_Value_Input q3rZ {
+                label Rot
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Rotate Image by this amount} xywh {124 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q3RGBA {
+                label RGB
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change RGBA Channel Display (Shortcuts r,g,b,a)} xywh {371 687 35 15} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_RGBA_gfc
+              }
+              Fl_Button q3Flip {
+                label Flip
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {332 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Button q3Flop {
+                label Flop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {372 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+            }
+            Fl_Group layouts4 {open
+              xywh {15 672 400 74} box BORDER_FRAME color 8 selection_color 0 labelsize 12 labelcolor 8 align 5 hide
+            } {
+              Fl_Choice q4Choice {
+                label Track
+                user_data PLATECONTROLS_ID
+                callback controlBarCB open
+                tooltip {Select what track you want to view on this plate} xywh {24 687 36 15} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(42,42,42));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label A
+                  xywh {75 75 31 21}
+                }
+                MenuItem {} {
+                  label B
+                  xywh {85 85 31 21}
+                }
+                MenuItem {} {
+                  label C
+                  xywh {95 95 31 21}
+                }
+                MenuItem {} {
+                  label D
+                  xywh {105 105 31 21}
+                }
+              }
+              Fl_Input_Choice q4AspectChoice {
+                label Aspect
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB open
+                tooltip {Select or type in the aspect ratio of the plate} xywh {68 687 63 15} box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 8 align 1 when 3 textsize 12
+                code0 {\#include "Fl_Input_Choice_gfc.h"}
+                code1 {o->value(0);o->input()->color(fl_rgb_color(42,42,42));}
+                code2 {o->menubutton()->color(fl_rgb_color(42,42,42));}
+                code3 {o->menubutton()->box(FL_FLAT_BOX); o->input()->selection_color(FL_BLACK);o->input()->textcolor(31);}
+                class Fl_Input_Choice_gfc
+              } {
+                MenuItem {} {
+                  label original
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {4:3}
+                  xywh {15 15 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {16:9}
+                  xywh {25 25 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.39:1}
+                  xywh {35 35 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {2.35:1}
+                  xywh {45 45 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.85:1}
+                  xywh {55 55 30 20} labelsize 12 labelcolor 31
+                }
+                MenuItem {} {
+                  label {1.37:1}
+                  xywh {65 65 30 20} labelsize 12 labelcolor 31
+                }
+              }
+              Fl_Button q4CropPos {
+                label {@line}
+                user_data CBCROPPOS_ID
+                callback controlBarCB
+                xywh {137 676 15 17} color 0 labelsize 7 hide
+              }
+              Fl_Value_Input q4Scale {
+                label Zoom
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Zoom the image by this amount (Ctrl+LMB Drag)} xywh {24 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum 0.01 maximum 999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q4X {
+                label X
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image horizontally by this amount (LMB Drag)} xywh {57 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Value_Input q4Y {
+                label Y
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Pan the image vertically by this amount (LMB Drag)} xywh {90 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q4Crop {
+                label Crop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change the aspect ratio of the plate by placing black crop bars} xywh {134 687 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX value 1 color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Value_Input q4Gamma {
+                label Gamma
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Gamma (W+LMB Drag)} xywh {279 687 23 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q4Contrast {
+                label Contrast
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Contrast (D+LMB Drag)} xywh {231 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q4Brightness {
+                label Brightness
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Brightness (Q+LMB Drag)} xywh {184 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q4Saturation {
+                label Saturation
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Saturation (S+LMB Drag)} xywh {280 724 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 maximum 9999 step 0.01 value 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Value_Input q4Exposure {
+                label Exposure
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB
+                tooltip {Adjust Viewport Exposure (E+LMB Drag)} xywh {321 687 36 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 0.01 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+              }
+              Fl_Choice q4LUT {
+                label LUT
+                user_data PLATECONTROLSCOLOR_ID
+                callback controlBarCB open
+                tooltip {Select the LUT to apply on this viewport (L+Up Arrow/ Down Arrow)} xywh {184 687 82 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 align 1 textsize 10 textcolor 31
+                code0 {\#include "Fl_Choice_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Choice_gfc
+              } {
+                MenuItem {} {
+                  label {No LUT}
+                  xywh {90 90 31 21} labelsize 10
+                }
+              }
+              Fl_Value_Input q4rZ {
+                label Rot
+                user_data PLATECONTROLSTRANSFORMATIONS_ID
+                callback controlBarCB
+                tooltip {Rotate Image by this amount} xywh {124 724 28 15} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 8 align 1 minimum -9999 maximum 9999 step 1 textsize 10 textcolor 31
+                code0 {o->color(fl_rgb_color(42,42,42));}
+              }
+              Fl_Button q4RGBA {
+                label RGB
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Change RGBA Channel Display (Shortcuts r,g,b,a)} xywh {371 687 35 15} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_RGBA_gfc
+              }
+              Fl_Button q4Flip {
+                label Flip
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {332 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+              Fl_Button q4Flop {
+                label Flop
+                user_data PLATECONTROLS_ID
+                callback controlBarCB
+                tooltip {Flip or Flop the Image (Ctrl+8,9)} xywh {372 724 35 15} type Toggle box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 31 when 3
+                code0 {\#include "Fl_Button_gfc.h"}
+                code1 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+                class Fl_Button_gfc
+              }
+            }
+            Fl_Group activeViewportGroup {
+              label {Active Viewport:} open
+              xywh {15 652 245 18} labelsize 12 labelcolor 8 align 21
+            } {
+              Fl_Round_Button activeViewport0 {
+                label 1
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB
+                xywh {108 653 15 15} type Radio down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+              }
+              Fl_Round_Button activeViewport1 {
+                label {  2 }
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB
+                xywh {132 653 15 15} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+              }
+              Fl_Round_Button activeViewport2 {
+                label { 3}
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB
+                xywh {156 653 15 15} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+              }
+              Fl_Round_Button activeViewport3 {
+                label { 4}
+                user_data PLATECONTROLS_ID user_data_type long
+                callback controlBarCB
+                xywh {180 653 16 15} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 0
+              }
+            }
+          }
+          Fl_Value_Input playUpToInput {
+            label End
+            user_data PLAYTO_ID
+            callback controlBarCB
+            xywh {268 621 30 16} box FLAT_BOX color 8 labelsize 10 labelcolor 8 minimum 1 maximum 999999 step 1 value 1 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(42,42,42));}
+          }
+          Fl_Value_Input playFromInput {
+            label Start
+            user_data PLAYFROM_ID
+            callback controlBarCB
+            xywh {101 621 30 16} box FLAT_BOX color 8 labelsize 10 labelcolor 8 minimum 1 maximum 999999 step 1 value 1 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(42,42,42));}
+          }
+          Fl_Button abortA {
+            user_data ABORTA_ID user_data_type long
+            callback controlBarCB
+            tooltip {Stop loading of this track} image {tinyXBright.png} deimage {tinyXSmall.png} xywh {438 644 17 17} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 31 labelsize 9 labelcolor 8 deactivate
+            code0 {\#include "Fl_Button_gfc.h"}
+            code1 {o->color(fl_rgb_color(42,42,42));}
+            class Fl_Button_gfc
+          }
+          Fl_Button abortB {
+            user_data ABORTB_ID user_data_type long
+            callback controlBarCB
+            tooltip {Stop loading of this track} image {tinyXBright.png} deimage {tinyXSmall.png} xywh {438 663 17 17} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 31 labelsize 9 labelcolor 8 deactivate
+            code0 {\#include "Fl_Button_gfc.h"}
+            code1 {o->color(fl_rgb_color(42,42,42));}
+            class Fl_Button_gfc
+          }
+          Fl_Button abortC {
+            user_data ABORTC_ID user_data_type long
+            callback controlBarCB
+            tooltip {Stop loading of this track} image {tinyXBright.png} deimage {tinyXSmall.png} xywh {438 682 17 17} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 31 labelsize 9 labelcolor 8 deactivate
+            code0 {\#include "Fl_Button_gfc.h"}
+            code1 {o->color(fl_rgb_color(42,42,42));}
+            class Fl_Button_gfc
+          }
+          Fl_Button abortD {
+            user_data ABORTD_ID user_data_type long
+            callback controlBarCB
+            tooltip {Stop loading of this track} image {tinyXBright.png} deimage {tinyXSmall.png} xywh {438 701 17 17} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 31 labelsize 9 labelcolor 8 deactivate
+            code0 {\#include "Fl_Button_gfc.h"}
+            code1 {o->color(fl_rgb_color(42,42,42));}
+            class Fl_Button_gfc
+          }
+          Fl_Button menuA {
+            label {@2>}
+            user_data CBMOREOPTIONS_ID user_data_type long
+            callback controlBarCB
+            tooltip {more options} xywh {428 647 10 12} box NO_BOX color 0 selection_color 0 labelfont 1 labelsize 10 labelcolor 8 align 16
+          }
+          Fl_Button menuB {
+            label {@2>}
+            user_data CBMOREOPTIONS_ID user_data_type long
+            callback controlBarCB
+            tooltip {more options} xywh {428 666 10 12} box NO_BOX color 0 selection_color 0 labelfont 1 labelsize 10 labelcolor 8 align 16
+          }
+          Fl_Button menuC {
+            label {@2>}
+            user_data CBMOREOPTIONS_ID user_data_type long
+            callback controlBarCB
+            tooltip {more options} xywh {428 685 10 12} box NO_BOX color 0 selection_color 0 labelfont 1 labelsize 10 labelcolor 8 align 16
+          }
+          Fl_Button menuD {
+            label {@2>}
+            user_data CBMOREOPTIONS_ID user_data_type long
+            callback controlBarCB
+            tooltip {more options} xywh {428 701 10 15} box NO_BOX color 0 selection_color 0 labelfont 1 labelsize 10 labelcolor 8 align 16
+          }
+          Fl_Value_Input timeLineInput {
+            user_data TIMELINEINPUT_ID
+            callback controlBarCB
+            xywh {415 621 41 16} box FLAT_BOX color 8 labelsize 10 align 0 minimum 1 maximum 999999 step 1 value 1 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(42,42,42));}
+          }
+          Fl_Button fxButton1 {
+            label FX
+            user_data PLATEFX_ID
+            callback controlBarCB
+            tooltip {Open FX Control Window} xywh {165 619 26 21} shortcut 0xffc5 color 0 labelfont 1 labelsize 11 labelcolor 7 hide
+          }
+          Fl_Choice loopPriorityChoice {
+            label {Loop to}
+            user_data LOOPPRIORITY_ID
+            callback controlBarCB
+            tooltip {Select the loop priority: Shortest: Loop within the shortest track; Longest: Loop from the start of the earliest track until the end of the longest; Timeline: Loop within the timeline} xywh {349 621 64 16} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 8 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(42,42,42));}
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label shortest
+              xywh {10 10 34 24} labelsize 11
+            }
+            MenuItem {} {
+              label longest
+              xywh {0 0 34 24} labelsize 11
+            }
+            MenuItem {} {
+              label timeline
+              xywh {20 20 34 24} labelsize 11
+            }
+          }
+          Fl_Value_Input outPointInput {
+            label {<> Out}
+            user_data OUTPOINT_ID
+            callback controlBarCB
+            xywh {214 621 30 16} box FLAT_BOX color 8 labelsize 10 labelcolor 8 minimum 1 maximum 999999 step 1 value 1 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(42,42,42));}
+          }
+          Fl_Value_Input inPointInput {
+            label In
+            user_data INPOINT_ID
+            callback controlBarCB
+            xywh {147 621 30 16} box FLAT_BOX color 8 labelsize 10 labelcolor 8 minimum 1 maximum 999999 step 1 value 1 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(42,42,42));}
+          }
+          Fl_Choice viewportLayoutChoice {
+            label {Viewport Layout}
+            user_data PLATECONTROLS_ID
+            callback controlBarCB
+            tooltip {Select Viewport Layout (Ctrl+1,2,3,4)} xywh {365 652 50 16} down_box FLAT_BOX color 8 selection_color 31 labelsize 12 labelcolor 8 textcolor 31
+            code0 {\#include "Fl_Choice_gfc.h"}
+            code1 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label 1x1
+              xywh {85 85 31 21}
+            }
+            MenuItem {} {
+              label 2x1
+              xywh {95 95 31 21}
+            }
+            MenuItem {} {
+              label 1x2
+              xywh {105 105 31 21}
+            }
+            MenuItem {} {
+              label 2x2
+              xywh {115 115 31 21}
+            }
+          }
+        }
+        Fl_Group Resizable {
+          xywh {457 618 564 100} resizable
+        } {
+          Fl_Group tracksAndTimeline {
+            xywh {458 618 563 100} resizable
+          } {
+            Fl_Box trackABar {
+              user_data 0
+              callback tracksBarCB
+              xywh {458 646 563 14} color 6 selection_color 0 labeltype NO_LABEL labelsize 10 labelcolor 7 align 64
+              code0 {\#include "trackwidget.h"}
+              class TrackWidget
+            }
+            Fl_Box trackBBar {
+              user_data 1
+              callback tracksBarCB
+              xywh {458 665 563 14} color 6 selection_color 0 labelsize 10 labelcolor 7 align 64
+              class TrackWidget
+            }
+            Fl_Box trackCBar {
+              user_data 2
+              callback tracksBarCB
+              xywh {458 685 563 14} color 6 selection_color 0 labelsize 10 labelcolor 7 align 64
+              class TrackWidget
+            }
+            Fl_Box trackDBar {
+              user_data 3
+              callback tracksBarCB
+              xywh {458 703 563 14} color 6 selection_color 0 labelsize 10 labelcolor 7 align 64
+              class TrackWidget
+            }
+            Fl_Slider timeLine {
+              user_data TIMELINE_ID
+              callback controlBarCB
+              xywh {458 622 563 14} type Horizontal box FLAT_BOX color 8 selection_color 0 minimum 1 step 1 value 1 slider_size 1
+              code0 {\#include "Fl_Slider_Timeline_gfc.h"}
+              class Fl_Slider_Timeline_gfc
+            }
+          }
+        }
+        Fl_Group buttonsAndLogo {
+          xywh {429 722 592 38}
+        } {
+          Fl_Group Logos {
+            xywh {855 726 166 33} align 21 hide
+          } {
+            Fl_Box LogoOllinGray {
+              image {logo-gray-tiny.jpg} xywh {869 727 152 23} hide
+            }
+            Fl_Box LogoOllin {
+              image {logo-black-tiny.jpg} xywh {869 727 152 22} hide
+            }
+            Fl_Button {} {
+              label button
+              image {logo-cutout-small3.png} xywh {871 735 109 24}
+            }
+          }
+          Fl_Group buttons {
+            xywh {429 722 387 38}
+          } {
+            Fl_Button rewindButton {
+              label {@<<}
+              user_data REWIND_ID user_data_type long
+              callback controlBarCB
+              xywh {432 728 25 27} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelfont 14 labelsize 20 labelcolor 8
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Button backOneButton {
+              label {@|<}
+              user_data BACKONE_ID user_data_type long
+              callback controlBarCB
+              xywh {458 728 25 27} box FLAT_BOX down_box FLAT_BOX shortcut 0xff51 color 8 selection_color 8 labelfont 14 labelsize 20 labelcolor 8
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Button playRevButton {
+              label {@<}
+              user_data PLAYREV_ID user_data_type long
+              callback controlBarCB
+              xywh {484 728 30 27} box FLAT_BOX down_box FLAT_BOX shortcut 0x3c color 8 selection_color 8 labelfont 14 labelsize 24 labelcolor 8
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Button playPauseButton {
+              label {@||}
+              user_data PLAYPAUSE_ID user_data_type long
+              callback controlBarCB
+              xywh {515 728 35 27} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelfont 14 labelsize 24 labelcolor 8
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Button playFwdButton {
+              label {@>}
+              user_data PLAYFWD_ID user_data_type long
+              callback controlBarCB
+              xywh {551 728 30 27} box FLAT_BOX down_box FLAT_BOX shortcut 0x3e color 8 selection_color 8 labelfont 14 labelsize 24 labelcolor 8
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Button forwardOneButton {
+              label {@>|}
+              user_data FORWARDONE_ID user_data_type long
+              callback controlBarCB
+              xywh {582 728 25 27} box FLAT_BOX down_box FLAT_BOX shortcut 0xff53 color 8 selection_color 8 labelfont 14 labelsize 20 labelcolor 8
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Button ffButton {
+              label {@>>}
+              user_data FF_ID user_data_type long
+              callback controlBarCB
+              xywh {608 728 25 27} box FLAT_BOX down_box FLAT_BOX color 8 selection_color 8 labelfont 14 labelsize 20 labelcolor 8
+              code0 {\#include "Fl_Button_gfc.h"}
+              class Fl_Button_gfc
+            }
+            Fl_Round_Button loopOnceRadio {
+              label once
+              user_data LOOPMODEONCE_ID user_data_type long
+              callback controlBarCB
+              xywh {643 738 15 15} type Radio down_box FLAT_BOX value 1 color 8 selection_color 31 labelsize 10 labelcolor 31 align 1
+            }
+            Fl_Round_Button loopLoopRadio {
+              label loop
+              user_data LOOPMODELOOP_ID user_data_type long
+              callback controlBarCB
+              xywh {672 738 15 15} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 1
+            }
+            Fl_Round_Button loopBounceRadio {
+              label swing
+              user_data LOOPMODEBOUNCE_ID user_data_type long
+              callback controlBarCB
+              xywh {702 738 15 15} type Radio down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 1
+            }
+            Fl_Value_Output currentFPSOutput {
+              tooltip {The Current Frames per Second} xywh {729 736 32 17} box FLAT_BOX color 8 selection_color 0 labelsize 10 labelcolor 42 align 1 maximum 999999 textfont 1 textsize 10 textcolor 8
+              code0 {o->color(fl_rgb_color(42,42,42));}
+            }
+            Fl_Input_Choice targetFPSInput {
+              user_data TARGETFPS_ID user_data_type long
+              callback controlBarCB
+              tooltip {The Target Frames per Second} xywh {762 735 54 18} box FLAT_BOX color 8 selection_color 8 labelsize 10 labelcolor 23 align 1 when 6 textfont 1 textsize 10
+              code0 {o->value(0);}
+              code1 {o->input()->color(fl_rgb_color(42,42,42));}
+              code2 {o->menubutton()->color(fl_rgb_color(42,42,42));}
+              code3 {o->menubutton()->box(FL_FLAT_BOX); o->input()->selection_color(FL_BLACK);o->input()->textcolor(31);}
+              class Fl_Input_Choice_gfc
+            } {
+              MenuItem {} {
+                label 24
+                xywh {20 20 30 20}
+              }
+              MenuItem {} {
+                label 30
+                xywh {30 30 30 20}
+              }
+              MenuItem {} {
+                label 48
+                xywh {40 40 30 20}
+              }
+              MenuItem {} {
+                label 60
+                xywh {50 50 30 20}
+              }
+            }
+          }
+          Fl_Group logoButtonsSpacer {
+            xywh {1015 722 6 38} resizable
+          } {}
+          Fl_Group {} {
+            xywh {821 729 193 29}
+          } {
+            Fl_Button addToPlaylistButton {
+              user_data ADDTOPLAYLIST_ID user_data_type long
+              callback controlBarCB
+              tooltip {Add Current Setup To Playlist} image {AddToPlaylistIcon-tiny.png} xywh {821 729 35 29} box FLAT_BOX down_box BORDER_BOX color 8 labelfont 1 labelsize 25 align 16
+              code0 {\#include "Fl_Button_gfc.h"}
+              code1 {o->color(fl_rgb_color(42,42,42));}
+              class Fl_Button_gfc
+            }
+            Fl_Button playlistButton {
+              user_data MENUFILEPLAYLIST_ID user_data_type long
+              callback controlBarCB
+              tooltip {Playlist Manager} image {PlaylistIcon-tiny-flat.png} xywh {860 729 35 29} box FLAT_BOX down_box BORDER_BOX color 8 labelfont 1 labelsize 25 align 16
+              code0 {\#include "Fl_Button_gfc.h"}
+              code1 {o->color(fl_rgb_color(42,42,42));}
+              class Fl_Button_gfc
+            }
+            Fl_Button fxButton {
+              user_data PLATEFX_ID user_data_type long
+              callback controlBarCB
+              tooltip {FX Stack Manager} image {FX-icon-tiny-flat.png} xywh {900 729 35 29} box FLAT_BOX down_box BORDER_BOX color 8 labelfont 1 labelsize 25 align 16
+              code0 {\#include "Fl_Button_gfc.h"}
+              code1 {o->color(fl_rgb_color(42,42,42));}
+              class Fl_Button_gfc
+            }
+            Fl_Button remoteButton {
+              user_data MENUREMOTEMANAGER_ID user_data_type long
+              callback controlBarCB
+              tooltip {Remote Session Manager} image {Remote-icon-tiny-flat2.png} xywh {939 729 35 29} box FLAT_BOX down_box BORDER_BOX color 8 labelfont 1 labelsize 25 align 16
+              code0 {\#include "Fl_Button_gfc.h"}
+              code1 {o->color(fl_rgb_color(42,42,42));}
+              class Fl_Button_gfc
+            }
+            Fl_Button renderButton {
+              user_data MENUFILERENDER_ID user_data_type long
+              callback controlBarCB
+              tooltip {Render Manager} image {Render-icon-tiny-flat.png} xywh {979 729 35 29} box FLAT_BOX down_box BORDER_BOX color 8 labelfont 1 labelsize 25 align 16
+              code0 {\#include "Fl_Button_gfc.h"}
+              code1 {o->color(fl_rgb_color(42,42,42));}
+              class Fl_Button_gfc
+            }
+          }
+        }
+      }
+      Fl_Menu_Bar menuBar {
+        label { } open
+        xywh {0 0 935 20} box NO_BOX color 8 selection_color 8 labeltype SHADOW_LABEL labelcolor 31 textsize 12 textcolor 31
+        code1 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+      } {
+        Submenu {} {
+          label File open
+          xywh {30 30 63 21} color 0 labelcolor 31
+        } {
+          MenuItem {} {
+            label {Load Manager}
+            user_data MENUFILELOAD_ID
+            callback menuCB
+            xywh {30 30 31 21} shortcut 0x4006c color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Playlist Manager}
+            user_data MENUFILEPLAYLIST_ID
+            callback menuCB
+            xywh {60 60 31 21} shortcut 0x40070 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Save Session}
+            user_data MENUFILESAVESESSION_ID
+            callback menuCB
+            xywh {40 40 31 21} shortcut 0x40073 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Open Session}
+            user_data MENUFILEOPENSESSION_ID
+            callback menuCB
+            xywh {50 50 31 21} shortcut 0x4006f color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Save Chat Log}
+            user_data MENUREMOTESAVECHAT_ID
+            callback menuCB
+            xywh {25 25 30 20} labelcolor 31 divider
+          }
+          MenuItem {} {
+            label Preferences
+            user_data MENUFILEPREFERENCES_ID
+            callback menuCB
+            xywh {60 60 31 21} color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label Quit
+            user_data MENUFILEEXIT_ID
+            callback menuCB
+            xywh {40 40 31 21} shortcut 0x40071 color 0 labelcolor 31 divider
+          }
+        }
+        Submenu {} {
+          label View open
+          xywh {0 0 63 21} color 0 labelcolor 31
+        } {
+          Submenu {} {
+            label {Viewport Layout}
+            xywh {0 0 63 21} color 0 labelcolor 31
+          } {
+            MenuItem menuLayoutSingle {
+              label Single
+              user_data FRAMINGSINGLE_ID
+              callback menuCB
+              image {single.png} xywh {25 25 31 21} shortcut 0x40031 color 0 labelcolor 31
+            }
+            MenuItem {} {
+              label Double
+              user_data FRAMINGDOUBLE_ID
+              callback menuCB
+              image {double.png} xywh {35 35 31 21} shortcut 0x40032 color 0 labelcolor 31
+            }
+            MenuItem {} {
+              label {Double Vertical}
+              user_data FRAMINGDOUBLEVERT_ID
+              callback menuCB
+              image {doublevert.PNG} xywh {55 55 31 21} shortcut 0x40033 color 0 labelcolor 31
+            }
+            MenuItem {} {
+              label 2x2
+              user_data FRAMINGQUAD_ID
+              callback menuCB
+              image {quad.png} xywh {45 45 31 21} shortcut 0x40034 color 0 labelcolor 31
+            }
+          }
+          Submenu {} {
+            label {Zoom Filtering} open
+            xywh {5 5 62 20} labelcolor 31
+          } {
+            MenuItem {} {
+              label {Point (pixelated)}
+              user_data FILTERINGMAGLINEAR_ID
+              callback menuCB
+              xywh {25 25 30 20} value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {BiLinear (smoothed)}
+              user_data FILTERINGMAGBILINEAR_ID
+              callback menuCB
+              xywh {35 35 30 20} labelcolor 31
+            }
+          }
+          Submenu {} {
+            label {Aspect Bars Opacity} open
+            xywh {10 10 62 20} labelcolor 31
+          } {
+            MenuItem {} {
+              label {100%}
+              user_data MENUASPECTOPACITY100_ID
+              callback menuCB
+              xywh {40 40 30 20} value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {75%}
+              user_data MENUASPECTOPACITY75_ID
+              callback menuCB
+              xywh {30 30 30 20} value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {50%}
+              user_data MENUASPECTOPACITY50_ID
+              callback menuCB
+              xywh {40 40 30 20} labelcolor 31
+            }
+            MenuItem {} {
+              label {25%}
+              user_data MENUASPECTOPACITY25_ID
+              callback menuCB
+              xywh {50 50 30 20} labelcolor 31
+            }
+          }
+          MenuItem {} {
+            label {Fit to Viewport}
+            user_data MENUFITTOVIEWPORT_ID
+            callback menuCB
+            xywh {15 15 31 21} shortcut 0x66 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Fit All to Viewport}
+            user_data MENUFITALLTOVIEWPORT_ID
+            callback menuCB
+            xywh {25 25 31 21} shortcut 0x80066 color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label {Flip (Vertical)}
+            user_data MENUFLIP_ID
+            callback menuCB
+            xywh {35 35 31 21} shortcut 0x40038 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Flop (Horizontal)}
+            user_data MENUFLOP_ID
+            callback menuCB
+            xywh {45 45 31 21} shortcut 0x40039 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Flip All}
+            user_data MENUFLIPALL_ID
+            callback menuCB
+            xywh {45 45 31 21} shortcut 0xc0038 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Flop All}
+            user_data MENUFLOPALL_ID
+            callback menuCB
+            xywh {55 55 31 21} shortcut 0xc0039 color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label {Reset current view}
+            user_data MENURESETXFORM_ID
+            callback menuCB
+            xywh {5 5 31 21} shortcut 0x40072 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Reset all views}
+            user_data MENURESETXFORMALL_ID
+            callback menuCB
+            xywh {15 15 31 21} shortcut 0xc0072 color 0 labelcolor 31 divider
+          }
+          Submenu {} {
+            label {Color Correction Favorites} open
+            xywh {20 20 62 20} labelcolor 31
+          } {
+            MenuItem {} {
+              label {Load from Slot 1}
+              user_data MENULOADCCFAVORITE1_ID
+              callback menuCB
+              tooltip {Load color correction from slot 1} xywh {100 100 30 20} shortcut 0x10031 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Load from Slot 2}
+              user_data MENULOADCCFAVORITE2_ID
+              callback menuCB
+              tooltip {Load color correction from slot 1} xywh {110 110 30 20} shortcut 0x10032 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Load from Slot 3}
+              user_data MENULOADCCFAVORITE3_ID
+              callback menuCB
+              tooltip {Load color correction from slot 3} xywh {120 120 30 20} shortcut 0x10033 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Load from Slot 4}
+              user_data MENULOADCCFAVORITE4_ID
+              callback menuCB
+              tooltip {Load color correction from slot 4} xywh {130 130 30 20} shortcut 0x10034 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Load from Slot 5}
+              user_data MENULOADCCFAVORITE5_ID
+              callback menuCB selected
+              tooltip {Load color correction from slot 5} xywh {140 140 30 20} shortcut 0x10035 value 1 labelcolor 31 divider
+            }
+            MenuItem {} {
+              label {Save to Slot 1}
+              user_data MENUSAVECCFAVORITE1_ID
+              callback menuCB
+              tooltip {save current color correction to slot 1} xywh {50 50 30 20} shortcut 0x50031 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Save to Slot 1}
+              user_data MENUSAVECCFAVORITE2_ID
+              callback menuCB
+              tooltip {save current color correction to slot 2} xywh {60 60 30 20} shortcut 0x50032 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Save to Slot 3}
+              user_data MENUSAVECCFAVORITE3_ID
+              callback menuCB
+              tooltip {save current color correction to slot 3} xywh {70 70 30 20} shortcut 0x50033 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Save to Slot 4}
+              user_data MENUSAVECCFAVORITE4_ID
+              callback menuCB
+              tooltip {save current color correction to slot 4} xywh {80 80 30 20} shortcut 0x50034 value 1 labelcolor 31
+            }
+            MenuItem {} {
+              label {Save to Slot 5}
+              user_data MENUSAVECCFAVORITE5_ID
+              callback menuCB
+              tooltip {save current color correction to slot 5} xywh {90 90 30 20} shortcut 0x50035 value 1 labelcolor 31
+            }
+          }
+          MenuItem {} {
+            label {Reset current Color Correction}
+            user_data MENURESETCC_ID
+            callback menuCB
+            xywh {5 5 31 21} shortcut 0x10072 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Reset all Color Corrections}
+            user_data MENURESETCCALL_ID
+            callback menuCB
+            xywh {15 15 31 21} shortcut 0x90072 color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label {Show Histogram}
+            user_data MENUHISTOGRAM_ID
+            callback menuCB
+            xywh {25 25 31 21} shortcut 0x40068 color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label {Show Vectorscope}
+            user_data MENUVECTOROSCOPE_ID
+            callback menuCB
+            xywh {35 35 31 21} color 0 labelcolor 31 hide deactivate divider
+          }
+          MenuItem {} {
+            label Fullscreen
+            user_data MENUFULLSCREEN_ID
+            callback menuCB
+            xywh {15 15 31 21} shortcut 0x40066 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Hide Controls}
+            user_data MENUHIDECONTROLS_ID
+            callback menuCB
+            xywh {25 25 31 21} shortcut 0xc0066 color 0 labelcolor 31
+          }
+        }
+        Submenu {} {
+          label Color
+          xywh {10 10 63 21} color 0 labelcolor 31 hide
+        } {
+          MenuItem {} {
+            label {Adjust Screen Gamma}
+            user_data MENUGAMMA_ID
+            callback menuCB
+            xywh {15 15 31 21} shortcut 0x40067 color 0 labelcolor 31 deactivate
+          }
+          Submenu {} {
+            label {BG Color} open
+            xywh {10 10 63 21} color 0 labelcolor 31
+          } {
+            MenuItem {} {
+              label Black
+              user_data BGCOLORBLACK_ID
+              callback menuCB
+              xywh {35 35 31 21} color 0 labelcolor 31
+            }
+            MenuItem {} {
+              label {18% Grey}
+              user_data BGCOLORGRAY_ID
+              callback menuCB
+              xywh {95 95 31 21} color 0 labelcolor 31
+            }
+          }
+        }
+        Submenu {} {
+          label Dialogs open
+          xywh {45 45 63 21} color 0 labelcolor 31
+        } {
+          MenuItem {} {
+            label {Load Manager}
+            user_data MENUFILELOAD_ID
+            callback menuCB
+            xywh {40 40 31 21} shortcut 0x4006c color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Playlist Manager}
+            user_data MENUFILEPLAYLIST_ID
+            callback menuCB
+            xywh {50 50 31 21} shortcut 0x40070 color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {FX Stack Manager}
+            user_data PLATEFX_ID
+            callback controlBarCB
+            xywh {0 0 30 20} shortcut 0xffbf labelcolor 31
+          }
+          MenuItem {} {
+            label {FX Manager}
+            user_data MENUPLUGINLOADER_ID
+            callback menuCB
+            xywh {30 30 30 20} shortcut 0xffc0 labelcolor 31
+          }
+          MenuItem {} {
+            label {LUT Manager}
+            user_data MENULUTLOADER_ID
+            callback menuCB
+            xywh {40 40 30 20} shortcut 0xffc1 labelcolor 31
+          }
+          MenuItem {} {
+            label {Remote Session Manager}
+            user_data MENUREMOTEMANAGER_ID
+            callback menuCB
+            xywh {15 15 30 20} shortcut 0xffc2 labelcolor 31
+          }
+          MenuItem {} {
+            label {Render Manager}
+            user_data MENUFILERENDER_ID
+            callback menuCB
+            xywh {45 45 31 21} shortcut 0xffc3 color 0 labelcolor 31
+          }
+        }
+        Submenu {} {
+          label Review
+          xywh {0 0 63 20} labelcolor 31 hide deactivate
+        } {
+          MenuItem {} {
+            label {Review Toolbar}
+            user_data MENUREVIEWTOOLBAR_ID
+            callback menuCB
+            xywh {20 20 30 20} shortcut 0xffc4 labelcolor 31
+          }
+        }
+        Submenu {} {
+          label {Remote Session}
+          xywh {5 5 63 20} labelcolor 31 hide
+        } {
+          MenuItem {} {
+            label {Chat Mode}
+            xywh {10 10 30 20} labelcolor 31
+          }
+          MenuItem {} {
+            label {Paste into Chat}
+            user_data MENUREMOTEPASTE_ID
+            callback menuCB
+            xywh {20 20 30 20} labelcolor 31
+          }
+        }
+        Submenu {} {
+          label { } open
+          xywh {20 20 63 21} color 0 labelcolor 31 deactivate
+        } {}
+        Submenu {} {
+          label Help open
+          xywh {50 50 63 21} color 0 labelcolor 31
+        } {
+          MenuItem {} {
+            label {User Manual}
+            user_data MENUHELPUSERGUIDE_ID
+            callback menuCB
+            xywh {50 50 31 21} shortcut 0xffbe color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Quick Start Guide}
+            user_data MENUHELPQUICKREFERENCE_ID
+            callback menuCB
+            xywh {60 60 31 21} color 0 labelcolor 31
+          }
+          MenuItem {} {
+            label {Online Support}
+            user_data MENUHELPONLINESUPPORT_ID
+            callback menuCB
+            xywh {70 70 31 21} color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label {Video Tutorials}
+            user_data MENUHELPVIDEOTUTORIALS_ID
+            callback menuCB
+            xywh {70 70 31 21} color 0 labelfont 1 labelsize 16 labelcolor 31
+          }
+          MenuItem {} {
+            label {On-screen Help}
+            user_data MENUHELPQUICKHELP_ID
+            callback menuCB
+            xywh {70 70 31 21} shortcut 0x68 color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label {Check System Requirements}
+            user_data MENUHELPREQUIREMENTSCHECK_ID
+            callback menuCB
+            xywh {60 60 31 21} color 0 labelcolor 31 divider
+          }
+          MenuItem {} {
+            label {About JefeCheck}
+            user_data MENUHELPABOUT_ID
+            callback menuCB
+            xywh {60 60 31 21} color 0 labelcolor 31
+          }
+        }
+      }
+      Fl_Group vp {
+        label GlViewport
+        callback controlBarCB
+        xywh {0 19 1020 597} box DOWN_BOX color 17 labelcolor 7 align 16 resizable
+        code0 {\#include "GlViewport.h"}
+        class GlViewport
+      } {}
+      Fl_Group menuLogos {
+        user_data MENUHELPABOUT_ID
+        callback controlBarCB
+        image {tiny-logo-png.png} xywh {933 0 87 19} align 24 when 6
+      } {}
+    }
+    code {printf("Making Main Window...ok\\n");} {}
+    code {q1Choice->value(0);
+q2Choice->value(1);
+q3Choice->value(2);
+q4Choice->value(3);
+targetFPSInput->value(0);} {}
+    code {fullscreenActive=0;} {}
+  }
+  Function {toggleFullscreen()} {open return_type void
+  } {
+    code {static int fsX, fsY, fsW, fsH;
+	
+	int controlsWhereHidden=0;
+	
+	 //if controls are hidden, show them briefly before going fullscreen
+            if(controlsHidden)
+            {
+             controlsWhereHidden=1;
+             toggleHideControls();
+            }
+            
+	
+	switch ( fullscreenActive ) {
+        case 0:
+        
+        	
+           
+            fsX=mainWindow->x();
+            fsY=mainWindow->y();
+            fsW=mainWindow->w();
+            fsH=mainWindow->h();
+
+            mainWindow->fullscreen();
+            fullscreenActive=1;
+	
+
+            break;
+        case 1:
+
+            mainWindow->fullscreen_off ( fsX,fsY,fsW,fsH );
+            fullscreenActive=0;
+
+            break;
+        }
+        
+        
+        //hide the controls again if they where hidden.
+	    if(controlsWhereHidden)
+	    {
+	     toggleHideControls();
+	    }} {}
+  }
+  Function {toggleHideControls(int force=-1)} {open return_type void
+  } {
+    code {static int vpPrevX,vpPrevY,vpPrevW, vpPrevH;
+	static int cbGroupHeight=-1;
+	static int menuBarHeight=-1;
+
+    printf("toggle hide!\\n");
+    
+	//only run the first time
+	if (cbGroupHeight==-1 && menuBarHeight==-1)
+	{
+		cbGroupHeight=controlBarGroup->h();
+		menuBarHeight=menuBar->h();
+	}
+		
+	if (controlsHidden || force==1) { //show the Controls
+
+
+        menuBar->set_visible();
+        controlBarGroup->set_visible();
+
+		//mw.controlBarGroup->resize(0,mw.mainWindow->h(),mw.mainWindow->w(),cbGroupHeight);
+
+		//mw.vp->resize(0,mw.menuBar->h(),mw.mainWindow->w(),mw.mainWindow->h()-mw.menuBar->h()-mw.controlBarGroup->h());
+		vp->resize(0,menuBarHeight,mainWindow->w(),mainWindow->h()-menuBarHeight-cbGroupHeight);
+		
+
+        //mw.vp->resize ( vpPrevX,vpPrevY,vpPrevW,vpPrevH );
+
+
+        controlBarGroup->redraw();
+        Fl::redraw();
+    } else { //hide the controls
+
+        vpPrevX=vp->x();
+        vpPrevY=vp->y();
+        vpPrevW=vp->w();
+        vpPrevH=vp->h();
+
+        menuBar->hide();
+        controlBarGroup->hide();
+
+        //not cool for multi monitor //mw.vp->resize ( 0,0,glutGet ( GLUT_SCREEN_WIDTH ),glutGet ( GLUT_SCREEN_HEIGHT ) );
+
+        vp->resize ( 0,0,mainWindow->w(),mainWindow->h());
+    }
+
+    controlsHidden=!controlsHidden;} {}
+  }
+} 

@@ -1,6 +1,7 @@
 #include "gfcnetworkmanager.h"
 #include "gfcTextRenderer.h"
 
+#include <FL/fl_ask.H>
 #include "gfcNetworkStructures.h"
 
 #include "gfcnetworklog.h"
@@ -70,6 +71,7 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
 {
 
 	if ( connected && !isServer) {
+            fl_alert ( "Can't start server when connected as client!" );
             return;
         }
         

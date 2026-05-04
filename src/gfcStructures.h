@@ -5,17 +5,10 @@
 #include <filesystem>
 #include <vector>
 #include <queue>
+#include <FL/filename.H>
+#include <FL/Fl_Preferences.H>
 #include <glad/glad.h>
-#ifdef __APPLE__
-#include <OpenGL/glu.h>
-#elif defined(_WIN32)
-// GLU callbacks on Windows reference Win32 API types (CALLBACK, void*),
-// so windows.h must be included first or GL/glu.h fails to parse.
-#include <windows.h>
-#include <GL/glu.h>
-#else
-#include <GL/glu.h>
-#endif
+#include <FL/gl.h>
 #include "UIConstants.h"
 #include "xmlParser.h"
 
@@ -283,14 +276,12 @@ public:
 
 		processorPriority=1.0;
 
-		remotePointerColor=((128u&0xff)<<24) | ((128u&0xff)<<16) | ((128u&0xff)<<8);
+		remotePointerColor=fl_rgb_color(128,128,128);
 
 		feedbackMessageFadeDelay=2.0;
 		feedbackMessageOn=1;
 		feedbackMessageSize=12;
-
-		defaultTextureFormat=GFC_16HALF;
-
+    
 	}
     int startFullscreen;
     int playbackOnLoad;
@@ -321,11 +312,6 @@ public:
     bool glsl;
     bool fbo;
     int fp16;
-    int defaultTextureFormat; // GFC_8BPC / GFC_16BPC / GFC_16HALF / GFC_4BPC.
-                              // Default for the Qt bridge's drag-drop / Cmd+O
-                              // load path. FLTK's per-track Load window writes
-                              // straight to gfcSequenceGUI::setCompression and
-                              // doesn't read this field.
     int forcePBO;
     int renderingEngine;
     int renderingEngineFlag; //since the renderingEngine can't be changed on the fly, it has to be changed on application start. this flag is copied to the renderingEngine on start, and it is modified when the program starts in the initial settings read.

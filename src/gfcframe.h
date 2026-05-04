@@ -12,6 +12,7 @@
 #include <map> 
 #endif //for metadata
 #include <glad/glad.h>
+#include <FL/Fl_Box.H>
 #include "UIConstants.h"
 #include "dpxslice.h"
 #include <vector>

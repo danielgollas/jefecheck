@@ -7,22 +7,6 @@
 
 namespace jefe::ui {
 
-enum class EventType {
-    Unknown,
-    Push,        // mouse button pressed
-    Release,     // mouse button released
-    Drag,        // mouse moved with button down
-    Move,        // mouse moved without button
-    Enter,       // pointer entered the widget
-    Leave,       // pointer left the widget
-    Wheel,       // scroll wheel
-    KeyDown,     // key pressed
-    KeyUp,       // key released
-    Focus,
-    Unfocus,
-    Paste,
-};
-
 enum class MouseButton {
     None  = 0,
     Left  = 1,
@@ -92,15 +76,10 @@ public:
     // The mouse button that triggered the current event, or None.
     virtual MouseButton mouseButton() const = 0;
 
-    // Live-state query: is this mouse button currently pressed? Useful in
-    // Drag handlers where mouseButton() doesn't apply.
-    virtual bool isMouseButtonDown(MouseButton button) const = 0;
-
     // Click count for the current press event (1, 2, 3 for single/double/triple).
     virtual int clickCount() const = 0;
 
-    // Vertical wheel delta for the current scroll event. Sign matches the
-    // host toolkit (FLTK / Qt) — typically positive when the wheel turns down.
+    // Vertical wheel delta for the current scroll event. Positive = up.
     virtual int wheelDeltaY() const = 0;
 
     // Modifier mask for the current event.
@@ -109,11 +88,6 @@ public:
     bool isCtrl()  const { return any(modifiers(), ModifierMask::Ctrl); }
     bool isAlt()   const { return any(modifiers(), ModifierMask::Alt); }
     bool isMeta()  const { return any(modifiers(), ModifierMask::Meta); }
-
-    // The type of the event currently being dispatched (whatever callback is
-    // running). Useful inside FLTK-style multi-event callbacks that switch on
-    // the event type.
-    virtual EventType currentEventType() const = 0;
 
     // The key for the current keyboard event, or Unknown.
     virtual Key currentKey() const = 0;

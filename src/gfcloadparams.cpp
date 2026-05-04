@@ -1,5 +1,5 @@
 #include "gfcloadparams.h"
-
+#include "gfcStructures.h"
 gfcLoadParams::gfcLoadParams()
 {
 	//aoi.set(-1,-1,-1,-1);
@@ -26,7 +26,5 @@ gfcLoadParams::~gfcLoadParams()
 
 void gfcLoadParams::fixWindowsPath()
 {
-	while (fileName.find('\\') != std::string::npos) {
-		fileName.replace(fileName.find('\\'), 1, "/");
-	}
+	ReplaceWindowsBackslash(this->fileName);	
 }

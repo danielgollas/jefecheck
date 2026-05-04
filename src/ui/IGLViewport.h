@@ -8,12 +8,24 @@
 #ifndef JEFECHECK_UI_IGLVIEWPORT_H
 #define JEFECHECK_UI_IGLVIEWPORT_H
 
-#include "IEventSystem.h"
-
 namespace jefe::ui {
 
+enum class EventType {
+    Push,        // mouse button pressed
+    Release,     // mouse button released
+    Drag,        // mouse moved with button down
+    Move,        // mouse moved without button
+    Enter,       // pointer entered the widget
+    Leave,       // pointer left the widget
+    Wheel,       // scroll wheel
+    KeyDown,     // key pressed
+    KeyUp,       // key released
+    Focus,
+    Unfocus,
+    Paste,
+};
+
 // Application code implements this to receive viewport events.
-// EventType is shared with IEventSystem (defined there).
 class IGLViewportListener {
 public:
     virtual ~IGLViewportListener() = default;

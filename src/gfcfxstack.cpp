@@ -1,9 +1,7 @@
 #include "gfcfxstack.h"
 //#include "network.h"
 
-// fxcontrolwindow.h transitively pulls all the FLTK widget headers used by
-// handleGUICB below. Only needed in the FLTK build; the rest of this file
-// (storage, networking, save/load) is FLTK-free.
+#include "fxcontrolwindow.h"
 #include "trilerp.h"
 
 #include "gfclutmanager.h"
@@ -43,21 +41,8 @@ gfcFX gfcFXStack::getFX(int index) {
     }
 }
 
-void gfcFXStack::addFXGUIInfo(fxParamInfo theInfo, void* widgetHandle) {
-    guiToFX[widgetHandle]=theInfo;
-}
-
-void gfcFXStack::setWidgetValue(int fxIndex,
-                                const std::string& groupName,
-                                const std::string& widgetName,
-                                float value) {
-    if (fxIndex < 0 || fxIndex >= (int)fxs.size()) return;
-    auto& fx = fxs[fxIndex];
-    auto gIt = fx.groups.find(groupName);
-    if (gIt == fx.groups.end()) return;
-    auto wIt = gIt->second.widgets.find(widgetName);
-    if (wIt == gIt->second.widgets.end()) return;
-    wIt->second.value = value;
+void gfcFXStack::addFXGUIInfo(fxParamInfo theInfo, Fl_Widget* o) {
+    guiToFX[o]=theInfo;
 }
 
 /**
@@ -66,9 +51,287 @@ void gfcFXStack::setWidgetValue(int fxIndex,
  * @param data
  * @return Returns 1 if the fxControl window needs updating, otherwise 0
  */
-int gfcFXStack::handleGUICB(void * widgetHandle, void * data) {
-    // Non-FLTK builds: FX widget callbacks are not yet wired up.
-    (void)widgetHandle; (void)data;
+int gfcFXStack::handleGUICB(Fl_Widget * o, void * data) {
+
+    fxParamInfo info=guiToFX[o];
+
+
+
+    switch ( info.type) {
+
+    case FX_ACTIVATE:
+        if (!((Fl_Check_Button*)o)->value()) {
+//printf("Deactivating FX%i on Quadrant %i\n",info.fxIndex,info.quadrant);
+            fxs[info.fxIndex].active=false;
+            numOfActiveFX--;
+            gfcNetFXCommonInfo message;
+
+            message.id.quadID=info.quadrant;
+            message.id.index=info.fxIndex;
+            message.onOff=1;
+            message.upDown=0;
+            message.reset=false;
+            message.remove=false;
+            networkManager.sendFXCommonMessage(message);
+        } else {
+            //printf("Activating FX%i on Quadrant %i\n",info.fxIndex,info.quadrant);
+            fxs[info.fxIndex].active=true;
+            numOfActiveFX++;
+            gfcNetFXCommonInfo message;
+
+            message.id.quadID=info.quadrant;
+            message.id.index=info.fxIndex;
+            message.onOff=2;
+            message.upDown=0;
+            message.reset=false;
+            message.remove=false;
+            networkManager.sendFXCommonMessage(message);
+
+        }
+        //printf("Number of Active effects(Q%i): %i\n",info.quadrant,numberOfActiveEffects[info.quadrant]);
+        break;
+
+    case FX_RESET: {
+        fxs[info.fxIndex].reset();
+
+        //Send the message from here
+        gfcNetFXCommonInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.onOff=0;
+        message.upDown=0;
+        message.reset=true;
+        message.remove=false;
+        networkManager.sendFXCommonMessage(message);
+
+        return 1;
+    }
+    break;
+
+    case FX_DELETE: {
+        //printf("Deleting FX%i\n",info.fxIndex);
+
+
+
+
+        fxs.erase(fxs.begin()+info.fxIndex);
+        numOfActiveFX--;
+
+
+
+        //Send the message from here
+        gfcNetFXCommonInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.onOff=0;
+        message.upDown=0;
+        message.reset=0;
+        message.remove=true;
+        networkManager.sendFXCommonMessage(message);
+
+        return 1;
+    }
+    break;
+
+
+    case FX_MOVEUP: {
+        //printf("MOVING UP FX%i\n",info.fxIndex);
+        //inefficent swap but who cares, it's a GUI operation
+
+        if (info.fxIndex>0) {
+            gfcFX tmpFX=fxs[info.fxIndex-1];
+            fxs[info.fxIndex-1]=fxs[info.fxIndex];
+            fxs[info.fxIndex]=tmpFX;
+
+
+
+            gfcNetFXCommonInfo message;
+
+            message.id.quadID=info.quadrant;
+            message.id.index=info.fxIndex;
+            message.onOff=0;
+            message.upDown=1; //move up
+            message.reset=false;
+            message.remove=false;
+            networkManager.sendFXCommonMessage(message);
+
+            return 1;
+        }
+
+    }
+    break;
+
+    case FX_MOVEDOWN: {
+        //printf("MOVING DOWN FX%i\n",info.fxIndex);
+        if (info.fxIndex<fxs.size()-1) {
+            gfcFX tmpFX=fxs[info.fxIndex+1];
+            fxs[info.fxIndex+1]=fxs[info.fxIndex];
+            fxs[info.fxIndex]=tmpFX;
+
+
+            gfcNetFXCommonInfo message;
+
+            message.id.quadID=info.quadrant;
+            message.id.index=info.fxIndex;
+            message.onOff=0;
+            message.upDown=2; //move down
+            message.reset=false;
+            message.remove=false;
+            networkManager.sendFXCommonMessage(message);
+
+            return 1;
+        }
+    }
+    break;
+
+    case FX_GUI_FLOAT: { //set the corresponding float in the fx (only internal storage for the fx, the actual Shader uses that internal storage later)
+
+        //fxs[info.fxIndex].floats[info.variableName]=((Fl_Value_Input*)o)->value();
+        // printf("Set Float Value %s(Q%i,FX%i):%f\n",info.variableName.c_str(),info.quadrant,info.fxIndex,fxs[info.fxIndex].floats[info.variableName]);
+        fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value=((Fl_Value_Input*)o)->value();
+
+        gfcNetFXAttribInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.attribType=FX_GUI_FLOAT;
+        message.theFloat=((Fl_Value_Input*)o)->value();
+        message.variableName=(info.variableName.c_str());
+        message.groupName=(info.groupName.c_str());
+        networkManager.sendFXAttribMessage(message);
+    }
+    break;
+    case FX_GUI_CHOICE: { //set the corresponding float in the fx (only internal storage for the fx, the actual Shader uses that internal storage later)
+
+        //fxs[info.fxIndex].floats[info.variableName]=((Fl_Value_Input*)o)->value();
+        // printf("Set Float Value %s(Q%i,FX%i):%f\n",info.variableName.c_str(),info.quadrant,info.fxIndex,fxs[info.fxIndex].floats[info.variableName]);
+        fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value=((Fl_Choice*)o)->value();
+
+        gfcNetFXAttribInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.attribType=FX_GUI_CHOICE;
+        message.theInt=((Fl_Choice*)o)->value();
+        message.variableName=(info.variableName.c_str());
+        message.groupName=(info.groupName.c_str());
+        networkManager.sendFXAttribMessage(message);
+    }
+
+    break;
+    case FX_GUI_TEXTURE: { //set the corresponding texture in the fx (only internal storage for the fx, the actual Shader uses that internal storage later)
+        fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value=((Fl_Choice*)o)->value();
+
+        gfcNetFXAttribInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.attribType=FX_GUI_TEXTURE;
+        message.theInt=((Fl_Choice*)o)->value();
+        message.variableName=(info.variableName.c_str());
+        message.groupName=(info.groupName.c_str());
+        networkManager.sendFXAttribMessage(message);
+
+        // printf("%s changed to %f\n",fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].varName,fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value);
+
+    }
+    break;
+    case FX_GUI_CUBE: { //set the corresponding texture in the fx (only internal storage for the fx, the actual Shader uses that internal storage later)
+
+        //find what cube this item in the menu corresponds to in the lutArray
+        int lutArrayIndex=0;
+        std::vector<std::string>lutNames=lutManager.getAllNames();
+
+        for (int i=0;i<lutNames.size();i++) {
+            if (strcmp(((Fl_Choice*)o)->text(),lutNames[i].c_str())==0) {
+                //printf("Found the Correct LUT index at %i\n (%s)\n",i,lutArray[i].filename);
+                lutArrayIndex=i;
+                break;
+
+            }
+        }
+
+        fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value=lutArrayIndex;
+
+        gfcNetFXAttribInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.attribType=FX_GUI_CUBE;
+        message.lutOrCube=(((Fl_Choice*)o)->text());
+        message.variableName=(info.variableName.c_str());
+        message.groupName=(info.groupName.c_str());
+        networkManager.sendFXAttribMessage(message);
+
+        //fxs[info.fxIndex].cubes[info.variableName]=lutArrayIndex;
+        //printf("Set Cube Value %s(Q%i,FX%i):%i\n",info.variableName.c_str(),info.quadrant,info.fxIndex,fxs[info.fxIndex].cubes[info.variableName]);
+
+    }
+
+    break;
+
+    case FX_GUI_LUT: { //set the corresponding texture in the fx (only internal storage for the fx, the actual Shader uses that internal storage later)
+		if (((Fl_Choice*)o)->text()!=NULL)
+		{
+
+        //find what cube this item in the menu corresponds to in the lutArray
+        int lutArrayIndex=0;
+        std::vector<std::string>lutNames=lutManager.getAllNames();
+        for (int i=0;i<lutNames.size();i++) {
+			
+			
+			std::string theName=((Fl_Choice*)o)->text();
+			//printf("((Fl_Choice*)o)->text()= %s i=%i , lutNames.size = %i\n",theName.c_str(), i,lutNames.size());
+            if (strcmp(theName.c_str(),lutNames[i].c_str())==0) {
+                //printf("Found the Correct LUT index at %i\n (%s)\n",i,lutArray[i].filename);
+                lutArrayIndex=i;
+                break;
+
+            }
+			
+        }
+
+        fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value=lutArrayIndex;
+        fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].lutValue=((Fl_Choice*)o)->value();
+
+        gfcNetFXAttribInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.attribType=FX_GUI_LUT;
+        message.lutOrCube=(((Fl_Choice*)o)->text());
+        message.variableName=(info.variableName.c_str());
+        message.groupName=(info.groupName.c_str());
+        networkManager.sendFXAttribMessage(message);
+        //fxs[info.fxIndex].cubes[info.variableName]=lutArrayIndex;
+        //printf("Set Cube Value %s(Q%i,FX%i):%i\n",info.variableName.c_str(),info.quadrant,info.fxIndex,fxs[info.fxIndex].cubes[info.variableName]);
+		}
+    }
+
+    break;
+
+    case FX_GUI_BOOL: { //set the corresponding texture in the fx (only internal storage for the fx, the actual Shader uses that internal storage later)
+        if (((Fl_Check_Button*)o)->value())
+            fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value=true;
+        else
+            fxs[info.fxIndex].groups[info.groupName].widgets[info.variableName].value=false;
+
+        gfcNetFXAttribInfo message;
+
+        message.id.quadID=info.quadrant;
+        message.id.index=info.fxIndex;
+        message.attribType=FX_GUI_BOOL;
+        message.theInt=((Fl_Button*)o)->value();
+        message.variableName=(info.variableName.c_str());
+        message.groupName=(info.groupName.c_str());
+        networkManager.sendFXAttribMessage(message);
+
+    }
+    break;
+    }
+
     return 0;
 }
 

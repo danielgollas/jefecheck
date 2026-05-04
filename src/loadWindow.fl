@@ -1,0 +1,794 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0109 
+header_name {.h} 
+code_name {.cxx}
+class LoadWindow {open : {public Fl_Double_Window}
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "Fl_DragBar.H"} {}
+  decl {\#include "UICallbacks.h"} {}
+  decl {\#include "Fl_Button_gfc.h"} {}
+  decl {\#include "gfcSliderInput.h"} {}
+  Function {LoadWindow(int x, int y, int wi, int height,const char* l) : Fl_Double_Window(300, 300, 300, 300, "Load Window")} {open
+  } {
+    Fl_Window loadWindow {
+      label {Load Window} open
+      xywh {1170 558 750 335} type Double box NO_BOX color 56 labelcolor 17 non_modal noborder size_range {750 335 750 335} visible
+    } {
+      Fl_Box bgBOX {
+        xywh {0 -4 753 377} box FLAT_BOX color 0
+        code0 {o->color(fl_rgb_color(27,27,27));}
+      }
+      Fl_Box {} {
+        label {.}
+        xywh {0 0 750 377} box FLAT_BOX color 38
+        code0 {o->type(Fl_DragBar::WINDRAG);}
+        code1 {//o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+        code2 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+        class Fl_DragBar
+      }
+      Fl_Group frame {open selected
+        xywh {2 1 746 332} box BORDER_FRAME color 8 labelcolor 19
+      } {
+        Fl_Group groupA {
+          callback loadCB open
+          xywh {7 16 365 130} box BORDER_FRAME color 8 labelcolor 7
+        } {
+          Fl_Value_Slider loadFromSpinnerA {
+            label In
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {38 50 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            code0 {\#include "gfcSliderInput.h"}
+            class gfcSliderInput
+          }
+          Fl_Value_Slider loadToSpinnerA {
+            label Out
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {38 66 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            class gfcSliderInput
+          }
+          Fl_Choice filterChooserA {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {73 99 91 18} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 10
+            code0 {\#include "Fl_Choice_gfc.h"}
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {25 25 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {35 35 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button browseButtonA {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {292 24 70 20} color 0 labelsize 11 labelcolor 7
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Input_Choice scaleChooserA {
+            label Scale
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {12 99 53 18} down_box BORDER_BOX color 37 labelsize 10 labelcolor 7 align 1 textsize 12
+            code0 {\#include "Fl_Input_Choice_gfc.h"}
+            code1 {o->value(0);}
+            code2 {o->textcolor(fl_rgb_color(85,85,85));}
+            class Fl_Input_Choice_gfc
+          } {
+            MenuItem {} {
+              label 100
+              xywh {15 15 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 50
+              xywh {25 25 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 25
+              xywh {35 35 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button reloadButtonA {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {262 51 24 25} color 0 labelsize 12 labelcolor 7 hide
+          }
+          Fl_Check_Button cropA {
+            label Crop
+            callback loadCB
+            tooltip {Enable cropping the image, once enabled, right click and shift+right click on the preview to select the Area of Interest to load} xywh {200 87 18 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 4
+            code0 {o->labelcolor(fl_rgb_color(160,160,160));}
+          }
+          Fl_Value_Input gammaSliderA {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {222 58 27 20} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1 hide
+          }
+          Fl_Choice formatA {
+            label {Bit Depth}
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {170 125 56 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label 8bpc
+              xywh {0 0 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 16bpc
+              xywh {55 55 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label HALF
+              xywh {65 65 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 4bpc
+              xywh {20 20 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label S3TC
+              xywh {30 30 30 20} labelsize 12
+            }
+          }
+          Fl_Menu_Button recentButtonA {
+            label {@2>}
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {263 26 27 17} box FLAT_BOX down_box FLAT_BOX color 8 labelcolor 31 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          } {}
+          Fl_Output {} {
+            label Sequence user_data_type long
+            xywh {172 25 195 18} labelsize 12 labelcolor 7 when 1 textsize 12 hide
+          }
+          Fl_Input fileNameInputA {
+            label Sequence
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {75 26 187 17} box FLAT_BOX color 8 labelsize 12 labelcolor 31 when 1 textsize 12 deactivate
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Choice loadModeA {
+            label Mode open
+            tooltip {Specifies how this track will be treated whn you hit the START button. It can replace what was there or it can ignore changes and leave everything the way it is} xywh {170 126 64 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 10 hide
+            code0 {o->value(0);}
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label Replace
+              xywh {0 0 63 24} labelsize 10
+            }
+            MenuItem {} {
+              label Ignore
+              xywh {10 10 34 24} labelsize 10
+            }
+            MenuItem {} {
+              label Stream
+              xywh {20 20 34 24} labelsize 10
+            }
+          }
+          Fl_Output estimatesA {
+            tooltip {Shows information on memory usage and load times} xywh {225 48 140 55} type Multiline box BORDER_BOX color 8 selection_color 0 labelsize 10 labelcolor 7 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Button unloadAndClearA {
+            label {@3+}
+            user_data LOADUNLOADANDCLEAR_ID
+            callback loadCB
+            xywh {252 109 27 27} color 0 labelsize 12 labelcolor 1
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Choice channelsChoiceA {
+            label Channels
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {When working with multi channel images (such as OpenEXR), you can choose what channel to load} xywh {60 125 100 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 12
+            class Fl_Choice_gfc
+          } {}
+          Fl_Button startA {
+            label START
+            user_data LOADSTART_ID
+            callback loadCB
+            xywh {287 107 75 31} color 0 labelsize 12 labelcolor 7
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Button startButton {
+          label {Start All  @+1>}
+          user_data LOADLOAD_ID
+          callback loadCB
+          tooltip {Start Loading!} xywh {317 300 130 29} down_box DOWN_BOX color 32 labelfont 1 labelcolor 8 align 16
+          code0 {\#include "Fl_Button_gfc.h"}
+          class Fl_Button_gfc
+        }
+        Fl_Button {} {
+          label Done
+          user_data LOADDONE_ID
+          callback loadCB
+          xywh {669 306 70 22} down_box DOWN_BOX color 32 labelfont 1 labelcolor 8
+          code0 {\#include "Fl_Button_gfc.h"}
+          class Fl_Button_gfc
+        }
+        Fl_Group groupB {
+          callback loadCB open
+          xywh {377 16 365 130} box BORDER_FRAME color 8 labelcolor 7
+        } {
+          Fl_Value_Slider loadFromSpinnerB {
+            label In
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {408 50 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            class gfcSliderInput
+          }
+          Fl_Value_Slider loadToSpinnerB {
+            label Out
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {408 66 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            class gfcSliderInput
+          }
+          Fl_Choice filterChooserB {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {443 99 91 18} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 10
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {35 35 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {45 45 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button browseButtonB {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {662 24 70 20} color 0 labelsize 11 labelcolor 7
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Input_Choice scaleChooserB {
+            label Scale
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {382 99 53 18} down_box BORDER_BOX color 37 labelsize 10 labelcolor 7 align 1 textsize 12
+            code0 {o->value(0);}
+            code1 {o->textcolor(fl_rgb_color(85,85,85));}
+            class Fl_Input_Choice_gfc
+          } {
+            MenuItem {} {
+              label 100
+              xywh {25 25 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 50
+              xywh {35 35 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 25
+              xywh {45 45 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button reloadButtonB {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {632 51 24 25} color 0 labelsize 12 labelcolor 7 hide
+          }
+          Fl_Check_Button cropB {
+            label Crop
+            callback loadCB
+            tooltip {Enable cropping the image, once enabled, right click and shift+right click on the preview to select the Area of Interest to load} xywh {570 87 18 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 4
+            code0 {o->labelcolor(fl_rgb_color(160,160,160));}
+          }
+          Fl_Value_Input gammaSliderB {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {592 58 27 20} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1 hide
+          }
+          Fl_Choice formatB {
+            label {Bit Depth}
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {542 125 54 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label 8bpc
+              xywh {5 5 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 16bpc
+              xywh {60 60 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label HALF
+              xywh {70 70 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 4bpc
+              xywh {25 25 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label S3TC
+              xywh {35 35 30 20} labelsize 12
+            }
+          }
+          Fl_Menu_Button recentButtonB {
+            label {@2>}
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {633 26 27 17} box FLAT_BOX down_box FLAT_BOX color 8 labelcolor 31 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          } {}
+          Fl_Output {} {
+            label Sequence user_data_type long
+            xywh {542 25 195 18} labelsize 12 labelcolor 7 when 1 textsize 12 hide
+          }
+          Fl_Input fileNameInputB {
+            label Sequence
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {445 26 187 17} box FLAT_BOX color 8 labelsize 12 labelcolor 31 when 1 textsize 12 deactivate
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Choice loadModeB {
+            label Mode open
+            tooltip {Specifies how this track will be treated whn you hit the START button. It can replace what was there or it can ignore changes and leave everything the way it is} xywh {539 125 64 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 10 hide
+            code0 {o->value(0);}
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label Replace
+              xywh {10 10 34 24} labelsize 10
+            }
+            MenuItem {} {
+              label Ignore
+              xywh {20 20 34 24} labelsize 10
+            }
+            MenuItem {} {
+              label Stream
+              xywh {30 30 34 24} labelsize 10
+            }
+          }
+          Fl_Output estimatesB {
+            tooltip {Shows information on memory usage and load times} xywh {595 48 140 55} type Multiline box BORDER_BOX color 8 selection_color 0 labelsize 10 labelcolor 7 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Button unloadAndClearB {
+            label {@3+}
+            user_data LOADUNLOADANDCLEAR_ID
+            callback loadCB
+            xywh {620 109 27 27} color 0 labelsize 12 labelcolor 1
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Choice channelsChoiceB {
+            label Channels
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {When working with multi channel images (such as OpenEXR), you can choose what channel to load} xywh {429 126 100 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 12
+            class Fl_Choice_gfc
+          } {}
+          Fl_Button startB {
+            label START
+            user_data LOADSTART_ID
+            callback loadCB
+            xywh {655 107 75 31} color 0 labelsize 12 labelcolor 7
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Group groupC {
+          callback loadCB open
+          xywh {7 163 365 130} box BORDER_FRAME color 8 labelcolor 7
+        } {
+          Fl_Value_Slider loadFromSpinnerC {
+            label In
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {38 197 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            class gfcSliderInput
+          }
+          Fl_Value_Slider loadToSpinnerC {
+            label Out
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {38 213 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            class gfcSliderInput
+          }
+          Fl_Choice filterChooserC {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {73 246 91 18} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 10
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {45 45 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {55 55 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button browseButtonC {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {292 171 70 20} color 0 labelsize 11 labelcolor 7
+            class Fl_Button_gfc
+          }
+          Fl_Input_Choice scaleChooserC {
+            label Scale
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {12 246 53 18} box FLAT_BOX down_box FLAT_BOX color 37 labelsize 10 labelcolor 7 align 1 textsize 12
+            code0 {o->value(0);}
+            code1 {o->textcolor(fl_rgb_color(85,85,85));}
+            class Fl_Input_Choice_gfc
+          } {
+            MenuItem {} {
+              label 100
+              xywh {35 35 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 50
+              xywh {45 45 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 25
+              xywh {55 55 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button reloadButtonC {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {262 198 24 25} color 0 labelsize 12 labelcolor 7 hide
+          }
+          Fl_Check_Button cropC {
+            label Crop
+            callback loadCB
+            tooltip {Enable cropping the image, once enabled, right click and shift+right click on the preview to select the Area of Interest to load} xywh {200 234 18 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 4
+            code0 {o->labelcolor(fl_rgb_color(160,160,160));}
+          }
+          Fl_Value_Input gammaSliderC {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {222 205 27 20} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1 hide
+          }
+          Fl_Choice formatC {
+            label {Bit Depth}
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {172 272 56 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label 8bpc
+              xywh {5 5 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 16bpc
+              xywh {60 60 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label HALF
+              xywh {70 70 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 4bpc
+              xywh {25 25 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label S3TC
+              xywh {35 35 30 20} labelsize 12
+            }
+          }
+          Fl_Menu_Button recentButtonC {
+            label {@2>}
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {263 173 27 17} box FLAT_BOX down_box FLAT_BOX color 8 labelcolor 31 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          } {}
+          Fl_Output {} {
+            label Sequence user_data_type long
+            xywh {172 172 195 18} labelsize 12 labelcolor 7 when 1 textsize 12 hide
+          }
+          Fl_Input fileNameInputC {
+            label Sequence
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {75 173 187 17} box FLAT_BOX color 8 labelsize 12 labelcolor 31 when 1 textsize 12 deactivate
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Choice loadModeC {
+            label Mode open
+            tooltip {Specifies how this track will be treated whn you hit the START button. It can replace what was there or it can ignore changes and leave everything the way it is} xywh {169 272 64 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 10 hide
+            code0 {o->value(0);}
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label Replace
+              xywh {20 20 34 24} labelsize 10
+            }
+            MenuItem {} {
+              label Ignore
+              xywh {30 30 34 24} labelsize 10
+            }
+            MenuItem {} {
+              label Stream
+              xywh {40 40 34 24} labelsize 10
+            }
+          }
+          Fl_Output estimatesC {
+            tooltip {Shows information on memory usage and load times} xywh {225 195 140 55} type Multiline box BORDER_BOX color 8 selection_color 0 labelsize 10 labelcolor 7 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Button unloadAndClearC {
+            label {@3+}
+            user_data LOADUNLOADANDCLEAR_ID
+            callback loadCB
+            xywh {250 255 27 27} color 0 labelsize 12 labelcolor 1
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Choice channelsChoiceC {
+            label Channels
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {When working with multi channel images (such as OpenEXR), you can choose what channel to load} xywh {59 272 100 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 12
+            class Fl_Choice_gfc
+          } {}
+          Fl_Button startC {
+            label START
+            user_data LOADSTART_ID
+            callback loadCB
+            xywh {287 254 75 31} color 0 labelsize 12 labelcolor 7
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Group groupD {
+          callback loadCB open
+          xywh {377 163 365 130} box BORDER_FRAME color 8 labelcolor 7
+        } {
+          Fl_Value_Slider loadFromSpinnerD {
+            label In
+            user_data LOADFROM_ID
+            callback loadCB
+            xywh {408 198 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            class gfcSliderInput
+          }
+          Fl_Value_Slider loadToSpinnerD {
+            label Out
+            user_data LOADTO_ID
+            callback loadCB
+            xywh {408 214 180 15} type {Horz Knob} color 0 labelsize 12 labelcolor 31 align 4 step 1 textsize 9
+            class gfcSliderInput
+          }
+          Fl_Choice filterChooserD {
+            label Filter
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {Filter to apply on the scaled images} xywh {443 246 91 18} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 10
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label {Linear (Ugly-fastest)}
+              xywh {55 55 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label {BiLinear (Better-slower)}
+              xywh {65 65 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button browseButtonD {
+            label Browse
+            user_data LOADBROWSE_ID user_data_type long
+            callback loadCB
+            xywh {662 172 70 20} color 0 labelsize 11 labelcolor 7
+            class Fl_Button_gfc
+          }
+          Fl_Input_Choice scaleChooserD {
+            label Scale
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Loaded images will be scaled down to this percent} xywh {382 246 53 18} down_box BORDER_BOX color 37 labelsize 10 labelcolor 7 align 1 textsize 12
+            code0 {o->value(0);}
+            code1 {o->textcolor(fl_rgb_color(85,85,85));}
+            class Fl_Input_Choice_gfc
+          } {
+            MenuItem {} {
+              label 100
+              xywh {45 45 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 50
+              xywh {55 55 31 21} color 0 labelsize 10
+            }
+            MenuItem {} {
+              label 25
+              xywh {65 65 31 21} color 0 labelsize 10
+            }
+          }
+          Fl_Button reloadButtonD {
+            user_data LOADUPDATE_ID user_data_type long
+            callback loadCB
+            image {reload.png} xywh {632 199 24 25} color 0 labelsize 12 labelcolor 7 hide
+          }
+          Fl_Check_Button cropD {
+            label Crop
+            callback loadCB
+            tooltip {Enable cropping the image, once enabled, right click and shift+right click on the preview to select the Area of Interest to load} xywh {570 234 18 18} down_box FLAT_BOX color 8 selection_color 31 labelsize 10 labelcolor 31 align 4
+            code0 {o->labelcolor(fl_rgb_color(160,160,160));}
+          }
+          Fl_Value_Input gammaSliderD {
+            label Gamma
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB
+            xywh {592 206 27 20} labelsize 12 labelcolor 7 when 4 maximum 3 step 0.1 value 1 hide
+          }
+          Fl_Choice formatD {
+            label {Bit Depth}
+            user_data LOADUPDATEPREVIEW_ID
+            callback loadCB open
+            tooltip {Special Formats can determine the quality/memory ratio.} xywh {542 272 54 16} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 align 1 textsize 12
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label 8bpc
+              xywh {5 5 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 16bpc
+              xywh {60 60 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label HALF
+              xywh {70 70 30 20} labelsize 12 divider
+            }
+            MenuItem {} {
+              label 4bpc
+              xywh {25 25 30 20} labelsize 12
+            }
+            MenuItem {} {
+              label S3TC
+              xywh {35 35 30 20} labelsize 12
+            }
+          }
+          Fl_Menu_Button recentButtonD {
+            label {@2>}
+            user_data LOADRECENT_ID user_data_type long
+            callback loadCB open
+            xywh {633 174 27 17} box FLAT_BOX down_box FLAT_BOX color 8 labelcolor 31 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          } {}
+          Fl_Output {} {
+            label Sequence user_data_type long
+            xywh {542 173 195 18} labelsize 12 labelcolor 7 when 1 textsize 12 hide
+          }
+          Fl_Input fileNameInputD {
+            label Sequence
+            user_data LOADFILENAME_ID user_data_type long
+            callback loadCB
+            xywh {445 174 187 17} box FLAT_BOX color 8 labelsize 12 labelcolor 31 when 1 textsize 12 deactivate
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Choice loadModeD {
+            label Mode open
+            tooltip {Specifies how this track will be treated whn you hit the START button. It can replace what was there or it can ignore changes and leave everything the way it is} xywh {539 273 64 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 10 hide
+            code0 {o->value(0);}
+            class Fl_Choice_gfc
+          } {
+            MenuItem {} {
+              label Replace
+              xywh {30 30 34 24} labelsize 10
+            }
+            MenuItem {} {
+              label Ignore
+              xywh {40 40 34 24} labelsize 10
+            }
+            MenuItem {} {
+              label Stream
+              xywh {50 50 34 24} labelsize 10
+            }
+          }
+          Fl_Output estimatesD {
+            tooltip {Shows information on memory usage and load times} xywh {595 196 140 55} type Multiline box BORDER_BOX color 8 selection_color 0 labelsize 10 labelcolor 7 textsize 10 textcolor 31
+            code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+          }
+          Fl_Button unloadAndClearD {
+            label {@3+}
+            user_data LOADUNLOADANDCLEAR_ID
+            callback loadCB
+            xywh {621 255 27 27} color 0 labelsize 12 labelcolor 1
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Choice channelsChoiceD {
+            label Channels
+            user_data LOADUPDATEPREVIEW_ID user_data_type long
+            callback loadCB open
+            tooltip {When working with multi channel images (such as OpenEXR), you can choose what channel to load} xywh {430 272 100 15} down_box BORDER_BOX color 0 labelsize 10 labelcolor 7 textsize 12
+            class Fl_Choice_gfc
+          } {}
+          Fl_Button startD {
+            label START
+            user_data LOADSTART_ID
+            callback loadCB
+            xywh {659 254 75 31} color 0 labelsize 12 labelcolor 7
+            code0 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+        }
+        Fl_Box {} {
+          label A
+          xywh {19 2 24 26} box FLAT_BOX color 8 labelfont 1 labelsize 24 labelcolor 31 align 17
+          code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+          code1 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+        }
+        Fl_Box {} {
+          label B
+          xywh {386 3 24 26} box FLAT_BOX color 8 labelfont 1 labelsize 24 labelcolor 31 align 17
+          code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+          code1 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+        }
+        Fl_Box {} {
+          label C
+          xywh {16 148 22 25} box FLAT_BOX color 8 labelfont 1 labelsize 24 labelcolor 31 align 17
+          code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+          code1 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+        }
+        Fl_Box {} {
+          label D
+          xywh {386 150 22 25} box FLAT_BOX color 8 labelfont 1 labelsize 24 labelcolor 31 align 17
+          code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+          code1 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+        }
+        Fl_Button addToQueueButton {
+          user_data LOADADDTOQUEUE_ID
+          callback loadCB
+          tooltip {Start Loading!} image {AddToPlaylistIcon-tiny.png} xywh {266 300 48 29} down_box DOWN_BOX color 32 labelfont 1 labelcolor 8
+          code0 {\#include "Fl_Button_gfc.h"}
+          class Fl_Button_gfc
+        }
+        Fl_Button openPlayListButton {
+          label {Playlist...}
+          user_data LOADOPENPLAYLIST_ID
+          callback loadCB
+          tooltip {Start Loading!} xywh {531 304 75 22} down_box DOWN_BOX color 32 labelfont 1 labelsize 12 labelcolor 8 hide
+          code0 {\#include "Fl_Button_gfc.h"}
+          class Fl_Button_gfc
+        }
+      }
+      Fl_Button reduceButton {
+        label {@8UpArrow}
+        user_data LOADREDUCE_ID
+        callback loadCB
+        xywh {420 282 30 18} shortcut 0x6d color 0 hide
+      }
+    }
+  }
+} 

@@ -1,0 +1,77 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+class moreOptionsPopup {open
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include <FL/Fl_Menu_Window.h>} {}
+  decl {\#include "Fl_Choice_gfc.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  Function {moreOptionsPopup(int x, int y, int wi, int height, const char* l)} {open
+  } {
+    Fl_Window moreOptions {
+      label {Track Options} open
+      xywh {1385 280 160 100} type Double color 60 labelcolor 17
+      code0 {\#include <FL/Fl_Menu_Window.h>}
+      class Fl_Menu_Window non_modal noborder size_range {160 100 160 100} visible
+    } {
+      Fl_Box bgBox {
+        label {TrackA Options}
+        xywh {-2 0 260 220} box DOWN_BOX color 0 labelfont 1 labelcolor 31 align 21
+        code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+      }
+      Fl_Value_Input frameOffset {
+        label {Frame Offset}
+        user_data MOFRAMEOFFSET_ID
+        callback moreOptionsCB selected
+        xywh {75 23 50 18} box FLAT_BOX color 8 labelfont 1 labelsize 10 labelcolor 8 minimum -999999 maximum 1e+007 step 1 textcolor 31
+        code0 {o->color(fl_rgb_color(GFC_WIDGET_COLOR,GFC_WIDGET_COLOR,GFC_WIDGET_COLOR));}
+      }
+      Fl_Button {} {
+        label x
+        user_data MOCLOSE_ID
+        callback moreOptionsCB
+        xywh {135 4 20 14} box THIN_UP_BOX color 0 labelfont 1 labelcolor 7
+        code0 {\#include "Fl_Button_gfc.h"}
+        class Fl_Button_gfc
+      }
+      Fl_Button unload {
+        label {Unload Track}
+        user_data MOUNLOADTRACK_ID
+        callback moreOptionsCB
+        xywh {5 76 80 20} color 0 labelfont 1 labelsize 10 labelcolor 7
+        code0 {\#include "Fl_Button_gfc.h"}
+        class Fl_Button_gfc
+      }
+      Fl_Choice holdFrame {
+        label {Hold Frame}
+        user_data MOHOLDFRAME_ID
+        callback moreOptionsCB open
+        xywh {74 47 55 18} down_box BORDER_BOX labelfont 1 labelsize 10 labelcolor 8
+        code0 {\#include "Fl_Choice_gfc.h"}
+        class Fl_Choice_gfc
+      } {
+        MenuItem {} {
+          label none
+          xywh {0 0 30 20} labelsize 10
+        }
+        MenuItem {} {
+          label current
+          xywh {20 20 30 20} labelsize 10
+        }
+        MenuItem {} {
+          label edge
+          xywh {10 10 30 20} labelsize 10
+        }
+      }
+    }
+  }
+  Function {popup()} {open
+  } {
+    code {moreOptions->position(Fl::event_x_root(), Fl::event_y_root());       // position window at cursor
+        moreOptions->show();} {}
+  }
+  decl {char ID;} {public
+  }
+} 

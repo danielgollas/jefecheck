@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include <FL/Fl_Text_Display.H>
+#include <FL/Fl_Text_Buffer.H>
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>
@@ -17,15 +19,18 @@ public:
     gfcNetworkLog();
 
     ~gfcNetworkLog();
-
+    
     void initialize();
     void addToLog(std::string, int type=GFCNETLOGTYPE_NORMAL,int NoDate=0);
     void outputToFile(std::string fileName);
     bool writeToConsole;
-
+    Fl_Text_Display* display;
+    
 private:
 std::vector<std::string> log;
-int lineCount;
+Fl_Text_Buffer buffer;
+Fl_Text_Buffer style_buffer;
+int lineCount; 
 };
 
 #endif

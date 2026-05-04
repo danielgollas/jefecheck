@@ -2,17 +2,7 @@
 #define PLAYLISTMANAGER_H
 
 #include "gfcplaylistitem.h"
-#include "gfcStructures.h"  // GFC_PL_GUI_TYPE
-// Stand-in for the FLTK build's playlistwindow.h class. Same shape; we
-// just don't pull the FLTK widget hierarchy along with it.
-class PlaylistParamInfo {
-public:
-    PlaylistParamInfo() {}
-    PlaylistParamInfo(int pplIndex, GFC_PL_GUI_TYPE pType)
-        : plIndex(pplIndex), type(pType) {}
-    int plIndex;
-    GFC_PL_GUI_TYPE type;
-};
+#include "playlistwindow.h"
 #include <vector>
 #include <map>
 
@@ -34,10 +24,8 @@ public:
 	void moveSelection(int direction);
 	void removePlaylistItem(int index);
 	void clearPlaylist(int networkNotify=1);
-	// Widget callback API. Handle is opaque so the header doesn't pull
-	// FLTK; the .cpp casts back to Fl_Widget* inside USE_FLTK gating.
-	void addPLIGUIInfo(PlaylistParamInfo, void* widgetHandle);
-	void handlePLIGUICB(void* widgetHandle, void* data);
+	void addPLIGUIInfo(PlaylistParamInfo, Fl_Widget*);
+	void handlePLIGUICB(Fl_Widget*, void* data);
 	void setSelectedItem(int);
 	void refreshSelectedItem();
 	
@@ -62,8 +50,8 @@ public:
 	
 private:
 	std::vector<gfcPlaylistItem> entries;
-	std::map<void*, PlaylistParamInfo> guiToPlaylistItem; //maps each widget (opaque handle) to info about the playlist item it belongs to.
-
+	std::map<Fl_Widget*,PlaylistParamInfo> guiToPlaylistItem; //maps each widget to info about the playlist item it belong to.
+	
 };
 
 #endif
