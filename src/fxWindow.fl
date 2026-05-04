@@ -1,0 +1,83 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+class FXWindow {open : {public Fl_Double_Window}
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  Function {FXWindow(int x, int y, int wi, int height,const char* l) : Fl_Double_Window(300, 300, 300, 300, "Load Window")} {open
+  } {
+    Fl_Window fxWindow {
+      label {FX Manager} open
+      xywh {630 392 515 430} type Double box NO_BOX color 56 labelcolor 17 non_modal size_range {515 430 515 430} visible
+    } {
+      Fl_Box {} {
+        label label
+        xywh {0 -4 1675 982} box FLAT_BOX color 30
+        code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+      }
+      Fl_Group {} {open
+        xywh {0 -16 1542 1121} labelcolor 19
+      } {
+        Fl_Group {} {
+          label Load
+          callback loadCB open
+          xywh {5 27 505 39} box BORDER_FRAME color 8 labelfont 1 labelsize 18 labelcolor 31 align 5
+        } {
+          Fl_File_Input fileNameInput {
+            label File
+            user_data LOADFILENAME_ID user_data_type long
+            xywh {40 37 403 27} color 0 labelsize 12 labelcolor 19 when 1 hide deactivate
+          }
+          Fl_Button browseButton {
+            label Browse
+            user_data FXBROWSE_ID user_data_type long
+            callback fxManagerCB_OTHERS
+            xywh {447 32 58 27} box FLAT_BOX down_box FLAT_BOX color 8 labelsize 12 labelcolor 31
+            code0 {\#include "gfcfxmanager.h"}
+            code1 {\#include "Fl_Button_gfc.h"}
+            class Fl_Button_gfc
+          }
+          Fl_Progress progress {selected
+            xywh {11 34 430 25} box FLAT_BOX color 0 selection_color 59 labelcolor 31
+          }
+        }
+        Fl_Button doneButton {
+          label Done
+          user_data FXDONE_ID
+          callback fxManagerCB_OTHERS
+          tooltip {Start Loading!} xywh {405 388 95 27} box FLAT_BOX down_box FLAT_BOX color 8 labelfont 1 labelsize 21 labelcolor 31
+          class Fl_Button_gfc
+        }
+        Fl_Group {} {open
+          image {fx.png} xywh {26 414 80 80} align 0
+        } {}
+        Fl_Group {} {open
+          xywh {9 108 493 272}
+        } {
+          Fl_Scroll scrollLoaded {
+            label Loaded open
+            xywh {9 108 493 272} type VERTICAL box FLAT_BOX color 8 selection_color 79 labelfont 1 labelsize 18 labelcolor 31 align 5
+            code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+          } {}
+        }
+        Fl_Check_Button autoLoadAllButton {
+          label {Auto-Load All}
+          user_data FXAUTOLOADALL_ID
+          callback fxManagerCB_OTHERS
+          xywh {370 88 15 15} down_box FLAT_BOX color 8 selection_color 31 labelcolor 50 align 8
+          code0 {\#include "gfcfxmanager.h"}
+        }
+        Fl_Button {} {
+          label {Unload All}
+          user_data FXUNLOADALL_ID
+          callback fxManagerCB_OTHERS
+          xywh {287 85 78 20} box FLAT_BOX down_box FLAT_BOX color 8 labelcolor 31
+          code0 {\#include "gfcfxmanager.h"}
+          class Fl_Button_gfc
+        }
+      }
+    }
+  }
+} 

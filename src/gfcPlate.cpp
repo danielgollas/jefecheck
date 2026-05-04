@@ -1,12 +1,18 @@
 #include <glad/glad.h>
 #include "gfcPlate.h"
-#include "ui/IApplication.h"
-namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
+#include <FL/Fl.H>
+#include <FL/fl_draw.H>
+#include <FL/x.H>
 #include "gfcSequence.h"
+#include "mainWindow.h"
+#include "loadWindow.h"
+#include "lutWindow.h"
+#include "FL/fl_ask.H"
 #include "gfcfx.h"
 #include <string>
 #include "platefxparams.h"
+#include "renderWindow.h"
 //#include "network.h"
 #include "gfcplatedrawparams.h"
 
@@ -20,37 +26,22 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 
 #include "gfchistogram.h"
 
-namespace {
-// Looks up an FLTK-compatible color index in the standard 8-color palette.
-// In the FLTK build we defer to Fl::get_color so the colors match exactly
-// whatever FLTK reports (including any custom palette overrides). In other
-// builds we fall back to a static table for the named colors and white for
-// out-of-range indices.
-inline void gfcLookupPointerColor(int colorIdx, unsigned char& r, unsigned char& g, unsigned char& b) {
-    static const unsigned char table[8][3] = {
-        {  0,  0,  0}, {255,  0,  0}, {  0,255,  0}, {255,255,  0},
-        {  0,  0,255}, {255,  0,255}, {  0,255,255}, {255,255,255}
-    };
-    if (colorIdx >= 0 && colorIdx < 8) {
-        r = table[colorIdx][0];
-        g = table[colorIdx][1];
-        b = table[colorIdx][2];
-    } else {
-        r = g = b = 255;
-    }
-}
-}  // namespace
 
 
-
+extern MainWindow mw;
+extern LoadWindow lw;
+extern LutWindow lutw;
+extern RenderWindow rw;
 //extern std::vector<CubeLUT> lutArray;
 extern bool npotTextures;
+extern float gFPS;
 extern GLint gFilteringModeMin;
 extern GLint gFilteringModeMag;
 extern std::vector<gfcFX> fxArray;
 extern std::vector<gfcFX> fxApplied[4];
 extern std::vector<int> fxArrayActiveCount; //how many fx are active for each quadrant.
 extern int numberOfActiveEffects[4];
+extern float timeStep;
 
 extern bool gConnected;
 extern std::vector<std::string> chatLog;
@@ -123,8 +114,10 @@ gfcPlate::gfcPlate ( void )
         , rX ( 0 )
         , rY ( 0 )
         , rZ ( 0 )
+        , choice ( 0 )
         , active ( false )
         , showText ( true )
+        ,aspectChoice ( NULL )
         ,textMode(1)
         ,aspect ( -1 )
         ,cropMode ( GFCCROPCENTER )
@@ -191,10 +184,7 @@ void gfcPlate::capturePointerCoords() {	//TEST CAPTURING THE GL COORDINATES FROM
         glGetDoublev( GL_MODELVIEW_MATRIX,modelView );
         glGetDoublev( GL_PROJECTION_MATRIX,projection );
 
-        // Qt build doesn't have a `mw` global yet; remote-pointer
-        // capture isn't wired. Single-plate Qt rendering will route
-        // viewport coords through the active GlViewport_Qt directly.
-        return;
+        gluUnProject ( mw.vp->prevX, mw.vp->h()-mw.vp->prevY, -1, modelView, projection, viewport, &posX, &posY, &posZ );
         prevPointerX=posX;
         prevPointerY=posY;
 
@@ -831,8 +821,8 @@ void gfcPlate::drawRemotePointers() {
             pIter=nickIter->second.begin();
             pEnd=nickIter->second.end();
             int maxPointer=nickIter->second.size();
-			unsigned char red, green, blue;
-			gfcLookupPointerColor(pIter->color, red, green, blue);
+			uchar red, green, blue;
+			Fl::get_color(Fl_Color(pIter->color), red, green, blue);
 
             if (pIter!=pEnd) {
 
@@ -1232,7 +1222,7 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
 
                     /*if ( forRender ) {
                         rw.progress->copy_label ( "Loading and Rendering" );
-                        app().processEvents();
+                        Fl::check();
                     }*/
 
                     //if ( polySizeX!=fboVP.w || polySizeY!=fboVP.h ) 

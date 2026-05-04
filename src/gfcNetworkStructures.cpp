@@ -1,6 +1,7 @@
 #include "gfcNetworkStructures.h"
 
 #include <stdio.h>
+#include "mainWindow.h"
 #include "RakPeerInterface.h"
 #include <string>
 #include <vector>
@@ -18,9 +19,11 @@
 #include "BitStream.h"
 #include "StringCompressor.h"
 #include "gfcStructures.h"
+#include "mainWindow.h"
 #include "gfcfx.h"
 #include "xmlParser.h"
 #include <fstream>
+#include <FL/fl_ask.H>
 #ifdef _WIN32
 #include <windows.h> // Sleep
 #else
@@ -33,8 +36,6 @@ extern gfcFXManager fxManager;
 
 #include "gfclutmanager.h"
 extern gfcLUTManager lutManager;
-
-extern gfcSettings sett;
 
 
 void serializeLUT ( CubeLUT* theLUT, RakNet::BitStream* bs ) {

@@ -1,0 +1,112 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+class MinSpecsWindow {open
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  Function {MinSpecsWindow(int x, int y, int wi, int height, const char* l)} {open
+  } {}
+  Function {make_window()} {open
+  } {
+    Fl_Window minSpecsWindow {
+      label {JefeCheck Host System Specs} open
+      xywh {1323 441 281 353} type Double color 0 selection_color 0 labelcolor 7 resizable size_range {281 355 281 355} visible
+    } {
+      Fl_Box {} {
+        label label
+        xywh {0 -8 619 553} box FLAT_BOX color 0
+        code0 {o->color(fl_rgb_color(GFC_BG_COLOR,GFC_BG_COLOR,GFC_BG_COLOR));}
+      }
+      Fl_Box versionLabel {
+        label {JefeCheck Video Card Check}
+        xywh {5 4 265 16} labelfont 1 labelsize 16 labelcolor 31 align 20
+      }
+      Fl_Pack {} {open
+        xywh {0 25 315 340} type HORIZONTAL
+      } {
+        Fl_Scroll {} {open
+          xywh {0 25 315 340} box FLAT_BOX color 0 resizable
+        } {
+          Fl_Pack {} {open
+            xywh {0 25 315 330}
+          } {
+            Fl_Box glVersion {
+              label label selected
+              xywh {20 32 270 16} labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Box glVendor {
+              label label selected
+              xywh {20 49 270 16} labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Box glRenderer {
+              label label selected
+              xywh {20 65 270 16} labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Box maxTexSize {
+              label label selected
+              xywh {20 84 270 16} labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Box maxViewportSize {
+              label label selected
+              xywh {20 101 270 16} labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Box glewVersion {
+              label label selected
+              xywh {20 122 270 16} labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Box {} {
+              label {Required for Basic Playback} selected
+              xywh {5 141 270 19} labelfont 1 labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Check_Button textureRectangle {
+              label {Texture Rectangle}
+              xywh {20 160 105 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+            Fl_Box {} {
+              label {Required for FX Processing} selected
+              xywh {5 176 270 19} labelfont 1 labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Check_Button shaderObjects {
+              label {Shader Objects}
+              xywh {20 195 64 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+            Fl_Check_Button glsl {
+              label {GL Shading Language}
+              xywh {20 211 64 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+            Fl_Check_Button fbo {
+              label {Frame Buffer Objects}
+              xywh {20 230 60 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+            Fl_Box {} {
+              label {Required for HDR Processing} selected
+              xywh {4 245 270 19} labelfont 1 labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Check_Button textureFloat {
+              label {Texture Float}
+              xywh {20 265 64 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+            Fl_Check_Button textureHalf {
+              label {Texture Half}
+              xywh {20 280 64 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+            Fl_Box {} {
+              label {Optional Extensions} selected
+              xywh {5 298 270 17} labelfont 1 labelsize 12 labelcolor 31 align 20
+            }
+            Fl_Check_Button PBO {
+              label {Pixel Buffer Objects}
+              xywh {20 330 64 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+            Fl_Check_Button s3tc {
+              label {S3TC Texture Compression}
+              xywh {20 315 64 15} down_box DOWN_BOX labelsize 11 labelcolor 1 deactivate
+            }
+          }
+        }
+      }
+    }
+  }
+} 

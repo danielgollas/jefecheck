@@ -1,4 +1,5 @@
 #include "gfcimageloaderoiio.h"
+#include "gfcStructures.h"
 #include "UIConstants.h"
 #include <OpenImageIO/imageio.h>
 #include <cstring>

@@ -17,6 +17,7 @@ sudo apt-get install -y \
     libimath-dev \
     libcurl4-openssl-dev \
     zlib1g-dev \
+    freeglut3-dev \
     libgl-dev \
     libglu1-mesa-dev \
     libx11-dev \

@@ -1,0 +1,223 @@
+# data file for the FLTK User Interface Designer (FLUID)
+version 2.0100 
+header_name {.h} 
+code_name {.cxx} 
+gridx 5 
+gridy 5 
+snap 3
+class MainWindow {open : {fltk::Window}
+} {
+  decl {\#  include <fltk/gl.h>} {}
+  decl {\#  include <fltk/GlWindow.h>} {}
+  decl {\#  include <stdio.h>} {}
+  decl {\#  include "GlViewport.h"} {}
+  Function {MainWindow(int X, int Y, int W, int H, const char *L) : fltk::Window(X,Y,W,H,L)} {open
+  } {
+    {fltk::Window} mainWindow {
+      label {It's Broken Cycler - Main Window} open
+      xywh {115 123 1374 845} when NEVER resizable color 56 visible
+    } {
+      {fltk::Group} {} {open
+        xywh {-20 -6 1407 887} align 16 resizable color 0x1e1e1c00 labelcolor 0x90909000
+      } {
+        {fltk::ValueInput} {} {
+          label {value:}
+          tooltip {Current Frame}
+          xywh {97 760 43 16} color 0x1c1c1c00 textcolor 0x6a6a6a00
+        }
+        {fltk::MenuBar} {} {open
+          xywh {20 8 329 18} color 0x19191900 textcolor 0x5b5b5b00
+        } {
+          {fltk::ItemGroup} {} {
+            label File open
+            color 0x19191900 textcolor 0x5b5b5b00
+          } {
+            {fltk::Item} {} {
+              label Exit
+              color 0x19191900 textcolor 0x5b5b5b00
+            }
+          }
+          {fltk::ItemGroup} {} {
+            label Help open
+            color 0x19191900 textcolor 0x5b5b5b00
+          } {
+            {fltk::Item} {} {
+              label About
+              color 0x19191900 textcolor 0x5b5b5b00
+            }
+          }
+        }
+        {fltk::InvisibleBox} vp {
+          xywh {20 28 1370 723} align 1 resizable box THIN_UP_BOX color 0xb006800 selection_color 56
+          extra_code {\#include "GlViewport.h"}
+          class GlViewport
+        }
+        {fltk::Group} {} {open selected
+          xywh {110 757 1283 96} align 21 color 0x2d2d2a00 textcolor 0x47474700 labelcolor 0x62615a00
+        } {
+          {fltk::Slider} timeLine {
+            tooltip {Scrub timeline to change current frame}
+            xywh {27 4 1122 15} type TICK_ABOVE box DOWN_BOX buttonbox FLAT_BOX color 0x12111000 buttoncolor 0x49484300 maximum 50 step 1 value 5
+          }
+          {fltk::Output} timeCodeOutput {
+            label {output:}
+            tooltip Time
+            xywh {1153 3 120 15}
+          }
+        }
+        {fltk::Group} {} {open
+          xywh {138 772 1257 50} buttonbox FLAT_BOX textcolor 0xe8e8d800
+        } {
+          {fltk::Slider} trackDBar {
+            label TrackD
+            xywh {3 37 1120 8} type TICK_BOTH align 4 box PLASTIC_UP_BOX buttonbox NO_BOX labelfont 1 color 0x9ca89c00 labelcolor 0x9ca89c00 labelsize 10 maximum 50 step 1 slider_size 0
+          }
+          {fltk::Slider} trackCBar {
+            label TrackC
+            xywh {3 27 1120 8} type TICK_BOTH align 4 box PLASTIC_UP_BOX buttonbox NO_BOX labelfont 1 color 0x9ca89c00 labelcolor 0x9ca89c00 labelsize 10 maximum 50 step 1 slider_size 0
+          }
+          {fltk::Slider} trackBBar {
+            label TrackB
+            xywh {3 17 1120 8} type TICK_BOTH align 4 box PLASTIC_UP_BOX buttonbox NO_BOX labelfont 1 color 0x9ca89c00 selection_color 0xa8a89800 buttoncolor 0xa8a89800 labelcolor 0x9ca89c00 highlight_color 0xa8a89800 highlight_textcolor 0xa8a89800 labelsize 10 maximum 50 step 1 slider_size 0
+          }
+          {fltk::Slider} trackABar {
+            label TrackA
+            xywh {3 7 1120 8} type TICK_BOTH align 4 box PLASTIC_UP_BOX buttonbox NO_BOX labelfont 1 color 0x9ca89c00 labelcolor 0x9ca89c00 labelsize 10 maximum 50 step 1 slider_size 0
+          }
+        }
+        {fltk::TiledGroup} {} {open
+          xywh {591 820 272 27} align 80 color 0xc2c0b200 labelcolor 0x5c685c00
+          class {fltk::Group}
+        } {
+          {fltk::Button} playButton {
+            label {@>}
+            tooltip Play
+            xywh {173 4 25 20} color 56 selection_textcolor 56 buttoncolor 56 labelcolor 0x5c685c00 highlight_color 56 highlight_textcolor 56
+          }
+          {fltk::Button} backButton {
+            label {@|<}
+            tooltip {Back one frame}
+            xywh {147 4 25 20} color 56 selection_textcolor 56 buttoncolor 56 labelcolor 0x5c685c00 highlight_color 56 highlight_textcolor 56
+          }
+          {fltk::Button} RewindButton {
+            label {@<<}
+            tooltip {First Frame}
+            xywh {120 4 25 20} color 56 selection_textcolor 56 buttoncolor 56 labelcolor 0x5c685c00 highlight_color 56 highlight_textcolor 56
+          }
+          {fltk::Button} FFButton {
+            label {@>>}
+            tooltip {Last frame}
+            xywh {225 4 30 20} color 56 selection_textcolor 56 buttoncolor 56 labelcolor 0x5c685c00 highlight_color 56 highlight_textcolor 56
+          }
+          {fltk::Button} advanceButton {
+            label {@>|}
+            tooltip {Forward one frame}
+            xywh {199 4 25 20} color 56 selection_textcolor 56 buttoncolor 56 labelcolor 0x5c685c00 highlight_color 56 highlight_textcolor 56
+          }
+          {fltk::ValueInput} targetFPSInput {
+            label {value:}
+            tooltip {Target FPS}
+            xywh {0 4 55 20} align 1 color 56 textcolor 0x74747400 labelcolor 0x5c685c00 minimum 1 maximum 60 step 1 value 24
+          }
+          {fltk::ValueOutput} currentFPSOutput {
+            label {value:}
+            tooltip {Real FPS}
+            xywh {61 3 54 20} align 1 color 0x35353500 textcolor 0x90909000 selection_textcolor 0x3d3d3d00 labelcolor 0x5c685c00 maximum 999999 value 3
+          }
+        }
+        {fltk::Group} channelsGroup {open
+          xywh {870 819 90 55}
+        } {
+          {fltk::Button} channelRButton {
+            label R
+            tooltip {Show Red Channel}
+            xywh {10 8 20 15} type TOGGLE
+          }
+          {fltk::Button} channelGButton {
+            label G
+            tooltip {Show Green Channel}
+            xywh {29 8 20 15} type TOGGLE
+          }
+          {fltk::Button} channelBButton {
+            label B
+            tooltip {Show Blue Channel}
+            xywh {48 8 20 15} type TOGGLE
+          }
+          {fltk::Button} channelAButton {
+            label A
+            tooltip {Show Alpha Channel}
+            xywh {66 8 20 15} type TOGGLE
+          }
+        }
+        {fltk::Group} zoomGroup {open
+          tooltip {Frame Scale}
+          xywh {965 824 111 17}
+        } {
+          {fltk::Choice} scaleChoice {
+            label Scale open
+            xywh {41 0 70 15} color 56 textcolor 0x77777700 selection_textcolor 0x44444400 labelcolor 0x6a6a6a00
+          } {
+            {fltk::Item} {} {
+              label {100%}
+              }
+            {fltk::Item} {} {
+              label {50%}
+              }
+            {fltk::Item} {} {
+              label {25%}
+              }
+          }
+        }
+        {fltk::Group} tracksActiveGroup {open
+          xywh {50 778 55 41} align 21 color 0x2d2d2a00 textcolor 0x47474700 labelcolor 0x62615a00
+        } {
+          {fltk::Button} trackAActiveToggle {
+            label active
+            tooltip {Track Active}
+            xywh {1 2 50 9} type TOGGLE box UP_BOX buttonbox FLAT_BOX labelfont 1 color 0x90909000 labelsize 10 textsize 4
+          }
+          {fltk::Button} trackBActiveToggle {
+            label active
+            tooltip {Track Active}
+            xywh {1 12 50 9} type TOGGLE box UP_BOX buttonbox FLAT_BOX labelfont 1 color 0x90909000 labelsize 10
+          }
+          {fltk::Button} trackCActiveToggle {
+            label active
+            tooltip {Track Active}
+            xywh {1 22 50 9} type TOGGLE box UP_BOX buttonbox FLAT_BOX labelfont 1 color 0x90909000 labelsize 10 textsize 4
+          }
+          {fltk::Button} trackDActiveToggle {
+            label active
+            tooltip {Track Active}
+            xywh {1 32 50 9} type TOGGLE box UP_BOX buttonbox FLAT_BOX labelfont 1 color 0x90909000 labelsize 10 textsize 4
+          }
+        }
+        {fltk::Group} LoopModeGroup {
+          label {Loop Mode} open
+          xywh {392 818 164 29} align 4 color 0x62625c00 textcolor 0x90909000 labelcolor 0x90909000
+        } {
+          {fltk::RadioButton} loopModeOnceRadio {
+            label button
+            tooltip {Play Once and Stop}
+            xywh {9 7 15 15} vertical image {E:\\projects\\gfcheck/once.PNG}
+          }
+          {fltk::RadioButton} loopModeLoopRadio {
+            label button
+            tooltip Loop
+            xywh {62 7 15 15} vertical image {E:\\projects\\gfcheck/loop.PNG}
+          }
+          {fltk::RadioButton} loopModeBounceRadio {
+            label button
+            tooltip Bounce
+            xywh {115 7 15 15} vertical image {E:\\projects\\gfcheck/bounce.PNG}
+          }
+        }
+      }
+    }
+    code {Fl::add_idle(IdleFunc, this);} {}
+  }
+  Function {show()} {open
+  } {
+    code {mainWindow->show();} {}
+  }
+} 

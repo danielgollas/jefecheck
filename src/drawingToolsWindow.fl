@@ -1,0 +1,174 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0107 
+header_name {.h} 
+code_name {.cxx}
+decl {\#include <FL/Fl_Tree.H>} {} 
+
+class DrawingToolsWindow {open : {public Fl_Double_Window}
+} {
+  decl {\#include "UIConstants.h"} {}
+  decl {\#include "UICallbacks.h"} {}
+  decl {\#include <FL/Fl_Tree.H>} {}
+  Function {DrawingToolsWindow(int x, int y, int wi, int height,const char* l) : Fl_Double_Window(300, 300, 300, 300, "Load Window")} {open
+  } {
+    Fl_Window drawingToolsWindow {
+      label Review open
+      xywh {2293 268 220 790} type Double box NO_BOX color 56 labelcolor 17 hide resizable non_modal size_range {220 300 220 720}
+    } {
+      Fl_Box {} {
+        label label
+        xywh {-300 -7 725 803} box FLAT_BOX color 0
+      }
+      Fl_Group toolsGroup {
+        label Tools
+        xywh {11 15 195 28} box THIN_UP_FRAME labelfont 1 labelsize 12 labelcolor 7
+      } {
+        Fl_Button textButton {
+          label Text
+          xywh {21 21 45 16} type Toggle box PLASTIC_DOWN_BOX down_box PLASTIC_UP_BOX
+        }
+        Fl_Button drawButton {
+          label Draw
+          xywh {71 21 55 16} type Toggle box PLASTIC_DOWN_BOX down_box PLASTIC_UP_BOX
+        }
+        Fl_Button aniLineButton {
+          label AniLine
+          xywh {131 22 60 16} type Toggle box PLASTIC_DOWN_BOX down_box PLASTIC_UP_BOX
+        }
+      }
+      Fl_Text_Display toolHelp {
+        xywh {11 46 195 19}
+      }
+      Fl_Scroll bigScroll {
+        xywh {-15 76 236 715} type VERTICAL box FLAT_BOX color 0 labelfont 1 labelsize 12 labelcolor 7 resizable
+      } {
+        Fl_Group {} {
+          label Revisions open
+          xywh {10 96 190 190} box THIN_DOWN_FRAME color 48 labelsize 10 labelcolor 7
+        } {
+          Fl_Browser revisionsTree {
+            label Revisions
+            user_data REVIEWTOOLSREVIEWTREE_ID
+            callback reviewToolsCB
+            xywh {16 100 180 84} align 0
+            code0 {\#include <FL/Fl_Tree.H>}
+            class Fl_Tree
+          }
+          Fl_Button {} {
+            label Delete
+            xywh {160 206 35 12} labelsize 11
+          }
+          Fl_Button {} {
+            label New
+            xywh {17 206 35 12} labelsize 11
+          }
+          Fl_Button {} {
+            label Lock selected
+            xywh {56 206 39 12} labelsize 11
+          }
+          Fl_Input {} {
+            label Author
+            xywh {54 223 140 17} labelsize 10 labelcolor 7 textsize 10
+          }
+          Fl_Output {} {
+            label Created
+            xywh {84 245 110 15} labelsize 10 labelcolor 7 textsize 10
+          }
+          Fl_Output {} {
+            label {Last modified}
+            xywh {84 266 110 15} labelsize 10 labelcolor 7 textsize 10
+          }
+        }
+        Fl_Group {} {
+          label Notes
+          xywh {10 303 190 117} box THIN_DOWN_FRAME color 48 labelsize 10 labelcolor 7
+        } {
+          Fl_Browser notesTree {
+            xywh {11 307 186 87} type Hold selection_color 0 labelfont 1 labelsize 12 labelcolor 7 align 1
+            code0 {\#include <FL/Fl_Tree.H>}
+            class Fl_Tree
+          }
+          Fl_Button {} {
+            label Delete
+            xywh {161 398 35 12} labelsize 11
+          }
+        }
+        Fl_Group {} {
+          label {Common Attributes}
+          xywh {10 439 190 192} box THIN_DOWN_FRAME color 48 labelsize 10 labelcolor 7
+        } {
+          Fl_Input name {
+            label Name
+            xywh {55 447 120 17} labelsize 12 labelcolor 7 textsize 12
+          }
+          Fl_Value_Input rangeStart {
+            xywh {15 520 35 16} labelsize 12 labelcolor 7 textsize 12
+          }
+          Fl_Value_Input rangeEnd {
+            label {>}
+            xywh {70 520 35 16} labelsize 12 labelcolor 7 textsize 12
+          }
+          Fl_Check_Button alwaysOn {
+            label Always
+            xywh {120 520 60 16} down_box DOWN_BOX labelsize 10 labelcolor 7
+          }
+          Fl_Button {} {
+            label {@8<}
+            xywh {50 520 10 17} labelsize 9
+          }
+          Fl_Button {} {
+            label {@8<}
+            xywh {105 520 10 18} labelsize 9
+          }
+          Fl_Box color {
+            label Color
+            xywh {50 545 20 16} box FLAT_BOX color 3 labelsize 12 labelcolor 7 align 4
+          }
+          Fl_Choice quadrant {
+            label Quad open
+            xywh {50 496 27 15} down_box BORDER_BOX labelsize 12 labelcolor 7
+          } {
+            MenuItem {} {
+              label 1
+              xywh {5 5 30 20}
+            }
+            MenuItem {} {
+              label 2
+              xywh {15 15 30 20}
+            }
+            MenuItem {} {
+              label 3
+              xywh {25 25 30 20}
+            }
+            MenuItem {} {
+              label 4
+              xywh {35 35 30 20}
+            }
+          }
+          Fl_Input size {
+            label Size
+            xywh {110 494 25 18} type Int labelsize 12 labelcolor 7
+          }
+          Fl_Text_Display {} {
+            xywh {15 571 165 50}
+          }
+          Fl_Value_Input {} {
+            label Position
+            xywh {60 472 30 13} labelsize 10 labelcolor 7 textsize 10
+          }
+          Fl_Value_Input {} {
+            xywh {100 472 30 13} labelsize 10 labelcolor 7 textsize 10
+          }
+        }
+        Fl_Group {} {
+          label {Tool Specifics} open
+          xywh {10 647 190 124} box THIN_DOWN_FRAME color 48 labelsize 10 labelcolor 7
+        } {
+          Fl_Scroll specificScroll {open
+            xywh {12 649 186 121} type VERTICAL box FLAT_BOX color 0 labelsize 10 labelcolor 7 resizable
+          } {}
+        }
+      }
+    }
+  }
+} 

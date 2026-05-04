@@ -7,13 +7,19 @@
 #include <glad/glad.h>
 #include <functional>
 #include "gfcSequence.h"
-#include "ui/IApplication.h"
-namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <string.h>
 #include <stdio.h>
 #include <vector>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <FL/Fl.H>
+#include "loadWindow.h"
+#include "mainWindow.h"
+#include "exrWindow.h"
+#include <FL/Fl_Slider.H>
+#include <FL/Fl_Progress.H>
+#include <FL/fl_ask.H>
+#include "GlViewport.h"
 //#include "gfcframeslice.h"
 #ifdef WIN32
 #else
@@ -41,6 +47,9 @@ extern gfcNetworkManager networkManager;
 #include "gfcplatemanager.h"
 extern gfcPlateManager plateManager;
 
+extern LoadWindow lw;
+extern MainWindow mw;
+extern ExrWindow ew;
 extern bool mainWindowExists;
 extern bool npotTextures;
 extern std::mutex gGLMutex;
@@ -596,7 +605,6 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 
 
 	//if(!gOutOfMemory)
-#ifdef JEFECHECK_USE_FLTK
 	if ( mw.infinitePlaybackToggle->value() )
 	{
 	int frameToFree=5;
@@ -617,9 +625,6 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 	mw.vp->trackD.loadingCanceled=true;
 	break;
 	}
-#else
-	break;
-#endif
 
 	}
 	break;
@@ -706,7 +711,7 @@ bool gfcSequence::generateTexture ( RawFrame *pRawFrame, gfcFrame *pFrame ) {
 
 	sldr->setRange ( rangeBegin,rangeEnd,mw.timeLine->w() / ( mw.playUpToInput->value()-mw.playFromInput->value() ) );
 	sldr->damage();
-	app().processEvents();
+	Fl::check();
 	}
 	}
 	*/
@@ -1582,8 +1587,8 @@ void gfcSequence::stopLoading() {
 	myThread=NULL;
 	clearRawQueue();
 
-	if (myGUI)
-		myGUI->deactivateAbortButton();
+	if (abortButton)
+		abortButton->deactivate();
 
 	gResizeTrigger=true;
 }
@@ -1636,6 +1641,7 @@ std::string gfcSequence::loadPreview() {
 	gfcLoadParams params=getLoadParamsFromGUI();
 
 	previewTimer.name="Load Preview";
+	fl_cursor(FL_CURSOR_WAIT);
 	//Fl::ready();
 	std::string previousSelectedChannel;
 
@@ -1709,6 +1715,7 @@ std::string gfcSequence::loadPreview() {
 
 	//aoi.set(previewFrame.sizeX/4,previewFrame.sizeY/4,previewFrame.sizeX/2,previewFrame.sizeY/2);
 	updateEstimates();
+	fl_cursor(FL_CURSOR_DEFAULT);
 	if (previewFrame.loaded)
 		return params.fileName;
 
