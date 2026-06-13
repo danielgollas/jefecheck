@@ -1106,4 +1106,15 @@ TrackEstimates getTrackEstimates(int trackIdx) {
     return est;
 }
 
+bool reloadTrackPreview(int trackIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return false;
+    if (seq->myGUI->getFilename().empty()) {
+        seq->clearPreviewFrame();
+        return false;
+    }
+    const std::string loaded = seq->loadPreview();
+    return !loaded.empty();
+}
+
 }  // namespace jefe::qt

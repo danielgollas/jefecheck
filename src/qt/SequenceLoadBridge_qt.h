@@ -447,6 +447,11 @@ struct TrackEstimates {
 
 TrackEstimates getTrackEstimates(int trackIdx);
 
+// Re-runs loadPreview on the given track. Caller must ensure the
+// viewport's GL context is current before invoking. Returns true if
+// the preview decoded successfully.
+bool reloadTrackPreview(int trackIdx);
+
 }  // namespace jefe::qt
 
 #endif
