@@ -18,6 +18,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace {
 constexpr int kMaxFrameNumber = 9'999'999;
 }
@@ -232,9 +234,10 @@ void TrackStrip_Qt::onBrowse() {
 
 void TrackStrip_Qt::onFromChanged(int v) {
     if (refreshing_) return;
-    if (v > to_->value()) {
+    if (v >= to_->value()) {
         refreshing_ = true;
-        from_->setValue(to_->value());
+        const int clamped = std::max(0, to_->value() - 1);
+        from_->setValue(clamped);
         refreshing_ = false;
         return;
     }
@@ -244,9 +247,9 @@ void TrackStrip_Qt::onFromChanged(int v) {
 
 void TrackStrip_Qt::onToChanged(int v) {
     if (refreshing_) return;
-    if (v < from_->value()) {
+    if (v <= from_->value()) {
         refreshing_ = true;
-        to_->setValue(from_->value());
+        to_->setValue(from_->value() + 1);
         refreshing_ = false;
         return;
     }
@@ -281,6 +284,9 @@ void TrackStrip_Qt::onCropToggled(bool on) {
 void TrackStrip_Qt::onReload() {
     if (refreshing_) return;
     pushRecentPath(filename_->text());
+    // Drive the re-decode directly so the Reload button doesn't depend
+    // on the dialog routing trackEdited through reloadTrackPreview.
+    jefe::qt::reloadTrackPreview(trackIdx_);
     emit trackEdited(trackIdx_);
 }
 
