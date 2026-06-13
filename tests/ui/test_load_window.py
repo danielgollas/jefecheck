@@ -114,3 +114,12 @@ def test_load_window_bad_filename_marks_error(app):
     assert "not found" in (header.get_attribute("value") or "").lower()
     est = app.by_object_name(locators.LOAD_ESTIMATES_FMT.format(idx=1))
     assert (est.get_attribute("value") or "").strip() == "–"
+
+
+def test_default_decode_filter_affects_scaled_preview(visual_app, multiview_sequence):
+    """Changing the Default decode filter pref changes scaled-load output.
+
+    Wired against the existing visual-diff framework but the baseline
+    PNG can't be hallucinated — capture on first manual run.
+    """
+    pytest.skip("requires baseline image; capture on first manual run")
