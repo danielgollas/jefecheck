@@ -365,6 +365,14 @@ bool loadFileIntoPlate(const std::string& path,
 void panPlate(int plateIdx, float dx, float dy);
 void zoomPlate(int plateIdx, float zoomDelta);
 
+// Drive every plate's showPreview flag from a single writer. Used by
+// GlViewport_Qt::setLoadWindowOpen — while the Load Sequence Manager
+// is open every plate renders its track's previewFrame; closing the
+// dialog flips them all back. Routed through the bridge so the
+// viewport TU doesn't have to pull gfcplatemanager.h (which drags
+// glad into Qt headers). Calls plateManager.setChanged().
+void setAllPlatesShowPreview(bool showPreview);
+
 // Hit-test for the plate under viewport pixel (x, y). y is top-down
 // in Qt's coord system. Falls back to 0 in single-plate mode.
 int plateAtViewportPos(int x, int y, int viewportW, int viewportH);

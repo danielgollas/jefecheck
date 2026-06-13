@@ -821,6 +821,13 @@ void zoomPlate(int plateIdx, float zoomDelta) {
     plateManager.setChanged();
 }
 
+void setAllPlatesShowPreview(bool showPreview) {
+    for (int i = 0; i < 4; ++i) {
+        plateManager.setPlateShowPreview(i, showPreview);
+    }
+    plateManager.setChanged();
+}
+
 int plateAtViewportPos(int x, int y, int viewportW, int viewportH) {
     return plateManager.getPlateAtPosition(x, y, viewportW, viewportH);
 }

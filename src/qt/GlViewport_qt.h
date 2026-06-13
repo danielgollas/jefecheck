@@ -31,6 +31,12 @@ public:
     void setListener(jefe::ui::IGLViewportListener* listener) override;
     void setCursorVisible(bool visible) override;
 
+    // Toggled by MainWindow_Qt when the Load Sequence Manager opens/closes.
+    // While true, every plate renders its track's previewFrame
+    // (deterministic, no per-track "was-touched" state).
+    void setLoadWindowOpen(bool open);
+    bool isLoadWindowOpen() const { return loadWindowOpen_; }
+
 signals:
     // Legacy single-arg signal — kept so any existing connections that
     // don't care about scale (e.g. future logging hooks) still work.
@@ -84,6 +90,8 @@ private:
     // motion sticks to whichever plate the press landed on, even if
     // the cursor wanders into a neighboring quadrant mid-drag.
     int dragPlate_ = -1;
+
+    bool loadWindowOpen_ = false;
 };
 
 #endif

@@ -64,6 +64,17 @@ void GlViewport_Qt::setCursorVisible(bool visible) {
     setCursor(visible ? Qt::ArrowCursor : Qt::BlankCursor);
 }
 
+void GlViewport_Qt::setLoadWindowOpen(bool open) {
+    if (loadWindowOpen_ == open) return;
+    loadWindowOpen_ = open;
+
+    // Drive every plate's showPreview deterministically from the flag.
+    // Routed through the bridge so this TU doesn't have to pull
+    // gfcplatemanager.h (glad transitivity vs QOpenGLWidget).
+    jefe::qt::setAllPlatesShowPreview(open);
+    update();
+}
+
 void GlViewport_Qt::initializeGL() {
     if (!gladLoaded_) {
         gladLoaded_ = jefecheck_loadGladGL();
