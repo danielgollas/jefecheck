@@ -1125,4 +1125,18 @@ void unloadAndClearTrack(int trackIdx) {
     plateManager.setChanged();
 }
 
+int startLoadingAllTracks() {
+    int started = 0;
+    for (int i = 0; i < 4; ++i) {
+        auto* seq = trackManager.getSequence(i);
+        if (!seq || !seq->myGUI) continue;
+        if (seq->myGUI->getFilename().empty()) continue;
+        trackManager.stopLoadingSequence(i);
+        seq->stopLoading();
+        trackManager.startLoadingSequence(i);
+        ++started;
+    }
+    return started;
+}
+
 }  // namespace jefe::qt

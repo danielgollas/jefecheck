@@ -456,6 +456,10 @@ bool reloadTrackPreview(int trackIdx);
 // resets GUI defaults.
 void unloadAndClearTrack(int trackIdx);
 
+// For each track with a non-empty filename, abort any in-flight load
+// and (re)start a full sequence load. Returns the number started.
+int startLoadingAllTracks();
+
 }  // namespace jefe::qt
 
 #endif
