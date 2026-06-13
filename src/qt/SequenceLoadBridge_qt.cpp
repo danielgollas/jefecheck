@@ -797,6 +797,14 @@ void setAllPlatesShowPreview(bool showPreview) {
     for (int i = 0; i < 4; ++i) {
         plateManager.setPlateShowPreview(i, showPreview);
     }
+    // setPlateShowPreview only writes to the Qt GUI side. gfcPlate::showPreview
+    // (and the other plate fields — gamma, exposure, BCS, LUT) are mirrored
+    // from the GUI by updateValueFromGUI. Without this propagation, the
+    // dialog's flag flip never reaches the plate, the previewFrame never
+    // renders, and after Load All the plate keeps stale color state (the
+    // "gray until Shift-R" symptom). The fast-path loadFileIntoPlate already
+    // calls this same accessor for the same reason.
+    plateManager.updateAllFromGUI();
     plateManager.setChanged();
 }
 
