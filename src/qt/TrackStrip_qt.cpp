@@ -421,10 +421,12 @@ void TrackStrip_Qt::applyElidedFilenameText() {
     QSignalBlocker b(filename_);
     filename_->setText(elided);
     filename_->setCursorPosition(0);
-    // Middle-elision usually shifts the digit-range columns (and may
-    // chew up the digits themselves), so suppress the overlay while
-    // elided. FocusIn restores both the literal text and the highlight.
-    filename_->clearHighlight();
+    // Don't clearHighlight() here — leave the cached digit-range alone.
+    // PathHighlightLineEdit::paintEvent's bounds check skips painting
+    // whenever the cached range exceeds the visible string length,
+    // which it usually does for middle-elided text. Keeping the cache
+    // means FocusIn (which restores the literal text) re-paints the
+    // highlight without needing to re-resolve the range.
 }
 
 void TrackStrip_Qt::rebuildRecentMenu() {

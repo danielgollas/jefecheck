@@ -20,8 +20,13 @@ void PathHighlightLineEdit_Qt::paintEvent(QPaintEvent* e) {
     QLineEdit::paintEvent(e);
 
     if (highlightLength_ <= 0 || highlightStart_ < 0) return;
-    // Suppress while editing so cursor / selection drive the visuals.
-    if (hasFocus()) return;
+    // We only draw the highlight when the full literal text is showing —
+    // the elide path swaps to a middle-elided string whose character
+    // indices don't map back to our cached digit-range. The bounds
+    // check below catches the elided case (elided text is shorter than
+    // the literal, so the cached digit range may exceed it). Focus
+    // state is irrelevant: the user sees the highlight precisely when
+    // they're looking at the literal filename.
     const QString full = text();
     if (highlightStart_ + highlightLength_ > full.length()) return;
 
