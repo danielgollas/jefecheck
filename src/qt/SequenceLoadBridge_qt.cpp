@@ -1117,4 +1117,12 @@ bool reloadTrackPreview(int trackIdx) {
     return !loaded.empty();
 }
 
+void unloadAndClearTrack(int trackIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return;
+    trackManager.stopLoadingSequence(trackIdx);
+    seq->unloadAndClear();
+    plateManager.setChanged();
+}
+
 }  // namespace jefe::qt

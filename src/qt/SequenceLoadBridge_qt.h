@@ -452,6 +452,10 @@ TrackEstimates getTrackEstimates(int trackIdx);
 // the preview decoded successfully.
 bool reloadTrackPreview(int trackIdx);
 
+// Aborts any in-flight load, clears loaded frames, drops preview,
+// resets GUI defaults.
+void unloadAndClearTrack(int trackIdx);
+
 }  // namespace jefe::qt
 
 #endif
