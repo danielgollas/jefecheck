@@ -1778,7 +1778,7 @@ gfcFrame gfcSequence::getPreviewFrame() {
 }
 
 double gfcSequence::getPreviewElapsedSecs() const {
-	return const_cast<gfcTimer&>(previewTimer).getElapsedSecs();
+	return previewTimer.getElapsedSecs();
 }
 
 /**

@@ -1163,7 +1163,21 @@ void setTrackCompression(int trackIdx, int compEnum) {
 
 void setTrackChannel(int trackIdx, int channelIdx) {
     auto* seq = trackManager.getSequence(trackIdx);
-    if (seq && seq->myGUI) seq->myGUI->setChannel(channelIdx);
+    if (!seq || !seq->myGUI) return;
+    seq->myGUI->setChannel(channelIdx);
+    // The OIIO loader picks the EXR layer from params.channelName
+    // (resolved via myGUI->getChannelName() in getLoadParamsFromGUI),
+    // not the int index. Mirror the per-plate setLayerOnPlate path:
+    // resolve idx → name through the Qt GUI's channel-options cache
+    // and write that too. Without this, switching channels through
+    // the Load Window int-only setter leaves channelName stale and
+    // the loader re-decodes the previously-selected layer.
+    if (auto* gui = dynamic_cast<gfcSequenceGUI_Qt*>(seq->myGUI)) {
+        const auto& opts = gui->getChannelOptions();
+        if (channelIdx >= 0 && channelIdx < (int)opts.size()) {
+            seq->myGUI->setChannel(opts[channelIdx]);
+        }
+    }
 }
 
 void setTrackCrop(int trackIdx, bool on) {

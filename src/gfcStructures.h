@@ -216,6 +216,10 @@ public:
 	void reset(); //stops and restarts
 	long getElapsed(bool update=false);
 	double getElapsedSecs(bool update=false);
+	// Const overload — read the last sampled value without calling
+	// update(). Lets const methods (e.g. gfcSequence::getPreviewElapsedSecs)
+	// query the timer without resorting to const_cast.
+	double getElapsedSecs() const { return (double)elapsed/1000.0; }
 	std::string name;
 }; 
 
