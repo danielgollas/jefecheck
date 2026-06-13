@@ -460,6 +460,36 @@ void unloadAndClearTrack(int trackIdx);
 // and (re)start a full sequence load. Returns the number started.
 int startLoadingAllTracks();
 
+// Per-track parameter snapshot for the Qt Load Window. Mirrors the
+// FLTK loadWindow's per-track widget state without dragging
+// gfcSequenceGUI/gfcSequence into Qt translation units. `channel-
+// Options` is populated only when the underlying GUI is a
+// gfcSequenceGUI_Qt (the channel/layer list the OIIO loader
+// discovered on the last preview); `filenameGeneric` is the
+// numbered-sequence pattern (e.g. /path/foo.####.dpx) the loader
+// derived from the source path.
+struct TrackParams {
+    std::string filename;
+    int from              = 1;
+    int to                = 1;
+    int scalePct          = 100;
+    int compression       = 0;
+    int channel           = 0;
+    bool crop             = false;
+    std::vector<std::string> channelOptions;
+    std::string filenameGeneric;
+};
+
+TrackParams getTrackParams(int trackIdx);
+
+void setTrackFilename(int trackIdx, const std::string& path);
+void setTrackFrom(int trackIdx, int v);
+void setTrackTo(int trackIdx, int v);
+void setTrackScalePct(int trackIdx, int pct);  // 100 / 50 / 25
+void setTrackCompression(int trackIdx, int compEnum);
+void setTrackChannel(int trackIdx, int channelIdx);
+void setTrackCrop(int trackIdx, bool on);
+
 }  // namespace jefe::qt
 
 #endif

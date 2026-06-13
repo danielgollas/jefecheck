@@ -1139,4 +1139,60 @@ int startLoadingAllTracks() {
     return started;
 }
 
+TrackParams getTrackParams(int trackIdx) {
+    TrackParams p;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return p;
+    p.filename        = seq->myGUI->getFilename();
+    p.from            = seq->myGUI->getFrom();
+    p.to              = seq->myGUI->getTo();
+    p.scalePct        = (int)(seq->myGUI->getScale() + 0.5f);
+    p.compression     = seq->myGUI->getCompression();
+    p.channel         = seq->myGUI->getChannel();
+    p.crop            = seq->myGUI->getCrop() != 0;
+    p.filenameGeneric = seq->filenameGeneric;
+    if (auto* gui = dynamic_cast<gfcSequenceGUI_Qt*>(seq->myGUI)) {
+        p.channelOptions = gui->getChannelOptions();
+    }
+    return p;
+}
+
+void setTrackFilename(int trackIdx, const std::string& path) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setFilename(path);
+}
+
+void setTrackFrom(int trackIdx, int v) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setFromFrame(v);
+}
+
+void setTrackTo(int trackIdx, int v) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setToFrame(v);
+}
+
+void setTrackScalePct(int trackIdx, int pct) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return;
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "%d", pct);
+    seq->myGUI->setScale(buf);
+}
+
+void setTrackCompression(int trackIdx, int compEnum) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setCompression(compEnum);
+}
+
+void setTrackChannel(int trackIdx, int channelIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setChannel(channelIdx);
+}
+
+void setTrackCrop(int trackIdx, bool on) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setCrop(on ? 1 : 0);
+}
+
 }  // namespace jefe::qt
