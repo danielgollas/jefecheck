@@ -807,6 +807,12 @@ void MainWindow_Qt::onFileDropped(const QString& path, float scale) {
 }
 
 void MainWindow_Qt::openLoadWindow() {
+    // Use show() (not exec()) — the dialog is setModal(true) for
+    // application-modal behavior, but exec() would block this slot
+    // and prevent onLoadWindowDropForwarded from delivering drops
+    // that arrive while the dialog is up. show() keeps the main
+    // event loop pumping, which the drop-forwarding signal/slot
+    // chain depends on.
     if (!loadWindowDialog_) {
         loadWindowDialog_ = new LoadWindowDialog_Qt(viewport_, this);
         connect(viewport_, &GlViewport_Qt::fileDroppedWhileLoadWindowOpen,

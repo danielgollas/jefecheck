@@ -39,7 +39,7 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
     row->addWidget(loadAll_);
     outer->addLayout(row);
 
-    connect(loadAll_, &QPushButton::clicked, this, &LoadWindowDialog_Qt::onLoadAll);
+    connect(loadAll_, &QPushButton::clicked, this, &LoadWindowDialog_Qt::accept);
 
     resize(900, 500);
 }
@@ -78,10 +78,6 @@ void LoadWindowDialog_Qt::onTrackEdited(int trackIdx) {
         }
     }
     if (viewport_) viewport_->update();
-}
-
-void LoadWindowDialog_Qt::onLoadAll() {
-    accept();
 }
 
 void LoadWindowDialog_Qt::setTrackFilename(int plateIdx, const QString& path) {

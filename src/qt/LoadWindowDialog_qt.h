@@ -22,7 +22,6 @@ protected:
 
 private slots:
     void onTrackEdited(int trackIdx);
-    void onLoadAll();
 
 private:
     GlViewport_Qt* viewport_ = nullptr;
