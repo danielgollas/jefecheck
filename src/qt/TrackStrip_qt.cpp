@@ -31,6 +31,17 @@ constexpr int kMaxFrameNumber = 9'999'999;
 TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     : QWidget(parent), trackIdx_(trackIdx) {
     setObjectName(QString("dialog.loadwindow.strip.%1").arg(trackIdx_));
+    // Panel-style background + 1px border so adjacent strips don't
+    // bleed into each other when FlowLayout stacks them vertically.
+    // The selector pins the rule to the strip itself; children inherit
+    // palette colors from the surrounding theme, not this stylesheet.
+    setAttribute(Qt::WA_StyledBackground, true);
+    setStyleSheet(
+        "TrackStrip_Qt { "
+        "  background-color: palette(base); "
+        "  border: 1px solid palette(mid); "
+        "  border-radius: 4px; "
+        "}");
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(8, 4, 8, 4);
