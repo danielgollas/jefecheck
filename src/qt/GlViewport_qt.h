@@ -55,6 +55,11 @@ signals:
     // spinboxes so the user can read back the values they just edited.
     void plateStateChanged();
 
+    // Emitted only when the Load Sequence Manager is open. plateIdx is
+    // the plate the drop is targeting (today: always 0; future PR will
+    // route to plate-under-cursor). path is the local file path.
+    void fileDroppedWhileLoadWindowOpen(int plateIdx, const QString& path);
+
 protected:
     // QOpenGLWidget hooks
     void initializeGL() override;
