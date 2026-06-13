@@ -71,10 +71,15 @@ void LoadWindowDialog_Qt::accept() {
 void LoadWindowDialog_Qt::onTrackEdited(int trackIdx) {
     const bool ok = jefe::qt::reloadTrackPreview(trackIdx);
     if (trackIdx >= 0 && trackIdx < 4 && strips_[trackIdx]) {
-        if (ok) {
-            strips_[trackIdx]->refreshFromGUI();
-        } else {
+        // Always pull widget state back from the GUI — findSequenceFiles
+        // writes the discovered from/to bounds via setFromToBounds even
+        // when the preview pixel decode itself failed. Skipping the
+        // refresh on !ok was the reason the spinners stayed at (1,1)
+        // and Load All only got a single frame.
+        strips_[trackIdx]->refreshFromGUI();
+        if (!ok) {
             // Distinguish "empty filename" (no error) from "preview failed".
+            // refreshFromGUI just reset the header; re-paint it red.
             const auto p = jefe::qt::getTrackParams(trackIdx);
             if (!p.filename.empty()) {
                 strips_[trackIdx]->markError("File not found");
