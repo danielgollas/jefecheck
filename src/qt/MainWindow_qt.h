@@ -51,6 +51,8 @@ protected:
 
 private slots:
     void onFileDropped(const QString& path, float scale);
+    void openLoadWindow();
+    void onLoadWindowDropForwarded(int plateIdx, const QString& path);
 
 private:
     void buildMenuBar();
@@ -60,6 +62,8 @@ private:
 
     void startAutoload();
     void autoloadStep();
+
+    class LoadWindowDialog_Qt* loadWindowDialog_ = nullptr;
 
     GlViewport_Qt* viewport_ = nullptr;
     QDockWidget* plateDock_ = nullptr;
