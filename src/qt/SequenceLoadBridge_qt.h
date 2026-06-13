@@ -26,6 +26,15 @@ void initializeRenderingChain();
 int  getDefaultTextureFormat();
 void setDefaultTextureFormat(int format);
 
+// Default decode-filter ID used by the OIIO loader's resize path
+// (gfcImageLoaderOIIO routes params.filterType into ImageBufAlgo::resize).
+// Mirrors gfcSettings::defaultDecodeFilter — exposed via the bridge so
+// MainWindow_qt.cpp can restore from QSettings without including
+// gfcStructures.h (which drags glad). Values are UIConstants.h FILTER*_ID
+// enum entries.
+int  getDefaultDecodeFilter();
+void setDefaultDecodeFilter(int filterId);
+
 // Walks the install-time LUT path (sett.lutPath, falling back to
 // <Resources>/FX/, then ./FX/) and loads every .lut/.cube/.cub/.tga
 // via lutManager. Each load may call glGenTextures, so the caller

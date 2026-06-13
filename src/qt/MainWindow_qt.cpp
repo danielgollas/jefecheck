@@ -95,6 +95,18 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         jefe::qt::setDefaultTextureFormat(
             depthCombo_->currentData().toInt());
     }
+    // Restore the OIIO loader's decode filter alongside defaultTextureFormat.
+    // The Preferences → Engine combo writes here too; mirroring the restore
+    // keeps the field consistent across launches and persists the user's
+    // last selection without round-tripping through the FLTK XML. Routed
+    // through SequenceLoadBridge so this TU can stay glad-free (same reason
+    // defaultTextureFormat goes through the bridge above).
+    {
+        QSettings settings;
+        jefe::qt::setDefaultDecodeFilter(
+            settings.value("Engine/defaultDecodeFilter",
+                           FILTERLANCZOS_ID).toInt());
+    }
     connect(depthCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int) {
         const int v = depthCombo_->currentData().toInt();

@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QSettings>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStandardPaths>
@@ -230,6 +231,29 @@ void PreferencesWindow_Qt::buildEnginePage() {
     connect(pbo, QOverload<int>::of(&QSpinBox::valueChanged),
             page, [](int v) { sett.forcePBO = v; });
     form->addRow("Force PBO mode", pbo);
+
+    // Default decode filter — shared by all tracks via OIIO loader's
+    // Filter2D resize path (see gfcImageLoaderOIIO scale handling).
+    // Persisted under Engine/defaultDecodeFilter; restored at startup by
+    // MainWindow_Qt next to defaultTextureFormat.
+    auto* filterLabel = new QLabel("Default decode filter:", page);
+    auto* filterCombo = new QComboBox(page);
+    filterCombo->setObjectName("prefs.engine.defaultDecodeFilter");
+    filterCombo->setAccessibleName("Default decode filter");
+    filterCombo->addItem("nearest",   FILTERBOX_ID);
+    filterCombo->addItem("triangle",  FILTERTRIANGLE_ID);
+    filterCombo->addItem("mitchell",  FILTERMITCHELL_ID);
+    filterCombo->addItem("lanczos3",  FILTERLANCZOS_ID);
+    int idx = filterCombo->findData(sett.defaultDecodeFilter);
+    if (idx < 0) idx = filterCombo->findData(FILTERLANCZOS_ID);
+    filterCombo->setCurrentIndex(idx);
+    connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [filterCombo](int i) {
+        sett.defaultDecodeFilter = filterCombo->itemData(i).toInt();
+        QSettings s;
+        s.setValue("Engine/defaultDecodeFilter", sett.defaultDecodeFilter);
+    });
+    form->addRow(filterLabel, filterCombo);
 
     addPage("Engine", page);
 }

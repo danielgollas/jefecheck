@@ -44,6 +44,14 @@ void setDefaultTextureFormat(int format) {
     sett.defaultTextureFormat = format;
 }
 
+int getDefaultDecodeFilter() {
+    return sett.defaultDecodeFilter;
+}
+
+void setDefaultDecodeFilter(int filterId) {
+    sett.defaultDecodeFilter = filterId;
+}
+
 void initializeRenderingChain() {
     // FLTK's main.cpp probes GL_ARB_shader_objects + GL_EXT_framebuffer_object
     // and writes these flags. The Qt build skips that probe but uses the

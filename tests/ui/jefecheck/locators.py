@@ -135,6 +135,13 @@ PREFERENCES_SIDEBAR = "preferences.sidebar"
 PREFERENCES_DONE = "preferences.done.button"
 PREFERENCES_CANCEL = "preferences.cancel.button"
 
+# Preferences → Engine panel widgets. PREFS_* prefix mirrors the
+# object-name pattern the PR-introducing-this-feature uses on the
+# widget side ("prefs.engine.<field>") — note the leaf objectName
+# differs from the `preferences.engine.*.combo` convention used by
+# pre-existing Engine widgets.
+PREFS_DEFAULT_DECODE_FILTER = "prefs.engine.defaultDecodeFilter"
+
 
 def plate(plate_id: int, role: str) -> str:
     """Build a per-plate locator: plate(0, 'gamma.spin') -> 'plate.0.gamma.spin'."""
