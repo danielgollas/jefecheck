@@ -13,7 +13,12 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
     : QDialog(parent), viewport_(viewport) {
     setObjectName("dialog.loadwindow");
     setWindowTitle("Load Sequence Manager");
-    setModal(true);
+    // Non-modal — the user needs to interact with the main window while
+    // the dialog is open (change layouts, move docks, read metadata in
+    // the viewport, etc.). The drop-forward signal/slot chain doesn't
+    // require the dialog to be modal; viewport.loadWindowOpen_ is what
+    // gates whether drops route here or into the fast path.
+    setModal(false);
 
     auto* outer = new QVBoxLayout(this);
 
