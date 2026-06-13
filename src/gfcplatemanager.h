@@ -145,6 +145,14 @@ public:
 
 	 void updateAllFromGUI();
 
+	 // Per-plate refresh without touching layout (framingMode) or active-quad
+	 // selection — both of those live on gfcPlateManagerGUI and the Qt build
+	 // drives them via different paths than the plate manager's GUI mirror,
+	 // so updateAllFromGUI clobbers them when called outside the original
+	 // FLTK-era startup flow. Use this from the Qt bridge (load window
+	 // open/close) when you only want to propagate per-plate state changes.
+	 void updatePlatesFromGUI();
+
 	 void updateColorCorrectionsFromGUI();
 	 void updateTransformationsFromGUI();
 

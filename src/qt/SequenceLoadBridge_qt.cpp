@@ -802,9 +802,14 @@ void setAllPlatesShowPreview(bool showPreview) {
     // from the GUI by updateValueFromGUI. Without this propagation, the
     // dialog's flag flip never reaches the plate, the previewFrame never
     // renders, and after Load All the plate keeps stale color state (the
-    // "gray until Shift-R" symptom). The fast-path loadFileIntoPlate already
-    // calls this same accessor for the same reason.
-    plateManager.updateAllFromGUI();
+    // "gray until Shift-R" symptom).
+    //
+    // We use updatePlatesFromGUI rather than updateAllFromGUI here because
+    // the latter also resets the layout (framingMode) and active quad from
+    // the plate-manager-GUI's stale fields — the Qt build drives those via
+    // separate paths (Cmd+1/2/3/4 shortcuts; plate-card clicks) that don't
+    // round-trip through the plate-manager GUI.
+    plateManager.updatePlatesFromGUI();
     plateManager.setChanged();
 }
 
