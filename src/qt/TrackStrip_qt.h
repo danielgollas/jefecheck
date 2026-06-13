@@ -1,0 +1,55 @@
+#pragma once
+
+#include <QWidget>
+#include <QString>
+
+class QLineEdit;
+class QPushButton;
+class QSpinBox;
+class QComboBox;
+class QCheckBox;
+class QLabel;
+class QToolButton;
+
+class TrackStrip_Qt : public QWidget {
+    Q_OBJECT
+public:
+    explicit TrackStrip_Qt(int trackIdx, QWidget* parent = nullptr);
+
+    // Snap widget state to current per-track state via the bridge.
+    // Called by LoadWindowDialog_Qt when the modal opens and after
+    // every preview re-decode.
+    void refreshFromGUI();
+
+    // Refresh the header label and estimates label only (cheaper than
+    // refreshFromGUI when widget state hasn't moved).
+    void refreshDerivedLabels();
+
+    // Flip header label to a red error state with the given reason.
+    void markError(const QString& reason);
+
+    // Called by the dialog when a drop while modal-open targets this strip.
+    void setFilenameFromDrop(const QString& path);
+
+    int trackIndex() const { return trackIdx_; }
+
+signals:
+    // Emitted on any user-initiated edit. Bridge runs reloadTrackPreview
+    // and the dialog refreshes our header/estimates/channel options.
+    void trackEdited(int trackIdx);
+
+private slots:
+    void onFilenameChanged();
+    void onBrowse();
+    void onFromChanged(int v);
+    void onToChanged(int v);
+
+private:
+    int trackIdx_;
+    bool refreshing_ = false;
+
+    QLineEdit*   filename_  = nullptr;
+    QPushButton* browse_    = nullptr;
+    QSpinBox*    from_      = nullptr;
+    QSpinBox*    to_        = nullptr;
+};
