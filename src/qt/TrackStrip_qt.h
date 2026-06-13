@@ -43,6 +43,9 @@ private slots:
     void onBrowse();
     void onFromChanged(int v);
     void onToChanged(int v);
+    void onScaleChanged(int idx);
+    void onBitDepthChanged(int idx);
+    void onChannelChanged(int idx);
 
 private:
     int trackIdx_;
@@ -52,4 +55,7 @@ private:
     QPushButton* browse_    = nullptr;
     QSpinBox*    from_      = nullptr;
     QSpinBox*    to_        = nullptr;
+    QComboBox*   scale_     = nullptr;
+    QComboBox*   bitDepth_  = nullptr;
+    QComboBox*   channels_  = nullptr;
 };

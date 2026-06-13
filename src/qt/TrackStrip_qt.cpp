@@ -3,6 +3,7 @@
 #include "SequenceLoadBridge_qt.h"
 #include "../UIConstants.h"
 
+#include <QComboBox>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -47,6 +48,32 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     row2->addStretch(1);
     outer->addLayout(row2);
 
+    // Row 3: Scale / Bit Depth / Channels
+    auto* row3 = new QHBoxLayout();
+
+    scale_ = new QComboBox(this);
+    scale_->setObjectName(QString("dialog.loadwindow.strip.%1.scale").arg(trackIdx_));
+    scale_->addItem("100%", 100);
+    scale_->addItem("50%",  50);
+    scale_->addItem("25%",  25);
+    row3->addWidget(new QLabel("Scale:", this));
+    row3->addWidget(scale_);
+
+    bitDepth_ = new QComboBox(this);
+    bitDepth_->setObjectName(QString("dialog.loadwindow.strip.%1.bitdepth").arg(trackIdx_));
+    bitDepth_->addItem("8-bit",   GFC_8BPC);
+    bitDepth_->addItem("16-bit",  GFC_16BPC);
+    bitDepth_->addItem("16-half", GFC_16HALF);
+    row3->addWidget(new QLabel("Bit:", this));
+    row3->addWidget(bitDepth_);
+
+    channels_ = new QComboBox(this);
+    channels_->setObjectName(QString("dialog.loadwindow.strip.%1.channels").arg(trackIdx_));
+    channels_->addItem("(default)");
+    row3->addWidget(new QLabel("Channels:", this));
+    row3->addWidget(channels_, 1);
+    outer->addLayout(row3);
+
     connect(filename_, &QLineEdit::editingFinished,
             this, &TrackStrip_Qt::onFilenameChanged);
     connect(browse_,   &QPushButton::clicked,
@@ -55,6 +82,12 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
             this, &TrackStrip_Qt::onFromChanged);
     connect(to_,   QOverload<int>::of(&QSpinBox::valueChanged),
             this, &TrackStrip_Qt::onToChanged);
+    connect(scale_,    QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TrackStrip_Qt::onScaleChanged);
+    connect(bitDepth_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TrackStrip_Qt::onBitDepthChanged);
+    connect(channels_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TrackStrip_Qt::onChannelChanged);
 }
 
 void TrackStrip_Qt::refreshFromGUI() {
@@ -63,6 +96,28 @@ void TrackStrip_Qt::refreshFromGUI() {
     filename_->setText(QString::fromStdString(p.filename));
     from_->setValue(p.from);
     to_->setValue(p.to);
+
+    {
+        int sIdx = scale_->findData(p.scalePct);
+        if (sIdx < 0) sIdx = scale_->findData(100);
+        scale_->setCurrentIndex(sIdx);
+    }
+    {
+        int bIdx = bitDepth_->findData(p.compression);
+        if (bIdx < 0) bIdx = bitDepth_->findData(GFC_16HALF);
+        bitDepth_->setCurrentIndex(bIdx);
+    }
+    channels_->clear();
+    if (p.channelOptions.empty()) {
+        channels_->addItem("(default)");
+    } else {
+        for (const auto& name : p.channelOptions) {
+            channels_->addItem(QString::fromStdString(name));
+        }
+        int chIdx = p.channel;
+        if (chIdx < 0 || chIdx >= channels_->count()) chIdx = 0;
+        channels_->setCurrentIndex(chIdx);
+    }
     refreshing_ = false;
 }
 
@@ -117,5 +172,23 @@ void TrackStrip_Qt::onToChanged(int v) {
         return;
     }
     jefe::qt::setTrackTo(trackIdx_, v);
+    emit trackEdited(trackIdx_);
+}
+
+void TrackStrip_Qt::onScaleChanged(int idx) {
+    if (refreshing_) return;
+    jefe::qt::setTrackScalePct(trackIdx_, scale_->itemData(idx).toInt());
+    emit trackEdited(trackIdx_);
+}
+
+void TrackStrip_Qt::onBitDepthChanged(int idx) {
+    if (refreshing_) return;
+    jefe::qt::setTrackCompression(trackIdx_, bitDepth_->itemData(idx).toInt());
+    emit trackEdited(trackIdx_);
+}
+
+void TrackStrip_Qt::onChannelChanged(int idx) {
+    if (refreshing_) return;
+    jefe::qt::setTrackChannel(trackIdx_, idx);
     emit trackEdited(trackIdx_);
 }
