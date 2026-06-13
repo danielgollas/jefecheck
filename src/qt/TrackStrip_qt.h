@@ -1,7 +1,8 @@
 #pragma once
 
-#include <QWidget>
+#include <QStringList>
 #include <QString>
+#include <QWidget>
 
 class QLineEdit;
 class QPushButton;
@@ -46,8 +47,16 @@ private slots:
     void onScaleChanged(int idx);
     void onBitDepthChanged(int idx);
     void onChannelChanged(int idx);
+    void onCropToggled(bool on);
+    void onReload();
+    void onUnload();
+    void onRecentSelected(const QString& path);
 
 private:
+    void pushRecentPath(const QString& path);
+    QStringList loadRecentPaths() const;
+    void rebuildRecentMenu();
+
     int trackIdx_;
     bool refreshing_ = false;
 
@@ -58,4 +67,8 @@ private:
     QComboBox*   scale_     = nullptr;
     QComboBox*   bitDepth_  = nullptr;
     QComboBox*   channels_  = nullptr;
+    QCheckBox*   crop_      = nullptr;
+    QPushButton* reload_    = nullptr;
+    QPushButton* unload_    = nullptr;
+    QToolButton* recent_    = nullptr;
 };

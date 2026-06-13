@@ -3,13 +3,19 @@
 #include "SequenceLoadBridge_qt.h"
 #include "../UIConstants.h"
 
+#include <QAction>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
+#include <QSettings>
 #include <QSpinBox>
+#include <QStringList>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace {
@@ -74,6 +80,31 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     row3->addWidget(channels_, 1);
     outer->addLayout(row3);
 
+    // Row 4: Crop / Reload / Unload / Recent
+    auto* row4 = new QHBoxLayout();
+
+    crop_ = new QCheckBox("Crop", this);
+    crop_->setObjectName(QString("dialog.loadwindow.strip.%1.crop").arg(trackIdx_));
+    row4->addWidget(crop_);
+
+    reload_ = new QPushButton("Reload", this);
+    reload_->setObjectName(QString("dialog.loadwindow.strip.%1.reload").arg(trackIdx_));
+    row4->addWidget(reload_);
+
+    unload_ = new QPushButton("Unload && Clear", this);
+    unload_->setObjectName(QString("dialog.loadwindow.strip.%1.unload").arg(trackIdx_));
+    row4->addWidget(unload_);
+
+    recent_ = new QToolButton(this);
+    recent_->setObjectName(QString("dialog.loadwindow.strip.%1.recent").arg(trackIdx_));
+    recent_->setText("Recent ▾");
+    recent_->setPopupMode(QToolButton::InstantPopup);
+    recent_->setMenu(new QMenu(this));
+    row4->addWidget(recent_);
+
+    row4->addStretch(1);
+    outer->addLayout(row4);
+
     connect(filename_, &QLineEdit::editingFinished,
             this, &TrackStrip_Qt::onFilenameChanged);
     connect(browse_,   &QPushButton::clicked,
@@ -88,6 +119,11 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
             this, &TrackStrip_Qt::onBitDepthChanged);
     connect(channels_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &TrackStrip_Qt::onChannelChanged);
+    connect(crop_,   &QCheckBox::toggled,    this, &TrackStrip_Qt::onCropToggled);
+    connect(reload_, &QPushButton::clicked,  this, &TrackStrip_Qt::onReload);
+    connect(unload_, &QPushButton::clicked,  this, &TrackStrip_Qt::onUnload);
+
+    rebuildRecentMenu();
 }
 
 void TrackStrip_Qt::refreshFromGUI() {
@@ -118,6 +154,7 @@ void TrackStrip_Qt::refreshFromGUI() {
         if (chIdx < 0 || chIdx >= channels_->count()) chIdx = 0;
         channels_->setCurrentIndex(chIdx);
     }
+    crop_->setChecked(p.crop);
     refreshing_ = false;
 }
 
@@ -137,6 +174,7 @@ void TrackStrip_Qt::setFilenameFromDrop(const QString& path) {
 void TrackStrip_Qt::onFilenameChanged() {
     if (refreshing_) return;
     jefe::qt::setTrackFilename(trackIdx_, filename_->text().toStdString());
+    pushRecentPath(filename_->text());
     emit trackEdited(trackIdx_);
 }
 
@@ -191,4 +229,59 @@ void TrackStrip_Qt::onChannelChanged(int idx) {
     if (refreshing_) return;
     jefe::qt::setTrackChannel(trackIdx_, idx);
     emit trackEdited(trackIdx_);
+}
+
+void TrackStrip_Qt::onCropToggled(bool on) {
+    if (refreshing_) return;
+    jefe::qt::setTrackCrop(trackIdx_, on);
+    emit trackEdited(trackIdx_);
+}
+
+void TrackStrip_Qt::onReload() {
+    if (refreshing_) return;
+    pushRecentPath(filename_->text());
+    emit trackEdited(trackIdx_);
+}
+
+void TrackStrip_Qt::onUnload() {
+    jefe::qt::unloadAndClearTrack(trackIdx_);
+    refreshFromGUI();
+    emit trackEdited(trackIdx_);
+}
+
+void TrackStrip_Qt::onRecentSelected(const QString& path) {
+    filename_->setText(path);
+    onFilenameChanged();
+}
+
+void TrackStrip_Qt::pushRecentPath(const QString& path) {
+    if (path.isEmpty()) return;
+    QStringList recents = loadRecentPaths();
+    recents.removeAll(path);
+    recents.prepend(path);
+    while (recents.size() > 10) recents.removeLast();
+    QSettings s;
+    s.setValue(QString("loadwindow/recent/%1").arg(trackIdx_), recents);
+    rebuildRecentMenu();
+}
+
+QStringList TrackStrip_Qt::loadRecentPaths() const {
+    QSettings s;
+    return s.value(QString("loadwindow/recent/%1").arg(trackIdx_)).toStringList();
+}
+
+void TrackStrip_Qt::rebuildRecentMenu() {
+    auto* menu = recent_->menu();
+    menu->clear();
+    const QStringList recents = loadRecentPaths();
+    if (recents.isEmpty()) {
+        menu->addAction("(no recent files)")->setEnabled(false);
+        return;
+    }
+    for (const QString& path : recents) {
+        QAction* a = menu->addAction(path);
+        connect(a, &QAction::triggered, this, [this, path]() {
+            onRecentSelected(path);
+        });
+    }
 }
