@@ -6,13 +6,17 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QEvent>
 #include <QFileDialog>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStringList>
 #include <QToolButton>
@@ -32,7 +36,7 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 
     header_ = new QLabel(this);
     header_->setObjectName(QString("dialog.loadwindow.strip.%1.header").arg(trackIdx_));
-    header_->setText(QString("Track %1:").arg(QChar('A' + trackIdx_)));
+    header_->setText(QString("Track %1").arg(QChar('A' + trackIdx_)));
     QFont hf = header_->font();
     hf.setBold(true);
     header_->setFont(hf);
@@ -42,6 +46,11 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     auto* row1 = new QHBoxLayout();
     filename_ = new QLineEdit(this);
     filename_->setObjectName(QString("dialog.loadwindow.strip.%1.filename").arg(trackIdx_));
+    // Don't let the line edit grow to fit a long path — we elide and
+    // keep the strip width stable. Any positive width works; the layout
+    // gives it the available row stretch via row1->addWidget(..., 1).
+    filename_->setMinimumWidth(80);
+    filename_->installEventFilter(this);
     browse_ = new QPushButton("Browse…", this);
     browse_->setObjectName(QString("dialog.loadwindow.strip.%1.browse").arg(trackIdx_));
     row1->addWidget(filename_, /*stretch=*/1);
@@ -143,7 +152,13 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 void TrackStrip_Qt::refreshFromGUI() {
     refreshing_ = true;
     const auto p = jefe::qt::getTrackParams(trackIdx_);
-    filename_->setText(QString::fromStdString(p.filename));
+    // Display the generic seq pattern (foo.####.exr) when the loader
+    // discovered one; fall back to the literal filename otherwise.
+    // The bridge still stores whatever the user typed under the hood.
+    displayPath_ = QString::fromStdString(
+        p.filenameGeneric.empty() ? p.filename : p.filenameGeneric);
+    filename_->setText(displayPath_);
+    applyElidedFilenameText();
     from_->setValue(p.from);
     to_->setValue(p.to);
 
@@ -174,13 +189,9 @@ void TrackStrip_Qt::refreshFromGUI() {
 }
 
 void TrackStrip_Qt::refreshDerivedLabels() {
-    const auto p = jefe::qt::getTrackParams(trackIdx_);
-    QString generic = QString::fromStdString(p.filenameGeneric);
-    if (generic.isEmpty()) {
-        header_->setText(QString("Track %1:").arg(QChar('A' + trackIdx_)));
-    } else {
-        header_->setText(QString("Track %1: %2").arg(QChar('A' + trackIdx_)).arg(generic));
-    }
+    // The seq pattern lives in the filename line edit now; the header
+    // is just the track tag. markError repaints this red on demand.
+    header_->setText(QString("Track %1").arg(QChar('A' + trackIdx_)));
     header_->setStyleSheet("");
 
     const auto est = jefe::qt::getTrackEstimates(trackIdx_);
@@ -210,14 +221,30 @@ void TrackStrip_Qt::markError(const QString& reason) {
 }
 
 void TrackStrip_Qt::setFilenameFromDrop(const QString& path) {
+    displayPath_ = path;
     filename_->setText(path);
     onFilenameChanged();
 }
 
 void TrackStrip_Qt::onFilenameChanged() {
     if (refreshing_) return;
-    jefe::qt::setTrackFilename(trackIdx_, filename_->text().toStdString());
-    pushRecentPath(filename_->text());
+    // Capture the un-elided text *before* the user edits get clobbered
+    // by any subsequent re-elision pass; if the line edit currently
+    // holds an elided rendering of displayPath_, prefer that (the
+    // user didn't type anything new).
+    QString typed = filename_->text();
+    if (!displayPath_.isEmpty() && !typed.contains(QChar(0x2026)) &&
+        typed != displayPath_) {
+        // User typed a new value — adopt it as the new full path.
+        displayPath_ = typed;
+    } else if (typed.contains(QChar(0x2026))) {
+        // Stale elision left in the field; ignore it and keep displayPath_.
+        typed = displayPath_;
+    } else {
+        displayPath_ = typed;
+    }
+    jefe::qt::setTrackFilename(trackIdx_, displayPath_.toStdString());
+    pushRecentPath(displayPath_);
     emit trackEdited(trackIdx_);
 }
 
@@ -228,6 +255,7 @@ void TrackStrip_Qt::onBrowse() {
         QString(),
         tr("Images (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp)"));
     if (path.isEmpty()) return;
+    displayPath_ = path;
     filename_->setText(path);
     onFilenameChanged();
 }
@@ -297,6 +325,7 @@ void TrackStrip_Qt::onUnload() {
 }
 
 void TrackStrip_Qt::onRecentSelected(const QString& path) {
+    displayPath_ = path;
     filename_->setText(path);
     onFilenameChanged();
 }
@@ -315,6 +344,35 @@ void TrackStrip_Qt::pushRecentPath(const QString& path) {
 QStringList TrackStrip_Qt::loadRecentPaths() const {
     QSettings s;
     return s.value(QString("loadwindow/recent/%1").arg(trackIdx_)).toStringList();
+}
+
+bool TrackStrip_Qt::eventFilter(QObject* o, QEvent* e) {
+    if (o == filename_) {
+        if (e->type() == QEvent::FocusIn) {
+            // Restore the full path so the user can see/edit it.
+            QSignalBlocker b(filename_);
+            filename_->setText(displayPath_);
+        } else if (e->type() == QEvent::FocusOut) {
+            applyElidedFilenameText();
+        }
+    }
+    return QWidget::eventFilter(o, e);
+}
+
+void TrackStrip_Qt::resizeEvent(QResizeEvent* e) {
+    QWidget::resizeEvent(e);
+    applyElidedFilenameText();
+}
+
+void TrackStrip_Qt::applyElidedFilenameText() {
+    if (!filename_) return;
+    if (filename_->hasFocus()) return;
+    QFontMetrics fm(filename_->font());
+    const int avail = std::max(40, filename_->width() - 20);
+    const QString elided = fm.elidedText(displayPath_, Qt::ElideMiddle, avail);
+    QSignalBlocker b(filename_);
+    filename_->setText(elided);
+    filename_->setCursorPosition(0);
 }
 
 void TrackStrip_Qt::rebuildRecentMenu() {

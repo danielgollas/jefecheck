@@ -39,6 +39,10 @@ signals:
     // and the dialog refreshes our header/estimates/channel options.
     void trackEdited(int trackIdx);
 
+protected:
+    bool eventFilter(QObject* o, QEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
+
 private slots:
     void onFilenameChanged();
     void onBrowse();
@@ -56,9 +60,19 @@ private:
     void pushRecentPath(const QString& path);
     QStringList loadRecentPaths() const;
     void rebuildRecentMenu();
+    // Re-apply Qt::ElideMiddle to filename_ based on its current width.
+    // No-op while the line edit has focus so the user can edit the
+    // untruncated path.
+    void applyElidedFilenameText();
 
     int trackIdx_;
     bool refreshing_ = false;
+
+    // Full (un-elided) path currently displayed by filename_. The
+    // QLineEdit's text() may hold a middle-elided render of this string
+    // when the widget isn't focused; we restore the original on focus
+    // in and re-elide on focus out / resize.
+    QString displayPath_;
 
     QLineEdit*   filename_  = nullptr;
     QPushButton* browse_    = nullptr;
