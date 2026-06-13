@@ -28,6 +28,14 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 
     auto* outer = new QVBoxLayout(this);
 
+    header_ = new QLabel(this);
+    header_->setObjectName(QString("dialog.loadwindow.strip.%1.header").arg(trackIdx_));
+    header_->setText(QString("Track %1:").arg(QChar('A' + trackIdx_)));
+    QFont hf = header_->font();
+    hf.setBold(true);
+    header_->setFont(hf);
+    outer->addWidget(header_);
+
     // Row 1: filename + Browse
     auto* row1 = new QHBoxLayout();
     filename_ = new QLineEdit(this);
@@ -105,6 +113,10 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     row4->addStretch(1);
     outer->addLayout(row4);
 
+    estimates_ = new QLabel("–", this);
+    estimates_->setObjectName(QString("dialog.loadwindow.strip.%1.estimates").arg(trackIdx_));
+    outer->addWidget(estimates_);
+
     connect(filename_, &QLineEdit::editingFinished,
             this, &TrackStrip_Qt::onFilenameChanged);
     connect(browse_,   &QPushButton::clicked,
@@ -155,15 +167,44 @@ void TrackStrip_Qt::refreshFromGUI() {
         channels_->setCurrentIndex(chIdx);
     }
     crop_->setChecked(p.crop);
+    refreshDerivedLabels();
     refreshing_ = false;
 }
 
 void TrackStrip_Qt::refreshDerivedLabels() {
-    // Filled in by Task 14 (header + estimates labels).
+    const auto p = jefe::qt::getTrackParams(trackIdx_);
+    QString generic = QString::fromStdString(p.filenameGeneric);
+    if (generic.isEmpty()) {
+        header_->setText(QString("Track %1:").arg(QChar('A' + trackIdx_)));
+    } else {
+        header_->setText(QString("Track %1: %2").arg(QChar('A' + trackIdx_)).arg(generic));
+    }
+    header_->setStyleSheet("");
+
+    const auto est = jefe::qt::getTrackEstimates(trackIdx_);
+    if (est.frames <= 0) {
+        estimates_->setText("–");
+    } else {
+        double b = (double)est.bytes;
+        const char* unit = "B";
+        if (b > 1024) { b /= 1024; unit = "KB"; }
+        if (b > 1024) { b /= 1024; unit = "MB"; }
+        if (b > 1024) { b /= 1024; unit = "GB"; }
+        estimates_->setText(
+            QString("%1 frames · ≈%2 %3 · ~%4s")
+                .arg(est.frames)
+                .arg(b, 0, 'f', b >= 10 ? 0 : 1)
+                .arg(unit)
+                .arg(est.seconds, 0, 'f', 1));
+    }
 }
 
-void TrackStrip_Qt::markError(const QString& /*reason*/) {
-    // Filled in by Task 14.
+void TrackStrip_Qt::markError(const QString& reason) {
+    header_->setText(QString("Track %1: %2")
+                         .arg(QChar('A' + trackIdx_))
+                         .arg(reason));
+    header_->setStyleSheet("color: #d44; font-weight: bold;");
+    estimates_->setText("–");
 }
 
 void TrackStrip_Qt::setFilenameFromDrop(const QString& path) {

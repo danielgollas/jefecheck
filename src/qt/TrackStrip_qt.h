@@ -71,4 +71,6 @@ private:
     QPushButton* reload_    = nullptr;
     QPushButton* unload_    = nullptr;
     QToolButton* recent_    = nullptr;
+    QLabel*      header_    = nullptr;
+    QLabel*      estimates_ = nullptr;
 };
