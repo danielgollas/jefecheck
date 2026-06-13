@@ -290,6 +290,7 @@ public:
 		feedbackMessageSize=12;
 
 		defaultTextureFormat=GFC_16HALF;
+		defaultDecodeFilter = FILTERLANCZOS_ID;
 
 	}
     int startFullscreen;
@@ -326,6 +327,7 @@ public:
                               // load path. FLTK's per-track Load window writes
                               // straight to gfcSequenceGUI::setCompression and
                               // doesn't read this field.
+    int defaultDecodeFilter; // FILTERBOX_ID / FILTERTRIANGLE_ID / FILTERMITCHELL_ID / FILTERLANCZOS_ID
     int forcePBO;
     int renderingEngine;
     int renderingEngineFlag; //since the renderingEngine can't be changed on the fly, it has to be changed on application start. this flag is copied to the renderingEngine on start, and it is modified when the program starts in the initial settings read.
@@ -385,8 +387,21 @@ public:
 	int autoAcceptRemoteLoadRequests;
 	int remotePointerColor;
 	std::string licensePath;
-	
+
 };
+
+// Maps the FILTER*_ID enum stored in gfcSettings::defaultDecodeFilter
+// to the OIIO filter name string used by ImageBufAlgo::resize KWArgs.
+// Unknown values fall back to "box" (nearest).
+inline const char* oiioFilterNameFor(int filterID) {
+    switch (filterID) {
+        case FILTERBOX_ID:      return "box";       // nearest
+        case FILTERTRIANGLE_ID: return "triangle";  // ≈ bilinear
+        case FILTERMITCHELL_ID: return "mitchell";
+        case FILTERLANCZOS_ID:  return "lanczos3";
+        default:                return "box";
+    }
+}
 
 std::string ftos(float value,int decimals=5);
 
