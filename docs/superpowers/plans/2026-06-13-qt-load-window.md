@@ -12,6 +12,38 @@
 
 ---
 
+## Plan Errata — read before each task
+
+The plan was reviewed against the live `qt-experimental` codebase. The corrections below override anything inconsistent in the task bodies; the bodies have been updated where feasible, but a few cross-cutting items are summarized here so each implementer has a single canonical reference.
+
+1. **House file-naming style is lowercase `_qt.{h,cpp}`.** All new files use `LoadWindowDialog_qt.{h,cpp}`, `TrackStrip_qt.{h,cpp}`, `FlowLayout_qt.{h,cpp}`. **Class names stay PascalCase with `_Qt` suffix** (e.g. `class TrackStrip_Qt`), matching the existing `MainWindow_Qt` / `GlViewport_Qt` convention.
+
+2. **No `CMakeLists.txt` edits.** `CMakeLists.txt` already globs `src/qt/*.cpp` and AUTOMOC is on. New `.cpp` files are picked up after `cmake -B build_qt -DUSE_QT=ON` re-configures the build dir. References to `JEFE_QT_SOURCES` / `JEFE_QT_HEADERS` in the task bodies are wrong — ignore them; just re-configure.
+
+3. **`TrackStrip_qt.cpp` and `LoadWindowDialog_qt.cpp` MUST NOT include `gfcSequence.h`.** Every per-track read/write goes through the `jefe::qt::*` accessors added in Tasks 4 and 7B (`getTrackParams`, `setTrackFilename`, `setTrackFrom`, `setTrackTo`, `setTrackScalePct`, `setTrackCompression`, `setTrackChannel`, `setTrackCrop`, `reloadTrackPreview`, `unloadAndClearTrack`, `getTrackEstimates`, `startLoadingAllTracks`). The bridge cpp is the only Qt TU that knows about `gfcSequence`. Where Task 11's code shows `seq->myGUI->X()` patterns, replace each one with the appropriate bridge call.
+
+4. **`gfcSettings::save`/`load` are empty stubs.** All persistence of the new `defaultDecodeFilter` happens via `QSettings` in Task 3 (Preferences write) and restored in `MainWindow_qt.cpp` at startup. Do not add XML save/load — Task 1 only adds the field + initializer + helper.
+
+5. **OIIO 3.x `ImageBufAlgo::resize` uses KWArgs**, not a positional `Filter2D*`. Task 2 uses `OIIO::ImageBufAlgo::resize(dst, src, {{ "filtername", filterName }})`. Do not call `Filter2D::create_shared`; do not include `OpenImageIO/filter.h`.
+
+6. **`gfcSequence::previewFrame` and `previewTimer` are private.** Tasks 4 and 5 use the public accessors `getPreviewFrame()` (returns by value) and the newly-added `getPreviewElapsedSecs()` (Task 4 Step 1). Task 5's "clear preview" call uses the existing public `clearPreviewFrame()` method.
+
+7. **Bit-depth combo enum values.** Use `GFC_8BPC` for "8-bit" (NOT `GFC_4BPC` — that's the 4-bit packed legacy mode). Drop `GFC_FLOAT32` entirely — it does not exist. Final combo list: 8-bit (`GFC_8BPC`), 16-bit (`GFC_16BPC`), 16-half (`GFC_16HALF`). Add `#include "../UIConstants.h"` to `TrackStrip_qt.cpp` so these constants are visible.
+
+8. **`trackManager.abortLoadingSequence` does not exist.** The real API is `stopLoadingSequence(int)` and `stopLoadingAll()`. The spec's "Aborted in-flight load on track X to start new load" status-bar message is not implemented in this PR — the pre-abort happens silently (Task 7 already calls `stopLoadingSequence` + `seq->stopLoading()` before re-firing, which is correct).
+
+9. **`gfcPlate::showPreview` is downstream of `gfcPlateGUI_Qt::showPreview_`.** Task 8's `setLoadWindowOpen(bool)` writes to the *GUI* via `setPlateShowPreview`; `gfcPlate::updateValueFromGUI` (called per-frame) mirrors that into the plate. Conceptually one writer, mechanically two layers. Task 18's removal of the bridge-side `setPlateShowPreview` writers is what makes Task 8 the sole driver.
+
+10. **Strip-internal `Unload & Clear` requires a viewport repaint.** The strip's `onUnload` calls `jefe::qt::unloadAndClearTrack(idx)` and then emits `trackEdited(idx)`. The dialog's `onTrackEdited` slot already calls `viewport_->update()` — leverage that path. The strip itself doesn't need a direct viewport pointer.
+
+11. **Add `void markError(const QString& reason);` to `TrackStrip_Qt`'s public header section** (Task 14's body uses it; the explicit declaration was missing from Task 14 Step 1).
+
+12. **`LoadWindowDialog_qt.cpp` includes a `QHBoxLayout` for the Load All row** — add `#include <QHBoxLayout>` to the includes block.
+
+13. **Task 20's `test_load_window_drop_while_open` requires a `drop_file_on_viewport` helper that doesn't exist yet.** Mark the test `@pytest.mark.xfail(reason="drop simulation TBD")` so the suite stays green; implementing the helper is a follow-up.
+
+---
+
 ## Setup
 
 - [ ] **Create branch off qt-experimental**
@@ -36,47 +68,55 @@ Expected: clean build of `build_qt/jefecheck.app/Contents/MacOS/jefecheck`.
 
 | Path | Action | Purpose |
 |---|---|---|
-| `src/gfcStructures.h` | Modify | Add `defaultDecodeFilter` to `gfcSettings`. |
-| `src/gfcStructures.cpp` | Modify | Save/load `defaultDecodeFilter` via XML. |
-| `src/gfcimageloaderoiio.cpp` | Modify | Replace `gflResize` with `OIIO::ImageBufAlgo::resize`. |
-| `src/qt/PreferencesWindow_Qt.cpp` | Modify | Add "Default decode filter" combo to Engine panel. |
-| `src/qt/SequenceLoadBridge_qt.h` | Modify | Add `TrackEstimates` struct + 5 accessors. |
-| `src/qt/SequenceLoadBridge_qt.cpp` | Modify | Implement the 5 accessors; remove old showPreview writers. |
+| `src/gfcimageloaderoiio.cpp` | Modify | Replace `gflResize` with `OIIO::ImageBufAlgo::resize` (KWArgs filter form, OIIO 3.x). |
+| `src/qt/PreferencesWindow_qt.cpp` | Modify | Add "Default decode filter" combo to Engine panel; persist via `QSettings`. |
+| `src/qt/MainWindow_qt.cpp` | Modify | Restore `defaultDecodeFilter` from `QSettings` at startup; menu items (Cmd+L, Cmd+O); slots. |
+| `src/qt/MainWindow_qt.h` | Modify | Add `loadWindowDialog_` member + slots. |
+| `src/qt/SequenceLoadBridge_qt.h` | Modify | Add `TrackParams`/`TrackEstimates` structs + per-field setters + accessors. |
+| `src/qt/SequenceLoadBridge_qt.cpp` | Modify | Implement accessors; remove old `setPlateShowPreview` writers. |
 | `src/qt/GlViewport_qt.h` | Modify | Add `setLoadWindowOpen` + `fileDroppedWhileLoadWindowOpen` signal. |
 | `src/qt/GlViewport_qt.cpp` | Modify | Branch `dropEvent` on flag. |
-| `src/qt/MainWindow_qt.h` | Modify | Add `loadWindowDialog_` member + slots. |
-| `src/qt/MainWindow_qt.cpp` | Modify | Menu items (Cmd+L Load Sequence Manager, Cmd+O Quick Load), open slot, drop-forwarding slot. |
-| `src/qt/FlowLayout_Qt.h` | **Create** | Vendored Qt FlowLayout. |
-| `src/qt/FlowLayout_Qt.cpp` | **Create** | Vendored Qt FlowLayout impl. |
-| `src/qt/TrackStrip_Qt.h` | **Create** | One strip per track. |
-| `src/qt/TrackStrip_Qt.cpp` | **Create** | Strip impl + widget-to-`gfcSequenceGUI_Qt` bindings + reentrancy guard. |
-| `src/qt/LoadWindowDialog_Qt.h` | **Create** | The modal dialog. |
-| `src/qt/LoadWindowDialog_Qt.cpp` | **Create** | Dialog impl: 4 strips, Load All, drop accept. |
-| `CMakeLists.txt` | Modify | Add the 6 new files to `JEFE_QT_SOURCES`. |
-| `tests/ui/jefecheck/locators.py` | Modify | Add `LOAD_WINDOW`, `LOAD_*_FMT` constants. |
+| `src/gfcStructures.h` | Modify | Add `oiioFilterNameFor()` helper. (No new `gfcSettings` field — pref is QSettings-persisted.) |
+| `src/gfcSequence.h` | Modify | Tiny: add `double getPreviewElapsedSecs() const` public accessor (used by estimates). |
+| `src/gfcSequence.cpp` | Modify | Implementation of that accessor (one-liner). |
+| `src/qt/FlowLayout_qt.h` | **Create** | Vendored Qt FlowLayout. |
+| `src/qt/FlowLayout_qt.cpp` | **Create** | Vendored Qt FlowLayout impl. |
+| `src/qt/TrackStrip_qt.h` | **Create** | One strip per track; reads/writes through bridge only. |
+| `src/qt/TrackStrip_qt.cpp` | **Create** | Strip impl + bridge-mediated bindings + reentrancy guard. |
+| `src/qt/LoadWindowDialog_qt.h` | **Create** | The modal dialog. |
+| `src/qt/LoadWindowDialog_qt.cpp` | **Create** | Dialog impl: 4 strips, Load All, drop accept. |
+| `tests/ui/jefecheck/locators.py` | Modify | Add `LOAD_WINDOW`, `LOAD_*_FMT`, `PREFS_DEFAULT_DECODE_FILTER` constants. |
 | `tests/ui/test_load_window.py` | **Create** | UI tests for the dialog and lifecycle. |
+
+**CMake note:** `CMakeLists.txt` already uses `file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)` with global `CMAKE_AUTOMOC ON`. New `src/qt/*.cpp` files are picked up automatically on `cmake -B build_qt` re-config — **no CMake edits required** for the new files.
+
+**File-naming convention:** new Qt files use the house-style lowercase `_qt.{h,cpp}` (matching `MainWindow_qt.cpp`, `SequenceLoadBridge_qt.cpp`, etc.).
+
+**TU separation guard:** `src/qt/*` files (other than the bridge cpp itself) must NOT include `gfcSequence.h` or any other glad-pulling header. All sequence/GUI state access from `TrackStrip_qt` and `LoadWindowDialog_qt` goes through `SequenceLoadBridge_qt.h` accessors. Bridge cpp is the only Qt TU that knows about `gfcSequence`.
 
 ---
 
-## Task 1: Add `defaultDecodeFilter` to `gfcSettings`
+## Task 1: Add `defaultDecodeFilter` field + `oiioFilterNameFor` helper
 
 **Files:**
 - Modify: `src/gfcStructures.h`
 - Modify: `src/gfcStructures.cpp`
 
-- [ ] **Step 1: Add the field with FILTER_* enum mapping helper to `gfcStructures.h`**
+> The XML save/load infrastructure for `gfcSettings` is a pair of empty stubs (`saveSettings`/`readSettings` in `gfcStructures.cpp` lines 314 and 379). All current Qt prefs are persisted via `QSettings` from `MainWindow_qt.cpp`. Follow that pattern: field on `gfcSettings`, persistence via `QSettings` from Qt code in Tasks 3 and 16.
 
-Find the existing `gfcSettings` class (`grep -n 'class gfcSettings' src/gfcStructures.h`) and inside the class body add the new field next to the other `int default*` settings:
+- [ ] **Step 1: Add the field and helper to `gfcStructures.h`**
+
+Find the existing `gfcSettings` class (`grep -n 'class gfcSettings' src/gfcStructures.h`) and inside the class body add the new field next to the other `int default*` settings (look for `defaultTextureFormat` as a sibling):
 
 ```cpp
     int defaultDecodeFilter; // FILTERBOX_ID / FILTERTRIANGLE_ID / FILTERMITCHELL_ID / FILTERLANCZOS_ID
 ```
 
-Right after the class definition (or in a free function group near it), add this static helper:
+After the class definition (outside it), add this helper:
 
 ```cpp
 // Maps the FILTER*_ID enum stored in gfcSettings::defaultDecodeFilter
-// to the OIIO::Filter2D::create() filter name string.
+// to the OIIO filter name string used by ImageBufAlgo::resize KWArgs.
 // Unknown values fall back to "box" (nearest).
 inline const char* oiioFilterNameFor(int filterID) {
     switch (filterID) {
@@ -89,41 +129,27 @@ inline const char* oiioFilterNameFor(int filterID) {
 }
 ```
 
-- [ ] **Step 2: Initialize the field in `gfcSettings` constructor**
+- [ ] **Step 2: Initialize the field in the `gfcSettings` constructor**
 
-In `src/gfcStructures.cpp`, find the `gfcSettings::gfcSettings()` constructor (`grep -n '^gfcSettings::gfcSettings' src/gfcStructures.cpp`) and add at the bottom of the body:
-
-```cpp
-    defaultDecodeFilter = FILTERLANCZOS_ID;
-```
-
-- [ ] **Step 3: Save/load via XML**
-
-Find `gfcSettings::save(XMLNode &node)` (`grep -n 'gfcSettings::save' src/gfcStructures.cpp`) and add:
+The constructor body is inline in the class definition in `gfcStructures.h` (the `gfcSettings()` body lives right under `class gfcSettings { public: gfcSettings() { ... }`). Locate the existing `defaultTextureFormat = ...` line in the constructor and add after it:
 
 ```cpp
-    saveSetting("defaultDecodeFilter", defaultDecodeFilter, node);
+        defaultDecodeFilter = FILTERLANCZOS_ID;
 ```
 
-Find `gfcSettings::load(XMLNode &node)` (`grep -n 'gfcSettings::load' src/gfcStructures.cpp`) and add:
-
-```cpp
-    setValueFromNode("defaultDecodeFilter", defaultDecodeFilter, node);
-```
-
-- [ ] **Step 4: Build and verify**
+- [ ] **Step 3: Build and verify**
 
 ```bash
-cmake --build build_qt -j$(sysctl -n hw.ncpu) 2>&1 | tail -20
+cmake --build build_qt -j$(sysctl -n hw.ncpu) 2>&1 | tail -10
 ```
 
-Expected: clean build, no errors mentioning `defaultDecodeFilter`.
+Expected: clean build. No XML save/load changes — persistence happens via `QSettings` in Tasks 3 and 16.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/gfcStructures.h src/gfcStructures.cpp
-git commit -m "settings: add defaultDecodeFilter (FILTERLANCZOS_ID default)"
+git add src/gfcStructures.h
+git commit -m "settings: add defaultDecodeFilter field + oiioFilterNameFor helper"
 ```
 
 ---
@@ -141,8 +167,9 @@ In `src/gfcimageloaderoiio.cpp`, near the other OIIO includes (`grep -n '#includ
 
 ```cpp
 #include <OpenImageIO/imagebufalgo.h>
-#include <OpenImageIO/filter.h>
 ```
+
+(No `filter.h` include needed — we pass the filter name as a string via KWArgs, which is the OIIO 3.x idiom.)
 
 - [ ] **Step 2: Replace the `gflResize` call**
 
@@ -180,13 +207,16 @@ Replace with:
                                 srcSpec.nchannels, srcSpec.format);
         OIIO::ImageBuf dst(dstSpec);
 
-        // Filter2D::create owns nothing the caller frees; pass by shared_ptr.
-        auto filter = OIIO::Filter2D::create_shared(filterName, 4.0f, 4.0f);
-        bool ok = OIIO::ImageBufAlgo::resize(dst, src, filter);
+        // OIIO 3.x KWArgs form — pass the filter name as a string. The
+        // ImageBufAlgo::resize signature is:
+        //   bool resize(ImageBuf& dst, const ImageBuf& src,
+        //               KWArgs options = {}, ROI roi = {}, int nthreads = 0);
+        bool ok = OIIO::ImageBufAlgo::resize(
+            dst, src, {{ "filtername", filterName }});
         if (!ok) {
-            // Fall back to nearest if OIIO refused the filter for any reason.
-            ok = OIIO::ImageBufAlgo::resize(dst, src,
-                    OIIO::Filter2D::create_shared("box", 1.0f, 1.0f));
+            // Fall back to box (nearest) if the filter name was rejected.
+            ok = OIIO::ImageBufAlgo::resize(
+                dst, src, {{ "filtername", "box" }});
         }
 
         if (ok) {
@@ -248,10 +278,11 @@ PR-LAST) actually affects the resampled output."
 
 ---
 
-## Task 3: Preferences "Default decode filter" combo
+## Task 3: Preferences "Default decode filter" combo (+ QSettings persistence)
 
 **Files:**
-- Modify: `src/qt/PreferencesWindow_Qt.cpp` (Engine panel section)
+- Modify: `src/qt/PreferencesWindow_qt.cpp` (Engine panel section)
+- Modify: `src/qt/MainWindow_qt.cpp` (restore-at-startup)
 - Modify: `tests/ui/jefecheck/locators.py`
 - Modify: `tests/ui/test_preferences.py`
 
@@ -285,9 +316,9 @@ cd tests/ui && JEFECHECK_BIN=../../build_qt/jefecheck.app .venv/bin/pytest test_
 
 Expected: FAIL — combo not found.
 
-- [ ] **Step 4: Add the combo in PreferencesWindow_Qt.cpp**
+- [ ] **Step 4: Add the combo in PreferencesWindow_qt.cpp (with `QSettings` persistence)**
 
-In `src/qt/PreferencesWindow_Qt.cpp`, find the Engine panel constructor section (`grep -n 'Engine\|engineGroup\|buildEnginePanel' src/qt/PreferencesWindow_Qt.cpp`) and add:
+In `src/qt/PreferencesWindow_qt.cpp`, find the Engine panel constructor section (`grep -n 'Engine\|engineGroup\|buildEnginePanel' src/qt/PreferencesWindow_qt.cpp`) and add (using whatever local layout-host names the surrounding code uses — read the existing rows):
 
 ```cpp
     auto* filterLabel = new QLabel("Default decode filter:", enginePanel);
@@ -297,20 +328,36 @@ In `src/qt/PreferencesWindow_Qt.cpp`, find the Engine panel constructor section 
     filterCombo->addItem("triangle",  FILTERTRIANGLE_ID);
     filterCombo->addItem("mitchell",  FILTERMITCHELL_ID);
     filterCombo->addItem("lanczos3",  FILTERLANCZOS_ID);
-    // Match current setting (no-op if it's the default 0/lanczos3).
+    // Match current in-memory setting (already restored from QSettings
+    // at startup — see MainWindow_qt loadSettings in Step 5).
     int idx = filterCombo->findData(sett.defaultDecodeFilter);
     if (idx < 0) idx = filterCombo->findData(FILTERLANCZOS_ID);
     filterCombo->setCurrentIndex(idx);
     connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [filterCombo](int i) {
         sett.defaultDecodeFilter = filterCombo->itemData(i).toInt();
+        // Persist immediately so a crash or force-quit doesn't lose the
+        // setting. Matches how defaultTextureFormat handling is wired.
+        QSettings s;
+        s.setValue("Engine/defaultDecodeFilter", sett.defaultDecodeFilter);
     });
     enginePanelLayout->addRow(filterLabel, filterCombo);
 ```
 
-(Adjust `enginePanel` / `enginePanelLayout` variable names to match the existing code — read the surrounding rows to see the convention.)
+(Add `#include <QSettings>` to the includes block if not already present.)
 
-- [ ] **Step 5: Build and re-run the test**
+- [ ] **Step 5: Restore the setting at startup in `MainWindow_qt.cpp`**
+
+Find where other settings are restored (`grep -n 'QSettings\|defaultTextureFormat\|loadSettings' src/qt/MainWindow_qt.cpp`). Add next to the existing `defaultTextureFormat` restore:
+
+```cpp
+    sett.defaultDecodeFilter = s.value("Engine/defaultDecodeFilter",
+                                       FILTERLANCZOS_ID).toInt();
+```
+
+(Adjust the `s` variable name to match the local `QSettings` instance the surrounding code uses.)
+
+- [ ] **Step 6: Build and re-run the test**
 
 ```bash
 cmake --build build_qt -j$(sysctl -n hw.ncpu) && \
@@ -320,26 +367,50 @@ cmake --build build_qt -j$(sysctl -n hw.ncpu) && \
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/qt/PreferencesWindow_Qt.cpp tests/ui/jefecheck/locators.py tests/ui/test_preferences.py
-git commit -m "prefs: add Default decode filter combo (Engine panel)
+git add src/qt/PreferencesWindow_qt.cpp src/qt/MainWindow_qt.cpp tests/ui/jefecheck/locators.py tests/ui/test_preferences.py
+git commit -m "prefs: add Default decode filter combo (Engine panel) + QSettings persist
 
 Lets the OIIO loader's new Filter2D resize use a user-selected filter
 shared by all tracks. Options: nearest / triangle / mitchell / lanczos3,
-default lanczos3 (matches FLTK's original)."
+default lanczos3 (matches FLTK's original). Persisted via QSettings
+under Engine/defaultDecodeFilter, restored at startup by MainWindow_qt
+next to defaultTextureFormat."
 ```
 
 ---
 
-## Task 4: Bridge — `TrackEstimates` struct + `getTrackEstimates` accessor
+## Task 4: Bridge — `TrackEstimates` struct + accessor + `gfcSequence::getPreviewElapsedSecs`
 
 **Files:**
+- Modify: `src/gfcSequence.h` (add public accessor)
+- Modify: `src/gfcSequence.cpp` (one-liner impl)
 - Modify: `src/qt/SequenceLoadBridge_qt.h`
 - Modify: `src/qt/SequenceLoadBridge_qt.cpp`
 
-- [ ] **Step 1: Add the struct + declaration in the header**
+`previewFrame` and `previewTimer` are private members of `gfcSequence`. The bridge accessor needs a public-API path to both; we add a tiny `getPreviewElapsedSecs()` and rely on the existing public `getPreviewFrame()` (returns by value) for dimensions.
+
+- [ ] **Step 1: Add `getPreviewElapsedSecs` to `gfcSequence`**
+
+In `src/gfcSequence.h`, near the existing `getPreviewFrame()` declaration (`grep -n 'getPreviewFrame' src/gfcSequence.h`):
+
+```cpp
+    double getPreviewElapsedSecs() const;  // last loadPreview() wall-clock time
+```
+
+In `src/gfcSequence.cpp`, near the bottom (or wherever `getPreviewFrame` is implemented):
+
+```cpp
+double gfcSequence::getPreviewElapsedSecs() const {
+    // gfcTimer::getElapsedSecs is non-const; cast away to keep the
+    // sequence accessor const-correct from the caller's POV.
+    return const_cast<gfcTimer&>(previewTimer).getElapsedSecs();
+}
+```
+
+- [ ] **Step 2: Add the struct + declaration in the bridge header**
 
 In `src/qt/SequenceLoadBridge_qt.h`, near the existing `RemoteServerParams` / `RenderParams` struct cluster (`grep -n 'struct.*Params' src/qt/SequenceLoadBridge_qt.h`):
 
@@ -357,7 +428,7 @@ TrackEstimates getTrackEstimates(int trackIdx);
 }  // namespace jefe::qt
 ```
 
-- [ ] **Step 2: Implement in the cpp**
+- [ ] **Step 3: Implement in the bridge cpp**
 
 In `src/qt/SequenceLoadBridge_qt.cpp`, near the other `namespace jefe::qt { ... }` accessors:
 
@@ -373,26 +444,27 @@ TrackEstimates getTrackEstimates(int trackIdx) {
     est.frames = to - from + 1;
 
     // Bytes-per-frame from the preview frame's decoded dimensions and the
-    // GUI's selected compression (matches what the loader will actually
-    // upload to GL).
-    int bpp = 4; // RGBA8
+    // GUI's selected compression (matches what the loader uploads to GL).
+    // gfcFrame is returned by value from getPreviewFrame(); cheap struct copy.
+    const gfcFrame pf = seq->getPreviewFrame();
+    int bpp = 4; // RGBA8 (GFC_8BPC default)
     switch (seq->myGUI->getCompression()) {
-        case GFC_4BPC:     bpp = 2; break; // RGBA4 packed
+        case GFC_8BPC:     bpp = 4; break;   // RGBA8
+        case GFC_4BPC:     bpp = 2; break;   // RGBA4 packed
         case GFC_16BPC:
-        case GFC_16HALF:   bpp = 8; break;
-        case GFC_S3TCDX1:  bpp = 1; break;
+        case GFC_16HALF:   bpp = 8; break;   // RGBA16(half)
+        case GFC_S3TCDX1:  bpp = 1; break;   // ~1 byte/pixel after DXT5
         default:           bpp = 4; break;
     }
-    const size_t w = (size_t)seq->previewFrame.quadSizeX;
-    const size_t h = (size_t)seq->previewFrame.quadSizeY;
+    const size_t w = (size_t)pf.quadSizeX;
+    const size_t h = (size_t)pf.quadSizeY;
     est.bytes = w * h * (size_t)bpp * (size_t)est.frames;
 
-    // Seconds: gfcTimer::getElapsedSecs() returns the wall-clock seconds
-    // of the most recent preview decode (loadPreview() start/stop wraps
-    // the timer). Use that as a per-frame estimate. If the timer hasn't
-    // been started yet (track never previewed), fall back to ~25 ms/frame.
-    const double secsPerFrame = seq->previewTimer.getElapsedSecs() > 0.0
-                                  ? seq->previewTimer.getElapsedSecs()
+    // Seconds: getPreviewElapsedSecs returns the wall-clock of the most
+    // recent preview decode (loadPreview() start/stop wraps the timer).
+    // If never previewed yet, fall back to ~25 ms/frame.
+    const double secsPerFrame = seq->getPreviewElapsedSecs() > 0.0
+                                  ? seq->getPreviewElapsedSecs()
                                   : 0.025;
     est.seconds = (float)(secsPerFrame * est.frames);
     return est;
@@ -445,7 +517,7 @@ bool reloadTrackPreview(int trackIdx) {
     auto* seq = trackManager.getSequence(trackIdx);
     if (!seq || !seq->myGUI) return false;
     if (seq->myGUI->getFilename().empty()) {
-        seq->previewFrame.clearFrame();
+        seq->clearPreviewFrame();  // public accessor; previewFrame is private
         return false;
     }
     const std::string loaded = seq->loadPreview();
@@ -567,6 +639,132 @@ cmake --build build_qt -j$(sysctl -n hw.ncpu) 2>&1 | tail -5
 ```bash
 git add src/qt/SequenceLoadBridge_qt.h src/qt/SequenceLoadBridge_qt.cpp
 git commit -m "bridge: startLoadingAllTracks() iterates and fires per-track loads"
+```
+
+---
+
+## Task 7B: Bridge — `TrackParams` snapshot + per-field setters
+
+**Files:**
+- Modify: `src/qt/SequenceLoadBridge_qt.h`
+- Modify: `src/qt/SequenceLoadBridge_qt.cpp`
+
+This task is what keeps the TU separation clean. `TrackStrip_qt.cpp` and `LoadWindowDialog_qt.cpp` are NOT allowed to include `gfcSequence.h` (it transitively pulls glad and would break the bridge's contract). Instead they read state via `getTrackParams(idx)` and write it via individual setters here.
+
+- [ ] **Step 1: Add the snapshot struct + setter declarations to `SequenceLoadBridge_qt.h`**
+
+In the `namespace jefe::qt { ... }` block, near the other accessors:
+
+```cpp
+struct TrackParams {
+    std::string filename;
+    int from              = 1;
+    int to                = 1;
+    int scalePct          = 100;   // 100 / 50 / 25
+    int compression       = 0;     // GFC_8BPC / GFC_16BPC / GFC_16HALF / GFC_4BPC / GFC_S3TCDX1
+    int channel           = 0;
+    bool crop             = false;
+    std::vector<std::string> channelOptions;
+    std::string filenameGeneric;
+};
+
+// Snapshot all per-track GUI state. Cheap value copy; caller mutates
+// fields via the individual setters below — there is no setParams.
+TrackParams getTrackParams(int trackIdx);
+
+void setTrackFilename(int trackIdx, const std::string& path);
+void setTrackFrom(int trackIdx, int v);
+void setTrackTo(int trackIdx, int v);
+void setTrackScalePct(int trackIdx, int pct);          // 100 / 50 / 25
+void setTrackCompression(int trackIdx, int compEnum);
+void setTrackChannel(int trackIdx, int channelIdx);
+void setTrackCrop(int trackIdx, bool on);
+```
+
+- [ ] **Step 2: Implement in the bridge cpp**
+
+Inside `namespace jefe::qt { ... }`:
+
+```cpp
+TrackParams getTrackParams(int trackIdx) {
+    TrackParams p;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return p;
+    p.filename        = seq->myGUI->getFilename();
+    p.from            = seq->myGUI->getFrom();
+    p.to              = seq->myGUI->getTo();
+    p.scalePct        = (int)(seq->myGUI->getScale() + 0.5f);
+    p.compression     = seq->myGUI->getCompression();
+    p.channel         = seq->myGUI->getChannel();
+    p.crop            = seq->myGUI->getCrop() != 0;
+    p.filenameGeneric = seq->filenameGeneric;
+
+    // Channel options live on the Qt subclass as a side-channel; downcast.
+    if (auto* gui = dynamic_cast<gfcSequenceGUI_Qt*>(seq->myGUI)) {
+        p.channelOptions = gui->getChannelOptions();
+    }
+    return p;
+}
+
+void setTrackFilename(int trackIdx, const std::string& path) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setFilename(path);
+}
+
+void setTrackFrom(int trackIdx, int v) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setFromFrame(v);
+}
+
+void setTrackTo(int trackIdx, int v) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setToFrame(v);
+}
+
+void setTrackScalePct(int trackIdx, int pct) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return;
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "%d", pct);
+    seq->myGUI->setScale(buf);
+}
+
+void setTrackCompression(int trackIdx, int compEnum) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setCompression(compEnum);
+}
+
+void setTrackChannel(int trackIdx, int channelIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setChannel(channelIdx);
+}
+
+void setTrackCrop(int trackIdx, bool on) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setCrop(on ? 1 : 0);
+}
+```
+
+Add `#include "gfcsequencegui_qt.h"` at the top of the bridge cpp if not already present (for the `dynamic_cast`).
+
+- [ ] **Step 3: Build**
+
+```bash
+cmake --build build_qt -j$(sysctl -n hw.ncpu) 2>&1 | tail -10
+```
+
+Expected: clean build (no callers yet; these are picked up in Tasks 11–13).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/qt/SequenceLoadBridge_qt.h src/qt/SequenceLoadBridge_qt.cpp
+git commit -m "bridge: TrackParams snapshot + per-field setters
+
+Keeps Qt-side TUs (TrackStrip_qt, LoadWindowDialog_qt) free of any
+gfcSequence.h include — they read/write state strictly through these
+wrappers. The bridge cpp is the only Qt TU that talks to gfcSequence
+directly."
 ```
 
 ---
@@ -710,13 +908,13 @@ git commit -m "viewport: drop branches on loadWindowOpen — modal forwards, clo
 ## Task 10: Vendor `FlowLayout_Qt`
 
 **Files:**
-- Create: `src/qt/FlowLayout_Qt.h`
-- Create: `src/qt/FlowLayout_Qt.cpp`
+- Create: `src/qt/FlowLayout_qt.h`
+- Create: `src/qt/FlowLayout_qt.cpp`
 - Modify: `CMakeLists.txt`
 
 This is the standard Qt `FlowLayout` example, lightly renamed. It re-flows children to fill width.
 
-- [ ] **Step 1: Create FlowLayout_Qt.h**
+- [ ] **Step 1: Create FlowLayout_qt.h**
 
 ```cpp
 // Adapted from Qt's flowlayout example (BSD 3-Clause, Qt Company).
@@ -763,10 +961,10 @@ private:
 };
 ```
 
-- [ ] **Step 2: Create FlowLayout_Qt.cpp**
+- [ ] **Step 2: Create FlowLayout_qt.cpp**
 
 ```cpp
-#include "FlowLayout_Qt.h"
+#include "FlowLayout_qt.h"
 
 #include <QWidget>
 
@@ -866,7 +1064,7 @@ int FlowLayout_Qt::smartSpacing(QStyle::PixelMetric pm) const {
 In `CMakeLists.txt`, find the Qt sources list (`grep -n 'qt/MainWindow_qt\|qt/GlViewport_qt' CMakeLists.txt`) and add next to the other `src/qt/*.cpp` lines:
 
 ```cmake
-    src/qt/FlowLayout_Qt.cpp
+    src/qt/FlowLayout_qt.cpp
 ```
 
 - [ ] **Step 4: Build**
@@ -880,7 +1078,7 @@ Expected: clean build (no use sites yet, but the new file compiles).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/qt/FlowLayout_Qt.h src/qt/FlowLayout_Qt.cpp CMakeLists.txt
+git add src/qt/FlowLayout_qt.h src/qt/FlowLayout_qt.cpp CMakeLists.txt
 git commit -m "qt: vendor FlowLayout_Qt for the load window's reflowing strip grid"
 ```
 
@@ -889,11 +1087,11 @@ git commit -m "qt: vendor FlowLayout_Qt for the load window's reflowing strip gr
 ## Task 11: `TrackStrip_Qt` — filename + Browse + From/To spinners
 
 **Files:**
-- Create: `src/qt/TrackStrip_Qt.h`
-- Create: `src/qt/TrackStrip_Qt.cpp`
+- Create: `src/qt/TrackStrip_qt.h`
+- Create: `src/qt/TrackStrip_qt.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Create TrackStrip_Qt.h**
+- [ ] **Step 1: Create TrackStrip_qt.h**
 
 ```cpp
 #pragma once
@@ -953,10 +1151,10 @@ private:
 };
 ```
 
-- [ ] **Step 2: Create TrackStrip_Qt.cpp with the minimum bindings**
+- [ ] **Step 2: Create TrackStrip_qt.cpp with the minimum bindings**
 
 ```cpp
-#include "TrackStrip_Qt.h"
+#include "TrackStrip_qt.h"
 
 #include "SequenceLoadBridge_qt.h"
 
@@ -1085,7 +1283,7 @@ void TrackStrip_Qt::onToChanged(int v) {
 - [ ] **Step 3: Wire into CMakeLists.txt**
 
 ```cmake
-    src/qt/TrackStrip_Qt.cpp
+    src/qt/TrackStrip_qt.cpp
 ```
 
 Add `Q_OBJECT` headers to the `JEFE_QT_HEADERS` list if your CMake separates MOC headers (`grep -n 'TrackStrip_Qt\|MOC' CMakeLists.txt`).
@@ -1101,7 +1299,7 @@ Expected: clean build (no instantiation yet).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/qt/TrackStrip_Qt.h src/qt/TrackStrip_Qt.cpp src/qt/SequenceLoadBridge_qt.h src/qt/SequenceLoadBridge_qt.cpp CMakeLists.txt
+git add src/qt/TrackStrip_qt.h src/qt/TrackStrip_qt.cpp src/qt/SequenceLoadBridge_qt.h src/qt/SequenceLoadBridge_qt.cpp CMakeLists.txt
 git commit -m "qt: TrackStrip_Qt scaffold — filename + Browse + From/To spinners"
 ```
 
@@ -1110,12 +1308,12 @@ git commit -m "qt: TrackStrip_Qt scaffold — filename + Browse + From/To spinne
 ## Task 12: `TrackStrip_Qt` — Scale + Bit Depth + Channels combos
 
 **Files:**
-- Modify: `src/qt/TrackStrip_Qt.h`
-- Modify: `src/qt/TrackStrip_Qt.cpp`
+- Modify: `src/qt/TrackStrip_qt.h`
+- Modify: `src/qt/TrackStrip_qt.cpp`
 
 - [ ] **Step 1: Add the three combos to the header**
 
-In `TrackStrip_Qt.h`, in the private members:
+In `TrackStrip_qt.h`, in the private members:
 
 ```cpp
     QComboBox* scale_     = nullptr;
@@ -1131,7 +1329,7 @@ And the slot decls in private slots:
     void onChannelChanged(int idx);
 ```
 
-- [ ] **Step 2: Add the row in TrackStrip_Qt.cpp constructor**
+- [ ] **Step 2: Add the row in TrackStrip_qt.cpp constructor**
 
 After the existing From/To row in the constructor, add:
 
@@ -1279,7 +1477,7 @@ Expected: clean build.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/qt/TrackStrip_Qt.h src/qt/TrackStrip_Qt.cpp
+git add src/qt/TrackStrip_qt.h src/qt/TrackStrip_qt.cpp
 git commit -m "qt: TrackStrip — Scale / Bit Depth / Channels combos bound to gfcSequenceGUI"
 ```
 
@@ -1288,8 +1486,8 @@ git commit -m "qt: TrackStrip — Scale / Bit Depth / Channels combos bound to g
 ## Task 13: `TrackStrip_Qt` — Crop + Reload + Unload + Recent dropdown
 
 **Files:**
-- Modify: `src/qt/TrackStrip_Qt.h`
-- Modify: `src/qt/TrackStrip_Qt.cpp`
+- Modify: `src/qt/TrackStrip_qt.h`
+- Modify: `src/qt/TrackStrip_qt.cpp`
 
 - [ ] **Step 1: Add members + slots to header**
 
@@ -1435,7 +1633,7 @@ cmake --build build_qt -j$(sysctl -n hw.ncpu) 2>&1 | tail -10
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/qt/TrackStrip_Qt.h src/qt/TrackStrip_Qt.cpp
+git add src/qt/TrackStrip_qt.h src/qt/TrackStrip_qt.cpp
 git commit -m "qt: TrackStrip — Crop / Reload / Unload + persistent Recent menu (QSettings)"
 ```
 
@@ -1444,8 +1642,8 @@ git commit -m "qt: TrackStrip — Crop / Reload / Unload + persistent Recent men
 ## Task 14: `TrackStrip_Qt` — Header label + Estimates label
 
 **Files:**
-- Modify: `src/qt/TrackStrip_Qt.h`
-- Modify: `src/qt/TrackStrip_Qt.cpp`
+- Modify: `src/qt/TrackStrip_qt.h`
+- Modify: `src/qt/TrackStrip_qt.cpp`
 
 - [ ] **Step 1: Header members**
 
@@ -1538,7 +1736,7 @@ cmake --build build_qt -j$(sysctl -n hw.ncpu) 2>&1 | tail -10
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/qt/TrackStrip_Qt.h src/qt/TrackStrip_Qt.cpp
+git add src/qt/TrackStrip_qt.h src/qt/TrackStrip_qt.cpp
 git commit -m "qt: TrackStrip — header label (seq pattern) + estimates one-liner + markError"
 ```
 
@@ -1547,8 +1745,8 @@ git commit -m "qt: TrackStrip — header label (seq pattern) + estimates one-lin
 ## Task 15: `LoadWindowDialog_Qt` scaffold
 
 **Files:**
-- Create: `src/qt/LoadWindowDialog_Qt.h`
-- Create: `src/qt/LoadWindowDialog_Qt.cpp`
+- Create: `src/qt/LoadWindowDialog_qt.h`
+- Create: `src/qt/LoadWindowDialog_qt.cpp`
 - Modify: `CMakeLists.txt`
 
 - [ ] **Step 1: Create the header**
@@ -1589,12 +1787,12 @@ private:
 - [ ] **Step 2: Create the cpp**
 
 ```cpp
-#include "LoadWindowDialog_Qt.h"
+#include "LoadWindowDialog_qt.h"
 
-#include "FlowLayout_Qt.h"
+#include "FlowLayout_qt.h"
 #include "GlViewport_qt.h"
 #include "SequenceLoadBridge_qt.h"
-#include "TrackStrip_Qt.h"
+#include "TrackStrip_qt.h"
 
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -1688,7 +1886,7 @@ void LoadWindowDialog_Qt::setTrackFilename(int plateIdx, const QString& path) {
 - [ ] **Step 3: CMakeLists**
 
 ```cmake
-    src/qt/LoadWindowDialog_Qt.cpp
+    src/qt/LoadWindowDialog_qt.cpp
 ```
 
 - [ ] **Step 4: Build**
@@ -1700,7 +1898,7 @@ cmake -B build_qt -DUSE_QT=ON && cmake --build build_qt -j$(sysctl -n hw.ncpu) 2
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/qt/LoadWindowDialog_Qt.h src/qt/LoadWindowDialog_Qt.cpp CMakeLists.txt
+git add src/qt/LoadWindowDialog_qt.h src/qt/LoadWindowDialog_qt.cpp CMakeLists.txt
 git commit -m "qt: LoadWindowDialog_Qt — 4 strips in FlowLayout + Load All + preview lifecycle"
 ```
 
@@ -1732,7 +1930,7 @@ In private slots:
 Top of `src/qt/MainWindow_qt.cpp`:
 
 ```cpp
-#include "LoadWindowDialog_Qt.h"
+#include "LoadWindowDialog_qt.h"
 ```
 
 - [ ] **Step 3: Wire the menu in buildMenuBar**
