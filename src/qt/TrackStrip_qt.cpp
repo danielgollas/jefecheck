@@ -33,17 +33,21 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     setObjectName(QString("dialog.loadwindow.strip.%1").arg(trackIdx_));
 
     auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(8, 4, 8, 4);
+    outer->setSpacing(4);
 
     header_ = new QLabel(this);
     header_->setObjectName(QString("dialog.loadwindow.strip.%1.header").arg(trackIdx_));
     header_->setText(QString("Track %1").arg(QChar('A' + trackIdx_)));
     QFont hf = header_->font();
     hf.setBold(true);
+    hf.setPointSize(std::max(8, hf.pointSize() - 1));
     header_->setFont(hf);
     outer->addWidget(header_);
 
-    // Row 1: filename + Browse
+    // Row 1: filename + Browse + Recent
     auto* row1 = new QHBoxLayout();
+    row1->setSpacing(6);
     filename_ = new QLineEdit(this);
     filename_->setObjectName(QString("dialog.loadwindow.strip.%1.filename").arg(trackIdx_));
     // Don't let the line edit grow to fit a long path — we elide and
@@ -53,12 +57,20 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     filename_->installEventFilter(this);
     browse_ = new QPushButton("Browse…", this);
     browse_->setObjectName(QString("dialog.loadwindow.strip.%1.browse").arg(trackIdx_));
+    recent_ = new QToolButton(this);
+    recent_->setObjectName(QString("dialog.loadwindow.strip.%1.recent").arg(trackIdx_));
+    recent_->setText("Recent ▾");
+    recent_->setPopupMode(QToolButton::InstantPopup);
+    recent_->setMenu(new QMenu(this));
     row1->addWidget(filename_, /*stretch=*/1);
     row1->addWidget(browse_);
+    row1->addWidget(recent_);
     outer->addLayout(row1);
 
-    // Row 2: From / To
+    // Row 2: From / To / Scale / Bit / Channels — single tight line
     auto* row2 = new QHBoxLayout();
+    row2->setSpacing(6);
+
     from_ = new QSpinBox(this);
     from_->setObjectName(QString("dialog.loadwindow.strip.%1.from").arg(trackIdx_));
     from_->setRange(0, kMaxFrameNumber);
@@ -67,66 +79,54 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     to_->setRange(0, kMaxFrameNumber);
     row2->addWidget(new QLabel("From:", this));
     row2->addWidget(from_);
-    row2->addSpacing(8);
     row2->addWidget(new QLabel("To:", this));
     row2->addWidget(to_);
-    row2->addStretch(1);
-    outer->addLayout(row2);
-
-    // Row 3: Scale / Bit Depth / Channels
-    auto* row3 = new QHBoxLayout();
 
     scale_ = new QComboBox(this);
     scale_->setObjectName(QString("dialog.loadwindow.strip.%1.scale").arg(trackIdx_));
     scale_->addItem("100%", 100);
     scale_->addItem("50%",  50);
     scale_->addItem("25%",  25);
-    row3->addWidget(new QLabel("Scale:", this));
-    row3->addWidget(scale_);
+    row2->addWidget(new QLabel("Scale:", this));
+    row2->addWidget(scale_);
 
     bitDepth_ = new QComboBox(this);
     bitDepth_->setObjectName(QString("dialog.loadwindow.strip.%1.bitdepth").arg(trackIdx_));
     bitDepth_->addItem("8-bit",   GFC_8BPC);
     bitDepth_->addItem("16-bit",  GFC_16BPC);
     bitDepth_->addItem("16-half", GFC_16HALF);
-    row3->addWidget(new QLabel("Bit:", this));
-    row3->addWidget(bitDepth_);
+    row2->addWidget(new QLabel("Bit:", this));
+    row2->addWidget(bitDepth_);
 
     channels_ = new QComboBox(this);
     channels_->setObjectName(QString("dialog.loadwindow.strip.%1.channels").arg(trackIdx_));
     channels_->addItem("(default)");
-    row3->addWidget(new QLabel("Channels:", this));
-    row3->addWidget(channels_, 1);
-    outer->addLayout(row3);
+    row2->addWidget(new QLabel("Ch:", this));
+    row2->addWidget(channels_, 1);
+    outer->addLayout(row2);
 
-    // Row 4: Crop / Reload / Unload / Recent
-    auto* row4 = new QHBoxLayout();
+    // Row 3: Crop / Reload / Unload / estimates
+    auto* row3 = new QHBoxLayout();
+    row3->setSpacing(6);
 
     crop_ = new QCheckBox("Crop", this);
     crop_->setObjectName(QString("dialog.loadwindow.strip.%1.crop").arg(trackIdx_));
-    row4->addWidget(crop_);
+    row3->addWidget(crop_);
 
     reload_ = new QPushButton("Reload", this);
     reload_->setObjectName(QString("dialog.loadwindow.strip.%1.reload").arg(trackIdx_));
-    row4->addWidget(reload_);
+    row3->addWidget(reload_);
 
     unload_ = new QPushButton("Unload && Clear", this);
     unload_->setObjectName(QString("dialog.loadwindow.strip.%1.unload").arg(trackIdx_));
-    row4->addWidget(unload_);
-
-    recent_ = new QToolButton(this);
-    recent_->setObjectName(QString("dialog.loadwindow.strip.%1.recent").arg(trackIdx_));
-    recent_->setText("Recent ▾");
-    recent_->setPopupMode(QToolButton::InstantPopup);
-    recent_->setMenu(new QMenu(this));
-    row4->addWidget(recent_);
-
-    row4->addStretch(1);
-    outer->addLayout(row4);
+    row3->addWidget(unload_);
 
     estimates_ = new QLabel("–", this);
     estimates_->setObjectName(QString("dialog.loadwindow.strip.%1.estimates").arg(trackIdx_));
-    outer->addWidget(estimates_);
+    estimates_->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
+    row3->addWidget(estimates_, /*stretch=*/1);
+
+    outer->addLayout(row3);
 
     connect(filename_, &QLineEdit::editingFinished,
             this, &TrackStrip_Qt::onFilenameChanged);

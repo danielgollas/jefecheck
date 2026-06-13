@@ -41,7 +41,11 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
 
     connect(loadAll_, &QPushButton::clicked, this, &LoadWindowDialog_Qt::accept);
 
-    resize(900, 500);
+    // Default to a narrow + tall layout so FlowLayout stacks the four
+    // strips vertically (4×1) — 900px-tall display still fits all four
+    // comfortably. Users can widen the dialog to reflow into 2×2 if
+    // they prefer that.
+    resize(620, 720);
 }
 
 void LoadWindowDialog_Qt::showEvent(QShowEvent* e) {
