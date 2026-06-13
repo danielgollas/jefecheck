@@ -385,7 +385,7 @@ void MainWindow_Qt::buildMenuBar() {
     // (per-track frame range, scale, gamma, channel picker à la the
     // FLTK loadWindow) is intentionally deferred — UX revision needed
     // first, per the migration plan's PR-LAST note.
-    auto* loadAction = fileMenu->addAction("&Load Sequence…",
+    auto* loadAction = fileMenu->addAction("&Quick Load…",
                         QKeySequence(Qt::CTRL | Qt::Key_O),
                         this, [this]() {
         QSettings settings;
