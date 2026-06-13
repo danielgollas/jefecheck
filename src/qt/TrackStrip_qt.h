@@ -4,7 +4,7 @@
 #include <QString>
 #include <QWidget>
 
-class QLineEdit;
+class PathHighlightLineEdit_Qt;
 class QPushButton;
 class QSpinBox;
 class QComboBox;
@@ -74,7 +74,15 @@ private:
     // in and re-elide on focus out / resize.
     QString displayPath_;
 
-    QLineEdit*   filename_  = nullptr;
+    // Cached digit-range highlight derived from filenameGeneric in
+    // refreshFromGUI. We cache here (rather than only on the widget)
+    // so we can re-apply the overlay when restoring the full literal
+    // path on FocusIn — applyElidedFilenameText clears the widget's
+    // copy because the elided text shifts character positions.
+    int filenameHighlightStart_  = -1;
+    int filenameHighlightLength_ = 0;
+
+    PathHighlightLineEdit_Qt* filename_ = nullptr;
     QPushButton* browse_    = nullptr;
     QSpinBox*    from_      = nullptr;
     QSpinBox*    to_        = nullptr;

@@ -1,5 +1,6 @@
 #include "TrackStrip_qt.h"
 
+#include "PathHighlightLineEdit_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "../UIConstants.h"
 
@@ -11,7 +12,6 @@
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -59,7 +59,7 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     // Row 1: filename + Browse + Recent
     auto* row1 = new QHBoxLayout();
     row1->setSpacing(6);
-    filename_ = new QLineEdit(this);
+    filename_ = new PathHighlightLineEdit_Qt(this);
     filename_->setObjectName(QString("dialog.loadwindow.strip.%1.filename").arg(trackIdx_));
     // Don't let the line edit grow to fit a long path — we elide and
     // keep the strip width stable. Any positive width works; the layout
@@ -139,7 +139,7 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 
     outer->addLayout(row3);
 
-    connect(filename_, &QLineEdit::editingFinished,
+    connect(filename_, &PathHighlightLineEdit_Qt::editingFinished,
             this, &TrackStrip_Qt::onFilenameChanged);
     connect(browse_,   &QPushButton::clicked,
             this, &TrackStrip_Qt::onBrowse);
@@ -163,12 +163,46 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 void TrackStrip_Qt::refreshFromGUI() {
     refreshing_ = true;
     const auto p = jefe::qt::getTrackParams(trackIdx_);
-    // Display the generic seq pattern (foo.####.exr) when the loader
-    // discovered one; fall back to the literal filename otherwise.
-    // The bridge still stores whatever the user typed under the hood.
-    displayPath_ = QString::fromStdString(
-        p.filenameGeneric.empty() ? p.filename : p.filenameGeneric);
+    // The QLineEdit always holds the LITERAL frame filename — never
+    // the generic foo.####.exr pattern. The loader needs a real path
+    // on disk; substituting #### into the textbox would round-trip
+    // back into setTrackFilename when editingFinished fires and break
+    // sequence detection. Instead we keep the literal text and use
+    // filenameGeneric only to compute the digit range to highlight.
+    displayPath_ = QString::fromStdString(p.filename);
     filename_->setText(displayPath_);
+
+    // Compute the digit range the loader identified as the seq number,
+    // so we can visually highlight it. filenameGeneric uses '#' chars
+    // where the digits live; the common prefix tells us where in the
+    // literal filename the digit run starts.
+    int hStart = -1;
+    int hLen   = 0;
+    if (!p.filenameGeneric.empty() && !p.filename.empty()) {
+        const QString gen = QString::fromStdString(p.filenameGeneric);
+        const QString& lit = displayPath_;
+        const int gh = gen.indexOf(QChar('#'));
+        if (gh >= 0) {
+            int ghEnd = gh;
+            while (ghEnd < gen.length() && gen[ghEnd] == QChar('#')) ++ghEnd;
+            const int width = ghEnd - gh;
+            // Only highlight when the prefix matches and the literal
+            // really has digits at that offset; otherwise we could be
+            // mid-edit with a diverged string.
+            if (lit.length() >= gh + width && lit.left(gh) == gen.left(gh)) {
+                bool allDigits = true;
+                for (int i = 0; i < width; ++i) {
+                    if (!lit[gh + i].isDigit()) { allDigits = false; break; }
+                }
+                if (allDigits) { hStart = gh; hLen = width; }
+            }
+        }
+    }
+    filenameHighlightStart_  = hStart;
+    filenameHighlightLength_ = hLen;
+    if (hLen > 0) filename_->setHighlightRange(hStart, hLen);
+    else          filename_->clearHighlight();
+
     applyElidedFilenameText();
     from_->setValue(p.from);
     to_->setValue(p.to);
@@ -239,18 +273,14 @@ void TrackStrip_Qt::setFilenameFromDrop(const QString& path) {
 
 void TrackStrip_Qt::onFilenameChanged() {
     if (refreshing_) return;
-    // Capture the un-elided text *before* the user edits get clobbered
-    // by any subsequent re-elision pass; if the line edit currently
-    // holds an elided rendering of displayPath_, prefer that (the
-    // user didn't type anything new).
-    QString typed = filename_->text();
-    if (!displayPath_.isEmpty() && !typed.contains(QChar(0x2026)) &&
-        typed != displayPath_) {
-        // User typed a new value — adopt it as the new full path.
-        displayPath_ = typed;
-    } else if (typed.contains(QChar(0x2026))) {
-        // Stale elision left in the field; ignore it and keep displayPath_.
-        typed = displayPath_;
+    // editingFinished fires before the FocusOut elision pass, so the
+    // line edit's text() is the literal value the user typed (or our
+    // own displayPath_ if they made no change). Stale elided text
+    // would contain a horizontal-ellipsis glyph; if we see one we
+    // keep displayPath_ rather than overwriting it with junk.
+    const QString typed = filename_->text();
+    if (typed.contains(QChar(0x2026))) {
+        // Stale elision — ignore and reuse the cached full path.
     } else {
         displayPath_ = typed;
     }
@@ -360,9 +390,16 @@ QStringList TrackStrip_Qt::loadRecentPaths() const {
 bool TrackStrip_Qt::eventFilter(QObject* o, QEvent* e) {
     if (o == filename_) {
         if (e->type() == QEvent::FocusIn) {
-            // Restore the full path so the user can see/edit it.
+            // Restore the full path so the user can see/edit it, and
+            // re-apply the cached digit-range highlight (we cleared it
+            // in applyElidedFilenameText since elided columns don't
+            // align with the literal-text character indices).
             QSignalBlocker b(filename_);
             filename_->setText(displayPath_);
+            if (filenameHighlightLength_ > 0) {
+                filename_->setHighlightRange(filenameHighlightStart_,
+                                             filenameHighlightLength_);
+            }
         } else if (e->type() == QEvent::FocusOut) {
             applyElidedFilenameText();
         }
@@ -384,6 +421,10 @@ void TrackStrip_Qt::applyElidedFilenameText() {
     QSignalBlocker b(filename_);
     filename_->setText(elided);
     filename_->setCursorPosition(0);
+    // Middle-elision usually shifts the digit-range columns (and may
+    // chew up the digits themselves), so suppress the overlay while
+    // elided. FocusIn restores both the literal text and the highlight.
+    filename_->clearHighlight();
 }
 
 void TrackStrip_Qt::rebuildRecentMenu() {
