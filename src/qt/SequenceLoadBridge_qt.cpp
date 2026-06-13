@@ -1075,4 +1075,35 @@ bool loadFileIntoPlate(const std::string& path,
     return true;
 }
 
+TrackEstimates getTrackEstimates(int trackIdx) {
+    TrackEstimates est{0, 0, 0.0f};
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return est;
+
+    const int from = seq->myGUI->getFrom();
+    const int to   = seq->myGUI->getTo();
+    if (to < from) return est;
+    est.frames = to - from + 1;
+
+    const gfcFrame pf = seq->getPreviewFrame();
+    int bpp = 4;
+    switch (seq->myGUI->getCompression()) {
+        case GFC_8BPC:     bpp = 4; break;
+        case GFC_4BPC:     bpp = 2; break;
+        case GFC_16BPC:
+        case GFC_16HALF:   bpp = 8; break;
+        case GFC_S3TCDX1:  bpp = 1; break;
+        default:           bpp = 4; break;
+    }
+    const size_t w = (size_t)pf.quadSizeX;
+    const size_t h = (size_t)pf.quadSizeY;
+    est.bytes = w * h * (size_t)bpp * (size_t)est.frames;
+
+    const double secsPerFrame = seq->getPreviewElapsedSecs() > 0.0
+                                  ? seq->getPreviewElapsedSecs()
+                                  : 0.025;
+    est.seconds = (float)(secsPerFrame * est.frames);
+    return est;
+}
+
 }  // namespace jefe::qt

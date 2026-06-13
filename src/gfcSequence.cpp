@@ -1777,6 +1777,10 @@ gfcFrame gfcSequence::getPreviewFrame() {
 	return previewFrame;
 }
 
+double gfcSequence::getPreviewElapsedSecs() const {
+	return const_cast<gfcTimer&>(previewTimer).getElapsedSecs();
+}
+
 /**
 * Finds all the filenames that go with the filname in the filename widget. It stores them in the filenames vector. It also sets the GUI
 objects that need to be set to the from and to values. It makes the following asumptions:

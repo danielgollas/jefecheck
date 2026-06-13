@@ -278,6 +278,7 @@ public:
     void updateTrackWidget();
     std::string loadPreview();
     gfcFrame getPreviewFrame();
+    double getPreviewElapsedSecs() const;  // last loadPreview() wall-clock time
     
     gfcSequenceGUI* myGUI;
     std::string filenameGeneric; ///contains the generic for of the sequence name , like /path/to/filename.####.dpx. It is obtained in findSequenceFiles

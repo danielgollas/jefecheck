@@ -434,6 +434,19 @@ int getTrackOnPlate(int plateIdx);
 void pausePlayback();
 void stepFrame(int direction);  // -1 reverse, +1 forward
 
+// Per-track load estimates surfaced to the Qt Load Window's strip
+// estimates label: total frame count, an approximate decoded-RGBA
+// byte budget, and a wall-clock estimate based on the last
+// loadPreview() timing. The byte count is bpp * width * height *
+// frames using the GUI's currently-selected bit depth.
+struct TrackEstimates {
+    int    frames;
+    size_t bytes;
+    float  seconds;
+};
+
+TrackEstimates getTrackEstimates(int trackIdx);
+
 }  // namespace jefe::qt
 
 #endif
