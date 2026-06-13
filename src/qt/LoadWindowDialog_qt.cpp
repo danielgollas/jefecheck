@@ -69,7 +69,19 @@ void LoadWindowDialog_Qt::accept() {
 }
 
 void LoadWindowDialog_Qt::onTrackEdited(int trackIdx) {
+    // loadPreview decodes a frame and uploads to GL; the viewport's
+    // QOpenGLWidget context must be current on the calling thread
+    // (mirrors MainWindow_Qt::loadFileIntoPlate's fast-path pattern at
+    // MainWindow_qt.cpp:768-774). Without this, glDeleteTextures /
+    // glTexImage2D inside loadPreview silently fail and previewFrame
+    // stays unloaded — findSequenceFiles writes the discovered range
+    // to the GUI before that point, but the broken pipeline caused
+    // observed brittle behavior where the spinners stayed at (1,1)
+    // and Load All loaded one frame.
+    if (viewport_) viewport_->makeCurrent();
     const bool ok = jefe::qt::reloadTrackPreview(trackIdx);
+    if (viewport_) viewport_->doneCurrent();
+
     if (trackIdx >= 0 && trackIdx < 4 && strips_[trackIdx]) {
         // Always pull widget state back from the GUI — findSequenceFiles
         // writes the discovered from/to bounds via setFromToBounds even
