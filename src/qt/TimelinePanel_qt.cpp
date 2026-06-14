@@ -299,6 +299,16 @@ void TimelinePanel_Qt::refreshFromPlayback() {
     const float fps = jefe::qt::getTargetFPS();
     const bool playing = jefe::qt::isPlaying();
 
+    // Fast-path: nothing changed since the last tick, so every widget
+    // setter below would be a value-identical no-op that still walks
+    // QAccessible / AppKit / AttributeGraph. Skip the whole pass.
+    if (lastCacheValid_
+        && from == lastFrom_ && to == lastTo_ && cur == lastCur_
+        && in == lastIn_ && out == lastOut_ && loop == lastLoop_
+        && fps == lastFps_ && playing == lastPlaying_) {
+        return;
+    }
+
     {
         const QSignalBlocker bFrame(frameSpin_);
         const QSignalBlocker bIn(inSpin_);
@@ -308,25 +318,37 @@ void TimelinePanel_Qt::refreshFromPlayback() {
 
         // Range-bound the spinboxes to the current playback range so
         // typing past the end clamps cleanly. Min always 1 to match
-        // the FLTK defaults.
+        // the FLTK defaults. Only re-set range when from/to actually
+        // changed — setRange triggers AX notifications even if the
+        // bounds match.
         const int hi = std::max(to, 1);
-        frameSpin_->setRange(std::max(from, 1), hi);
-        inSpin_->setRange(std::max(from, 1), hi);
-        outSpin_->setRange(std::max(from, 1), hi);
+        if (from != lastFrom_ || to != lastTo_) {
+            frameSpin_->setRange(std::max(from, 1), hi);
+            inSpin_->setRange(std::max(from, 1), hi);
+            outSpin_->setRange(std::max(from, 1), hi);
+        }
 
-        frameSpin_->setValue(cur);
-        inSpin_->setValue(in);
-        outSpin_->setValue(out);
-        if (fps > 0.0f) fpsSpin_->setValue(fps);
-        if (loop >= 0 && loop < loopMode_->count()) {
+        if (cur != lastCur_) frameSpin_->setValue(cur);
+        if (in != lastIn_)   inSpin_->setValue(in);
+        if (out != lastOut_) outSpin_->setValue(out);
+        if (fps > 0.0f && fps != lastFps_) fpsSpin_->setValue(fps);
+        if (loop != lastLoop_ && loop >= 0 && loop < loopMode_->count()) {
             loopMode_->setCurrentIndex(loop);
         }
     }
 
-    scrubber_->setRange(from, to);
-    scrubber_->setInOut(in, out);
-    scrubber_->setCurrentFrame(cur);
-    tracks_->setTimelineRange(from, to);
+    if (from != lastFrom_ || to != lastTo_) {
+        scrubber_->setRange(from, to);
+        tracks_->setTimelineRange(from, to);
+    }
+    if (in != lastIn_ || out != lastOut_) {
+        scrubber_->setInOut(in, out);
+    }
+    if (cur != lastCur_) scrubber_->setCurrentFrame(cur);
+    if (playing != lastPlaying_) playBtn_->setText(playing ? "⏸" : "▶");
 
-    playBtn_->setText(playing ? "⏸" : "▶");
+    lastFrom_ = from; lastTo_ = to; lastCur_ = cur;
+    lastIn_ = in; lastOut_ = out; lastLoop_ = loop;
+    lastFps_ = fps; lastPlaying_ = playing;
+    lastCacheValid_ = true;
 }
