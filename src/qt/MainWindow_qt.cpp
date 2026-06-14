@@ -307,14 +307,26 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     playbackTimer_ = new QTimer(this);
     playbackTimer_->setInterval(16);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
-        // tickPlayback() drains a frame from each sequence's queue and
-        // uploads it via glTexImage2D, so the GL context must be current.
         if (!viewport_) return;
-        viewport_->makeCurrent();
-        const bool dirty = jefe::qt::tickPlayback();
-        viewport_->doneCurrent();
-        if (dirty) {
-            viewport_->update();
+        // Skip the GL-current/tickPlayback/done-current trio when
+        // nothing is playing and no raw frames are pending — those
+        // makeCurrent / doneCurrent pairs are surprisingly expensive
+        // on macOS (each flushes the CGL command buffer + flips the
+        // CGLContextObj's `currentContext` TLS slot) and dominate
+        // idle CPU sampling. needsPlaybackTick is an isPlaying check
+        // + 4 O(1) queue::empty() probes.
+        const bool needsTick = jefe::qt::needsPlaybackTick();
+        bool dirty = false;
+        if (needsTick) {
+            // tickPlayback() drains a frame from each sequence's queue
+            // and uploads it via glTexImage2D, so the GL context must
+            // be current.
+            viewport_->makeCurrent();
+            dirty = jefe::qt::tickPlayback();
+            viewport_->doneCurrent();
+            if (dirty) {
+                viewport_->update();
+            }
         }
         // Pull playback state into the timeline widgets every tick.
         // Cheap (a handful of getters + signal-blocked setValues), and

@@ -67,6 +67,13 @@ void initializeTextRenderer(float dpiScale);
 // a timestep update + a flag swap.
 bool tickPlayback();
 
+// Cheap predicate — true when the playback engine is actively playing
+// OR when at least one track has frames waiting in its rawFrames queue
+// that need to be uploaded to GL. When both are false, the 60Hz timer
+// callback in MainWindow_qt.cpp can skip the makeCurrent/tickPlayback
+// pair entirely — saves ~60 GL-context switches per second at idle.
+bool needsPlaybackTick();
+
 // Hands back the gfcPlateGUI_Qt that gfcPlate reads its rendering
 // state from for plate `whichPlate`. PlateCard_Qt binds its widgets
 // to this so user edits land on the plate the viewport is drawing,

@@ -156,6 +156,20 @@ void initializeInstallLUTs() {
     plateManager.updateAllGUILUTWidgets();
 }
 
+bool needsPlaybackTick() {
+    // Playback engine actively advancing — must tick to keep currentFrame
+    // moving and to call plateManager.setChanged() each frame.
+    if (playbackManager.isPlaying()) return true;
+    // Any sequence with decoded-but-not-yet-uploaded frames also needs a
+    // tick so trackManager.generateTextures() can drain them onto the GPU.
+    // hasPendingRawFrames() is an O(1) queue::empty() check.
+    for (int i = 0; i < 4; ++i) {
+        gfcSequence* seq = trackManager.getSequence(i);
+        if (seq && seq->hasPendingRawFrames()) return true;
+    }
+    return false;
+}
+
 bool tickPlayback() {
     // playbackManager.update() is the heart of the playback engine —
     // advances currentFrame at target FPS, calls plateManager.setChanged()

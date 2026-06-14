@@ -268,6 +268,13 @@ public:
     void clearRawQueue();
     void stopLoading();
     bool isEmpty();
+    // True when the loader thread has decoded frames waiting to be
+    // uploaded to GL by generateTextures(). The Qt 60Hz tick uses this
+    // to skip the makeCurrent/tickPlayback pair when nothing's playing
+    // and no frames are pending, saving ~60 context switches/sec at
+    // idle. Cheap — std::queue::empty() is O(1) and lockless here is
+    // fine: a torn read at worst causes one extra (idempotent) tick.
+    bool hasPendingRawFrames() const { return !rawFrames.empty(); }
     void unloadAndClear();
     void clearPreviewFrame();
     void setForceGFLLoading(bool value);
