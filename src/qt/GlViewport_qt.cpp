@@ -28,6 +28,12 @@ GlViewport_Qt::GlViewport_Qt(QWidget* parent)
     setObjectName("viewport");
     setAccessibleName("Viewport");
     setAccessibleDescription("OpenGL plate viewport");
+    // We do a full repaint each frame (clear + redraw every plate), so
+    // we don't need Qt to preserve the previous frame's FBO contents.
+    // NoPartialUpdate skips that copy in the FBO→window composite step;
+    // measurable per-frame win on macOS where QOpenGLWidget already
+    // pays an FBO blit that FLTK's native NSOpenGLView avoids.
+    setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
 }
 
 GlViewport_Qt::~GlViewport_Qt() = default;
