@@ -170,6 +170,17 @@ docs/manual-images/     Screenshots (2014, need updating)
 
 ## Key Code Patterns
 
+### Qt UI code — read `developer_notes.md` first
+
+Before touching anything under `src/qt/` or wiring a new Qt control into the rendering chain, read **`developer_notes.md`** at the repo root. It captures the patterns the FLTK→Qt port landed on:
+
+- **TU separation**: only `src/qt/SequenceLoadBridge_qt.cpp` may include the rendering-chain managers (`gfcPlateManager`, `gfcSequence`, etc.). Glad and Qt's QOpenGLWidget refuse to share a TU on macOS. Every other `src/qt/*.cpp` routes through `jefe::qt::*` bridge accessors in `SequenceLoadBridge_qt.h`.
+- **Plate-card slots must propagate**: writing to the Qt plate GUI alone (`gui->setGamma(v)`) is a silent no-op — the plate's actual fields stay stale. Every plate-card slot follows the GUI write with `jefe::qt::propagatePlateChanges()`.
+- **`updatePlatesFromGUI` vs `updateAllFromGUI`**: the latter resets layout (framingMode) and active-quad, which the Qt build drives via separate paths. Always use `updatePlatesFromGUI` from Qt-side update points.
+- **macOS drag-perf playbook**: `Qt::QueuedConnection` for slot wiring, targeted signals (`plateTransformChanged` / `plateColorChanged`) over the heavy `plateStateChanged`, cache-gated widget writes in `refreshFromState`, 60Hz throttle on continuous emissions. AppKit's accessibility cascade fires on every Qt widget write regardless of whether the value changed — caching reduces *write count*, not *per-write cost*.
+- **`gfcPlate::showPreview` has one writer**: `setLoadWindowOpen` via `setAllPlatesShowPreview`. Don't add another.
+- **CBArgs enum**: `LOOPMODEONCE_ID` etc. are positional values 22/23/24 inside a flat enum, not 0/1/2. Translate combo indices at the bridge boundary.
+
 ### Image Loading Flow
 1. `gfcFrame::loadFrame()` creates a loader based on file extension
 2. `GFCLOADER_GFL` and `GFCLOADER_FIL` → `gfcImageLoaderOIIO` (replaced GFL)
