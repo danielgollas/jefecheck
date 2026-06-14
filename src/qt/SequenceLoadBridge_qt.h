@@ -114,6 +114,19 @@ void applyLUTToActivePlate(int guiLutIndex);
 void applyLUTToPlate(int plateIdx, int guiLutIndex);
 int  getLUTOnActivePlate();
 
+// Per-plate slot writes from PlateCard_Qt only update the Qt plate GUI
+// (e.g. `gui->setGamma(v)`). The actual gfcPlate fields are mirrored
+// from the GUI via `updateValueFromGUI`; without an explicit propagate
+// call after each edit, the super-shader rebuild never sees the new
+// value and color-correction controls silently do nothing. Call this
+// after any direct `gui->setX(...)` write that should affect rendering
+// (gamma, exposure, BCS, flip/flop, RGBA mask, scale, pan, rotation).
+//
+// Cheap — iterates 4 plates and calls each plate's updateValuesFromGUI.
+// Does NOT touch layout (framingMode) or active-quad selection, unlike
+// the older updateAllFromGUI helper that has its own use sites.
+void propagatePlateChanges();
+
 // FX browser / stack — backs the Qt FX Stack dock. Each FX is a
 // shader effect (.jfx + .frag/.vert) loaded into fxManager; each
 // plate has its own gfcFXStack of selected effects in render order.

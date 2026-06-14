@@ -240,24 +240,36 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
                 });
     }
 
-    connect(cropBtn_, &QPushButton::toggled, this, [g](bool on) { g->setCrop(on ? 1 : 0); });
-    connect(flipBtn_, &QPushButton::toggled, this, [g](bool on) { g->setFlip(on ? 1 : 0); });
-    connect(flopBtn_, &QPushButton::toggled, this, [g](bool on) { g->setFlop(on ? 1 : 0); });
+    // Every plate-card slot that writes to the Qt GUI must follow with a
+    // jefe::qt::propagatePlateChanges() call. Without it, the plate's
+    // actual fields stay stale and the super-shader never picks up the
+    // new value — controls appear inert. The LUT and Layer combos below
+    // route through bridge functions that already handle propagation.
+    connect(cropBtn_, &QPushButton::toggled, this, [g](bool on) {
+        g->setCrop(on ? 1 : 0); jefe::qt::propagatePlateChanges();
+    });
+    connect(flipBtn_, &QPushButton::toggled, this, [g](bool on) {
+        g->setFlip(on ? 1 : 0); jefe::qt::propagatePlateChanges();
+    });
+    connect(flopBtn_, &QPushButton::toggled, this, [g](bool on) {
+        g->setFlop(on ? 1 : 0); jefe::qt::propagatePlateChanges();
+    });
     connect(rgbaBtn_, &QPushButton::clicked, this, [g]() {
         // Cycle RGBA mode 0..3 each click. The FLTK build calls a similar
         // toggle from a single button.
         const int next = (g->getRGBA() + 1) % 4;
         g->setRGBA(next);
+        jefe::qt::propagatePlateChanges();
     });
 
     connect(zoomSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setScale((float)v); });
+            this, [g](double v) { g->setScale((float)v); jefe::qt::propagatePlateChanges(); });
     connect(panXSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setTX((float)v); });
+            this, [g](double v) { g->setTX((float)v); jefe::qt::propagatePlateChanges(); });
     connect(panYSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setTY((float)v); });
+            this, [g](double v) { g->setTY((float)v); jefe::qt::propagatePlateChanges(); });
     connect(rotSpin_,  QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setRZ((float)v); });
+            this, [g](double v) { g->setRZ((float)v); jefe::qt::propagatePlateChanges(); });
 
     // Route LUT change through the bridge so plates[id_].setLUT actually
     // binds the new GL texture and recompiles the super-shader. Calling
@@ -270,15 +282,15 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
             });
 
     connect(gammaSpin_,      QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setGamma((float)v); });
+            this, [g](double v) { g->setGamma((float)v); jefe::qt::propagatePlateChanges(); });
     connect(exposureSpin_,   QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setExposure((float)v); });
+            this, [g](double v) { g->setExposure((float)v); jefe::qt::propagatePlateChanges(); });
     connect(contrastSpin_,   QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setContrast((float)v); });
+            this, [g](double v) { g->setContrast((float)v); jefe::qt::propagatePlateChanges(); });
     connect(brightnessSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setBrightness((float)v); });
+            this, [g](double v) { g->setBrightness((float)v); jefe::qt::propagatePlateChanges(); });
     connect(saturationSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setSaturation((float)v); });
+            this, [g](double v) { g->setSaturation((float)v); jefe::qt::propagatePlateChanges(); });
 
     refreshFromState();
 }
