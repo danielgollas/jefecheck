@@ -240,24 +240,36 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
                 });
     }
 
-    connect(cropBtn_, &QPushButton::toggled, this, [g](bool on) { g->setCrop(on ? 1 : 0); });
-    connect(flipBtn_, &QPushButton::toggled, this, [g](bool on) { g->setFlip(on ? 1 : 0); });
-    connect(flopBtn_, &QPushButton::toggled, this, [g](bool on) { g->setFlop(on ? 1 : 0); });
+    // Every plate-card slot that writes to the Qt GUI must follow with a
+    // jefe::qt::propagatePlateChanges() call. Without it, the plate's
+    // actual fields stay stale and the super-shader never picks up the
+    // new value — controls appear inert. The LUT and Layer combos below
+    // route through bridge functions that already handle propagation.
+    connect(cropBtn_, &QPushButton::toggled, this, [g](bool on) {
+        g->setCrop(on ? 1 : 0); jefe::qt::propagatePlateChanges();
+    });
+    connect(flipBtn_, &QPushButton::toggled, this, [g](bool on) {
+        g->setFlip(on ? 1 : 0); jefe::qt::propagatePlateChanges();
+    });
+    connect(flopBtn_, &QPushButton::toggled, this, [g](bool on) {
+        g->setFlop(on ? 1 : 0); jefe::qt::propagatePlateChanges();
+    });
     connect(rgbaBtn_, &QPushButton::clicked, this, [g]() {
         // Cycle RGBA mode 0..3 each click. The FLTK build calls a similar
         // toggle from a single button.
         const int next = (g->getRGBA() + 1) % 4;
         g->setRGBA(next);
+        jefe::qt::propagatePlateChanges();
     });
 
     connect(zoomSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setScale((float)v); });
+            this, [g](double v) { g->setScale((float)v); jefe::qt::propagatePlateChanges(); });
     connect(panXSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setTX((float)v); });
+            this, [g](double v) { g->setTX((float)v); jefe::qt::propagatePlateChanges(); });
     connect(panYSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setTY((float)v); });
+            this, [g](double v) { g->setTY((float)v); jefe::qt::propagatePlateChanges(); });
     connect(rotSpin_,  QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setRZ((float)v); });
+            this, [g](double v) { g->setRZ((float)v); jefe::qt::propagatePlateChanges(); });
 
     // Route LUT change through the bridge so plates[id_].setLUT actually
     // binds the new GL texture and recompiles the super-shader. Calling
@@ -270,15 +282,15 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
             });
 
     connect(gammaSpin_,      QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setGamma((float)v); });
+            this, [g](double v) { g->setGamma((float)v); jefe::qt::propagatePlateChanges(); });
     connect(exposureSpin_,   QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setExposure((float)v); });
+            this, [g](double v) { g->setExposure((float)v); jefe::qt::propagatePlateChanges(); });
     connect(contrastSpin_,   QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setContrast((float)v); });
+            this, [g](double v) { g->setContrast((float)v); jefe::qt::propagatePlateChanges(); });
     connect(brightnessSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setBrightness((float)v); });
+            this, [g](double v) { g->setBrightness((float)v); jefe::qt::propagatePlateChanges(); });
     connect(saturationSpin_, QOverload<double>::of(&QDS::valueChanged),
-            this, [g](double v) { g->setSaturation((float)v); });
+            this, [g](double v) { g->setSaturation((float)v); jefe::qt::propagatePlateChanges(); });
 
     refreshFromState();
 }
@@ -315,6 +327,31 @@ void PlateCard_Qt::setActiveHighlight(bool on) {
 void PlateCard_Qt::refreshFromState() {
     if (!gui_) return;
 
+    // Read fresh state once up front. The reads themselves are cheap
+    // (plain getters off the GUI state object); the cost being optimized
+    // is the widget-side setValue/setText/setChecked/setCurrentIndex
+    // cascade through QAccessible + AppKit + AttributeGraph that fires
+    // even when the new value equals the old.
+    const int track = gui_->getSequenceID();
+    const QString aspect = QString::fromStdString(gui_->getAspectString());
+    const bool crop = gui_->getCrop() != 0;
+    const bool flip = gui_->getFlip() != 0;
+    const bool flop = gui_->getFlop() != 0;
+    const int rgba = gui_->getRGBA() & 3;
+    const float scale = gui_->getScale();
+    const float tx = gui_->getTX();
+    const float ty = gui_->getTY();
+    const float rz = gui_->getRZ();
+    const int lut = gui_->getLUT();
+    const auto& lutOpts = gui_->getLUTOptions();
+    const float gamma = gui_->getGamma();
+    const float exposure = gui_->getExposure();
+    const float contrast = gui_->getContrast();
+    const float brightness = gui_->getBrightness();
+    const float saturation = gui_->getSaturation();
+    const auto layers = jefe::qt::getLayersOnPlate(id_);
+    const std::string activeLayer = jefe::qt::getActiveLayerOnPlate(id_);
+
     // Block every widget's signals for the duration of the refresh.
     // Without this, programmatic setValue() loops back into the setters
     // we just wired up, fighting the user's edits and re-rounding floats.
@@ -336,8 +373,10 @@ void PlateCard_Qt::refreshFromState() {
     const QSignalBlocker bBrightness(brightnessSpin_);
     const QSignalBlocker bSaturation(saturationSpin_);
 
-    const int track = gui_->getSequenceID();
-    if (track >= 0 && track < trackBox_->count()) {
+    const bool firstPass = !lastShown_.valid;
+
+    if ((firstPass || track != lastShown_.track)
+        && track >= 0 && track < trackBox_->count()) {
         trackBox_->setCurrentIndex(track);
     }
 
@@ -347,25 +386,15 @@ void PlateCard_Qt::refreshFromState() {
     // an empty name). Showing a one-item combo with a blank label
     // would just be confusing.
     {
-        const auto layers = jefe::qt::getLayersOnPlate(id_);
-        const std::string activeLayer = jefe::qt::getActiveLayerOnPlate(id_);
         bool hasNamedLayers = false;
         for (const auto& n : layers) {
             if (!n.empty()) { hasNamedLayers = true; break; }
         }
         if (hasNamedLayers) {
-            // Only rebuild the item list if it actually changed —
-            // touching items causes the combo to flicker even with
-            // signals blocked.
-            bool listChanged = (layerBox_->count() != int(layers.size()));
-            if (!listChanged) {
-                for (int i = 0; i < int(layers.size()); ++i) {
-                    if (layerBox_->itemText(i).toStdString() != layers[i]) {
-                        listChanged = true;
-                        break;
-                    }
-                }
-            }
+            // Only rebuild the item list if the cached list shows a
+            // different shape. Touching items causes the combo to
+            // flicker even with signals blocked.
+            const bool listChanged = firstPass || (layers != lastShown_.layers);
             if (listChanged) {
                 layerBox_->clear();
                 for (const auto& name : layers) {
@@ -373,63 +402,154 @@ void PlateCard_Qt::refreshFromState() {
                 }
             }
             const QString want = QString::fromStdString(activeLayer);
-            if (!want.isEmpty() && layerBox_->currentText() != want) {
+            if (!want.isEmpty()
+                && (firstPass || activeLayer != lastShown_.activeLayer
+                    || listChanged)
+                && layerBox_->currentText() != want) {
                 layerBox_->setCurrentText(want);
             }
-            layerBox_->setVisible(true);
+            if (firstPass || !lastShown_.layerVisible) {
+                layerBox_->setVisible(true);
+            }
+            lastShown_.layerVisible = true;
         } else {
-            layerBox_->setVisible(false);
+            if (firstPass || lastShown_.layerVisible) {
+                layerBox_->setVisible(false);
+            }
+            lastShown_.layerVisible = false;
         }
+        lastShown_.layers = layers;
+        lastShown_.activeLayer = activeLayer;
     }
 
-    const QString aspect = QString::fromStdString(gui_->getAspectString());
-    if (!aspect.isEmpty() && aspectBox_->currentText() != aspect) {
+    if ((firstPass || aspect != lastShown_.aspect)
+        && !aspect.isEmpty()
+        && aspectBox_->currentText() != aspect) {
         aspectBox_->setCurrentText(aspect);
     }
 
-    cropBtn_->setChecked(gui_->getCrop() != 0);
-    flipBtn_->setChecked(gui_->getFlip() != 0);
-    flopBtn_->setChecked(gui_->getFlop() != 0);
+    if (firstPass || crop != lastShown_.crop) cropBtn_->setChecked(crop);
+    if (firstPass || flip != lastShown_.flip) flipBtn_->setChecked(flip);
+    if (firstPass || flop != lastShown_.flop) flopBtn_->setChecked(flop);
 
     // RGB button label tracks the active channel mask. Matches the FLTK
     // single-button cycle: 0=RGB, 1=R, 2=G, 3=B (alpha lives elsewhere).
     static const char* kRgbaLabels[4] = {"RGB", "R", "G", "B"};
-    const int rgba = gui_->getRGBA() & 3;
-    rgbaBtn_->setText(kRgbaLabels[rgba]);
-    rgbaBtn_->setChecked(rgba != 0);
+    if (firstPass || rgba != lastShown_.rgba) {
+        rgbaBtn_->setText(kRgbaLabels[rgba]);
+        rgbaBtn_->setChecked(rgba != 0);
+    }
 
-    zoomSpin_->setValue(gui_->getScale());
-    panXSpin_->setValue(gui_->getTX());
-    panYSpin_->setValue(gui_->getTY());
-    rotSpin_->setValue(gui_->getRZ());
+    if (firstPass || scale != lastShown_.scale)         zoomSpin_->setValue(scale);
+    if (firstPass || tx    != lastShown_.tx)            panXSpin_->setValue(tx);
+    if (firstPass || ty    != lastShown_.ty)            panYSpin_->setValue(ty);
+    if (firstPass || rz    != lastShown_.rz)            rotSpin_->setValue(rz);
 
     // Rebuild the LUT combo if the gui's LUT list changed (it grows after
     // initializeInstallLUTs runs the autoload). Cheap to compare; saves a
     // user-visible flicker when the names already match.
-    const auto& opts = gui_->getLUTOptions();
-    bool listChanged = (lutBox_->count() != int(opts.size()));
-    if (!listChanged) {
-        for (int i = 0; i < int(opts.size()); ++i) {
-            if (lutBox_->itemText(i).toStdString() != opts[i]) {
-                listChanged = true;
-                break;
-            }
-        }
-    }
-    if (listChanged) {
+    const bool lutListChanged = firstPass || (lutOpts != lastShown_.lutOptions);
+    if (lutListChanged) {
         lutBox_->clear();
-        for (const auto& name : opts) {
+        for (const auto& name : lutOpts) {
             lutBox_->addItem(QString::fromStdString(name));
         }
+        lastShown_.lutOptions = lutOpts;
     }
-    const int lut = gui_->getLUT();
-    if (lut >= 0 && lut < lutBox_->count()) {
+    if ((firstPass || lut != lastShown_.lut || lutListChanged)
+        && lut >= 0 && lut < lutBox_->count()) {
         lutBox_->setCurrentIndex(lut);
     }
 
-    gammaSpin_->setValue(gui_->getGamma());
-    exposureSpin_->setValue(gui_->getExposure());
-    contrastSpin_->setValue(gui_->getContrast());
-    brightnessSpin_->setValue(gui_->getBrightness());
-    saturationSpin_->setValue(gui_->getSaturation());
+    if (firstPass || gamma      != lastShown_.gamma)      gammaSpin_->setValue(gamma);
+    if (firstPass || exposure   != lastShown_.exposure)   exposureSpin_->setValue(exposure);
+    if (firstPass || contrast   != lastShown_.contrast)   contrastSpin_->setValue(contrast);
+    if (firstPass || brightness != lastShown_.brightness) brightnessSpin_->setValue(brightness);
+    if (firstPass || saturation != lastShown_.saturation) saturationSpin_->setValue(saturation);
+
+    // Commit the freshly-read values to the cache. Future calls compare
+    // against these and short-circuit when they match.
+    lastShown_.track       = track;
+    lastShown_.aspect      = aspect;
+    lastShown_.crop        = crop;
+    lastShown_.flip        = flip;
+    lastShown_.flop        = flop;
+    lastShown_.rgba        = rgba;
+    lastShown_.scale       = scale;
+    lastShown_.tx          = tx;
+    lastShown_.ty          = ty;
+    lastShown_.rz          = rz;
+    lastShown_.lut         = lut;
+    lastShown_.gamma       = gamma;
+    lastShown_.exposure    = exposure;
+    lastShown_.contrast    = contrast;
+    lastShown_.brightness  = brightness;
+    lastShown_.saturation  = saturation;
+    lastShown_.valid       = true;
+}
+
+void PlateCard_Qt::refreshTransformOnly() {
+    if (!gui_) return;
+    // Read only the four fields that change during a viewport pan/zoom drag.
+    // Same delta-vs-cache gating as refreshFromState — typical drag touch
+    // is 2-4 setValue calls on this one card, with no other widget scope
+    // churn and no FX panel refresh fired.
+    const float scale = gui_->getScale();
+    const float tx    = gui_->getTX();
+    const float ty    = gui_->getTY();
+    const float rz    = gui_->getRZ();
+
+    if (lastShown_.valid
+        && scale == lastShown_.scale
+        && tx == lastShown_.tx
+        && ty == lastShown_.ty
+        && rz == lastShown_.rz) {
+        return;  // nothing changed — skip widget access entirely
+    }
+
+    const QSignalBlocker bZoom(zoomSpin_);
+    const QSignalBlocker bPanX(panXSpin_);
+    const QSignalBlocker bPanY(panYSpin_);
+    const QSignalBlocker bRot(rotSpin_);
+
+    if (scale != lastShown_.scale) { zoomSpin_->setValue(scale); lastShown_.scale = scale; }
+    if (tx    != lastShown_.tx)    { panXSpin_->setValue(tx);   lastShown_.tx    = tx; }
+    if (ty    != lastShown_.ty)    { panYSpin_->setValue(ty);   lastShown_.ty    = ty; }
+    if (rz    != lastShown_.rz)    { rotSpin_->setValue(rz);    lastShown_.rz    = rz; }
+}
+
+void PlateCard_Qt::refreshColorOnly() {
+    if (!gui_) return;
+    // Mirror of refreshTransformOnly for the five color-correction
+    // spinboxes. Reads the GUI's current values, short-circuits when
+    // none changed against the cache, then writes only the changed
+    // fields with signals blocked. Saves the full refreshFromState
+    // walk (13+ widget writes across track/aspect/layer/RGBA/LUT/etc.)
+    // during a W/E/Q/D/S drag.
+    const float gamma      = gui_->getGamma();
+    const float exposure   = gui_->getExposure();
+    const float contrast   = gui_->getContrast();
+    const float brightness = gui_->getBrightness();
+    const float saturation = gui_->getSaturation();
+
+    if (lastShown_.valid
+        && gamma == lastShown_.gamma
+        && exposure == lastShown_.exposure
+        && contrast == lastShown_.contrast
+        && brightness == lastShown_.brightness
+        && saturation == lastShown_.saturation) {
+        return;
+    }
+
+    const QSignalBlocker bGamma(gammaSpin_);
+    const QSignalBlocker bExposure(exposureSpin_);
+    const QSignalBlocker bContrast(contrastSpin_);
+    const QSignalBlocker bBrightness(brightnessSpin_);
+    const QSignalBlocker bSaturation(saturationSpin_);
+
+    if (gamma      != lastShown_.gamma)      { gammaSpin_->setValue(gamma);           lastShown_.gamma      = gamma; }
+    if (exposure   != lastShown_.exposure)   { exposureSpin_->setValue(exposure);     lastShown_.exposure   = exposure; }
+    if (contrast   != lastShown_.contrast)   { contrastSpin_->setValue(contrast);     lastShown_.contrast   = contrast; }
+    if (brightness != lastShown_.brightness) { brightnessSpin_->setValue(brightness); lastShown_.brightness = brightness; }
+    if (saturation != lastShown_.saturation) { saturationSpin_->setValue(saturation); lastShown_.saturation = saturation; }
 }

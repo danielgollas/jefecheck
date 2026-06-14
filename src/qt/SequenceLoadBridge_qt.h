@@ -67,6 +67,13 @@ void initializeTextRenderer(float dpiScale);
 // a timestep update + a flag swap.
 bool tickPlayback();
 
+// Cheap predicate — true when the playback engine is actively playing
+// OR when at least one track has frames waiting in its rawFrames queue
+// that need to be uploaded to GL. When both are false, the 60Hz timer
+// callback in MainWindow_qt.cpp can skip the makeCurrent/tickPlayback
+// pair entirely — saves ~60 GL-context switches per second at idle.
+bool needsPlaybackTick();
+
 // Hands back the gfcPlateGUI_Qt that gfcPlate reads its rendering
 // state from for plate `whichPlate`. PlateCard_Qt binds its widgets
 // to this so user edits land on the plate the viewport is drawing,
@@ -113,6 +120,19 @@ bool loadLUTFile(const std::string& path);
 void applyLUTToActivePlate(int guiLutIndex);
 void applyLUTToPlate(int plateIdx, int guiLutIndex);
 int  getLUTOnActivePlate();
+
+// Per-plate slot writes from PlateCard_Qt only update the Qt plate GUI
+// (e.g. `gui->setGamma(v)`). The actual gfcPlate fields are mirrored
+// from the GUI via `updateValueFromGUI`; without an explicit propagate
+// call after each edit, the super-shader rebuild never sees the new
+// value and color-correction controls silently do nothing. Call this
+// after any direct `gui->setX(...)` write that should affect rendering
+// (gamma, exposure, BCS, flip/flop, RGBA mask, scale, pan, rotation).
+//
+// Cheap — iterates 4 plates and calls each plate's updateValuesFromGUI.
+// Does NOT touch layout (framingMode) or active-quad selection, unlike
+// the older updateAllFromGUI helper that has its own use sites.
+void propagatePlateChanges();
 
 // FX browser / stack — backs the Qt FX Stack dock. Each FX is a
 // shader effect (.jfx + .frag/.vert) loaded into fxManager; each
@@ -364,6 +384,40 @@ bool loadFileIntoPlate(const std::string& path,
 // the next paintGL pass picks up the change.
 void panPlate(int plateIdx, float dx, float dy);
 void zoomPlate(int plateIdx, float zoomDelta);
+
+// Gang-pan: pan every plate by the same delta in one shot. The FLTK
+// build invokes this on Alt+drag in GlViewport.cpp — the Qt viewport
+// mirrors the modifier convention. plateManager.panAllPlates handles
+// the iteration internally and calls setChanged once at the end.
+void panAllPlates(float dx, float dy);
+
+// Gang-zoom: scale every plate by the same delta in one shot. Wraps
+// plateManager.zoomAllPlates. Used by viewport key+drag color paths
+// that share the gang-modifier convention.
+void zoomAllPlates(float zoomDelta);
+
+// Color-correction deltas. Each call applies `delta` to the named
+// field additively (the underlying gfcPlateManager setters take an
+// `isDelta` flag; we pass 1 so the value is summed onto the current
+// field rather than overwritten). Single-plate variants target
+// `plateIdx` and are no-ops when plateIdx < 0. Gang variants hit
+// every plate via the matching plateManager.set*All() path. Each
+// flags plateManager dirty so the next paintGL repaints.
+//
+// Used by GlViewport_Qt's W/E/Q/D/S key+drag handlers to mirror
+// FLTK GlViewport.cpp's adjustmentValue = (eventX - prevX) * 0.01
+// convention (drag right = increase).
+void adjustPlateGamma(int plateIdx, float delta);
+void adjustPlateExposure(int plateIdx, float delta);
+void adjustPlateBrightness(int plateIdx, float delta);
+void adjustPlateContrast(int plateIdx, float delta);
+void adjustPlateSaturation(int plateIdx, float delta);
+
+void adjustAllPlatesGamma(float delta);
+void adjustAllPlatesExposure(float delta);
+void adjustAllPlatesBrightness(float delta);
+void adjustAllPlatesContrast(float delta);
+void adjustAllPlatesSaturation(float delta);
 
 // Drive every plate's showPreview flag from a single writer. Used by
 // GlViewport_Qt::setLoadWindowOpen — while the Load Sequence Manager

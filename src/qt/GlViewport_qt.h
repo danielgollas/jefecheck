@@ -11,8 +11,12 @@
 
 #include "ui/IGLViewport.h"
 
+#include <QElapsedTimer>
 #include <QOpenGLWidget>
+#include <QSet>
 #include <QString>
+
+class QPinchGesture;
 
 class GlViewport_Qt : public QOpenGLWidget, public jefe::ui::IGLViewport {
     Q_OBJECT
@@ -55,6 +59,26 @@ signals:
     // spinboxes so the user can read back the values they just edited.
     void plateStateChanged();
 
+    // Lightweight version emitted continuously during pan/zoom drag.
+    // Wired to a per-card slot that only refreshes the four transform
+    // spinboxes (zoom, panX, panY, rotation) on the dragged plate,
+    // bypassing the full refreshAllCards + FXParamPanel cascade.
+    //
+    // For Alt-drag gang-transform: emit this once per affected plate
+    // index — the queued connection coalesces in the event loop and
+    // each card's refreshTransformOnly is independently delta-gated
+    // against its cache. 4 emits per frame at 60Hz is still cheap.
+    void plateTransformChanged(int plateIdx);
+
+    // Sibling of plateTransformChanged for color-correction drags
+    // (W/E/Q/D/S key + drag — see mouseMoveEvent). Wired to a per-card
+    // slot that only refreshes the gamma / exposure / contrast /
+    // brightness / saturation spinboxes on the affected plate, gated
+    // on per-field cache delta. Same queued, coalescing semantics as
+    // plateTransformChanged so the dispatch cost stays bounded even
+    // when gang-modifying all four plates each frame.
+    void plateColorChanged(int plateIdx);
+
     // Emitted only when the Load Sequence Manager is open. plateIdx is
     // the plate the drop is targeting (today: always 0; future PR will
     // route to plate-under-cursor). path is the local file path.
@@ -81,6 +105,11 @@ protected:
     void dragMoveEvent(QDragMoveEvent*) override;
     void dropEvent(QDropEvent*) override;
 
+    // Gesture dispatch — pinch maps to zoom on the plate under the
+    // gesture center. macOS trackpads deliver QPinchGesture natively;
+    // x86 Magic Trackpads and Windows precision touchpads also work.
+    bool event(QEvent* e) override;
+
 private:
     jefe::ui::IGLViewportListener* listener_ = nullptr;
     bool gladLoaded_ = false;
@@ -97,6 +126,33 @@ private:
     int dragPlate_ = -1;
 
     bool loadWindowOpen_ = false;
+
+    // mouseMoveEvent gates plateStateChanged emissions to ~60Hz so the
+    // plate-card spinboxes and FX-panel reflect the live drag without
+    // the AppKit layout cascade overhead of firing per-pixel.
+    QElapsedTimer dragEmitTimer_;
+    bool dragEmittedAny_ = false;
+
+    // Set of currently-held lowercase letter keycodes that combine with
+    // left-drag to perform color-correction adjustments (FLTK
+    // convention: W=gamma, E=exposure, Q=brightness, D=contrast,
+    // S=saturation). Tracked here because Qt only delivers keyboard
+    // events when the widget has focus, and key state otherwise has
+    // to be polled per mouseMoveEvent. Cleared on key release AND on
+    // leaveEvent to avoid the stuck-modifier trap when the user
+    // releases a key while the cursor is outside the viewport.
+    QSet<int> heldDragModifierKeys_;
+
+    // Pinch-zoom target plate, captured on QPinchGesture::GestureStarted
+    // from the gesture's center point. Cleared on Finished/Canceled so
+    // an interrupted pinch doesn't bleed into the next one. -1 when no
+    // pinch is active.
+    int pinchPlate_ = -1;
+
+    // Pinch handler split out of event() for readability — applies
+    // scaleFactor as an incremental zoom delta (scaleFactor>1 zooms in)
+    // and emits the throttled targeted signal.
+    void handlePinchGesture(QPinchGesture* g);
 };
 
 #endif

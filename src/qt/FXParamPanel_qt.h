@@ -14,7 +14,11 @@
 #ifndef JEFECHECK_QT_FX_PARAM_PANEL_H
 #define JEFECHECK_QT_FX_PARAM_PANEL_H
 
+#include <QPointer>
 #include <QWidget>
+
+#include <string>
+#include <vector>
 
 class QLabel;
 class QVBoxLayout;
@@ -31,6 +35,14 @@ public slots:
     void refresh();
 
 private:
+    // Walks the existing editor widgets and updates only those whose
+    // current value differs from what the bridge reports. Called from
+    // refresh() when the active plate and FX stack haven't changed, so
+    // we can skip the full teardown + rebuild. Returns true when the
+    // walk succeeded; false signals the cached editor list is stale
+    // (mismatched count) and forces a full rebuild.
+    bool refreshValuesOnly();
+
     QScrollArea* scroll_ = nullptr;
     QWidget* contentWidget_ = nullptr;
     QVBoxLayout* contentLayout_ = nullptr;
@@ -43,6 +55,30 @@ private:
     // the panel is mid-rebuild. The guard is set during refresh and
     // checked by every editor slot.
     bool refreshing_ = false;
+
+    // Last-rebuilt stack fingerprint. plateStateChanged fires for every
+    // viewport mouse-move; without this, refresh() tore down + rebuilt
+    // every editor widget per pixel, churning QAccessible / AppKit.
+    // When the active plate and the stack's FX-name list match the
+    // cache, we walk refreshValuesOnly() instead of rebuilding.
+    int lastActivePlate_ = -2;
+    std::vector<std::string> lastStack_;
+
+    // One entry per param row produced by the last full rebuild. Used by
+    // refreshValuesOnly() to skip setValue/setChecked/setCurrentIndex
+    // calls when the new bridge value matches the cached one. Editors
+    // are held as QPointer so a stray Qt-side teardown (which shouldn't
+    // happen but cheap to guard) doesn't dangle. The editor pointer can
+    // be null for read-only display rows (Texture/Cube/LUT/Other).
+    struct CachedRow {
+        int fxIdx = 0;
+        std::string group;
+        std::string name;
+        int paramType = -1;  // FXParamType cast to int
+        float value = 0.0f;
+        QPointer<QWidget> editor;
+    };
+    std::vector<CachedRow> rowCache_;
 };
 
 #endif

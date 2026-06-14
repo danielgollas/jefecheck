@@ -22,6 +22,17 @@ public slots:
     // shortcuts), so the user can see the values they're editing.
     void refreshAllCards();
 
+    // Lightweight refresh of just the dragged plate's transform spinboxes.
+    // Wired to GlViewport_Qt::plateTransformChanged during pan/zoom drag —
+    // an order of magnitude cheaper than refreshAllCards since it skips
+    // the other 3 cards' widget-block scopes entirely.
+    void refreshPlateTransform(int plateIdx);
+
+    // Sibling of refreshPlateTransform for color-correction drags
+    // (W/E/Q/D/S key+drag). Routes plateColorChanged(plateIdx) to the
+    // matching card's refreshColorOnly().
+    void refreshPlateColor(int plateIdx);
+
 protected:
     void resizeEvent(QResizeEvent* e) override;
 

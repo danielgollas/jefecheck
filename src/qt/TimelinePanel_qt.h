@@ -93,6 +93,21 @@ private:
     QSpinBox* inSpin_ = nullptr;
     QSpinBox* outSpin_ = nullptr;
     QDoubleSpinBox* fpsSpin_ = nullptr;
+
+    // Last-seen playback values; refreshFromPlayback compares against
+    // these and skips widget setters when nothing changed. Without this
+    // the 60Hz tick fires setValue/setText/setRange unconditionally and
+    // each one cascades through QAccessible/AppKit even when the value
+    // is identical, dominating idle CPU sampling.
+    int   lastFrom_     = -1;
+    int   lastTo_       = -1;
+    int   lastCur_      = -1;
+    int   lastIn_       = -1;
+    int   lastOut_      = -1;
+    int   lastLoop_     = -1;
+    float lastFps_      = -1.0f;
+    bool  lastPlaying_  = false;
+    bool  lastCacheValid_ = false;
 };
 
 #endif

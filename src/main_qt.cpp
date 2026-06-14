@@ -94,6 +94,12 @@ int main(int argc, char* argv[]) {
     fmt.setProfile(QSurfaceFormat::NoProfile);
     fmt.setVersion(2, 1);
     fmt.setDepthBufferSize(24);
+    // Explicit vsync (1 = sync to display refresh). Qt's default on macOS
+    // is platform-dependent; spelling it out keeps swap behavior
+    // deterministic across the QOpenGLWidget FBO + window-server
+    // composite pipeline. Without this, drag pan feel was inconsistent —
+    // some frames hit vsync, others didn't.
+    fmt.setSwapInterval(1);
     QSurfaceFormat::setDefaultFormat(fmt);
 
     QApplication qapp(argc, argv);

@@ -307,14 +307,26 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     playbackTimer_ = new QTimer(this);
     playbackTimer_->setInterval(16);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
-        // tickPlayback() drains a frame from each sequence's queue and
-        // uploads it via glTexImage2D, so the GL context must be current.
         if (!viewport_) return;
-        viewport_->makeCurrent();
-        const bool dirty = jefe::qt::tickPlayback();
-        viewport_->doneCurrent();
-        if (dirty) {
-            viewport_->update();
+        // Skip the GL-current/tickPlayback/done-current trio when
+        // nothing is playing and no raw frames are pending — those
+        // makeCurrent / doneCurrent pairs are surprisingly expensive
+        // on macOS (each flushes the CGL command buffer + flips the
+        // CGLContextObj's `currentContext` TLS slot) and dominate
+        // idle CPU sampling. needsPlaybackTick is an isPlaying check
+        // + 4 O(1) queue::empty() probes.
+        const bool needsTick = jefe::qt::needsPlaybackTick();
+        bool dirty = false;
+        if (needsTick) {
+            // tickPlayback() drains a frame from each sequence's queue
+            // and uploads it via glTexImage2D, so the GL context must
+            // be current.
+            viewport_->makeCurrent();
+            dirty = jefe::qt::tickPlayback();
+            viewport_->doneCurrent();
+            if (dirty) {
+                viewport_->update();
+            }
         }
         // Pull playback state into the timeline widgets every tick.
         // Cheap (a handful of getters + signal-blocked setValues), and
@@ -545,8 +557,30 @@ void MainWindow_Qt::buildDocks() {
 
     // Mirror viewport-driven plate edits (drag pan, wheel zoom, keyboard
     // shortcuts) back into the plate cards so the spinboxes stay in sync.
+    // QueuedConnection so the slot runs asynchronously in the event
+    // loop rather than synchronously inside mouseMoveEvent — keeps the
+    // viewport's drag-event handler returning fast and lets Qt
+    // coalesce repeated posts when emit-rate exceeds the event-loop
+    // service rate. mouseReleaseEvent fires this so the inactive-plate
+    // cards and FX panel get their one-shot sync at the end of drag.
     connect(viewport_, &GlViewport_Qt::plateStateChanged,
-            plateManagerWidget_, &PlateManager_Qt::refreshAllCards);
+            plateManagerWidget_, &PlateManager_Qt::refreshAllCards,
+            Qt::QueuedConnection);
+
+    // Lightweight per-frame drag signal — only refreshes the four
+    // transform spinboxes on the dragged plate, no FX panel cascade.
+    // QueuedConnection again so the slot doesn't block mouseMoveEvent.
+    connect(viewport_, &GlViewport_Qt::plateTransformChanged,
+            plateManagerWidget_, &PlateManager_Qt::refreshPlateTransform,
+            Qt::QueuedConnection);
+
+    // Sibling of plateTransformChanged for the W/E/Q/D/S color-
+    // correction drag interactions — refreshes only the BCS/gamma/
+    // exposure spinboxes on the affected plate. Same queued, gated
+    // pattern so the per-frame cost stays bounded.
+    connect(viewport_, &GlViewport_Qt::plateColorChanged,
+            plateManagerWidget_, &PlateManager_Qt::refreshPlateColor,
+            Qt::QueuedConnection);
 
     // The 2x2 minimum (wide + tall) applies only when the dock is on the
     // top or bottom edge. Floating, or docked to a side edge, drops to a
@@ -662,8 +696,11 @@ void MainWindow_Qt::buildDocks() {
     // Refresh the FX param panel whenever viewport-driven plate edits
     // fire (this also catches active-plate changes — clicking a plate
     // card emits plateStateChanged via PlateManager_Qt's wiring).
+    // QueuedConnection for the same reason as the plate-card connect
+    // above: keeps the slot off the mouseMove hot path.
     connect(viewport_, &GlViewport_Qt::plateStateChanged,
-            fxParamPanelWidget_, &FXParamPanel_Qt::refresh);
+            fxParamPanelWidget_, &FXParamPanel_Qt::refresh,
+            Qt::QueuedConnection);
     // Also refresh after FX add/remove via the FX Stack panel — those
     // mutate the stack but don't go through plateStateChanged.
     connect(fxPanelWidget_, &FXStackPanel_Qt::stackChanged,

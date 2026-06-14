@@ -156,6 +156,20 @@ void initializeInstallLUTs() {
     plateManager.updateAllGUILUTWidgets();
 }
 
+bool needsPlaybackTick() {
+    // Playback engine actively advancing — must tick to keep currentFrame
+    // moving and to call plateManager.setChanged() each frame.
+    if (playbackManager.isPlaying()) return true;
+    // Any sequence with decoded-but-not-yet-uploaded frames also needs a
+    // tick so trackManager.generateTextures() can drain them onto the GPU.
+    // hasPendingRawFrames() is an O(1) queue::empty() check.
+    for (int i = 0; i < 4; ++i) {
+        gfcSequence* seq = trackManager.getSequence(i);
+        if (seq && seq->hasPendingRawFrames()) return true;
+    }
+    return false;
+}
+
 bool tickPlayback() {
     // playbackManager.update() is the heart of the playback engine —
     // advances currentFrame at target FPS, calls plateManager.setChanged()
@@ -226,12 +240,38 @@ void seekToFrame(int frame) {
     plateManager.setChanged();
 }
 
+// The Qt loop-mode combo uses 0/1/2 for Once/Loop/Bounce, but the
+// playback manager's switch in update() matches against the CBArgs
+// enum values (LOOPMODEONCE_ID=22, LOOPMODELOOP_ID=23, LOOPMODEBOUNCE_ID=24).
+// Without this translation, changing the combo wrote a value (0/1/2) that
+// no case matched — the switch fell through silently and playback froze.
+// Constructor-time default of LOOPMODEONCE_ID worked, so first-loop playback
+// succeeded; any subsequent mode change broke everything. Translate at the
+// bridge boundary in both directions.
+static int comboIdxToLoopModeId(int idx) {
+    switch (idx) {
+        case 1:  return LOOPMODELOOP_ID;
+        case 2:  return LOOPMODEBOUNCE_ID;
+        case 0:  // fall through to default
+        default: return LOOPMODEONCE_ID;
+    }
+}
+
+static int loopModeIdToComboIdx(int id) {
+    switch (id) {
+        case LOOPMODELOOP_ID:   return 1;
+        case LOOPMODEBOUNCE_ID: return 2;
+        case LOOPMODEONCE_ID:   // fall through
+        default:                return 0;
+    }
+}
+
 void setLoopMode(int mode) {
-    playbackManager.setPlaybackMode(mode);
+    playbackManager.setPlaybackMode(comboIdxToLoopModeId(mode));
 }
 
 int getLoopMode() {
-    return playbackManager.getPlaybackMode();
+    return loopModeIdToComboIdx(playbackManager.getPlaybackMode());
 }
 
 void setTargetFPS(float fps) {
@@ -787,9 +827,82 @@ void panPlate(int plateIdx, float dx, float dy) {
     plateManager.setChanged();
 }
 
+void panAllPlates(float dx, float dy) {
+    plateManager.panAllPlates(dx, dy);
+    plateManager.setChanged();
+}
+
 void zoomPlate(int plateIdx, float zoomDelta) {
     if (plateIdx < 0) return;
     plateManager.zoomPlate(plateIdx, zoomDelta);
+    plateManager.setChanged();
+}
+
+void zoomAllPlates(float zoomDelta) {
+    plateManager.zoomAllPlates(zoomDelta);
+    plateManager.setChanged();
+}
+
+// Color-correction adjustment helpers. `1` as the isDelta flag asks
+// plateManager to sum the value onto the current field rather than
+// overwrite — same convention the FLTK GlViewport key+drag path uses.
+void adjustPlateGamma(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setGamma(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateExposure(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setExposure(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateBrightness(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setBrightness(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateContrast(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setContrast(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateSaturation(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setSaturation(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesGamma(float delta) {
+    plateManager.setGammaAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesExposure(float delta) {
+    plateManager.setExposureAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesBrightness(float delta) {
+    plateManager.setBrightnessAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesContrast(float delta) {
+    plateManager.setContrastAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesSaturation(float delta) {
+    plateManager.setSaturationAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void propagatePlateChanges() {
+    plateManager.updatePlatesFromGUI();
     plateManager.setChanged();
 }
 

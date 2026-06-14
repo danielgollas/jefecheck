@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -90,6 +91,28 @@ FXParamPanel_Qt::FXParamPanel_Qt(QWidget* parent) : QWidget(parent) {
 }
 
 void FXParamPanel_Qt::refresh() {
+    const int active = jefe::qt::getActivePlate();
+
+    // Fast path: when the active plate and the FX stack's name list
+    // haven't changed since the last rebuild, the editor widgets are
+    // still valid — just refresh their values in place. Cheap
+    // fingerprint via getFXStackOnPlate (returns names only) so we
+    // avoid the heavier getFXStackMetaOnPlate walk until we know a
+    // rebuild is needed. plateStateChanged fires per viewport mouse-
+    // move, so without this every drag pixel tore down + rebuilt the
+    // whole row hierarchy.
+    if (active >= 0 && active == lastActivePlate_) {
+        const auto stackNames = jefe::qt::getFXStackOnPlate(active);
+        if (stackNames == lastStack_ && !stackNames.empty()) {
+            refreshing_ = true;
+            const bool ok = refreshValuesOnly();
+            refreshing_ = false;
+            if (ok) return;
+            // Fall through to full rebuild if the cached row list is
+            // stale (e.g. a param row count mismatch).
+        }
+    }
+
     refreshing_ = true;
 
     // Tear down existing rows synchronously. addStretch is the last
@@ -105,12 +128,14 @@ void FXParamPanel_Qt::refresh() {
         }
         delete item;
     }
+    rowCache_.clear();
 
-    const int active = jefe::qt::getActivePlate();
     if (active < 0) {
         status_->setText("No active plate.");
         contentLayout_->addStretch(1);
         refreshing_ = false;
+        lastActivePlate_ = active;
+        lastStack_.clear();
         return;
     }
 
@@ -119,6 +144,8 @@ void FXParamPanel_Qt::refresh() {
         status_->setText(QString("Plate %1: no FX on stack.").arg(active));
         contentLayout_->addStretch(1);
         refreshing_ = false;
+        lastActivePlate_ = active;
+        lastStack_.clear();
         return;
     }
 
@@ -266,6 +293,18 @@ void FXParamPanel_Qt::refresh() {
             }
             rowLay->addWidget(editor, /*stretch*/ 1);
 
+            // Cache this row so refreshValuesOnly can update the editor
+            // in place on the next refresh — provided the stack
+            // fingerprint still matches.
+            CachedRow cached;
+            cached.fxIdx = fxIdx;
+            cached.group = p.group;
+            cached.name = p.name;
+            cached.paramType = static_cast<int>(p.type);
+            cached.value = p.value;
+            cached.editor = editor;
+            rowCache_.push_back(std::move(cached));
+
             auto* typeLab = new QLabel(
                 QString("<span style='color:#666'>(%1)</span>")
                     .arg(typeLabel(p.type)),
@@ -290,5 +329,107 @@ void FXParamPanel_Qt::refresh() {
             .arg(paramCount)
             .arg(editableCount));
 
+    // Update the stack fingerprint for the next refresh() call. Names
+    // only — the cheap getFXStackOnPlate fingerprint that the fast path
+    // compares against. Param-value churn alone won't invalidate this.
+    // Mirror getFXStackOnPlate's name selection (menuName preferred,
+    // fall back to name) so the equality check on the fast path works.
+    lastActivePlate_ = active;
+    lastStack_.clear();
+    lastStack_.reserve(stack.size());
+    for (const auto& fx : stack) {
+        lastStack_.push_back(fx.menuName.empty() ? fx.name : fx.menuName);
+    }
+
     refreshing_ = false;
+}
+
+bool FXParamPanel_Qt::refreshValuesOnly() {
+    // Fast-path partner to refresh(). Walks the cached editor list and
+    // re-reads the bridge's current param values; only writes a widget
+    // when the value actually changed. Returns false to demand a full
+    // rebuild if the bridge's row layout no longer matches our cache —
+    // e.g. param count drift inside a single FX entry, which would
+    // otherwise leave editors out of sync with the underlying gfcFX.
+    const int active = lastActivePlate_;
+    if (active < 0) return false;
+
+    const auto stack = jefe::qt::getFXStackMetaOnPlate(active);
+    if (stack.empty()) return false;
+
+    // Flatten the bridge's view to the same row order rowCache_ was
+    // built with (skip Spacer/Newline, keep everything else). If the
+    // flattened size mismatches our cache, fall back to rebuild.
+    std::vector<const jefe::qt::FXParamMeta*> flat;
+    flat.reserve(rowCache_.size());
+    for (const auto& fx : stack) {
+        for (const auto& p : fx.params) {
+            if (p.type == jefe::qt::FXParamType::Spacer ||
+                p.type == jefe::qt::FXParamType::Newline) {
+                continue;
+            }
+            flat.push_back(&p);
+        }
+    }
+    if (flat.size() != rowCache_.size()) return false;
+
+    for (size_t i = 0; i < rowCache_.size(); ++i) {
+        auto& cached = rowCache_[i];
+        const auto* p = flat[i];
+
+        // Defensive identity check — if the row order shifted (group
+        // / name / type mismatch) the cached editor is no longer the
+        // right target for this param and a rebuild is cleaner than
+        // guessing.
+        if (cached.group != p->group ||
+            cached.name != p->name ||
+            cached.paramType != static_cast<int>(p->type)) {
+            return false;
+        }
+
+        if (cached.value == p->value) continue;  // unchanged
+        cached.value = p->value;
+
+        QWidget* w = cached.editor.data();
+        if (!w) continue;  // editor torn down behind our back; skip
+
+        switch (static_cast<jefe::qt::FXParamType>(cached.paramType)) {
+            case jefe::qt::FXParamType::Float: {
+                if (auto* spin = qobject_cast<QDoubleSpinBox*>(w)) {
+                    const QSignalBlocker b(spin);
+                    spin->setValue(static_cast<double>(p->value));
+                }
+                break;
+            }
+            case jefe::qt::FXParamType::Bool: {
+                if (auto* check = qobject_cast<QCheckBox*>(w)) {
+                    const QSignalBlocker b(check);
+                    check->setChecked(p->value != 0.0f);
+                }
+                break;
+            }
+            case jefe::qt::FXParamType::Choice: {
+                if (auto* combo = qobject_cast<QComboBox*>(w)) {
+                    const QSignalBlocker b(combo);
+                    const int idx = static_cast<int>(p->value);
+                    if (idx >= 0 && idx < combo->count()) {
+                        combo->setCurrentIndex(idx);
+                    }
+                }
+                break;
+            }
+            default: {
+                // Texture / cube / LUT / Other render as a read-only
+                // QLabel showing the raw float — update its text in
+                // place. No signal-blocker needed; QLabel::setText is
+                // a one-way write.
+                if (auto* lab = qobject_cast<QLabel*>(w)) {
+                    lab->setText(QString::number(
+                        static_cast<double>(p->value), 'g', 6));
+                }
+                break;
+            }
+        }
+    }
+    return true;
 }
