@@ -16,6 +16,8 @@
 #include <QSet>
 #include <QString>
 
+class QPinchGesture;
+
 class GlViewport_Qt : public QOpenGLWidget, public jefe::ui::IGLViewport {
     Q_OBJECT
 
@@ -103,6 +105,11 @@ protected:
     void dragMoveEvent(QDragMoveEvent*) override;
     void dropEvent(QDropEvent*) override;
 
+    // Gesture dispatch — pinch maps to zoom on the plate under the
+    // gesture center. macOS trackpads deliver QPinchGesture natively;
+    // x86 Magic Trackpads and Windows precision touchpads also work.
+    bool event(QEvent* e) override;
+
 private:
     jefe::ui::IGLViewportListener* listener_ = nullptr;
     bool gladLoaded_ = false;
@@ -135,6 +142,17 @@ private:
     // leaveEvent to avoid the stuck-modifier trap when the user
     // releases a key while the cursor is outside the viewport.
     QSet<int> heldDragModifierKeys_;
+
+    // Pinch-zoom target plate, captured on QPinchGesture::GestureStarted
+    // from the gesture's center point. Cleared on Finished/Canceled so
+    // an interrupted pinch doesn't bleed into the next one. -1 when no
+    // pinch is active.
+    int pinchPlate_ = -1;
+
+    // Pinch handler split out of event() for readability — applies
+    // scaleFactor as an incremental zoom delta (scaleFactor>1 zooms in)
+    // and emits the throttled targeted signal.
+    void handlePinchGesture(QPinchGesture* g);
 };
 
 #endif

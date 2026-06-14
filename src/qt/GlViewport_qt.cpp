@@ -9,12 +9,15 @@
 // FLTK dependencies, so it's safe to pull into the Qt TU directly.
 #include "../UIConstants.h"
 
+#include <QApplication>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QGestureEvent>
 #include <QKeyEvent>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPinchGesture>
 #include <QUrl>
 #include <QWheelEvent>
 
@@ -34,6 +37,11 @@ GlViewport_Qt::GlViewport_Qt(QWidget* parent)
     // measurable per-frame win on macOS where QOpenGLWidget already
     // pays an FBO blit that FLTK's native NSOpenGLView avoids.
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
+
+    // Accept native pinch gestures — trackpad two-finger pinch maps to
+    // zoom on the plate under the gesture center (Alt = gang). Without
+    // grabGesture, QPinchGesture events never reach this widget.
+    grabGesture(Qt::PinchGesture);
 }
 
 GlViewport_Qt::~GlViewport_Qt() = default;
@@ -503,4 +511,59 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
     emit fileDroppedWithScale(path, scale);
     emit fileDropped(path);  // legacy, see header comment
     e->acceptProposedAction();
+}
+
+bool GlViewport_Qt::event(QEvent* e) {
+    if (e->type() == QEvent::Gesture) {
+        auto* ge = static_cast<QGestureEvent*>(e);
+        if (auto* gesture = ge->gesture(Qt::PinchGesture)) {
+            handlePinchGesture(static_cast<QPinchGesture*>(gesture));
+            return true;
+        }
+    }
+    return QOpenGLWidget::event(e);
+}
+
+void GlViewport_Qt::handlePinchGesture(QPinchGesture* g) {
+    // On gesture start, hit-test the plate under the gesture center.
+    // centerPoint() is in global screen coords on QPinchGesture.
+    if (g->state() == Qt::GestureStarted) {
+        const QPoint local = mapFromGlobal(g->centerPoint().toPoint());
+        pinchPlate_ = jefe::qt::plateAtViewportPos(
+            local.x(), local.y(), width(), height());
+    }
+
+    if (g->changeFlags() & QPinchGesture::ScaleFactorChanged && pinchPlate_ >= 0) {
+        // scaleFactor() is the incremental change since the last event
+        // (1.0 = no change, > 1 zooms in). Convert to additive delta —
+        // gfcPlateManager::zoomPlate / zoomAllPlates take a signed delta.
+        const float delta = static_cast<float>(g->scaleFactor() - 1.0);
+        if (delta != 0.0f) {
+            const bool gang =
+                QApplication::keyboardModifiers() & Qt::AltModifier;
+            if (gang) {
+                jefe::qt::zoomAllPlates(delta);
+            } else {
+                jefe::qt::zoomPlate(pinchPlate_, delta);
+            }
+            update();
+            // Targeted refresh of just the zoom spinbox(es). Same queued,
+            // cache-gated path used by wheel zoom and drag pan — pinch
+            // rate is trackpad-driven (~60Hz) so the existing 16ms throttle
+            // is unnecessary here.
+            if (gang) {
+                for (int p = 0; p < 4; ++p) emit plateTransformChanged(p);
+            } else {
+                emit plateTransformChanged(pinchPlate_);
+            }
+        }
+    }
+
+    if (g->state() == Qt::GestureFinished ||
+        g->state() == Qt::GestureCanceled) {
+        // Full sync of every card + FX panel at the end of the gesture
+        // (matches the post-drag plateStateChanged in mouseReleaseEvent).
+        emit plateStateChanged();
+        pinchPlate_ = -1;
+    }
 }
