@@ -54,8 +54,23 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     setMinimumWidth(60);
     setFixedHeight(20);  // match the compact button row in the card
-    // Read like a combo: left-aligned text, no auto-raise flicker.
-    setStyleSheet("QToolButton { text-align: left; padding-left: 4px; }");
+    // The dark VFX theme (jefecheck_dark.qss) styles QComboBox/QPushButton
+    // but NOT QToolButton, so an unstyled QToolButton would render with the
+    // native look and clash with the sibling combos/buttons in this row.
+    // Mirror the theme's QComboBox body (bg/border/radius/color + orange
+    // hover) so the control reads as a dropdown consistent with its
+    // neighbors. The `QToolButton`-typed selector keeps this off the popup's
+    // checkbox/list/line-edit children (none of which are QToolButtons).
+    setStyleSheet(
+        "QToolButton {"
+        " background-color: #2a2a2a;"
+        " border: 1px solid #3a3a3a;"
+        " border-radius: 3px;"
+        " color: #e0e0e0;"
+        " text-align: left;"
+        " padding: 2px 6px;"
+        " }"
+        "QToolButton:hover { border-color: #d4771e; }");
 
     // Build the custom popup frame. Qt::Popup gives us click-outside
     // dismissal and grabs input while shown.
