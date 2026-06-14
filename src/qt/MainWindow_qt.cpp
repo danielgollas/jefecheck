@@ -557,8 +557,14 @@ void MainWindow_Qt::buildDocks() {
 
     // Mirror viewport-driven plate edits (drag pan, wheel zoom, keyboard
     // shortcuts) back into the plate cards so the spinboxes stay in sync.
+    // QueuedConnection so the slot runs asynchronously in the event
+    // loop rather than synchronously inside mouseMoveEvent — keeps the
+    // viewport's drag-event handler returning fast and lets Qt
+    // coalesce repeated posts when emit-rate exceeds the event-loop
+    // service rate.
     connect(viewport_, &GlViewport_Qt::plateStateChanged,
-            plateManagerWidget_, &PlateManager_Qt::refreshAllCards);
+            plateManagerWidget_, &PlateManager_Qt::refreshAllCards,
+            Qt::QueuedConnection);
 
     // The 2x2 minimum (wide + tall) applies only when the dock is on the
     // top or bottom edge. Floating, or docked to a side edge, drops to a
@@ -674,8 +680,11 @@ void MainWindow_Qt::buildDocks() {
     // Refresh the FX param panel whenever viewport-driven plate edits
     // fire (this also catches active-plate changes — clicking a plate
     // card emits plateStateChanged via PlateManager_Qt's wiring).
+    // QueuedConnection for the same reason as the plate-card connect
+    // above: keeps the slot off the mouseMove hot path.
     connect(viewport_, &GlViewport_Qt::plateStateChanged,
-            fxParamPanelWidget_, &FXParamPanel_Qt::refresh);
+            fxParamPanelWidget_, &FXParamPanel_Qt::refresh,
+            Qt::QueuedConnection);
     // Also refresh after FX add/remove via the FX Stack panel — those
     // mutate the stack but don't go through plateStateChanged.
     connect(fxPanelWidget_, &FXStackPanel_Qt::stackChanged,
