@@ -327,6 +327,31 @@ void PlateCard_Qt::setActiveHighlight(bool on) {
 void PlateCard_Qt::refreshFromState() {
     if (!gui_) return;
 
+    // Read fresh state once up front. The reads themselves are cheap
+    // (plain getters off the GUI state object); the cost being optimized
+    // is the widget-side setValue/setText/setChecked/setCurrentIndex
+    // cascade through QAccessible + AppKit + AttributeGraph that fires
+    // even when the new value equals the old.
+    const int track = gui_->getSequenceID();
+    const QString aspect = QString::fromStdString(gui_->getAspectString());
+    const bool crop = gui_->getCrop() != 0;
+    const bool flip = gui_->getFlip() != 0;
+    const bool flop = gui_->getFlop() != 0;
+    const int rgba = gui_->getRGBA() & 3;
+    const float scale = gui_->getScale();
+    const float tx = gui_->getTX();
+    const float ty = gui_->getTY();
+    const float rz = gui_->getRZ();
+    const int lut = gui_->getLUT();
+    const auto& lutOpts = gui_->getLUTOptions();
+    const float gamma = gui_->getGamma();
+    const float exposure = gui_->getExposure();
+    const float contrast = gui_->getContrast();
+    const float brightness = gui_->getBrightness();
+    const float saturation = gui_->getSaturation();
+    const auto layers = jefe::qt::getLayersOnPlate(id_);
+    const std::string activeLayer = jefe::qt::getActiveLayerOnPlate(id_);
+
     // Block every widget's signals for the duration of the refresh.
     // Without this, programmatic setValue() loops back into the setters
     // we just wired up, fighting the user's edits and re-rounding floats.
@@ -348,8 +373,10 @@ void PlateCard_Qt::refreshFromState() {
     const QSignalBlocker bBrightness(brightnessSpin_);
     const QSignalBlocker bSaturation(saturationSpin_);
 
-    const int track = gui_->getSequenceID();
-    if (track >= 0 && track < trackBox_->count()) {
+    const bool firstPass = !lastShown_.valid;
+
+    if ((firstPass || track != lastShown_.track)
+        && track >= 0 && track < trackBox_->count()) {
         trackBox_->setCurrentIndex(track);
     }
 
@@ -359,25 +386,15 @@ void PlateCard_Qt::refreshFromState() {
     // an empty name). Showing a one-item combo with a blank label
     // would just be confusing.
     {
-        const auto layers = jefe::qt::getLayersOnPlate(id_);
-        const std::string activeLayer = jefe::qt::getActiveLayerOnPlate(id_);
         bool hasNamedLayers = false;
         for (const auto& n : layers) {
             if (!n.empty()) { hasNamedLayers = true; break; }
         }
         if (hasNamedLayers) {
-            // Only rebuild the item list if it actually changed —
-            // touching items causes the combo to flicker even with
-            // signals blocked.
-            bool listChanged = (layerBox_->count() != int(layers.size()));
-            if (!listChanged) {
-                for (int i = 0; i < int(layers.size()); ++i) {
-                    if (layerBox_->itemText(i).toStdString() != layers[i]) {
-                        listChanged = true;
-                        break;
-                    }
-                }
-            }
+            // Only rebuild the item list if the cached list shows a
+            // different shape. Touching items causes the combo to
+            // flicker even with signals blocked.
+            const bool listChanged = firstPass || (layers != lastShown_.layers);
             if (listChanged) {
                 layerBox_->clear();
                 for (const auto& name : layers) {
@@ -385,63 +402,88 @@ void PlateCard_Qt::refreshFromState() {
                 }
             }
             const QString want = QString::fromStdString(activeLayer);
-            if (!want.isEmpty() && layerBox_->currentText() != want) {
+            if (!want.isEmpty()
+                && (firstPass || activeLayer != lastShown_.activeLayer
+                    || listChanged)
+                && layerBox_->currentText() != want) {
                 layerBox_->setCurrentText(want);
             }
-            layerBox_->setVisible(true);
+            if (firstPass || !lastShown_.layerVisible) {
+                layerBox_->setVisible(true);
+            }
+            lastShown_.layerVisible = true;
         } else {
-            layerBox_->setVisible(false);
+            if (firstPass || lastShown_.layerVisible) {
+                layerBox_->setVisible(false);
+            }
+            lastShown_.layerVisible = false;
         }
+        lastShown_.layers = layers;
+        lastShown_.activeLayer = activeLayer;
     }
 
-    const QString aspect = QString::fromStdString(gui_->getAspectString());
-    if (!aspect.isEmpty() && aspectBox_->currentText() != aspect) {
+    if ((firstPass || aspect != lastShown_.aspect)
+        && !aspect.isEmpty()
+        && aspectBox_->currentText() != aspect) {
         aspectBox_->setCurrentText(aspect);
     }
 
-    cropBtn_->setChecked(gui_->getCrop() != 0);
-    flipBtn_->setChecked(gui_->getFlip() != 0);
-    flopBtn_->setChecked(gui_->getFlop() != 0);
+    if (firstPass || crop != lastShown_.crop) cropBtn_->setChecked(crop);
+    if (firstPass || flip != lastShown_.flip) flipBtn_->setChecked(flip);
+    if (firstPass || flop != lastShown_.flop) flopBtn_->setChecked(flop);
 
     // RGB button label tracks the active channel mask. Matches the FLTK
     // single-button cycle: 0=RGB, 1=R, 2=G, 3=B (alpha lives elsewhere).
     static const char* kRgbaLabels[4] = {"RGB", "R", "G", "B"};
-    const int rgba = gui_->getRGBA() & 3;
-    rgbaBtn_->setText(kRgbaLabels[rgba]);
-    rgbaBtn_->setChecked(rgba != 0);
+    if (firstPass || rgba != lastShown_.rgba) {
+        rgbaBtn_->setText(kRgbaLabels[rgba]);
+        rgbaBtn_->setChecked(rgba != 0);
+    }
 
-    zoomSpin_->setValue(gui_->getScale());
-    panXSpin_->setValue(gui_->getTX());
-    panYSpin_->setValue(gui_->getTY());
-    rotSpin_->setValue(gui_->getRZ());
+    if (firstPass || scale != lastShown_.scale)         zoomSpin_->setValue(scale);
+    if (firstPass || tx    != lastShown_.tx)            panXSpin_->setValue(tx);
+    if (firstPass || ty    != lastShown_.ty)            panYSpin_->setValue(ty);
+    if (firstPass || rz    != lastShown_.rz)            rotSpin_->setValue(rz);
 
     // Rebuild the LUT combo if the gui's LUT list changed (it grows after
     // initializeInstallLUTs runs the autoload). Cheap to compare; saves a
     // user-visible flicker when the names already match.
-    const auto& opts = gui_->getLUTOptions();
-    bool listChanged = (lutBox_->count() != int(opts.size()));
-    if (!listChanged) {
-        for (int i = 0; i < int(opts.size()); ++i) {
-            if (lutBox_->itemText(i).toStdString() != opts[i]) {
-                listChanged = true;
-                break;
-            }
-        }
-    }
-    if (listChanged) {
+    const bool lutListChanged = firstPass || (lutOpts != lastShown_.lutOptions);
+    if (lutListChanged) {
         lutBox_->clear();
-        for (const auto& name : opts) {
+        for (const auto& name : lutOpts) {
             lutBox_->addItem(QString::fromStdString(name));
         }
+        lastShown_.lutOptions = lutOpts;
     }
-    const int lut = gui_->getLUT();
-    if (lut >= 0 && lut < lutBox_->count()) {
+    if ((firstPass || lut != lastShown_.lut || lutListChanged)
+        && lut >= 0 && lut < lutBox_->count()) {
         lutBox_->setCurrentIndex(lut);
     }
 
-    gammaSpin_->setValue(gui_->getGamma());
-    exposureSpin_->setValue(gui_->getExposure());
-    contrastSpin_->setValue(gui_->getContrast());
-    brightnessSpin_->setValue(gui_->getBrightness());
-    saturationSpin_->setValue(gui_->getSaturation());
+    if (firstPass || gamma      != lastShown_.gamma)      gammaSpin_->setValue(gamma);
+    if (firstPass || exposure   != lastShown_.exposure)   exposureSpin_->setValue(exposure);
+    if (firstPass || contrast   != lastShown_.contrast)   contrastSpin_->setValue(contrast);
+    if (firstPass || brightness != lastShown_.brightness) brightnessSpin_->setValue(brightness);
+    if (firstPass || saturation != lastShown_.saturation) saturationSpin_->setValue(saturation);
+
+    // Commit the freshly-read values to the cache. Future calls compare
+    // against these and short-circuit when they match.
+    lastShown_.track       = track;
+    lastShown_.aspect      = aspect;
+    lastShown_.crop        = crop;
+    lastShown_.flip        = flip;
+    lastShown_.flop        = flop;
+    lastShown_.rgba        = rgba;
+    lastShown_.scale       = scale;
+    lastShown_.tx          = tx;
+    lastShown_.ty          = ty;
+    lastShown_.rz          = rz;
+    lastShown_.lut         = lut;
+    lastShown_.gamma       = gamma;
+    lastShown_.exposure    = exposure;
+    lastShown_.contrast    = contrast;
+    lastShown_.brightness  = brightness;
+    lastShown_.saturation  = saturation;
+    lastShown_.valid       = true;
 }

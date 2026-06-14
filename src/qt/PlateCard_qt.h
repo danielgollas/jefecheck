@@ -13,8 +13,11 @@
 #define JEFECHECK_QT_PLATE_CARD_H
 
 #include <QFrame>
+#include <QString>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 class QCheckBox;
 class QComboBox;
@@ -85,6 +88,40 @@ private:
     QDoubleSpinBox* contrastSpin_ = nullptr;
     QDoubleSpinBox* brightnessSpin_ = nullptr;
     QDoubleSpinBox* saturationSpin_ = nullptr;
+
+    // Last-seen state from gui_/bridge. refreshFromState() short-circuits
+    // each widget write when its source value matches the cached one.
+    // Without this, every plateStateChanged emission (which fires on
+    // every viewport mouse-move during drag) walks 13+ setValue/setText/
+    // setChecked/setCurrentIndex calls per card × 4 cards through
+    // QAccessible / AppKit / AttributeGraph, dominating drag CPU.
+    struct CachedState {
+        bool  valid       = false;
+        int   track       = -1;
+        QString aspect;
+        bool  crop        = false;
+        bool  flip        = false;
+        bool  flop        = false;
+        int   rgba        = -1;
+        float scale       = 0.0f;
+        float tx          = 0.0f;
+        float ty          = 0.0f;
+        float rz          = 0.0f;
+        int   lut         = -1;
+        std::vector<std::string> lutOptions;
+        float gamma       = 0.0f;
+        float exposure    = 0.0f;
+        float contrast    = 0.0f;
+        float brightness  = 0.0f;
+        float saturation  = 0.0f;
+        // Layer combo state — both the populated item list and the
+        // current selection. Visibility is derived from layers being
+        // non-empty (named) so it's cached implicitly via layers.size.
+        std::vector<std::string> layers;
+        std::string activeLayer;
+        bool layerVisible = false;
+    };
+    CachedState lastShown_;
 };
 
 #endif
