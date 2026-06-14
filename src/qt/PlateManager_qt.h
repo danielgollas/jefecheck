@@ -1,6 +1,7 @@
-// Plate Manager dock content. Hosts up to N plate cards in a 1- or 2-column
-// QGridLayout that reflows on resize. Two columns when there's room (default
-// docked state), single column when narrow (e.g. floated to a vertical edge).
+// Plate Manager dock content. Hosts the plate cards in a single row (1×N,
+// horizontal dock) or a single column (N×1, vertical dock). Orientation is
+// driven by the dock edge (setOrientation), not by width — the panel fixes
+// its cross-axis extent to one card and scrolls the long axis.
 #ifndef JEFECHECK_QT_PLATE_MANAGER_H
 #define JEFECHECK_QT_PLATE_MANAGER_H
 
@@ -33,16 +34,23 @@ public slots:
     // matching card's refreshColorOnly().
     void refreshPlateColor(int plateIdx);
 
-protected:
-    void resizeEvent(QResizeEvent* e) override;
+    // Switch between the horizontal (false: 1×N row, cards in wide-short
+    // form) and vertical (true: N×1 column, cards in narrow-tall form)
+    // arrangements. Driven by the dock edge in MainWindow. Re-flows the
+    // grid, re-lays each card via PlateCard_Qt::setVertical, and pins the
+    // panel's cross-axis extent to one card so the long axis is what scrolls.
+    void setOrientation(bool vertical);
 
 private:
-    void reflow(int viewportWidth);
+    void arrange();
+    // Pins the panel's fixed extent to the packed cards (called by arrange,
+    // and deferred a tick to re-measure after dock transitions settle).
+    void applyFixedExtent();
 
     QWidget* inner_ = nullptr;
     QGridLayout* grid_ = nullptr;
     QList<PlateCard_Qt*> cards_;
-    int currentColumns_ = 0;
+    bool vertical_ = false;
 };
 
 #endif

@@ -88,11 +88,12 @@ static std::vector<LayerInfo> discoverLayers(const OIIO::ImageSpec &spec) {
     for (auto &g : groups) {
         LayerInfo li;
         if (g.prefix.empty()) {
-            // Default layer
-            if (g.hasAlpha && g.count >= 4) li.name = "RGBA";
-            else if (g.count >= 3) li.name = "RGB";
-            else if (g.count == 1) li.name = "Luminance";
-            else li.name = "RGB";
+            // Default layer — the file's primary (prefix-less) channels.
+            // Labeled "Main" so it reads consistently across formats
+            // and EXRs with named sub-layers. Single-channel stays
+            // "Luminance" since that's genuinely descriptive (grayscale).
+            if (g.count == 1) li.name = "Luminance";
+            else li.name = "Main";
         } else {
             li.name = g.prefix;
         }

@@ -24,6 +24,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QPushButton;
 
+class AspectCropCombo_Qt;
 class gfcPlateGUI_Qt;
 
 class PlateCard_Qt : public QFrame {
@@ -41,6 +42,15 @@ public:
 
     gfcPlateGUI_Qt* gui() { return gui_; }
     int id() const { return id_; }
+
+    // Switch the card between its two internal layouts: false = the
+    // wide-short two-row form (horizontal dock), true = the narrow-tall
+    // multi-row form (~200px wide, for a vertical dock). No-op when the
+    // requested orientation already matches. The control widgets are
+    // reused (reparented) across the swap — only the caption labels and
+    // layout containers are rebuilt — so signal wiring and cached state
+    // survive untouched.
+    void setVertical(bool vertical);
 
     // Pulls all values from gui_ and pushes them into the spinboxes /
     // combos / toggles, with widget signals temporarily blocked so the
@@ -76,11 +86,35 @@ signals:
     // plate as the active plate.
     void clicked(int id);
 
+    // Emitted after this card changes its track's layer. The layer lives on
+    // the (shared) sequence, so other cards bound to the same track need to
+    // refresh their layer combo to reflect the new selection. The dock wires
+    // this to refreshAllCards.
+    void layerChanged();
+
 protected:
     void mousePressEvent(QMouseEvent* e) override;
 
 private:
+    // (Re)builds the content widget for the current `vertical_` value. The
+    // control widgets are reparented into a fresh content_ child; the old
+    // content_ (caption labels + layout containers only) is deleted after
+    // the new one is fully built so it can't drag the controls with it.
+    void rebuildContent();
+
     int id_;
+    // Object-name prefix `plate.<idx>` — shared between the constructor and
+    // rebuildContent() so both arrangements name their caption labels (e.g.
+    // the `track.label` plate-activation click target) consistently.
+    QString objPrefix_;
+    // Current internal layout; false = wide-short (horizontal), true =
+    // narrow-tall (vertical). Drives rebuildContent().
+    bool vertical_ = false;
+    // The single child of the card's top-level layout. Rebuilt (deleted +
+    // recreated) by rebuildContent() on each orientation change; holds all
+    // the caption labels and per-row layouts. The control widgets are
+    // reparented into it but outlive it.
+    QWidget* content_ = nullptr;
     // Either points into ownedGui_ or borrowed from outside. Never null
     // after construction.
     gfcPlateGUI_Qt* gui_ = nullptr;
@@ -89,8 +123,9 @@ private:
     // Cached widget pointers — refreshFromState needs them.
     QComboBox* trackBox_ = nullptr;
     QComboBox* layerBox_ = nullptr;
-    QComboBox* aspectBox_ = nullptr;
-    QPushButton* cropBtn_ = nullptr;
+    // Combined aspect-ratio combo with a folded-in crop checkbox (replaces
+    // the old standalone aspectBox_ QComboBox + cropBtn_ toggle).
+    AspectCropCombo_Qt* aspectCrop_ = nullptr;
     QPushButton* flipBtn_ = nullptr;
     QPushButton* flopBtn_ = nullptr;
     QPushButton* rgbaBtn_ = nullptr;
@@ -130,12 +165,10 @@ private:
         float contrast    = 0.0f;
         float brightness  = 0.0f;
         float saturation  = 0.0f;
-        // Layer combo state — both the populated item list and the
-        // current selection. Visibility is derived from layers being
-        // non-empty (named) so it's cached implicitly via layers.size.
+        // Layer combo state — the populated item list (after the
+        // "Main Layer" default substitution) and the current selection.
         std::vector<std::string> layers;
         std::string activeLayer;
-        bool layerVisible = false;
     };
     CachedState lastShown_;
 };

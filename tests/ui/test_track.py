@@ -28,12 +28,13 @@ def _activate_plate(app, plate_id: int) -> None:
     """Click on plate `plate_id`'s card to make it the active plate.
 
     Mac2 / XCUITest doesn't expose the QFrame itself as an AX element
-    (no built-in interaction model), but the plate's big-number QLabel
+    (no built-in interaction model), but the "Track" caption QLabel
     inside the frame does surface, and QLabel doesn't consume mouse
     presses — they propagate up to PlateCard_Qt::mousePressEvent which
-    emits the clicked signal.
+    emits the clicked signal. (This caption replaced the old plate-number
+    label as the activation handle.)
     """
-    label = app.by_object_name(locators.plate(plate_id, "id.label"))
+    label = app.by_object_name(locators.plate(plate_id, "track.label"))
     label.click()
 
 

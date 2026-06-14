@@ -2,9 +2,12 @@
 
 Drops a 4-frame multi-view EXR sequence into plate 0 via --open-file,
 then asserts the layer combo on plate 0 actually drives the OIIO
-loader's channel selection. The fixture EXRs ship two layers (`RGB`
-and `right`) discovered from the channel names `R, G, B, right.R,
-right.G, right.B`.
+loader's channel selection. The fixture EXRs ship two layers
+(`Main` — the prefix-less R,G,B group — and `right`) discovered
+from the channel names `R, G, B, right.R, right.G, right.B`.
+
+The layer combo is always visible; with no loaded layers (or a plain
+single-layer file) it shows a single "Main" default.
 
 These exercise the full plumbing on a real multi-frame, multi-layer
 sequence: setChannelOptions → channelOptions_ → getLayersOnPlate →
@@ -65,13 +68,13 @@ def _combo_text(combo) -> str:
 
 
 def _wait_for_layer_combo(app, plate_id: int = 0, timeout: float = 5.0):
-    """Poll for the layer combo to appear AND become populated.
+    """Poll for the layer combo to be populated with the multi-layer list.
 
-    refreshFromState only flips the combo to visible after
-    setChannelOptions has been called on the sequence GUI — which
-    happens during loadPreview. Tests that touch the combo need to
-    wait for the deferred load to land, otherwise the AX query races
-    the playback tick that refreshes plate cards.
+    The combo is always visible (showing "Main" by default), but the
+    EXR sub-layers only appear after setChannelOptions runs on the sequence
+    GUI during loadPreview. Callers pair this with _wait_for_load so the
+    deferred load has landed and refreshAllCards has rebuilt the item list
+    before the AX query reads it.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -84,32 +87,33 @@ def _wait_for_layer_combo(app, plate_id: int = 0, timeout: float = 5.0):
         f"Layer combo on plate {plate_id} never appeared with a value")
 
 
-def test_multiview_load_makes_layer_combo_visible(multiview_app):
-    """Loading a multi-layer EXR should reveal the layer combo on plate 0.
+def test_multiview_load_populates_layer_combo(multiview_app):
+    """Loading a multi-layer EXR populates the layer combo on plate 0.
 
-    Visibility is the cheap signal — refreshFromState hides the combo
-    when getLayersOnPlate returns no named layers, so seeing it means
-    the OIIO loader's discovery flowed through gfcSequenceGUI_Qt's
-    channelOptions_ to the widget.
+    The combo is always displayed; the signal here is that it gains the
+    discovered layers — i.e. the OIIO loader's discovery flowed through
+    gfcSequenceGUI_Qt's channelOptions_ to the widget. _wait_for_layer_combo
+    polls until it carries a selection.
     """
     _wait_for_load(multiview_app)
     combo = _wait_for_layer_combo(multiview_app)
     assert combo.is_displayed(), "Layer combo is present but hidden"
 
 
-def test_multiview_layer_combo_defaults_to_rgb(multiview_app):
+def test_multiview_layer_combo_defaults_to_main_layer(multiview_app):
     """Initial selection is the first OIIO-discovered layer.
 
     discoverLayers walks channels in spec order: the empty-prefix group
-    (R, G, B) gets renamed to "RGB" and is layer 0; "right" (3 channels
+    (R, G, B) is named "Main" and is layer 0; "right" (3 channels
     with the `right.` prefix) is layer 1. loadPreview's first-time path
-    calls setChannel(0), so the combo's currentText should land on RGB.
+    calls setChannel(0), so the combo's currentText should land on
+    "Main".
     """
     _wait_for_load(multiview_app)
     combo = _wait_for_layer_combo(multiview_app)
     current = _combo_text(combo)
-    assert current == "RGB", (
-        f"Expected default layer 'RGB', got {current!r}"
+    assert current == "Main", (
+        f"Expected default layer 'Main', got {current!r}"
     )
 
 
@@ -184,20 +188,20 @@ def test_multiview_layer_switch_keeps_sequence_loaded(multiview_app):
     )
 
 
-def test_unloaded_plate_has_no_layer_combo_visible(multiview_app):
-    """Plates without a previewed sequence keep the combo hidden.
+def test_unloaded_plate_shows_main_layer_default(multiview_app):
+    """Plates without a previewed sequence still show the combo.
 
     Only plate 0 was --open-file'd; plates 1..3 have empty
-    channelOptions_ on their sequence GUIs, so refreshFromState leaves
-    layerBox_ hidden. Hidden Qt widgets typically drop out of the AX
-    tree on macOS, so a None return from by_object_name_optional is a
-    valid pass (the combo is "not visible" by virtue of not being in
-    the tree at all).
+    channelOptions_ on their sequence GUIs. The combo is always visible,
+    so an unloaded plate shows the single "Main" default rather
+    than hiding the control.
     """
     _wait_for_load(multiview_app)
-    combo = _layer_combo_optional(multiview_app, plate_id=1)
-    if combo is None:
-        return
-    assert not combo.is_displayed(), (
-        "Layer combo on plate 1 should be hidden — it has no loaded sequence"
+    combo = _layer_combo(multiview_app, plate_id=1)
+    assert combo.is_displayed(), (
+        "Layer combo on plate 1 should be visible with the Main default"
+    )
+    assert _combo_text(combo) == "Main", (
+        f"Unloaded plate should default to 'Main', got "
+        f"{_combo_text(combo)!r}"
     )

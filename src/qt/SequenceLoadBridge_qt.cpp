@@ -1082,6 +1082,21 @@ std::string getActiveLayerOnPlate(int plateIdx) {
     return seq->myGUI->getChannelName();
 }
 
+std::string getPlateNativeAspect(int plateIdx) {
+    auto* seq = sequenceForPlate(plateIdx);
+    if (!seq) return {};
+    // getPreviewFrame() returns a shallow copy (gfcFrame has no destructor),
+    // so reading its dimensions is cheap and safe. An unloaded frame defaults
+    // to the 15x15 sentinel with loaded==false — gate on both.
+    gfcFrame f = seq->getPreviewFrame();
+    if (!f.loaded || f.sizeX <= 0 || f.sizeY <= 0) return {};
+    const double ratio =
+        static_cast<double>(f.sizeX) / static_cast<double>(f.sizeY);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.2f:1", ratio);
+    return std::string(buf);
+}
+
 void setLayerOnPlate(int plateIdx, const std::string& layerName) {
     if (plateIdx < 0) return;
     const int trackIdx = plateManager.getTrackOnPlate(plateIdx);

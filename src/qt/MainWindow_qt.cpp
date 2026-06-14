@@ -582,37 +582,51 @@ void MainWindow_Qt::buildDocks() {
             plateManagerWidget_, &PlateManager_Qt::refreshPlateColor,
             Qt::QueuedConnection);
 
-    // The 2x2 minimum (wide + tall) applies only when the dock is on the
-    // top or bottom edge. Floating, or docked to a side edge, drops to a
-    // single-column minimum so the user can run it as a tall narrow
-    // column. Generous chrome budget — Qt's dock framing, grid margins,
-    // and inter-card spacing add up to more than back-of-envelope math
-    // suggests.
-    constexpr int kCardMaxW = 320;
-    constexpr int kCardMinH = 84;
-    constexpr int kHorizDockMinW = 2 * kCardMaxW + 80;   // 2 cols
-    constexpr int kHorizDockMinH = 2 * kCardMinH + 60;   // 2 rows
-    constexpr int kSingleColMinW = kCardMaxW + 60;       // 1 col
-    constexpr int kSingleColMinH = kCardMinH + 40;       // 1 row
-
-    auto updatePlateMins = [this]() {
-        const bool wantsTwoColumns =
-            !plateDock_->isFloating() &&
-            (dockWidgetArea(plateDock_) == Qt::TopDockWidgetArea ||
-             dockWidgetArea(plateDock_) == Qt::BottomDockWidgetArea);
-        if (wantsTwoColumns) {
-            plateDock_->setMinimumWidth(kHorizDockMinW);
-            plateDock_->setMinimumHeight(kHorizDockMinH);
-        } else {
-            plateDock_->setMinimumWidth(kSingleColMinW);
-            plateDock_->setMinimumHeight(kSingleColMinH);
-        }
+    // The Plate Manager fixes its own size to the packed card grid (2×2 when
+    // horizontal, a single narrow column when vertical). When docked it shares
+    // a row/column with the Timeline, and QMainWindow otherwise leaves the
+    // shared extent at the (taller) neighbor's size, padding the Plate Manager
+    // with empty space. pinPlateDock pulls the shared extent down to the
+    // panel's own size hint; the Timeline — which can shrink — follows.
+    // Deferred a tick so it runs after the panel has re-laid-out for the new
+    // orientation (its sizeHint is only correct post-arrange).
+    auto pinPlateDock = [this]() {
+        if (!plateDock_ || plateDock_->isFloating()) return;
+        QTimer::singleShot(0, this, [this]() {
+            if (!plateDock_ || plateDock_->isFloating()) return;
+            const QSize hint = plateManagerWidget_->sizeHint();
+            const Qt::DockWidgetArea area = dockWidgetArea(plateDock_);
+            const bool side = (area == Qt::LeftDockWidgetArea ||
+                               area == Qt::RightDockWidgetArea);
+            if (side) {
+                resizeDocks({plateDock_}, {hint.width()}, Qt::Horizontal);
+            } else {
+                resizeDocks({plateDock_}, {hint.height()}, Qt::Vertical);
+            }
+        });
     };
-    updatePlateMins();
-    connect(plateDock_, &QDockWidget::topLevelChanged,
-            plateDock_, [updatePlateMins](bool) { updatePlateMins(); });
+
+    // Orientation follows the dock edge: a left/right edge gives the
+    // narrow-tall column form, every other edge (and floating) the
+    // wide-short row form. The Plate Manager pins its own cross-axis extent
+    // once it knows the orientation.
     connect(plateDock_, &QDockWidget::dockLocationChanged,
-            plateDock_, [updatePlateMins](Qt::DockWidgetArea) { updatePlateMins(); });
+            plateManagerWidget_, [this, pinPlateDock](Qt::DockWidgetArea area) {
+                plateManagerWidget_->setOrientation(
+                    area == Qt::LeftDockWidgetArea ||
+                    area == Qt::RightDockWidgetArea);
+                pinPlateDock();
+            });
+    // Floating reads as horizontal (the dock has no edge to key off); when it
+    // re-docks, pin the row/column down to the panel again.
+    connect(plateDock_, &QDockWidget::topLevelChanged,
+            plateManagerWidget_, [this, pinPlateDock](bool floating) {
+                if (floating) plateManagerWidget_->setOrientation(false);
+                else pinPlateDock();
+            });
+    // Initial edge is Bottom ⇒ horizontal.
+    plateManagerWidget_->setOrientation(false);
+    pinPlateDock();
 
     // Timeline + Transport — bottom-right; split alongside the plate dock.
     timelineDock_ = new QDockWidget("Timeline", this);
@@ -817,6 +831,11 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
     }
 
     viewport_->update();
+    // The preview frame (and its dimensions, channels, layers, etc.) is now
+    // loaded — refresh the plate cards so widgets that read frame-derived
+    // state (e.g. the Aspect control's native ratio) update immediately
+    // rather than waiting for the next viewport-driven plateStateChanged.
+    if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
     static const char kPlateNames[4] = {'A', 'B', 'C', 'D'};
     if (scale < 0.999f) {
         // Flash a 3-second message so the Shift / Shift+Cmd modifier
@@ -853,6 +872,13 @@ void MainWindow_Qt::openLoadWindow() {
         loadWindowDialog_ = new LoadWindowDialog_Qt(viewport_, this);
         connect(viewport_, &GlViewport_Qt::fileDroppedWhileLoadWindowOpen,
                 this, &MainWindow_Qt::onLoadWindowDropForwarded);
+        // When the Load Sequence Manager closes (Load All or cancel), the
+        // tracks' preview frames are decoded — refresh the plate cards so
+        // frame-derived widget state (Aspect native ratio, layers, range)
+        // reflects what was just loaded.
+        connect(loadWindowDialog_, &QDialog::finished, this, [this](int) {
+            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        });
     }
     loadWindowDialog_->show();
     loadWindowDialog_->raise();
