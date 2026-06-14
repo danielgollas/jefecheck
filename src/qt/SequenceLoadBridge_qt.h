@@ -391,6 +391,34 @@ void zoomPlate(int plateIdx, float zoomDelta);
 // the iteration internally and calls setChanged once at the end.
 void panAllPlates(float dx, float dy);
 
+// Gang-zoom: scale every plate by the same delta in one shot. Wraps
+// plateManager.zoomAllPlates. Used by viewport key+drag color paths
+// that share the gang-modifier convention.
+void zoomAllPlates(float zoomDelta);
+
+// Color-correction deltas. Each call applies `delta` to the named
+// field additively (the underlying gfcPlateManager setters take an
+// `isDelta` flag; we pass 1 so the value is summed onto the current
+// field rather than overwritten). Single-plate variants target
+// `plateIdx` and are no-ops when plateIdx < 0. Gang variants hit
+// every plate via the matching plateManager.set*All() path. Each
+// flags plateManager dirty so the next paintGL repaints.
+//
+// Used by GlViewport_Qt's W/E/Q/D/S key+drag handlers to mirror
+// FLTK GlViewport.cpp's adjustmentValue = (eventX - prevX) * 0.01
+// convention (drag right = increase).
+void adjustPlateGamma(int plateIdx, float delta);
+void adjustPlateExposure(int plateIdx, float delta);
+void adjustPlateBrightness(int plateIdx, float delta);
+void adjustPlateContrast(int plateIdx, float delta);
+void adjustPlateSaturation(int plateIdx, float delta);
+
+void adjustAllPlatesGamma(float delta);
+void adjustAllPlatesExposure(float delta);
+void adjustAllPlatesBrightness(float delta);
+void adjustAllPlatesContrast(float delta);
+void adjustAllPlatesSaturation(float delta);
+
 // Drive every plate's showPreview flag from a single writer. Used by
 // GlViewport_Qt::setLoadWindowOpen — while the Load Sequence Manager
 // is open every plate renders its track's previewFrame; closing the

@@ -838,6 +838,69 @@ void zoomPlate(int plateIdx, float zoomDelta) {
     plateManager.setChanged();
 }
 
+void zoomAllPlates(float zoomDelta) {
+    plateManager.zoomAllPlates(zoomDelta);
+    plateManager.setChanged();
+}
+
+// Color-correction adjustment helpers. `1` as the isDelta flag asks
+// plateManager to sum the value onto the current field rather than
+// overwrite — same convention the FLTK GlViewport key+drag path uses.
+void adjustPlateGamma(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setGamma(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateExposure(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setExposure(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateBrightness(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setBrightness(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateContrast(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setContrast(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustPlateSaturation(int plateIdx, float delta) {
+    if (plateIdx < 0) return;
+    plateManager.setSaturation(plateIdx, delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesGamma(float delta) {
+    plateManager.setGammaAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesExposure(float delta) {
+    plateManager.setExposureAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesBrightness(float delta) {
+    plateManager.setBrightnessAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesContrast(float delta) {
+    plateManager.setContrastAll(delta, 1);
+    plateManager.setChanged();
+}
+
+void adjustAllPlatesSaturation(float delta) {
+    plateManager.setSaturationAll(delta, 1);
+    plateManager.setChanged();
+}
+
 void propagatePlateChanges() {
     plateManager.updatePlatesFromGUI();
     plateManager.setChanged();
