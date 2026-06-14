@@ -145,6 +145,72 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
     if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {
+        const float dpr = devicePixelRatioF();
+        const bool gang = (e->modifiers() & Qt::AltModifier) != 0;
+
+        // ---- Color-correction key+drag dispatch (W/E/Q/D/S). ----
+        //
+        // FLTK GlViewport's left-drag path checks each letter key in
+        // order and applies `adjustmentValue = (eventX - prevX) * 0.01`
+        // additively (isDelta=1) to the matching plate field. Per-plate
+        // calls target the active plate; Alt-modified calls hit every
+        // plate via the *All variants.
+        //
+        // We branch BEFORE the pan path and early-return on a handled
+        // color drag — pan and color-correct shouldn't compose in one
+        // motion (matches FLTK's case-by-case if/else structure).
+        const float dxLogical = float(e->position().x()) - lastMouseX_;
+        const float adjust    = dxLogical * 0.01f;
+        const int targetPlate = jefe::qt::getActivePlate();
+
+        bool handledColor = false;
+        auto applyColor = [&](auto perPlateFn, auto gangFn) {
+            if (gang) gangFn(adjust);
+            else      perPlateFn(targetPlate, adjust);
+            handledColor = true;
+        };
+
+        if (heldDragModifierKeys_.contains(Qt::Key_W)) {
+            applyColor(jefe::qt::adjustPlateGamma,
+                       jefe::qt::adjustAllPlatesGamma);
+        } else if (heldDragModifierKeys_.contains(Qt::Key_E)) {
+            applyColor(jefe::qt::adjustPlateExposure,
+                       jefe::qt::adjustAllPlatesExposure);
+        } else if (heldDragModifierKeys_.contains(Qt::Key_Q)) {
+            applyColor(jefe::qt::adjustPlateBrightness,
+                       jefe::qt::adjustAllPlatesBrightness);
+        } else if (heldDragModifierKeys_.contains(Qt::Key_D)) {
+            applyColor(jefe::qt::adjustPlateContrast,
+                       jefe::qt::adjustAllPlatesContrast);
+        } else if (heldDragModifierKeys_.contains(Qt::Key_S)) {
+            applyColor(jefe::qt::adjustPlateSaturation,
+                       jefe::qt::adjustAllPlatesSaturation);
+        }
+
+        if (handledColor) {
+            update();
+            // Throttle + queued emit of plateColorChanged — same 60Hz
+            // cap as the transform path so we don't spam the event
+            // loop at the device's 100Hz+ mouse poll rate.
+            constexpr qint64 kEmitIntervalMs = 16;
+            if (!dragEmitTimer_.isValid()
+                || dragEmitTimer_.elapsed() >= kEmitIntervalMs) {
+                if (gang) {
+                    for (int p = 0; p < 4; ++p) emit plateColorChanged(p);
+                } else {
+                    emit plateColorChanged(targetPlate);
+                }
+                dragEmitTimer_.restart();
+                dragEmittedAny_ = true;
+            }
+            lastMouseX_ = e->position().x();
+            lastMouseY_ = e->position().y();
+            if (listener_) listener_->onEvent(jefe::ui::EventType::Drag);
+            return;
+        }
+
+        // ---- Pan path (no color key held). ----
+        //
         // FLTK's GlViewport pans by (prevX - eventX, prevY - eventY) so
         // dragging right shifts the plate left. Match that sign so the
         // mouse behaves the same in both backends. Multiply by dpr —
@@ -152,13 +218,15 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         // framebuffer pixels, but Qt mouse positions are logical, so
         // a 1-px drag would otherwise move the image only 1/dpr px on
         // Retina.
-        const float dpr = devicePixelRatioF();
         const float dx = (lastMouseX_ - float(e->position().x())) * dpr;
         const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
         // Alt-drag = gang-transform: pan every plate by the same delta.
-        // Matches the FLTK convention in GlViewport.cpp:558 where
-        // FL_Alt_{L,R} routes through plateManager.panAllPlates.
-        const bool gang = (e->modifiers() & Qt::AltModifier) != 0;
+        // Matches the FLTK convention in GlViewport.cpp where the
+        // letterless Alt+drag branch routes to panAllPlates. (FLTK has
+        // a separate Alt+drag = zoomPlate branch tied to a different
+        // condition higher up the if-chain; preserving the pan-all
+        // behavior the Qt UI already exposes — Daniel signed off on
+        // that semantics for the Qt port.)
         if (gang) {
             jefe::qt::panAllPlates(dx, dy);
         } else {
@@ -218,12 +286,33 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
         // 0.1 matches FLTK's default zoomSpeed for the un-shifted wheel.
         jefe::qt::zoomPlate(plate, deltaY * 0.1f);
         update();
-        emit plateStateChanged();
+        // Targeted refresh — wheel only mutates the zoom field on one
+        // plate, so the lightweight transform-only signal is enough.
+        // Plays nice with rapid wheel events: no FX-panel refresh and
+        // no other-card walk per scroll tick.
+        if (plate >= 0) emit plateTransformChanged(plate);
     }
     if (listener_) listener_->onEvent(jefe::ui::EventType::Wheel);
 }
 
 void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
+    // Track color-correction modifier keys (W/E/Q/D/S) — combined with
+    // a left-drag in mouseMoveEvent they trigger the matching field
+    // adjustment. Don't gate on autoRepeat: holding the key while
+    // dragging is the normal use, and autoRepeat false on first press
+    // is enough since we only need set membership.
+    switch (e->key()) {
+        case Qt::Key_W:
+        case Qt::Key_E:
+        case Qt::Key_Q:
+        case Qt::Key_D:
+        case Qt::Key_S:
+            heldDragModifierKeys_.insert(e->key());
+            break;
+        default:
+            break;
+    }
+
     // Plate-control shortcuts. Any unhandled key falls through to the
     // listener and Qt's default propagation so menu mnemonics, dialog
     // accelerators, etc. still work.
@@ -310,7 +399,23 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
     QOpenGLWidget::keyPressEvent(e);
 }
 
-void GlViewport_Qt::keyReleaseEvent(QKeyEvent*) {
+void GlViewport_Qt::keyReleaseEvent(QKeyEvent* e) {
+    // Pair with keyPressEvent's color-correction modifier tracking. Qt
+    // does fire autoRepeat release/press pairs during a held key — we
+    // accept the brief drop in set membership; it just means the next
+    // mouseMoveEvent in that millisecond window won't apply an
+    // adjustment, which is invisible in practice at 60Hz emit gating.
+    switch (e->key()) {
+        case Qt::Key_W:
+        case Qt::Key_E:
+        case Qt::Key_Q:
+        case Qt::Key_D:
+        case Qt::Key_S:
+            heldDragModifierKeys_.remove(e->key());
+            break;
+        default:
+            break;
+    }
     if (listener_) listener_->onEvent(jefe::ui::EventType::KeyUp);
 }
 
@@ -319,6 +424,12 @@ void GlViewport_Qt::enterEvent(QEnterEvent*) {
 }
 
 void GlViewport_Qt::leaveEvent(QEvent*) {
+    // Cursor left the viewport — drop any held drag-modifier keys so a
+    // subsequent re-enter without a fresh key press doesn't apply
+    // ghost color-correction adjustments. Qt stops delivering key
+    // events to a widget that loses focus, so without this clear the
+    // set could stay populated indefinitely.
+    heldDragModifierKeys_.clear();
     if (listener_) listener_->onEvent(jefe::ui::EventType::Leave);
 }
 

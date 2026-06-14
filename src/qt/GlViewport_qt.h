@@ -13,6 +13,7 @@
 
 #include <QElapsedTimer>
 #include <QOpenGLWidget>
+#include <QSet>
 #include <QString>
 
 class GlViewport_Qt : public QOpenGLWidget, public jefe::ui::IGLViewport {
@@ -124,6 +125,16 @@ private:
     // the AppKit layout cascade overhead of firing per-pixel.
     QElapsedTimer dragEmitTimer_;
     bool dragEmittedAny_ = false;
+
+    // Set of currently-held lowercase letter keycodes that combine with
+    // left-drag to perform color-correction adjustments (FLTK
+    // convention: W=gamma, E=exposure, Q=brightness, D=contrast,
+    // S=saturation). Tracked here because Qt only delivers keyboard
+    // events when the widget has focus, and key state otherwise has
+    // to be polled per mouseMoveEvent. Cleared on key release AND on
+    // leaveEvent to avoid the stuck-modifier trap when the user
+    // releases a key while the cursor is outside the viewport.
+    QSet<int> heldDragModifierKeys_;
 };
 
 #endif
