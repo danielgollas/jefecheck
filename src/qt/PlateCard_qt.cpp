@@ -4,16 +4,29 @@
 #include "gfcplategui_qt.h"
 
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QPen>
+#include <QPixmap>
+#include <QPointF>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSize>
 #include <QVBoxLayout>
 
 namespace {
+// One height for every control on the card (combos, spinboxes, buttons) so
+// rows line up exactly. Combos enforce a min height from their padding, so
+// the card stylesheet trims that padding to let everything sit at this
+// compact height under labels-on-top.
+constexpr int kCtrlHeight = 22;
+
 QDoubleSpinBox* makeSpin(QWidget* parent, double min, double max, double step,
                          double initial, int width) {
     auto* s = new QDoubleSpinBox(parent);
@@ -22,24 +35,86 @@ QDoubleSpinBox* makeSpin(QWidget* parent, double min, double max, double step,
     s->setValue(initial);
     s->setDecimals(step < 1.0 ? 2 : 0);
     s->setFixedWidth(width);
+    s->setFixedHeight(kCtrlHeight);
     s->setAlignment(Qt::AlignRight);
     s->setButtonSymbols(QAbstractSpinBox::NoButtons);
     return s;
 }
 
-QLabel* makeInlineLabel(QWidget* parent, const QString& text) {
-    auto* l = new QLabel(text, parent);
-    l->setStyleSheet("color: #888;");
-    return l;
+// A "label on top" cell: a small gray caption above the control, returned
+// as a QVBoxLayout the caller adds to the row. An empty caption still
+// reserves the caption's height, so captionless controls (Flip/Flop, LUT)
+// bottom-align with the labeled ones. `capObjectName`, when set, names the
+// caption QLabel — used so the "Track" caption can serve as the plate-
+// activation click target (a QLabel doesn't consume the press, so it
+// propagates to PlateCard_Qt::mousePressEvent → clicked()).
+QVBoxLayout* labeledCell(QWidget* parent, const QString& caption, QWidget* w,
+                         const QString& capObjectName = QString()) {
+    auto* v = new QVBoxLayout();
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(1);
+    auto* cap = new QLabel(caption, parent);
+    cap->setStyleSheet("color: #888; font-size: 8pt;");
+    cap->setAlignment(Qt::AlignHCenter | Qt::AlignBottom);
+    if (!capObjectName.isEmpty()) cap->setObjectName(capObjectName);
+    v->addWidget(cap);
+    v->addWidget(w);
+    return v;
 }
 
-QPushButton* makeToggle(QWidget* parent, const QString& text,
-                        const QString& tip, int width = 32) {
-    auto* b = new QPushButton(text, parent);
+// Draw a double-headed mirror arrow into a 2x-dpr pixmap, tinted `color`.
+// vertical=true → up/down arrow (Flip, mirrors top-bottom); false → left/
+// right arrow (Flop, mirrors left-right). Logical canvas is 14x14.
+QPixmap makeMirrorPixmap(bool vertical, const QColor& color) {
+    QPixmap pm(28, 28);
+    pm.setDevicePixelRatio(2.0);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(color, 1.4);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    p.setPen(pen);
+    if (vertical) {  // Flip: vertical double-headed arrow
+        p.drawLine(QPointF(7, 3), QPointF(7, 11));     // shaft
+        p.drawLine(QPointF(7, 3), QPointF(4.5, 5.5));  // up head
+        p.drawLine(QPointF(7, 3), QPointF(9.5, 5.5));
+        p.drawLine(QPointF(7, 11), QPointF(4.5, 8.5));  // down head
+        p.drawLine(QPointF(7, 11), QPointF(9.5, 8.5));
+    } else {  // Flop: horizontal double-headed arrow
+        p.drawLine(QPointF(3, 7), QPointF(11, 7));     // shaft
+        p.drawLine(QPointF(3, 7), QPointF(5.5, 4.5));  // left head
+        p.drawLine(QPointF(3, 7), QPointF(5.5, 9.5));
+        p.drawLine(QPointF(11, 7), QPointF(8.5, 4.5));  // right head
+        p.drawLine(QPointF(11, 7), QPointF(8.5, 9.5));
+    }
+    p.end();
+    return pm;
+}
+
+// QIcon with both check states: light glyph when unchecked (dark bg), dark
+// glyph when checked (the theme's orange QPushButton:checked background).
+QIcon makeMirrorIcon(bool vertical) {
+    QIcon icon;
+    icon.addPixmap(makeMirrorPixmap(vertical, QColor(0xe0, 0xe0, 0xe0)),
+                   QIcon::Normal, QIcon::Off);
+    icon.addPixmap(makeMirrorPixmap(vertical, QColor(0x1a, 0x1a, 0x1a)),
+                   QIcon::Normal, QIcon::On);
+    return icon;
+}
+
+// Compact icon-only toggle button (Flip/Flop). Tight padding so the card row
+// stays narrow; fixed size keeps the 14px glyph from being clipped by the
+// theme's default button padding.
+QPushButton* makeIconToggle(QWidget* parent, const QIcon& icon,
+                            const QString& tip) {
+    auto* b = new QPushButton(parent);
     b->setCheckable(true);
+    b->setIcon(icon);
+    b->setIconSize(QSize(14, 14));
     b->setToolTip(tip);
-    b->setFixedHeight(20);
-    b->setMinimumWidth(width);
+    b->setFixedSize(24, kCtrlHeight);
+    b->setStyleSheet("QPushButton { padding: 1px; }");
     return b;
 }
 }  // namespace
@@ -58,155 +133,152 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
 
     setFrameShape(QFrame::StyledPanel);
     setFrameShadow(QFrame::Plain);
-    setMinimumSize(280, 84);
+    // No artificial minimum: let the layout's own minimumSizeHint govern so
+    // the card never shrinks below its tightly-packed contents. The Plate
+    // Manager's scroll area then shows a horizontal scrollbar when the dock
+    // is narrower, instead of squashing fixed-width children into overlap.
 
     setStyleSheet(
         "QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox, "
         "QComboBox QAbstractItemView, QAbstractSpinBox { font-size: 10pt; }"
+        // Trim the theme's padding so combos/spinboxes fit the compact
+        // kCtrlHeight row and pack tightly under labels-on-top.
+        "QComboBox { padding: 1px 16px 1px 4px; }"
+        "QAbstractSpinBox { padding: 1px 2px; }"
     );
 
     // Plate-card object names follow `plate.<idx>.<role>` so UI tests can
     // target a specific plate without depending on tab order. Setting
     // setAccessibleName as well so the AX label matches the on-screen text.
-    const QString objPrefix = QStringLiteral("plate.%1").arg(id);
-    setObjectName(objPrefix + ".card");
+    objPrefix_ = QStringLiteral("plate.%1").arg(id);
+    setObjectName(objPrefix_ + ".card");
     setAccessibleName(QStringLiteral("Plate %1").arg(id + 1));
-
-    auto* plateId = new QLabel(QString::number(id + 1), this);
-    plateId->setStyleSheet("font-weight: bold; font-size: 12pt; color: #ccc;");
-    plateId->setFixedWidth(14);
-    plateId->setAlignment(Qt::AlignCenter);
-    plateId->setObjectName(objPrefix + ".id.label");
 
     trackBox_ = new QComboBox(this);
     trackBox_->addItems({"A", "B", "C", "D"});
     trackBox_->setCurrentIndex(gui_->getSequenceID() >= 0 ? gui_->getSequenceID() : id);
-    trackBox_->setFixedWidth(40);
-    trackBox_->setObjectName(objPrefix + ".track.combo");
+    // Wide enough to fit the single glyph clear of the theme's 22px
+    // dropdown-arrow padding (40px clipped it).
+    trackBox_->setFixedWidth(56);  // room for the letter clear of the arrow
+    trackBox_->setFixedHeight(kCtrlHeight);
+    trackBox_->setObjectName(objPrefix_ + ".track.combo");
     trackBox_->setAccessibleName("Track");
 
-    // EXR layer picker. Lives between Track and Aspect so it reads as
-    // "this track, this layer, this aspect". Hidden until the plate's
-    // current track has > 1 named layer (refreshFromState handles that
-    // toggle); for non-EXR / single-layer files there's nothing to
-    // choose so showing the combo would just be visual noise.
+    // Layer picker. Lives between Track and Aspect so it reads as "this
+    // track, this layer, this aspect". Always visible: it shows "Main"
+    // by default (the file's primary channels) and adds the EXR sub-layers
+    // (e.g. "right", "diffuse") when a multi-layer file is loaded.
     layerBox_ = new QComboBox(this);
-    layerBox_->setMinimumWidth(70);
-    layerBox_->setObjectName(objPrefix + ".layer.combo");
-    layerBox_->setAccessibleName("EXR layer");
-    layerBox_->setToolTip("EXR layer driving this plate");
-    layerBox_->setVisible(false);
+    // Fixed width — wide enough for "Main" and typical layer names; longer
+    // names elide. (The card no longer grows, so nothing expands here.)
+    layerBox_->setFixedWidth(92);
+    layerBox_->setFixedHeight(kCtrlHeight);
+    layerBox_->setObjectName(objPrefix_ + ".layer.combo");
+    layerBox_->setAccessibleName("Layer");
+    layerBox_->setToolTip("Image layer / channel group driving this plate");
 
-    // Aspect ratio combo with the Crop toggle folded into its popup. The
-    // crop checkbox keeps the old `crop.button` leaf objectName and "Crop"
-    // accessible name so existing UI-test locators resolve it once the
-    // popup is open.
+    // Aspect ratio control with the letterbox toggle folded into its popup.
+    // The checkbox keeps the old `crop.button` leaf objectName so existing
+    // UI-test locators resolve it once the popup is open; its visible/AX
+    // label is "Letterbox".
     aspectCrop_ = new AspectCropCombo_Qt(this);
     aspectCrop_->setPresets({"original", "16:9", "4:3", "2.39:1", "2.35:1", "1.85:1", "1.37:1"});
-    aspectCrop_->setMinimumWidth(60);
-    aspectCrop_->setObjectName(objPrefix + ".aspect.combo");
+    // Fixed, just wide enough for "source" (the default label). Layer takes
+    // the row's free space instead.
+    aspectCrop_->setFixedWidth(54);
+    aspectCrop_->setFixedHeight(kCtrlHeight);  // match the combos/buttons
+    aspectCrop_->setObjectName(objPrefix_ + ".aspect.combo");
     aspectCrop_->setAccessibleName("Aspect ratio");
-    aspectCrop_->setCropObjectName(objPrefix + ".crop.button");
-    aspectCrop_->setCropAccessibleName("Crop");
-    aspectCrop_->setCropToolTip("Toggle crop bars (aspect-ratio letterbox)");
+    aspectCrop_->setCropObjectName(objPrefix_ + ".crop.button");
+    aspectCrop_->setCropAccessibleName("Letterbox");
+    aspectCrop_->setCropToolTip("Letterbox to the selected aspect ratio (black bars)");
 
-    flipBtn_ = makeToggle(this, "Flip", "Flip vertically", 32);
-    flipBtn_->setObjectName(objPrefix + ".flip.button");
+    // Icon-only toggles: Flip = vertical mirror (up/down arrow), Flop =
+    // horizontal mirror (left/right arrow). accessibleName stays "Flip"/
+    // "Flop" so AX titles and UI-test locators are unchanged.
+    flipBtn_ = makeIconToggle(this, makeMirrorIcon(/*vertical=*/true),
+                              "Flip vertically (mirror top–bottom)");
+    flipBtn_->setObjectName(objPrefix_ + ".flip.button");
     flipBtn_->setAccessibleName("Flip");
-    flopBtn_ = makeToggle(this, "Flop", "Flop horizontally", 32);
-    flopBtn_->setObjectName(objPrefix + ".flop.button");
+    flopBtn_ = makeIconToggle(this, makeMirrorIcon(/*vertical=*/false),
+                              "Flop horizontally (mirror left–right)");
+    flopBtn_->setObjectName(objPrefix_ + ".flop.button");
     flopBtn_->setAccessibleName("Flop");
 
     rgbaBtn_ = new QPushButton("RGB", this);
     rgbaBtn_->setCheckable(true);
     rgbaBtn_->setToolTip("Cycle RGBA channel display (shortcuts r/g/b/a)");
-    rgbaBtn_->setFixedHeight(20);
-    rgbaBtn_->setMinimumWidth(36);
-    rgbaBtn_->setObjectName(objPrefix + ".rgba.button");
+    // Fixed size with tight padding so the button doesn't jitter as its
+    // label cycles RGB → R → G → B (different glyph widths). 40px clears
+    // the widest label ("RGB") with the reduced padding.
+    rgbaBtn_->setFixedSize(36, kCtrlHeight);
+    rgbaBtn_->setStyleSheet("QPushButton { padding: 1px 4px; }");
+    rgbaBtn_->setObjectName(objPrefix_ + ".rgba.button");
     rgbaBtn_->setAccessibleName("RGBA channel");
 
-    auto* row1 = new QHBoxLayout();
-    row1->setSpacing(4);
-    row1->addWidget(plateId);
-    row1->addWidget(trackBox_);
-    row1->addWidget(layerBox_);
-    row1->addWidget(aspectCrop_, 1);
-    row1->addWidget(flipBtn_);
-    row1->addWidget(flopBtn_);
-    row1->addWidget(rgbaBtn_);
-
-    zoomSpin_ = makeSpin(this, 0.01,    99.99, 0.01, 1.0, 46);
-    zoomSpin_->setObjectName(objPrefix + ".zoom.spin");
+    // Narrow fields — sized to fit "00.00" (theme adds 6px padding + 1px
+    // border each side). Pan/rotation get a touch more for the sign / 3rd
+    // digit ("-360.00").
+    // Snug fields sized for "00.00" (kNarrowSpin); Pan X/Y get the wider
+    // width (pixel offsets run 3–4 digits); rotation fits "360.00".
+    constexpr int kNarrowSpin = 38;  // Zoom + color fields — fits "00.00"/"-9.99"
+    constexpr int kWideSpin   = 40;  // Pan X/Y — fits "0000" / "-999"
+    constexpr int kRotSpin    = 48;
+    zoomSpin_ = makeSpin(this, 0.01,    1.0e6, 0.01, 1.0, kNarrowSpin);
+    zoomSpin_->setObjectName(objPrefix_ + ".zoom.spin");
     zoomSpin_->setAccessibleName("Zoom");
-    panXSpin_ = makeSpin(this, -9999.0, 9999.0, 1.0,  0.0, 50);
-    panXSpin_->setObjectName(objPrefix + ".panx.spin");
+    panXSpin_ = makeSpin(this, -1.0e6, 1.0e6, 1.0,  0.0, kWideSpin);
+    panXSpin_->setObjectName(objPrefix_ + ".panx.spin");
     panXSpin_->setAccessibleName("Pan X");
-    panYSpin_ = makeSpin(this, -9999.0, 9999.0, 1.0,  0.0, 50);
-    panYSpin_->setObjectName(objPrefix + ".pany.spin");
+    panYSpin_ = makeSpin(this, -1.0e6, 1.0e6, 1.0,  0.0, kWideSpin);
+    panYSpin_->setObjectName(objPrefix_ + ".pany.spin");
     panYSpin_->setAccessibleName("Pan Y");
-    rotSpin_  = makeSpin(this, -360.0,  360.0,  0.01, 0.0, 56);
-    rotSpin_->setObjectName(objPrefix + ".rotation.spin");
+    rotSpin_  = makeSpin(this, -360.0,  360.0,  0.01, 0.0, kRotSpin);
+    rotSpin_->setObjectName(objPrefix_ + ".rotation.spin");
     rotSpin_->setAccessibleName("Rotation");
 
     lutBox_ = new QComboBox(this);
     lutBox_->addItem("No LUT");
-    lutBox_->setMinimumWidth(70);
-    lutBox_->setObjectName(objPrefix + ".lut.combo");
+    // Ignored width policy: a QComboBox normally sizes to its longest item,
+    // which would balloon the card once LUTs autoload. Ignored makes the
+    // combo's sizeHint irrelevant — it simply fills the space row 2 has
+    // left over (the card width is set by the wider transforms row), so the
+    // LUT never extends past row 1's right edge. The popup still shows full
+    // names; long current selections elide. Min keeps it usable.
+    lutBox_->setMinimumWidth(50);
+    lutBox_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    lutBox_->setFixedHeight(kCtrlHeight);
+    lutBox_->setObjectName(objPrefix_ + ".lut.combo");
     lutBox_->setAccessibleName("LUT");
 
-    auto* row2 = new QHBoxLayout();
-    row2->setSpacing(2);
-    row2->addWidget(makeInlineLabel(this, "Zoom"));
-    row2->addWidget(zoomSpin_);
-    row2->addSpacing(4);
-    row2->addWidget(makeInlineLabel(this, "X"));
-    row2->addWidget(panXSpin_);
-    row2->addWidget(makeInlineLabel(this, "Y"));
-    row2->addWidget(panYSpin_);
-    row2->addSpacing(4);
-    row2->addWidget(makeInlineLabel(this, "R"));
-    row2->addWidget(rotSpin_);
-    row2->addSpacing(4);
-    row2->addWidget(makeInlineLabel(this, "LUT"));
-    row2->addWidget(lutBox_, 1);
-
-    gammaSpin_      = makeSpin(this, 0.01,   99.99, 0.01, 1.0, 44);
-    gammaSpin_->setObjectName(objPrefix + ".gamma.spin");
+    // Color controls cap at 9.99 (the useful range for grade tweaks).
+    // gamma/contrast/saturation are non-negative; exposure/brightness are
+    // bipolar (±9.99). Two-decimal display.
+    gammaSpin_      = makeSpin(this, 0.0,   9.99, 0.01, 1.0, kNarrowSpin);
+    gammaSpin_->setObjectName(objPrefix_ + ".gamma.spin");
     gammaSpin_->setAccessibleName("Gamma");
-    exposureSpin_   = makeSpin(this, -99.99, 99.99, 0.01, 0.0, 48);
-    exposureSpin_->setObjectName(objPrefix + ".exposure.spin");
+    exposureSpin_   = makeSpin(this, -9.99, 9.99, 0.01, 0.0, kNarrowSpin);
+    exposureSpin_->setObjectName(objPrefix_ + ".exposure.spin");
     exposureSpin_->setAccessibleName("Exposure");
-    contrastSpin_   = makeSpin(this, 0.01,   99.99, 0.01, 1.0, 44);
-    contrastSpin_->setObjectName(objPrefix + ".contrast.spin");
+    contrastSpin_   = makeSpin(this, 0.0,   9.99, 0.01, 1.0, kNarrowSpin);
+    contrastSpin_->setObjectName(objPrefix_ + ".contrast.spin");
     contrastSpin_->setAccessibleName("Contrast");
-    brightnessSpin_ = makeSpin(this, -99.99, 99.99, 0.01, 0.0, 48);
-    brightnessSpin_->setObjectName(objPrefix + ".brightness.spin");
+    brightnessSpin_ = makeSpin(this, -9.99, 9.99, 0.01, 0.0, kNarrowSpin);
+    brightnessSpin_->setObjectName(objPrefix_ + ".brightness.spin");
     brightnessSpin_->setAccessibleName("Brightness");
-    saturationSpin_ = makeSpin(this, 0.0,    99.99, 0.01, 1.0, 44);
-    saturationSpin_->setObjectName(objPrefix + ".saturation.spin");
+    saturationSpin_ = makeSpin(this, 0.0,   9.99, 0.01, 1.0, kNarrowSpin);
+    saturationSpin_->setObjectName(objPrefix_ + ".saturation.spin");
     saturationSpin_->setAccessibleName("Saturation");
 
-    auto* row3 = new QHBoxLayout();
-    row3->setSpacing(2);
-    row3->addWidget(makeInlineLabel(this, "γ"));
-    row3->addWidget(gammaSpin_);
-    row3->addWidget(makeInlineLabel(this, "Ex"));
-    row3->addWidget(exposureSpin_);
-    row3->addWidget(makeInlineLabel(this, "Cn"));
-    row3->addWidget(contrastSpin_);
-    row3->addWidget(makeInlineLabel(this, "Br"));
-    row3->addWidget(brightnessSpin_);
-    row3->addWidget(makeInlineLabel(this, "St"));
-    row3->addWidget(saturationSpin_);
-    row3->addStretch(1);
-
-    auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(4, 2, 4, 2);
-    outer->setSpacing(2);
-    outer->addLayout(row1);
-    outer->addLayout(row2);
-    outer->addLayout(row3);
-    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    // Top-level layout: one swappable content_ child holding the caption
+    // labels and per-row layouts. Created once here; rebuildContent() builds
+    // (and on later setVertical calls rebuilds) it. Keeping the row assembly
+    // in rebuildContent lets the wide-short and narrow-tall forms share one
+    // code path while the control widgets are simply reparented across swaps.
+    auto* top = new QVBoxLayout(this);
+    top->setContentsMargins(0, 0, 0, 0);
+    top->setSpacing(0);
+    rebuildContent();
 
     // Wire signals to the GUI state object. gfcPlate reads through the
     // same interface, so each connect() below is the actual control →
@@ -303,6 +375,155 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
 
 PlateCard_Qt::~PlateCard_Qt() = default;
 
+void PlateCard_Qt::setVertical(bool vertical) {
+    if (vertical == vertical_) return;
+    vertical_ = vertical;
+    rebuildContent();
+}
+
+void PlateCard_Qt::rebuildContent() {
+    // Build the new content into a fresh child widget. Adding the shared
+    // control widgets to nc's layouts reparents them into nc — intended:
+    // the members survive (and their signal connections persist across
+    // reparenting); only the caption QLabels and layout containers are nc's
+    // own children, so deleting the old content can't strand a caption.
+    auto* nc = new QWidget(this);
+
+    if (!vertical_) {
+        // ---- Wide-short (horizontal dock): two rows. ----
+        // Flip/Flop share one cell (a blank caption keeps them bottom-
+        // aligned with the labeled fields). A fresh mirrorBox parented to
+        // nc each rebuild so it dies with the old content.
+        auto* mirrorBox = new QWidget(nc);
+        auto* mirrorLay = new QHBoxLayout(mirrorBox);
+        mirrorLay->setContentsMargins(0, 0, 0, 0);
+        mirrorLay->setSpacing(1);
+        mirrorLay->addWidget(flipBtn_);
+        mirrorLay->addWidget(flopBtn_);
+
+        // Transform group, packed tight (small spacing) so the four fields
+        // read as one cluster and free width for the dropdowns.
+        auto* xformGroup = new QHBoxLayout();
+        xformGroup->setSpacing(1);
+        xformGroup->addLayout(labeledCell(nc, "Zoom", zoomSpin_));
+        xformGroup->addLayout(labeledCell(nc, "X",    panXSpin_));
+        xformGroup->addLayout(labeledCell(nc, "Y",    panYSpin_));
+        xformGroup->addLayout(labeledCell(nc, "Rot",  rotSpin_));
+
+        // Row 1 — Track (fixed) + Layer/Aspect + packed transforms. The
+        // "Track" caption carries the `track.label` objectName so it's the
+        // plate-activation click target. Flip/Flop moved to row 2 so Layer/
+        // Aspect don't clip.
+        auto* row1 = new QHBoxLayout();
+        row1->setSpacing(2);
+        row1->addLayout(labeledCell(nc, "Track",  trackBox_, objPrefix_ + ".track.label"));
+        row1->addLayout(labeledCell(nc, "Layer",  layerBox_));
+        row1->addLayout(labeledCell(nc, "Aspect", aspectCrop_));
+        row1->addLayout(xformGroup);
+        row1->addStretch(1);  // absorb the width difference vs the (wider) row 2
+
+        // Color-correction group, packed tight so the five fields read as
+        // one cluster.
+        auto* colorGroup = new QHBoxLayout();
+        colorGroup->setSpacing(1);
+        colorGroup->addLayout(labeledCell(nc, "Gamma", gammaSpin_));
+        colorGroup->addLayout(labeledCell(nc, "Exp",   exposureSpin_));
+        colorGroup->addLayout(labeledCell(nc, "Con",   contrastSpin_));
+        colorGroup->addLayout(labeledCell(nc, "Bri",   brightnessSpin_));
+        colorGroup->addLayout(labeledCell(nc, "Sat",   saturationSpin_));
+
+        // Row 2 — channel, packed color group, Flip/Flop, then LUT.
+        auto* row2 = new QHBoxLayout();
+        row2->setSpacing(2);
+        row2->addLayout(labeledCell(nc, "Chan", rgbaBtn_));
+        row2->addLayout(colorGroup);
+        row2->addLayout(labeledCell(nc, QString(), mirrorBox));  // Flip/Flop
+        // LUT picker fills the row's leftover width via its Ignored size
+        // policy; no trailing stretch so it reaches the card's right edge.
+        row2->addLayout(labeledCell(nc, QString(), lutBox_), 1);
+
+        auto* outer = new QVBoxLayout(nc);
+        outer->setContentsMargins(4, 2, 4, 2);
+        outer->setSpacing(2);
+        outer->addLayout(row1);
+        outer->addLayout(row2);
+    } else {
+        // ---- Narrow-tall (vertical dock): five stacked rows, ~200px. ----
+        // The color row (row D, five fields) sets the card's width. Each row
+        // is a QHBoxLayout of cells with a trailing stretch so cells pack
+        // left; row E lets the LUT fill instead.
+        auto* mirrorBox = new QWidget(nc);
+        auto* mirrorLay = new QHBoxLayout(mirrorBox);
+        mirrorLay->setContentsMargins(0, 0, 0, 0);
+        mirrorLay->setSpacing(1);
+        mirrorLay->addWidget(flipBtn_);
+        mirrorLay->addWidget(flopBtn_);
+
+        // Row A — Track + Layer + channel. "Track" caption keeps the
+        // click-target id. Channel rides here (not row B) to leave row B's
+        // width for the LUT.
+        auto* rowA = new QHBoxLayout();
+        rowA->setSpacing(2);
+        rowA->addLayout(labeledCell(nc, "Track", trackBox_, objPrefix_ + ".track.label"));
+        rowA->addLayout(labeledCell(nc, "Layer", layerBox_));
+        rowA->addLayout(labeledCell(nc, "Chan",  rgbaBtn_));
+        rowA->addStretch(1);
+
+        // Row B — Aspect + Flip/Flop mirror + LUT (fills the leftover width
+        // via its Ignored size policy). Folding the LUT in here keeps the
+        // narrow card to four rows instead of five.
+        auto* rowB = new QHBoxLayout();
+        rowB->setSpacing(2);
+        rowB->addLayout(labeledCell(nc, "Aspect", aspectCrop_));
+        rowB->addLayout(labeledCell(nc, QString(), mirrorBox));
+        rowB->addLayout(labeledCell(nc, QString(), lutBox_), 1);
+
+        // Row C — transforms, packed tight.
+        auto* rowC = new QHBoxLayout();
+        rowC->setSpacing(1);
+        rowC->addLayout(labeledCell(nc, "Zoom", zoomSpin_));
+        rowC->addLayout(labeledCell(nc, "X",    panXSpin_));
+        rowC->addLayout(labeledCell(nc, "Y",    panYSpin_));
+        rowC->addLayout(labeledCell(nc, "Rot",  rotSpin_));
+        rowC->addStretch(1);
+
+        // Row D — color correction, packed tight. Five fields ≈ 200px set
+        // the card's width.
+        auto* rowD = new QHBoxLayout();
+        rowD->setSpacing(1);
+        rowD->addLayout(labeledCell(nc, "Gamma", gammaSpin_));
+        rowD->addLayout(labeledCell(nc, "Exp",   exposureSpin_));
+        rowD->addLayout(labeledCell(nc, "Con",   contrastSpin_));
+        rowD->addLayout(labeledCell(nc, "Bri",   brightnessSpin_));
+        rowD->addLayout(labeledCell(nc, "Sat",   saturationSpin_));
+        rowD->addStretch(1);
+
+        auto* outer = new QVBoxLayout(nc);
+        outer->setContentsMargins(4, 2, 4, 2);
+        outer->setSpacing(2);
+        outer->addLayout(rowA);
+        outer->addLayout(rowB);
+        outer->addLayout(rowC);
+        outer->addLayout(rowD);
+    }
+
+    // Swap content. Build nc first (reparenting the controls into it) BEFORE
+    // deleting the old content_, so the deletion can't take the shared
+    // control widgets with it.
+    auto* top = layout();
+    if (content_) {
+        top->removeWidget(content_);
+        content_->deleteLater();
+    }
+    top->addWidget(nc);
+    content_ = nc;
+
+    // The card stays at its packed size and neither grows nor shrinks; the
+    // Plate Manager left/top-aligns cards and scrolls the long axis.
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    adjustSize();
+}
+
 void PlateCard_Qt::mousePressEvent(QMouseEvent* e) {
     // Child widgets (spinboxes, combos, buttons) handle their own
     // events first; this only fires when the user clicks on the card's
@@ -386,51 +607,47 @@ void PlateCard_Qt::refreshFromState() {
         trackBox_->setCurrentIndex(track);
     }
 
-    // Layer combo: populate from the bridge's view of the plate's track.
-    // Hide the combo for files with no named layers (single-layer EXR,
-    // or any non-EXR format — the OIIO loader returns one entry with
-    // an empty name). Showing a one-item combo with a blank label
-    // would just be confusing.
+    // Layer combo: always visible. Defaults to a single "Main" entry
+    // when the plate has no loaded layers yet (or a non-EXR/single-layer
+    // file); multi-layer EXRs add their discovered sub-layer names. The
+    // OIIO/DPX loaders already name the default layer "Main", so a
+    // loaded plate's first entry matches this default with no special-case.
     {
-        bool hasNamedLayers = false;
-        for (const auto& n : layers) {
-            if (!n.empty()) { hasNamedLayers = true; break; }
+        std::vector<std::string> items = layers;
+        // Defensive: any blank/legacy entry shows as "Main".
+        for (auto& n : items) {
+            if (n.empty()) n = "Main";
         }
-        if (hasNamedLayers) {
-            // Only rebuild the item list if the cached list shows a
-            // different shape. Touching items causes the combo to
-            // flicker even with signals blocked.
-            const bool listChanged = firstPass || (layers != lastShown_.layers);
-            if (listChanged) {
-                layerBox_->clear();
-                for (const auto& name : layers) {
-                    layerBox_->addItem(QString::fromStdString(name));
-                }
+        if (items.empty()) items.push_back("Main");
+
+        // Only rebuild the item list when its shape changed — touching items
+        // flickers the combo even with signals blocked.
+        const bool listChanged = firstPass || (items != lastShown_.layers);
+        if (listChanged) {
+            layerBox_->clear();
+            for (const auto& name : items) {
+                layerBox_->addItem(QString::fromStdString(name));
             }
-            const QString want = QString::fromStdString(activeLayer);
-            if (!want.isEmpty()
-                && (firstPass || activeLayer != lastShown_.activeLayer
-                    || listChanged)
-                && layerBox_->currentText() != want) {
-                layerBox_->setCurrentText(want);
-            }
-            if (firstPass || !lastShown_.layerVisible) {
-                layerBox_->setVisible(true);
-            }
-            lastShown_.layerVisible = true;
-        } else {
-            if (firstPass || lastShown_.layerVisible) {
-                layerBox_->setVisible(false);
-            }
-            lastShown_.layerVisible = false;
         }
-        lastShown_.layers = layers;
+        const QString want = QString::fromStdString(activeLayer);
+        if (!want.isEmpty()
+            && (firstPass || activeLayer != lastShown_.activeLayer
+                || listChanged)
+            && layerBox_->currentText() != want) {
+            layerBox_->setCurrentText(want);
+        }
+        lastShown_.layers = items;
         lastShown_.activeLayer = activeLayer;
     }
 
     if ((firstPass || aspect != lastShown_.aspect) && !aspect.isEmpty()) {
         aspectCrop_->setCurrentAspect(aspect);
     }
+
+    // Show the loaded frame's true ratio next to "original" in the drop-down.
+    // Cheap string compare inside the widget gates the work; safe per-refresh.
+    aspectCrop_->setNativeAspectLabel(
+        QString::fromStdString(jefe::qt::getPlateNativeAspect(id_)));
 
     if (firstPass || crop != lastShown_.crop) aspectCrop_->setCropChecked(crop);
     if (firstPass || flip != lastShown_.flip) flipBtn_->setChecked(flip);

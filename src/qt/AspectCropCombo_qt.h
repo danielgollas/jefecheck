@@ -71,11 +71,18 @@ public:
     void setCropChecked(bool on);
 
     // PlateCard sets these on the inner checkbox so UI-test locators keep
-    // resolving `plate.<idx>.crop.button` / accessibleName "Crop" once the
-    // popup is open.
+    // resolving `plate.<idx>.crop.button` once the popup is open.
     void setCropObjectName(const QString& name);
     void setCropAccessibleName(const QString& name);
     void setCropToolTip(const QString& tip);
+
+    // The derived native aspect of the loaded frame, formatted "2.40:1"
+    // (empty when nothing is loaded). When set, the "original" preset row's
+    // DISPLAY text becomes "<derived> (native)" — but only in the drop-down;
+    // its canonical value stays "original" so selecting it still sends the
+    // file-original sentinel, and the closed face never shows the derived
+    // string. Signal-free.
+    void setNativeAspectLabel(const QString& derived);
 
 signals:
     void aspectChanged(const QString& aspect);
@@ -102,7 +109,13 @@ private:
     // mutates the stored aspect.
     void updateFace();
 
+    // Update the "original" preset row's display text from nativeAspect_
+    // ("<derived> (native)" when known, else "original"), keeping its
+    // canonical "original" value in Qt::UserRole.
+    void refreshOriginalRow();
+
     QString      aspect_;               // raw stored ratio string (== face text)
+    QString      nativeAspect_;         // derived native ratio, drop-down only
     bool         crop_       = false;
 
     QFrame*      popupFrame_ = nullptr;

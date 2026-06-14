@@ -356,6 +356,12 @@ std::vector<std::string> getLayersOnPlate(int plateIdx);
 std::string getActiveLayerOnPlate(int plateIdx);
 void setLayerOnPlate(int plateIdx, const std::string& layerName);
 
+// Native aspect ratio of the plate's loaded preview frame, formatted
+// "W.WW:1" (e.g. "2.39:1"), or empty when no frame is loaded yet. Derived
+// from the decoded frame's pixel dimensions. The Aspect control shows this
+// next to its "original" entry so the user sees the file's true ratio.
+std::string getPlateNativeAspect(int plateIdx);
+
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering
 // chain picks up the new frame on the next draw call. Caller is

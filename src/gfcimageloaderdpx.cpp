@@ -358,18 +358,18 @@ int gfcImageLoaderDPX::load(gfcLoadParams pparams) {
 	
 	switch (imageInfo.image_element[0].descriptor) {
     	case ImageElementRGB:
-        	
-        	channelNames.push_back("RGB");
-        
+
+        	channelNames.push_back("Main");
+
         break;
     	case ImageElementRGBA:
-        
-        	channelNames.push_back("RGBA");
-        
+
+        	channelNames.push_back("Main");
+
         break;
 
     	default:
-                channelNames.push_back("RGBA");
+                channelNames.push_back("Main");
 				//return 2;
         break;
     	}

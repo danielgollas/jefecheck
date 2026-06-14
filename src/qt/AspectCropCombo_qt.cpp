@@ -2,11 +2,14 @@
 
 #include <QCheckBox>
 #include <QEvent>
+#include <QFont>
 #include <QFrame>
+#include <QLabel>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QListWidgetItem>
 #include <QPainter>
 #include <QPen>
 #include <QPixmap>
@@ -23,28 +26,6 @@ namespace {
 // reopen the popup, or it flickers shut-then-open. 150ms comfortably covers
 // the same physical click without swallowing a deliberate second click.
 constexpr qint64 kReopenGuardMs = 150;
-
-// Build the small crop-marks icon shown on the face while crop is active:
-// two opposing right-angle corner brackets (the universal crop glyph),
-// drawn into a 2x-dpr pixmap so it stays crisp on Retina. Light color so it
-// reads on the dark VFX theme.
-QIcon makeCropIcon() {
-    QPixmap pm(28, 28);
-    pm.setDevicePixelRatio(2.0);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(QColor(0xe0, 0xe0, 0xe0), 1.4);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    p.setPen(pen);
-    const QPointF tl[3] = {{10, 3}, {3, 3}, {3, 10}};    // top-left bracket
-    const QPointF br[3] = {{4, 11}, {11, 11}, {11, 4}};  // bottom-right bracket
-    p.drawPolyline(tl, 3);
-    p.drawPolyline(br, 3);
-    p.end();
-    return QIcon(pm);
-}
 }  // namespace
 
 AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
@@ -68,7 +49,7 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
         " border-radius: 3px;"
         " color: #e0e0e0;"
         " text-align: left;"
-        " padding: 2px 6px;"
+        " padding: 2px 4px;"
         " }"
         "QToolButton:hover { border-color: #d4771e; }");
 
@@ -76,6 +57,15 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     // dismissal and grabs input while shown.
     popupFrame_ = new QFrame(this, Qt::Popup);
     popupFrame_->setFrameShape(QFrame::StyledPanel);
+    // The popup's children (checkbox / list / line-edit) are NOT covered by
+    // the plate card's 10pt font stylesheet, so without this they render at
+    // the platform default (~13pt on macOS) and the popup balloons. A 10pt
+    // QFont propagates to all children and keeps rows compact.
+    {
+        QFont compact = popupFrame_->font();
+        compact.setPointSize(10);
+        popupFrame_->setFont(compact);
+    }
     // Watch the frame's Hide events so the reopen-flicker guard is stamped
     // for EVERY dismissal path — our own hide() calls AND the Qt::Popup
     // outside-click that closes it without going through our code.
@@ -85,8 +75,14 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     lay->setContentsMargins(0, 0, 0, 0);
     lay->setSpacing(0);
 
-    cropCheck_ = new QCheckBox(QStringLiteral("Crop (letterbox bars)"), popupFrame_);
-    cropCheck_->setContentsMargins(6, 4, 6, 4);
+    // Section header so the popup reads as the Aspect control.
+    auto* header = new QLabel(QStringLiteral("Aspect"), popupFrame_);
+    header->setContentsMargins(6, 3, 6, 1);
+    header->setStyleSheet("color: #888; font-weight: bold;");
+    lay->addWidget(header);
+
+    cropCheck_ = new QCheckBox(QStringLiteral("Letterbox"), popupFrame_);
+    cropCheck_->setContentsMargins(12, 3, 6, 3);  // breathing room left of the box
     // crop_ is the source of truth; sync the freshly-created checkbox to it
     // (false) so they start unambiguously consistent.
     {
@@ -95,6 +91,13 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     }
     lay->addWidget(cropCheck_);
 
+    // Custom-ratio entry lives near the top under Crop (it used to be the
+    // editable combo face). Enter commits the trimmed text as the new aspect.
+    customEdit_ = new QLineEdit(popupFrame_);
+    customEdit_->setPlaceholderText(QStringLiteral("Custom ratio…"));
+    customEdit_->setContentsMargins(0, 2, 0, 2);  // full width, like the list rows
+    lay->addWidget(customEdit_);
+
     auto* divider = new QFrame(popupFrame_);
     divider->setFrameShape(QFrame::HLine);
     divider->setFrameShadow(QFrame::Sunken);
@@ -102,19 +105,13 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
 
     ratioList_ = new QListWidget(popupFrame_);
     ratioList_->setFrameShape(QFrame::NoFrame);
+    // The list shows a fixed handful of short rows — never scroll, and don't
+    // let QListWidget's default 256x192 size hint inflate the popup. Height
+    // is pinned to the row count in setPresets(); width comes from the frame.
+    ratioList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    ratioList_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    ratioList_->setUniformItemSizes(true);
     lay->addWidget(ratioList_);
-
-    auto* divider2 = new QFrame(popupFrame_);
-    divider2->setFrameShape(QFrame::HLine);
-    divider2->setFrameShadow(QFrame::Sunken);
-    lay->addWidget(divider2);
-
-    // Custom-ratio entry now lives in the popup (it used to be the editable
-    // combo face). Enter commits the trimmed text as the new aspect.
-    customEdit_ = new QLineEdit(popupFrame_);
-    customEdit_->setPlaceholderText(QStringLiteral("Custom ratio…"));
-    customEdit_->setContentsMargins(6, 4, 6, 4);
-    lay->addWidget(customEdit_);
 
     // Checkbox: flip crop, keep popup OPEN, leave ratio untouched.
     connect(cropCheck_, &QCheckBox::toggled, this, [this](bool on) {
@@ -125,11 +122,12 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
         // pick a ratio in the same interaction.
     });
 
-    // Ratio click: set aspect, CLOSE popup, leave crop unchanged.
+    // Ratio click: set aspect, CLOSE popup, leave crop unchanged. Use the
+    // canonical UserRole value, not the (possibly decorated) display text.
     connect(ratioList_, &QListWidget::itemClicked, this,
             [this](QListWidgetItem* item) {
         if (!item) return;
-        const QString s = item->text();
+        const QString s = item->data(Qt::UserRole).toString();
         if (s != aspect_) {
             aspect_ = s;
             updateFace();
@@ -163,7 +161,42 @@ AspectCropCombo_Qt::~AspectCropCombo_Qt() = default;
 void AspectCropCombo_Qt::setPresets(const QStringList& presets) {
     ratioList_->clear();
     for (const QString& p : presets) {
-        ratioList_->addItem(p);
+        // The canonical aspect value lives in UserRole; the display text can
+        // diverge from it (the "original" row shows the derived native ratio
+        // while still meaning "original"). Default the two to be equal.
+        auto* item = new QListWidgetItem(p, ratioList_);
+        item->setData(Qt::UserRole, p);
+    }
+    refreshOriginalRow();
+    // Pin the list to exactly its rows so the popup is no taller than its
+    // contents (QListWidget's default size hint is 256x192). sizeHintForRow
+    // needs at least one item, which we now have.
+    if (ratioList_->count() > 0) {
+        const int rh = ratioList_->sizeHintForRow(0);
+        const int fw = ratioList_->frameWidth();
+        ratioList_->setFixedHeight(rh * ratioList_->count() + 2 * fw);
+    }
+}
+
+void AspectCropCombo_Qt::setNativeAspectLabel(const QString& derived) {
+    if (derived == nativeAspect_) return;
+    nativeAspect_ = derived;
+    refreshOriginalRow();
+    // If "original" is the current selection, the face shows the computed
+    // ratio — refresh it now that the native value changed.
+    if (aspect_ == QLatin1String("original")) updateFace();
+}
+
+void AspectCropCombo_Qt::refreshOriginalRow() {
+    if (!ratioList_) return;
+    for (int i = 0; i < ratioList_->count(); ++i) {
+        QListWidgetItem* it = ratioList_->item(i);
+        if (it->data(Qt::UserRole).toString() == QLatin1String("original")) {
+            it->setText(nativeAspect_.isEmpty()
+                            ? QStringLiteral("source")
+                            : nativeAspect_ + QStringLiteral(" (native)"));
+            return;
+        }
     }
 }
 
@@ -245,7 +278,7 @@ void AspectCropCombo_Qt::openPopup() {
     ratioList_->setCurrentItem(nullptr);
     for (int i = 0; i < ratioList_->count(); ++i) {
         QListWidgetItem* it = ratioList_->item(i);
-        if (it->text() == aspect_) {
+        if (it->data(Qt::UserRole).toString() == aspect_) {
             ratioList_->setCurrentItem(it);
             break;
         }
@@ -254,7 +287,11 @@ void AspectCropCombo_Qt::openPopup() {
     customEdit_->clear();
 
     // Size the frame first so we can position/flip it against the screen.
-    popupFrame_->setMinimumWidth(width());
+    // Width is the wider of the combo face and a compact floor — NOT driven
+    // by QListWidget's oversized default hint. setFixedWidth keeps adjustSize
+    // from ballooning horizontally; height still follows the (now pinned)
+    // content.
+    popupFrame_->setFixedWidth(qMax(width(), 150));
     popupFrame_->adjustSize();
     const QSize pop = popupFrame_->sizeHint().expandedTo(popupFrame_->size());
 
@@ -287,13 +324,19 @@ void AspectCropCombo_Qt::openPopup() {
 }
 
 void AspectCropCombo_Qt::updateFace() {
-    // Face text is ALWAYS the raw aspect string — never decorated, never
-    // round-tripped into stored state. The crop indicator is a painted icon.
-    setText(aspect_);
-    if (crop_) {
-        static const QIcon cropIcon = makeCropIcon();
-        setIcon(cropIcon);
-    } else {
-        setIcon(QIcon());
+    // Face shows the raw aspect string, EXCEPT when "original" is selected and
+    // we know the frame's native ratio — then show the computed ratio (without
+    // the drop-down-only "(native)" suffix). The stored aspect_ stays
+    // "original" so selection semantics are unchanged; this is display-only.
+    // The default ("original") canonical value is shown as "source" on the
+    // face; if the frame's native ratio is known we show that number
+    // instead. Non-default ratios show their own string.
+    QString face = aspect_;
+    if (aspect_ == QLatin1String("original")) {
+        face = nativeAspect_.isEmpty() ? QStringLiteral("source") : nativeAspect_;
     }
+    setText(face);
+    // No crop indicator on the closed face — an icon widens the fixed-width
+    // button and crowds the text. Letterbox state is shown by the checkbox
+    // in the drop-down.
 }
