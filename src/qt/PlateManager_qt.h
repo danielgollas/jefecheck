@@ -28,6 +28,11 @@ public slots:
     // the other 3 cards' widget-block scopes entirely.
     void refreshPlateTransform(int plateIdx);
 
+    // Sibling of refreshPlateTransform for color-correction drags
+    // (W/E/Q/D/S key+drag). Routes plateColorChanged(plateIdx) to the
+    // matching card's refreshColorOnly().
+    void refreshPlateColor(int plateIdx);
+
 protected:
     void resizeEvent(QResizeEvent* e) override;
 

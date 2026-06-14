@@ -83,3 +83,8 @@ void PlateManager_Qt::refreshPlateTransform(int plateIdx) {
     if (plateIdx < 0 || plateIdx >= cards_.size()) return;
     if (auto* card = cards_[plateIdx]) card->refreshTransformOnly();
 }
+
+void PlateManager_Qt::refreshPlateColor(int plateIdx) {
+    if (plateIdx < 0 || plateIdx >= cards_.size()) return;
+    if (auto* card = cards_[plateIdx]) card->refreshColorOnly();
+}

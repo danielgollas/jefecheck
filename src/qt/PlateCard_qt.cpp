@@ -517,3 +517,39 @@ void PlateCard_Qt::refreshTransformOnly() {
     if (ty    != lastShown_.ty)    { panYSpin_->setValue(ty);   lastShown_.ty    = ty; }
     if (rz    != lastShown_.rz)    { rotSpin_->setValue(rz);    lastShown_.rz    = rz; }
 }
+
+void PlateCard_Qt::refreshColorOnly() {
+    if (!gui_) return;
+    // Mirror of refreshTransformOnly for the five color-correction
+    // spinboxes. Reads the GUI's current values, short-circuits when
+    // none changed against the cache, then writes only the changed
+    // fields with signals blocked. Saves the full refreshFromState
+    // walk (13+ widget writes across track/aspect/layer/RGBA/LUT/etc.)
+    // during a W/E/Q/D/S drag.
+    const float gamma      = gui_->getGamma();
+    const float exposure   = gui_->getExposure();
+    const float contrast   = gui_->getContrast();
+    const float brightness = gui_->getBrightness();
+    const float saturation = gui_->getSaturation();
+
+    if (lastShown_.valid
+        && gamma == lastShown_.gamma
+        && exposure == lastShown_.exposure
+        && contrast == lastShown_.contrast
+        && brightness == lastShown_.brightness
+        && saturation == lastShown_.saturation) {
+        return;
+    }
+
+    const QSignalBlocker bGamma(gammaSpin_);
+    const QSignalBlocker bExposure(exposureSpin_);
+    const QSignalBlocker bContrast(contrastSpin_);
+    const QSignalBlocker bBrightness(brightnessSpin_);
+    const QSignalBlocker bSaturation(saturationSpin_);
+
+    if (gamma      != lastShown_.gamma)      { gammaSpin_->setValue(gamma);           lastShown_.gamma      = gamma; }
+    if (exposure   != lastShown_.exposure)   { exposureSpin_->setValue(exposure);     lastShown_.exposure   = exposure; }
+    if (contrast   != lastShown_.contrast)   { contrastSpin_->setValue(contrast);     lastShown_.contrast   = contrast; }
+    if (brightness != lastShown_.brightness) { brightnessSpin_->setValue(brightness); lastShown_.brightness = brightness; }
+    if (saturation != lastShown_.saturation) { saturationSpin_->setValue(saturation); lastShown_.saturation = saturation; }
+}

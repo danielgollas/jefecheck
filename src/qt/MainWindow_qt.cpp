@@ -574,6 +574,14 @@ void MainWindow_Qt::buildDocks() {
             plateManagerWidget_, &PlateManager_Qt::refreshPlateTransform,
             Qt::QueuedConnection);
 
+    // Sibling of plateTransformChanged for the W/E/Q/D/S color-
+    // correction drag interactions — refreshes only the BCS/gamma/
+    // exposure spinboxes on the affected plate. Same queued, gated
+    // pattern so the per-frame cost stays bounded.
+    connect(viewport_, &GlViewport_Qt::plateColorChanged,
+            plateManagerWidget_, &PlateManager_Qt::refreshPlateColor,
+            Qt::QueuedConnection);
+
     // The 2x2 minimum (wide + tall) applies only when the dock is on the
     // top or bottom edge. Floating, or docked to a side edge, drops to a
     // single-column minimum so the user can run it as a tall narrow

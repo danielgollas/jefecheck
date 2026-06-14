@@ -67,6 +67,15 @@ signals:
     // against its cache. 4 emits per frame at 60Hz is still cheap.
     void plateTransformChanged(int plateIdx);
 
+    // Sibling of plateTransformChanged for color-correction drags
+    // (W/E/Q/D/S key + drag — see mouseMoveEvent). Wired to a per-card
+    // slot that only refreshes the gamma / exposure / contrast /
+    // brightness / saturation spinboxes on the affected plate, gated
+    // on per-field cache delta. Same queued, coalescing semantics as
+    // plateTransformChanged so the dispatch cost stays bounded even
+    // when gang-modifying all four plates each frame.
+    void plateColorChanged(int plateIdx);
+
     // Emitted only when the Load Sequence Manager is open. plateIdx is
     // the plate the drop is targeting (today: always 0; future PR will
     // route to plate-under-cursor). path is the local file path.

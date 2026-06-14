@@ -57,6 +57,14 @@ public:
     // other dozen widgets and no FX param panel touch.
     void refreshTransformOnly();
 
+    // Drag-friendly partial refresh — updates only the gamma, exposure,
+    // contrast, brightness, and saturation spinboxes on this card,
+    // gated on per-field cache delta. Used by the W/E/Q/D/S key+drag
+    // color-correction handler in GlViewport_Qt so the spinbox under
+    // the user's eye reflects the live value without paying the full
+    // refreshAllCards + FXParamPanel cascade.
+    void refreshColorOnly();
+
     // Toggles the active-plate styling. Called by the parent dock when
     // it knows the active plate index has changed (either from a click
     // on a different card or via plateManager.setActiveQuad()).
