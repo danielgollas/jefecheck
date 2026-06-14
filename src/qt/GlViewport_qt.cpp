@@ -125,8 +125,18 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
 }
 
 void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
+    const bool wasDragging = dragPlate_ >= 0;
     dragPlate_ = -1;
     if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
+    // Sync the plate-card spinboxes / FX param panel once at the end of a
+    // drag. Inline-emitting during every mouseMove fired the heavy
+    // refreshAllCards + FXParamPanel::refresh cascade per pixel, which
+    // dominated the AppKit layout cost during pan — FLTK was buttery
+    // because it never had the equivalent of those widgets to update
+    // mid-drag. The plate visually pans every frame regardless because
+    // panPlate writes directly to gfcPlate state and we still call
+    // update() on every move; only the widget sync defers to release.
+    if (wasDragging) emit plateStateChanged();
 }
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
@@ -143,7 +153,10 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
         jefe::qt::panPlate(dragPlate_, dx, dy);
         update();
-        emit plateStateChanged();
+        // plateStateChanged deferred to mouseReleaseEvent — see comment
+        // there. The visual pan still updates this frame because
+        // panPlate mutates gfcPlate directly and update() schedules a
+        // paintGL; only the card-widget sync waits for release.
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
     }
