@@ -649,30 +649,15 @@ void gfc_gl_font(int face, int size) {
     textRenderer().setSize((float)size);
 }
 
-namespace {
-// Drag-time text suppression flag. Set by the Qt viewport in
-// mouseMoveEvent (pan start) and cleared in mouseReleaseEvent. Skipping
-// gfc_gl_draw during drag eliminates per-frame glyph atlas lookups and
-// per-glyph quad draws — the biggest remaining paintGL cost after the
-// emit cascade was tamed.
-bool g_textSuppressed = false;
-}
-
-void gfc_gl_set_suppressed(bool suppress) { g_textSuppressed = suppress; }
-bool gfc_gl_is_suppressed() { return g_textSuppressed; }
-
 void gfc_gl_draw(const char *str) {
-    if (g_textSuppressed) return;
     textRenderer().draw(str, 0, 0);
 }
 
 void gfc_gl_draw(const char *str, float x, float y) {
-    if (g_textSuppressed) return;
     textRenderer().draw(str, x, y);
 }
 
 void gfc_gl_draw(const char *str, int x, int y, int w, int h, int align) {
-    if (g_textSuppressed) return;
     textRenderer().draw(str, (float)x, (float)y, (float)w, (float)h, align);
 }
 
