@@ -27,13 +27,17 @@ def _reset_plate_toggles_after(app):
     has been changed — typically <100ms total.
 
     Flip/flop are always-visible buttons. Crop, however, moved into the
-    aspect combo's drop-down popup (AspectCropCombo_Qt), so its checkbox
-    is only in the AX tree while that popup is open. Reading or clearing
-    crop therefore requires opening each plate's aspect combo first — we
-    pay that open cost unconditionally for crop because the checked state
-    can't be read without the popup. Clicking the checkbox leaves the
-    popup open, so we re-open per plate but the combo dismisses on its
-    own when focus leaves it / the next plate's combo is opened.
+    aspect combo's drop-down popup (AspectCropCombo_Qt, a QToolButton whose
+    popup is a Qt::Popup frame), so its checkbox is only in the AX tree
+    while that popup is open. Reading or clearing crop therefore requires
+    opening each plate's aspect combo first — we pay that open cost
+    unconditionally for crop because the checked state can't be read without
+    the popup. Clicking the crop checkbox is INSIDE the Qt::Popup grab, so it
+    leaves the popup open. We re-open per plate; opening the NEXT plate's
+    combo is an outside-click relative to the prior plate's popup, which
+    dismisses it (the Qt::Popup click-outside-to-dismiss behavior). The last
+    plate's popup is left open but harmless — the next test's first AX click
+    dismisses it.
     """
     yield
     for plate_id in range(4):
