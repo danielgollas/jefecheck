@@ -226,12 +226,38 @@ void seekToFrame(int frame) {
     plateManager.setChanged();
 }
 
+// The Qt loop-mode combo uses 0/1/2 for Once/Loop/Bounce, but the
+// playback manager's switch in update() matches against the CBArgs
+// enum values (LOOPMODEONCE_ID=22, LOOPMODELOOP_ID=23, LOOPMODEBOUNCE_ID=24).
+// Without this translation, changing the combo wrote a value (0/1/2) that
+// no case matched — the switch fell through silently and playback froze.
+// Constructor-time default of LOOPMODEONCE_ID worked, so first-loop playback
+// succeeded; any subsequent mode change broke everything. Translate at the
+// bridge boundary in both directions.
+static int comboIdxToLoopModeId(int idx) {
+    switch (idx) {
+        case 1:  return LOOPMODELOOP_ID;
+        case 2:  return LOOPMODEBOUNCE_ID;
+        case 0:  // fall through to default
+        default: return LOOPMODEONCE_ID;
+    }
+}
+
+static int loopModeIdToComboIdx(int id) {
+    switch (id) {
+        case LOOPMODELOOP_ID:   return 1;
+        case LOOPMODEBOUNCE_ID: return 2;
+        case LOOPMODEONCE_ID:   // fall through
+        default:                return 0;
+    }
+}
+
 void setLoopMode(int mode) {
-    playbackManager.setPlaybackMode(mode);
+    playbackManager.setPlaybackMode(comboIdxToLoopModeId(mode));
 }
 
 int getLoopMode() {
-    return playbackManager.getPlaybackMode();
+    return loopModeIdToComboIdx(playbackManager.getPlaybackMode());
 }
 
 void setTargetFPS(float fps) {
