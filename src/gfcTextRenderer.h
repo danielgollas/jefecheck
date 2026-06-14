@@ -129,4 +129,12 @@ void gfc_gl_draw(const char *str, int x, int y, int w, int h, int align);
 float gfc_gl_height();
 void gfc_gl_measure(const char *str, int &w, int &h, int wrap = 0);
 
+// Suppress all gfc_gl_draw calls when true. The Qt viewport sets this
+// during pan/zoom drags so paintGL skips the per-plate text overlays
+// (labels, frame number, AOI corner readouts) that otherwise pile up
+// glyph atlas lookups + per-glyph quad draws per frame. Cleared on
+// mouseRelease so the labels reappear immediately after the drag.
+void gfc_gl_set_suppressed(bool suppress);
+bool gfc_gl_is_suppressed();
+
 #endif

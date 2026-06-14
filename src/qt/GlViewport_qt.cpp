@@ -5,6 +5,11 @@
 #include "GlViewport_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
+// Forward-declare the suppress accessor instead of including
+// gfcTextRenderer.h — that header pulls system OpenGL headers, which
+// conflict with the QOpenGLWidget glad path this TU is on.
+void gfc_gl_set_suppressed(bool);
+
 // FRAMING*_ID constants for layout shortcuts. UIConstants.h has no
 // FLTK dependencies, so it's safe to pull into the Qt TU directly.
 #include "../UIConstants.h"
@@ -134,10 +139,13 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
     const bool wasDragging = dragPlate_ >= 0;
     dragPlate_ = -1;
     if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
-    // Final widget sync once the drag ends — this catches any motion
-    // that arrived after the most recent throttled emit so the
-    // spinboxes hold the exact final values.
     if (wasDragging) {
+        // Restore text overlays now that the drag is over and force a
+        // repaint so the labels reappear immediately.
+        gfc_gl_set_suppressed(false);
+        update();
+        // Final widget sync — catches any motion after the last
+        // throttled emit so the spinboxes hold the exact final values.
         emit plateStateChanged();
         dragEmittedAny_ = false;
     }
@@ -145,6 +153,14 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
     if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {
+        // Suppress per-plate text overlays for the duration of the drag.
+        // Each plate's drawText / AOI corner readouts call gfc_gl_draw
+        // which iterates glyphs, looks up atlas tiles, and draws a quad
+        // per glyph — ~12+ text draws per frame across 4 plates. Skipping
+        // them is the biggest paintGL win after the emit cascade was
+        // throttled. Restored in mouseReleaseEvent.
+        gfc_gl_set_suppressed(true);
+
         // FLTK's GlViewport pans by (prevX - eventX, prevY - eventY) so
         // dragging right shifts the plate left. Match that sign so the
         // mouse behaves the same in both backends. Multiply by dpr —
