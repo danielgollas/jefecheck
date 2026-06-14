@@ -561,9 +561,17 @@ void MainWindow_Qt::buildDocks() {
     // loop rather than synchronously inside mouseMoveEvent — keeps the
     // viewport's drag-event handler returning fast and lets Qt
     // coalesce repeated posts when emit-rate exceeds the event-loop
-    // service rate.
+    // service rate. mouseReleaseEvent fires this so the inactive-plate
+    // cards and FX panel get their one-shot sync at the end of drag.
     connect(viewport_, &GlViewport_Qt::plateStateChanged,
             plateManagerWidget_, &PlateManager_Qt::refreshAllCards,
+            Qt::QueuedConnection);
+
+    // Lightweight per-frame drag signal — only refreshes the four
+    // transform spinboxes on the dragged plate, no FX panel cascade.
+    // QueuedConnection again so the slot doesn't block mouseMoveEvent.
+    connect(viewport_, &GlViewport_Qt::plateTransformChanged,
+            plateManagerWidget_, &PlateManager_Qt::refreshPlateTransform,
             Qt::QueuedConnection);
 
     // The 2x2 minimum (wide + tall) applies only when the dock is on the

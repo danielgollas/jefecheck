@@ -56,6 +56,12 @@ signals:
     // spinboxes so the user can read back the values they just edited.
     void plateStateChanged();
 
+    // Lightweight version emitted continuously during pan/zoom drag.
+    // Wired to a per-card slot that only refreshes the four transform
+    // spinboxes (zoom, panX, panY, rotation) on the dragged plate,
+    // bypassing the full refreshAllCards + FXParamPanel cascade.
+    void plateTransformChanged(int plateIdx);
+
     // Emitted only when the Load Sequence Manager is open. plateIdx is
     // the plate the drop is targeting (today: always 0; future PR will
     // route to plate-under-cursor). path is the local file path.

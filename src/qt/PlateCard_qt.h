@@ -49,6 +49,14 @@ public:
     // every paint.
     void refreshFromState();
 
+    // Fast path used during viewport drag: only refresh the four
+    // transform spinboxes (zoom, panX, panY, rotation), skipping every
+    // other widget. Each is gated on cache delta, same as
+    // refreshFromState — typical cost during pan is 2-4 setValue calls
+    // on this card only, with no QSignalBlocker scope churn for the
+    // other dozen widgets and no FX param panel touch.
+    void refreshTransformOnly();
+
     // Toggles the active-plate styling. Called by the parent dock when
     // it knows the active plate index has changed (either from a click
     // on a different card or via plateManager.setActiveQuad()).

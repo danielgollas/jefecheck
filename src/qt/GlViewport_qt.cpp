@@ -157,19 +157,20 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
         jefe::qt::panPlate(dragPlate_, dx, dy);
         update();
-        // Throttle plateStateChanged to ~60Hz during drag. macOS sends
-        // mouse-move events at the device polling rate (100Hz+), and
-        // each emit cascades into refreshAllCards + FXParamPanel::refresh
-        // which is expensive even with widget caching (read-state cost
-        // and AppKit accessibility tree updates). The plate visually
-        // pans on every move because panPlate writes gfcPlate state
-        // directly and update() schedules the paint — we only gate the
-        // widget-sync signal. mouseReleaseEvent emits a final unthrottled
-        // one so the spinboxes hold the exact end-of-drag values.
+        // Lightweight per-drag signal — only refreshes the four transform
+        // spinboxes on the dragged plate's card. Skips the heavy
+        // refreshAllCards (4 plates × ~15 fields) + FXParamPanel::refresh
+        // cascade that plateStateChanged triggers, AND the QSignalBlocker
+        // scope churn for every widget on every card.
+        //
+        // Throttled to ~60Hz so mouseMoveEvent stays fast even at the
+        // device's 100Hz+ poll rate. mouseReleaseEvent emits the full
+        // plateStateChanged so the inactive-plate cards and FX panel
+        // get their one-shot post-drag sync.
         constexpr qint64 kEmitIntervalMs = 16;
         if (!dragEmitTimer_.isValid()
             || dragEmitTimer_.elapsed() >= kEmitIntervalMs) {
-            emit plateStateChanged();
+            emit plateTransformChanged(dragPlate_);
             dragEmitTimer_.restart();
             dragEmittedAny_ = true;
         }

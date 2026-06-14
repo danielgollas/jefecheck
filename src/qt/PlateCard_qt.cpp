@@ -487,3 +487,33 @@ void PlateCard_Qt::refreshFromState() {
     lastShown_.saturation  = saturation;
     lastShown_.valid       = true;
 }
+
+void PlateCard_Qt::refreshTransformOnly() {
+    if (!gui_) return;
+    // Read only the four fields that change during a viewport pan/zoom drag.
+    // Same delta-vs-cache gating as refreshFromState — typical drag touch
+    // is 2-4 setValue calls on this one card, with no other widget scope
+    // churn and no FX panel refresh fired.
+    const float scale = gui_->getScale();
+    const float tx    = gui_->getTX();
+    const float ty    = gui_->getTY();
+    const float rz    = gui_->getRZ();
+
+    if (lastShown_.valid
+        && scale == lastShown_.scale
+        && tx == lastShown_.tx
+        && ty == lastShown_.ty
+        && rz == lastShown_.rz) {
+        return;  // nothing changed — skip widget access entirely
+    }
+
+    const QSignalBlocker bZoom(zoomSpin_);
+    const QSignalBlocker bPanX(panXSpin_);
+    const QSignalBlocker bPanY(panYSpin_);
+    const QSignalBlocker bRot(rotSpin_);
+
+    if (scale != lastShown_.scale) { zoomSpin_->setValue(scale); lastShown_.scale = scale; }
+    if (tx    != lastShown_.tx)    { panXSpin_->setValue(tx);   lastShown_.tx    = tx; }
+    if (ty    != lastShown_.ty)    { panYSpin_->setValue(ty);   lastShown_.ty    = ty; }
+    if (rz    != lastShown_.rz)    { rotSpin_->setValue(rz);    lastShown_.rz    = rz; }
+}
