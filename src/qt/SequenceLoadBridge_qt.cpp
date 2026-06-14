@@ -827,6 +827,11 @@ void panPlate(int plateIdx, float dx, float dy) {
     plateManager.setChanged();
 }
 
+void panAllPlates(float dx, float dy) {
+    plateManager.panAllPlates(dx, dy);
+    plateManager.setChanged();
+}
+
 void zoomPlate(int plateIdx, float zoomDelta) {
     if (plateIdx < 0) return;
     plateManager.zoomPlate(plateIdx, zoomDelta);

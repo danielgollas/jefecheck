@@ -60,6 +60,11 @@ signals:
     // Wired to a per-card slot that only refreshes the four transform
     // spinboxes (zoom, panX, panY, rotation) on the dragged plate,
     // bypassing the full refreshAllCards + FXParamPanel cascade.
+    //
+    // For Alt-drag gang-transform: emit this once per affected plate
+    // index — the queued connection coalesces in the event loop and
+    // each card's refreshTransformOnly is independently delta-gated
+    // against its cache. 4 emits per frame at 60Hz is still cheap.
     void plateTransformChanged(int plateIdx);
 
     // Emitted only when the Load Sequence Manager is open. plateIdx is

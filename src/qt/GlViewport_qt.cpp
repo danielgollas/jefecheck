@@ -155,7 +155,15 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         const float dpr = devicePixelRatioF();
         const float dx = (lastMouseX_ - float(e->position().x())) * dpr;
         const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
-        jefe::qt::panPlate(dragPlate_, dx, dy);
+        // Alt-drag = gang-transform: pan every plate by the same delta.
+        // Matches the FLTK convention in GlViewport.cpp:558 where
+        // FL_Alt_{L,R} routes through plateManager.panAllPlates.
+        const bool gang = (e->modifiers() & Qt::AltModifier) != 0;
+        if (gang) {
+            jefe::qt::panAllPlates(dx, dy);
+        } else {
+            jefe::qt::panPlate(dragPlate_, dx, dy);
+        }
         update();
         // Lightweight per-drag signal — only refreshes the four transform
         // spinboxes on the dragged plate's card. Skips the heavy
@@ -170,7 +178,15 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         constexpr qint64 kEmitIntervalMs = 16;
         if (!dragEmitTimer_.isValid()
             || dragEmitTimer_.elapsed() >= kEmitIntervalMs) {
-            emit plateTransformChanged(dragPlate_);
+            if (gang) {
+                // Every card got panned — refresh each. Queued + cached
+                // so the cost is bounded; cards whose values didn't
+                // actually change (none in practice during gang-pan)
+                // would skip their setValue calls anyway.
+                for (int p = 0; p < 4; ++p) emit plateTransformChanged(p);
+            } else {
+                emit plateTransformChanged(dragPlate_);
+            }
             dragEmitTimer_.restart();
             dragEmittedAny_ = true;
         }

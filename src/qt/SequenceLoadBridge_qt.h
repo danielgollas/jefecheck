@@ -385,6 +385,12 @@ bool loadFileIntoPlate(const std::string& path,
 void panPlate(int plateIdx, float dx, float dy);
 void zoomPlate(int plateIdx, float zoomDelta);
 
+// Gang-pan: pan every plate by the same delta in one shot. The FLTK
+// build invokes this on Alt+drag in GlViewport.cpp — the Qt viewport
+// mirrors the modifier convention. plateManager.panAllPlates handles
+// the iteration internally and calls setChanged once at the end.
+void panAllPlates(float dx, float dy);
+
 // Drive every plate's showPreview flag from a single writer. Used by
 // GlViewport_Qt::setLoadWindowOpen — while the Load Sequence Manager
 // is open every plate renders its track's previewFrame; closing the
