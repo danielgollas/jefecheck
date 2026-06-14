@@ -25,13 +25,27 @@ def _reset_plate_toggles_after(app):
     iterates every plate × every toggle but only clicks when actually
     on, so the cost is one AX read per (plate, toggle) when nothing
     has been changed — typically <100ms total.
+
+    Flip/flop are always-visible buttons. Crop, however, moved into the
+    aspect combo's drop-down popup (AspectCropCombo_Qt), so its checkbox
+    is only in the AX tree while that popup is open. Reading or clearing
+    crop therefore requires opening each plate's aspect combo first — we
+    pay that open cost unconditionally for crop because the checked state
+    can't be read without the popup. Clicking the checkbox leaves the
+    popup open, so we re-open per plate but the combo dismisses on its
+    own when focus leaves it / the next plate's combo is opened.
     """
     yield
     for plate_id in range(4):
-        for role in ("flip.button", "flop.button", "crop.button"):
+        for role in ("flip.button", "flop.button"):
             btn = app.by_object_name(locators.plate(plate_id, role))
             if _checked(btn):
                 btn.click()
+        # Crop lives in the aspect combo popup — open it, then read/clear.
+        app.by_object_name(locators.plate(plate_id, "aspect.combo")).click()
+        crop = app.by_object_name(locators.plate(plate_id, "crop.button"))
+        if _checked(crop):
+            crop.click()
 
 
 def test_flip_button_toggles_when_clicked(app):
@@ -51,6 +65,10 @@ def test_flop_button_toggles_when_clicked(app):
 
 
 def test_crop_button_toggles_when_clicked(app):
+    # Crop moved into the aspect combo's drop-down popup, so the combo
+    # must be opened first before the crop checkbox is resolvable in the
+    # AX tree. Toggling the checkbox leaves the popup open by design.
+    app.by_object_name(locators.plate(0, "aspect.combo")).click()
     btn = app.by_object_name(locators.plate(0, "crop.button"))
     initial = _checked(btn)
     btn.click()

@@ -24,6 +24,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QPushButton;
 
+class AspectCropCombo_Qt;
 class gfcPlateGUI_Qt;
 
 class PlateCard_Qt : public QFrame {
@@ -89,8 +90,9 @@ private:
     // Cached widget pointers — refreshFromState needs them.
     QComboBox* trackBox_ = nullptr;
     QComboBox* layerBox_ = nullptr;
-    QComboBox* aspectBox_ = nullptr;
-    QPushButton* cropBtn_ = nullptr;
+    // Combined aspect-ratio combo with a folded-in crop checkbox (replaces
+    // the old standalone aspectBox_ QComboBox + cropBtn_ toggle).
+    AspectCropCombo_Qt* aspectCrop_ = nullptr;
     QPushButton* flipBtn_ = nullptr;
     QPushButton* flopBtn_ = nullptr;
     QPushButton* rgbaBtn_ = nullptr;

@@ -1,4 +1,5 @@
 #include "PlateCard_qt.h"
+#include "AspectCropCombo_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "gfcplategui_qt.h"
 
@@ -96,16 +97,19 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     layerBox_->setToolTip("EXR layer driving this plate");
     layerBox_->setVisible(false);
 
-    aspectBox_ = new QComboBox(this);
-    aspectBox_->setEditable(true);
-    aspectBox_->addItems({"original", "16:9", "4:3", "2.39:1", "2.35:1", "1.85:1", "1.37:1"});
-    aspectBox_->setMinimumWidth(60);
-    aspectBox_->setObjectName(objPrefix + ".aspect.combo");
-    aspectBox_->setAccessibleName("Aspect ratio");
+    // Aspect ratio combo with the Crop toggle folded into its popup. The
+    // crop checkbox keeps the old `crop.button` leaf objectName and "Crop"
+    // accessible name so existing UI-test locators resolve it once the
+    // popup is open.
+    aspectCrop_ = new AspectCropCombo_Qt(this);
+    aspectCrop_->setPresets({"original", "16:9", "4:3", "2.39:1", "2.35:1", "1.85:1", "1.37:1"});
+    aspectCrop_->setMinimumWidth(60);
+    aspectCrop_->setObjectName(objPrefix + ".aspect.combo");
+    aspectCrop_->setAccessibleName("Aspect ratio");
+    aspectCrop_->setCropObjectName(objPrefix + ".crop.button");
+    aspectCrop_->setCropAccessibleName("Crop");
+    aspectCrop_->setCropToolTip("Toggle crop bars (aspect-ratio letterbox)");
 
-    cropBtn_ = makeToggle(this, "Crop", "Toggle crop bars (aspect-ratio letterbox)", 36);
-    cropBtn_->setObjectName(objPrefix + ".crop.button");
-    cropBtn_->setAccessibleName("Crop");
     flipBtn_ = makeToggle(this, "Flip", "Flip vertically", 32);
     flipBtn_->setObjectName(objPrefix + ".flip.button");
     flipBtn_->setAccessibleName("Flip");
@@ -126,8 +130,7 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     row1->addWidget(plateId);
     row1->addWidget(trackBox_);
     row1->addWidget(layerBox_);
-    row1->addWidget(aspectBox_, 1);
-    row1->addWidget(cropBtn_);
+    row1->addWidget(aspectCrop_, 1);
     row1->addWidget(flipBtn_);
     row1->addWidget(flopBtn_);
     row1->addWidget(rgbaBtn_);
@@ -222,8 +225,11 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
             this, [boundPlateIdForTrack](int idx) {
                 jefe::qt::setTrackOnPlate(boundPlateIdForTrack, idx);
             });
-    connect(aspectBox_, &QCB::currentTextChanged,
-            this, [g](const QString& s) { g->setAspectChoice(s.toStdString()); });
+    connect(aspectCrop_, &AspectCropCombo_Qt::aspectChanged,
+            this, [g](const QString& s) {
+        g->setAspectChoice(s.toStdString());
+        jefe::qt::propagatePlateChanges();
+    });
 
     // Layer change → bridge does the heavy lifting (rewrite the track's
     // gfcSequenceGUI channel name, re-decode the preview, and kick off
@@ -245,7 +251,7 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     // actual fields stay stale and the super-shader never picks up the
     // new value — controls appear inert. The LUT and Layer combos below
     // route through bridge functions that already handle propagation.
-    connect(cropBtn_, &QPushButton::toggled, this, [g](bool on) {
+    connect(aspectCrop_, &AspectCropCombo_Qt::cropToggled, this, [g](bool on) {
         g->setCrop(on ? 1 : 0); jefe::qt::propagatePlateChanges();
     });
     connect(flipBtn_, &QPushButton::toggled, this, [g](bool on) {
@@ -357,8 +363,8 @@ void PlateCard_Qt::refreshFromState() {
     // we just wired up, fighting the user's edits and re-rounding floats.
     const QSignalBlocker bTrack(trackBox_);
     const QSignalBlocker bLayer(layerBox_);
-    const QSignalBlocker bAspect(aspectBox_);
-    const QSignalBlocker bCrop(cropBtn_);
+    // aspectCrop_ has inherently signal-free setters (setCurrentAspect /
+    // setCropChecked block the inner widget internally), so no blocker here.
     const QSignalBlocker bFlip(flipBtn_);
     const QSignalBlocker bFlop(flopBtn_);
     const QSignalBlocker bRgba(rgbaBtn_);
@@ -422,13 +428,11 @@ void PlateCard_Qt::refreshFromState() {
         lastShown_.activeLayer = activeLayer;
     }
 
-    if ((firstPass || aspect != lastShown_.aspect)
-        && !aspect.isEmpty()
-        && aspectBox_->currentText() != aspect) {
-        aspectBox_->setCurrentText(aspect);
+    if ((firstPass || aspect != lastShown_.aspect) && !aspect.isEmpty()) {
+        aspectCrop_->setCurrentAspect(aspect);
     }
 
-    if (firstPass || crop != lastShown_.crop) cropBtn_->setChecked(crop);
+    if (firstPass || crop != lastShown_.crop) aspectCrop_->setCropChecked(crop);
     if (firstPass || flip != lastShown_.flip) flipBtn_->setChecked(flip);
     if (firstPass || flop != lastShown_.flop) flopBtn_->setChecked(flop);
 

@@ -28,7 +28,9 @@ def test_plate_zero_card_widgets_resolvable(app):
         locators.plate(0, "lut.combo"),
         locators.plate(0, "flip.button"),
         locators.plate(0, "flop.button"),
-        locators.plate(0, "crop.button"),
+        # crop.button moved into the aspect combo's popup (not in the AX
+        # tree when closed); the always-visible combo is asserted instead.
+        locators.plate(0, "aspect.combo"),
     ]
     for object_name in expected:
         app.by_object_name(object_name)
@@ -40,10 +42,11 @@ def test_plate_button_titles_reflect_accessible_name(app):
     This verifies the Phase A naming pass actually reaches the AX layer
     (and that Appium can read it) for the widget type that maps cleanly.
     """
+    # crop.button moved into the aspect combo popup (AspectCropCombo_Qt)
+    # and is no longer always-visible; it is covered by test_plate_ops.
     expected = {
         locators.plate(0, "flip.button"): "Flip",
         locators.plate(0, "flop.button"): "Flop",
-        locators.plate(0, "crop.button"): "Crop",
     }
     for object_name, title in expected.items():
         widget = app.by_object_name(object_name)
