@@ -86,6 +86,12 @@ signals:
     // plate as the active plate.
     void clicked(int id);
 
+    // Emitted after this card changes its track's layer. The layer lives on
+    // the (shared) sequence, so other cards bound to the same track need to
+    // refresh their layer combo to reflect the new selection. The dock wires
+    // this to refreshAllCards.
+    void layerChanged();
+
 protected:
     void mousePressEvent(QMouseEvent* e) override;
 

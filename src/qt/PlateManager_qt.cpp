@@ -33,6 +33,10 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QScrollArea(parent) {
                     jefe::qt::setActivePlate(id);
                     refreshAllCards();
                 });
+        // A layer change writes to the shared sequence; refresh every card so
+        // siblings bound to the same track show the new layer in their combo.
+        connect(card, &PlateCard_Qt::layerChanged,
+                this, &PlateManager_Qt::refreshAllCards);
         cards_.append(card);
     }
 

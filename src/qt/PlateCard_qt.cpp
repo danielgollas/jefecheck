@@ -312,9 +312,12 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     {
         const int boundPlateId = id_;
         connect(layerBox_, &QCB::currentTextChanged,
-                this, [boundPlateId](const QString& s) {
+                this, [this, boundPlateId](const QString& s) {
                     if (s.isEmpty()) return;
                     jefe::qt::setLayerOnPlate(boundPlateId, s.toStdString());
+                    // The layer lives on the shared sequence, so any other
+                    // card bound to this track must refresh its combo.
+                    emit layerChanged();
                 });
     }
 
