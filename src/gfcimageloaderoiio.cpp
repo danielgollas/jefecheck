@@ -1,6 +1,8 @@
 #include "gfcimageloaderoiio.h"
 #include "UIConstants.h"
+#include "gfcStructures.h"
 #include <OpenImageIO/imageio.h>
+#include <OpenImageIO/imagebufalgo.h>
 #include <cstring>
 #include <set>
 #include <algorithm>
@@ -223,11 +225,51 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     inp->close();
 
-    // Apply scale if requested
+    // Apply scale via OIIO (the filter actually matters here — our
+    // local gflResize ignores filter selection and is nearest-only).
     if (params.scale > 0 && params.scale != 100) {
         int newW = (int)(width * params.scale / 100.0f);
         int newH = (int)(height * params.scale / 100.0f);
-        gflResize(theBitmap, nullptr, newW, newH, GFL_RESIZE_BILINEAR, 0);
+
+        const char* filterName = oiioFilterNameFor(params.filterType);
+
+        // Wrap the decoded GFL bitmap as an OIIO ImageBuf without copying.
+        OIIO::ImageSpec srcSpec(theBitmap->Width, theBitmap->Height,
+                                theBitmap->ComponentsPerPixel,
+                                theBitmap->BitsPerComponent == 8  ? OIIO::TypeDesc::UINT8 :
+                                theBitmap->BitsPerComponent == 16 ? OIIO::TypeDesc::UINT16 :
+                                                                    OIIO::TypeDesc::FLOAT);
+        OIIO::ImageBuf src(srcSpec, theBitmap->Data);
+
+        OIIO::ImageSpec dstSpec(newW, newH,
+                                srcSpec.nchannels, srcSpec.format);
+        OIIO::ImageBuf dst(dstSpec);
+
+        // OIIO 3.x KWArgs form — pass the filter name as a string.
+        bool ok = OIIO::ImageBufAlgo::resize(
+            dst, src, {{ "filtername", filterName }});
+        if (!ok) {
+            // Fall back to box (nearest) if the filter name was rejected.
+            ok = OIIO::ImageBufAlgo::resize(
+                dst, src, {{ "filtername", "box" }});
+        }
+
+        if (ok) {
+            // Copy resized pixels back into a freshly-allocated GFL buffer.
+            const int bytesPerPixel = srcSpec.nchannels * (theBitmap->BitsPerComponent / 8);
+            const int newBytesPerLine = newW * bytesPerPixel;
+            unsigned char* newData = (unsigned char*)calloc(1,
+                (size_t)newBytesPerLine * newH);
+            dst.get_pixels(OIIO::ROI::All(), srcSpec.format, newData);
+            free(theBitmap->Data);
+            theBitmap->Data = newData;
+            theBitmap->Width = newW;
+            theBitmap->Height = newH;
+            theBitmap->BytesPerLine = newBytesPerLine;
+        } else {
+            printf("OIIO: resize failed (filter=%s), keeping original size\n",
+                   filterName);
+        }
     }
 
     // Apply crop if requested

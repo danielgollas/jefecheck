@@ -129,11 +129,36 @@ RENDER_STATUS = "dialog.render.status.label"
 RENDER_RENDER = "dialog.render.render.button"
 RENDER_DONE = "dialog.render.done.button"
 
+# Load Sequence Manager (Cmd+L) — modal QDialog.
+LOAD_WINDOW            = "dialog.loadwindow"
+LOAD_WINDOW_LOAD_ALL   = "dialog.loadwindow.button.loadAll"
+LOAD_STRIP_FMT         = "dialog.loadwindow.strip.{idx}"           # idx in 0..3
+LOAD_FILENAME_FMT      = "dialog.loadwindow.strip.{idx}.filename"
+LOAD_BROWSE_FMT        = "dialog.loadwindow.strip.{idx}.browse"
+LOAD_RECENT_FMT        = "dialog.loadwindow.strip.{idx}.recent"
+LOAD_FROM_FMT          = "dialog.loadwindow.strip.{idx}.from"
+LOAD_TO_FMT            = "dialog.loadwindow.strip.{idx}.to"
+LOAD_SCALE_FMT         = "dialog.loadwindow.strip.{idx}.scale"
+LOAD_BITDEPTH_FMT      = "dialog.loadwindow.strip.{idx}.bitdepth"
+LOAD_CHANNELS_FMT      = "dialog.loadwindow.strip.{idx}.channels"
+LOAD_CROP_FMT          = "dialog.loadwindow.strip.{idx}.crop"
+LOAD_RELOAD_FMT        = "dialog.loadwindow.strip.{idx}.reload"
+LOAD_UNLOAD_FMT        = "dialog.loadwindow.strip.{idx}.unload"
+LOAD_ESTIMATES_FMT     = "dialog.loadwindow.strip.{idx}.estimates"
+LOAD_HEADER_FMT        = "dialog.loadwindow.strip.{idx}.header"
+
 # Preferences
 PREFERENCES_DIALOG = "preferences.dialog"
 PREFERENCES_SIDEBAR = "preferences.sidebar"
 PREFERENCES_DONE = "preferences.done.button"
 PREFERENCES_CANCEL = "preferences.cancel.button"
+
+# Preferences → Engine panel widgets. PREFS_* prefix mirrors the
+# object-name pattern the PR-introducing-this-feature uses on the
+# widget side ("prefs.engine.<field>") — note the leaf objectName
+# differs from the `preferences.engine.*.combo` convention used by
+# pre-existing Engine widgets.
+PREFS_DEFAULT_DECODE_FILTER = "prefs.engine.defaultDecodeFilter"
 
 
 def plate(plate_id: int, role: str) -> str:

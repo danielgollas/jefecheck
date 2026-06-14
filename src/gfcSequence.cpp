@@ -266,7 +266,12 @@ void findSequence (std::vector<std::string> &refFiles, std::string inputFilename
 			nextNum=atoi ( num ) +1;
 			sprintf ( tmpName,nextString,nextNum );
 			//printf("\nConstructed filename: %s\n",tmpName);
-			endNum=startNum;
+			// The originally-picked frame exists (that's what triggered detection),
+			// so endNum is at least atoi(num). Initializing to startNum was a bug
+			// when there were frames below the pick: e.g. pick=0008 with 0001..0008
+			// on disk → startNum=1 (down walk), endNum stayed at 1 because the up
+			// walk starts at 0009 and immediately fails.
+			endNum=atoi ( num );
 			//printf("Looking for files above...\n",tmpName);
 			while ( FILE_EXISTS( tmpName ) ) {
 				endNum=nextNum;
@@ -1775,6 +1780,10 @@ gfcLoadParams gfcSequence::getLoadParamsFromGUI() {
 
 gfcFrame gfcSequence::getPreviewFrame() {
 	return previewFrame;
+}
+
+double gfcSequence::getPreviewElapsedSecs() const {
+	return previewTimer.getElapsedSecs();
 }
 
 /**

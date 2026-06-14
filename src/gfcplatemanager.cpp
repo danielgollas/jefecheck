@@ -687,6 +687,15 @@ void gfcPlateManager::updateTransformationsFromGUI()
 }
 
 
+void gfcPlateManager::updatePlatesFromGUI() {
+    setChanged();
+    for (int i = (int)plates.size() - 1; i >= 0; --i) {
+        plates[i].updateValuesFromGUI();
+    }
+    // Don't touch framingMode or activeQuad — see header comment.
+    networkManager.notifyEvent(GFCNETEVENT_TRANSFORMS);
+}
+
 void gfcPlateManager::updateAllFromGUI() {
     setChanged();
 

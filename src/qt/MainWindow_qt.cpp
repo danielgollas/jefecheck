@@ -6,6 +6,7 @@
 #include "PlaylistPanel_qt.h"
 #include "RemotePanel_qt.h"
 #include "ImageLoadBridge_qt.h"
+#include "LoadWindowDialog_qt.h"
 #include "PlateManager_qt.h"
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
@@ -94,6 +95,18 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         depthCombo_->setCurrentIndex(idx);
         jefe::qt::setDefaultTextureFormat(
             depthCombo_->currentData().toInt());
+    }
+    // Restore the OIIO loader's decode filter alongside defaultTextureFormat.
+    // The Preferences → Engine combo writes here too; mirroring the restore
+    // keeps the field consistent across launches and persists the user's
+    // last selection without round-tripping through the FLTK XML. Routed
+    // through SequenceLoadBridge so this TU can stay glad-free (same reason
+    // defaultTextureFormat goes through the bridge above).
+    {
+        QSettings settings;
+        jefe::qt::setDefaultDecodeFilter(
+            settings.value("Engine/defaultDecodeFilter",
+                           FILTERLANCZOS_ID).toInt());
     }
     connect(depthCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int) {
@@ -372,7 +385,7 @@ void MainWindow_Qt::buildMenuBar() {
     // (per-track frame range, scale, gamma, channel picker à la the
     // FLTK loadWindow) is intentionally deferred — UX revision needed
     // first, per the migration plan's PR-LAST note.
-    auto* loadAction = fileMenu->addAction("&Load Sequence…",
+    auto* loadAction = fileMenu->addAction("&Quick Load…",
                         QKeySequence(Qt::CTRL | Qt::Key_O),
                         this, [this]() {
         QSettings settings;
@@ -394,6 +407,12 @@ void MainWindow_Qt::buildMenuBar() {
         loadFileIntoPlate(plate, chosen);
     });
     loadAction->setObjectName("menu.file.load");
+
+    auto* loadMgrAction = fileMenu->addAction(tr("Load Sequence Manager…"));
+    loadMgrAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    loadMgrAction->setObjectName("menu.file.loadmgr");
+    connect(loadMgrAction, &QAction::triggered, this, &MainWindow_Qt::openLoadWindow);
+
     // File → Render… opens RenderDialog_Qt (PR-39a). Modal exec();
     // synchronous renderPlate freezes the dialog until done — async
     // + a worker thread come in PR-39b. No shortcut wired yet
@@ -785,6 +804,27 @@ void MainWindow_Qt::onFileDropped(const QString& path, float scale) {
     // always goes to plate 0 today; PR-after-this can extend to "the
     // plate under the drop point" once we factor that out.
     loadFileIntoPlate(0, path, scale);
+}
+
+void MainWindow_Qt::openLoadWindow() {
+    // Non-modal dialog (setModal(false)) — the user needs to keep
+    // working with the main window (layouts, docks, viewport metadata)
+    // while sequences are being prepped. show() (not exec()) is required
+    // both because of non-modality and because the drop-forwarding
+    // signal/slot chain needs the main event loop to keep pumping.
+    if (!loadWindowDialog_) {
+        loadWindowDialog_ = new LoadWindowDialog_Qt(viewport_, this);
+        connect(viewport_, &GlViewport_Qt::fileDroppedWhileLoadWindowOpen,
+                this, &MainWindow_Qt::onLoadWindowDropForwarded);
+    }
+    loadWindowDialog_->show();
+    loadWindowDialog_->raise();
+    loadWindowDialog_->activateWindow();
+}
+
+void MainWindow_Qt::onLoadWindowDropForwarded(int plateIdx,
+                                              const QString& path) {
+    if (loadWindowDialog_) loadWindowDialog_->setTrackFilename(plateIdx, path);
 }
 
 void MainWindow_Qt::startAutoload() {

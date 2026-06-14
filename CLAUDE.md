@@ -94,9 +94,20 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 ### UI
 - **Qt6** GUI hosted in `src/qt/`. Single `MainWindow_Qt` with native menu bar, central `GlViewport_Qt` (QOpenGLWidget), and dockable panels (Plate Manager, Timeline, FX Stack, FX Params, LUTs, Playlist).
 - Native file dialogs via `QFileDialog`.
-- Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Remote Session (`RemoteDialog_Qt`).
+- Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Remote Session (`RemoteDialog_Qt`), Load Sequence Manager (`LoadWindowDialog_Qt`).
 - Dark VFX theme at `src/qt/theme/jefecheck_dark.qss`.
 - Object names follow the dotted-leaf scheme documented in `tests/ui/jefecheck/locators.py` so Mac2/XCUITest can resolve widgets via `identifier ENDSWITH '<leaf>'`.
+
+### Load Sequence Manager
+
+The Qt build's load flow has two paths:
+
+- **Cmd+L → Load Sequence Manager** (`LoadWindowDialog_Qt`). Modal with four track strips. Edits live-update each track's preview frame; while the modal is open, all plates render their tracks' previews (deterministic — `viewport.loadWindowOpen_` is the single source of `gfcPlate::showPreview`). "Load All" closes the modal and fires `trackManager.startLoadingSequence` per non-empty track.
+- **Cmd+O → Quick Load…** and **drag-drop on viewport**: existing fast path. `jefe::qt::loadFileIntoPlate` runs immediately; no preview indirection.
+
+`Cmd+Shift+O` is reserved for the future Open Session feature (FLTK convention) and is intentionally unbound today.
+
+OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so the Preferences → Engine → Default decode filter setting (`nearest` / `triangle` / `mitchell` / `lanczos3`, default `lanczos3`) actually controls scale quality.
 
 ## Key Dependencies
 

@@ -44,6 +44,14 @@ void setDefaultTextureFormat(int format) {
     sett.defaultTextureFormat = format;
 }
 
+int getDefaultDecodeFilter() {
+    return sett.defaultDecodeFilter;
+}
+
+void setDefaultDecodeFilter(int filterId) {
+    sett.defaultDecodeFilter = filterId;
+}
+
 void initializeRenderingChain() {
     // FLTK's main.cpp probes GL_ARB_shader_objects + GL_EXT_framebuffer_object
     // and writes these flags. The Qt build skips that probe but uses the
@@ -167,34 +175,6 @@ bool tickPlayback() {
     // make the viewport's GL context current before calling — texture
     // uploads happen on the calling thread.
     trackManager.generateTextures();
-
-    // After uploading, walk the plates to flip any that are still in
-    // showPreview mode but whose sequence now has at least one playback
-    // frame on the GPU. The drop / loadFileIntoPlate path enables
-    // showPreview so the previewFrame paints immediately; without this
-    // flip the plate would never advance to the playback path
-    // (gfcPlate::getFrameAndSequence's `if (showPreview)` branch never
-    // resolves). FLTK gets the flip for free because its
-    // `getShowPreview()` reads `loadWindow->visible()` — closing the
-    // Load dialog implicitly switches the plate. Qt has no Load dialog,
-    // so we have to drive the transition explicitly here.
-    //
-    // Single-frame "sequences" stay in showPreview = true: the preview
-    // frame *is* the displayed image, and the playback path would just
-    // re-load the same texture for no visual benefit. Detected by
-    // numPreviewFrames == 1 (multi-image discovery from
-    // findSequenceFiles).
-    for (int p = 0; p < GFC_MAX_PLATES; ++p) {
-        auto* gui = dynamic_cast<gfcPlateGUI_Qt*>(plateManager.getPlateGUI(p));
-        if (!gui || !gui->getShowPreview()) continue;
-        const int trackIdx = plateManager.getTrackOnPlate(p);
-        auto* seq = trackManager.getSequence(trackIdx);
-        if (!seq) continue;
-        if (seq->getNumPreviewFrames() <= 1) continue;
-        if (seq->getRangeEnd() <= 0) continue;  // no frames uploaded yet
-        plateManager.setPlateShowPreview(p, false);
-        plateManager.setChanged();
-    }
 
     // Pushes per-track widget state (visible range, current frame, etc.)
     // into the gfcSequenceGUI for each sequence. In the Qt build the
@@ -813,6 +793,26 @@ void zoomPlate(int plateIdx, float zoomDelta) {
     plateManager.setChanged();
 }
 
+void setAllPlatesShowPreview(bool showPreview) {
+    for (int i = 0; i < 4; ++i) {
+        plateManager.setPlateShowPreview(i, showPreview);
+    }
+    // setPlateShowPreview only writes to the Qt GUI side. gfcPlate::showPreview
+    // (and the other plate fields — gamma, exposure, BCS, LUT) are mirrored
+    // from the GUI by updateValueFromGUI. Without this propagation, the
+    // dialog's flag flip never reaches the plate, the previewFrame never
+    // renders, and after Load All the plate keeps stale color state (the
+    // "gray until Shift-R" symptom).
+    //
+    // We use updatePlatesFromGUI rather than updateAllFromGUI here because
+    // the latter also resets the layout (framingMode) and active quad from
+    // the plate-manager-GUI's stale fields — the Qt build drives those via
+    // separate paths (Cmd+1/2/3/4 shortcuts; plate-card clicks) that don't
+    // round-trip through the plate-manager GUI.
+    plateManager.updatePlatesFromGUI();
+    plateManager.setChanged();
+}
+
 int plateAtViewportPos(int x, int y, int viewportW, int viewportH) {
     return plateManager.getPlateAtPosition(x, y, viewportW, viewportH);
 }
@@ -989,7 +989,6 @@ void setLayerOnPlate(int plateIdx, const std::string& layerName) {
     // loader's layer pick is driven by params.channelName which we just
     // set above.
     seq->loadPreview();
-    plateManager.setPlateShowPreview(trackIdx, true);
 
     // The async multi-frame loader caches the channel choice into each
     // frame's load params at startLoadingSequence time, so a layer
@@ -1041,8 +1040,6 @@ bool loadFileIntoPlate(const std::string& path,
         return false;
     }
 
-    plateManager.setPlateShowPreview(whichSequence, true);
-
     // gfcPlate::showPreview, scale, track, channel masks etc. are read
     // from members that updateValuesFromGUI copies out of myGUI. The
     // FLTK build calls this once on startup; the Qt build never does,
@@ -1065,6 +1062,140 @@ bool loadFileIntoPlate(const std::string& path,
     }
 
     return true;
+}
+
+TrackEstimates getTrackEstimates(int trackIdx) {
+    TrackEstimates est{0, 0, 0.0f};
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return est;
+
+    const int from = seq->myGUI->getFrom();
+    const int to   = seq->myGUI->getTo();
+    if (to < from) return est;
+    est.frames = to - from + 1;
+
+    const gfcFrame pf = seq->getPreviewFrame();
+    int bpp = 4;
+    switch (seq->myGUI->getCompression()) {
+        case GFC_8BPC:     bpp = 4; break;
+        case GFC_4BPC:     bpp = 2; break;
+        case GFC_16BPC:
+        case GFC_16HALF:   bpp = 8; break;
+        case GFC_S3TCDX1:  bpp = 1; break;
+        default:           bpp = 4; break;
+    }
+    const size_t w = (size_t)pf.quadSizeX;
+    const size_t h = (size_t)pf.quadSizeY;
+    est.bytes = w * h * (size_t)bpp * (size_t)est.frames;
+
+    const double secsPerFrame = seq->getPreviewElapsedSecs() > 0.0
+                                  ? seq->getPreviewElapsedSecs()
+                                  : 0.025;
+    est.seconds = (float)(secsPerFrame * est.frames);
+    return est;
+}
+
+bool reloadTrackPreview(int trackIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return false;
+    if (seq->myGUI->getFilename().empty()) {
+        seq->clearPreviewFrame();
+        return false;
+    }
+    const std::string loaded = seq->loadPreview();
+    return !loaded.empty();
+}
+
+void unloadAndClearTrack(int trackIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return;
+    trackManager.stopLoadingSequence(trackIdx);
+    seq->unloadAndClear();
+    plateManager.setChanged();
+}
+
+int startLoadingAllTracks() {
+    int started = 0;
+    for (int i = 0; i < 4; ++i) {
+        auto* seq = trackManager.getSequence(i);
+        if (!seq || !seq->myGUI) continue;
+        if (seq->myGUI->getFilename().empty()) continue;
+        trackManager.stopLoadingSequence(i);
+        seq->stopLoading();
+        trackManager.startLoadingSequence(i);
+        ++started;
+    }
+    return started;
+}
+
+TrackParams getTrackParams(int trackIdx) {
+    TrackParams p;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return p;
+    p.filename        = seq->myGUI->getFilename();
+    p.from            = seq->myGUI->getFrom();
+    p.to              = seq->myGUI->getTo();
+    p.scalePct        = (int)(seq->myGUI->getScale() + 0.5f);
+    p.compression     = seq->myGUI->getCompression();
+    p.channel         = seq->myGUI->getChannel();
+    p.crop            = seq->myGUI->getCrop() != 0;
+    p.filenameGeneric = seq->filenameGeneric;
+    if (auto* gui = dynamic_cast<gfcSequenceGUI_Qt*>(seq->myGUI)) {
+        p.channelOptions = gui->getChannelOptions();
+    }
+    return p;
+}
+
+void setTrackFilename(int trackIdx, const std::string& path) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setFilename(path);
+}
+
+void setTrackFrom(int trackIdx, int v) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setFromFrame(v);
+}
+
+void setTrackTo(int trackIdx, int v) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setToFrame(v);
+}
+
+void setTrackScalePct(int trackIdx, int pct) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return;
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "%d", pct);
+    seq->myGUI->setScale(buf);
+}
+
+void setTrackCompression(int trackIdx, int compEnum) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setCompression(compEnum);
+}
+
+void setTrackChannel(int trackIdx, int channelIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->myGUI) return;
+    seq->myGUI->setChannel(channelIdx);
+    // The OIIO loader picks the EXR layer from params.channelName
+    // (resolved via myGUI->getChannelName() in getLoadParamsFromGUI),
+    // not the int index. Mirror the per-plate setLayerOnPlate path:
+    // resolve idx → name through the Qt GUI's channel-options cache
+    // and write that too. Without this, switching channels through
+    // the Load Window int-only setter leaves channelName stale and
+    // the loader re-decodes the previously-selected layer.
+    if (auto* gui = dynamic_cast<gfcSequenceGUI_Qt*>(seq->myGUI)) {
+        const auto& opts = gui->getChannelOptions();
+        if (channelIdx >= 0 && channelIdx < (int)opts.size()) {
+            seq->myGUI->setChannel(opts[channelIdx]);
+        }
+    }
+}
+
+void setTrackCrop(int trackIdx, bool on) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (seq && seq->myGUI) seq->myGUI->setCrop(on ? 1 : 0);
 }
 
 }  // namespace jefe::qt

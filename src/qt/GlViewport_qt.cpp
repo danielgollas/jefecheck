@@ -64,6 +64,17 @@ void GlViewport_Qt::setCursorVisible(bool visible) {
     setCursor(visible ? Qt::ArrowCursor : Qt::BlankCursor);
 }
 
+void GlViewport_Qt::setLoadWindowOpen(bool open) {
+    if (loadWindowOpen_ == open) return;
+    loadWindowOpen_ = open;
+
+    // Drive every plate's showPreview deterministically from the flag.
+    // Routed through the bridge so this TU doesn't have to pull
+    // gfcplatemanager.h (glad transitivity vs QOpenGLWidget).
+    jefe::qt::setAllPlatesShowPreview(open);
+    update();
+}
+
 void GlViewport_Qt::initializeGL() {
     if (!gladLoaded_) {
         gladLoaded_ = jefecheck_loadGladGL();
@@ -290,6 +301,27 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
         e->ignore();
         return;
     }
+
+    QString path;
+    for (const QUrl& u : e->mimeData()->urls()) {
+        if (u.isLocalFile()) { path = u.toLocalFile(); break; }
+    }
+    if (path.isEmpty()) {
+        e->ignore();
+        return;
+    }
+
+    // Modal-open branch: forward the path to the active plate's strip
+    // and skip the fast load. Scale modifiers don't apply — the load
+    // window owns the load configuration.
+    if (loadWindowOpen_) {
+        const int plateIdx = 0;  // hardcoded today; future PR uses plate-under-cursor
+        emit fileDroppedWhileLoadWindowOpen(plateIdx, path);
+        e->acceptProposedAction();
+        return;
+    }
+
+    // Modal-closed branch: existing scale-modifier fast path.
     // Scale modifier mapping mirrors the spec:
     //   plain     -> 1.0
     //   Shift     -> 0.5
@@ -311,14 +343,7 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
         scale = 0.5f;
     }
 
-    for (const QUrl& u : e->mimeData()->urls()) {
-        if (u.isLocalFile()) {
-            const QString path = u.toLocalFile();
-            emit fileDroppedWithScale(path, scale);
-            emit fileDropped(path);  // legacy, see header comment
-            e->acceptProposedAction();
-            return;
-        }
-    }
-    e->ignore();
+    emit fileDroppedWithScale(path, scale);
+    emit fileDropped(path);  // legacy, see header comment
+    e->acceptProposedAction();
 }

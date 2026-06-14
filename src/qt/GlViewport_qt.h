@@ -31,6 +31,12 @@ public:
     void setListener(jefe::ui::IGLViewportListener* listener) override;
     void setCursorVisible(bool visible) override;
 
+    // Toggled by MainWindow_Qt when the Load Sequence Manager opens/closes.
+    // While true, every plate renders its track's previewFrame
+    // (deterministic, no per-track "was-touched" state).
+    void setLoadWindowOpen(bool open);
+    bool isLoadWindowOpen() const { return loadWindowOpen_; }
+
 signals:
     // Legacy single-arg signal — kept so any existing connections that
     // don't care about scale (e.g. future logging hooks) still work.
@@ -48,6 +54,11 @@ signals:
     // track-cycle. The Plate Manager dock listens and refreshes its
     // spinboxes so the user can read back the values they just edited.
     void plateStateChanged();
+
+    // Emitted only when the Load Sequence Manager is open. plateIdx is
+    // the plate the drop is targeting (today: always 0; future PR will
+    // route to plate-under-cursor). path is the local file path.
+    void fileDroppedWhileLoadWindowOpen(int plateIdx, const QString& path);
 
 protected:
     // QOpenGLWidget hooks
@@ -84,6 +95,8 @@ private:
     // motion sticks to whichever plate the press landed on, even if
     // the cursor wanders into a neighboring quadrant mid-drag.
     int dragPlate_ = -1;
+
+    bool loadWindowOpen_ = false;
 };
 
 #endif

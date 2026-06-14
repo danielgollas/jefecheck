@@ -26,6 +26,15 @@ void initializeRenderingChain();
 int  getDefaultTextureFormat();
 void setDefaultTextureFormat(int format);
 
+// Default decode-filter ID used by the OIIO loader's resize path
+// (gfcImageLoaderOIIO routes params.filterType into ImageBufAlgo::resize).
+// Mirrors gfcSettings::defaultDecodeFilter — exposed via the bridge so
+// MainWindow_qt.cpp can restore from QSettings without including
+// gfcStructures.h (which drags glad). Values are UIConstants.h FILTER*_ID
+// enum entries.
+int  getDefaultDecodeFilter();
+void setDefaultDecodeFilter(int filterId);
+
 // Walks the install-time LUT path (sett.lutPath, falling back to
 // <Resources>/FX/, then ./FX/) and loads every .lut/.cube/.cub/.tga
 // via lutManager. Each load may call glGenTextures, so the caller
@@ -356,6 +365,14 @@ bool loadFileIntoPlate(const std::string& path,
 void panPlate(int plateIdx, float dx, float dy);
 void zoomPlate(int plateIdx, float zoomDelta);
 
+// Drive every plate's showPreview flag from a single writer. Used by
+// GlViewport_Qt::setLoadWindowOpen — while the Load Sequence Manager
+// is open every plate renders its track's previewFrame; closing the
+// dialog flips them all back. Routed through the bridge so the
+// viewport TU doesn't have to pull gfcplatemanager.h (which drags
+// glad into Qt headers). Calls plateManager.setChanged().
+void setAllPlatesShowPreview(bool showPreview);
+
 // Hit-test for the plate under viewport pixel (x, y). y is top-down
 // in Qt's coord system. Falls back to 0 in single-plate mode.
 int plateAtViewportPos(int x, int y, int viewportW, int viewportH);
@@ -424,6 +441,62 @@ int getTrackOnPlate(int plateIdx);
 // the FLTK reference.
 void pausePlayback();
 void stepFrame(int direction);  // -1 reverse, +1 forward
+
+// Per-track load estimates surfaced to the Qt Load Window's strip
+// estimates label: total frame count, an approximate decoded-RGBA
+// byte budget, and a wall-clock estimate based on the last
+// loadPreview() timing. The byte count is bpp * width * height *
+// frames using the GUI's currently-selected bit depth.
+struct TrackEstimates {
+    int    frames;
+    size_t bytes;
+    float  seconds;
+};
+
+TrackEstimates getTrackEstimates(int trackIdx);
+
+// Re-runs loadPreview on the given track. Caller must ensure the
+// viewport's GL context is current before invoking. Returns true if
+// the preview decoded successfully.
+bool reloadTrackPreview(int trackIdx);
+
+// Aborts any in-flight load, clears loaded frames, drops preview,
+// resets GUI defaults.
+void unloadAndClearTrack(int trackIdx);
+
+// For each track with a non-empty filename, abort any in-flight load
+// and (re)start a full sequence load. Returns the number started.
+int startLoadingAllTracks();
+
+// Per-track parameter snapshot for the Qt Load Window. Mirrors the
+// FLTK loadWindow's per-track widget state without dragging
+// gfcSequenceGUI/gfcSequence into Qt translation units. `channel-
+// Options` is populated only when the underlying GUI is a
+// gfcSequenceGUI_Qt (the channel/layer list the OIIO loader
+// discovered on the last preview); `filenameGeneric` is the
+// numbered-sequence pattern (e.g. /path/foo.####.dpx) the loader
+// derived from the source path.
+struct TrackParams {
+    std::string filename;
+    int from              = 1;
+    int to                = 1;
+    int scalePct          = 100;
+    int compression       = 0;
+    int channel           = 0;
+    bool crop             = false;
+    std::vector<std::string> channelOptions;
+    std::string filenameGeneric;
+};
+
+TrackParams getTrackParams(int trackIdx);
+
+void setTrackFilename(int trackIdx, const std::string& path);
+void setTrackFrom(int trackIdx, int v);
+void setTrackTo(int trackIdx, int v);
+void setTrackScalePct(int trackIdx, int pct);  // 100 / 50 / 25
+void setTrackCompression(int trackIdx, int compEnum);
+void setTrackChannel(int trackIdx, int channelIdx);
+void setTrackCrop(int trackIdx, bool on);
 
 }  // namespace jefe::qt
 
