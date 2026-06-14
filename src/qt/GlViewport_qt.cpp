@@ -128,15 +128,13 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
     const bool wasDragging = dragPlate_ >= 0;
     dragPlate_ = -1;
     if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
-    // Sync the plate-card spinboxes / FX param panel once at the end of a
-    // drag. Inline-emitting during every mouseMove fired the heavy
-    // refreshAllCards + FXParamPanel::refresh cascade per pixel, which
-    // dominated the AppKit layout cost during pan — FLTK was buttery
-    // because it never had the equivalent of those widgets to update
-    // mid-drag. The plate visually pans every frame regardless because
-    // panPlate writes directly to gfcPlate state and we still call
-    // update() on every move; only the widget sync defers to release.
-    if (wasDragging) emit plateStateChanged();
+    // Final widget sync once the drag ends — this catches any motion
+    // that arrived after the most recent throttled emit so the
+    // spinboxes hold the exact final values.
+    if (wasDragging) {
+        emit plateStateChanged();
+        dragEmittedAny_ = false;
+    }
 }
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
@@ -153,10 +151,22 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
         jefe::qt::panPlate(dragPlate_, dx, dy);
         update();
-        // plateStateChanged deferred to mouseReleaseEvent — see comment
-        // there. The visual pan still updates this frame because
-        // panPlate mutates gfcPlate directly and update() schedules a
-        // paintGL; only the card-widget sync waits for release.
+        // Throttle plateStateChanged to ~60Hz during drag. macOS sends
+        // mouse-move events at the device polling rate (100Hz+), and
+        // each emit cascades into refreshAllCards + FXParamPanel::refresh
+        // which is expensive even with widget caching (read-state cost
+        // and AppKit accessibility tree updates). The plate visually
+        // pans on every move because panPlate writes gfcPlate state
+        // directly and update() schedules the paint — we only gate the
+        // widget-sync signal. mouseReleaseEvent emits a final unthrottled
+        // one so the spinboxes hold the exact end-of-drag values.
+        constexpr qint64 kEmitIntervalMs = 16;
+        if (!dragEmitTimer_.isValid()
+            || dragEmitTimer_.elapsed() >= kEmitIntervalMs) {
+            emit plateStateChanged();
+            dragEmitTimer_.restart();
+            dragEmittedAny_ = true;
+        }
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
     }

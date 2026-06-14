@@ -11,6 +11,7 @@
 
 #include "ui/IGLViewport.h"
 
+#include <QElapsedTimer>
 #include <QOpenGLWidget>
 #include <QString>
 
@@ -97,6 +98,12 @@ private:
     int dragPlate_ = -1;
 
     bool loadWindowOpen_ = false;
+
+    // mouseMoveEvent gates plateStateChanged emissions to ~60Hz so the
+    // plate-card spinboxes and FX-panel reflect the live drag without
+    // the AppKit layout cascade overhead of firing per-pixel.
+    QElapsedTimer dragEmitTimer_;
+    bool dragEmittedAny_ = false;
 };
 
 #endif
