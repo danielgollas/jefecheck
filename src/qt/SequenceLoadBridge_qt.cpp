@@ -205,6 +205,38 @@ bool tickPlayback() {
     return dirty;
 }
 
+bool tickPlaybackTiming() {
+    // No-GL half of tickPlayback(). playbackManager.update() advances
+    // currentFrame at the target FPS off the wall clock, so running this
+    // at a high rate (e.g. 250 Hz) lets a frame advance land within a few
+    // ms of its true time instead of being quantized to a coarse tick —
+    // this is what keeps the measured FPS pinned at the target instead of
+    // wobbling. None of these calls touch the GL context.
+    playbackManager.update();
+    plateManager.updateAnimations();
+    trackManager.updateTrackWidgets();
+    return plateManager.getChanged();
+}
+
+bool hasPendingTextureUploads() {
+    // Same probe as needsPlaybackTick()'s second clause, exposed on its
+    // own so the timer can gate the expensive makeCurrent/generateTextures/
+    // doneCurrent trio: only enter the GL context when there's actually a
+    // decoded frame waiting to upload.
+    for (int i = 0; i < 4; ++i) {
+        gfcSequence* seq = trackManager.getSequence(i);
+        if (seq && seq->hasPendingRawFrames()) return true;
+    }
+    return false;
+}
+
+void uploadPendingTextures() {
+    // GL half of tickPlayback(): drain one frame from each sequence's
+    // rawFrames queue and upload it via glTexImage2D. Caller MUST make the
+    // viewport's GL context current first (uploads run on this thread).
+    trackManager.generateTextures();
+}
+
 gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate) {
     return dynamic_cast<gfcPlateGUI_Qt*>(plateManager.getPlateGUI(whichPlate));
 }

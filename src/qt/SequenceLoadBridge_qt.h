@@ -67,6 +67,25 @@ void initializeTextRenderer(float dpiScale);
 // a timestep update + a flag swap.
 bool tickPlayback();
 
+// Decoupled playback tick (preferred over tickPlayback). Splits the
+// per-tick work into a cheap, no-GL timing step and an expensive,
+// GL-bound texture upload so the timer can run at a high rate (for tight
+// FPS pacing) without paying makeCurrent/doneCurrent on every tick.
+//
+//   tickPlaybackTiming()       — advances currentFrame at the target FPS,
+//                                updates animations and track widgets, and
+//                                returns the plateManager dirty flag. No GL
+//                                context required; safe to call at 250+ Hz.
+//   hasPendingTextureUploads() — true when any track has decoded frames
+//                                queued for GPU upload. Gate the GL trio on
+//                                this so makeCurrent only runs when needed.
+//   uploadPendingTextures()    — drains the rawFrames queues onto GL
+//                                textures. Caller MUST make the viewport's
+//                                GL context current first.
+bool tickPlaybackTiming();
+bool hasPendingTextureUploads();
+void uploadPendingTextures();
+
 // Cheap predicate — true when the playback engine is actively playing
 // OR when at least one track has frames waiting in its rawFrames queue
 // that need to be uploaded to GL. When both are false, the 60Hz timer

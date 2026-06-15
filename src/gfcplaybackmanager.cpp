@@ -1,4 +1,5 @@
 #include "gfcplaybackmanager.h"
+#include <chrono>
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "qt/gfcplaybackgui_qt.h"
@@ -23,6 +24,16 @@ gfcPlaybackManager::gfcPlaybackManager() {
     allowNetworkMessages=true;
 	inPoint=1;
 	outPoint=100;
+    // Seed the FPS pacing before any GUI exists. Without this targetFPS /
+    // timePerFrame are uninitialized: the Qt fps spinbox sets its display
+    // value (24) *before* its valueChanged signal is connected, so the
+    // engine never receives a starting FPS. A garbage (often ~0) timePerFrame
+    // makes `intraFrameCount >= timePerFrame` true every tick, so playback
+    // runs at the tick rate (~60fps) instead of the target. Defaulting to
+    // 24fps here matches the spinbox default and gives correct pacing from
+    // the first frame; the spinbox's valueChanged still overrides it live.
+    targetFPS=24.0f;
+    timePerFrame=1.0/targetFPS;
 	timer.start();
 }
 
@@ -82,12 +93,60 @@ void gfcPlaybackManager::update() {
 		
 
         if (intraFrameCount>=timePerFrame) {
-            
-			
-			
-			
+
+			// Measured-FPS readout (the on-screen "fps:" overlay reads
+			// getCurrentFPS()). Derive it from the true wall-clock interval
+			// between consecutive frame advances, smoothed with an
+			// exponential moving average. This is frame-aligned (no
+			// partial-window bias) and the EMA damps the few-ms per-frame
+			// OS-timer jitter, so the displayed value sits steady at the
+			// target instead of ticking over a fresh 2s window average.
+			{
+				using dclock = std::chrono::steady_clock;
+				static dclock::time_point lastAdvance = dclock::now();
+				static dclock::time_point lastDisplay = dclock::now();
+				static double emaIntervalMs = -1.0;
+				const dclock::time_point nowAdv = dclock::now();
+				const double interMs =
+					std::chrono::duration<double, std::milli>(nowAdv - lastAdvance).count();
+				lastAdvance = nowAdv;
+
+				// Ignore discontinuities (first advance, or resuming after a
+				// pause/idle gap) so they don't poison the average.
+				const double tpfMs = timePerFrame*1000.0;
+				if (interMs > 0.0 && interMs < 5.0*tpfMs) {
+					if (emaIntervalMs < 0.0) emaIntervalMs = interMs;
+					else emaIntervalMs += 0.05*(interMs - emaIntervalMs);
+				}
+
+				// The EMA above updates every frame (~24x/s) so it stays
+				// smooth, but pushing it to the on-screen readout that often
+				// makes the displayed number flicker. Refresh the visible
+				// value at a slow, fixed cadence (~2.5 Hz) so it reads as a
+				// stable number.
+				if (emaIntervalMs > 0.0 &&
+					std::chrono::duration<double>(nowAdv - lastDisplay).count() >= 0.4) {
+					lastDisplay = nowAdv;
+					const double measured = 1000.0/emaIntervalMs;
+					// Deadband: when playback is keeping up with the target
+					// (within ~2%), report the target exactly. The true
+					// cadence dithers ±0.1fps around the target from
+					// unavoidable OS-timer/event-loop jitter; without this the
+					// readout never settles. A genuine slowdown (heavy decode,
+					// dropped frames) falls outside the band and shows the
+					// real, smoothed rate — which is what the readout is for.
+					double diff = measured - (double)targetFPS;
+					if (diff < 0.0) diff = -diff;
+					if (targetFPS > 0.0f && diff <= 0.02*(double)targetFPS)
+						currentFPS = targetFPS;
+					else
+						currentFPS = (float)measured;
+					myGUI->setCurrentFPS(currentFPS);
+				}
+			}
+
             intraFrameCount-=timePerFrame;
-			
+
 			updateTimeCode();
 			plateManager.setChanged();
 			
@@ -157,21 +216,13 @@ void gfcPlaybackManager::update() {
 		
 		
 		
-		if (fpsCount>=targetFPS*2) 
+		// currentFPS is now maintained by the EMA at the frame-advance point
+		// above (frame-aligned, smoothed). Periodically drain the old
+		// window counters so they stay bounded over long sessions.
+		if (fpsCount>=targetFPS*2)
 		{
-			char tmpNum[12]="0.0";
-			float tmpFloat=0;			
-			if(fpsTimerCount>0){
-				tmpFloat=fpsCount/fpsTimerCount;
-			}
-			if(tmpFloat < 999999999){
-				sprintf(tmpNum,"%.2f",tmpFloat);
-			}
-			currentFPS=atof(tmpNum);
-			//currentFPS=timeStep;
-			myGUI->setCurrentFPS(currentFPS);
 			fpsTimerCount=0;
-			fpsCount=0; 
+			fpsCount=0;
 		}
 		
 		/*if (fpsTimerCount>=1.0) 
@@ -363,15 +414,20 @@ void gfcPlaybackManager::rew() {
 }
 
 void gfcPlaybackManager::updateTimestep() {
+    // Use a high-resolution monotonic clock for the playback timestep.
+    // gfcTimer is integer-millisecond (gettimeofday truncated to whole ms),
+    // which is fine at a coarse tick but becomes the dominant noise source
+    // once the playback timer runs finely (a 4ms tick fed integer-ms deltas
+    // of 3/4/5ms — ±12.5% jitter plus a systematic floor undercount). The
+    // frame-pacing accumulator needs sub-millisecond deltas to hold a steady
+    // FPS, so read steady_clock directly here.
+    using clock = std::chrono::steady_clock;
+    static clock::time_point tsBaseTime = clock::now();
+    const clock::time_point currentTime = clock::now();
 
-	static long long tsBaseTime=timer.getElapsed(true);
-    long long currentTime;
-    currentTime=timer.getElapsed(true);
+    timeStep = std::chrono::duration<double>(currentTime - tsBaseTime).count(); // seconds
 
-    timeStep= ( currentTime-tsBaseTime ) /1000.0; //timestep in seconds
-
-    tsBaseTime=timer.getElapsed(true);
-
+    tsBaseTime = currentTime;
 }
 
 void gfcPlaybackManager::setPlaybackMode(int mode) {
