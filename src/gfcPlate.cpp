@@ -2459,7 +2459,8 @@ void gfcPlate::getFrameAndSequence() {
             stream<<"Track "<< (char)('A'+track);
             stream<<"   f: "<<std::setw(8)<<std::setfill('0')<< currentFrame<<std::setw(0);
             stream<<"   t: "<<playbackManager.getTimecodeString();
-            stream<<"   fps: "<< playbackManager.getCurrentFPS()<<std::endl;
+            stream<<"   fps: "<< std::fixed << std::setprecision(1)
+                  << playbackManager.getCurrentFPS() << std::defaultfloat << std::endl;
             stream<<theFrame.getInfoString();
             //sprintf(label,"track %c  f: %08i    t: %s    fps:%.2f\n %s", this->track+'A',currentFrame,mw.vp->updateTimecode().c_str(),gFPS,theFrame.getInfoString().c_str());
             break;
@@ -2467,7 +2468,8 @@ void gfcPlate::getFrameAndSequence() {
             stream<<"Track "<< (char)('A'+track);
             stream<<"   f: "<<std::setw(8)<<std::setfill('0')<< currentFrame<<std::setw(0);
             stream<<"   t: "<<playbackManager.getTimecodeString();
-            stream<<"   fps: "<< playbackManager.getCurrentFPS()<<std::endl;
+            stream<<"   fps: "<< std::fixed << std::setprecision(1)
+                  << playbackManager.getCurrentFPS() << std::defaultfloat << std::endl;
             stream<<theFrame.getInfoString()<<std::endl<<std::endl;
             stream<<theFrame.getExtendedInfoString();
             break;

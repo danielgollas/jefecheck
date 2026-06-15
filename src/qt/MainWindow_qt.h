@@ -84,6 +84,10 @@ private:
     QLabel* loadedStatusLabel_ = nullptr;
     QLabel* startupStatusLabel_ = nullptr;
     QTimer* playbackTimer_ = nullptr;
+    // The playback timer runs fast (for tight FPS pacing) but the timeline/
+    // status read-back only needs ~60 Hz, so it's throttled to every Nth
+    // tick. See the timer lambda in the constructor.
+    int uiRefreshCounter_ = 0;
 
     // Incremental autoload state. The autoload walks LUT files first
     // (cheap, just glGenTextures), then FX files (expensive, GLSL

@@ -300,35 +300,53 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // sees the "Startup: Loading FXs (12/35)…" label tick forward.
     QTimer::singleShot(250, this, [this]() { startAutoload(); });
 
-    // ~60Hz tick that drives playbackManager's timestep + frame advance.
-    // playbackManager.update() is cheap when nothing's playing, so a
-    // steady tick is fine. The interval is the upper bound on playback
-    // jitter; the tight FPS targeting happens inside the manager.
+    // Fast playback tick (~250Hz) for tight FPS pacing. The frame-advance
+    // logic in gfcPlaybackManager accumulates real wall-clock time and only
+    // advances when it crosses the target frame interval, so ticking finely
+    // lets a frame advance land within a few ms of its true time instead of
+    // being quantized to a coarse interval (a 16Hz/60Hz tick made a 24fps
+    // target wobble ±0.1 because 41.67ms can't sit on a 16ms grid). The
+    // FLTK build got the same effect from a near-continuous idle loop.
+    //
+    // Affording the fine tick requires keeping the per-tick cost low: the
+    // expensive makeCurrent/doneCurrent pair (each flushes the CGL command
+    // buffer + flips the context TLS slot on macOS) only runs when a decoded
+    // frame is actually waiting to upload, not on every tick.
     playbackTimer_ = new QTimer(this);
-    playbackTimer_->setInterval(16);
+    playbackTimer_->setTimerType(Qt::PreciseTimer);
+    playbackTimer_->setInterval(4);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
         if (!viewport_) return;
-        // Skip the GL-current/tickPlayback/done-current trio when
-        // nothing is playing and no raw frames are pending — those
-        // makeCurrent / doneCurrent pairs are surprisingly expensive
-        // on macOS (each flushes the CGL command buffer + flips the
-        // CGLContextObj's `currentContext` TLS slot) and dominate
-        // idle CPU sampling. needsPlaybackTick is an isPlaying check
-        // + 4 O(1) queue::empty() probes.
+        // Skip everything when nothing is playing and no raw frames are
+        // pending. needsPlaybackTick is an isPlaying check + 4 O(1)
+        // queue::empty() probes.
         const bool needsTick = jefe::qt::needsPlaybackTick();
         bool dirty = false;
         if (needsTick) {
-            // tickPlayback() drains a frame from each sequence's queue
-            // and uploads it via glTexImage2D, so the GL context must
-            // be current.
-            viewport_->makeCurrent();
-            dirty = jefe::qt::tickPlayback();
-            viewport_->doneCurrent();
+            // No-GL timing step — advances currentFrame at the target FPS
+            // and updates animations. Cheap enough to run at the full tick
+            // rate, which is what keeps pacing tight.
+            dirty = jefe::qt::tickPlaybackTiming();
+            // Only enter the GL context when there's a decoded frame queued
+            // for upload — gates the costly makeCurrent/doneCurrent pair so
+            // the fast tick doesn't thrash the context.
+            if (jefe::qt::hasPendingTextureUploads()) {
+                viewport_->makeCurrent();
+                jefe::qt::uploadPendingTextures();
+                viewport_->doneCurrent();
+                dirty = true;
+            }
             if (dirty) {
                 viewport_->update();
             }
         }
-        // Pull playback state into the timeline widgets every tick.
+        // The timeline/status read-back only needs ~60Hz, so throttle it to
+        // every 4th tick (≈16ms) rather than running it at the full 250Hz
+        // playback rate. refreshFromPlayback animates the playhead; 60Hz is
+        // plenty smooth and avoids 4× the signal-blocked widget churn.
+        if (++uiRefreshCounter_ < 4) return;
+        uiRefreshCounter_ = 0;
+        // Pull playback state into the timeline widgets.
         // Cheap (a handful of getters + signal-blocked setValues), and
         // it's the only path that animates the playhead during play.
         if (timelinePanelWidget_) {
