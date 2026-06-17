@@ -2,16 +2,23 @@
 #include "SequenceLoadBridge_qt.h"
 
 #include <QComboBox>
+#include <QContextMenuEvent>
 #include <QDoubleSpinBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
+#include <QMenu>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -127,11 +134,39 @@ TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setObjectName("timeline.tracks");
     setAccessibleName("Timeline tracks");
+    setAcceptDrops(true);
+    setCursor(Qt::SizeHorCursor);  // hint that horizontal drag = offset
 }
 
-void TimelineTracks_Qt::setTimelineRange(int from, int to) {
-    from_ = from;
-    to_ = std::max(to, from);
+int TimelineTracks_Qt::laneHeight() const {
+    return std::max(height() / 4, 16);
+}
+
+int TimelineTracks_Qt::laneTopY(int track) const {
+    return track * laneHeight();
+}
+
+void TimelineTracks_Qt::refresh() {
+    const int from = jefe::qt::getFromFrame();
+    const int to   = std::max(jefe::qt::getToFrame(), from);
+    const int cur  = jefe::qt::getCurrentFrame();
+
+    std::array<jefe::qt::TrackTimelineState, 4> next{};
+    for (int i = 0; i < 4; ++i) next[i] = jefe::qt::getTrackTimelineState(i);
+
+    // Cache-compare: skip the repaint when nothing a row draws has
+    // changed (matches the AppKit-cascade-avoidance pattern elsewhere).
+    bool changed = (from != from_ || to != to_ || cur != current_);
+    for (int i = 0; i < 4 && !changed; ++i) {
+        const auto& a = states_[i];
+        const auto& b = next[i];
+        changed = a.present != b.present || a.rangeStart != b.rangeStart
+               || a.rangeEnd != b.rangeEnd || a.loadedCount != b.loadedCount
+               || a.offset != b.offset || a.label != b.label;
+    }
+    if (!changed) return;
+
+    from_ = from; to_ = to; current_ = cur; states_ = next;
     update();
 }
 
@@ -140,19 +175,148 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
     const QRect r = rect();
     p.fillRect(r, QColor(28, 28, 28));
 
-    // Four track lanes. Per-track loaded ranges aren't plumbed yet —
-    // future work bumps them out via a getTrackRange(i) bridge call.
-    const int laneHeight = std::max(r.height() / 4, 16);
+    const int lh = laneHeight();
     for (int i = 0; i < 4; ++i) {
-        const int y = i * laneHeight;
-        const QRect lane(0, y, r.width(), laneHeight - 2);
+        const int y = laneTopY(i);
+        const QRect lane(0, y, r.width(), lh - 2);
         p.fillRect(lane, i % 2 ? QColor(36, 36, 36) : QColor(32, 32, 32));
-        p.setPen(QColor(160, 160, 160));
-        p.drawText(8, y + laneHeight / 2 + 4,
-                   QString("Track %1").arg(QChar('A' + i)));
+
+        const auto& s = states_[i];
+        const QChar letter('A' + i);
+
+        if (!s.present) {
+            // Empty lane: faint placeholder, doubles as drop / alt-click target.
+            p.setPen(QColor(90, 90, 90));
+            p.drawText(8, y + lh / 2 + 4,
+                       QString("%1  (empty — drop or alt-click to load)")
+                           .arg(letter));
+            continue;
+        }
+
+        // Sequence bar across [rangeStart, rangeEnd] in dark gray.
+        const int xStart = xFromFrameMapped(s.rangeStart, width(), from_, to_);
+        const int xEnd   = xFromFrameMapped(s.rangeEnd,   width(), from_, to_);
+        const int barTop = y + 3;
+        const int barH   = lh - 8;
+        const QRect bar(xStart, barTop, std::max(xEnd - xStart, 1), barH);
+        p.fillRect(bar, QColor(85, 85, 85));
+
+        // Loaded portion (lighter), starting at firstLoadedFrame.
+        if (s.loadedCount > 0) {
+            const int loadedEndFrame = s.firstLoadedFrame + s.loadedCount - 1;
+            const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
+            const int xL1 = xFromFrameMapped(loadedEndFrame,     width(), from_, to_);
+            const QRect loaded(xL0, barTop, std::max(xL1 - xL0, 1), barH);
+            p.fillRect(loaded, QColor(160, 160, 160));
+        }
+
+        // Label (track letter + filename) over the bar.
+        p.setPen(QColor(230, 230, 230));
+        p.drawText(xStart + 4, y + lh / 2 + 4,
+                   QString("%1  %2").arg(letter).arg(QString::fromStdString(s.label)));
     }
-    (void)from_;
-    (void)to_;
+
+    // Read-only playhead across all lanes (alignment with the scrubber;
+    // not draggable — drag is reassigned to offset).
+    const int xCur = xFromFrameMapped(current_, width(), from_, to_);
+    p.setPen(QPen(QColor(0xd4, 0x77, 0x1e), 1));
+    p.drawLine(xCur, 0, xCur, r.height());
+}
+
+int TimelineTracks_Qt::trackAtY(int y) const {
+    const int t = y / std::max(laneHeight(), 1);
+    return std::clamp(t, 0, 3);
+}
+
+double TimelineTracks_Qt::pxPerFrame() const {
+    const int span = std::max(to_ - from_, 1);
+    const int usable = std::max(width() - 2 * kScrubberPad, 1);
+    return std::max((double)usable / span, 0.001);
+}
+
+void TimelineTracks_Qt::mousePressEvent(QMouseEvent* e) {
+    if (e->button() != Qt::LeftButton) return;
+    const int track = trackAtY((int)e->position().y());
+
+    if (e->modifiers() & Qt::AltModifier) {
+        // Alt+click: load the track's sequence from the clicked frame on.
+        const int frame = frameFromXMapped((int)e->position().x(),
+                                           width(), from_, to_);
+        jefe::qt::startLoadingTrackAt(track, frame);
+        return;
+    }
+
+    // Begin a drag-to-offset gesture on this track.
+    dragTrack_ = track;
+    dragAccumPx_ = 0.0;
+    dragPrevX_ = (int)e->position().x();
+}
+
+void TimelineTracks_Qt::mouseMoveEvent(QMouseEvent* e) {
+    if (dragTrack_ < 0 || !(e->buttons() & Qt::LeftButton)) return;
+    const int x = (int)e->position().x();
+    dragAccumPx_ += (x - dragPrevX_);
+    dragPrevX_ = x;
+
+    const double frameW = pxPerFrame();
+    while (dragAccumPx_ >= frameW || dragAccumPx_ <= -frameW) {
+        const int step = dragAccumPx_ > 0 ? 1 : -1;
+        jefe::qt::setTrackOffset(dragTrack_,
+                                 jefe::qt::getTrackOffset(dragTrack_) + step);
+        dragAccumPx_ -= step * frameW;
+    }
+    refresh();
+}
+
+void TimelineTracks_Qt::mouseReleaseEvent(QMouseEvent* e) {
+    Q_UNUSED(e);
+    dragTrack_ = -1;
+    dragAccumPx_ = 0.0;
+}
+
+void TimelineTracks_Qt::contextMenuEvent(QContextMenuEvent* e) {
+    const int track = trackAtY(e->y());
+    QMenu menu(this);
+
+    QAction* hold = menu.addAction("Hold last frame");
+    hold->setCheckable(true);
+    hold->setChecked(jefe::qt::getTrackHoldMode(track));
+
+    QAction* setOff = menu.addAction("Set offset…");
+
+    QAction* chosen = menu.exec(e->globalPos());
+    if (chosen == hold) {
+        jefe::qt::setTrackHoldMode(track, hold->isChecked());
+        refresh();
+    } else if (chosen == setOff) {
+        bool ok = false;
+        const int cur = jefe::qt::getTrackOffset(track);
+        const int v = QInputDialog::getInt(this, "Track offset",
+                          QString("Offset for track %1 (frames):")
+                              .arg(QChar('A' + track)),
+                          cur, -100000, 100000, 1, &ok);
+        if (ok) {
+            jefe::qt::setTrackOffset(track, v);
+            refresh();
+        }
+    }
+}
+
+void TimelineTracks_Qt::dragEnterEvent(QDragEnterEvent* e) {
+    if (e->mimeData()->hasUrls()) e->acceptProposedAction();
+}
+
+void TimelineTracks_Qt::dropEvent(QDropEvent* e) {
+    if (!e->mimeData()->hasUrls()) return;
+    const int track = trackAtY((int)e->position().y());
+    const QList<QUrl> urls = e->mimeData()->urls();
+    if (urls.isEmpty()) return;
+    const QString path = urls.first().toLocalFile();
+    if (path.isEmpty()) return;
+    // Reuse the standard load path, targeting this row's sequence.
+    jefe::qt::loadFileIntoPlate(path.toStdString(), track, true, 1.0f);
+    e->acceptProposedAction();
+    refresh();
 }
 
 // ---- TimelinePanel_Qt ----
@@ -301,6 +465,11 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
 }
 
 void TimelinePanel_Qt::refreshFromPlayback() {
+    // Track rows update independently of the transport values (their
+    // loaded fill grows during decode even while frame/range hold), and
+    // refresh() is itself cache-gated, so do it before the fast-path.
+    tracks_->refresh();
+
     const int from = jefe::qt::getFromFrame();
     const int to   = jefe::qt::getToFrame();
     const int cur  = jefe::qt::getCurrentFrame();
@@ -350,7 +519,6 @@ void TimelinePanel_Qt::refreshFromPlayback() {
 
     if (from != lastFrom_ || to != lastTo_) {
         scrubber_->setRange(from, to);
-        tracks_->setTimelineRange(from, to);
     }
     if (in != lastIn_ || out != lastOut_) {
         scrubber_->setInOut(in, out);

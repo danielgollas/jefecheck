@@ -14,10 +14,17 @@
 
 #include <QWidget>
 
+#include <array>
+
+#include "SequenceLoadBridge_qt.h"   // jefe::qt::TrackTimelineState
+
 class QComboBox;
 class QDoubleSpinBox;
 class QPaintEvent;
 class QMouseEvent;
+class QContextMenuEvent;
+class QDragEnterEvent;
+class QDropEvent;
 class QPushButton;
 class QSpinBox;
 
@@ -57,14 +64,37 @@ class TimelineTracks_Qt : public QWidget {
 public:
     explicit TimelineTracks_Qt(QWidget* parent = nullptr);
 
-    void setTimelineRange(int from, int to);
+    // Pull global range, current frame, and the 4 per-track states from
+    // the bridge; cache-compare and repaint only on change. Driven from
+    // TimelinePanel_Qt::refreshFromPlayback. Cheap when idle.
+    void refresh();
 
 protected:
     void paintEvent(QPaintEvent* e) override;
+    void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
+    void contextMenuEvent(QContextMenuEvent* e) override;
+    void dragEnterEvent(QDragEnterEvent* e) override;
+    void dropEvent(QDropEvent* e) override;
 
 private:
+    int laneTopY(int track) const;   // y of lane `track`'s top edge
+    int laneHeight() const;          // per-lane height
+    int trackAtY(int y) const;       // which lane (0..3) contains y
+    double pxPerFrame() const;       // pixels per timeline frame
+
     int from_ = 1;
     int to_ = 1;
+    int current_ = 1;
+    std::array<jefe::qt::TrackTimelineState, 4> states_{};
+
+    // Drag-to-offset state. Left-drag accumulates dx (vs dragPrevX_);
+    // each whole-frame worth of motion steps the dragged track's offset
+    // by +/-1. dragTrack_ == -1 means no gesture in progress.
+    int    dragTrack_ = -1;
+    double dragAccumPx_ = 0.0;
+    int    dragPrevX_ = 0;
 };
 
 class TimelinePanel_Qt : public QWidget {
