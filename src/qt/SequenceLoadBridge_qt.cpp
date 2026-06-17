@@ -1294,8 +1294,13 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
     if (!seq) return s;
     s.present = !seq->isEmpty();
     s.offset  = seq->getOffset();
-    s.rangeStart = seq->getRangeStart();   // offset already folded in
-    s.rangeEnd   = seq->getRangeEnd();
+    // gfcSequence ranges are 0-based (an 8-frame clip is 0..7), but the
+    // timeline and the playback limits are 1-based — getEndLimit/
+    // getStartLimit add +1 to the sequence range, and `to` is the frame
+    // count. Convert here so the bar lines up with the 1-based scrubber/
+    // playhead (without +1 the last frame's slice never fills).
+    s.rangeStart = seq->getRangeStart() + 1;   // offset already folded in
+    s.rangeEnd   = seq->getRangeEnd() + 1;
     s.numFrames  = seq->getNumFrames();
     s.loadedCount = seq->getLoadedFrameCount();
     // v1: anchor the loaded fill at the sequence's range start. Loading

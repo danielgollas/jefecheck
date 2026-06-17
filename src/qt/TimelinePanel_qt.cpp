@@ -136,6 +136,8 @@ TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
     setAccessibleName("Timeline tracks");
     setAcceptDrops(true);
     setCursor(Qt::SizeHorCursor);  // hint that horizontal drag = offset
+    setToolTip("Drag to offset · Alt-click to load from frame · "
+               "Right-click for options · Drop a file to load");
 }
 
 int TimelineTracks_Qt::laneHeight() const {
@@ -185,11 +187,11 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
         const QChar letter('A' + i);
 
         if (!s.present) {
-            // Empty lane: faint placeholder, doubles as drop / alt-click target.
+            // Empty lane: just the track letter. The load hints live in
+            // the widget tooltip so a long string can't force the panel
+            // wide.
             p.setPen(QColor(90, 90, 90));
-            p.drawText(8, y + lh / 2 + 4,
-                       QString("%1  (empty — drop or alt-click to load)")
-                           .arg(letter));
+            p.drawText(8, y + lh / 2 + 4, QString(letter));
             continue;
         }
 
@@ -496,16 +498,18 @@ void TimelinePanel_Qt::refreshFromPlayback() {
         const QSignalBlocker bFps(fpsSpin_);
         const QSignalBlocker bLoop(loopMode_);
 
-        // Range-bound the spinboxes to the current playback range so
-        // typing past the end clamps cleanly. Min always 1 to match
-        // the FLTK defaults. Only re-set range when from/to actually
-        // changed — setRange triggers AX notifications even if the
-        // bounds match.
-        const int hi = std::max(to, 1);
+        // Current-frame spin stays within the timeline [from, to]. In/out
+        // are freely editable and NOT capped to the loaded track length —
+        // the timeline total (`to`) follows the out point (see
+        // gfcPlaybackManager::setOutPoint), so the user can extend the
+        // timeline past the tracks (e.g. to view offset frames). Only
+        // re-set ranges when from/to changed — setRange fires AX
+        // notifications even when the bounds match.
+        constexpr int kRangeMax = 9999999;
         if (from != lastFrom_ || to != lastTo_) {
-            frameSpin_->setRange(std::max(from, 1), hi);
-            inSpin_->setRange(std::max(from, 1), hi);
-            outSpin_->setRange(std::max(from, 1), hi);
+            frameSpin_->setRange(std::max(from, 1), std::max(to, 1));
+            inSpin_->setRange(1, kRangeMax);
+            outSpin_->setRange(1, kRangeMax);
         }
 
         if (cur != lastCur_) frameSpin_->setValue(cur);
