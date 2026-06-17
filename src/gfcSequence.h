@@ -262,6 +262,10 @@ public:
     int getRangeStart();
     int getRangeEnd();
     int getNumFrames();
+    // Number of frames decoded into this sequence so far. Mirrors the
+    // value FLTK fed the track-widget progress bar (loadedFrames.size()).
+    // Used by the Qt track timeline to draw the loaded-vs-unloaded fill.
+    int getLoadedFrameCount();
 	int getNumPreviewFrames();
     void startLoading(gfcLoadParams params);
     void startLoading(int fromTrack=0,int fromTimeLine=0);
