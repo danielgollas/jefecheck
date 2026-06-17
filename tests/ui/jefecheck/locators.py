@@ -25,6 +25,12 @@ DOCK_TIMELINE = "dock.timeline"
 DOCK_FXSTACK = "dock.fxstack"
 DOCK_LUTS = "dock.luts"
 
+# Timeline widgets (inside the timeline dock). The scrubber and the
+# track-rows lane are single painted QWidgets — their sub-regions are
+# not separate AX elements, so only the container objectNames resolve.
+TIMELINE_SCRUBBER = "timeline.scrubber"
+TIMELINE_TRACKS = "timeline.tracks"
+
 # Menus / actions. Note: macOS folds Qt's QMenuBar into the system
 # menu bar, which lives in a separate AX tree from the application
 # window — `by_object_name(menu.*)` does NOT resolve via Mac2.
