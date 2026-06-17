@@ -569,6 +569,44 @@ struct TrackParams {
 
 TrackParams getTrackParams(int trackIdx);
 
+// Per-track snapshot for the timeline track rows. All frame values are
+// in global-timeline coordinates (offset already folded in), so the
+// widget can map them straight through the same x<->frame transform the
+// scrubber uses. `present` is false for an empty track (draw a
+// placeholder lane). `loadedCount` frames starting at `firstLoadedFrame`
+// are decoded; the rest of [rangeStart, rangeEnd] is not-yet-loaded.
+struct TrackTimelineState {
+    bool        present          = false;
+    int         rangeStart       = 1;
+    int         rangeEnd         = 1;
+    int         offset           = 0;
+    int         numFrames        = 0;
+    int         firstLoadedFrame = 1;
+    int         loadedCount      = 0;
+    std::string label;
+};
+
+TrackTimelineState getTrackTimelineState(int trackIdx);
+
+// Frame offset of a track on the global timeline. setTrackOffset shifts
+// the whole sequence left/right (drag / "Set offset..." popup) and flags
+// the viewport dirty so it repaints at the new frame mapping.
+int  getTrackOffset(int trackIdx);
+void setTrackOffset(int trackIdx, int offset);
+
+// Begin decoding the track's assigned sequence starting at `frame`
+// (timeline coordinates). Wraps trackManager.startLoadingSequenceAt;
+// the loader thread fills rawFrames and the playback tick uploads them,
+// so no GL context is required here. No-op for an empty track.
+void startLoadingTrackAt(int trackIdx, int frame);
+
+// Hold-last-frame mode (right-click popup). gfcSequence::getHoldMode()
+// is an int; the widget only needs on/off, so the bridge translates:
+// getTrackHoldMode == (getHoldMode() != 0); setTrackHoldMode(true) ->
+// setHoldMode(1), (false) -> setHoldMode(0).
+bool getTrackHoldMode(int trackIdx);
+void setTrackHoldMode(int trackIdx, bool hold);
+
 void setTrackFilename(int trackIdx, const std::string& path);
 void setTrackFrom(int trackIdx, int v);
 void setTrackTo(int trackIdx, int v);

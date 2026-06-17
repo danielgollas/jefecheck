@@ -1288,6 +1288,60 @@ int startLoadingAllTracks() {
     return started;
 }
 
+TrackTimelineState getTrackTimelineState(int trackIdx) {
+    TrackTimelineState s;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return s;
+    s.present = !seq->isEmpty();
+    s.offset  = seq->getOffset();
+    s.rangeStart = seq->getRangeStart();   // offset already folded in
+    s.rangeEnd   = seq->getRangeEnd();
+    s.numFrames  = seq->getNumFrames();
+    s.loadedCount = seq->getLoadedFrameCount();
+    // v1: anchor the loaded fill at the sequence's range start. Loading
+    // is sequential, so [rangeStart, rangeStart + loadedCount) is the
+    // decoded run. (Precise fill positioning for alt-click load-from-X
+    // is a deferred refinement noted in the spec.)
+    s.firstLoadedFrame = s.rangeStart;
+    if (seq->myGUI && !seq->myGUI->getFilename().empty()) {
+        namespace fs = std::filesystem;
+        s.label = fs::path(seq->filenameGeneric.empty()
+                               ? seq->myGUI->getFilename()
+                               : seq->filenameGeneric).filename().string();
+    }
+    return s;
+}
+
+int getTrackOffset(int trackIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    return seq ? seq->getOffset() : 0;
+}
+
+void setTrackOffset(int trackIdx, int offset) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return;
+    seq->setOffset(offset);
+    plateManager.setChanged();
+}
+
+void startLoadingTrackAt(int trackIdx, int frame) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || seq->isEmpty()) return;
+    trackManager.startLoadingSequenceAt(trackIdx, frame);
+}
+
+bool getTrackHoldMode(int trackIdx) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    return seq ? (seq->getHoldMode() != 0) : false;
+}
+
+void setTrackHoldMode(int trackIdx, bool hold) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return;
+    seq->setHoldMode(hold ? 1 : 0);
+    plateManager.setChanged();
+}
+
 TrackParams getTrackParams(int trackIdx) {
     TrackParams p;
     auto* seq = trackManager.getSequence(trackIdx);
