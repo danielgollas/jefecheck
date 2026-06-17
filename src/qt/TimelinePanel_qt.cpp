@@ -17,7 +17,26 @@
 #include <algorithm>
 
 namespace {
-constexpr int kScrubberPad = 4;  // horizontal padding inside the scrubber
+constexpr int kScrubberPad = 4;  // horizontal padding inside the lane area
+
+// Shared pixel<->frame mapping used by both the scrubber and the track
+// rows so their frames line up vertically. `width` is the widget width;
+// the playable strip [from, to] sits inside `kScrubberPad` on each side.
+int frameFromXMapped(int x, int width, int from, int to) {
+    const int span = to - from;
+    if (span <= 0) return from;
+    const int usable = std::max(width - 2 * kScrubberPad, 1);
+    const int rel = std::clamp(x - kScrubberPad, 0, usable);
+    return from + (rel * span + usable / 2) / usable;
+}
+
+int xFromFrameMapped(int frame, int width, int from, int to) {
+    const int span = to - from;
+    if (span <= 0) return kScrubberPad;
+    const int usable = std::max(width - 2 * kScrubberPad, 1);
+    const int rel = std::clamp(frame - from, 0, span);
+    return kScrubberPad + (rel * usable) / span;
+}
 }  // namespace
 
 // ---- TimelineScrubber_Qt ----
@@ -52,19 +71,11 @@ void TimelineScrubber_Qt::setCurrentFrame(int frame) {
 }
 
 int TimelineScrubber_Qt::frameFromX(int x) const {
-    const int span = to_ - from_;
-    if (span <= 0) return from_;
-    const int usable = std::max(width() - 2 * kScrubberPad, 1);
-    const int rel = std::clamp(x - kScrubberPad, 0, usable);
-    return from_ + (rel * span + usable / 2) / usable;
+    return frameFromXMapped(x, width(), from_, to_);
 }
 
 int TimelineScrubber_Qt::xFromFrame(int frame) const {
-    const int span = to_ - from_;
-    if (span <= 0) return kScrubberPad;
-    const int usable = std::max(width() - 2 * kScrubberPad, 1);
-    const int rel = std::clamp(frame - from_, 0, span);
-    return kScrubberPad + (rel * usable) / span;
+    return xFromFrameMapped(frame, width(), from_, to_);
 }
 
 void TimelineScrubber_Qt::paintEvent(QPaintEvent*) {
