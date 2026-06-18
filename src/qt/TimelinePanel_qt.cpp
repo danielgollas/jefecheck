@@ -131,6 +131,10 @@ void TimelineScrubber_Qt::mouseMoveEvent(QMouseEvent* e) {
 // ---- TimelineTracks_Qt ----
 
 TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
+    // Modest floor; the timeline shares the bottom dock row with the Plate
+    // Manager (horizontal split), so it takes that row's height — we must
+    // NOT force a taller floor or the timeline ends up taller than the
+    // plate cards. Thumbnails scale to whatever lane height the row gives.
     setMinimumHeight(96);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setObjectName("timeline.tracks");
@@ -150,8 +154,11 @@ int TimelineTracks_Qt::laneTopY(int track) const {
 }
 
 void TimelineTracks_Qt::refresh() {
-    const int from = jefe::qt::getFromFrame();
-    const int to   = std::max(jefe::qt::getToFrame(), from);
+    // The timeline view spans the in/out range across the full widget
+    // width — in/out are the zoom control (tick size = width / span), not
+    // sub-markers of a larger total. So map everything through [in, out].
+    const int from = jefe::qt::getInPoint();
+    const int to   = std::max(jefe::qt::getOutPoint(), from);
     const int cur  = jefe::qt::getCurrentFrame();
 
     std::array<jefe::qt::TrackTimelineState, 4> next{};
@@ -164,7 +171,6 @@ void TimelineTracks_Qt::refresh() {
     if (toggleChanged) {
         thumbCache_.clear();
         lastThumbsEnabled_ = thumbsEnabled;
-        setMinimumHeight(thumbsEnabled ? 168 : 96);  // taller lanes for thumbs
     }
 
     // Drop cached pixmaps for any track whose sequence changed (reload /
@@ -301,32 +307,47 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
 
     const int loadedEndFrame =
         s.loadedCount > 0 ? s.firstLoadedFrame + s.loadedCount - 1 : s.firstLoadedFrame;
-    const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
-    const int xL1 = xFromFrameMapped(loadedEndFrame, width(), from_, to_);
-    const int loadedW = std::max(xL1 - xL0, 1);
 
-    // Slot width from a 16:9-ish box; letterbox handles real aspect.
-    const int slotW = std::max(stripH * 16 / 9, 24);
-    const int nSlots = std::max(loadedW / (slotW + gap), 1);
+    // A thumbnail is always its natural width (stripH × frame aspect) — never
+    // squeezed or cropped. The aspect is the same for every frame, so probe
+    // one decoded thumbnail; fall back to 16:9 until one exists.
+    double aspect = 16.0 / 9.0;
+    {
+        const QPixmap probe = thumbPixmap(track, s.firstLoadedFrame - s.rangeStart);
+        if (!probe.isNull() && probe.height() > 0)
+            aspect = (double)probe.width() / probe.height();
+    }
+    const int naturalW = std::max((int)(stripH * aspect + 0.5), 2);
 
-    for (int i = 0; i < nSlots; ++i) {
-        const int slotX = xL0 + i * (slotW + gap);
-        const int centerX = slotX + slotW / 2;
-        const int frame = frameFromXMapped(centerX, width(), from_, to_);
-        const int frameIndex = frame - s.rangeStart;  // 0-based seq index
+    // Walk the visible loaded frames left→right; draw each at its own tick x
+    // (centered), at natural width, and skip any frame whose thumbnail would
+    // overlap the previous drawn one. Sparse → every frame, tick-aligned with
+    // gaps; dense → auto-samples and packs. "Min width = natural ratio."
+    const int firstVis = std::max(s.firstLoadedFrame, from_);
+    const int lastVis  = std::min(loadedEndFrame, to_);
+    const double rightLimit = width() - kScrubberPad - naturalW;
+    double lastRight = -1e9;
+    for (int f = firstVis; f <= lastVis; ++f) {
+        const double cx = xFromFrameMapped(f, width(), from_, to_);
+        double x = cx - naturalW / 2.0;
+        if (x < lastRight + gap) continue;            // overlaps prev → skip
+        const int frameIndex = f - s.rangeStart;
         if (frameIndex < 0) continue;
-        QPixmap pm = thumbPixmap(track, frameIndex);
-        if (pm.isNull()) continue;
-        QPixmap scaled = pm.scaled(slotW, stripH, Qt::KeepAspectRatio,
-                                   Qt::SmoothTransformation);
-        const int dx = slotX + (slotW - scaled.width()) / 2;
-        const int dy = stripTop + (stripH - scaled.height()) / 2;
-        p.drawPixmap(dx, dy, scaled);
+        const QPixmap pm = thumbPixmap(track, frameIndex);
+        if (pm.isNull()) continue;                    // not decoded yet
+        x = std::clamp(x, (double)kScrubberPad, std::max((double)kScrubberPad, rightLimit));
+        // Target matches the source aspect, so this fills exactly — no pad/crop.
+        const QPixmap scaled = pm.scaled(naturalW, stripH, Qt::IgnoreAspectRatio,
+                                         Qt::SmoothTransformation);
+        p.drawPixmap((int)(x + 0.5), stripTop, scaled);
+        lastRight = x + naturalW;
     }
 
     // Thin loaded bar beneath the strip.
     if (s.loadedCount > 0) {
-        const QRect bar(xL0, laneY + laneH - barH - 1, loadedW, barH);
+        const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
+        const int xL1 = xFromFrameMapped(loadedEndFrame, width(), from_, to_);
+        const QRect bar(xL0, laneY + laneH - barH - 1, std::max(xL1 - xL0, 1), barH);
         p.fillRect(bar, QColor(150, 185, 150));
     }
 }
@@ -625,16 +646,14 @@ void TimelinePanel_Qt::refreshFromPlayback() {
         const QSignalBlocker bFps(fpsSpin_);
         const QSignalBlocker bLoop(loopMode_);
 
-        // Current-frame spin stays within the timeline [from, to]. In/out
-        // are freely editable and NOT capped to the loaded track length —
-        // the timeline total (`to`) follows the out point (see
-        // gfcPlaybackManager::setOutPoint), so the user can extend the
-        // timeline past the tracks (e.g. to view offset frames). Only
-        // re-set ranges when from/to changed — setRange fires AX
-        // notifications even when the bounds match.
+        // The timeline view is the in/out range, so the current-frame spin
+        // is bounded by [in, out]. In/out themselves are freely editable
+        // (the zoom control) and NOT capped to track length. Re-set ranges
+        // only when in/out changed — setRange fires AX notifications even
+        // when the bounds match.
         constexpr int kRangeMax = 9999999;
-        if (from != lastFrom_ || to != lastTo_) {
-            frameSpin_->setRange(std::max(from, 1), std::max(to, 1));
+        if (in != lastIn_ || out != lastOut_) {
+            frameSpin_->setRange(std::max(in, 1), std::max(out, 1));
             inSpin_->setRange(1, kRangeMax);
             outSpin_->setRange(1, kRangeMax);
         }
@@ -648,11 +667,10 @@ void TimelinePanel_Qt::refreshFromPlayback() {
         }
     }
 
-    if (from != lastFrom_ || to != lastTo_) {
-        scrubber_->setRange(from, to);
-    }
+    // The scrubber maps the in/out view across the full width (same as the
+    // track rows), so its range IS [in, out]; no separate in/out highlight.
     if (in != lastIn_ || out != lastOut_) {
-        scrubber_->setInOut(in, out);
+        scrubber_->setRange(in, out);
     }
     if (cur != lastCur_) scrubber_->setCurrentFrame(cur);
     if (playing != lastPlaying_) playBtn_->setText(playing ? "⏸" : "▶");

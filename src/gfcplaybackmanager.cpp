@@ -524,13 +524,10 @@ void gfcPlaybackManager::setOutPoint(int frame)
 	if (inPoint>outPoint) {
 		setInPoint(outPoint);
 	}
-	// The timeline total follows the out point: the timeline range is
-	// freely editable and not capped to the loaded track length, so
-	// pushing the out point past the current end grows the timeline to
-	// contain it (lets the user view/play offset frames beyond a track).
-	if (outPoint>to) {
-		setToFrame(outPoint);
-	}
+	// Note: the Qt timeline maps the [in, out] range to the full widget
+	// width (in/out are the zoom control), so out is free to exceed the
+	// total `to` without growing it — the view just zooms. We deliberately
+	// do NOT grow `to` here.
 
 	myGUI->setTimelineOut(outPoint);
 	myGUI->setOutPoint(outPoint);

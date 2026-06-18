@@ -48,9 +48,13 @@ void gfcTrackManager::startLoadingSequence(int whichOne)
 	sequences[whichOne].startLoading();
 	playbackManager.setFromFrame(1);
 	playbackManager.setToFrame(this->getMaxTrackLength());
-	
+	// The Qt timeline view spans [in, out]; default it to the full content
+	// so a freshly-loaded sequence fills the timeline width.
+	playbackManager.setInPoint(1);
+	playbackManager.setOutPoint(this->getMaxTrackLength());
+
 	updateTrackWidgetsFromAndTo(playbackManager.getFromFrame(),playbackManager.getToFrame());
-	
+
 }
 
 

@@ -65,7 +65,7 @@ void setThumbnailsEnabled(bool on);    // writes sett.showThumbnails; on->off
 
 ### Toggle
 
-- A checkable **View → Show Frame Thumbnails** `QAction` in `MainWindow_qt`, and a matching item in the track right-click `QMenu`, both routed through `jefe::qt::setThumbnailsEnabled`. Default checked (on).
+- A checkable control **on the timeline window itself** — a small checkable `QToolButton`/`QPushButton` in the transport bar (`TimelinePanel_Qt`), e.g. a "🎞 Thumbs" toggle next to the FPS field — plus a matching item in the track right-click `QMenu`. Both route through `jefe::qt::setThumbnailsEnabled`. Default checked (on). (No View-menu action — the control belongs on the timeline panel.)
 - Toggling on mid-session shows thumbnails for frames decoded while enabled; already-decoded frames fill in on the next decode (play-through / scrub / reload). Documented behavior, not a bug.
 
 ### Data flow / refresh / invalidation
@@ -85,8 +85,7 @@ void setThumbnailsEnabled(bool on);    // writes sett.showThumbnails; on->off
 - **Modify:** `src/gfcSequence.{h,cpp}` — `Thumbnail` struct, per-sequence cache + capture in `generateTexture`, `getThumbnail`, clear on unload.
 - **Modify:** `src/gfcStructures.h` — `bool showThumbnails = true;` in `gfcSettings`.
 - **Modify:** `src/qt/SequenceLoadBridge_qt.{h,cpp}` — `ThumbPixels`, `getTrackThumbnail`, `getThumbnailsEnabled`/`setThumbnailsEnabled`.
-- **Modify:** `src/qt/TimelinePanel_qt.{h,cpp}` — filmstrip rendering, pixmap cache, lane-height bump, right-click toggle item.
-- **Modify:** `src/qt/MainWindow_qt.{h,cpp}` — View → Show Frame Thumbnails action.
+- **Modify:** `src/qt/TimelinePanel_qt.{h,cpp}` — filmstrip rendering, pixmap cache, lane-height bump, transport-bar thumbnails toggle button + track right-click toggle item.
 - **Modify:** `tests/ui/jefecheck/locators.py` + `tests/ui/test_track_timeline.py` — toggle-action locator + smoke assertion.
 - **Reference:** `src/gfcpixelbuffer.h` (`GFLC_BITMAP`), PR #97 widget code.
 
