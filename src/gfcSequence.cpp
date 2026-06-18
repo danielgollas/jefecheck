@@ -777,7 +777,16 @@ int gfcSequence::generateTextures ( int howMany ) {
 		//    	printf("gfcSequence::generateTextures: rawQueue not empty\n");
 		if (tmpRawFrame.loaded ) {
 			//            printf ( "gfcSequence::generateTextures:  generating texture...\n" );
-			GLuint tmpTexID=tmpRawFrame.generateTexture();
+			// Capture a filmstrip thumbnail when enabled, capped per
+			// sequence: store at most kMaxThumbs frames (every Nth beyond
+			// that) so very long sequences stay bounded in memory.
+			constexpr int kMaxThumbs = 2000;
+			const int totalFrames = (int)files.size();
+			const int thumbStride = totalFrames > kMaxThumbs
+			                        ? (totalFrames + kMaxThumbs - 1) / kMaxThumbs : 1;
+			const bool capture = sett.showThumbnails
+			                     && (tmpRawFrame.indexNumber % thumbStride == 0);
+			GLuint tmpTexID=tmpRawFrame.generateTexture(capture);
 			//printf ( "texID=%i\n",tmpTexID );
 			//check for gl errors.
 
@@ -2051,6 +2060,12 @@ int gfcSequence::getNumFrames() {
 
 int gfcSequence::getLoadedFrameCount() {
 	return (int)loadedFrames.size();
+}
+
+const GfcThumbnail& gfcSequence::getThumbnail(int frameIndex) const {
+	static const GfcThumbnail empty;
+	if (frameIndex < 0 || frameIndex >= (int)frames.size()) return empty;
+	return frames[frameIndex].thumbnail;
 }
 
 int gfcSequence::getNumPreviewFrames()

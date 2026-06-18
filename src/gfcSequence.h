@@ -266,6 +266,10 @@ public:
     // value FLTK fed the track-widget progress bar (loadedFrames.size()).
     // Used by the Qt track timeline to draw the loaded-vs-unloaded fill.
     int getLoadedFrameCount();
+    // Thumbnail for a decoded frame (0-based sequence index), for the
+    // timeline filmstrip. Returns an empty thumbnail (w==0) when the
+    // index is out of range or that frame hasn't been captured.
+    const GfcThumbnail& getThumbnail(int frameIndex) const;
 	int getNumPreviewFrames();
     void startLoading(gfcLoadParams params);
     void startLoading(int fromTrack=0,int fromTimeLine=0);
