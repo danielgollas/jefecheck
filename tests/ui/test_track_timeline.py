@@ -12,3 +12,9 @@ def test_track_timeline_widget_present(app):
     """The timeline tracks lane container exists and is addressable."""
     tracks = app.by_object_name(locators.TIMELINE_TRACKS)
     assert tracks is not None
+
+
+def test_thumbnails_toggle_present(app):
+    """The timeline thumbnails toggle button is present and addressable."""
+    btn = app.by_object_name(locators.TIMELINE_THUMBS_TOGGLE)
+    assert btn is not None

@@ -30,6 +30,7 @@ DOCK_LUTS = "dock.luts"
 # not separate AX elements, so only the container objectNames resolve.
 TIMELINE_SCRUBBER = "timeline.scrubber"
 TIMELINE_TRACKS = "timeline.tracks"
+TIMELINE_THUMBS_TOGGLE = "transport.thumbnails.toggle"
 
 # Menus / actions. Note: macOS folds Qt's QMenuBar into the system
 # menu bar, which lives in a separate AX tree from the application
