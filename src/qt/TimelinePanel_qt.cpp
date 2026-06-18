@@ -209,7 +209,9 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
             const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
             const int xL1 = xFromFrameMapped(loadedEndFrame,     width(), from_, to_);
             const QRect loaded(xL0, barTop, std::max(xL1 - xL0, 1), barH);
-            p.fillRect(loaded, QColor(160, 160, 160));
+            // Loaded frames: light, desaturated green (à la FLTK's intended
+            // loaded-bar color) so decoded extent reads at a glance.
+            p.fillRect(loaded, QColor(150, 185, 150));
         }
 
         // Label (track letter + filename) over the bar.
