@@ -100,6 +100,15 @@ public:
     //bool operator > (const RawFrame& a){return true;}
 };
 
+// A small RGBA8 thumbnail of a decoded frame, for the timeline filmstrip.
+// Empty rgba = not captured. Stored on the gfcFrame so it rides along when
+// the frame is copied into the sequence's frames[] vector.
+struct GfcThumbnail {
+    int w = 0;
+    int h = 0;
+    std::vector<unsigned char> rgba;   // tightly packed RGBA8, row-major
+};
+
 class gfcFrame
 {
 public:
@@ -138,7 +147,9 @@ public:
     gfcRectangf texCoords;
     
     int indexNumber;
-    
+
+    GfcThumbnail thumbnail;
+
     std::string fileName;
     std::string loadErrorString;
 
@@ -158,7 +169,7 @@ public:
     int loadFrame(gfcLoadParams params);
     int loadFrame();
     std::vector<std::string> getChannelNames();
-    GLuint generateTexture();
+    GLuint generateTexture(bool captureThumbnail = false);
     void releaseMemory();
     void deleteTexture();
     

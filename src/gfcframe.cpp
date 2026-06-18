@@ -184,7 +184,7 @@ std::vector< std::string > gfcFrame::getChannelNames()
 	return channelNames;
 }
 
-GLuint gfcFrame::generateTexture()
+GLuint gfcFrame::generateTexture(bool captureThumbnail)
 {
 	//printf ( " Inside gfcFrame::generateTexture\n" );
 	//0. Clear previous texture no matter what 
@@ -228,6 +228,45 @@ GLuint gfcFrame::generateTexture()
 	timer.stop();
 	timer.print();
 	*/
+
+	// Capture a downsampled RGBA8 thumbnail for the timeline filmstrip
+	// while the decoder's CPU buffer is still alive (releaseMemory frees
+	// it just below). Source is BGRA, 8- or 16-bit per info.dataType.
+	if (captureThumbnail && info.dataPointer && sizeX > 0 && sizeY > 0
+	    && (info.dataType == GL_UNSIGNED_BYTE || info.dataType == GL_UNSIGNED_SHORT)) {
+		const int srcW = sizeX, srcH = sizeY;
+		const int dstH = 48;
+		int dstW = (int)((double)dstH * srcW / srcH + 0.5);
+		if (dstW < 1) dstW = 1;
+		if (dstW > 96) dstW = 96;
+		thumbnail.w = dstW;
+		thumbnail.h = dstH;
+		thumbnail.rgba.assign((size_t)dstW * dstH * 4, 0);
+		const bool sixteen = (info.dataType == GL_UNSIGNED_SHORT);
+		const unsigned char*  s8  = (const unsigned char*)info.dataPointer;
+		const unsigned short* s16 = (const unsigned short*)info.dataPointer;
+		for (int y = 0; y < dstH; ++y) {
+			const int sy = y * srcH / dstH;
+			for (int x = 0; x < dstW; ++x) {
+				const int sx = x * srcW / dstW;
+				const size_t si = ((size_t)sy * srcW + sx) * 4; // BGRA, 4 comps
+				unsigned char b, g, r, a;
+				if (sixteen) {
+					b = (unsigned char)(s16[si+0] >> 8);
+					g = (unsigned char)(s16[si+1] >> 8);
+					r = (unsigned char)(s16[si+2] >> 8);
+					a = (unsigned char)(s16[si+3] >> 8);
+				} else {
+					b = s8[si+0]; g = s8[si+1]; r = s8[si+2]; a = s8[si+3];
+				}
+				const size_t di = ((size_t)y * dstW + x) * 4;
+				thumbnail.rgba[di+0] = r;  // BGRA -> RGBA
+				thumbnail.rgba[di+1] = g;
+				thumbnail.rgba[di+2] = b;
+				thumbnail.rgba[di+3] = a;
+			}
+		}
+	}
 
 	//3. check for glErrors.
 	//glPrintError();
@@ -277,6 +316,10 @@ void gfcFrame::clearFrame()
 {
 	deleteTexture();
 	releaseMemory();
+	thumbnail.w = 0;
+	thumbnail.h = 0;
+	thumbnail.rgba.clear();
+	thumbnail.rgba.shrink_to_fit();
 	sizeX=sizeY=15;
         loaded=false;
         if(theImageLoader)
