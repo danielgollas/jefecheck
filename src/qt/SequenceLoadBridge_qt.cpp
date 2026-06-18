@@ -1288,6 +1288,29 @@ int startLoadingAllTracks() {
     return started;
 }
 
+ThumbPixels getTrackThumbnail(int track, int frameIndex) {
+    ThumbPixels out;
+    if (!sett.showThumbnails) return out;
+    auto* seq = trackManager.getSequence(track);
+    if (!seq) return out;
+    const GfcThumbnail& t = seq->getThumbnail(frameIndex);
+    if (t.w <= 0 || t.h <= 0 || t.rgba.empty()) return out;
+    out.present = true;
+    out.w = t.w;
+    out.h = t.h;
+    out.rgba = t.rgba;   // copy out; widget must not hold seq memory
+    return out;
+}
+
+bool getThumbnailsEnabled() {
+    return sett.showThumbnails;
+}
+
+void setThumbnailsEnabled(bool on) {
+    sett.showThumbnails = on;
+    plateManager.setChanged();
+}
+
 TrackTimelineState getTrackTimelineState(int trackIdx) {
     TrackTimelineState s;
     auto* seq = trackManager.getSequence(trackIdx);

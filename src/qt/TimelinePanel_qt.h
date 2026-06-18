@@ -13,6 +13,8 @@
 #define JEFECHECK_QT_TIMELINE_PANEL_H
 
 #include <QWidget>
+#include <QHash>
+#include <QPixmap>
 
 #include <array>
 
@@ -83,11 +85,18 @@ private:
     int laneHeight() const;          // per-lane height
     int trackAtY(int y) const;       // which lane (0..3) contains y
     double pxPerFrame() const;       // pixels per timeline frame
+    QPixmap thumbPixmap(int track, int frameIndex);   // fetch+cache
+    void paintFilmstrip(QPainter& p, int track, int laneY, int laneH,
+                        const jefe::qt::TrackTimelineState& s);
 
     int from_ = 1;
     int to_ = 1;
     int current_ = 1;
     std::array<jefe::qt::TrackTimelineState, 4> states_{};
+
+    // Cached thumbnail pixmaps, keyed by (track << 24) | frameIndex.
+    QHash<int, QPixmap> thumbCache_;
+    bool lastThumbsEnabled_ = true;
 
     // Drag-to-offset state. Left-drag accumulates dx (vs dragPrevX_);
     // each whole-frame worth of motion steps the dragged track's offset
@@ -123,6 +132,7 @@ private:
     QSpinBox* inSpin_ = nullptr;
     QSpinBox* outSpin_ = nullptr;
     QDoubleSpinBox* fpsSpin_ = nullptr;
+    QPushButton* thumbsBtn_ = nullptr;
 
     // Last-seen playback values; refreshFromPlayback compares against
     // these and skips widget setters when nothing changed. Without this

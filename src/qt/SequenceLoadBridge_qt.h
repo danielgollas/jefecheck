@@ -615,6 +615,22 @@ void setTrackCompression(int trackIdx, int compEnum);
 void setTrackChannel(int trackIdx, int channelIdx);
 void setTrackCrop(int trackIdx, bool on);
 
+// A copy of a frame's filmstrip thumbnail for the timeline widget.
+// present=false when thumbnails are off, the track/frame is invalid, or
+// that frame hasn't decoded yet. rgba is tightly-packed RGBA8 (wrap as
+// QImage::Format_RGBA8888).
+struct ThumbPixels {
+    bool present = false;
+    int  w = 0;
+    int  h = 0;
+    std::vector<unsigned char> rgba;
+};
+
+ThumbPixels getTrackThumbnail(int track, int frameIndex);
+
+bool getThumbnailsEnabled();        // reads sett.showThumbnails
+void setThumbnailsEnabled(bool on); // writes sett.showThumbnails; setChanged()
+
 }  // namespace jefe::qt
 
 #endif

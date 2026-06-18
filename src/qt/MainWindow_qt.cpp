@@ -37,7 +37,10 @@
 
 namespace {
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
-constexpr const char* kSettingsState    = "MainWindow/state";
+// Bumped to _v2 to discard layouts saved while the timeline briefly forced
+// an over-tall bottom dock row (which could collapse/hide the Plate Manager).
+// Old "MainWindow/state" is ignored, so first-launch defaults reapply once.
+constexpr const char* kSettingsState    = "MainWindow/state_v2";
 }
 
 MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {

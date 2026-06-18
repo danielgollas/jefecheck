@@ -8,6 +8,7 @@
 #include <QDropEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
@@ -130,6 +131,10 @@ void TimelineScrubber_Qt::mouseMoveEvent(QMouseEvent* e) {
 // ---- TimelineTracks_Qt ----
 
 TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
+    // Modest floor; the timeline shares the bottom dock row with the Plate
+    // Manager (horizontal split), so it takes that row's height — we must
+    // NOT force a taller floor or the timeline ends up taller than the
+    // plate cards. Thumbnails scale to whatever lane height the row gives.
     setMinimumHeight(96);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setObjectName("timeline.tracks");
@@ -149,16 +154,41 @@ int TimelineTracks_Qt::laneTopY(int track) const {
 }
 
 void TimelineTracks_Qt::refresh() {
-    const int from = jefe::qt::getFromFrame();
-    const int to   = std::max(jefe::qt::getToFrame(), from);
+    // The timeline view spans the in/out range across the full widget
+    // width — in/out are the zoom control (tick size = width / span), not
+    // sub-markers of a larger total. So map everything through [in, out].
+    const int from = jefe::qt::getInPoint();
+    const int to   = std::max(jefe::qt::getOutPoint(), from);
     const int cur  = jefe::qt::getCurrentFrame();
 
     std::array<jefe::qt::TrackTimelineState, 4> next{};
     for (int i = 0; i < 4; ++i) next[i] = jefe::qt::getTrackTimelineState(i);
 
+    // Thumbnails toggle: drop the pixmap cache and re-flow lane height
+    // when it flips (taller lanes show the filmstrip legibly).
+    const bool thumbsEnabled = jefe::qt::getThumbnailsEnabled();
+    const bool toggleChanged = (thumbsEnabled != lastThumbsEnabled_);
+    if (toggleChanged) {
+        thumbCache_.clear();
+        lastThumbsEnabled_ = thumbsEnabled;
+    }
+
+    // Drop cached pixmaps for any track whose sequence changed (reload /
+    // unload) so stale thumbnails don't linger.
+    for (int i = 0; i < 4; ++i) {
+        if (states_[i].numFrames != next[i].numFrames
+            || states_[i].label != next[i].label) {
+            const int lo = i << 24, hi = (i << 24) | 0x00FFFFFF;
+            for (auto it = thumbCache_.begin(); it != thumbCache_.end(); ) {
+                if (it.key() >= lo && it.key() <= hi) it = thumbCache_.erase(it);
+                else ++it;
+            }
+        }
+    }
+
     // Cache-compare: skip the repaint when nothing a row draws has
     // changed (matches the AppKit-cascade-avoidance pattern elsewhere).
-    bool changed = (from != from_ || to != to_ || cur != current_);
+    bool changed = toggleChanged || (from != from_ || to != to_ || cur != current_);
     for (int i = 0; i < 4 && !changed; ++i) {
         const auto& a = states_[i];
         const auto& b = next[i];
@@ -195,29 +225,40 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
             continue;
         }
 
-        // Sequence bar across [rangeStart, rangeEnd] in dark gray.
         const int xStart = xFromFrameMapped(s.rangeStart, width(), from_, to_);
-        const int xEnd   = xFromFrameMapped(s.rangeEnd,   width(), from_, to_);
-        const int barTop = y + 3;
-        const int barH   = lh - 8;
-        const QRect bar(xStart, barTop, std::max(xEnd - xStart, 1), barH);
-        p.fillRect(bar, QColor(85, 85, 85));
 
-        // Loaded portion (lighter), starting at firstLoadedFrame.
-        if (s.loadedCount > 0) {
-            const int loadedEndFrame = s.firstLoadedFrame + s.loadedCount - 1;
-            const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
-            const int xL1 = xFromFrameMapped(loadedEndFrame,     width(), from_, to_);
-            const QRect loaded(xL0, barTop, std::max(xL1 - xL0, 1), barH);
-            // Loaded frames: light, desaturated green (à la FLTK's intended
-            // loaded-bar color) so decoded extent reads at a glance.
-            p.fillRect(loaded, QColor(150, 185, 150));
+        if (jefe::qt::getThumbnailsEnabled()) {
+            // Filmstrip: thumbnails + thin loaded bar.
+            paintFilmstrip(p, i, y, lh, s);
+            // Label over the strip (kept for identification).
+            p.setPen(QColor(230, 230, 230));
+            p.drawText(xStart + 4, y + 12,
+                       QString("%1  %2").arg(letter)
+                           .arg(QString::fromStdString(s.label)));
+        } else {
+            // Sequence bar across [rangeStart, rangeEnd] in dark gray.
+            const int xEnd   = xFromFrameMapped(s.rangeEnd,   width(), from_, to_);
+            const int barTop = y + 3;
+            const int barH   = lh - 8;
+            const QRect bar(xStart, barTop, std::max(xEnd - xStart, 1), barH);
+            p.fillRect(bar, QColor(85, 85, 85));
+
+            // Loaded portion (lighter), starting at firstLoadedFrame.
+            if (s.loadedCount > 0) {
+                const int loadedEndFrame = s.firstLoadedFrame + s.loadedCount - 1;
+                const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
+                const int xL1 = xFromFrameMapped(loadedEndFrame,     width(), from_, to_);
+                const QRect loaded(xL0, barTop, std::max(xL1 - xL0, 1), barH);
+                // Loaded frames: light, desaturated green (à la FLTK's intended
+                // loaded-bar color) so decoded extent reads at a glance.
+                p.fillRect(loaded, QColor(150, 185, 150));
+            }
+
+            // Label (track letter + filename) over the bar.
+            p.setPen(QColor(230, 230, 230));
+            p.drawText(xStart + 4, y + lh / 2 + 4,
+                       QString("%1  %2").arg(letter).arg(QString::fromStdString(s.label)));
         }
-
-        // Label (track letter + filename) over the bar.
-        p.setPen(QColor(230, 230, 230));
-        p.drawText(xStart + 4, y + lh / 2 + 4,
-                   QString("%1  %2").arg(letter).arg(QString::fromStdString(s.label)));
     }
 
     // Read-only playhead across all lanes (alignment with the scrubber;
@@ -236,6 +277,79 @@ double TimelineTracks_Qt::pxPerFrame() const {
     const int span = std::max(to_ - from_, 1);
     const int usable = std::max(width() - 2 * kScrubberPad, 1);
     return std::max((double)usable / span, 0.001);
+}
+
+QPixmap TimelineTracks_Qt::thumbPixmap(int track, int frameIndex) {
+    const int key = (track << 24) | (frameIndex & 0x00FFFFFF);
+    auto it = thumbCache_.find(key);
+    if (it != thumbCache_.end()) return it.value();
+    jefe::qt::ThumbPixels t = jefe::qt::getTrackThumbnail(track, frameIndex);
+    QPixmap pm;
+    if (t.present) {
+        // QImage wraps the temporary buffer; copy() forces a deep copy so
+        // the vector can go away.
+        QImage img(t.rgba.data(), t.w, t.h, t.w * 4, QImage::Format_RGBA8888);
+        pm = QPixmap::fromImage(img.copy());
+        thumbCache_.insert(key, pm);   // only cache real thumbs
+    }
+    return pm;
+}
+
+void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
+                                       int laneH,
+                                       const jefe::qt::TrackTimelineState& s) {
+    // Lane splits into a thumbnail strip (top) and a thin loaded bar.
+    const int barH = 4;
+    const int gap = 1;
+    const int stripTop = laneY + 2;
+    const int stripH = laneH - barH - 4;
+    if (stripH < 6) return;  // lane too short; nothing legible to draw
+
+    const int loadedEndFrame =
+        s.loadedCount > 0 ? s.firstLoadedFrame + s.loadedCount - 1 : s.firstLoadedFrame;
+
+    // A thumbnail is always its natural width (stripH × frame aspect) — never
+    // squeezed or cropped. The aspect is the same for every frame, so probe
+    // one decoded thumbnail; fall back to 16:9 until one exists.
+    double aspect = 16.0 / 9.0;
+    {
+        const QPixmap probe = thumbPixmap(track, s.firstLoadedFrame - s.rangeStart);
+        if (!probe.isNull() && probe.height() > 0)
+            aspect = (double)probe.width() / probe.height();
+    }
+    const int naturalW = std::max((int)(stripH * aspect + 0.5), 2);
+
+    // Walk the visible loaded frames left→right; draw each at its own tick x
+    // (centered), at natural width, and skip any frame whose thumbnail would
+    // overlap the previous drawn one. Sparse → every frame, tick-aligned with
+    // gaps; dense → auto-samples and packs. "Min width = natural ratio."
+    const int firstVis = std::max(s.firstLoadedFrame, from_);
+    const int lastVis  = std::min(loadedEndFrame, to_);
+    const double rightLimit = width() - kScrubberPad - naturalW;
+    double lastRight = -1e9;
+    for (int f = firstVis; f <= lastVis; ++f) {
+        const double cx = xFromFrameMapped(f, width(), from_, to_);
+        double x = cx - naturalW / 2.0;
+        if (x < lastRight + gap) continue;            // overlaps prev → skip
+        const int frameIndex = f - s.rangeStart;
+        if (frameIndex < 0) continue;
+        const QPixmap pm = thumbPixmap(track, frameIndex);
+        if (pm.isNull()) continue;                    // not decoded yet
+        x = std::clamp(x, (double)kScrubberPad, std::max((double)kScrubberPad, rightLimit));
+        // Target matches the source aspect, so this fills exactly — no pad/crop.
+        const QPixmap scaled = pm.scaled(naturalW, stripH, Qt::IgnoreAspectRatio,
+                                         Qt::SmoothTransformation);
+        p.drawPixmap((int)(x + 0.5), stripTop, scaled);
+        lastRight = x + naturalW;
+    }
+
+    // Thin loaded bar beneath the strip.
+    if (s.loadedCount > 0) {
+        const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
+        const int xL1 = xFromFrameMapped(loadedEndFrame, width(), from_, to_);
+        const QRect bar(xL0, laneY + laneH - barH - 1, std::max(xL1 - xL0, 1), barH);
+        p.fillRect(bar, QColor(150, 185, 150));
+    }
 }
 
 void TimelineTracks_Qt::mousePressEvent(QMouseEvent* e) {
@@ -288,9 +402,17 @@ void TimelineTracks_Qt::contextMenuEvent(QContextMenuEvent* e) {
 
     QAction* setOff = menu.addAction("Set offset…");
 
+    menu.addSeparator();
+    QAction* thumbs = menu.addAction("Show frame thumbnails");
+    thumbs->setCheckable(true);
+    thumbs->setChecked(jefe::qt::getThumbnailsEnabled());
+
     QAction* chosen = menu.exec(e->globalPos());
     if (chosen == hold) {
         jefe::qt::setTrackHoldMode(track, hold->isChecked());
+        refresh();
+    } else if (chosen == thumbs) {
+        jefe::qt::setThumbnailsEnabled(thumbs->isChecked());
         refresh();
     } else if (chosen == setOff) {
         bool ok = false;
@@ -419,6 +541,19 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     fpsSpin_->setAccessibleName("Target FPS");
     transport->addWidget(fpsSpin_);
 
+    thumbsBtn_ = new QPushButton("🎞", this);
+    thumbsBtn_->setCheckable(true);
+    thumbsBtn_->setChecked(jefe::qt::getThumbnailsEnabled());
+    thumbsBtn_->setToolTip("Show frame thumbnails on the timeline");
+    thumbsBtn_->setObjectName("transport.thumbnails.toggle");
+    thumbsBtn_->setAccessibleName("Show frame thumbnails");
+    thumbsBtn_->setFixedWidth(32);
+    transport->addWidget(thumbsBtn_);
+    connect(thumbsBtn_, &QPushButton::toggled, this, [this](bool on) {
+        jefe::qt::setThumbnailsEnabled(on);
+        if (tracks_) tracks_->refresh();
+    });
+
     scrubber_ = new TimelineScrubber_Qt(this);
     tracks_   = new TimelineTracks_Qt(this);
 
@@ -474,6 +609,17 @@ void TimelinePanel_Qt::refreshFromPlayback() {
     // refresh() is itself cache-gated, so do it before the fast-path.
     tracks_->refresh();
 
+    // Keep the thumbnails toggle button in sync if the state was changed
+    // elsewhere (e.g. the track right-click menu). Signal-blocked so it
+    // doesn't re-enter setThumbnailsEnabled.
+    if (thumbsBtn_) {
+        const bool on = jefe::qt::getThumbnailsEnabled();
+        if (thumbsBtn_->isChecked() != on) {
+            const QSignalBlocker b(thumbsBtn_);
+            thumbsBtn_->setChecked(on);
+        }
+    }
+
     const int from = jefe::qt::getFromFrame();
     const int to   = jefe::qt::getToFrame();
     const int cur  = jefe::qt::getCurrentFrame();
@@ -500,16 +646,14 @@ void TimelinePanel_Qt::refreshFromPlayback() {
         const QSignalBlocker bFps(fpsSpin_);
         const QSignalBlocker bLoop(loopMode_);
 
-        // Current-frame spin stays within the timeline [from, to]. In/out
-        // are freely editable and NOT capped to the loaded track length —
-        // the timeline total (`to`) follows the out point (see
-        // gfcPlaybackManager::setOutPoint), so the user can extend the
-        // timeline past the tracks (e.g. to view offset frames). Only
-        // re-set ranges when from/to changed — setRange fires AX
-        // notifications even when the bounds match.
+        // The timeline view is the in/out range, so the current-frame spin
+        // is bounded by [in, out]. In/out themselves are freely editable
+        // (the zoom control) and NOT capped to track length. Re-set ranges
+        // only when in/out changed — setRange fires AX notifications even
+        // when the bounds match.
         constexpr int kRangeMax = 9999999;
-        if (from != lastFrom_ || to != lastTo_) {
-            frameSpin_->setRange(std::max(from, 1), std::max(to, 1));
+        if (in != lastIn_ || out != lastOut_) {
+            frameSpin_->setRange(std::max(in, 1), std::max(out, 1));
             inSpin_->setRange(1, kRangeMax);
             outSpin_->setRange(1, kRangeMax);
         }
@@ -523,11 +667,10 @@ void TimelinePanel_Qt::refreshFromPlayback() {
         }
     }
 
-    if (from != lastFrom_ || to != lastTo_) {
-        scrubber_->setRange(from, to);
-    }
+    // The scrubber maps the in/out view across the full width (same as the
+    // track rows), so its range IS [in, out]; no separate in/out highlight.
     if (in != lastIn_ || out != lastOut_) {
-        scrubber_->setInOut(in, out);
+        scrubber_->setRange(in, out);
     }
     if (cur != lastCur_) scrubber_->setCurrentFrame(cur);
     if (playing != lastPlaying_) playBtn_->setText(playing ? "⏸" : "▶");

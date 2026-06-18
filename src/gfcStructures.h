@@ -295,8 +295,10 @@ public:
 
 		defaultTextureFormat=GFC_16HALF;
 		defaultDecodeFilter = FILTERLANCZOS_ID;
+		showThumbnails=true;
 
 	}
+    bool showThumbnails;   // timeline filmstrip thumbnails (default on)
     int startFullscreen;
     int playbackOnLoad;
     float bgColor;
