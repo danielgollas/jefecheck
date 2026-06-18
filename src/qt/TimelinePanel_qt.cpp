@@ -381,9 +381,17 @@ void TimelineTracks_Qt::contextMenuEvent(QContextMenuEvent* e) {
 
     QAction* setOff = menu.addAction("Set offset…");
 
+    menu.addSeparator();
+    QAction* thumbs = menu.addAction("Show frame thumbnails");
+    thumbs->setCheckable(true);
+    thumbs->setChecked(jefe::qt::getThumbnailsEnabled());
+
     QAction* chosen = menu.exec(e->globalPos());
     if (chosen == hold) {
         jefe::qt::setTrackHoldMode(track, hold->isChecked());
+        refresh();
+    } else if (chosen == thumbs) {
+        jefe::qt::setThumbnailsEnabled(thumbs->isChecked());
         refresh();
     } else if (chosen == setOff) {
         bool ok = false;
@@ -512,6 +520,19 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     fpsSpin_->setAccessibleName("Target FPS");
     transport->addWidget(fpsSpin_);
 
+    thumbsBtn_ = new QPushButton("🎞", this);
+    thumbsBtn_->setCheckable(true);
+    thumbsBtn_->setChecked(jefe::qt::getThumbnailsEnabled());
+    thumbsBtn_->setToolTip("Show frame thumbnails on the timeline");
+    thumbsBtn_->setObjectName("transport.thumbnails.toggle");
+    thumbsBtn_->setAccessibleName("Show frame thumbnails");
+    thumbsBtn_->setFixedWidth(32);
+    transport->addWidget(thumbsBtn_);
+    connect(thumbsBtn_, &QPushButton::toggled, this, [this](bool on) {
+        jefe::qt::setThumbnailsEnabled(on);
+        if (tracks_) tracks_->refresh();
+    });
+
     scrubber_ = new TimelineScrubber_Qt(this);
     tracks_   = new TimelineTracks_Qt(this);
 
@@ -566,6 +587,17 @@ void TimelinePanel_Qt::refreshFromPlayback() {
     // loaded fill grows during decode even while frame/range hold), and
     // refresh() is itself cache-gated, so do it before the fast-path.
     tracks_->refresh();
+
+    // Keep the thumbnails toggle button in sync if the state was changed
+    // elsewhere (e.g. the track right-click menu). Signal-blocked so it
+    // doesn't re-enter setThumbnailsEnabled.
+    if (thumbsBtn_) {
+        const bool on = jefe::qt::getThumbnailsEnabled();
+        if (thumbsBtn_->isChecked() != on) {
+            const QSignalBlocker b(thumbsBtn_);
+            thumbsBtn_->setChecked(on);
+        }
+    }
 
     const int from = jefe::qt::getFromFrame();
     const int to   = jefe::qt::getToFrame();
