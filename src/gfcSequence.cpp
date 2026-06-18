@@ -2049,6 +2049,10 @@ int gfcSequence::getNumFrames() {
 	return files.size();
 }
 
+int gfcSequence::getLoadedFrameCount() {
+	return (int)loadedFrames.size();
+}
+
 int gfcSequence::getNumPreviewFrames()
 {
 	return previewFiles.size();

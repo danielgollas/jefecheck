@@ -19,7 +19,7 @@ extern gfcPlateManager plateManager;
 gfcPlaybackManager::gfcPlaybackManager() {
     myGUI=NULL;
     currentDirection=1;
-    playbackMode=LOOPMODEONCE_ID;
+    playbackMode=LOOPMODELOOP_ID;  // default to looping playback
     loopPriority=GFC_LOOPPRIORITY_SHORTEST;
     allowNetworkMessages=true;
 	inPoint=1;
@@ -65,7 +65,7 @@ void gfcPlaybackManager::update() {
 
     int endLimit=getEndLimit();
     int startLimit=getStartLimit();
-   
+
     if (!playing) { //TODO: sleep should not be handled here, figure a better way, probably timing if there hasn't been a callback in a while then go to sleep.
 /*
 
@@ -524,7 +524,14 @@ void gfcPlaybackManager::setOutPoint(int frame)
 	if (inPoint>outPoint) {
 		setInPoint(outPoint);
 	}
-	
+	// The timeline total follows the out point: the timeline range is
+	// freely editable and not capped to the loaded track length, so
+	// pushing the out point past the current end grows the timeline to
+	// contain it (lets the user view/play offset frames beyond a track).
+	if (outPoint>to) {
+		setToFrame(outPoint);
+	}
+
 	myGUI->setTimelineOut(outPoint);
 	myGUI->setOutPoint(outPoint);
 	updateTimeCode();
