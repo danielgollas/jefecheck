@@ -265,6 +265,7 @@ public:
         maxRecentFXStacks=5;
 		maxRecentFXs=5;
         maxRecentSessions=5;
+        startupSessionBehavior=2;  // 0=Empty, 1=Reopen last, 2=Ask
         maxRecentBrowsed=10;
         maxRecentIPs=5;
         maximumFramesInQueue=5;
@@ -354,6 +355,7 @@ public:
     int maxRecentFXStacks;
 	int maxRecentFXs;
     int maxRecentSessions;
+    int startupSessionBehavior;  // 0=Empty, 1=Reopen last, 2=Ask
     int maxRecentBrowsed;
     int maxRecentIPs;
 
