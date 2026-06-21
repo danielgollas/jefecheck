@@ -135,6 +135,10 @@ bool isPlaying();
 void toggleHistogramActiveQuad();
 void toggleHistogramAll();
 
+// On-screen help overlay (FLTK's bare 'h' toggleHelp; bare H is flop in
+// Qt, so this is a Help-menu item with no single-key shortcut).
+void toggleOnScreenHelp();
+
 // LUT browser — backs the Qt LUT dock. Names mirror lutManager's
 // public API (getAllNames). loadLUTFile pulls a .lut/.cub/.cube/.tga
 // off disk; applyLUTToActivePlate(idx) calls plateManager.setLUT on

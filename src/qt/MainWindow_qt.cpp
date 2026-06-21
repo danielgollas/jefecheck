@@ -641,6 +641,19 @@ void MainWindow_Qt::buildMenuBar() {
         QDesktopServices::openUrl(QUrl(
             "https://github.com/danielgollas/jefecheck/blob/main/docs/quick-start.md"));
     })->setObjectName("menu.help.quickstart");
+    // FLTK's "Online Support" / "Video Tutorials" pointed at the dead
+    // jefecorp.com domain. The open-source release routes support to the
+    // GitHub issue tracker instead; there are no video tutorials to link.
+    helpMenu->addAction(tr("&Report an Issue…"), this, []() {
+        QDesktopServices::openUrl(QUrl(
+            "https://github.com/danielgollas/jefecheck/issues"));
+    })->setObjectName("menu.help.issues");
+    helpMenu->addSeparator();
+    // On-screen help overlay (FLTK's bare 'h' toggleHelp). Menu item only —
+    // bare H is flop in the Qt build.
+    helpMenu->addAction(tr("Toggle On-Screen &Help"), this, []() {
+        jefe::qt::toggleOnScreenHelp();
+    })->setObjectName("menu.help.onscreen");
     helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
         this, [this]() {
