@@ -854,6 +854,23 @@ int getLUTOnActivePlate() {
     return gui ? gui->getLUT() : 0;
 }
 
+std::vector<LutSummary> getLutSummaries() {
+    std::vector<LutSummary> out;
+    const auto names = lutManager.getAllNames();
+    out.reserve(names.size());
+    for (int i = 0; i < (int)names.size(); ++i) {
+        CubeLUT lut = lutManager.getLUT(i);   // copies; only on manual refresh
+        LutSummary s;
+        s.name     = lut.getNameNoPath();
+        s.is3D     = (lut.type != CubeLUT::JEFECHECK1D);
+        s.size     = lut.size;
+        s.fromBits = lut.fromBits;
+        s.toBits   = lut.toBits;
+        out.push_back(std::move(s));
+    }
+    return out;
+}
+
 LutPreviewData getLutPreview(int guiLutIndex) {
     LutPreviewData d;
     if (guiLutIndex <= 0) return d;          // 0 = "(No LUT)"
@@ -875,29 +892,31 @@ LutPreviewData getLutPreview(int guiLutIndex) {
         return d;
     }
 
-    // 3D: subsample the cube so the emitted point count stays bounded.
-    constexpr int kMaxPreviewPoints = 20000;
+    // 3D: build a structured working grid (with adjacency, so the widget
+    // can draw faces / lattice / dots). Subsample large cubes to a bounded
+    // working edge so faces and lattice stay manageable.
+    constexpr int kMaxCubeEdge = 33;
     const int s = lut.size;
-    int axisTarget = (int)std::cbrt((double)kMaxPreviewPoints);
-    if (axisTarget < 2) axisTarget = 2;
-    int stride = (s + axisTarget - 1) / axisTarget;
-    if (stride < 1) stride = 1;
-    const float denom = (s > 1) ? (float)(s - 1) : 1.f;
+    int stride = 1;
+    while ((s + stride - 1) / stride > kMaxCubeEdge) ++stride;
+    const int cs = (s + stride - 1) / stride;   // working edge (ceil)
+    d.cubeSize = cs;
+    d.cubeRGB.resize((size_t)cs * cs * cs * 3);
     auto clamp01 = [](double v) { return (float)(v < 0 ? 0 : (v > 1 ? 1 : v)); };
-    for (int x = 0; x < s; x += stride) {
-        for (int y = 0; y < s; y += stride) {
-            for (int z = 0; z < s; z += stride) {
+    for (int ix = 0; ix < cs; ++ix) {
+        const int x = std::min(ix * stride, s - 1);
+        for (int iy = 0; iy < cs; ++iy) {
+            const int y = std::min(iy * stride, s - 1);
+            for (int iz = 0; iz < cs; ++iz) {
+                const int z = std::min(iz * stride, s - 1);
                 const Vec3D& c = lut.cube[x][y][z];
-                d.points3D.push_back(x / denom);
-                d.points3D.push_back(y / denom);
-                d.points3D.push_back(z / denom);
-                d.points3D.push_back(clamp01(c.x));
-                d.points3D.push_back(clamp01(c.y));
-                d.points3D.push_back(clamp01(c.z));
+                const size_t idx = (((size_t)ix * cs + iy) * cs + iz) * 3;
+                d.cubeRGB[idx + 0] = clamp01(c.x);
+                d.cubeRGB[idx + 1] = clamp01(c.y);
+                d.cubeRGB[idx + 2] = clamp01(c.z);
             }
         }
     }
-    d.point3DCount = (int)(d.points3D.size() / 6);
     return d;
 }
 

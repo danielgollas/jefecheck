@@ -646,14 +646,27 @@ struct LutPreviewData {
     std::string name;
     // 1D: `size` output samples (raw, in [0, max1D]).
     std::vector<float> curve1D;
-    // 3D: flat [x,y,z, r,g,b] per sampled point. Positions are normalized
-    // grid coords in [0,1]; colors are the clamped mapped RGB. Subsampled
-    // so the count stays bounded.
-    std::vector<float> points3D;
-    int                point3DCount = 0;  // points3D.size() / 6
+    // 3D: structured cube grid (with adjacency, for faces/lattice/dots).
+    // `cubeSize` is the working edge after any subsample; `cubeRGB` holds
+    // cubeSize^3 nodes × 3 floats = the node's clamped output RGB, x-major:
+    // node (x,y,z) at index ((x*cubeSize + y)*cubeSize + z) * 3.
+    int                cubeSize = 0;
+    std::vector<float> cubeRGB;
 };
 
 LutPreviewData getLutPreview(int guiLutIndex);
+
+// Lightweight per-LUT metadata for the sortable LUT browser table (no cube
+// data copied). One entry per loaded LUT, in lutManager order; the panel's
+// gui index for entry i is (i + 1) (row 0 is the "(No LUT)" slot).
+struct LutSummary {
+    std::string name;
+    bool is3D     = false;
+    int  size     = 0;
+    int  fromBits = 0;
+    int  toBits   = 0;
+};
+std::vector<LutSummary> getLutSummaries();
 
 }  // namespace jefe::qt
 
