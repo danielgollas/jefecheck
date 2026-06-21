@@ -175,6 +175,21 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     buildDocks();
     restoreLayout();
 
+    // Seed session state from QSettings + capture last-run clean-exit flag.
+    {
+        QSettings s;
+        std::vector<std::string> recents;
+        for (const QString& p : s.value("Session/recent").toStringList())
+            recents.push_back(p.toStdString());
+        jefe::qt::setRecentSessions(recents);
+        jefe::qt::setStartupSessionBehavior(
+            s.value("Session/startupBehavior", 2).toInt());
+        lastExitWasClean_ = s.value("Session/cleanExit", true).toBool();
+        s.setValue("Session/cleanExit", false);   // unclean until proven otherwise
+    }
+    // App-global color-correction favorites (persist across launches).
+    jefe::qt::loadCCFavoritesFile(jefe::qt::getFavoritesFilePath());
+
     // Window-scoped layout shortcuts. Qt's QShortcut delivers regardless
     // of whether the viewport, a dock widget, or the menu bar has focus —
     // GlViewport_Qt's keyPressEvent only fires when the viewport itself
@@ -302,6 +317,10 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // paint events fire, AX queries get answered, and the user
     // sees the "Startup: Loading FXs (12/35)…" label tick forward.
     QTimer::singleShot(250, this, [this]() { startAutoload(); });
+
+    // Session recovery runs after the GL context is alive (loadSession uploads
+    // preview textures) — deferred past the autoload kick.
+    QTimer::singleShot(400, this, [this]() { maybeRestoreSessionAtStartup(); });
 
     // Fast playback tick (~250Hz) for tight FPS pacing. The frame-advance
     // logic in gfcPlaybackManager accumulates real wall-clock time and only
@@ -875,7 +894,40 @@ void MainWindow_Qt::saveLayout() {
 
 void MainWindow_Qt::closeEvent(QCloseEvent* e) {
     saveLayout();
+    // Write the recovery session and mark a clean exit so the next launch can
+    // distinguish a crash from a normal close. Persist recent sessions.
+    jefe::qt::writeRecoverySession();
+    {
+        QSettings s;
+        s.setValue("Session/cleanExit", true);
+        QStringList rs;
+        for (const auto& p : jefe::qt::getRecentSessions())
+            rs << QString::fromStdString(p);
+        s.setValue("Session/recent", rs);
+    }
     QMainWindow::closeEvent(e);
+}
+
+void MainWindow_Qt::maybeRestoreSessionAtStartup() {
+    if (!viewport_) return;
+    if (!jefe::qt::getHasRecoverableSession()) return;
+    const int mode = jefe::qt::getStartupSessionBehavior();  // 0 empty,1 reopen,2 ask
+    auto doLoad = [this]() {
+        viewport_->makeCurrent();
+        jefe::qt::loadRecoverySession();
+        viewport_->doneCurrent();
+        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        viewport_->update();
+    };
+    if (mode == 1) { doLoad(); return; }                     // Reopen
+    if (mode == 0 && lastExitWasClean_) return;              // Empty + clean → nothing
+    // Ask (mode 2), or Empty after an unclean exit → prompt.
+    const QString msg = lastExitWasClean_
+        ? tr("Reopen your last session?")
+        : tr("JefeCheck didn't close normally last time. "
+             "Recover the previous session?");
+    if (QMessageBox::question(this, tr("Session"), msg) == QMessageBox::Yes)
+        doLoad();
 }
 
 void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
