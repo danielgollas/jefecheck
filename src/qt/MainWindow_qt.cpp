@@ -175,6 +175,21 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     buildDocks();
     restoreLayout();
 
+    // Seed session state from QSettings + capture last-run clean-exit flag.
+    {
+        QSettings s;
+        std::vector<std::string> recents;
+        for (const QString& p : s.value("Session/recent").toStringList())
+            recents.push_back(p.toStdString());
+        jefe::qt::setRecentSessions(recents);
+        jefe::qt::setStartupSessionBehavior(
+            s.value("Session/startupBehavior", 2).toInt());
+        lastExitWasClean_ = s.value("Session/cleanExit", true).toBool();
+        s.setValue("Session/cleanExit", false);   // unclean until proven otherwise
+    }
+    // App-global color-correction favorites (persist across launches).
+    jefe::qt::loadCCFavoritesFile(jefe::qt::getFavoritesFilePath());
+
     // Window-scoped layout shortcuts. Qt's QShortcut delivers regardless
     // of whether the viewport, a dock widget, or the menu bar has focus —
     // GlViewport_Qt's keyPressEvent only fires when the viewport itself
@@ -302,6 +317,10 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // paint events fire, AX queries get answered, and the user
     // sees the "Startup: Loading FXs (12/35)…" label tick forward.
     QTimer::singleShot(250, this, [this]() { startAutoload(); });
+
+    // Session recovery runs after the GL context is alive (loadSession uploads
+    // preview textures) — deferred past the autoload kick.
+    QTimer::singleShot(400, this, [this]() { maybeRestoreSessionAtStartup(); });
 
     // Fast playback tick (~250Hz) for tight FPS pacing. The frame-advance
     // logic in gfcPlaybackManager accumulates real wall-clock time and only
@@ -446,6 +465,21 @@ void MainWindow_Qt::buildMenuBar() {
     loadMgrAction->setObjectName("menu.file.loadmgr");
     connect(loadMgrAction, &QAction::triggered, this, &MainWindow_Qt::openLoadWindow);
 
+    fileMenu->addSeparator();
+    auto* saveSessAction = fileMenu->addAction(tr("&Save Session"),
+        QKeySequence(QKeySequence::Save), this, [this]() { doSaveSession(false); });
+    saveSessAction->setObjectName("menu.file.savesession");
+    auto* saveAsAction = fileMenu->addAction(tr("Save Session &As…"),
+        this, [this]() { doSaveSession(true); });
+    saveAsAction->setObjectName("menu.file.savesessionas");
+    auto* openSessAction = fileMenu->addAction(tr("&Open Session…"),
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O),
+        this, [this]() { doOpenSession(); });
+    openSessAction->setObjectName("menu.file.opensession");
+    recentMenu_ = fileMenu->addMenu(tr("Recent Sessions"));
+    recentMenu_->setObjectName("menu.file.recent");
+    connect(fileMenu, &QMenu::aboutToShow, this, [this]() { rebuildRecentSessionsMenu(); });
+
     // File → Render… opens RenderDialog_Qt (PR-39a). Modal exec();
     // synchronous renderPlate freezes the dialog until done — async
     // + a worker thread come in PR-39b. No shortcut wired yet
@@ -524,6 +558,34 @@ void MainWindow_Qt::buildMenuBar() {
     };
     // Filled in after buildDocks() runs, see below.
     (void)rememberDockToggle;
+
+    // View → Color Correction Favorites: 5 save/load slots on the active plate.
+    // Menu-only (no Ctrl+1-5 shortcuts — they'd collide with the layout ones).
+    viewMenu->addSeparator();
+    auto* ccFavMenu = viewMenu->addMenu(tr("Color Correction Favorites"));
+    ccFavMenu->setObjectName("menu.view.ccfavorites");
+    for (int i = 0; i < 5; ++i) {
+        QAction* save = ccFavMenu->addAction(tr("Save to Slot %1").arg(i + 1));
+        save->setObjectName(QString("menu.view.ccfav.save.%1").arg(i));
+        connect(save, &QAction::triggered, this, [this, i]() {
+            jefe::qt::saveCCFavoriteFromActive(i);
+            jefe::qt::saveCCFavoritesFile(jefe::qt::getFavoritesFilePath());
+            statusBar()->showMessage(
+                tr("Saved color correction to favorite %1").arg(i + 1), 3000);
+        });
+    }
+    ccFavMenu->addSeparator();
+    for (int i = 0; i < 5; ++i) {
+        QAction* load = ccFavMenu->addAction(tr("Load Slot %1").arg(i + 1));
+        load->setObjectName(QString("menu.view.ccfav.load.%1").arg(i));
+        connect(load, &QAction::triggered, this, [this, i]() {
+            jefe::qt::applyCCFavoriteToActive(i);
+            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+            if (viewport_) viewport_->update();
+            statusBar()->showMessage(
+                tr("Loaded color correction favorite %1").arg(i + 1), 3000);
+        });
+    }
 
     auto* helpMenu = mb->addMenu("&Help");
     helpMenu->setObjectName("menu.help");
@@ -786,6 +848,92 @@ void MainWindow_Qt::restoreLayout() {
     }
 }
 
+void MainWindow_Qt::doSaveSession(bool forceDialog) {
+    QString path = currentSessionPath_;
+    if (forceDialog || path.isEmpty()) {
+        path = QFileDialog::getSaveFileName(this, tr("Save Session"),
+                   path.isEmpty() ? QString() : path,
+                   tr("JefeCheck Session (*.jcs)"));
+        if (path.isEmpty()) return;
+    }
+    if (jefe::qt::saveSession(path.toStdString())) {
+        currentSessionPath_ = path;
+        updateSessionTitle();
+        statusBar()->showMessage(
+            tr("Saved session: %1").arg(QFileInfo(path).fileName()), 4000);
+    } else {
+        QMessageBox::warning(this, tr("Save Session"),
+                             tr("Could not save the session."));
+    }
+}
+
+void MainWindow_Qt::doOpenSession() {
+    const QString path = QFileDialog::getOpenFileName(this, tr("Open Session"),
+                             QString(), tr("JefeCheck Session (*.jcs)"));
+    if (path.isEmpty()) return;
+    openSessionPath(path);
+}
+
+void MainWindow_Qt::openSessionPath(const QString& path) {
+    if (!viewport_) return;
+    viewport_->makeCurrent();          // loadSession uploads preview textures
+    const bool ok = jefe::qt::loadSession(path.toStdString());
+    if (ok) jefe::qt::startLoadingAllTracks();   // loadSession restores params +
+                                                 // a preview but doesn't kick the
+                                                 // full decode — do it (= "Load All")
+    viewport_->doneCurrent();
+    if (ok) {
+        currentSessionPath_ = path;
+        updateSessionTitle();
+        refreshAfterSessionLoad();
+        statusBar()->showMessage(
+            tr("Opened session: %1").arg(QFileInfo(path).fileName()), 4000);
+    } else {
+        QMessageBox::warning(this, tr("Open Session"),
+                             tr("Could not open the session."));
+    }
+}
+
+void MainWindow_Qt::refreshAfterSessionLoad() {
+    // loadSession sets plate/track params synchronously but the sequences
+    // re-decode asynchronously (loader thread → frames arrive over the next
+    // ticks). Refresh the not-per-tick widgets now AND again shortly after,
+    // so the loaded-state-dependent UI (plate cards, LUT/timeline, viewport)
+    // catches up once the async load has progressed. (Status labels + the
+    // timeline already refresh every tick.)
+    auto refresh = [this]() {
+        if (plateManagerWidget_)   plateManagerWidget_->refreshAllCards();
+        if (lutPanelWidget_)       lutPanelWidget_->refreshList();
+        if (timelinePanelWidget_)  timelinePanelWidget_->refreshFromPlayback();
+        if (viewport_)             viewport_->update();
+    };
+    refresh();
+    QTimer::singleShot(250, this, refresh);
+    QTimer::singleShot(750, this, refresh);
+}
+
+void MainWindow_Qt::rebuildRecentSessionsMenu() {
+    if (!recentMenu_) return;
+    recentMenu_->clear();
+    const auto recents = jefe::qt::getRecentSessions();
+    bool any = false;
+    for (auto it = recents.rbegin(); it != recents.rend(); ++it) {  // newest first
+        const QString p = QString::fromStdString(*it);
+        if (!QFileInfo::exists(p)) continue;                        // prune missing
+        any = true;
+        QAction* a = recentMenu_->addAction(QFileInfo(p).fileName());
+        a->setToolTip(p);
+        connect(a, &QAction::triggered, this, [this, p]() { openSessionPath(p); });
+    }
+    if (!any) recentMenu_->addAction(tr("(none)"))->setEnabled(false);
+}
+
+void MainWindow_Qt::updateSessionTitle() {
+    if (currentSessionPath_.isEmpty()) setWindowTitle("JefeCheck");
+    else setWindowTitle(QString("JefeCheck — %1")
+                            .arg(QFileInfo(currentSessionPath_).fileName()));
+}
+
 void MainWindow_Qt::saveLayout() {
     QSettings s;
     s.setValue(kSettingsGeometry, saveGeometry());
@@ -794,7 +942,40 @@ void MainWindow_Qt::saveLayout() {
 
 void MainWindow_Qt::closeEvent(QCloseEvent* e) {
     saveLayout();
+    // Write the recovery session and mark a clean exit so the next launch can
+    // distinguish a crash from a normal close. Persist recent sessions.
+    jefe::qt::writeRecoverySession();
+    {
+        QSettings s;
+        s.setValue("Session/cleanExit", true);
+        QStringList rs;
+        for (const auto& p : jefe::qt::getRecentSessions())
+            rs << QString::fromStdString(p);
+        s.setValue("Session/recent", rs);
+    }
     QMainWindow::closeEvent(e);
+}
+
+void MainWindow_Qt::maybeRestoreSessionAtStartup() {
+    if (!viewport_) return;
+    if (!jefe::qt::getHasRecoverableSession()) return;
+    const int mode = jefe::qt::getStartupSessionBehavior();  // 0 empty,1 reopen,2 ask
+    auto doLoad = [this]() {
+        viewport_->makeCurrent();
+        if (jefe::qt::loadRecoverySession())
+            jefe::qt::startLoadingAllTracks();   // kick the full decode (= Load All)
+        viewport_->doneCurrent();
+        refreshAfterSessionLoad();
+    };
+    if (mode == 1) { doLoad(); return; }                     // Reopen
+    if (mode == 0 && lastExitWasClean_) return;              // Empty + clean → nothing
+    // Ask (mode 2), or Empty after an unclean exit → prompt.
+    const QString msg = lastExitWasClean_
+        ? tr("Reopen your last session?")
+        : tr("JefeCheck didn't close normally last time. "
+             "Recover the previous session?");
+    if (QMessageBox::question(this, tr("Session"), msg) == QMessageBox::Yes)
+        doLoad();
 }
 
 void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {

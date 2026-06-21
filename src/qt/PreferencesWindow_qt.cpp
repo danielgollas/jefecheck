@@ -154,6 +154,26 @@ void PreferencesWindow_Qt::buildGeneralPage() {
             [](bool on) { sett.enableCrashRecoverySession = on ? 1 : 0; });
     form->addRow(QString(), recovery);
 
+    // On launch: what to do with the previous session. Persisted under
+    // Session/startupBehavior; the MainWindow constructor seeds sett from it.
+    auto* startup = new QComboBox(page);
+    startup->addItem("Start empty");          // 0
+    startup->addItem("Reopen last session");  // 1
+    startup->addItem("Ask");                  // 2
+    startup->setObjectName("prefs.session.startup");
+    startup->setAccessibleName("On launch session behavior");
+    {
+        QSettings s;
+        startup->setCurrentIndex(s.value("Session/startupBehavior", 2).toInt());
+    }
+    connect(startup, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            page, [](int idx) {
+        sett.startupSessionBehavior = idx;
+        QSettings s;
+        s.setValue("Session/startupBehavior", idx);
+    });
+    form->addRow("On launch", startup);
+
     auto* aspect = new QDoubleSpinBox(page);
     aspect->setRange(0.0, 1.0);
     aspect->setSingleStep(0.05);

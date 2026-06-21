@@ -243,6 +243,18 @@ The LUT panel has an in-window preview: a QPainter 2D curve for 1D LUTs and an i
 - **Sortable table**: the LUT browser is a `QTreeWidget` (Name/Type/Size/Depth). Numeric columns sort via a `QTreeWidgetItem` subclass comparing an int stashed in a custom data role — plain display-text sort is lexical ("1024" < "16³").
 - **Image-based (.tga) LUTs load via OIIO** now: `gfcReadImageRGB8` (in the OIIO loader) feeds `CubeLUT`'s `IMAGELUT2D` path; the shipped `UnitCube.tga` is a handy identity-cube sanity check. Only 64×64 image LUTs are wired (Nuke 448×448 reports unsupported).
 
+## 17. Session save / restore
+
+Wires the GUI-free `gfcSessionManager` into Qt via `jefe::qt::*`. Key points:
+
+- **`loadSession` / `loadRecoverySession` must run with the viewport GL context current** — they decode preview frames (texture uploads). `MainWindow` wraps them in `makeCurrent`/`doneCurrent` (same rule as the LUT autoload).
+- **`loadSession` restores params + a preview but does NOT kick the full decode.** After a successful load, call `jefe::qt::startLoadingAllTracks()` (= the Load window's "Load All") or the footage stays unloaded. This was the "had to open the load window then press Load All" bug.
+- **Async refresh.** Sequences re-decode on the loader thread (frames arrive over the next ticks). `refreshAfterSessionLoad()` refreshes the not-per-tick widgets (plate cards, LUT panel, timeline, viewport) **immediately and again at 250/750ms**. (Status labels + timeline already refresh every tick.)
+- **`writeRecoverySession` is unconditional** (not gated on `enableCrashRecoverySession`) — the `On launch` preference governs whether the recovery file is *consumed*, not whether it's written.
+- **Clean-exit detection:** `QSettings("Session/cleanExit")` set `true` in `closeEvent`, cleared to `false` at startup — distinguishes a crash from a clean close for the recovery prompt.
+- **Recent sessions** in `QSettings("Session/recent")` (cap 5; seeded into `sett` at startup, written back on close). **CC favorites** persist app-globally in `favorites.jcs` *and* embed in each `.jcs` (a `ccFavorites` node). View-menu only — no `Ctrl+1–5` shortcuts (clash with layout).
+- **`updateAllFromGUI` caveat (§2):** `loadSession` ends with `updateAllFromGUI`, which can reset framing/active-quad; if a restored layout is wrong, re-apply framing post-load.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.

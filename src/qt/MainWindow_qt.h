@@ -26,6 +26,7 @@ class RemoteDialog_Qt;
 class PlateManager_Qt;
 class QComboBox;
 class QLabel;
+class QMenu;
 class TimelinePanel_Qt;
 class QTimer;
 
@@ -59,6 +60,18 @@ private:
     void buildDocks();
     void restoreLayout();
     void saveLayout();
+
+    // Session save/restore.
+    void doSaveSession(bool forceDialog);
+    void doOpenSession();
+    void openSessionPath(const QString& path);   // GL-current load + bookkeeping
+    void refreshAfterSessionLoad();               // cards/LUT/timeline/viewport
+    void rebuildRecentSessionsMenu();
+    void updateSessionTitle();
+    void maybeRestoreSessionAtStartup();
+    QString currentSessionPath_;
+    QMenu*  recentMenu_ = nullptr;
+    bool    lastExitWasClean_ = true;
 
     void startAutoload();
     void autoloadStep();
