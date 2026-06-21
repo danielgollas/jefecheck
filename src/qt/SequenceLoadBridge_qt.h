@@ -127,6 +127,7 @@ int  getInPoint();
 int  getOutPoint();
 void setInPoint(int frame);
 void setOutPoint(int frame);
+void setInPointAndLoad();   // FLTK Alt+I: set in point + reload tracks there
 bool isPlaying();
 
 // Histogram overlay (Ctrl+H active quad / Ctrl+Alt+H all plates). Toggles

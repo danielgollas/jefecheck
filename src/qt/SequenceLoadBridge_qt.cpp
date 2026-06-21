@@ -273,6 +273,15 @@ void setPlayDirection(int direction) {
     playbackManager.setDirection(direction);
 }
 
+void setInPointAndLoad() {
+    // FLTK's Alt+I: set the in point at the current frame and (re)start all
+    // tracks loading from one frame earlier, so footage is decoded around
+    // the new in point. Async — the per-tick texture drain uploads frames.
+    const int cur = playbackManager.getCurrentFrame();
+    trackManager.startLoadingAllAt(cur - 1);
+    playbackManager.setInPoint(cur);
+}
+
 void fastFwdPlayback() {
     playbackManager.ffwd();
 }
