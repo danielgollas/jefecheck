@@ -439,6 +439,12 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
         // In / out points (FLTK I/O). Bare = at current frame; Shift = to the
         // timeline ends.
         case Qt::Key_I:
+            if (alt && !ctrl) {
+                // FLTK Alt+I: set in point at current frame + reload tracks.
+                jefe::qt::setInPointAndLoad();
+                handled();
+                return;
+            }
             if (!ctrl && !alt) {
                 jefe::qt::setInPoint(shift ? jefe::qt::getFromFrame()
                                            : jefe::qt::getCurrentFrame());

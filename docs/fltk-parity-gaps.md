@@ -32,7 +32,7 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 ## F. Playback / transport keyboard shortcuts
 Qt has Space (pause), Left/Right (step), Up/Down (track cycle). FLTK additionally had:
 - ✅ **Playback direction** `.` (fwd) / `,` (rev) and **frame step** `C` (fwd) / `X` (rev) — DONE (transport-keys PR; `c`/`x` reuse `stepFrame`, `.`/`,` via new `setPlayDirection`). **Rewind / fast-fwd** ✅ `Home`/`End` (FLTK's `Z`/`V` are taken by flip/flop in Qt). **Loop mode** ✅ `8`/`9`/`0` (once/loop/bounce) — DONE (shortcut-parity PR).
-- 🟡 **In/Out point keys** ✅ `I`/`O` set in/out at current frame; `Shift+I`/`Shift+O` set to timeline ends — DONE (shortcut-parity PR). Alt set-and-load-at variant still TODO.
+- ✅ **In/Out point keys** `I`/`O` set in/out at current frame; `Shift+I`/`Shift+O` set to timeline ends (shortcut-parity PR); ✅ `Alt+I` sets the in point and reloads all tracks from there (inout-alt PR, via `setInPointAndLoad` → `trackManager.startLoadingAllAt`).
 - ⚪ **LUT cycling** `L` + Up/Down — the audit misattributed this: FLTK's `l` opens the load window (already `Ctrl+L` in Qt), it does not cycle LUTs. Nothing to port.
 
 ## G. Channel toggles
