@@ -673,6 +673,11 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     }
     p.prefix       = src.prefix;
     p.postfix      = src.postfix;
+    p.jpegQuality     = src.jpegQuality;
+    p.pngQuality      = src.pngQuality;
+    p.tiffCompression = src.tiffCompression;
+    p.exrCompression  = src.exrCompression;
+    p.exrFormat       = src.exrFormat;
     return p;
 }
 }  // namespace
