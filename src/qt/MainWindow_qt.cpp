@@ -878,18 +878,38 @@ void MainWindow_Qt::openSessionPath(const QString& path) {
     if (!viewport_) return;
     viewport_->makeCurrent();          // loadSession uploads preview textures
     const bool ok = jefe::qt::loadSession(path.toStdString());
+    if (ok) jefe::qt::startLoadingAllTracks();   // loadSession restores params +
+                                                 // a preview but doesn't kick the
+                                                 // full decode — do it (= "Load All")
     viewport_->doneCurrent();
     if (ok) {
         currentSessionPath_ = path;
         updateSessionTitle();
-        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-        viewport_->update();
+        refreshAfterSessionLoad();
         statusBar()->showMessage(
             tr("Opened session: %1").arg(QFileInfo(path).fileName()), 4000);
     } else {
         QMessageBox::warning(this, tr("Open Session"),
                              tr("Could not open the session."));
     }
+}
+
+void MainWindow_Qt::refreshAfterSessionLoad() {
+    // loadSession sets plate/track params synchronously but the sequences
+    // re-decode asynchronously (loader thread → frames arrive over the next
+    // ticks). Refresh the not-per-tick widgets now AND again shortly after,
+    // so the loaded-state-dependent UI (plate cards, LUT/timeline, viewport)
+    // catches up once the async load has progressed. (Status labels + the
+    // timeline already refresh every tick.)
+    auto refresh = [this]() {
+        if (plateManagerWidget_)   plateManagerWidget_->refreshAllCards();
+        if (lutPanelWidget_)       lutPanelWidget_->refreshList();
+        if (timelinePanelWidget_)  timelinePanelWidget_->refreshFromPlayback();
+        if (viewport_)             viewport_->update();
+    };
+    refresh();
+    QTimer::singleShot(250, this, refresh);
+    QTimer::singleShot(750, this, refresh);
 }
 
 void MainWindow_Qt::rebuildRecentSessionsMenu() {
@@ -942,10 +962,10 @@ void MainWindow_Qt::maybeRestoreSessionAtStartup() {
     const int mode = jefe::qt::getStartupSessionBehavior();  // 0 empty,1 reopen,2 ask
     auto doLoad = [this]() {
         viewport_->makeCurrent();
-        jefe::qt::loadRecoverySession();
+        if (jefe::qt::loadRecoverySession())
+            jefe::qt::startLoadingAllTracks();   // kick the full decode (= Load All)
         viewport_->doneCurrent();
-        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-        viewport_->update();
+        refreshAfterSessionLoad();
     };
     if (mode == 1) { doLoad(); return; }                     // Reopen
     if (mode == 0 && lastExitWasClean_) return;              // Empty + clean → nothing

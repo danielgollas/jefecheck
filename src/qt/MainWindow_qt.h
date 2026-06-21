@@ -65,6 +65,7 @@ private:
     void doSaveSession(bool forceDialog);
     void doOpenSession();
     void openSessionPath(const QString& path);   // GL-current load + bookkeeping
+    void refreshAfterSessionLoad();               // cards/LUT/timeline/viewport
     void rebuildRecentSessionsMenu();
     void updateSessionTitle();
     void maybeRestoreSessionAtStartup();
