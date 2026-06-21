@@ -40,10 +40,14 @@ TIMELINE_THUMBS_TOGGLE = "transport.thumbnails.toggle"
 # shortcut bound to each action instead.
 MENU_FILE = "menu.file"
 MENU_FILE_LOAD = "menu.file.load"
+MENU_FILE_SAVE_SESSION = "menu.file.savesession"
+MENU_FILE_OPEN_SESSION = "menu.file.opensession"
+MENU_FILE_RECENT = "menu.file.recent"
 MENU_FILE_PREFERENCES = "menu.file.preferences"
 MENU_FILE_QUIT = "menu.file.quit"
 MENU_VIEW = "menu.view"
 MENU_VIEW_FULLSCREEN = "menu.view.fullscreen"
+MENU_VIEW_CCFAVORITES = "menu.view.ccfavorites"
 MENU_HELP = "menu.help"
 # NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's
 # objectName — every menu item appears with `identifier='qt_itemFired:'`
