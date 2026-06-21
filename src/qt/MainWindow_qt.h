@@ -69,6 +69,8 @@ private:
     void rebuildRecentSessionsMenu();
     void updateSessionTitle();
     void maybeRestoreSessionAtStartup();
+    void toggleHideControls();
+    bool controlsHidden_ = false;
     QString currentSessionPath_;
     QMenu*  recentMenu_ = nullptr;
     bool    lastExitWasClean_ = true;

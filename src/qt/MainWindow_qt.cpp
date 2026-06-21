@@ -22,7 +22,9 @@
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDir>
+#include <QDesktopServices>
 #include <QDockWidget>
+#include <QUrl>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
@@ -587,8 +589,45 @@ void MainWindow_Qt::buildMenuBar() {
         });
     }
 
+    // Dialogs menu — F-key access to the panels/dialogs (FLTK F2..F6). The
+    // docks are built after buildMenuBar(), so the lambdas reach them at
+    // trigger time (by which point buildDocks() has run). "Opening" a dock =
+    // show + raise (brings its tab forward in a tab group).
+    auto* dialogsMenu = mb->addMenu(tr("&Dialogs"));
+    dialogsMenu->setObjectName("menu.dialogs");
+    auto raiseDock = [](QDockWidget* d) { if (d) { d->show(); d->raise(); } };
+    dialogsMenu->addAction(tr("FX Stack"), QKeySequence(Qt::Key_F2),
+                           this, [this, raiseDock]() { raiseDock(fxDock_); })
+        ->setObjectName("menu.dialogs.fxstack");
+    dialogsMenu->addAction(tr("FX Parameters"), QKeySequence(Qt::Key_F3),
+                           this, [this, raiseDock]() { raiseDock(fxParamsDock_); })
+        ->setObjectName("menu.dialogs.fxparams");
+    dialogsMenu->addAction(tr("LUT Manager"), QKeySequence(Qt::Key_F4),
+                           this, [this, raiseDock]() { raiseDock(lutDock_); })
+        ->setObjectName("menu.dialogs.lut");
+    dialogsMenu->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
+                           this, [this]() { RemoteDialog_Qt dlg(this); dlg.exec(); })
+        ->setObjectName("menu.dialogs.remote");
+    dialogsMenu->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
+                           this, [this]() { RenderDialog_Qt dlg(this); dlg.exec(); })
+        ->setObjectName("menu.dialogs.render");
+    dialogsMenu->addSeparator();
+    dialogsMenu->addAction(tr("Hide Controls"),
+                           QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
+                           this, [this]() { toggleHideControls(); })
+        ->setObjectName("menu.dialogs.hidecontrols");
+
     auto* helpMenu = mb->addMenu("&Help");
     helpMenu->setObjectName("menu.help");
+    helpMenu->addAction(tr("User &Manual"), QKeySequence(Qt::Key_F1), this, []() {
+        QDesktopServices::openUrl(QUrl(
+            "https://github.com/danielgollas/jefecheck/blob/main/docs/manual.md"));
+    })->setObjectName("menu.help.manual");
+    helpMenu->addAction(tr("&Quick Start Guide"), this, []() {
+        QDesktopServices::openUrl(QUrl(
+            "https://github.com/danielgollas/jefecheck/blob/main/docs/quick-start.md"));
+    })->setObjectName("menu.help.quickstart");
+    helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
         this, [this]() {
             QMessageBox::about(this, tr("About JefeCheck"),
@@ -926,6 +965,18 @@ void MainWindow_Qt::rebuildRecentSessionsMenu() {
         connect(a, &QAction::triggered, this, [this, p]() { openSessionPath(p); });
     }
     if (!any) recentMenu_->addAction(tr("(none)"))->setEnabled(false);
+}
+
+void MainWindow_Qt::toggleHideControls() {
+    // Hide/show the menu bar, status bar and all docks so only the viewport
+    // remains. The Ctrl+Alt+F QShortcut still fires while hidden, so the menu
+    // bar can be brought back.
+    controlsHidden_ = !controlsHidden_;
+    const bool vis = !controlsHidden_;
+    menuBar()->setVisible(vis);
+    statusBar()->setVisible(vis);
+    const QList<QDockWidget*> docks = findChildren<QDockWidget*>();
+    for (QDockWidget* d : docks) d->setVisible(vis);
 }
 
 void MainWindow_Qt::updateSessionTitle() {
