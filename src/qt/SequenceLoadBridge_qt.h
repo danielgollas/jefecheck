@@ -128,6 +128,12 @@ void setInPoint(int frame);
 void setOutPoint(int frame);
 bool isPlaying();
 
+// Histogram overlay (Ctrl+H active quad / Ctrl+Alt+H all plates). Toggles
+// gfcPlate's in-viewport draggable histogram sub-window; the render path
+// already draws it when visible.
+void toggleHistogramActiveQuad();
+void toggleHistogramAll();
+
 // LUT browser — backs the Qt LUT dock. Names mirror lutManager's
 // public API (getAllNames). loadLUTFile pulls a .lut/.cub/.cube/.tga
 // off disk; applyLUTToActivePlate(idx) calls plateManager.setLUT on

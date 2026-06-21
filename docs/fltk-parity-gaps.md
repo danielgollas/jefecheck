@@ -19,7 +19,7 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 
 ## D. Visualization / display
 - ✅ **LUT visualization** (1D graph / 3D cube) — DONE in PR #99 (matches manual §LUT Manager Visualization).
-- 🔴 **Show Histogram** (`Ctrl+H`) — RGB histogram overlay, draggable/resizable. Not ported.
+- ✅ **Show Histogram** (`Ctrl+H` active quad / `Ctrl+Alt+H` all plates) — DONE (histogram PR). The RGB histogram overlay (`gfcPlate::drawHistogram` + draggable `gfcHistogramGLWindow`) already existed in the render chain; this just adds the toggle (bridge + View menu). Drag/resize uses the existing pick-selection path.
 - ✅ **Hide Controls** (`Ctrl+Alt+F`) — hides menu bar / status bar / all docks; the shortcut still fires while hidden so it toggles back. DONE (shortcut-parity PR).
 - 🟡 **Zoom Filtering** (point vs bilinear) — FLTK View-menu toggle; in Qt this may live in Preferences (verify) — at least no View-menu item.
 - 🟡 **Aspect bar opacity** — FLTK View-menu (4 levels); Qt moved it to Preferences → View (developer_notes). Functional, different access.
