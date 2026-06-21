@@ -30,9 +30,9 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 
 ## F. Playback / transport keyboard shortcuts
 Qt has Space (pause), Left/Right (step), Up/Down (track cycle). FLTK additionally had:
-- 🟡 **Playback direction** `.` (fwd) / `,` (rev); **frame step** `C`/`X`. Still TODO. **Rewind / fast-fwd** ✅ remapped to `Home`/`End` (FLTK's `Z`/`V` keys are taken by flip/flop in Qt). **Loop mode** ✅ `8`/`9`/`0` (once/loop/bounce) — DONE (shortcut-parity PR).
+- ✅ **Playback direction** `.` (fwd) / `,` (rev) and **frame step** `C` (fwd) / `X` (rev) — DONE (transport-keys PR; `c`/`x` reuse `stepFrame`, `.`/`,` via new `setPlayDirection`). **Rewind / fast-fwd** ✅ `Home`/`End` (FLTK's `Z`/`V` are taken by flip/flop in Qt). **Loop mode** ✅ `8`/`9`/`0` (once/loop/bounce) — DONE (shortcut-parity PR).
 - 🟡 **In/Out point keys** ✅ `I`/`O` set in/out at current frame; `Shift+I`/`Shift+O` set to timeline ends — DONE (shortcut-parity PR). Alt set-and-load-at variant still TODO.
-- 🔴 **LUT cycling** `L` + Up/Down.
+- ⚪ **LUT cycling** `L` + Up/Down — the audit misattributed this: FLTK's `l` opens the load window (already `Ctrl+L` in Qt), it does not cycle LUTs. Nothing to port.
 
 ## G. Channel toggles
 - 🔴 **R/G/B/A bare-key channel-visibility toggles** — removed (printable keys at app scope conflict with text input). Per-plate RGBA mask toggles exist in the plate-card UI, just no global keys.

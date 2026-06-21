@@ -267,6 +267,12 @@ void rewindPlayback() {
     playbackManager.rew();
 }
 
+void setPlayDirection(int direction) {
+    // FLTK's '.' (forward, +1) / ',' (reverse, -1). Sets playback heading
+    // without toggling play/pause.
+    playbackManager.setDirection(direction);
+}
+
 void fastFwdPlayback() {
     playbackManager.ffwd();
 }
