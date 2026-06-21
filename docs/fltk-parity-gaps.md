@@ -21,12 +21,13 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 - ✅ **LUT visualization** (1D graph / 3D cube) — DONE in PR #99 (matches manual §LUT Manager Visualization).
 - ✅ **Show Histogram** (`Ctrl+H` active quad / `Ctrl+Alt+H` all plates) — DONE (histogram PR). The RGB histogram overlay (`gfcPlate::drawHistogram` + draggable `gfcHistogramGLWindow`) already existed in the render chain; this just adds the toggle (bridge + View menu). Drag/resize uses the existing pick-selection path.
 - ✅ **Hide Controls** (`Ctrl+Alt+F`) — hides menu bar / status bar / all docks; the shortcut still fires while hidden so it toggles back. DONE (shortcut-parity PR).
+- ✅ **Toggle On-Screen Help** (FLTK bare `h`) — DONE (help-menu PR; Help → Toggle On-Screen Help. Menu item since bare H is flop in Qt).
 - 🟡 **Zoom Filtering** (point vs bilinear) — FLTK View-menu toggle; in Qt this may live in Preferences (verify) — at least no View-menu item.
 - 🟡 **Aspect bar opacity** — FLTK View-menu (4 levels); Qt moved it to Preferences → View (developer_notes). Functional, different access.
 
 ## E. Menu access & shortcuts (dialogs mostly exist as Qt docks)
 - ✅ **F-key dialog shortcuts**: F2 FX Stack, F3 FX Params, F4 LUT, F5 Remote, F6 Render — DONE (shortcut-parity PR). New "Dialogs" menu (`menu.dialogs`) raises the matching dock/dialog; Hide Controls (`Ctrl+Alt+F`) lives here too.
-- 🟡 **Help menu**: ✅ F1 User Manual + Quick Start Guide (open the GitHub docs) added (shortcut-parity PR). Online Support / Video Tutorials / on-screen-help toggle (`H`) still TODO. (About + System Specs already existed.)
+- ✅ **Help menu**: F1 User Manual + Quick Start Guide (shortcut-parity PR); ✅ **Report an Issue** (→ GitHub issues — modern replacement for FLTK's dead jefecorp.com "Online Support"; no Video Tutorials exist for the OSS release) and ✅ **Toggle On-Screen Help** (FLTK's bare `h`; menu item since bare H is flop) added (help-menu PR). (About + System Specs already existed.)
 
 ## F. Playback / transport keyboard shortcuts
 Qt has Space (pause), Left/Right (step), Up/Down (track cycle). FLTK additionally had:

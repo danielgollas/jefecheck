@@ -59,6 +59,10 @@ MENU_HELP = "menu.help"
 # expose them via AT-SPI / UIA.
 MENU_HELP_ABOUT = "menu.help.about"
 MENU_HELP_SPECS = "menu.help.specs"
+MENU_HELP_MANUAL = "menu.help.manual"            # F1
+MENU_HELP_QUICKSTART = "menu.help.quickstart"
+MENU_HELP_ISSUES = "menu.help.issues"            # GitHub issue tracker
+MENU_HELP_ONSCREEN = "menu.help.onscreen"        # on-screen help overlay toggle
 
 # Min Specs dialog (Help → System Specs). The dialog itself is a real
 # QDialog so its child widgets DO surface objectNames as identifiers.
