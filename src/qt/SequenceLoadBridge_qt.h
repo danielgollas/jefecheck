@@ -260,6 +260,13 @@ struct RenderParams {
     std::string prefix;
     std::string postfix;
     std::string formatString;  // e.g. "jpg" — drives extension; CreateRenderFilename appends it
+    // Format-specific quality knobs. Defaults mirror gfcRenderParams's ctor
+    // so a caller that doesn't set them keeps the prior behavior.
+    int jpegQuality     = 95;   // 0..100
+    int pngQuality      = 6;    // zlib level 0..9
+    int tiffCompression = 0;    // 0 LZW, 1 none, 2 zip
+    int exrCompression  = 0;    // 0 zip, 1 piz, 2 none
+    int exrFormat       = 0;    // GFC_HALF=0, GFC_FLOAT=1
 };
 
 // Returns a sample filename built from `params` using the existing

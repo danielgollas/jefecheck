@@ -1018,6 +1018,22 @@ int MainWindow_Qt::runHeadlessRenderTest(const QString& dir) {
         p.prefix       = QString("rendertest_%1_").arg(f.ext).toStdString();
         total += jefe::qt::triggerSyncRender(p);
     }
+    // Extra low-quality JPEG so the quality plumbing is observable: this
+    // file should be markedly smaller than rendertest_jpg_*.jpg above.
+    {
+        jefe::qt::RenderParams p;
+        p.quadrant     = 0;
+        p.format       = 0;      // JPEG
+        p.formatString = "jpg";
+        p.from         = frame;
+        p.to           = frame;
+        p.padding      = 4;
+        p.scale        = 1.0f;
+        p.path         = dir.toStdString();
+        p.prefix       = "rendertest_jpglowq_";
+        p.jpegQuality  = 5;
+        total += jefe::qt::triggerSyncRender(p);
+    }
     viewport_->doneCurrent();
     return total;
 }

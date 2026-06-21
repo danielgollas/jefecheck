@@ -11,7 +11,7 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 
 ## B. File export / saving / render
 - ✅ **Image saving** (`gfcImageSaver`) — DONE (image-saving PR). OIIO-backed `gfcImageSaverOIIO` writes JPEG/PNG/TIFF/TGA/BMP (8-bit RGBA, RGB for JPEG/BMP) and EXR (half/float). Verified end-to-end via `--render-test`.
-- 🟡 **Render Manager** (`src/qt/RenderDialog_qt`) — ✅ now writes real files (saver wired + GL context made current around the render). Format-specific quality knobs are applied from `gfcRenderParams` defaults but **not yet exposed in the dialog UI**; still missing: **video creation** (FLTK used mencoder, Linux-only), progress dialog (frame counter + abort), "open when done". Header comments mark these "PR-39b".
+- 🟡 **Render Manager** (`src/qt/RenderDialog_qt`) — ✅ writes real files and ✅ exposes format-specific quality knobs (render-quality PR): JPEG quality, PNG zlib level, TIFF + EXR compression, EXR depth — a `QStackedWidget` swaps the right controls per format; verified JPEG q95→q5 shrinks output 3.2×. Still missing: **video creation** (FLTK used mencoder, Linux-only), async render with progress dialog (frame counter + abort), "open when done".
 - 🔴 **Save Chat Log** (File menu) — remote dialog exists; chat-log save not wired.
 
 ## C. Color-correction favorites (5 slots)

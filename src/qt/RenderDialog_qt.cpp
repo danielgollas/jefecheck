@@ -17,6 +17,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace {
@@ -65,6 +66,57 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         formatCombo_->addItem(f.label);
     }
     form->addRow("Format:", formatCombo_);
+
+    // Format-specific quality controls, one page per format index.
+    qualityStack_ = new QStackedWidget(this);
+    qualityStack_->setObjectName("dialog.render.quality.stack");
+
+    // 0 — JPEG: quality 0..100.
+    jpegQualitySpin_ = new QSpinBox(this);
+    jpegQualitySpin_->setObjectName("dialog.render.jpegquality.spin");
+    jpegQualitySpin_->setRange(0, 100);
+    jpegQualitySpin_->setValue(95);
+    jpegQualitySpin_->setSuffix("  (quality)");
+    qualityStack_->insertWidget(0, jpegQualitySpin_);
+
+    // 1 — EXR: depth + compression.
+    {
+        auto* exrRow = new QWidget(this);
+        auto* l = new QHBoxLayout(exrRow);
+        l->setContentsMargins(0, 0, 0, 0);
+        exrDepthCombo_ = new QComboBox(exrRow);
+        exrDepthCombo_->setObjectName("dialog.render.exrdepth.combo");
+        exrDepthCombo_->addItems({"Half", "Float"});   // GFC_HALF=0, GFC_FLOAT=1
+        exrCompCombo_ = new QComboBox(exrRow);
+        exrCompCombo_->setObjectName("dialog.render.exrcomp.combo");
+        exrCompCombo_->addItems({"ZIP", "PIZ", "None"}); // 0/1/2
+        l->addWidget(new QLabel("Depth:", exrRow));
+        l->addWidget(exrDepthCombo_);
+        l->addWidget(new QLabel("Compression:", exrRow));
+        l->addWidget(exrCompCombo_);
+        l->addStretch(1);
+        qualityStack_->insertWidget(1, exrRow);
+    }
+
+    // 2 — TIFF: compression.
+    tiffCompCombo_ = new QComboBox(this);
+    tiffCompCombo_->setObjectName("dialog.render.tiffcomp.combo");
+    tiffCompCombo_->addItems({"LZW", "None", "ZIP"});  // 0/1/2
+    qualityStack_->insertWidget(2, tiffCompCombo_);
+
+    // 3 — TGA, 4 — BMP: no options.
+    qualityStack_->insertWidget(3, new QLabel("(no options)", this));
+    qualityStack_->insertWidget(4, new QLabel("(no options)", this));
+
+    // 5 — PNG: zlib compression level 0..9.
+    pngLevelSpin_ = new QSpinBox(this);
+    pngLevelSpin_->setObjectName("dialog.render.pnglevel.spin");
+    pngLevelSpin_->setRange(0, 9);
+    pngLevelSpin_->setValue(6);
+    pngLevelSpin_->setSuffix("  (compression 0–9)");
+    qualityStack_->insertWidget(5, pngLevelSpin_);
+
+    form->addRow("Quality:", qualityStack_);
 
     // Frame range — start + end + auto-fill from playback.
     startFrameSpin_ = new QSpinBox(this);
@@ -169,7 +221,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     // re-evaluates render-button enable state.
     auto onChange = [this]() { onAnyFieldChanged(); };
     connect(formatCombo_,    QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [onChange](int) { onChange(); });
+            this, [this, onChange](int) { updateQualityPage(); onChange(); });
     connect(startFrameSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
             this, [onChange](int) { onChange(); });
     connect(endFrameSpin_,   QOverload<int>::of(&QSpinBox::valueChanged),
@@ -196,7 +248,15 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
 
     // Sensible default range from the playback in/out points.
     onAutoRangeClicked();
+    updateQualityPage();
     rebuildPreview();
+}
+
+void RenderDialog_Qt::updateQualityPage() {
+    const int idx = formatCombo_->currentIndex();
+    if (idx >= 0 && idx < qualityStack_->count()) {
+        qualityStack_->setCurrentIndex(idx);
+    }
 }
 
 void RenderDialog_Qt::browseForOutputDir() {
@@ -280,6 +340,13 @@ void RenderDialog_Qt::onRenderClicked() {
     p.path    = pathEdit_->text().toStdString();
     p.prefix  = prefixEdit_->text().toStdString();
     p.postfix = postfixEdit_->text().toStdString();
+
+    // Format-specific quality knobs (the saver reads whichever apply).
+    p.jpegQuality     = jpegQualitySpin_->value();
+    p.pngQuality      = pngLevelSpin_->value();
+    p.tiffCompression = tiffCompCombo_->currentIndex();
+    p.exrCompression  = exrCompCombo_->currentIndex();
+    p.exrFormat       = exrDepthCombo_->currentIndex();
 
     statusLabel_->setText("Rendering…");
     renderBtn_->setEnabled(false);
