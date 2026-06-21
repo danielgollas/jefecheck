@@ -446,6 +446,21 @@ void MainWindow_Qt::buildMenuBar() {
     loadMgrAction->setObjectName("menu.file.loadmgr");
     connect(loadMgrAction, &QAction::triggered, this, &MainWindow_Qt::openLoadWindow);
 
+    fileMenu->addSeparator();
+    auto* saveSessAction = fileMenu->addAction(tr("&Save Session"),
+        QKeySequence(QKeySequence::Save), this, [this]() { doSaveSession(false); });
+    saveSessAction->setObjectName("menu.file.savesession");
+    auto* saveAsAction = fileMenu->addAction(tr("Save Session &As…"),
+        this, [this]() { doSaveSession(true); });
+    saveAsAction->setObjectName("menu.file.savesessionas");
+    auto* openSessAction = fileMenu->addAction(tr("&Open Session…"),
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O),
+        this, [this]() { doOpenSession(); });
+    openSessAction->setObjectName("menu.file.opensession");
+    recentMenu_ = fileMenu->addMenu(tr("Recent Sessions"));
+    recentMenu_->setObjectName("menu.file.recent");
+    connect(fileMenu, &QMenu::aboutToShow, this, [this]() { rebuildRecentSessionsMenu(); });
+
     // File → Render… opens RenderDialog_Qt (PR-39a). Modal exec();
     // synchronous renderPlate freezes the dialog until done — async
     // + a worker thread come in PR-39b. No shortcut wired yet
@@ -784,6 +799,72 @@ void MainWindow_Qt::restoreLayout() {
             resizeDocks({plateDock_}, {plateDock_->minimumHeight()}, Qt::Vertical);
         }, Qt::QueuedConnection);
     }
+}
+
+void MainWindow_Qt::doSaveSession(bool forceDialog) {
+    QString path = currentSessionPath_;
+    if (forceDialog || path.isEmpty()) {
+        path = QFileDialog::getSaveFileName(this, tr("Save Session"),
+                   path.isEmpty() ? QString() : path,
+                   tr("JefeCheck Session (*.jcs)"));
+        if (path.isEmpty()) return;
+    }
+    if (jefe::qt::saveSession(path.toStdString())) {
+        currentSessionPath_ = path;
+        updateSessionTitle();
+        statusBar()->showMessage(
+            tr("Saved session: %1").arg(QFileInfo(path).fileName()), 4000);
+    } else {
+        QMessageBox::warning(this, tr("Save Session"),
+                             tr("Could not save the session."));
+    }
+}
+
+void MainWindow_Qt::doOpenSession() {
+    const QString path = QFileDialog::getOpenFileName(this, tr("Open Session"),
+                             QString(), tr("JefeCheck Session (*.jcs)"));
+    if (path.isEmpty()) return;
+    openSessionPath(path);
+}
+
+void MainWindow_Qt::openSessionPath(const QString& path) {
+    if (!viewport_) return;
+    viewport_->makeCurrent();          // loadSession uploads preview textures
+    const bool ok = jefe::qt::loadSession(path.toStdString());
+    viewport_->doneCurrent();
+    if (ok) {
+        currentSessionPath_ = path;
+        updateSessionTitle();
+        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        viewport_->update();
+        statusBar()->showMessage(
+            tr("Opened session: %1").arg(QFileInfo(path).fileName()), 4000);
+    } else {
+        QMessageBox::warning(this, tr("Open Session"),
+                             tr("Could not open the session."));
+    }
+}
+
+void MainWindow_Qt::rebuildRecentSessionsMenu() {
+    if (!recentMenu_) return;
+    recentMenu_->clear();
+    const auto recents = jefe::qt::getRecentSessions();
+    bool any = false;
+    for (auto it = recents.rbegin(); it != recents.rend(); ++it) {  // newest first
+        const QString p = QString::fromStdString(*it);
+        if (!QFileInfo::exists(p)) continue;                        // prune missing
+        any = true;
+        QAction* a = recentMenu_->addAction(QFileInfo(p).fileName());
+        a->setToolTip(p);
+        connect(a, &QAction::triggered, this, [this, p]() { openSessionPath(p); });
+    }
+    if (!any) recentMenu_->addAction(tr("(none)"))->setEnabled(false);
+}
+
+void MainWindow_Qt::updateSessionTitle() {
+    if (currentSessionPath_.isEmpty()) setWindowTitle("JefeCheck");
+    else setWindowTitle(QString("JefeCheck — %1")
+                            .arg(QFileInfo(currentSessionPath_).fileName()));
 }
 
 void MainWindow_Qt::saveLayout() {
