@@ -393,3 +393,28 @@ void gfcImageLoaderOIIO::releaseMemory() {
 std::vector<std::string> gfcImageLoaderOIIO::getChannelNames() {
     return channelNames;
 }
+
+bool gfcReadImageRGB8(const char* path, std::vector<unsigned char>& out,
+                      int& width, int& height) {
+    auto inp = OIIO::ImageInput::open(path);
+    if (!inp) return false;
+    const OIIO::ImageSpec& spec = inp->spec();
+    width  = spec.width;
+    height = spec.height;
+    const int ch = spec.nchannels;
+    if (width <= 0 || height <= 0 || ch < 1) { inp->close(); return false; }
+    std::vector<unsigned char> buf((size_t)width * height * ch);
+    // OIIO 2.x signature: read_image(subimage, miplevel, chbegin, chend, type, data)
+    if (!inp->read_image(0, 0, 0, ch, OIIO::TypeDesc::UINT8, buf.data())) {
+        inp->close();
+        return false;
+    }
+    inp->close();
+    out.assign((size_t)width * height * 3, 0);
+    for (size_t p = 0; p < (size_t)width * height; ++p) {
+        out[p * 3 + 0] = buf[p * ch + 0];
+        out[p * 3 + 1] = (ch > 1) ? buf[p * ch + 1] : buf[p * ch + 0];
+        out[p * 3 + 2] = (ch > 2) ? buf[p * ch + 2] : buf[p * ch + 0];
+    }
+    return true;
+}

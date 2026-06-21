@@ -452,12 +452,9 @@ int getLoadedFXCount() {
 }
 
 int getExpectedLUTCount() {
-    // .tga / image-based LUT loading is disabled in this build (see
-    // CLAUDE.md "Known issues" — trilerp.cpp IMAGELUT2D returns -1
-    // pending OIIO image reading). Counting .tga files in the
-    // expected total would always show a mismatch on a healthy
-    // install, so we exclude them.
-    return countFilesByExt(sett.lutPath, {".lut", ".cub", ".cube"});
+    // .tga image-based LUTs now load via OIIO (gfcReadImageRGB8), so they
+    // count toward the expected total alongside the text-based LUTs.
+    return countFilesByExt(sett.lutPath, {".lut", ".cub", ".cube", ".tga"});
 }
 
 int getLoadedLUTCount() {
@@ -493,9 +490,9 @@ std::vector<std::string> getInstallLUTPaths(const std::string& dir) {
         std::string ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(),
                        [](unsigned char c) { return std::tolower(c); });
-        // Skip .tga — image-based LUT loading is disabled (see
-        // getExpectedLUTCount).
-        if (ext == ".lut" || ext == ".cub" || ext == ".cube") {
+        // .tga = image-based LUT (now loaded via OIIO; e.g. the UnitCube
+        // identity cube). .lut/.cub/.cube are text-based LUTs.
+        if (ext == ".lut" || ext == ".cub" || ext == ".cube" || ext == ".tga") {
             files.push_back(entry.path().string());
         }
     }

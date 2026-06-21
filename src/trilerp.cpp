@@ -20,6 +20,7 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include <fstream>
 #include "gfcpixelbuffer.h"
 #include "gfcStructures.h"
+#include "gfcimageloaderoiio.h"   // gfcReadImageRGB8 for image-based (.tga) LUTs
 #include "xmlParser.h"
 /*
 Vec3D Lerp3D(Vec3D A, Vec3D B, float D)
@@ -871,146 +872,50 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
 
         //printf("*Loading 2D LUT: %s\n",GetFilenameNoPath(pfilename).c_str());
         //printf("Type=%i\n",type);
-        GFLC_BITMAP image;
-        GFLC_LOAD_PARAMS loadParams;
-
-        if (image.loadFromFile(pfilename,loadParams)) {
-            if (pprogress!=NULL) {
-                progress->copy_label("Error opening image!");
-                progress->value(0);
-
-            }
+        std::vector<unsigned char> img;
+        int iw = 0, ih = 0;
+        if (!gfcReadImageRGB8(pfilename, img, iw, ih)) {
+            if (pprogress != NULL) { progress->copy_label("Error opening image!"); progress->value(0); }
             return -1;
         }
+        auto px = [&](int x, int y, int c) -> double {
+            return (double)img[((size_t)y * iw + x) * 3 + c];
+        };
 
-		//DETERMINE THE TYPE OF IMAGE LUT THIS IS, JEFECHECK LUTs ARE 64x64, 
-		//NUKE CMS Cube renders are bigger (448x448 for 16x16x16 cubes (7x7pixels per entry) or more for bigger cubes, for now, support only 16size)
-		switch(image.getWidth())
-		{
-		case 64:
-			{
-				printf("Loading JefeCheck Image 3D LUT\n");
-				Vec3D colorStrip[64*64];
-				GFLC_COLOR tmpColor;
-				int stripCount=0;
-				if (pprogress!=NULL) {
-					progress->copy_label("Error opening file!");
-					progress->maximum(4096);
-				}
-
-				for (int i=0;i<image.getWidth();i++ ) {
-					for (int j=0;j<image.getHeight();j++) {
-						if (pprogress!=NULL) {
-							progress->copy_label("Reading Image...");
-							progress->value(stripCount/2.0);
-
-						}
-						image.getPixel(i,j,tmpColor);
-						colorStrip[stripCount].x=tmpColor.getRed();
-						colorStrip[stripCount].y=tmpColor.getGreen();
-						colorStrip[stripCount].z=tmpColor.getBlue();
-						stripCount++;
-					}
-				}
-				
-				printf("stripCount=%i\n",stripCount);
-				
-				size=16;
-
-				stripCount=0;
-				if (pprogress!=NULL) {
-					progress->copy_label("Converting to cube...");
-					progress->maximum(4096);
-
-				}
-				allocateCube(size);
-				for (int i=0; i<size;i++) {
-					for (int j=0; j<size;j++) {
-						for (int k=0; k<size;k++) {
-							cube[i][j][k]=colorStrip[stripCount]/255.0;
-							inputForMD5+=cube[i][j][k].x;
-							inputForMD5+=cube[i][j][k].y;
-							inputForMD5+=cube[i][j][k].z;
-							if (pprogress!=NULL) {
-								progress->copy_label("Convertig to cube...");
-								progress->value(2048+stripCount/2.0);
-
-							}
-							stripCount++;
-						}
-					}
-				}
-				
-			}
-			break;
-		case 448:
-			printf("Loading 2D image LUT of size %ix%i\n",image.getWidth(),image.getHeight());
-			{
-				int nukePixelsPerSample=7;
-				printf("Loading Nuke Image 3D LUT\n");
-				//Vec3D colorStrip[64*64];
-				std::vector<Vec3D> colorStrip;
-				int imageSamplesPerImageSide=image.getWidth()/nukePixelsPerSample;
-				colorStrip.resize(imageSamplesPerImageSide*imageSamplesPerImageSide);
-				GFLC_COLOR tmpColor;
-				int stripCount=0;
-				if (pprogress!=NULL) {
-					progress->copy_label("Error opening file!");
-					progress->maximum(4096);
-				}
-				image.rotate(image,90);
-				for (int i=0;i<image.getWidth();i+=7 ) {
-					for (int j=0;j<image.getHeight();j+=7) {
-						
-						image.getPixel(i,j,tmpColor);
-						//printf("pixel(%i,%i)\n",i,j);
-						colorStrip[stripCount].x=tmpColor.getRed();
-						colorStrip[stripCount].y=tmpColor.getGreen();
-						colorStrip[stripCount].z=tmpColor.getBlue();
-						
-						if (pprogress!=NULL) {
-							progress->copy_label("Reading Image...");
-							progress->value(stripCount/2.0);
-
-						}
-						stripCount++;
-					}
-				}
-				
-				printf("stripCount=%i\n",stripCount);
-
-				stripCount=0;
-				if (pprogress!=NULL) {
-					progress->copy_label("Converting to cube...");
-					progress->maximum(4096);
-
-				}
-				for (int i=0; i<16;i++) {
-					for (int j=0; j<16;j++) {
-						for (int k=0; k<16;k++) {
-							cube[k][j][i]=colorStrip[stripCount]/255.0;
-							inputForMD5+=cube[i][j][k].x;
-							inputForMD5+=cube[i][j][k].y;
-							inputForMD5+=cube[i][j][k].z;
-							if (pprogress!=NULL) {
-								progress->copy_label("Converting to cube...");
-								progress->value(2048+stripCount/2.0);
-
-							}
-							stripCount++;
-						}
-					}
-				}
-			}
-		    break;
-		default:
-			if (pprogress!=NULL) {
-				progress->copy_label("Not a Recognized Image LUT Format!");
-				progress->value(0);
-				return -1;
-			}
-		    break;
-		}
+        if (iw == 64 && ih == 64) {
+            // JefeCheck 64x64 image LUT -> 16^3 cube (column-major strip).
+            printf("Loading JefeCheck Image 3D LUT (64x64)\n");
+            Vec3D colorStrip[64 * 64];
+            int stripCount = 0;
+            for (int i = 0; i < iw; i++) {
+                for (int j = 0; j < ih; j++) {
+                    colorStrip[stripCount].x = px(i, j, 0);
+                    colorStrip[stripCount].y = px(i, j, 1);
+                    colorStrip[stripCount].z = px(i, j, 2);
+                    stripCount++;
+                }
+            }
+            size = 16;
+            allocateCube(size);
+            stripCount = 0;
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j < size; j++) {
+                    for (int k = 0; k < size; k++) {
+                        cube[i][j][k] = colorStrip[stripCount] / 255.0;
+                        inputForMD5 += cube[i][j][k].x;
+                        inputForMD5 += cube[i][j][k].y;
+                        inputForMD5 += cube[i][j][k].z;
+                        stripCount++;
+                    }
+                }
+            }
+        } else {
+            // Other image-LUT layouts (e.g. Nuke 448x448) aren't supported via
+            // OIIO yet. The shipped .tga cubes (UnitCube, log2linsRGB) are 64x64.
+            printf("Unsupported image LUT size %ix%i (only 64x64 supported)\n", iw, ih);
+            if (pprogress != NULL) { progress->copy_label("Unsupported image LUT size"); progress->value(0); }
+            return -1;
+        }
 				
 
         
