@@ -13,6 +13,7 @@
 #include <QSurfaceFormat>
 #include <QTimer>
 
+#include <cstdlib>
 #include <cstring>
 
 #include "gfcStructures.h"
@@ -67,6 +68,22 @@ static QStringList resolveOpenFiles(int argc, char* argv[]) {
         }
     }
     return paths;
+}
+
+// Resolve --render-test <dir>. Headless render smoke test: once the
+// --open-file footage has loaded, render one frame of plate 0 into <dir>
+// in every output format, then exit (0 = frames written, 2 = nothing
+// written). Drives the same triggerSyncRender path the Render dialog uses,
+// so it verifies the real GL-readback → OIIO-save pipeline without a UI
+// session. Use a multi-frame sequence — a single still only populates the
+// preview frame, not the sequence frames the renderer reads.
+static QString resolveRenderTestDir(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--render-test") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
 }
 
 int main(int argc, char* argv[]) {
@@ -145,6 +162,28 @@ int main(int argc, char* argv[]) {
         const QString path = openFiles.at(i);
         QTimer::singleShot(0, &window, [&window, plateIdx, path]() {
             window.loadFileIntoPlate(plateIdx, path);
+        });
+    }
+
+    // Headless render smoke test (--render-test <dir>): after the footage
+    // has had time to decode and the GL context to initialise, render one
+    // frame of plate 0 into <dir> and quit.
+    const QString renderTestDir = resolveRenderTestDir(argc, argv);
+    if (!renderTestDir.isEmpty()) {
+        QDir().mkpath(renderTestDir);
+        QTimer::singleShot(5000, &window, [&window, renderTestDir]() {
+            // The render (GL readback + OIIO save) lives in MainWindow's
+            // TU, which can touch the viewport's GL context and the bridge
+            // without pulling glad into this Qt entry-point TU.
+            const int n = window.runHeadlessRenderTest(renderTestDir);
+            printf("RENDER-TEST: wrote %d frame(s) to %s\n",
+                   n, renderTestDir.toLocal8Bit().constData());
+            fflush(stdout);
+            // OIIO has already flushed/closed the output files. Skip Qt's
+            // global teardown (it trips a pre-existing trace trap in
+            // gfcPlaybackGUI's destructor on macOS) so the harness gets a
+            // deterministic exit code.
+            std::_Exit(n > 0 ? 0 : 2);
         });
     }
 

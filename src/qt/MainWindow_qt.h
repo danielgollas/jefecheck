@@ -47,6 +47,12 @@ public:
     void loadFileIntoPlate(int plateIdx, const QString& path);
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
+    // Headless render smoke test (--render-test). Renders one frame of
+    // plate 0 into `dir` as PNG with the viewport context current, and
+    // returns the number of frames written. Used by main() to verify the
+    // GL-readback → OIIO-save render path without a UI session.
+    int runHeadlessRenderTest(const QString& dir);
+
 protected:
     void closeEvent(QCloseEvent* e) override;
 

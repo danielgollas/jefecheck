@@ -979,6 +979,35 @@ void MainWindow_Qt::toggleHideControls() {
     for (QDockWidget* d : docks) d->setVisible(vis);
 }
 
+int MainWindow_Qt::runHeadlessRenderTest(const QString& dir) {
+    if (!viewport_) return 0;
+    // Exercise every output format so the smoke test covers both the
+    // 8-bit (JPEG/PNG/TIFF/TGA/BMP) and float/half (EXR) saver paths.
+    struct Fmt { int format; const char* ext; };
+    static const Fmt kFmts[] = {
+        {0, "jpg"}, {1, "exr"}, {2, "tif"},
+        {3, "tga"}, {4, "bmp"}, {5, "png"},
+    };
+    const int frame = jefe::qt::getCurrentFrame();
+    int total = 0;
+    viewport_->makeCurrent();
+    for (const auto& f : kFmts) {
+        jefe::qt::RenderParams p;
+        p.quadrant     = 0;
+        p.format       = f.format;
+        p.formatString = f.ext;
+        p.from         = frame;
+        p.to           = frame;
+        p.padding      = 4;
+        p.scale        = 1.0f;
+        p.path         = dir.toStdString();
+        p.prefix       = QString("rendertest_%1_").arg(f.ext).toStdString();
+        total += jefe::qt::triggerSyncRender(p);
+    }
+    viewport_->doneCurrent();
+    return total;
+}
+
 void MainWindow_Qt::updateSessionTitle() {
     if (currentSessionPath_.isEmpty()) setWindowTitle("JefeCheck");
     else setWindowTitle(QString("JefeCheck — %1")

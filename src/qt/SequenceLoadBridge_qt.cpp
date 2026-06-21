@@ -649,6 +649,12 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     p.padding      = src.padding;
     p.scale        = src.scale;
     p.path         = src.path;
+    // CreateRenderFilename concatenates path+prefix directly, so the output
+    // directory needs a trailing separator (QFileDialog hands one back
+    // without it).
+    if (!p.path.empty() && p.path.back() != '/' && p.path.back() != '\\') {
+        p.path += '/';
+    }
     p.prefix       = src.prefix;
     p.postfix      = src.postfix;
     return p;

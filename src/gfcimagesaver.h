@@ -11,7 +11,7 @@ class gfcImageSaver {
 public:
     gfcImageSaver();
     gfcImageSaver(gfcRenderParams pparams);
-    ~gfcImageSaver();
+    virtual ~gfcImageSaver();
 
     int getGLPixelFormat();
     int getGLFormat();

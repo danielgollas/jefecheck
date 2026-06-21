@@ -255,6 +255,18 @@ Wires the GUI-free `gfcSessionManager` into Qt via `jefe::qt::*`. Key points:
 - **Recent sessions** in `QSettings("Session/recent")` (cap 5; seeded into `sett` at startup, written back on close). **CC favorites** persist app-globally in `favorites.jcs` *and* embed in each `.jcs` (a `ccFavorites` node). View-menu only — no `Ctrl+1–5` shortcuts (clash with layout).
 - **`updateAllFromGUI` caveat (§2):** `loadSession` ends with `updateAllFromGUI`, which can reset framing/active-quad; if a restored layout is wrong, re-apply framing post-load.
 
+## 18. Image saving / render output (`gfcImageSaver` → OIIO)
+
+`getImageSaverInstance` was a stub that returned NULL and then dereferenced it (a guaranteed crash the moment the Render button ran — so that path had never actually executed). It now returns a concrete OIIO-backed `gfcImageSaverOIIO` (file-local in `gfcimagesaver.cpp`). Key points:
+
+- **The render path is `gfcPlate::draw3DrectWithFX` with `forRender=true`** (driven by `gfcPlateManager::renderPlate` → `triggerSyncRender`). It allocates the saver, reads the FBO texture into the saver's buffer via `glGetTexImage(getGLFormat(), getGLPixelFormat())`, then calls `save()`. The save block sits **inside `if (theFrame.loaded)`** — an unloaded frame renders nothing.
+- **Readback format:** always RGBA. LDR formats read `GL_UNSIGNED_BYTE`; EXR reads `GL_FLOAT` (OIIO converts float→half on write when `exrFormat==GFC_HALF`). The saver flips vertically (GL bottom-up → OIIO top-down) and strips alpha to RGB for JPEG/BMP; PNG/TIFF/TGA/EXR keep RGBA.
+- **A current GL context is mandatory.** `renderPlate` issues GL calls outside `paintGL`, so callers must wrap it in `viewport->makeCurrent()/doneCurrent()` (same rule as session load, §17). `RenderDialog_Qt::onRenderClicked` does this via `MainWindow_Qt::viewport()`.
+- **`gfcRenderParams`'s ctor now initialises its fields** (quality/compression/format) — they were uninitialised garbage, and `triggerSyncRender` doesn't set the quality knobs.
+- **Output path needs a trailing separator:** `CreateRenderFilename` concatenates `path+prefix` directly; the bridge's `toCoreRenderParams` appends `/` because `QFileDialog::getExistingDirectory` omits it.
+- **Stills don't render.** `loadFileIntoPlate` (Quick Load / `--open-file`) loads only a *preview* frame; the sequence frame-list the renderer reads (`getFrame(currentFrame)`, `getNumFrames()`) is populated only when `startLoadingSequence` fires — i.e. for multi-frame sequences (`getNumPreviewFrames() > 1`). Render/test with a real sequence, not a single image.
+- **Headless verification:** `--render-test <dir>` (in `main_qt.cpp` → `MainWindow_Qt::runHeadlessRenderTest`) renders one frame of plate 0 in all six formats and `std::_Exit`s. It `_Exit`s deliberately to skip Qt's global teardown, which trips a **pre-existing trace trap in `gfcPlaybackGUI`'s destructor** on macOS (unrelated to saving; see plate-polish backlog). Verified: `multipart.0001.exr` → 877×876 JPEG/EXR(half)/TIFF/TGA/BMP/PNG.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.
