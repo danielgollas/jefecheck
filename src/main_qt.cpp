@@ -20,6 +20,7 @@
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
+#include "qt/SequenceLoadBridge_qt.h"
 
 extern gfcSettings sett;
 
@@ -80,6 +81,18 @@ static QStringList resolveOpenFiles(int argc, char* argv[]) {
 static QString resolveRenderTestDir(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--render-test") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
+// Resolve --playlist-test <image>. Headless .jpl round-trip smoke test:
+// add <image> to the playlist, save to a temp .jpl, clear, reload, and
+// verify the entry count survives. Pure data/XML path — no GL needed.
+static QString resolvePlaylistTestFile(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--playlist-test") == 0) {
             return QString::fromLocal8Bit(argv[i + 1]);
         }
     }
@@ -147,6 +160,27 @@ int main(int argc, char* argv[]) {
     jefe::ui::IEventSystem::setInstance(&events);
 
     applyDarkTheme(qapp);
+
+    // Headless .jpl round-trip test (--playlist-test <image>): runs before
+    // the window is even shown — playlist ops are pure data, no GL.
+    const QString playlistTestFile = resolvePlaylistTestFile(argc, argv);
+    if (!playlistTestFile.isEmpty()) {
+        jefe::qt::clearPlaylist();
+        jefe::qt::addPlaylistFile(playlistTestFile.toStdString());
+        const int added = int(jefe::qt::getPlaylistItemNames().size());
+        const std::string jpl =
+            (QDir::tempPath() + "/jefecheck_playlist_test.jpl").toStdString();
+        jefe::qt::savePlaylistFile(jpl);
+        jefe::qt::clearPlaylist();
+        const int afterClear = int(jefe::qt::getPlaylistItemNames().size());
+        jefe::qt::loadPlaylistFile(jpl);
+        const int afterLoad = int(jefe::qt::getPlaylistItemNames().size());
+        printf("PLAYLIST-TEST: added=%d afterClear=%d afterLoad=%d file=%s\n",
+               added, afterClear, afterLoad, jpl.c_str());
+        fflush(stdout);
+        const bool ok = (added == 1 && afterClear == 0 && afterLoad == 1);
+        std::_Exit(ok ? 0 : 2);
+    }
 
     MainWindow_Qt window;
     window.setObjectName("MainWindow");

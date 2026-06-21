@@ -328,6 +328,10 @@ void movePlaylistItem(int index, int direction);  // -1 up, +1 down
 void clearPlaylist();
 void loadPlaylistItem(int index);
 int  getSelectedPlaylistItem();
+// Save/load the whole playlist as a `.jpl` (XML). `savePlaylistFile`
+// appends `.jpl` if the path has no extension.
+void savePlaylistFile(const std::string& path);
+void loadPlaylistFile(const std::string& path);
 
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for

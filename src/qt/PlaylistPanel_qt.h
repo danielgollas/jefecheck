@@ -32,6 +32,8 @@ private:
     void onUpClicked();
     void onDownClicked();
     void onClearClicked();
+    void onSaveClicked();
+    void onLoadClicked();
     void onItemDoubleClicked(QListWidgetItem* item);
 
     QListWidget* list_ = nullptr;
@@ -40,6 +42,8 @@ private:
     QPushButton* upBtn_ = nullptr;
     QPushButton* downBtn_ = nullptr;
     QPushButton* clearBtn_ = nullptr;
+    QPushButton* saveBtn_ = nullptr;
+    QPushButton* loadBtn_ = nullptr;
     QLabel* status_ = nullptr;
 };
 

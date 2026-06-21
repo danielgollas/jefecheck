@@ -745,6 +745,16 @@ int getSelectedPlaylistItem() {
     return playlistManager.selectedItem;
 }
 
+void savePlaylistFile(const std::string& path) {
+    if (path.empty()) return;
+    playlistManager.savePlaylist(path);   // appends .jpl if missing
+}
+
+void loadPlaylistFile(const std::string& path) {
+    if (path.empty()) return;
+    playlistManager.loadPlaylist(path);
+}
+
 void connectAsServer(const RemoteServerParams& params) {
     if (networkManager.getConnected()) return;
     gfcServerParams sp;
