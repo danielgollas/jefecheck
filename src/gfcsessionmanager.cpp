@@ -90,6 +90,11 @@ void gfcSessionManager::loadSession(std::string filename)
 	playlistManager.clearPlaylist();
 	playlistManager.loadPlaylistParameters(playlistNode);
 
+	//Restore CC favorites if the session carries them (older sessions won't).
+	XMLNode favsNode=xRootNode.getChildNode("ccFavorites");
+	if (!favsNode.isEmpty())
+		plateManager.loadFavoriteColorCorrectionsFromNode(favsNode);
+
     //NOTE: save into recent sessions.
    // if all was good, save to the recent sessions
 	
@@ -175,6 +180,10 @@ if ( filename.empty() ) {
 	//save playlist
 	XMLNode playlistNode=xRootNode.addChild("playlist");
 	playlistManager.savePlaylistParameters(playlistNode);
+
+	//Color-correction favorites (5 slots) ride along in the session.
+	XMLNode favsNode=xRootNode.addChild("ccFavorites");
+	plateManager.saveFavoriteColorCorrectionsToNode(favsNode);
 
     XMLError writeError=xMainNode.writeToFile ( filename.c_str() );
 
