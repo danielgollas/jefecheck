@@ -1,11 +1,11 @@
 # Qt LUT Preview — Design Spec
 
-**Status:** Approved (2026-06-20)
+**Status:** Approved (2026-06-20); **extended to v2 (LUT inspector) 2026-06-20** — see "## v2 — LUT inspector" at the bottom.
 **Branch target:** `qt-experimental`
 
 ## Goal
 
-Add an in-window visual preview of a loaded LUT to the Qt LUT panel: a 2D curve for 1D LUTs, a slowly-spinning 3D point cloud for 3D LUTs, plus an info subpanel (type, size, bit depth, etc.) and a show/hide toggle. A gut-check aid to confirm a LUT looks sane — not a hero feature.
+Add an in-window visual preview of a loaded LUT to the Qt LUT panel: a 2D curve for 1D LUTs, a slowly-spinning 3D point cloud for 3D LUTs, plus an info subpanel (type, size, bit depth, etc.) and a show/hide toggle. A gut-check aid to confirm a LUT looks sane — not a hero feature. **(v2 turns the 3D side into an interactive cube inspector — see the v2 section.)**
 
 ## Background / current state
 
@@ -98,3 +98,43 @@ A `LUTPreview_Qt : QWidget` containing:
 
 - **Appium smoke:** the preview container and toggle resolve by object name; toggling doesn't crash. (Per-pixel canvas content isn't AX-addressable.)
 - **Manual:** load a 1D LUT → curve renders with axes; load a 3D LUT (.cube/.cub) → point cloud auto-spins, drag nudges it, colors look right; info labels show correct type/size/depth; toggle hides/shows the pane; selecting "(No LUT)" clears the preview.
+
+---
+
+## v2 — LUT inspector (extension, 2026-06-20)
+
+The 3D side grows from an auto-spinning point cloud into an interactive cube inspector. The 1D curve, info subpanel, and toggle are unchanged. v1 (above) is already implemented and committed on the branch; v2 builds on it in the same PR.
+
+### Resolved decisions
+- **Deformed placement = output color** (position driven by the LUT's output; identity = undeformed cube). Delta-mode (`out − in`) is a possible later toggle, not in v2.
+- **Dots marker = a temporary dropdown** of dot / mini-cube / tetrahedron (we'll settle on one later).
+- **Resizable preview = a QSplitter** between the LUT list and the preview pane. A detach-to-window button is a stretch goal only if trivial.
+- **Auto-spin** becomes an optional checkbox (default off) now that a real camera drives interaction.
+- **Default render mode:** Dots on, Solid/Grid off.
+
+### Data-model change (bridge)
+Solid faces and the Grid lattice need the **structured cube grid with adjacency**, not v1's flat subsampled point list. Replace `points3D`/`point3DCount` in `LutPreviewData` with:
+```cpp
+    int                cubeSize = 0;   // working cube edge after any subsample
+    std::vector<float> cubeRGB;        // cubeSize^3 * 3 floats: output color per
+                                       // node, x-major: idx((x*cubeSize+y)*cubeSize+z)*3
+```
+- The bridge subsamples to a working edge `cubeSize ≤ kMaxCubeEdge = 33` (so faces ≤ ~6·33²·2 tris, lattice ≤ ~3·33²·32 lines) for large LUTs; logs when it caps.
+- Node position: **uniform** → `(x,y,z)/(cubeSize-1)`; **deformed** → that node's `cubeRGB` (clamped to [0,1]).
+
+### 3D widget (`LutCloudWidget`) — rework
+- **Maya-style camera** replacing the auto-spin/simple-drag: orbit (Alt+LMB), pan (Alt+MMB), dolly (Alt+RMB and mouse wheel), focus/frame the cube (F key → reset target+distance to fit). Camera state = target (Vec3-ish), yaw, pitch, distance; `paintGL` builds the modelview from it. Auto-spin checkbox advances yaw when enabled and idle.
+- **Three composable render modes** (independent checkboxes), all reading the same `cubeRGB` at the current placement:
+  - **Solid** — the 6 outer boundary faces as Gouraud-shaded quads (per-vertex output color), depth-tested, no interior fill.
+  - **Grid** — lines between each pair of adjacent nodes along ±x/±y/±z; per-vertex color so GL interpolates along each segment.
+  - **Dots** — a marker per node colored by its output: `GL_POINTS`, a small cube, or a small tetrahedron per the marker dropdown.
+- **Background-brightness slider** (0..1 gray) sets `glClearColor`; the axis-end labels recolor (dark text on bright bg, light on dark) to stay readable.
+- **Axis labels** — small "R"/"G"/"B" text at the +X/+Y/+Z axis ends, drawn with a `QPainter` overlay (`QOpenGLWidget` supports painting after `beginNativePainting`/`endNativePainting`), projected from the 3D axis endpoints.
+- **Uniform vs deformed** checkbox selects the node placement (see data-model).
+
+### Panel controls (under the existing Preview toggle, shown only when a 3D LUT is selected)
+- A QSplitter makes the preview pane resizable.
+- A small controls strip: render-mode checkboxes (Solid / Grid / Dots), the Dots marker dropdown, the uniform/deformed checkbox, the auto-spin checkbox, and the background-brightness slider. Object names: `lut.preview.mode.solid/grid/dots`, `lut.preview.marker`, `lut.preview.deformed`, `lut.preview.autospin`, `lut.preview.bg`.
+
+### Out of scope (v2)
+- Delta deform mode; per-node picking/selection (F just frames the whole cube); saving inspector state across sessions; the 1D side gaining a camera.
