@@ -417,6 +417,25 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             if (!ctrl && !alt) { jefe::qt::setLoopMode(2); handled(); return; }
             break;
 
+        // Playback direction (FLTK '.' fwd / ',' rev). The keys carry '<'/'>'
+        // on a US layout — match the glyphs, not the shift state.
+        case Qt::Key_Period:
+        case Qt::Key_Greater:
+            if (!ctrl && !alt) { jefe::qt::setPlayDirection(+1); handled(); return; }
+            break;
+        case Qt::Key_Comma:
+        case Qt::Key_Less:
+            if (!ctrl && !alt) { jefe::qt::setPlayDirection(-1); handled(); return; }
+            break;
+
+        // Single-frame step (FLTK 'c' fwd / 'x' rev) — same as Left/Right.
+        case Qt::Key_C:
+            if (!ctrl && !alt) { jefe::qt::stepFrame(+1); handled(); return; }
+            break;
+        case Qt::Key_X:
+            if (!ctrl && !alt) { jefe::qt::stepFrame(-1); handled(); return; }
+            break;
+
         // In / out points (FLTK I/O). Bare = at current frame; Shift = to the
         // timeline ends.
         case Qt::Key_I:
