@@ -2,7 +2,26 @@
 
 Audit of features the FLTK build (git `9a1c605`) + user manual describe that the current Qt build (`qt-experimental`) does **not** yet implement. Sources: `git show 9a1c605:src/{mainWindow.fl,UICallbacks.cpp,GlViewport.cpp,renderWindow.h}`, current `src/qt/*`, `docs/manual.md`.
 
-**Legend:** 🟢 backend exists in shared C++ (cheap — just wire Qt UI/shortcuts) · 🟡 partial in Qt · 🔴 not implemented (real work) · ✅ done.
+**Legend:** 🟢 backend exists in shared C++ (cheap — just wire Qt UI/shortcuts) · 🟡 partial in Qt · 🔴 not implemented (real work) · ✅ done · ⚪ intentionally not ported.
+
+## Status (updated 2026-06-21)
+
+The 2026-06-21 parity run closed every high/medium-value gap (PRs #100–108):
+session restore + CC favorites, image saving + render output, render quality
+knobs, histogram overlay, playlist `.jpl`, the shortcut/menu/transport set
+(Dialogs/Help menus, Hide Controls, transport + In/Out + direction/step keys),
+and the Help menu. What remains is, by design, **not** scheduled:
+
+- **Async render + progress dialog** — the only remaining item with real value;
+  the sync render works, so this is a scoped future PR (QThread driver), not a
+  gap. Video creation is dead (FLTK used Linux-only mencoder).
+- **Save Chat Log** — low value; tied to the rarely-used remote-chat feature.
+- **Zoom Filtering / Aspect-bar opacity** — functionally present via Preferences;
+  only the FLTK View-menu *access path* differs.
+- **R/G/B/A channel keys** — deliberately removed (printable keys at app scope
+  collide with text input); per-plate RGBA masks live in the plate card.
+- **Playlist drag-append / remote integration**, **`Ctrl+P`** (taken by
+  Preferences in Qt) — minor.
 
 ## A. Session & playlist (state management)
 - ✅ **Save Session / Open Session / Recent / crash recovery** — DONE (PR #100). Configurable launch behavior (empty/reopen/ask); auto-loads footage; CC favorites folded in (✅ C).
@@ -12,7 +31,7 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 ## B. File export / saving / render
 - ✅ **Image saving** (`gfcImageSaver`) — DONE (image-saving PR). OIIO-backed `gfcImageSaverOIIO` writes JPEG/PNG/TIFF/TGA/BMP (8-bit RGBA, RGB for JPEG/BMP) and EXR (half/float). Verified end-to-end via `--render-test`.
 - 🟡 **Render Manager** (`src/qt/RenderDialog_qt`) — ✅ writes real files and ✅ exposes format-specific quality knobs (render-quality PR): JPEG quality, PNG zlib level, TIFF + EXR compression, EXR depth — a `QStackedWidget` swaps the right controls per format; verified JPEG q95→q5 shrinks output 3.2×. Still missing: **video creation** (FLTK used mencoder, Linux-only), async render with progress dialog (frame counter + abort), "open when done".
-- 🔴 **Save Chat Log** (File menu) — remote dialog exists; chat-log save not wired.
+- ⚪ **Save Chat Log** (File menu) — deferred (low value; tied to the rarely-used remote-chat feature). Remote dialog exists; chat-log save not wired.
 
 ## C. Color-correction favorites (5 slots)
 - 🟢 **Save/Load CC favorites** (`Cmd+1..5` load / `Cmd+Shift+1..5` save) — `gfcPlateManager::saveFavoriteColorCorrectionFromPlate` / `setFavoriteColorCorrectionOnPlate` exist + persist in session XML; no Qt menu or shortcuts. Manual §Control Bar ("save and load up to 5 favorite color corrections").
@@ -36,7 +55,7 @@ Qt has Space (pause), Left/Right (step), Up/Down (track cycle). FLTK additionall
 - ⚪ **LUT cycling** `L` + Up/Down — the audit misattributed this: FLTK's `l` opens the load window (already `Ctrl+L` in Qt), it does not cycle LUTs. Nothing to port.
 
 ## G. Channel toggles
-- 🔴 **R/G/B/A bare-key channel-visibility toggles** — removed (printable keys at app scope conflict with text input). Per-plate RGBA mask toggles exist in the plate-card UI, just no global keys.
+- ⚪ **R/G/B/A bare-key channel-visibility toggles** — intentionally not ported (printable keys at app scope conflict with text input). Per-plate RGBA mask toggles exist in the plate-card UI.
 
 ## H. Remapped (functional parity, different keys — NOT missing)
 - Flip/Flop `Ctrl+8`/`Ctrl+9` → `V`/`H` (+ `Shift` for all).
