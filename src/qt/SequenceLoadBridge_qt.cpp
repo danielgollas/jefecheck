@@ -22,6 +22,7 @@
 #include "gfcsequencegui_qt.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 
@@ -851,6 +852,53 @@ int getLUTOnActivePlate() {
     if (q < 0) return 0;
     auto* gui = plateManager.getPlateGUI(q);
     return gui ? gui->getLUT() : 0;
+}
+
+LutPreviewData getLutPreview(int guiLutIndex) {
+    LutPreviewData d;
+    if (guiLutIndex <= 0) return d;          // 0 = "(No LUT)"
+    CubeLUT lut = lutManager.getLUT(guiLutIndex - 1);
+    if (lut.size <= 0) return d;
+    d.valid    = true;
+    d.type     = lut.type;
+    d.is3D     = (lut.type != CubeLUT::JEFECHECK1D);
+    d.size     = lut.size;
+    d.fromBits = lut.fromBits;
+    d.toBits   = lut.toBits;
+    d.max1D    = lut.maximum1DValue > 0.f ? lut.maximum1DValue : 1.f;
+    d.name     = lut.getNameNoPath();
+
+    if (!d.is3D) {
+        const int n = std::min(lut.size, 1024);
+        d.curve1D.reserve(n);
+        for (int i = 0; i < n; ++i) d.curve1D.push_back(lut.lut1D[i]);
+        return d;
+    }
+
+    // 3D: subsample the cube so the emitted point count stays bounded.
+    constexpr int kMaxPreviewPoints = 20000;
+    const int s = lut.size;
+    int axisTarget = (int)std::cbrt((double)kMaxPreviewPoints);
+    if (axisTarget < 2) axisTarget = 2;
+    int stride = (s + axisTarget - 1) / axisTarget;
+    if (stride < 1) stride = 1;
+    const float denom = (s > 1) ? (float)(s - 1) : 1.f;
+    auto clamp01 = [](double v) { return (float)(v < 0 ? 0 : (v > 1 ? 1 : v)); };
+    for (int x = 0; x < s; x += stride) {
+        for (int y = 0; y < s; y += stride) {
+            for (int z = 0; z < s; z += stride) {
+                const Vec3D& c = lut.cube[x][y][z];
+                d.points3D.push_back(x / denom);
+                d.points3D.push_back(y / denom);
+                d.points3D.push_back(z / denom);
+                d.points3D.push_back(clamp01(c.x));
+                d.points3D.push_back(clamp01(c.y));
+                d.points3D.push_back(clamp01(c.z));
+            }
+        }
+    }
+    d.point3DCount = (int)(d.points3D.size() / 6);
+    return d;
 }
 
 void panPlate(int plateIdx, float dx, float dy) {

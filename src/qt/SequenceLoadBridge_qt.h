@@ -631,6 +631,30 @@ ThumbPixels getTrackThumbnail(int track, int frameIndex);
 bool getThumbnailsEnabled();        // reads sett.showThumbnails
 void setThumbnailsEnabled(bool on); // writes sett.showThumbnails; setChanged()
 
+// Qt-safe snapshot of a LUT for the LUT-panel preview. The bridge .cpp
+// (which includes trilerp.h) copies the sample data out so the widget
+// never touches CubeLUT/glad. guiLutIndex is the LUT-panel row:
+// 0 = "(No LUT)" → valid=false; row r>=1 → lutManager.getLUT(r-1).
+struct LutPreviewData {
+    bool        valid    = false;
+    int         type     = 0;      // CubeLUT::LUTTYPES
+    bool        is3D     = false;  // type != JEFECHECK1D
+    int         size     = 0;      // samples (1D) or cube edge (3D)
+    int         fromBits = 0;
+    int         toBits   = 0;
+    float       max1D    = 1.0f;
+    std::string name;
+    // 1D: `size` output samples (raw, in [0, max1D]).
+    std::vector<float> curve1D;
+    // 3D: flat [x,y,z, r,g,b] per sampled point. Positions are normalized
+    // grid coords in [0,1]; colors are the clamped mapped RGB. Subsampled
+    // so the count stays bounded.
+    std::vector<float> points3D;
+    int                point3DCount = 0;  // points3D.size() / 6
+};
+
+LutPreviewData getLutPreview(int guiLutIndex);
+
 }  // namespace jefe::qt
 
 #endif
