@@ -48,6 +48,8 @@ MENU_FILE_QUIT = "menu.file.quit"
 MENU_VIEW = "menu.view"
 MENU_VIEW_FULLSCREEN = "menu.view.fullscreen"
 MENU_VIEW_CCFAVORITES = "menu.view.ccfavorites"
+MENU_VIEW_HISTOGRAM = "menu.view.histogram"            # Ctrl+H (active quad)
+MENU_VIEW_HISTOGRAM_ALL = "menu.view.histogramall"     # Ctrl+Alt+H (all plates)
 MENU_HELP = "menu.help"
 # NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's
 # objectName — every menu item appears with `identifier='qt_itemFired:'`

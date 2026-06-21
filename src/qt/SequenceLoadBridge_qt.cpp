@@ -276,6 +276,16 @@ void seekToFrame(int frame) {
     plateManager.setChanged();
 }
 
+void toggleHistogramActiveQuad() {
+    plateManager.toggleHistogramMode(plateManager.getActiveQuad());
+    plateManager.setChanged();
+}
+
+void toggleHistogramAll() {
+    plateManager.toggleHistogramModeAll();
+    plateManager.setChanged();
+}
+
 // The Qt loop-mode combo uses 0/1/2 for Once/Loop/Bounce, but the
 // playback manager's switch in update() matches against the CBArgs
 // enum values (LOOPMODEONCE_ID=22, LOOPMODELOOP_ID=23, LOOPMODEBOUNCE_ID=24).

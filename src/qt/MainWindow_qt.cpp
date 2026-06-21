@@ -552,6 +552,20 @@ void MainWindow_Qt::buildMenuBar() {
         fullscreenAction->setChecked(isFullScreen());
     });
     viewMenu->addSeparator();
+    // Histogram overlay (gfcPlate's in-viewport draggable sub-window).
+    // Ctrl+H toggles it on the active quad, Ctrl+Alt+H on all plates —
+    // matches FLTK. Routed through the bridge; the render path already
+    // draws the window when visible.
+    viewMenu->addAction(tr("Show &Histogram"), QKeySequence(Qt::CTRL | Qt::Key_H),
+                        this, []() {
+        jefe::qt::toggleHistogramActiveQuad();
+    })->setObjectName("menu.view.histogram");
+    viewMenu->addAction(tr("Show Histogram (All Plates)"),
+                        QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H),
+                        this, []() {
+        jefe::qt::toggleHistogramAll();
+    })->setObjectName("menu.view.histogramall");
+    viewMenu->addSeparator();
     // Toggle actions for each dock. createDockWidget() exposes a built-in
     // toggleViewAction() that flips visibility and tracks state for us.
     auto rememberDockToggle = [viewMenu](QDockWidget* d) {
