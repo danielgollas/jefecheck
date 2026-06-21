@@ -127,6 +127,8 @@ PLAYLIST_REMOVE = "playlist.remove.button"
 PLAYLIST_UP = "playlist.up.button"
 PLAYLIST_DOWN = "playlist.down.button"
 PLAYLIST_CLEAR = "playlist.clear.button"
+PLAYLIST_SAVE = "playlist.save.button"
+PLAYLIST_LOAD = "playlist.load.button"
 PLAYLIST_STATUS = "playlist.status.label"
 
 # Render dialog (PR-39a — minimal: quadrant/format/range/scale/path/prefix)

@@ -51,6 +51,18 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     connect(clearBtn_, &QPushButton::clicked,
             this, &PlaylistPanel_Qt::onClearClicked);
 
+    saveBtn_ = new QPushButton("Save…", this);
+    saveBtn_->setObjectName("playlist.save.button");
+    saveBtn_->setToolTip("Save the playlist to a .jpl file");
+    connect(saveBtn_, &QPushButton::clicked,
+            this, &PlaylistPanel_Qt::onSaveClicked);
+
+    loadBtn_ = new QPushButton("Load…", this);
+    loadBtn_->setObjectName("playlist.load.button");
+    loadBtn_->setToolTip("Load a playlist from a .jpl file");
+    connect(loadBtn_, &QPushButton::clicked,
+            this, &PlaylistPanel_Qt::onLoadClicked);
+
     status_ = new QLabel(this);
     status_->setObjectName("playlist.status.label");
     status_->setStyleSheet("color: #888; font-style: italic;");
@@ -64,6 +76,8 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     btnRow->addWidget(downBtn_);
     btnRow->addWidget(clearBtn_);
     btnRow->addStretch(1);
+    btnRow->addWidget(loadBtn_);
+    btnRow->addWidget(saveBtn_);
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(8, 8, 8, 8);
@@ -135,6 +149,29 @@ void PlaylistPanel_Qt::onDownClicked() {
 
 void PlaylistPanel_Qt::onClearClicked() {
     jefe::qt::clearPlaylist();
+    refreshList();
+}
+
+void PlaylistPanel_Qt::onSaveClicked() {
+    QSettings s;
+    const QString seed = s.value(kLastDirSettingKey, QDir::homePath()).toString();
+    QString chosen = QFileDialog::getSaveFileName(
+        this, "Save playlist", seed, "JefeCheck playlist (*.jpl)");
+    if (chosen.isEmpty()) return;
+    s.setValue(kLastDirSettingKey, QFileInfo(chosen).absolutePath());
+    // The bridge appends .jpl if absent, but Qt's filter may already have.
+    jefe::qt::savePlaylistFile(chosen.toStdString());
+    status_->setText(QString("Saved %1 entries").arg(list_->count()));
+}
+
+void PlaylistPanel_Qt::onLoadClicked() {
+    QSettings s;
+    const QString seed = s.value(kLastDirSettingKey, QDir::homePath()).toString();
+    const QString chosen = QFileDialog::getOpenFileName(
+        this, "Load playlist", seed, "JefeCheck playlist (*.jpl);;All files (*)");
+    if (chosen.isEmpty()) return;
+    s.setValue(kLastDirSettingKey, QFileInfo(chosen).absolutePath());
+    jefe::qt::loadPlaylistFile(chosen.toStdString());
     refreshList();
 }
 

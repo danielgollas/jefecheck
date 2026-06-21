@@ -6,7 +6,7 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 
 ## A. Session & playlist (state management)
 - ✅ **Save Session / Open Session / Recent / crash recovery** — DONE (PR #100). Configurable launch behavior (empty/reopen/ask); auto-loads footage; CC favorites folded in (✅ C).
-- 🟡 **Playlist Manager** (`Ctrl+P`) — a Qt playlist dock exists (`dock.playlist`); FLTK's full save/load `.jpl`, drag-append, remote-session integration not fully verified/ported. Manual §Playlists.
+- 🟡 **Playlist Manager** (`Ctrl+P`) — Qt playlist dock (`dock.playlist`) with add/remove/reorder/clear and ✅ **Save/Load `.jpl`** (playlist PR — Load…/Save… buttons → `gfcPlaylistManager::loadPlaylist`/`savePlaylist`, round-trip verified via `--playlist-test`). Still TODO: drag-append, remote-session integration, `Ctrl+P` dock shortcut. Manual §Playlists.
 - 🟢 **Window layout persistence** — ✅ already works (`saveLayout`/`restoreLayout` via QSettings).
 
 ## B. File export / saving / render
