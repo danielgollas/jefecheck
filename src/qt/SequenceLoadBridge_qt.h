@@ -668,6 +668,29 @@ struct LutSummary {
 };
 std::vector<LutSummary> getLutSummaries();
 
+// --- Session save/restore ---------------------------------------------------
+// loadSession / loadRecoverySession decode preview frames, so the CALLER must
+// make the viewport's GL context current first (the bridge is context-free).
+bool saveSession(const std::string& path);
+bool loadSession(const std::string& path);
+// Recovery / last-session file (getApplicationDataPath()+recoverySession.jcs).
+bool getHasRecoverableSession();
+bool loadRecoverySession();     // loads it; does NOT delete (caller decides)
+void writeRecoverySession();    // writes it unconditionally
+void removeRecoverySession();
+// Recent sessions (manager keeps sett.recentSessions, cap 5).
+std::vector<std::string> getRecentSessions();
+void setRecentSessions(const std::vector<std::string>& paths);
+// Startup-session preference (0 Empty / 1 Reopen / 2 Ask).
+int  getStartupSessionBehavior();
+void setStartupSessionBehavior(int mode);
+// Color-correction favorites (slot 0..4, on the active plate).
+void saveCCFavoriteFromActive(int slot);
+void applyCCFavoriteToActive(int slot);
+bool saveCCFavoritesFile(const std::string& path);
+bool loadCCFavoritesFile(const std::string& path);
+std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
+
 }  // namespace jefe::qt
 
 #endif

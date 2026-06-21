@@ -14,6 +14,8 @@
 #include "../gfcplaylistmanager.h"
 #include "../gfcplaylistitem.h"
 #include "../gfcnetworkmanager.h"
+#include "../gfcsessionmanager.h"
+#include "../xmlParser.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
@@ -33,6 +35,7 @@ extern gfcTrackManager trackManager;
 extern gfcLUTManager lutManager;
 extern gfcFXManager fxManager;
 extern gfcNetworkManager networkManager;
+extern gfcSessionManager sessionManager;
 extern gfcSettings sett;
 
 namespace jefe::qt {
@@ -1502,6 +1505,84 @@ void setTrackChannel(int trackIdx, int channelIdx) {
 void setTrackCrop(int trackIdx, bool on) {
     auto* seq = trackManager.getSequence(trackIdx);
     if (seq && seq->myGUI) seq->myGUI->setCrop(on ? 1 : 0);
+}
+
+// --- Session save/restore ---------------------------------------------------
+
+static std::string recoveryPath() {
+    return ::getApplicationDataPath() + "recoverySession.jcs";
+}
+
+bool saveSession(const std::string& path) {
+    if (path.empty()) return false;
+    sessionManager.saveSession(path);
+    return true;
+}
+
+bool loadSession(const std::string& path) {
+    if (path.empty()) return false;
+    sessionManager.loadSession(path);   // caller made GL context current
+    plateManager.setChanged();
+    return true;
+}
+
+bool getHasRecoverableSession() { return sessionManager.checkCrashedSession(); }
+
+bool loadRecoverySession() {
+    if (!sessionManager.checkCrashedSession()) return false;
+    // Load but leave the file in place (loadCrashedSession deletes; we want it
+    // to also serve "reopen last session").
+    sessionManager.loadSession(recoveryPath());
+    plateManager.setChanged();
+    return true;
+}
+
+void writeRecoverySession() {
+    // Unconditional (not gated on enableCrashRecoverySession) so "reopen last"
+    // always has content; the launch preference governs whether it's consumed.
+    sessionManager.saveSession(recoveryPath());
+}
+
+void removeRecoverySession() { sessionManager.removeCrashSession(); }
+
+std::vector<std::string> getRecentSessions() { return sett.recentSessions; }
+
+void setRecentSessions(const std::vector<std::string>& paths) {
+    sett.recentSessions = paths;
+    if ((int)sett.recentSessions.size() > sett.maxRecentSessions)
+        sett.recentSessions.resize(sett.maxRecentSessions);
+}
+
+int  getStartupSessionBehavior() { return sett.startupSessionBehavior; }
+void setStartupSessionBehavior(int mode) { sett.startupSessionBehavior = mode; }
+
+void saveCCFavoriteFromActive(int slot) {
+    plateManager.saveFavoriteColorCorrectionFromPlate(slot);  // active quad
+}
+
+void applyCCFavoriteToActive(int slot) {
+    plateManager.setFavoriteColorCorrectionOnPlate(slot);     // active quad
+    plateManager.setChanged();
+}
+
+bool saveCCFavoritesFile(const std::string& path) {
+    XMLNode root = XMLNode::createXMLTopNode("ccFavorites");
+    plateManager.saveFavoriteColorCorrectionsToNode(root);
+    return root.writeToFile(path.c_str()) == eXMLErrorNone;
+}
+
+bool loadCCFavoritesFile(const std::string& path) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::exists(path, ec)) return false;
+    XMLNode root = XMLNode::openFileHelper(path.c_str(), "ccFavorites");
+    if (root.isEmpty()) return false;
+    plateManager.loadFavoriteColorCorrectionsFromNode(root);
+    return true;
+}
+
+std::string getFavoritesFilePath() {
+    return ::getApplicationDataPath() + "favorites.jcs";
 }
 
 }  // namespace jefe::qt
