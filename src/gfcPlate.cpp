@@ -1365,6 +1365,10 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
             renderParams.sizeX=fboVP.w;
             renderParams.sizeY=fboVP.h;
             gfcImageSaver *imageSaver= getImageSaverInstance(renderParams);
+            if (imageSaver==NULL) {
+                printf("ERROR: no image saver for render format %i\n",renderParams.format);
+                return;
+            }
 
             //get the FBOs texture into the imageSavers pixels;
             void * thePixels=imageSaver->getPixelPointer();
@@ -1383,7 +1387,11 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
             //printf("The error should follow\n");
             glPrintError();
             //glFinish();
-            imageSaver->save();
+            if (imageSaver->save() != 0) {
+                printf("RENDER SAVE FAILED (%s): %s\n",
+                       renderParams.filename.c_str(),
+                       imageSaver->getErrorString().c_str());
+            }
             imageSaver->freeResources();
 
             if (imageSaver)

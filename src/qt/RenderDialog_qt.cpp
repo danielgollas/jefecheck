@@ -1,4 +1,6 @@
 #include "RenderDialog_qt.h"
+#include "GlViewport_qt.h"
+#include "MainWindow_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QApplication>
@@ -284,9 +286,20 @@ void RenderDialog_Qt::onRenderClicked() {
     doneBtn_->setEnabled(false);
     QApplication::processEvents();
 
+    // renderPlate drives gfcPlate::draw() directly — that issues GL calls
+    // (glGetTexImage, FBO binds) that need the viewport's context current,
+    // which it isn't outside paintGL. Make it current around the render.
+    GlViewport_Qt* vp = nullptr;
+    if (auto* mw = qobject_cast<MainWindow_Qt*>(window())) {
+        vp = mw->viewport();
+    }
+    if (vp) vp->makeCurrent();
+
     // Synchronous — the dialog will appear frozen until the render
     // completes. PR-39b moves this onto a QThread.
     const int n = jefe::qt::triggerSyncRender(p);
+
+    if (vp) vp->doneCurrent();
 
     statusLabel_->setText(QString("Rendered %1 frame(s)").arg(n));
     renderBtn_->setEnabled(inputsValid());
