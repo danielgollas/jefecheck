@@ -31,4 +31,11 @@ private:
     gfcLoadParams params;
 };
 
+// Reads any OIIO-supported image (TGA, PNG, …) into a tightly-packed,
+// top-left-origin RGB8 buffer (width*height*3 bytes). Returns false on
+// failure. Used by the image-based LUT loader (CubeLUT IMAGELUT2D) so the
+// .tga cube LUTs load without the removed GFL SDK. No OIIO types leak.
+bool gfcReadImageRGB8(const char* path, std::vector<unsigned char>& out,
+                      int& width, int& height);
+
 #endif

@@ -15,7 +15,10 @@ class QDropEvent;
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
+class QTreeWidget;
 class QPushButton;
+class QCheckBox;
+class LUTPreview_Qt;
 
 class FXStackPanel_Qt : public QWidget {
     Q_OBJECT
@@ -63,9 +66,13 @@ protected:
 
 private:
     void applySelected();
+    void updatePreview();
+    int  selectedGuiIndex() const;   // gui LUT index of the selected row (0 = none)
 
-    QListWidget* list_ = nullptr;
+    QTreeWidget* table_ = nullptr;
     QLabel* status_ = nullptr;
+    QCheckBox*     previewToggle_ = nullptr;
+    LUTPreview_Qt* preview_       = nullptr;
 };
 
 #endif

@@ -631,6 +631,43 @@ ThumbPixels getTrackThumbnail(int track, int frameIndex);
 bool getThumbnailsEnabled();        // reads sett.showThumbnails
 void setThumbnailsEnabled(bool on); // writes sett.showThumbnails; setChanged()
 
+// Qt-safe snapshot of a LUT for the LUT-panel preview. The bridge .cpp
+// (which includes trilerp.h) copies the sample data out so the widget
+// never touches CubeLUT/glad. guiLutIndex is the LUT-panel row:
+// 0 = "(No LUT)" → valid=false; row r>=1 → lutManager.getLUT(r-1).
+struct LutPreviewData {
+    bool        valid    = false;
+    int         type     = 0;      // CubeLUT::LUTTYPES
+    bool        is3D     = false;  // type != JEFECHECK1D
+    int         size     = 0;      // samples (1D) or cube edge (3D)
+    int         fromBits = 0;
+    int         toBits   = 0;
+    float       max1D    = 1.0f;
+    std::string name;
+    // 1D: `size` output samples (raw, in [0, max1D]).
+    std::vector<float> curve1D;
+    // 3D: structured cube grid (with adjacency, for faces/lattice/dots).
+    // `cubeSize` is the working edge after any subsample; `cubeRGB` holds
+    // cubeSize^3 nodes × 3 floats = the node's clamped output RGB, x-major:
+    // node (x,y,z) at index ((x*cubeSize + y)*cubeSize + z) * 3.
+    int                cubeSize = 0;
+    std::vector<float> cubeRGB;
+};
+
+LutPreviewData getLutPreview(int guiLutIndex);
+
+// Lightweight per-LUT metadata for the sortable LUT browser table (no cube
+// data copied). One entry per loaded LUT, in lutManager order; the panel's
+// gui index for entry i is (i + 1) (row 0 is the "(No LUT)" slot).
+struct LutSummary {
+    std::string name;
+    bool is3D     = false;
+    int  size     = 0;
+    int  fromBits = 0;
+    int  toBits   = 0;
+};
+std::vector<LutSummary> getLutSummaries();
+
 }  // namespace jefe::qt
 
 #endif

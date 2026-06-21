@@ -78,6 +78,11 @@ TRANSPORT_FPS = "transport.fps.spin"
 LUT_LIST = "lut.list"
 LUT_APPLY = "lut.apply.button"
 LUT_REFRESH = "lut.refresh.button"
+# LUT preview/inspector (the 1D curve / 3D cube canvases are painted/GL
+# widgets whose content isn't AX-addressable — only the container + toggle
+# resolve; behavior is verified manually).
+LUT_PREVIEW = "lut.preview"
+LUT_PREVIEW_TOGGLE = "lut.preview.toggle"
 
 # FX Stack panel
 FXSTACK_AVAILABLE = "fxstack.available.list"

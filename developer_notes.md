@@ -230,6 +230,19 @@ The track rows can render a filmstrip of decoded frames (toggle: `sett.showThumb
 - **Layout = natural width, tick-aligned, skip-overlap** (`paintFilmstrip`): a thumbnail is always `stripH × frameAspect` (its natural ratio — never squeezed/cropped). Each loaded frame is drawn centered on its tick x; any frame whose thumb would overlap the previous drawn one is skipped. Sparse → every frame, tick-aligned with gaps; dense → auto-samples and packs. There is no manual density threshold — "min width = natural ratio" IS the threshold. Frame aspect is probed from one decoded thumbnail (16:9 fallback until one exists).
 - **Don't force the timeline taller than the Plate Manager.** They share the bottom dock row (`splitDockWidget(plateDock_, timelineDock_, Horizontal)`), so a tall min-height on the tracks widget makes the whole row (and thus the plate side) over-tall. Keep the floor modest (96); thumbnails scale to whatever lane height the row provides. An over-tall row once corrupted the saved dock state and hid the Plate Manager — `kSettingsState` was bumped to `_v2` to discard that.
 
+## 16. LUT preview / inspector (`LUTPreview_qt`)
+
+The LUT panel has an in-window preview: a QPainter 2D curve for 1D LUTs and an interactive `QOpenGLWidget` cube inspector for 3D LUTs. Hard-won bits:
+
+- **All LUT sample data comes through the bridge** (`jefe::qt::getLutPreview` → `LutPreviewData` with a structured `cubeRGB` grid; `getLutSummaries` for the table). The widget never includes `trilerp.h`/glad (TU separation, §1). `getLUT(int)` returns a `CubeLUT` **by value** (copies the whole cube) — fine for one-shot snapshots on selection, not for per-frame use.
+- **The cloud is its own `QOpenGLWidget`** using GL 2.1 immediate-mode + fixed-function (`glBegin`, `glFrustum`, `glRotatef`) — valid under the app's NoProfile 2.1 `QSurfaceFormat`, resolved against the system GL the widget's context uses, **not glad**. `QOpenGLFunctions` supplies the core subset (`glClear/glEnable/...`).
+- **Set GL state every frame in `paintGL`, not in `initializeGL`.** The QPainter used for the R/G/B axis labels **disables `GL_DEPTH_TEST`** each frame, so enabling it once in `initializeGL` makes occlusion break from frame 2 (solid faces draw back-over-front). Wrap the raw GL in `beginNativePainting`/`endNativePainting`, and re-enable depth/clear/point-size at the top of every `paintGL`. Capture the GL matrices (`glGetFloatv`) for label projection *before* `endNativePainting`, draw the text *after*.
+- **Dynamic frustum**: rebuild the projection each frame from the camera distance (`znear ≈ dist−2`, `zfar = dist+8`) so it never clips as you dolly — a fixed near/far in `resizeGL` clips.
+- **`emit` is a Qt macro** — never name a local lambda `emit` (use `emitVert` etc.); it fails to compile with a cryptic "expected unqualified-id".
+- **Adding a new Q_OBJECT header** (e.g. `LUTPreview_qt.h`) requires wiping `build_qt/jefecheck_autogen` before `cmake -B build_qt`, or AUTOMOC won't scan it → "undefined vtable" link errors.
+- **Sortable table**: the LUT browser is a `QTreeWidget` (Name/Type/Size/Depth). Numeric columns sort via a `QTreeWidgetItem` subclass comparing an int stashed in a custom data role — plain display-text sort is lexical ("1024" < "16³").
+- **Image-based (.tga) LUTs load via OIIO** now: `gfcReadImageRGB8` (in the OIIO loader) feeds `CubeLUT`'s `IMAGELUT2D` path; the shipped `UnitCube.tga` is a handy identity-cube sanity check. Only 64×64 image LUTs are wired (Nuke 448×448 reports unsupported).
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.

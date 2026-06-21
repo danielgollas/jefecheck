@@ -22,6 +22,7 @@
 #include "gfcsequencegui_qt.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 
@@ -451,12 +452,9 @@ int getLoadedFXCount() {
 }
 
 int getExpectedLUTCount() {
-    // .tga / image-based LUT loading is disabled in this build (see
-    // CLAUDE.md "Known issues" — trilerp.cpp IMAGELUT2D returns -1
-    // pending OIIO image reading). Counting .tga files in the
-    // expected total would always show a mismatch on a healthy
-    // install, so we exclude them.
-    return countFilesByExt(sett.lutPath, {".lut", ".cub", ".cube"});
+    // .tga image-based LUTs now load via OIIO (gfcReadImageRGB8), so they
+    // count toward the expected total alongside the text-based LUTs.
+    return countFilesByExt(sett.lutPath, {".lut", ".cub", ".cube", ".tga"});
 }
 
 int getLoadedLUTCount() {
@@ -492,9 +490,9 @@ std::vector<std::string> getInstallLUTPaths(const std::string& dir) {
         std::string ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(),
                        [](unsigned char c) { return std::tolower(c); });
-        // Skip .tga — image-based LUT loading is disabled (see
-        // getExpectedLUTCount).
-        if (ext == ".lut" || ext == ".cub" || ext == ".cube") {
+        // .tga = image-based LUT (now loaded via OIIO; e.g. the UnitCube
+        // identity cube). .lut/.cub/.cube are text-based LUTs.
+        if (ext == ".lut" || ext == ".cub" || ext == ".cube" || ext == ".tga") {
             files.push_back(entry.path().string());
         }
     }
@@ -851,6 +849,72 @@ int getLUTOnActivePlate() {
     if (q < 0) return 0;
     auto* gui = plateManager.getPlateGUI(q);
     return gui ? gui->getLUT() : 0;
+}
+
+std::vector<LutSummary> getLutSummaries() {
+    std::vector<LutSummary> out;
+    const auto names = lutManager.getAllNames();
+    out.reserve(names.size());
+    for (int i = 0; i < (int)names.size(); ++i) {
+        CubeLUT lut = lutManager.getLUT(i);   // copies; only on manual refresh
+        LutSummary s;
+        s.name     = lut.getNameNoPath();
+        s.is3D     = (lut.type != CubeLUT::JEFECHECK1D);
+        s.size     = lut.size;
+        s.fromBits = lut.fromBits;
+        s.toBits   = lut.toBits;
+        out.push_back(std::move(s));
+    }
+    return out;
+}
+
+LutPreviewData getLutPreview(int guiLutIndex) {
+    LutPreviewData d;
+    if (guiLutIndex <= 0) return d;          // 0 = "(No LUT)"
+    CubeLUT lut = lutManager.getLUT(guiLutIndex - 1);
+    if (lut.size <= 0) return d;
+    d.valid    = true;
+    d.type     = lut.type;
+    d.is3D     = (lut.type != CubeLUT::JEFECHECK1D);
+    d.size     = lut.size;
+    d.fromBits = lut.fromBits;
+    d.toBits   = lut.toBits;
+    d.max1D    = lut.maximum1DValue > 0.f ? lut.maximum1DValue : 1.f;
+    d.name     = lut.getNameNoPath();
+
+    if (!d.is3D) {
+        const int n = std::min(lut.size, 1024);
+        d.curve1D.reserve(n);
+        for (int i = 0; i < n; ++i) d.curve1D.push_back(lut.lut1D[i]);
+        return d;
+    }
+
+    // 3D: build a structured working grid (with adjacency, so the widget
+    // can draw faces / lattice / dots). Subsample large cubes to a bounded
+    // working edge so faces and lattice stay manageable.
+    constexpr int kMaxCubeEdge = 33;
+    const int s = lut.size;
+    int stride = 1;
+    while ((s + stride - 1) / stride > kMaxCubeEdge) ++stride;
+    const int cs = (s + stride - 1) / stride;   // working edge (ceil)
+    d.cubeSize = cs;
+    d.cubeRGB.resize((size_t)cs * cs * cs * 3);
+    auto clamp01 = [](double v) { return (float)(v < 0 ? 0 : (v > 1 ? 1 : v)); };
+    for (int ix = 0; ix < cs; ++ix) {
+        const int x = std::min(ix * stride, s - 1);
+        for (int iy = 0; iy < cs; ++iy) {
+            const int y = std::min(iy * stride, s - 1);
+            for (int iz = 0; iz < cs; ++iz) {
+                const int z = std::min(iz * stride, s - 1);
+                const Vec3D& c = lut.cube[x][y][z];
+                const size_t idx = (((size_t)ix * cs + iy) * cs + iz) * 3;
+                d.cubeRGB[idx + 0] = clamp01(c.x);
+                d.cubeRGB[idx + 1] = clamp01(c.y);
+                d.cubeRGB[idx + 2] = clamp01(c.z);
+            }
+        }
+    }
+    return d;
 }
 
 void panPlate(int plateIdx, float dx, float dy) {
