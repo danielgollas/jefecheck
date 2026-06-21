@@ -559,6 +559,34 @@ void MainWindow_Qt::buildMenuBar() {
     // Filled in after buildDocks() runs, see below.
     (void)rememberDockToggle;
 
+    // View → Color Correction Favorites: 5 save/load slots on the active plate.
+    // Menu-only (no Ctrl+1-5 shortcuts — they'd collide with the layout ones).
+    viewMenu->addSeparator();
+    auto* ccFavMenu = viewMenu->addMenu(tr("Color Correction Favorites"));
+    ccFavMenu->setObjectName("menu.view.ccfavorites");
+    for (int i = 0; i < 5; ++i) {
+        QAction* save = ccFavMenu->addAction(tr("Save to Slot %1").arg(i + 1));
+        save->setObjectName(QString("menu.view.ccfav.save.%1").arg(i));
+        connect(save, &QAction::triggered, this, [this, i]() {
+            jefe::qt::saveCCFavoriteFromActive(i);
+            jefe::qt::saveCCFavoritesFile(jefe::qt::getFavoritesFilePath());
+            statusBar()->showMessage(
+                tr("Saved color correction to favorite %1").arg(i + 1), 3000);
+        });
+    }
+    ccFavMenu->addSeparator();
+    for (int i = 0; i < 5; ++i) {
+        QAction* load = ccFavMenu->addAction(tr("Load Slot %1").arg(i + 1));
+        load->setObjectName(QString("menu.view.ccfav.load.%1").arg(i));
+        connect(load, &QAction::triggered, this, [this, i]() {
+            jefe::qt::applyCCFavoriteToActive(i);
+            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+            if (viewport_) viewport_->update();
+            statusBar()->showMessage(
+                tr("Loaded color correction favorite %1").arg(i + 1), 3000);
+        });
+    }
+
     auto* helpMenu = mb->addMenu("&Help");
     helpMenu->setObjectName("menu.help");
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
