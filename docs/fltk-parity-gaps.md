@@ -5,9 +5,7 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 **Legend:** 🟢 backend exists in shared C++ (cheap — just wire Qt UI/shortcuts) · 🟡 partial in Qt · 🔴 not implemented (real work) · ✅ done.
 
 ## A. Session & playlist (state management)
-- 🟢 **Save Session / Open Session** (`Ctrl+S` / `Ctrl+O`) → `.jcs`. `gfcSessionManager::saveSession/loadSession` fully exist; no Qt menu/shortcut. *(This is the chosen next project.)*
-- 🟢 **Recent Sessions** submenu — `sett.recentSessions` tracked; `rebuildRecentSessionsMenu()` stubbed; no Qt menu.
-- 🟢 **Crash recovery on startup** — `writeCrashSession`/`checkCrashedSession`/`loadCrashedSession` exist; no Qt startup hook.
+- ✅ **Save Session / Open Session / Recent / crash recovery** — DONE (PR #100). Configurable launch behavior (empty/reopen/ask); auto-loads footage; CC favorites folded in (✅ C).
 - 🟡 **Playlist Manager** (`Ctrl+P`) — a Qt playlist dock exists (`dock.playlist`); FLTK's full save/load `.jpl`, drag-append, remote-session integration not fully verified/ported. Manual §Playlists.
 - 🟢 **Window layout persistence** — ✅ already works (`saveLayout`/`restoreLayout` via QSettings).
 
@@ -22,18 +20,18 @@ Audit of features the FLTK build (git `9a1c605`) + user manual describe that the
 ## D. Visualization / display
 - ✅ **LUT visualization** (1D graph / 3D cube) — DONE in PR #99 (matches manual §LUT Manager Visualization).
 - 🔴 **Show Histogram** (`Ctrl+H`) — RGB histogram overlay, draggable/resizable. Not ported.
-- 🔴 **Hide Controls** (`Ctrl+Alt+F`) — hide menu/control bars, shortcuts still active. Not ported.
+- ✅ **Hide Controls** (`Ctrl+Alt+F`) — hides menu bar / status bar / all docks; the shortcut still fires while hidden so it toggles back. DONE (shortcut-parity PR).
 - 🟡 **Zoom Filtering** (point vs bilinear) — FLTK View-menu toggle; in Qt this may live in Preferences (verify) — at least no View-menu item.
 - 🟡 **Aspect bar opacity** — FLTK View-menu (4 levels); Qt moved it to Preferences → View (developer_notes). Functional, different access.
 
 ## E. Menu access & shortcuts (dialogs mostly exist as Qt docks)
-- 🔴 **F-key dialog shortcuts**: F2 FX Stack, F3 FX Manager, F4 LUT, F5 Remote, F6 Render. The Qt equivalents exist as docks/dialogs but have **no F-key shortcuts** and there's no "Dialogs" menu.
-- 🔴 **Help menu**: F1 manual, Quick Start, Online Support, Video Tutorials, **Toggle On-screen Help (`H`)**, (About + System Specs already exist in Qt Help menu).
+- ✅ **F-key dialog shortcuts**: F2 FX Stack, F3 FX Params, F4 LUT, F5 Remote, F6 Render — DONE (shortcut-parity PR). New "Dialogs" menu (`menu.dialogs`) raises the matching dock/dialog; Hide Controls (`Ctrl+Alt+F`) lives here too.
+- 🟡 **Help menu**: ✅ F1 User Manual + Quick Start Guide (open the GitHub docs) added (shortcut-parity PR). Online Support / Video Tutorials / on-screen-help toggle (`H`) still TODO. (About + System Specs already existed.)
 
 ## F. Playback / transport keyboard shortcuts
 Qt has Space (pause), Left/Right (step), Up/Down (track cycle). FLTK additionally had:
-- 🔴 **Playback direction** `.` (fwd) / `,` (rev); **frame step** `C`/`X`; **fast-fwd** `V` / **rewind** `Z`; **loop mode** `8`/`9`/`0`. *(Note: `V`/`H` are now flip/flop in Qt.)*
-- 🔴 **In/Out point keys** `I`/`O` (+ `Shift`/`Alt` variants: set to 1, set to max, set-and-load-at). Spinboxes exist in the timeline; keys don't.
+- 🟡 **Playback direction** `.` (fwd) / `,` (rev); **frame step** `C`/`X`. Still TODO. **Rewind / fast-fwd** ✅ remapped to `Home`/`End` (FLTK's `Z`/`V` keys are taken by flip/flop in Qt). **Loop mode** ✅ `8`/`9`/`0` (once/loop/bounce) — DONE (shortcut-parity PR).
+- 🟡 **In/Out point keys** ✅ `I`/`O` set in/out at current frame; `Shift+I`/`Shift+O` set to timeline ends — DONE (shortcut-parity PR). Alt set-and-load-at variant still TODO.
 - 🔴 **LUT cycling** `L` + Up/Down.
 
 ## G. Channel toggles

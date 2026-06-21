@@ -398,6 +398,44 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             }
             break;
 
+        // Rewind / fast-forward to the start / end (transport rew/ffwd).
+        case Qt::Key_Home:
+            if (!ctrl && !alt) { jefe::qt::rewindPlayback(); handled(); return; }
+            break;
+        case Qt::Key_End:
+            if (!ctrl && !alt) { jefe::qt::fastFwdPlayback(); handled(); return; }
+            break;
+
+        // Loop mode (FLTK 8/9/0): once / loop / bounce.
+        case Qt::Key_8:
+            if (!ctrl && !alt) { jefe::qt::setLoopMode(0); handled(); return; }
+            break;
+        case Qt::Key_9:
+            if (!ctrl && !alt) { jefe::qt::setLoopMode(1); handled(); return; }
+            break;
+        case Qt::Key_0:
+            if (!ctrl && !alt) { jefe::qt::setLoopMode(2); handled(); return; }
+            break;
+
+        // In / out points (FLTK I/O). Bare = at current frame; Shift = to the
+        // timeline ends.
+        case Qt::Key_I:
+            if (!ctrl && !alt) {
+                jefe::qt::setInPoint(shift ? jefe::qt::getFromFrame()
+                                           : jefe::qt::getCurrentFrame());
+                handled();
+                return;
+            }
+            break;
+        case Qt::Key_O:
+            if (!ctrl && !alt) {
+                jefe::qt::setOutPoint(shift ? jefe::qt::getToFrame()
+                                            : jefe::qt::getCurrentFrame());
+                handled();
+                return;
+            }
+            break;
+
         default:
             break;
     }
