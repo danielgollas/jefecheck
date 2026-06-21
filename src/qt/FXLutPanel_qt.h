@@ -16,6 +16,8 @@ class QLabel;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QCheckBox;
+class LUTPreview_Qt;
 
 class FXStackPanel_Qt : public QWidget {
     Q_OBJECT
@@ -63,9 +65,12 @@ protected:
 
 private:
     void applySelected();
+    void updatePreview();
 
     QListWidget* list_ = nullptr;
     QLabel* status_ = nullptr;
+    QCheckBox*     previewToggle_ = nullptr;
+    LUTPreview_Qt* preview_       = nullptr;
 };
 
 #endif

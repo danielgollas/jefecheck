@@ -1,6 +1,8 @@
 #include "FXLutPanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
+#include "LUTPreview_qt.h"
 
+#include <QCheckBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QHBoxLayout>
@@ -166,14 +168,32 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     row->addWidget(refreshBtn);
     row->addStretch(1);
 
+    previewToggle_ = new QCheckBox("Preview", this);
+    previewToggle_->setChecked(true);
+    previewToggle_->setObjectName("lut.preview.toggle");
+    previewToggle_->setAccessibleName("Show LUT preview");
+
+    preview_ = new LUTPreview_Qt(this);
+
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(8, 8, 8, 8);
     outer->setSpacing(6);
     outer->addWidget(status_);
     outer->addWidget(list_, /*stretch*/ 1);
     outer->addLayout(row);
+    outer->addWidget(previewToggle_);
+    outer->addWidget(preview_, /*stretch*/ 1);
 
     refreshList();
+
+    connect(previewToggle_, &QCheckBox::toggled, this, [this](bool on) {
+        preview_->setVisible(on);
+        if (on) updatePreview();
+    });
+    connect(list_, &QListWidget::currentRowChanged, this, [this](int) {
+        updatePreview();
+    });
+    updatePreview();
 }
 
 void LUTPanel_Qt::refreshList() {
@@ -194,6 +214,13 @@ void LUTPanel_Qt::refreshList() {
     if (active >= 0 && active < list_->count()) {
         list_->setCurrentRow(active);
     }
+    updatePreview();
+}
+
+void LUTPanel_Qt::updatePreview() {
+    // Null-guarded: refreshList() runs in the ctor before preview_ exists.
+    if (!preview_ || !previewToggle_ || !previewToggle_->isChecked()) return;
+    preview_->setLut(jefe::qt::getLutPreview(list_->currentRow()));
 }
 
 void LUTPanel_Qt::applySelected() {

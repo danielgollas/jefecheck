@@ -6,7 +6,9 @@
 #include <QGridLayout>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QFont>
 #include <QString>
+#include <algorithm>
 #include <QTimer>
 #include <QMouseEvent>
 #include <QShowEvent>
@@ -37,8 +39,14 @@ void LutCurveWidget::paintEvent(QPaintEvent*) {
     const QRect r = rect();
     p.fillRect(r, QColor(20, 20, 20));
 
-    const int pad = 10;
-    const QRect plot = r.adjusted(pad, pad, -pad, -pad);
+    // Reserve margins for axis labels/ticks, then make the plot SQUARE so
+    // an identity LUT reads as a 45° diagonal.
+    const int leftM = 34, bottomM = 22, topM = 8, rightM = 8;
+    QRect avail = r.adjusted(leftM, topM, -rightM, -bottomM);
+    const int side = std::max(std::min(avail.width(), avail.height()), 10);
+    const QRect plot(avail.left(), avail.bottom() - side, side, side);
+
+    // Grid + square border.
     p.setPen(QColor(60, 60, 60));
     p.drawRect(plot);
     for (int i = 1; i < 4; ++i) {
@@ -47,14 +55,41 @@ void LutCurveWidget::paintEvent(QPaintEvent*) {
         p.drawLine(gx, plot.top(), gx, plot.bottom());
         p.drawLine(plot.left(), gy, plot.right(), gy);
     }
+
     if (samples_.size() < 2) {
         p.setPen(QColor(120, 120, 120));
         p.drawText(plot, Qt::AlignCenter, "no 1D data");
         return;
     }
-    // Curve: x = input index across width, y = output / maxValue (inverted).
-    p.setPen(QPen(QColor(0xd4, 0x77, 0x1e), 1.5));
     const int n = (int)samples_.size();
+
+    // Axis labels + numeric ticks. X (in): 0 .. n samples. Y (out): 0 .. max.
+    QFont f = p.font();
+    f.setPointSizeF(8.0);
+    p.setFont(f);
+    p.setPen(QColor(150, 150, 150));
+    // X ticks.
+    p.drawText(QRect(plot.left() - 12, plot.bottom() + 2, 24, 14),
+               Qt::AlignCenter, "0");
+    p.drawText(QRect(plot.right() - 24, plot.bottom() + 2, 28, 14),
+               Qt::AlignRight | Qt::AlignVCenter, QString::number(n));
+    // Y ticks (top = max, bottom = 0).
+    p.drawText(QRect(0, plot.top() - 6, leftM - 4, 14),
+               Qt::AlignRight | Qt::AlignVCenter, QString::number(maxValue_, 'g', 3));
+    p.drawText(QRect(0, plot.bottom() - 7, leftM - 4, 14),
+               Qt::AlignRight | Qt::AlignVCenter, "0");
+    // Axis names: "in" under the X axis, "out" rotated along the Y axis.
+    p.setPen(QColor(180, 180, 180));
+    p.drawText(QRect(plot.left(), plot.bottom() + 6, plot.width(), 16),
+               Qt::AlignCenter, "in");
+    p.save();
+    p.translate(10, plot.center().y());
+    p.rotate(-90);
+    p.drawText(QRect(-side / 2, -8, side, 16), Qt::AlignCenter, "out");
+    p.restore();
+
+    // Curve: x = input index, y = output / maxValue (inverted), in the square.
+    p.setPen(QPen(QColor(0xd4, 0x77, 0x1e), 1.5));
     QPointF prev;
     for (int i = 0; i < n; ++i) {
         const float fx = (float)i / (n - 1);
@@ -92,7 +127,7 @@ void LutCloudWidget::setPoints(const std::vector<float>& p, int c) {
 
 void LutCloudWidget::initializeGL() {
     initializeOpenGLFunctions();
-    glClearColor(0.08f, 0.08f, 0.08f, 1.f);
+    glClearColor(0.5f, 0.5f, 0.5f, 1.f);   // medium neutral gray
     glEnable(GL_DEPTH_TEST);
     glPointSize(3.0f);
 }
@@ -115,7 +150,17 @@ void LutCloudWidget::paintGL() {
     glTranslatef(0.f, 0.f, -2.2f);     // pull the cube back into the frustum
     glRotatef(pitch_, 1.f, 0.f, 0.f);
     glRotatef(yaw_,   0.f, 1.f, 0.f);
-    glTranslatef(-0.5f, -0.5f, -0.5f); // center the unit cube on the origin
+    glTranslatef(-0.5f, -0.5f, -0.5f); // pivot around the cube center; (0,0,0)
+                                       // (the black corner) is the color-space origin
+
+    // Axes: long red/green/blue lines through the origin, one per channel
+    // (R→X, G→Y, B→Z). Drawn "infinite" by extending well past the cube.
+    const float A = 4.0f;
+    glBegin(GL_LINES);
+        glColor3f(1.f, 0.f, 0.f); glVertex3f(-A, 0.f, 0.f); glVertex3f(A, 0.f, 0.f);
+        glColor3f(0.f, 1.f, 0.f); glVertex3f(0.f, -A, 0.f); glVertex3f(0.f, A, 0.f);
+        glColor3f(0.f, 0.f, 1.f); glVertex3f(0.f, 0.f, -A); glVertex3f(0.f, 0.f, A);
+    glEnd();
 
     if (count_ > 0) {
         glBegin(GL_POINTS);
