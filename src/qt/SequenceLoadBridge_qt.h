@@ -140,6 +140,17 @@ void toggleHistogramAll();
 // Qt, so this is a Help-menu item with no single-key shortcut).
 void toggleOnScreenHelp();
 
+// Color-pick dispatch for in-viewport overlays (the draggable histogram
+// sub-window). Coordinates are framebuffer pixels, bottom-left origin
+// (the caller applies the device-pixel-ratio + Y-flip). The down/drag
+// calls return nonzero when an overlay consumed the event, so the caller
+// can suppress its own pan/zoom for that drag. The caller MUST have the
+// viewport GL context current (these run a selection render + read-back).
+int  viewportPickDown(int xFb, int yFb, bool ctrl, bool alt, bool shift);
+int  viewportPickDrag(int xFb, int yFb, int dxFb, int dyFb,
+                      bool ctrl, bool alt, bool shift);
+void viewportPickUp(int xFb, int yFb, bool ctrl, bool alt, bool shift);
+
 // LUT browser — backs the Qt LUT dock. Names mirror lutManager's
 // public API (getAllNames). loadLUTFile pulls a .lut/.cub/.cube/.tga
 // off disk; applyLUTToActivePlate(idx) calls plateManager.setLUT on

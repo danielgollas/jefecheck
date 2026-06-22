@@ -121,6 +121,32 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
     if (e->button() == Qt::LeftButton) {
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
+
+        // First give in-viewport pick overlays (the histogram sub-window) a
+        // chance to claim the click. doPicking runs a selection render +
+        // read-back, so the GL context must be current; update() afterwards
+        // repaints over the transient pick frame before it's composited.
+        const float dpr = devicePixelRatioF();
+        const int xFb = int(lastMouseX_ * dpr);
+        const int yFb = int((float(height()) - lastMouseY_) * dpr);
+        const bool ctrl  = e->modifiers().testFlag(Qt::ControlModifier);
+        const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
+        const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
+        makeCurrent();
+        const bool picked = jefe::qt::viewportPickDown(xFb, yFb, ctrl, alt, shift) != 0;
+        doneCurrent();
+        // doPicking renders the selection buffer into the widget FBO, so a
+        // repaint is always needed to restore the real frame — even when
+        // nothing was picked (otherwise a click while paused leaves the
+        // pick render on screen).
+        update();
+        if (picked) {
+            pickDragActive_ = true;
+            dragPlate_ = -1;     // don't also pan the plate under the cursor
+            if (listener_) listener_->onEvent(jefe::ui::EventType::Push);
+            return;
+        }
+
         // Hit-test which plate the click landed on so drag pan and
         // (in single mode) keyboard shortcuts target it. The current
         // viewport size matches what plateManager.draw saw last, so
@@ -138,7 +164,22 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
     if (listener_) listener_->onEvent(jefe::ui::EventType::Push);
 }
 
-void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
+void GlViewport_Qt::mouseReleaseEvent(QMouseEvent* e) {
+    if (pickDragActive_) {
+        const float dpr = devicePixelRatioF();
+        const int xFb = int(float(e->position().x()) * dpr);
+        const int yFb = int((float(height()) - float(e->position().y())) * dpr);
+        makeCurrent();
+        jefe::qt::viewportPickUp(xFb, yFb,
+                                 e->modifiers().testFlag(Qt::ControlModifier),
+                                 e->modifiers().testFlag(Qt::AltModifier),
+                                 e->modifiers().testFlag(Qt::ShiftModifier));
+        doneCurrent();
+        pickDragActive_ = false;
+        update();
+        if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
+        return;
+    }
     const bool wasDragging = dragPlate_ >= 0;
     dragPlate_ = -1;
     if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
@@ -152,6 +193,30 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent*) {
 }
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
+    // Pick-overlay drag (histogram sub-window). Latched on press; runs the
+    // pick dispatch with the GL context current and consumes the motion so
+    // the plate doesn't also pan.
+    if (pickDragActive_ && (e->buttons() & Qt::LeftButton)) {
+        const float dpr = devicePixelRatioF();
+        const int xFb  = int(float(e->position().x()) * dpr);
+        const int yFb  = int((float(height()) - float(e->position().y())) * dpr);
+        // gfcGLSubWindow::move applies (prevX-curX, prevY-curY) — same sign
+        // convention as the plate pan path below.
+        const int dxFb = int((lastMouseX_ - float(e->position().x())) * dpr);
+        const int dyFb = int((lastMouseY_ - float(e->position().y())) * dpr);
+        const bool ctrl  = e->modifiers().testFlag(Qt::ControlModifier);
+        const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
+        const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
+        makeCurrent();
+        jefe::qt::viewportPickDrag(xFb, yFb, dxFb, dyFb, ctrl, alt, shift);
+        doneCurrent();
+        update();
+        lastMouseX_ = e->position().x();
+        lastMouseY_ = e->position().y();
+        if (listener_) listener_->onEvent(jefe::ui::EventType::Drag);
+        return;
+    }
+
     if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {
         const float dpr = devicePixelRatioF();
         const bool gang = (e->modifiers() & Qt::AltModifier) != 0;
