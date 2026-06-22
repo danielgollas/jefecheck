@@ -38,7 +38,7 @@ and the Help menu. What remains is, by design, **not** scheduled:
 
 ## D. Visualization / display
 - ✅ **LUT visualization** (1D graph / 3D cube) — DONE in PR #99 (matches manual §LUT Manager Visualization).
-- ✅ **Show Histogram** (`Ctrl+H` active quad / `Ctrl+Alt+H` all plates) — DONE (histogram PR). The RGB histogram overlay (`gfcPlate::drawHistogram` + draggable `gfcHistogramGLWindow`) already existed in the render chain; this just adds the toggle (bridge + View menu). Drag/resize uses the existing pick-selection path.
+- ✅ **Show Histogram** (`Ctrl+H` active quad / `Ctrl+Alt+H` all plates) — toggle via bridge + View menu (histogram PR). Drag/resize works via the GL color-pick subsystem (histogram-drag PR): the Qt build had never registered `pickManager` drawees/notifees or driven `doPicking` on mouse events, so the overlay (and AOI corners) couldn't be grabbed. Now wired in `GlViewport_Qt`'s press/move/release.
 - ✅ **Hide Controls** (`Ctrl+Alt+F`) — hides menu bar / status bar / all docks; the shortcut still fires while hidden so it toggles back. DONE (shortcut-parity PR).
 - ✅ **Toggle On-Screen Help** (FLTK bare `h`) — DONE (help-menu PR; Help → Toggle On-Screen Help. Menu item since bare H is flop in Qt).
 - 🟡 **Zoom Filtering** (point vs bilinear) — FLTK View-menu toggle; in Qt this may live in Preferences (verify) — at least no View-menu item.

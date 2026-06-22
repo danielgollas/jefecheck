@@ -15,6 +15,7 @@
 #include "../gfcplaylistitem.h"
 #include "../gfcnetworkmanager.h"
 #include "../gfcsessionmanager.h"
+#include "../gfcpickmanager.h"
 #include "../xmlParser.h"
 #include "../gfcSequence.h"
 #include "../gfcsequencegui.h"
@@ -36,6 +37,7 @@ extern gfcLUTManager lutManager;
 extern gfcFXManager fxManager;
 extern gfcNetworkManager networkManager;
 extern gfcSessionManager sessionManager;
+extern gfcPickManager pickManager;
 extern gfcSettings sett;
 
 namespace jefe::qt {
@@ -84,6 +86,44 @@ void initializeRenderingChain() {
     if (sett.lutPath.empty()) {
         sett.lutPath = ::getApplicationDataPath() + "FX/";
     }
+
+    // Wire the color-pick subsystem (FLTK did this in main.cpp). Without
+    // it nothing registers with pickManager, so in-viewport overlays like
+    // the histogram window never receive click/drag events. Plates are a
+    // fixed-size vector built in the gfcPlateManager ctor, so they exist.
+    pickManager.registerDrawee(&plateManager);
+    pickManager.registerNotifee(&plateManager);
+    plateManager.registerPlatesAsPickNotifees();
+}
+
+namespace {
+// Build the gfcPickFlags bitfield doPicking expects. BUTTON1 is always set
+// (we only dispatch picks for the left button); ctrl/alt/shift map to the
+// GFC_PICK_MODIFIER_* bits.
+unsigned int pickFlags(bool ctrl, bool alt, bool shift) {
+    unsigned int f = GFC_PICK_MODIFIER_BUTTON1;
+    if (ctrl)  f |= GFC_PICK_MODIFIER_CTRL;
+    if (alt)   f |= GFC_PICK_MODIFIER_ALT;
+    if (shift) f |= GFC_PICK_MODIFIER_SHIFT;
+    return f;
+}
+}  // namespace
+
+int viewportPickDown(int xFb, int yFb, bool ctrl, bool alt, bool shift) {
+    return pickManager.doPicking(GFC_PICK_EVENT_CLICK_DOWN,
+                                 pickFlags(ctrl, alt, shift), xFb, yFb, 0, 0);
+}
+
+int viewportPickDrag(int xFb, int yFb, int dxFb, int dyFb,
+                     bool ctrl, bool alt, bool shift) {
+    return pickManager.doPicking(GFC_PICK_EVENT_DRAG,
+                                 pickFlags(ctrl, alt, shift),
+                                 xFb, yFb, dxFb, dyFb);
+}
+
+void viewportPickUp(int xFb, int yFb, bool ctrl, bool alt, bool shift) {
+    pickManager.doPicking(GFC_PICK_EVENT_CLICK_UP,
+                          pickFlags(ctrl, alt, shift), xFb, yFb, 0, 0);
 }
 
 void initializeTextRenderer(float dpiScale) {

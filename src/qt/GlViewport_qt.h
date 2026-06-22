@@ -125,6 +125,11 @@ private:
     // the cursor wanders into a neighboring quadrant mid-drag.
     int dragPlate_ = -1;
 
+    // True while a left-drag is moving/resizing an in-viewport pick overlay
+    // (the histogram sub-window). Set on press when viewportPickDown reports
+    // a hit; suppresses the plate pan/color path for that drag.
+    bool pickDragActive_ = false;
+
     bool loadWindowOpen_ = false;
 
     // mouseMoveEvent gates plateStateChanged emissions to ~60Hz so the
