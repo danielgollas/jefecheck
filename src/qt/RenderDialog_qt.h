@@ -14,6 +14,8 @@
 
 #include <QDialog>
 
+#include "SequenceLoadBridge_qt.h"   // jefe::qt::RenderParams (glad-free)
+
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -22,6 +24,7 @@ class QProgressBar;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
+class GlViewport_Qt;
 
 class RenderDialog_Qt : public QDialog {
     Q_OBJECT
@@ -39,6 +42,23 @@ private:
     bool inputsValid() const;
     // Show the quality page that matches the currently-selected format.
     void updateQualityPage();
+
+    // Incremental render driven by the event loop: one frame per
+    // QTimer::singleShot(0) so the dialog stays responsive and Cancel is
+    // honored between frames. GL stays on the main thread (the viewport's
+    // context is thread-affine, so a worker thread isn't safe here).
+    void startRender();
+    void renderStep();
+    void finishRender(bool cancelled);
+
+    bool rendering_ = false;
+    bool cancelRequested_ = false;
+    int  renderCur_ = 0;        // next frame to render
+    int  renderTo_ = 0;         // last frame (inclusive)
+    int  renderDone_ = 0;       // frames written so far
+    int  renderTotal_ = 0;
+    GlViewport_Qt* renderVp_ = nullptr;
+    jefe::qt::RenderParams renderParams_;
 
     QComboBox* quadrantCombo_ = nullptr;
     QComboBox* formatCombo_ = nullptr;
