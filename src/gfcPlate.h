@@ -251,7 +251,11 @@ class gfcPlate: public gfcPickNotifee
 	
 	int activeFBO;
 	
-	bool forRender; //turn on when rendering, turn off when drawing to screen. 
+	bool forRender; //turn on when rendering, turn off when drawing to screen.
+	// When true, a forRender draw renders into the FBO but does NOT save the
+	// result. Used to prime the FBO before the first captured frame (the
+	// first render into a freshly-created FBO can read back stale/black).
+	bool skipRenderSave = false;
 	//gfcPlateRenderParams renderParams;
 	gfcRenderParams renderParams;
 	//MtPoly poly;
