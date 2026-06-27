@@ -87,6 +87,18 @@ static QString resolveRenderTestDir(int argc, char* argv[]) {
     return QString();
 }
 
+// Resolve --video-test <dir>. Headless video-export test: render the in/out
+// range to a temp PNG sequence and encode an H.264 mp4 into <dir>, then exit
+// (0 = ok, 2 = failed). Exercises the full render → FFmpeg pipeline.
+static QString resolveVideoTestDir(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--video-test") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
 // Resolve --playlist-test <image>. Headless .jpl round-trip smoke test:
 // add <image> to the playlist, save to a temp .jpl, clear, reload, and
 // verify the entry count survives. Pure data/XML path — no GL needed.
@@ -218,6 +230,18 @@ int main(int argc, char* argv[]) {
             // gfcPlaybackGUI's destructor on macOS) so the harness gets a
             // deterministic exit code.
             std::_Exit(n > 0 ? 0 : 2);
+        });
+    }
+
+    // Headless video-export test (--video-test <dir>): render the in/out
+    // range to a temp PNG sequence, encode an mp4, and quit.
+    const QString videoTestDir = resolveVideoTestDir(argc, argv);
+    if (!videoTestDir.isEmpty()) {
+        QDir().mkpath(videoTestDir);
+        QTimer::singleShot(5000, &window, [&window, videoTestDir]() {
+            const int ok = window.runHeadlessVideoTest(videoTestDir);
+            fflush(stdout);
+            std::_Exit(ok ? 0 : 2);
         });
     }
 

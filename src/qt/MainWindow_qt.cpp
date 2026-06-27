@@ -12,6 +12,9 @@
 #include "PreferencesWindow_qt.h"
 #include "RenderBridge_qt.h"
 #include "RenderDialog_qt.h"
+#include "VideoEncoder_qt.h"
+
+#include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
 
@@ -992,6 +995,51 @@ void MainWindow_Qt::rebuildRecentSessionsMenu() {
         connect(a, &QAction::triggered, this, [this, p]() { openSessionPath(p); });
     }
     if (!any) recentMenu_->addAction(tr("(none)"))->setEnabled(false);
+}
+
+int MainWindow_Qt::runHeadlessVideoTest(const QString& dir) {
+    if (!viewport_) return 0;
+    const int from = jefe::qt::getFromFrame();
+    const int to   = jefe::qt::getToFrame();
+    const QString tmp = QDir(QDir::tempPath()).filePath("jefecheck_vidtest_frames");
+    QDir(tmp).removeRecursively();
+    QDir().mkpath(tmp);
+
+    viewport_->makeCurrent();
+    for (int f = from; f <= to; ++f) {
+        jefe::qt::RenderParams p;
+        p.quadrant = 0; p.format = 5; p.formatString = "png";
+        p.from = f; p.to = f; p.padding = 4; p.scale = 1.0f;
+        p.path = tmp.toStdString(); p.prefix = "f_";
+        jefe::qt::triggerSyncRender(p);
+    }
+    viewport_->doneCurrent();
+
+    VideoEncoder_Qt enc;
+    VideoEncoder_Qt::Params ep;
+    ep.framePattern = tmp + "/f_%04d.png";
+    ep.startNumber  = from;
+    ep.frameCount   = to - from + 1;
+    ep.fps          = 24;
+    ep.codec        = VideoEncoder_Qt::Codec::H264;
+    ep.quality      = 80;
+    ep.outFile      = QDir(dir).filePath("videotest.mp4");
+
+    QEventLoop loop;
+    int result = 0;
+    QObject::connect(&enc, &VideoEncoder_Qt::finished, &loop,
+                     [&](bool ok, const QString& msg) {
+        result = ok ? 1 : 0;
+        printf("VIDEO-TEST: %s%s\n", ok ? "OK " : "FAILED: ",
+               ok ? ep.outFile.toLocal8Bit().constData()
+                  : msg.toLocal8Bit().constData());
+        fflush(stdout);
+        loop.quit();
+    });
+    enc.start(ep);
+    loop.exec();
+    QDir(tmp).removeRecursively();
+    return result;
 }
 
 void MainWindow_Qt::toggleHideControls() {

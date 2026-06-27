@@ -50,6 +50,8 @@ private:
     void startRender();
     void renderStep();
     void finishRender(bool cancelled);
+    void startEncode();             // begins the ffmpeg pass (video formats)
+    void cleanupVideoTemp();
 
     bool rendering_ = false;
     bool cancelRequested_ = false;
@@ -59,6 +61,14 @@ private:
     int  renderTotal_ = 0;
     GlViewport_Qt* renderVp_ = nullptr;
     jefe::qt::RenderParams renderParams_;
+
+    // Video export: when the chosen format is a video codec, frames are
+    // rendered as PNG into a temp dir, then encoded with FFmpeg.
+    bool    renderIsVideo_ = false;
+    int     videoFormatIdx_ = 0;    // index into the format combo
+    QString videoOutFile_;
+    QString videoTmpDir_;           // temp PNG sequence dir (removed after)
+    class VideoEncoder_Qt* videoEncoder_ = nullptr;
 
     QComboBox* quadrantCombo_ = nullptr;
     QComboBox* formatCombo_ = nullptr;
@@ -80,6 +90,8 @@ private:
     QComboBox* tiffCompCombo_ = nullptr;
     QComboBox* exrDepthCombo_ = nullptr;
     QComboBox* exrCompCombo_ = nullptr;
+    QSpinBox* videoFpsSpin_ = nullptr;
+    QSpinBox* videoQualitySpin_ = nullptr;
 
     QLabel* previewLabel_ = nullptr;
     QLabel* statusLabel_ = nullptr;
