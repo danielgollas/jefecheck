@@ -1475,6 +1475,19 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
 
     gfcPlate* ptrToPlate=&plates[params.quadrant];
 
+    // Prime the FBO before the first captured frame. The very first
+    // forRender draw creates/sizes the plate's FBO; reading it back
+    // immediately can return a stale/black buffer (the first rendered
+    // frame came out empty). One discarded warm-up draw at params.from
+    // makes the FBO valid before we capture it.
+    ptrToPlate->forRender=true;
+    ptrToPlate->skipRenderSave=true;
+    playbackManager.setCurrentFrame(params.from);
+    ptrToPlate->renderParams=params;
+    ptrToPlate->draw();
+    ptrToPlate->skipRenderSave=false;
+    ptrToPlate->forRender=false;
+
     for ( int i=params.from; i<=params.to;i++ ) {
 
         ptrToPlate->forRender=true;
