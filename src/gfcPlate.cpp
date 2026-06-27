@@ -1360,7 +1360,7 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
             //std::cout << "single buffered!\n" ;
         }
 
-        if ( forRender && !skipRenderSave ) {
+        if ( forRender ) {
             //instance an imageSaver according to format
             renderParams.sizeX=fboVP.w;
             renderParams.sizeY=fboVP.h;
