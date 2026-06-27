@@ -3,9 +3,24 @@
 JefeCheck is moving from FLTK 1.4 to Qt 6 for the GUI layer. This doc tracks
 where the migration is, what's done, what's next, and how to keep working.
 
-**Long-lived feature branch:** `qt-migration` (off `main`).
-**Sub-work:** branched as `qt/<topic>` and PR'd into `qt-migration`. Nothing
-goes directly to `main` until the migration ships.
+**Long-lived feature branch:** `qt-experimental` (off `main`).
+**Sub-work:** branched as `qt/<topic>` and PR'd (squash) into `qt-experimental`.
+**Nothing goes to `main`** — `main` deliberately reverted the migration (#90)
+and stays on the FLTK build; the Qt line lives entirely on `qt-experimental`
+until the rewrite is promoted. Keep the two branches separate.
+
+## Status (2026-06 — current)
+
+The migration is **functionally complete on `qt-experimental`**: Qt 6 is the
+only backend, FLTK was removed (PR-43f), and the app builds and runs on
+macOS/Linux/Windows. Phases 2E/3/4 below are effectively done. Recent work
+beyond the original plan: Qt load window, track timeline + thumbnails, LUT
+inspector, session restore + CC favorites, full FLTK→Qt parity pass
+(shortcuts/menus/histogram/playlist), and the render/export pipeline (stills
+via OIIO + video via bundled FFmpeg, resolution + 16-bit + per-format
+controls). See `docs/fltk-parity-gaps.md` for the parity ledger and
+`developer_notes.md` for the engineering notes. **Next:** wire the FX stack
+into the Qt build (the shader pipeline exists but isn't applied yet).
 
 ## Why
 
@@ -34,26 +49,22 @@ original detailed plan. Summary:
 | 2B | `QOpenGLWidget`-based `GlViewport_qt` (skeleton) | done | ⏳ this PR |
 | 2C | `*_qt` skeletons for the 5 existing GUI abstractions | done | ⏳ this PR |
 | 2D | Dark VFX QSS theme | done | ⏳ this PR |
-| 2E | Port FLUID windows to Qt (MainWindow, Load, Preferences, FX, etc.) | 4-6 wks | not started |
-| 2F | Replace `Fl::run()` with `QApplication::exec()` | 1 wk | ✅ minimal Qt build runs (skeleton) |
-| 3 | Feature parity validation per window | 4-6 wks | not started |
-| 4 | Remove FLTK and `*_fltk` files; simplify | 2-3 wks | not started |
+| 2E | Port FLUID windows to Qt (MainWindow, Load, Preferences, FX, Render, etc.) | 4-6 wks | ✅ on `qt-experimental` |
+| 2F | Replace `Fl::run()` with `QApplication::exec()` | 1 wk | ✅ |
+| 3 | Feature parity validation per window | 4-6 wks | ✅ (see `docs/fltk-parity-gaps.md`) |
+| 4 | Remove FLTK and `*_fltk` files; simplify | 2-3 wks | ✅ FLTK removed (PR-43f) |
 
-## What works today
+## What works today (`qt-experimental`)
 
-- **`USE_QT=OFF` (default):** existing FLTK build. Untouched. CI green.
-- **`USE_QT=ON`:** CMake configures cleanly, finds Qt6, generates build files.
-  Will **not** link yet — `main.cpp`, `UICallbacks.cpp`, FLUID-generated
-  windows, `GlViewport`, `gfcPlate` still hardcode FLTK. Phase 0B-0D and
-  Phase 1 fix that.
+Qt 6 is the only backend; there is no `USE_QT` toggle anymore. The build
+links and runs the full app on macOS/Linux/Windows:
 
 ```bash
-# FLTK build (current, default)
-cmake -B build && cmake --build build -j
-
-# Qt build (configure only, won't link until Phase 1 done)
-cmake -B build_qt -DUSE_QT=ON -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt
+cmake -B build && cmake --build build -j   # Qt build (the only build)
 ```
+
+The remaining substantive gap is the **FX stack** — the GLSL shader pipeline
+loads but isn't wired to apply in the Qt build yet (next feature).
 
 ## Layout
 

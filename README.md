@@ -2,41 +2,51 @@
 
 Professional video frame processing and playback application for color correction, effects, and real-time review of digital cinema content.
 
+> **GUI:** JefeCheck's interface is built on **Qt 6** (dark VFX theme). The Qt
+> rewrite lives on the `qt-experimental` branch; `main` remains on the older
+> FLTK build until the rewrite is promoted. Build from `qt-experimental` for
+> the current app.
+
 ## Features
 
 - Real-time playback of image sequences (DPX, EXR, and common formats via OpenImageIO)
-- Up to 4 simultaneous video tracks with independent controls
-- GPU-accelerated effects pipeline with GLSL shader support
-- 1D and 3D LUT (Look-Up Table) support for color grading
+- Up to 4 simultaneous video tracks/plates with multi-plate layouts (1×1, 2×1, 1×2, 2×2)
+- Per-plate color correction (gamma/exposure/brightness/contrast/saturation, RGBA masks)
+- 1D and 3D LUT (Look-Up Table) support for color grading, with an interactive LUT inspector
+- Render & export: image sequences (JPEG/PNG/TIFF/TGA/BMP/EXR, 8/16-bit, per-format quality) and **video** (H.264/H.265/ProRes via bundled FFmpeg), with output-resolution control and a live, cancellable progress bar
+- RGB histogram overlay
 - Network-based remote control and synchronization between instances
-- Playlist management for sequential review sessions
+- Playlist management (`.jpl`) for sequential review sessions
 - Session save/restore with crash recovery
+- Shader-based FX pipeline (GLSL) — *wiring the FX stack into the Qt build is in progress*
 
 ## Building from Source
+
+C++20, CMake. Qt 6, OpenImageIO, OpenEXR/Imath, FreeType, libcurl, zlib are required.
+A static **FFmpeg** for video export is fetched and bundled by the build automatically
+(disable with `-DJEFECHECK_BUNDLE_FFMPEG=OFF`).
 
 ### macOS
 
 ```bash
-brew install fltk openimageio openexr curl zlib
-cmake -B build
-cmake --build build
+brew install qt openimageio openexr curl zlib cmake freetype
+cmake -B build && cmake --build build
 ```
 
-### Linux
+### Linux (Ubuntu 24.04)
 
 ```bash
-sudo apt install libfltk1.3-dev libopenimageio-dev libopenexr-dev libcurl4-openssl-dev zlib1g-dev
-cmake -B build
-cmake --build build
+sudo apt install cmake build-essential qt6-base-dev qt6-base-private-dev libqt6opengl6-dev \
+  libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev \
+  libcurl4-openssl-dev zlib1g-dev libgl-dev libglu1-mesa-dev libfreetype6-dev
+cmake -B build && cmake --build build -j$(nproc)
 ```
 
-### Windows
+### Windows (MSYS2 / MinGW)
 
-```powershell
-vcpkg install fltk openimageio openexr curl zlib
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=[path-to-vcpkg]/scripts/buildsystems/vcpkg.cmake
-cmake --build build
-```
+Use MSYS2 with `mingw-w64-x86_64-qt6-base`, `mingw-w64-x86_64-qt6-tools`,
+`mingw-w64-x86_64-openimageio`, and `mingw-w64-x86_64-freetype` (see
+`.github/workflows/build.yml`), then `cmake -B build && cmake --build build`.
 
 ## Usage
 
