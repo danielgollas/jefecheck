@@ -30,7 +30,7 @@ and the Help menu. What remains is, by design, **not** scheduled:
 
 ## B. File export / saving / render
 - ✅ **Image saving** (`gfcImageSaver`) — DONE (image-saving PR). OIIO-backed `gfcImageSaverOIIO` writes JPEG/PNG/TIFF/TGA/BMP (8-bit RGBA, RGB for JPEG/BMP) and EXR (half/float). Verified end-to-end via `--render-test`.
-- 🟡 **Render Manager** (`src/qt/RenderDialog_qt`) — ✅ writes real files and ✅ exposes format-specific quality knobs (render-quality PR): JPEG quality, PNG zlib level, TIFF + EXR compression, EXR depth — a `QStackedWidget` swaps the right controls per format; verified JPEG q95→q5 shrinks output 3.2×. Still missing: **video creation** (FLTK used mencoder, Linux-only), async render with progress dialog (frame counter + abort), "open when done".
+- 🟡 **Render Manager** (`src/qt/RenderDialog_qt`) — ✅ writes real files; ✅ format-specific quality knobs (render-quality PR: JPEG quality, PNG zlib level, TIFF + EXR compression, EXR depth via a per-format `QStackedWidget`); ✅ **progress bar + cancel** (render-progress / render-async PRs): an event-loop-driven incremental render (one frame per `QTimer::singleShot(0)`, GL stays on the main thread) keeps the dialog responsive, fills a live progress bar, persists green "Done — N ✓" at 100%, and the Render button doubles as **Cancel** (amber "Cancelled — N"). Only **video creation** remains (FLTK used mencoder, Linux-only) plus optional "open when done".
 - ⚪ **Save Chat Log** (File menu) — deferred (low value; tied to the rarely-used remote-chat feature). Remote dialog exists; chat-log save not wired.
 
 ## C. Color-correction favorites (5 slots)

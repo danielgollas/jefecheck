@@ -15,6 +15,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QProgressBar>
+#include <QTimer>
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
@@ -349,81 +350,144 @@ void RenderDialog_Qt::rebuildPreview() {
     renderBtn_->setEnabled(true);
 }
 
+namespace {
+const char* kBarBlue =
+    "QProgressBar {"
+    "  border: 1px solid #555; border-radius: 3px; background: #222;"
+    "  text-align: center; color: #fff; min-height: 20px; }"
+    "QProgressBar::chunk { background-color: #3b7dd8; border-radius: 2px; }";
+const char* kBarGreen =
+    "QProgressBar {"
+    "  border: 1px solid #555; border-radius: 3px; background: #222;"
+    "  text-align: center; color: #fff; min-height: 20px; }"
+    "QProgressBar::chunk { background-color: #2e9e4f; border-radius: 2px; }";
+const char* kBarAmber =
+    "QProgressBar {"
+    "  border: 1px solid #555; border-radius: 3px; background: #222;"
+    "  text-align: center; color: #fff; min-height: 20px; }"
+    "QProgressBar::chunk { background-color: #b07a1e; border-radius: 2px; }";
+}  // namespace
+
 void RenderDialog_Qt::onRenderClicked() {
+    // The Render button doubles as Cancel while a render is running.
+    if (rendering_) {
+        cancelRequested_ = true;
+        renderBtn_->setEnabled(false);   // disable until the current frame ends
+        return;
+    }
+    startRender();
+}
+
+void RenderDialog_Qt::startRender() {
     if (!inputsValid()) return;
 
-    jefe::qt::RenderParams p;
-    p.quadrant     = quadrantCombo_->currentIndex();
-    p.format       = formatCombo_->currentIndex();
-    p.formatString = (p.format >= 0 && p.format < int(std::size(kFormats)))
-        ? kFormats[p.format].ext : "";
-    p.from    = startFrameSpin_->value();
-    p.to      = endFrameSpin_->value();
-    p.padding = paddingSpin_->value();
-    p.scale   = static_cast<float>(scaleSpin_->value());
-    p.path    = pathEdit_->text().toStdString();
-    p.prefix  = prefixEdit_->text().toStdString();
-    p.postfix = postfixEdit_->text().toStdString();
+    renderParams_ = jefe::qt::RenderParams{};
+    renderParams_.quadrant     = quadrantCombo_->currentIndex();
+    renderParams_.format       = formatCombo_->currentIndex();
+    renderParams_.formatString =
+        (renderParams_.format >= 0 && renderParams_.format < int(std::size(kFormats)))
+            ? kFormats[renderParams_.format].ext : "";
+    renderParams_.padding = paddingSpin_->value();
+    renderParams_.scale   = static_cast<float>(scaleSpin_->value());
+    renderParams_.path    = pathEdit_->text().toStdString();
+    renderParams_.prefix  = prefixEdit_->text().toStdString();
+    renderParams_.postfix = postfixEdit_->text().toStdString();
+    renderParams_.jpegQuality     = jpegQualitySpin_->value();
+    renderParams_.pngQuality      = pngLevelSpin_->value();
+    renderParams_.tiffCompression = tiffCompCombo_->currentIndex();
+    renderParams_.exrCompression  = exrCompCombo_->currentIndex();
+    renderParams_.exrFormat       = exrDepthCombo_->currentIndex();
 
-    // Format-specific quality knobs (the saver reads whichever apply).
-    p.jpegQuality     = jpegQualitySpin_->value();
-    p.pngQuality      = pngLevelSpin_->value();
-    p.tiffCompression = tiffCompCombo_->currentIndex();
-    p.exrCompression  = exrCompCombo_->currentIndex();
-    p.exrFormat       = exrDepthCombo_->currentIndex();
-
-    statusLabel_->setText("Rendering…");
-    renderBtn_->setEnabled(false);
-    doneBtn_->setEnabled(false);
-    progressBar_->setVisible(true);
-    progressBar_->setRange(0, 100);
-    progressBar_->setValue(0);
-    progressBar_->setFormat("Rendering… %p%");
-    QApplication::processEvents();
-
-    // renderPlate drives gfcPlate::draw() directly — that issues GL calls
-    // (glGetTexImage, FBO binds) that need the viewport's context current,
-    // which it isn't outside paintGL. Make it current around the render.
-    //
-    // NOTE: walk parentWidget(), NOT window(): this is a modal QDialog, so
-    // window() returns the dialog itself (a top-level window), not the
-    // MainWindow. Using window() left vp null → makeCurrent skipped → the
-    // render ran on no/stale GL context and produced black frames.
-    GlViewport_Qt* vp = nullptr;
+    // Resolve the viewport once (walk parentWidget(), NOT window(): this is a
+    // modal QDialog so window() returns the dialog itself, not the MainWindow).
+    renderVp_ = nullptr;
     for (QWidget* w = parentWidget(); w; w = w->parentWidget()) {
         if (auto* mw = qobject_cast<MainWindow_Qt*>(w)) {
-            vp = mw->viewport();
+            renderVp_ = mw->viewport();
             break;
         }
     }
-    if (vp) vp->makeCurrent();
 
-    // Synchronous on the GUI thread. The per-frame progress callback drives
-    // the bar and pumps events so it repaints as frames complete. (Async +
-    // cancel via a QThread driver is still future work.)
-    const int n = jefe::qt::triggerSyncRender(p, [this](int doneFrames, int totalFrames) {
-        const int pct = (totalFrames > 0)
-            ? int(100.0 * doneFrames / totalFrames + 0.5) : 0;
-        progressBar_->setValue(pct);
-        progressBar_->setFormat(
-            QString("Rendering… %1/%2").arg(doneFrames).arg(totalFrames));
-        statusLabel_->setText(
-            QString("Rendering frame %1 of %2…").arg(doneFrames).arg(totalFrames));
-        QApplication::processEvents();
-    });
+    renderCur_   = startFrameSpin_->value();
+    renderTo_    = endFrameSpin_->value();
+    renderDone_  = 0;
+    renderTotal_ = renderTo_ - renderCur_ + 1;
+    cancelRequested_ = false;
+    rendering_   = true;
 
-    if (vp) vp->doneCurrent();
+    progressBar_->setVisible(true);
+    progressBar_->setStyleSheet(kBarBlue);
+    progressBar_->setRange(0, 100);
+    progressBar_->setValue(0);
+    progressBar_->setFormat(QString("Rendering… 0/%1").arg(renderTotal_));
+    statusLabel_->setText("Rendering…");
+    renderBtn_->setText("Cancel");
+    doneBtn_->setEnabled(false);
+    // Lock the inputs while rendering so the snapshot in renderParams_ stays
+    // consistent with what the progress reflects.
+    for (QWidget* w : {(QWidget*)quadrantCombo_, (QWidget*)formatCombo_,
+                       (QWidget*)startFrameSpin_, (QWidget*)endFrameSpin_,
+                       (QWidget*)pathEdit_, (QWidget*)browseBtn_}) {
+        if (w) w->setEnabled(false);
+    }
 
-    // Leave the bar full, green, and labelled so it's clear the render
-    // finished — it persists at 100% until the next render starts.
-    progressBar_->setValue(100);
-    progressBar_->setFormat(QString("Done — %1 frame(s) ✓").arg(n));
-    progressBar_->setStyleSheet(
-        "QProgressBar {"
-        "  border: 1px solid #555; border-radius: 3px; background: #222;"
-        "  text-align: center; color: #fff; min-height: 20px; }"
-        "QProgressBar::chunk { background-color: #2e9e4f; border-radius: 2px; }");
-    statusLabel_->setText(QString("Rendered %1 frame(s)").arg(n));
+    // Kick the first frame on the event loop so the UI paints first.
+    QTimer::singleShot(0, this, &RenderDialog_Qt::renderStep);
+}
+
+void RenderDialog_Qt::renderStep() {
+    if (cancelRequested_ || renderCur_ > renderTo_) {
+        finishRender(cancelRequested_);
+        return;
+    }
+
+    // Render exactly one frame. renderPlate drives gfcPlate::draw() directly,
+    // which issues GL calls needing the viewport context current.
+    jefe::qt::RenderParams p = renderParams_;
+    p.from = renderCur_;
+    p.to   = renderCur_;
+    if (renderVp_) renderVp_->makeCurrent();
+    const int n = jefe::qt::triggerSyncRender(p);
+    if (renderVp_) renderVp_->doneCurrent();
+
+    renderDone_ += n;
+    ++renderCur_;
+
+    const int pct = (renderTotal_ > 0)
+        ? int(100.0 * renderDone_ / renderTotal_ + 0.5) : 0;
+    progressBar_->setValue(pct);
+    progressBar_->setFormat(
+        QString("Rendering… %1/%2").arg(renderDone_).arg(renderTotal_));
+    statusLabel_->setText(
+        QString("Rendering frame %1 of %2…").arg(renderDone_).arg(renderTotal_));
+
+    // Schedule the next frame; the event loop runs in between so the dialog
+    // stays responsive and a Cancel click is processed.
+    QTimer::singleShot(0, this, &RenderDialog_Qt::renderStep);
+}
+
+void RenderDialog_Qt::finishRender(bool cancelled) {
+    rendering_ = false;
+    renderVp_ = nullptr;
+    renderBtn_->setText("Render");
     renderBtn_->setEnabled(inputsValid());
     doneBtn_->setEnabled(true);
+    for (QWidget* w : {(QWidget*)quadrantCombo_, (QWidget*)formatCombo_,
+                       (QWidget*)startFrameSpin_, (QWidget*)endFrameSpin_,
+                       (QWidget*)pathEdit_, (QWidget*)browseBtn_}) {
+        if (w) w->setEnabled(true);
+    }
+
+    if (cancelled) {
+        progressBar_->setStyleSheet(kBarAmber);
+        progressBar_->setFormat(
+            QString("Cancelled — %1 frame(s)").arg(renderDone_));
+        statusLabel_->setText(
+            QString("Render cancelled after %1 frame(s)").arg(renderDone_));
+    } else {
+        progressBar_->setStyleSheet(kBarGreen);
+        progressBar_->setValue(100);
+        progressBar_->setFormat(QString("Done — %1 frame(s) ✓").arg(renderDone_));
+        statusLabel_->setText(QString("Rendered %1 frame(s)").arg(renderDone_));
+    }
 }
