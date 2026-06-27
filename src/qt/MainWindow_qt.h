@@ -53,6 +53,11 @@ public:
     // GL-readback → OIIO-save render path without a UI session.
     int runHeadlessRenderTest(const QString& dir);
 
+    // Headless video-export test (--video-test). Renders the in/out range
+    // to a temp PNG sequence, encodes an H.264 mp4 into `dir`, and returns
+    // 1 on success. Verifies the full render → FFmpeg pipeline.
+    int runHeadlessVideoTest(const QString& dir);
+
 protected:
     void closeEvent(QCloseEvent* e) override;
 
