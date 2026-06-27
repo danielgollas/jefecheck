@@ -67,6 +67,7 @@ private:
     bool    renderIsVideo_ = false;
     int     videoFormatIdx_ = 0;    // index into the format combo
     QString videoOutFile_;
+    QString lastOutputDir_;         // revealed when the status link is clicked
     QString videoTmpDir_;           // temp PNG sequence dir (removed after)
     class VideoEncoder_Qt* videoEncoder_ = nullptr;
 
