@@ -356,9 +356,17 @@ void RenderDialog_Qt::onRenderClicked() {
     // renderPlate drives gfcPlate::draw() directly — that issues GL calls
     // (glGetTexImage, FBO binds) that need the viewport's context current,
     // which it isn't outside paintGL. Make it current around the render.
+    //
+    // NOTE: walk parentWidget(), NOT window(): this is a modal QDialog, so
+    // window() returns the dialog itself (a top-level window), not the
+    // MainWindow. Using window() left vp null → makeCurrent skipped → the
+    // render ran on no/stale GL context and produced black frames.
     GlViewport_Qt* vp = nullptr;
-    if (auto* mw = qobject_cast<MainWindow_Qt*>(window())) {
-        vp = mw->viewport();
+    for (QWidget* w = parentWidget(); w; w = w->parentWidget()) {
+        if (auto* mw = qobject_cast<MainWindow_Qt*>(w)) {
+            vp = mw->viewport();
+            break;
+        }
     }
     if (vp) vp->makeCurrent();
 
