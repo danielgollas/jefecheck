@@ -34,7 +34,12 @@ namespace {
 class gfcImageSaverOIIO : public gfcImageSaver {
 public:
     explicit gfcImageSaverOIIO(gfcRenderParams pparams) : gfcImageSaver(pparams) {
-        isFloat_ = (params.format == GFC_RENDER_EXR);
+        // 16-bit LDR (PNG/TIFF) and EXR read back as float so the render's
+        // float FBO precision survives to the file.
+        sixteenBit_ = (params.bitsPerChannel >= 16) &&
+                      (params.format == GFC_RENDER_PNG ||
+                       params.format == GFC_RENDER_TIFF);
+        isFloat_ = (params.format == GFC_RENDER_EXR) || sixteenBit_;
         // We always read back 4-channel RGBA from the FBO texture.
         requestFormat = GL_RGBA;
         pixelFormat   = isFloat_ ? GL_FLOAT : GL_UNSIGNED_BYTE;
@@ -79,11 +84,15 @@ public:
             return -1;
         }
 
-        const OIIO::TypeDesc writeType =
-            isFloat_
-                ? (params.exrFormat == GFC_FLOAT ? OIIO::TypeDesc::FLOAT
-                                                 : OIIO::TypeDesc::HALF)
-                : OIIO::TypeDesc::UINT8;
+        OIIO::TypeDesc writeType;
+        if (sixteenBit_) {
+            writeType = OIIO::TypeDesc::UINT16;       // 16-bit PNG / TIFF
+        } else if (params.format == GFC_RENDER_EXR) {
+            writeType = (params.exrFormat == GFC_FLOAT) ? OIIO::TypeDesc::FLOAT
+                                                        : OIIO::TypeDesc::HALF;
+        } else {
+            writeType = OIIO::TypeDesc::UINT8;
+        }
 
         OIIO::ImageSpec spec(width_, height_, outChannels, writeType);
         applyFormatAttributes(spec);
@@ -184,6 +193,7 @@ private:
     }
 
     bool isFloat_ = false;
+    bool sixteenBit_ = false;
     int  width_   = 0;
     int  height_  = 0;
     std::vector<uint8_t> byteBuf_;

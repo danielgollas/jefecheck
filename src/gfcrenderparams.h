@@ -51,6 +51,10 @@ public:
     int exrCompression;
     int exrFormat;
 
+    // Bits per channel for LDR stills (8 or 16). 16 requires the render FBO
+    // to be float so the readback carries real >8-bit precision.
+    int bitsPerChannel;
+
 };
 
 #endif

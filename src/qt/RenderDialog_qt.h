@@ -101,7 +101,9 @@ private:
     class QCheckBox* jpegProgressiveCheck_ = nullptr;
     QComboBox* jpegSubsamplingCombo_ = nullptr;
     QSpinBox* pngLevelSpin_ = nullptr;
+    QComboBox* pngBitDepthCombo_ = nullptr;   // 8 / 16-bit
     QComboBox* tiffCompCombo_ = nullptr;
+    QComboBox* tiffBitDepthCombo_ = nullptr;  // 8 / 16-bit
     QComboBox* exrDepthCombo_ = nullptr;
     QComboBox* exrCompCombo_ = nullptr;
     QSpinBox* videoFpsSpin_ = nullptr;

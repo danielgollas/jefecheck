@@ -740,6 +740,7 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     p.tiffCompression = src.tiffCompression;
     p.exrCompression  = src.exrCompression;
     p.exrFormat       = src.exrFormat;
+    p.bitsPerChannel  = src.bitsPerChannel;
     return p;
 }
 }  // namespace

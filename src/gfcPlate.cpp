@@ -724,7 +724,9 @@ bool gfcPlate::createFBO() {
                     //printf("8 bit texture name:  %i  index: %i\n",fboTexturev[i],i);
                     fbo8bitTexture=fboTexturev[i];
                 } else {
-                    glTexImage2D ( GL_TEXTURE_RECTANGLE_ARB, 0, sett.fp16?GL_RGBA16F_ARB:GL_RGBA,  fboVP.w, fboVP.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0 );
+                    const GLint internalFmt = (sett.fp16 || createFloatFBO)
+                                                  ? GL_RGBA16F_ARB : GL_RGBA;
+                    glTexImage2D ( GL_TEXTURE_RECTANGLE_ARB, 0, internalFmt,  fboVP.w, fboVP.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0 );
                 }
                 glPrintError();
                 glFramebufferTexture2DEXT ( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT+i, GL_TEXTURE_RECTANGLE_ARB, fboTexturev[i], 0 );
@@ -1248,12 +1250,19 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                         wantW = renderParams.outWidth;
                         wantH = renderParams.outHeight;
                     }
-					if (wantW!=fboVP.w || wantH!=fboVP.h)
+                    // A 16-bit/EXR render wants a float FBO for real precision;
+                    // on-screen / 8-bit renders use the normal 8-bit FBO.
+                    const bool wantFloat = forRender &&
+                        (renderParams.bitsPerChannel >= 16 ||
+                         renderParams.format == GFC_RENDER_EXR);
+					if (wantW!=fboVP.w || wantH!=fboVP.h || wantFloat!=fboIsFloat)
 					{
-                        printf(" *fboVP different from the target size, creating new fbo! (%ix%i vs %ix%i)\n",fboVP.w,fboVP.h,wantW,wantH);
+                        printf(" *fboVP different from the target size/format, creating new fbo! (%ix%i vs %ix%i, float %d->%d)\n",fboVP.w,fboVP.h,wantW,wantH,(int)fboIsFloat,(int)wantFloat);
 						fboVP.w=wantW;
 						fboVP.h=wantH;
+                        createFloatFBO=wantFloat;
                         createFBO();
+                        fboIsFloat=wantFloat;
                     } else {
                         //                         printf(" *fboVP: (%i,%i,%i,%i)\n",fboVP.x,fboVP.y,fboVP.w,fboVP.h);
                         //                         printf(" *fboVP already up to date\n");
