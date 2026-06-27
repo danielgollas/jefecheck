@@ -18,6 +18,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
+class QProgressBar;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
@@ -62,6 +63,7 @@ private:
 
     QLabel* previewLabel_ = nullptr;
     QLabel* statusLabel_ = nullptr;
+    QProgressBar* progressBar_ = nullptr;
     QPushButton* renderBtn_ = nullptr;
     QPushButton* doneBtn_ = nullptr;
 };
