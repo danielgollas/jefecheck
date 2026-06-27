@@ -6,6 +6,7 @@
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
@@ -22,6 +23,7 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace {
@@ -66,6 +68,14 @@ VideoEncoder_Qt::Codec codecForFormat(int idx) {
 }
 
 constexpr const char* kRenderDirSettingKey = "Render/lastDir";
+
+// Wrap a success message as a clickable link (href is a sentinel; the
+// dialog opens lastOutputDir_ on linkActivated).
+QString folderLink(const QString& message) {
+    return QString("<a href=\"#open\" style=\"color:#6db3f2; "
+                   "text-decoration:none;\">%1 — Show in folder ↗</a>")
+        .arg(message.toHtmlEscaped());
+}
 
 }  // namespace
 
@@ -268,10 +278,19 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         "  text-align: center; color: #eee; min-height: 20px; }"
         "QProgressBar::chunk { background-color: #3b7dd8; border-radius: 2px; }");
 
-    // Status (e.g. "Rendered N frames").
+    // Status (e.g. "Rendered N frames"). After a successful render the text
+    // becomes a link that reveals the output folder (lastOutputDir_).
     statusLabel_ = new QLabel(this);
     statusLabel_->setObjectName("dialog.render.status.label");
     statusLabel_->setStyleSheet("color: #888; font-style: italic;");
+    statusLabel_->setOpenExternalLinks(false);
+    statusLabel_->setTextInteractionFlags(Qt::LinksAccessibleByMouse |
+                                          Qt::LinksAccessibleByKeyboard);
+    statusLabel_->setToolTip("Open the output folder");
+    connect(statusLabel_, &QLabel::linkActivated, this, [this](const QString&) {
+        if (!lastOutputDir_.isEmpty())
+            QDesktopServices::openUrl(QUrl::fromLocalFile(lastOutputDir_));
+    });
 
     // Render / Done buttons.
     renderBtn_ = new QPushButton("Render", this);
@@ -611,7 +630,8 @@ void RenderDialog_Qt::startEncode() {
             progressBar_->setStyleSheet(kBarGreen);
             progressBar_->setValue(100);
             progressBar_->setFormat(QString("Done — %1 ✓").arg(out));
-            statusLabel_->setText(QString("Wrote %1").arg(out));
+            lastOutputDir_ = QFileInfo(videoOutFile_).absolutePath();
+            statusLabel_->setText(folderLink(QString("Wrote %1").arg(out)));
         }
         if (videoEncoder_) { videoEncoder_->deleteLater(); videoEncoder_ = nullptr; }
         rendering_ = false;
@@ -667,6 +687,8 @@ void RenderDialog_Qt::finishRender(bool cancelled) {
         progressBar_->setStyleSheet(kBarGreen);
         progressBar_->setValue(100);
         progressBar_->setFormat(QString("Done — %1 frame(s) ✓").arg(renderDone_));
-        statusLabel_->setText(QString("Rendered %1 frame(s)").arg(renderDone_));
+        lastOutputDir_ = pathEdit_->text();
+        statusLabel_->setText(
+            folderLink(QString("Rendered %1 frame(s)").arg(renderDone_)));
     }
 }
