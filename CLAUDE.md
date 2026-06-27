@@ -109,6 +109,16 @@ The Qt build's load flow has two paths:
 
 OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so the Preferences → Engine → Default decode filter setting (`nearest` / `triangle` / `mitchell` / `lanczos3`, default `lanczos3`) actually controls scale quality.
 
+### Render & export (`RenderDialog_Qt`, `gfcImageSaverOIIO`, `VideoEncoder_Qt`)
+
+The Render dialog (File → Render…, F6) renders the active plate's frame range and writes:
+- **Stills** — JPEG / PNG / TIFF / TGA / BMP / EXR via OIIO (`gfcImageSaverOIIO`). The render path is `gfcPlateManager::renderPlate` → `gfcPlate::draw3DrectWithFX(forRender)` → FBO readback → OIIO write. The caller (`onRenderClicked`) **must** make the viewport GL context current first (resolve the MainWindow via `parentWidget()`, not `window()`).
+- **Video** — H.264 / H.265 (mp4) / ProRes (mov) by rendering a temp PNG sequence then encoding with the **FFmpeg CLI** (`VideoEncoder_Qt`, `QProcess` — not libav*).
+
+Controls: output **resolution** (`gfcRenderParams.outWidth/outHeight` size the FBO; 0 = source), per-format quality (JPEG quality/progressive/subsampling, PNG level, TIFF/EXR compression, EXR depth, **8/16-bit** PNG/TIFF, video CRF-vs-bitrate + preset). **16-bit / EXR renders use a float (`RGBA16F`) FBO** for real precision (8-bit renders keep the 8-bit FBO). The render is incremental (`QTimer::singleShot(0)` per frame — responsive + cancellable) with a progress bar and a "Show in folder" status link.
+
+FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a GPL static build into the bundle); resolved at runtime via `$JEFECHECK_FFMPEG` → QSettings → bundled → PATH. Headless verification: `--render-test` / `--video-test` / `--playlist-test`. See `developer_notes.md` §18–21.
+
 ## Key Dependencies
 
 | Library | Purpose | License |
@@ -123,6 +133,7 @@ OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so 
 | libcurl | HTTP | MIT |
 | zlib | Compression | zlib |
 | xmlParser | XML parsing (vendored in src/) | BSD |
+| FFmpeg | Video export (H.264/H.265/ProRes) — invoked as a CLI subprocess, **not linked**; bundled per-platform | GPL (bundled static build) |
 
 **Removed dependencies:** FLTK 1.4 (replaced by Qt6 in PR-43f), GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
 
@@ -183,6 +194,8 @@ Before touching anything under `src/qt/` or wiring a new Qt control into the ren
 - **Plate-card layout is orientation-aware & fixed-size**: the card has two internal layouts (wide-short / narrow-tall) swapped via a rebuilt content widget; the Plate Manager keys off `QDockWidget::dockLocationChanged` and fixes its own extent. Gotchas (see developer_notes.md §11): a `QComboBox` sizes to its longest item — use `QSizePolicy::Ignored` for a fill combo so it can't balloon a fixed card; never read a widget's `sizeHint()` synchronously during a dock/content swap (defer with `QTimer::singleShot(0)` + safety floors); use `resizeDocks` to pull a shared dock row to the panel's size rather than fighting a taller neighbor.
 - **AspectCropCombo is a `QToolButton`, not an editable combo** (developer_notes.md §12): an editable combo only opens its popup on the arrow, so a body click never opened it. Aspect (reshape) and crop/letterbox are orthogonal in the renderer — keep both reachable. The default shows as "source"/native ratio but its canonical value stays "original" (via the list item's `Qt::UserRole`).
 - **Playback FPS pacing** (developer_notes.md §13): `gfcPlaybackManager` must seed `targetFPS`/`timePerFrame` in its constructor (the fps spinbox's initial value is set before its signal is connected). `updateTimestep()` reads `std::chrono::steady_clock`, not the integer-ms `gfcTimer`. The Qt playback `QTimer` runs fine (4ms, `PreciseTimer`) with the per-tick GL upload gated on `hasPendingTextureUploads()` and UI read-back throttled to ~60Hz. The on-screen FPS is an EMA with a slow display refresh, a 2%-of-target deadband, and 1-decimal formatting — it's a "keeping up?" indicator, not raw instantaneous timing.
+- **Render/export** (developer_notes.md §18–20): `getImageSaverInstance` was a NULL-deref stub — the OIIO saver (`gfcImageSaverOIIO`) writes all still formats. The render dialog must get the viewport via `parentWidget()` (a modal `QDialog`'s `window()` is itself, not the MainWindow → null vp → black frames). `renderParams.outWidth/outHeight` size the FBO (resolution control); 16-bit/EXR renders need a float FBO (`createFloatFBO`) for real precision. Video export shells out to the **FFmpeg CLI** (`VideoEncoder_Qt`/`QProcess`, never libav*). Render is incremental (`singleShot(0)` per frame, cancellable); never a `QThread` (the GL context is thread-affine).
+- **Pick subsystem** (developer_notes.md §21): in-viewport overlay dragging (histogram, AOI) goes through the GL color-pick pass, registered in `initializeRenderingChain` and driven by `jefe::qt::viewportPick*` with the GL context current — not Qt mouse hit-testing.
 
 ### Image Loading Flow
 1. `gfcFrame::loadFrame()` creates a loader based on file extension
