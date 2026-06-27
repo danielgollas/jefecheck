@@ -101,6 +101,54 @@ target_link_libraries(jefecheck PRIVATE
 )
 target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
 
+# --- Static FFmpeg for video export ----------------------------------------
+# Fetch the same GPL static ffmpeg the release packaging uses, once, into the
+# build tree, so a dev/.app build resolves it from the bundle. GUI launches
+# get a minimal PATH (no /opt/homebrew/bin), so the PATH fallback misses —
+# bundling next to the app is what makes video export work out of the box.
+# Override the source with -DJEFECHECK_FFMPEG_BIN=/path (or the env var);
+# turn the whole thing off with -DJEFECHECK_BUNDLE_FFMPEG=OFF.
+option(JEFECHECK_BUNDLE_FFMPEG "Bundle a static ffmpeg for video export" ON)
+set(_ffmpeg_bundled "")
+if(JEFECHECK_BUNDLE_FFMPEG)
+    set(_ffmpeg_cache "${CMAKE_BINARY_DIR}/ffmpeg-static")
+    set(_ffmpeg_src "$ENV{JEFECHECK_FFMPEG_BIN}")
+    if(NOT _ffmpeg_src AND DEFINED JEFECHECK_FFMPEG_BIN)
+        set(_ffmpeg_src "${JEFECHECK_FFMPEG_BIN}")
+    endif()
+    if(NOT EXISTS "${_ffmpeg_cache}")
+        if(_ffmpeg_src AND EXISTS "${_ffmpeg_src}")
+            configure_file("${_ffmpeg_src}" "${_ffmpeg_cache}" COPYONLY)
+        else()
+            if(APPLE AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+                set(_ffmpeg_asset "ffmpeg-darwin-arm64")
+            elseif(APPLE)
+                set(_ffmpeg_asset "ffmpeg-darwin-x64")
+            elseif(WIN32)
+                set(_ffmpeg_asset "ffmpeg-win32-x64")
+            else()
+                set(_ffmpeg_asset "ffmpeg-linux-x64")
+            endif()
+            message(STATUS "Fetching static ffmpeg (${_ffmpeg_asset}) for video export...")
+            file(DOWNLOAD
+                "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/${_ffmpeg_asset}"
+                "${_ffmpeg_cache}" TLS_VERIFY ON STATUS _ffmpeg_dl)
+            list(GET _ffmpeg_dl 0 _ffmpeg_dl_code)
+            if(NOT _ffmpeg_dl_code EQUAL 0)
+                message(WARNING "ffmpeg download failed (${_ffmpeg_dl}); "
+                    "video export will rely on a Preferences/PATH ffmpeg")
+                file(REMOVE "${_ffmpeg_cache}")
+            endif()
+        endif()
+    endif()
+    if(EXISTS "${_ffmpeg_cache}")
+        file(CHMOD "${_ffmpeg_cache}" PERMISSIONS
+             OWNER_READ OWNER_WRITE OWNER_EXECUTE
+             GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+        set(_ffmpeg_bundled "${_ffmpeg_cache}")
+    endif()
+endif()
+
 # macOS
 if(APPLE)
     # Objective-C++ TU for the NSBundle-backed bundle Resources lookup.
@@ -144,6 +192,30 @@ if(APPLE)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_SOURCE_DIR}/packaging/macos/JefeCheck.icns
                 ${_app_resources}/JefeCheck.icns
+        VERBATIM)
+
+    # Drop the static ffmpeg into Resources/ where VideoEncoder_Qt::findFfmpeg
+    # looks first (Contents/Resources/ffmpeg).
+    if(_ffmpeg_bundled)
+        add_custom_command(TARGET jefecheck POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_ffmpeg_bundled}" ${_app_resources}/ffmpeg
+            COMMAND chmod +x ${_app_resources}/ffmpeg
+            VERBATIM)
+    endif()
+endif()
+
+# Non-macOS dev builds: drop ffmpeg next to the binary (where findFfmpeg
+# looks first on Linux/Windows).
+if(NOT APPLE AND _ffmpeg_bundled)
+    if(WIN32)
+        set(_ffmpeg_dest_name "ffmpeg.exe")
+    else()
+        set(_ffmpeg_dest_name "ffmpeg")
+    endif()
+    add_custom_command(TARGET jefecheck POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_ffmpeg_bundled}" $<TARGET_FILE_DIR:jefecheck>/${_ffmpeg_dest_name}
         VERBATIM)
 endif()
 
