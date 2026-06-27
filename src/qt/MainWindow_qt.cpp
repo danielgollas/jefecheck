@@ -1047,6 +1047,24 @@ int MainWindow_Qt::runHeadlessRenderTest(const QString& dir) {
         p.jpegQuality  = 5;
         total += jefe::qt::triggerSyncRender(p);
     }
+    // Full in/out sequence as a numbered PNG run (seq_0001.png …) so the
+    // multi-frame render path is exercised, not just one frame in N formats.
+    {
+        jefe::qt::RenderParams p;
+        p.quadrant     = 0;
+        p.format       = 5;      // PNG
+        p.formatString = "png";
+        p.from         = jefe::qt::getFromFrame();
+        p.to           = jefe::qt::getToFrame();
+        p.padding      = 4;
+        p.scale        = 1.0f;
+        p.path         = dir.toStdString();
+        p.prefix       = "seq_";
+        const int n = jefe::qt::triggerSyncRender(p);
+        printf("RENDER-TEST seq: %d frame(s) [%d..%d]\n", n, p.from, p.to);
+        fflush(stdout);
+        total += n;
+    }
     viewport_->doneCurrent();
     return total;
 }
