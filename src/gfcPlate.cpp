@@ -1235,14 +1235,24 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                         app().processEvents();
                     }*/
 
-                    //if ( polySizeX!=fboVP.w || polySizeY!=fboVP.h ) 
-					if (this->textureSize.w!=fboVP.w || textureSize.h!=fboVP.h)					
+                    //if ( polySizeX!=fboVP.w || polySizeY!=fboVP.h )
+                    // For a render with an explicit output size, size the FBO
+                    // to the target (the source quad is sampled across it, so
+                    // it scales to fit); otherwise track the source texture
+                    // size. This is what makes the render's resolution control
+                    // actually change the output (and gives video a constant
+                    // size across frames of differing source dimensions).
+                    int wantW = textureSize.w;
+                    int wantH = textureSize.h;
+                    if (forRender && renderParams.outWidth > 0 && renderParams.outHeight > 0) {
+                        wantW = renderParams.outWidth;
+                        wantH = renderParams.outHeight;
+                    }
+					if (wantW!=fboVP.w || wantH!=fboVP.h)
 					{
-                        printf(" *fboVP different from the track size, creating new fbo! (%ix%i vs %ix%i)\n",fboVP.w,fboVP.h,polySizeX,polySizeY);
-                        //fboVP.w=polySizeX;
-                        //fboVP.h=polySizeY;
-						fboVP.w=textureSize.w;
-						fboVP.h=textureSize.h;
+                        printf(" *fboVP different from the target size, creating new fbo! (%ix%i vs %ix%i)\n",fboVP.w,fboVP.h,wantW,wantH);
+						fboVP.w=wantW;
+						fboVP.h=wantH;
                         createFBO();
                     } else {
                         //                         printf(" *fboVP: (%i,%i,%i,%i)\n",fboVP.x,fboVP.y,fboVP.w,fboVP.h);

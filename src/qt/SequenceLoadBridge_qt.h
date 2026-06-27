@@ -147,6 +147,10 @@ void toggleOnScreenHelp();
 // calls return nonzero when an overlay consumed the event, so the caller
 // can suppress its own pan/zoom for that drag. The caller MUST have the
 // viewport GL context current (these run a selection render + read-back).
+// Source pixel size of the given plate's current frame (0 if nothing loaded).
+// The render dialog uses it to seed/scale the output-resolution controls.
+void getRenderSourceSize(int quadrant, int& w, int& h);
+
 int  viewportPickDown(int xFb, int yFb, bool ctrl, bool alt, bool shift);
 int  viewportPickDrag(int xFb, int yFb, int dxFb, int dyFb,
                       bool ctrl, bool alt, bool shift);
@@ -273,6 +277,8 @@ struct RenderParams {
     int to       = 1;
     int padding  = 4;
     float scale  = 1.0f;
+    int outWidth  = 0;       // target output resolution (0 = source size)
+    int outHeight = 0;
     std::string path;        // output directory (no trailing slash required)
     std::string prefix;
     std::string postfix;

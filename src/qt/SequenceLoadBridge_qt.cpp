@@ -109,6 +109,10 @@ unsigned int pickFlags(bool ctrl, bool alt, bool shift) {
 }
 }  // namespace
 
+void getRenderSourceSize(int quadrant, int& w, int& h) {
+    plateManager.getPlateSourceSize(quadrant, w, h);
+}
+
 int viewportPickDown(int xFb, int yFb, bool ctrl, bool alt, bool shift) {
     return pickManager.doPicking(GFC_PICK_EVENT_CLICK_DOWN,
                                  pickFlags(ctrl, alt, shift), xFb, yFb, 0, 0);
@@ -718,6 +722,8 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     p.frame        = src.from;
     p.padding      = src.padding;
     p.scale        = src.scale;
+    p.outWidth     = src.outWidth;
+    p.outHeight    = src.outHeight;
     p.path         = src.path;
     // CreateRenderFilename concatenates path+prefix directly, so the output
     // directory needs a trailing separator (QFileDialog hands one back

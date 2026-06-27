@@ -212,14 +212,28 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     paddingSpin_->setValue(4);
     form->addRow("Padding:", paddingSpin_);
 
-    // Scale.
-    scaleSpin_ = new QDoubleSpinBox(this);
-    scaleSpin_->setObjectName("dialog.render.scale.spin");
-    scaleSpin_->setRange(0.05, 4.0);
-    scaleSpin_->setSingleStep(0.05);
-    scaleSpin_->setValue(1.0);
-    scaleSpin_->setDecimals(2);
-    form->addRow("Scale:", scaleSpin_);
+    // Resolution: a scale preset combo + explicit W×H spinners. The combo
+    // scales relative to the source; the spinners show (and let you override)
+    // the final output size and are what the render actually uses.
+    resolutionCombo_ = new QComboBox(this);
+    resolutionCombo_->setObjectName("dialog.render.resolution.combo");
+    resolutionCombo_->addItems({"Source (100%)", "75%", "50%", "25%", "Custom"});
+    widthSpin_ = new QSpinBox(this);
+    widthSpin_->setObjectName("dialog.render.width.spin");
+    widthSpin_->setRange(1, 16384);
+    widthSpin_->setValue(1920);
+    heightSpin_ = new QSpinBox(this);
+    heightSpin_->setObjectName("dialog.render.height.spin");
+    heightSpin_->setRange(1, 16384);
+    heightSpin_->setValue(1080);
+    auto* resRow = new QHBoxLayout();
+    resRow->setContentsMargins(0, 0, 0, 0);
+    resRow->addWidget(resolutionCombo_);
+    resRow->addWidget(widthSpin_);
+    resRow->addWidget(new QLabel("×", this));
+    resRow->addWidget(heightSpin_);
+    resRow->addStretch(1);
+    form->addRow("Resolution:", resRow);
 
     // Output path + browse.
     pathEdit_ = new QLineEdit(this);
@@ -330,7 +344,24 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     connect(postfixEdit_,    &QLineEdit::textChanged,
             this, [onChange](const QString&) { onChange(); });
     connect(quadrantCombo_,  QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [onChange](int) { onChange(); });
+            this, [this, onChange](int) {
+        refreshSourceSize();
+        applyResolutionPreset();
+        onChange();
+    });
+
+    // Resolution: preset combo recomputes W×H; editing W/H flips to Custom.
+    connect(resolutionCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this, onChange](int) { applyResolutionPreset(); onChange(); });
+    auto onSizeEdited = [this, onChange]() {
+        QSignalBlocker b(resolutionCombo_);
+        resolutionCombo_->setCurrentIndex(4);   // Custom
+        onChange();
+    };
+    connect(widthSpin_,  QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [onSizeEdited](int) { onSizeEdited(); });
+    connect(heightSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [onSizeEdited](int) { onSizeEdited(); });
 
     connect(browseBtn_,    &QPushButton::clicked,
             this, &RenderDialog_Qt::browseForOutputDir);
@@ -341,10 +372,36 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     connect(doneBtn_,      &QPushButton::clicked,
             this, &QDialog::accept);
 
-    // Sensible default range from the playback in/out points.
+    // Sensible default range from the playback in/out points, and seed the
+    // resolution from the active plate's source size (combo defaults to
+    // Source → spinners show the source dims).
     onAutoRangeClicked();
+    refreshSourceSize();
+    applyResolutionPreset();
     updateQualityPage();
     rebuildPreview();
+}
+
+void RenderDialog_Qt::refreshSourceSize() {
+    int w = 0, h = 0;
+    jefe::qt::getRenderSourceSize(quadrantCombo_->currentIndex(), w, h);
+    sourceW_ = w;
+    sourceH_ = h;
+}
+
+void RenderDialog_Qt::applyResolutionPreset() {
+    const int idx = resolutionCombo_->currentIndex();
+    if (idx >= 4) return;                 // Custom — leave the spinners alone
+    if (sourceW_ <= 0 || sourceH_ <= 0) return;  // no footage loaded yet
+    double frac = 1.0;
+    if (idx == 1) frac = 0.75;
+    else if (idx == 2) frac = 0.50;
+    else if (idx == 3) frac = 0.25;
+    const int w = qMax(1, int(sourceW_ * frac + 0.5));
+    const int h = qMax(1, int(sourceH_ * frac + 0.5));
+    QSignalBlocker bw(widthSpin_), bh(heightSpin_);
+    widthSpin_->setValue(w);
+    heightSpin_->setValue(h);
 }
 
 void RenderDialog_Qt::updateQualityPage() {
@@ -399,7 +456,7 @@ void RenderDialog_Qt::rebuildPreview() {
     p.from    = startFrameSpin_->value();
     p.to      = endFrameSpin_->value();
     p.padding = paddingSpin_->value();
-    p.scale   = static_cast<float>(scaleSpin_->value());
+    p.scale   = 1.0f;
     p.path    = pathEdit_->text().toStdString();
     p.prefix  = prefixEdit_->text().toStdString();
     p.postfix = postfixEdit_->text().toStdString();
@@ -490,7 +547,9 @@ void RenderDialog_Qt::startRender() {
 
     renderParams_ = jefe::qt::RenderParams{};
     renderParams_.quadrant     = quadrantCombo_->currentIndex();
-    renderParams_.scale   = static_cast<float>(scaleSpin_->value());
+    renderParams_.scale   = 1.0f;
+    renderParams_.outWidth  = widthSpin_->value();
+    renderParams_.outHeight = heightSpin_->value();
     renderParams_.jpegQuality     = jpegQualitySpin_->value();
     renderParams_.pngQuality      = pngLevelSpin_->value();
     renderParams_.tiffCompression = tiffCompCombo_->currentIndex();

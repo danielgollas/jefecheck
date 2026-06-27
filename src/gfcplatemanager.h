@@ -125,6 +125,13 @@ public:
    void clearFXStack(int whichOne);
    
    void renderPlate(gfcRenderParams params,std::vector<std::string> *renderNames=NULL);
+
+   // Source pixel size of plate `quad`'s current frame (0 if out of range).
+   void getPlateSourceSize(int quad, int& w, int& h) {
+       w = 0; h = 0;
+       if (quad >= 0 && quad < (int)plates.size())
+           plates[quad].getRenderSourceSize(w, h);
+   }
 	
    void setFeedbackMessage(std::string theMessage);
    
