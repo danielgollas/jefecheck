@@ -6,6 +6,7 @@
 #ifndef JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 #define JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -290,13 +291,15 @@ struct RenderParams {
 // "first frame: …" preview as the user edits path/prefix/format.
 std::string previewRenderFilename(const RenderParams& params);
 
-// Synchronously runs `plateManager.renderPlate(params)` on the GUI
-// thread. PR-39a accepts that the UI freezes during render — async
-// + cancel button comes in PR-39b along with a QThread driver. The
+// Synchronously renders `params`'s frame range on the GUI thread. The
 // caller MUST have a current GL context (the Qt mainwindow's
-// QOpenGLWidget keeps one current). Returns the count of frames
-// the renderer wrote.
-int triggerSyncRender(const RenderParams& params);
+// QOpenGLWidget keeps one current). Returns the count of frames written.
+//
+// `onProgress(framesDone, framesTotal)` is invoked after each frame so the
+// dialog can drive a progress bar (it calls processEvents to repaint). The
+// render runs one frame per renderPlate call to make that granular.
+int triggerSyncRender(const RenderParams& params,
+                      const std::function<void(int, int)>& onProgress = {});
 
 // Cancel hooks. Today only meaningful from a worker thread (PR-39b);
 // stubbed here for symmetry with the FLTK callback shape.

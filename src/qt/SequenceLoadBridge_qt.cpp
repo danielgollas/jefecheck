@@ -741,11 +741,24 @@ std::string previewRenderFilename(const RenderParams& params) {
     return CreateRenderFilename(p);
 }
 
-int triggerSyncRender(const RenderParams& params) {
-    gfcRenderParams p = toCoreRenderParams(params);
-    std::vector<std::string> rendered;
-    plateManager.renderPlate(p, &rendered);
-    return static_cast<int>(rendered.size());
+int triggerSyncRender(const RenderParams& params,
+                      const std::function<void(int, int)>& onProgress) {
+    gfcRenderParams base = toCoreRenderParams(params);
+    const int total = (base.to >= base.from) ? (base.to - base.from + 1) : 0;
+    int done = 0;
+    if (onProgress) onProgress(0, total);
+    // Render one frame per renderPlate call so we can report progress (and
+    // let the dialog repaint) between frames.
+    for (int frame = base.from; frame <= base.to; ++frame) {
+        gfcRenderParams pf = base;
+        pf.from = frame;
+        pf.to   = frame;
+        std::vector<std::string> rendered;
+        plateManager.renderPlate(pf, &rendered);
+        done += static_cast<int>(rendered.size());
+        if (onProgress) onProgress(done, total);
+    }
+    return done;
 }
 
 void abortRender() {

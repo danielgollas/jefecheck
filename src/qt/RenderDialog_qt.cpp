@@ -14,6 +14,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
@@ -48,7 +49,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     setObjectName("dialog.render");
     setWindowTitle("Render");
     setModal(true);
-    resize(520, 360);
+    resize(560, 480);
 
     auto* form = new QFormLayout();
     form->setLabelAlignment(Qt::AlignRight);
@@ -185,13 +186,35 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     postfixEdit_->setPlaceholderText("Optional");
     form->addRow("Postfix:", postfixEdit_);
 
-    // Preview label — first / last filename.
+    // Preview label — first / last filename. Shows three lines
+    // (first … last), so give it room and top-align it so long output
+    // paths aren't clipped/squashed.
     previewLabel_ = new QLabel(this);
     previewLabel_->setObjectName("dialog.render.preview.label");
     previewLabel_->setStyleSheet("color: #aaa; font-family: monospace;");
     previewLabel_->setWordWrap(true);
-    previewLabel_->setMinimumHeight(40);
+    previewLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    previewLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    previewLabel_->setMinimumHeight(72);
+    previewLabel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
     form->addRow("Preview:", previewLabel_);
+
+    // Progress bar — fills per frame during render and stays at 100% when
+    // done so it's clear the render finished. Hidden until the first render.
+    progressBar_ = new QProgressBar(this);
+    progressBar_->setObjectName("dialog.render.progress.bar");
+    progressBar_->setRange(0, 100);
+    progressBar_->setValue(0);
+    progressBar_->setTextVisible(true);
+    progressBar_->setVisible(false);
+    // Explicit style: the native macOS progress bar ignores setTextVisible,
+    // so the "Rendering… X/Y" / "Done" text wouldn't show. This also gives
+    // it a clear height and a green chunk when complete reads as "done".
+    progressBar_->setStyleSheet(
+        "QProgressBar {"
+        "  border: 1px solid #555; border-radius: 3px; background: #222;"
+        "  text-align: center; color: #eee; min-height: 20px; }"
+        "QProgressBar::chunk { background-color: #3b7dd8; border-radius: 2px; }");
 
     // Status (e.g. "Rendered N frames").
     statusLabel_ = new QLabel(this);
@@ -215,6 +238,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     outer->setContentsMargins(16, 16, 16, 16);
     outer->setSpacing(10);
     outer->addLayout(form);
+    outer->addWidget(progressBar_);
     outer->addLayout(buttonRow);
 
     // Wire signals. Any field change rebuilds the preview and
@@ -351,6 +375,10 @@ void RenderDialog_Qt::onRenderClicked() {
     statusLabel_->setText("Rendering…");
     renderBtn_->setEnabled(false);
     doneBtn_->setEnabled(false);
+    progressBar_->setVisible(true);
+    progressBar_->setRange(0, 100);
+    progressBar_->setValue(0);
+    progressBar_->setFormat("Rendering… %p%");
     QApplication::processEvents();
 
     // renderPlate drives gfcPlate::draw() directly — that issues GL calls
@@ -370,12 +398,31 @@ void RenderDialog_Qt::onRenderClicked() {
     }
     if (vp) vp->makeCurrent();
 
-    // Synchronous — the dialog will appear frozen until the render
-    // completes. PR-39b moves this onto a QThread.
-    const int n = jefe::qt::triggerSyncRender(p);
+    // Synchronous on the GUI thread. The per-frame progress callback drives
+    // the bar and pumps events so it repaints as frames complete. (Async +
+    // cancel via a QThread driver is still future work.)
+    const int n = jefe::qt::triggerSyncRender(p, [this](int doneFrames, int totalFrames) {
+        const int pct = (totalFrames > 0)
+            ? int(100.0 * doneFrames / totalFrames + 0.5) : 0;
+        progressBar_->setValue(pct);
+        progressBar_->setFormat(
+            QString("Rendering… %1/%2").arg(doneFrames).arg(totalFrames));
+        statusLabel_->setText(
+            QString("Rendering frame %1 of %2…").arg(doneFrames).arg(totalFrames));
+        QApplication::processEvents();
+    });
 
     if (vp) vp->doneCurrent();
 
+    // Leave the bar full, green, and labelled so it's clear the render
+    // finished — it persists at 100% until the next render starts.
+    progressBar_->setValue(100);
+    progressBar_->setFormat(QString("Done — %1 frame(s) ✓").arg(n));
+    progressBar_->setStyleSheet(
+        "QProgressBar {"
+        "  border: 1px solid #555; border-radius: 3px; background: #222;"
+        "  text-align: center; color: #fff; min-height: 20px; }"
+        "QProgressBar::chunk { background-color: #2e9e4f; border-radius: 2px; }");
     statusLabel_->setText(QString("Rendered %1 frame(s)").arg(n));
     renderBtn_->setEnabled(inputsValid());
     doneBtn_->setEnabled(true);
