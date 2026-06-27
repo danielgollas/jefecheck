@@ -15,10 +15,13 @@ gfcRenderParams::gfcRenderParams()
     , jpegQuality(95)
     , jpegProgressive(false)
     , jpegOptimized(false)
+    , jpegSubsampling(0)        // 4:4:4
     , pngQuality(6)             // libpng zlib compression level 0..9
     , tiffCompression(0)        // 0 = LZW (see gfcImageSaverOIIO)
     , videoCodec(0)
     , videoVBR(0)
+    , videoBitrateKbps(0)
+    , videoPreset(4)            // ~medium
     , createMovie(0)
     , deleteFramesAfter(0)
     , frameRate(24)

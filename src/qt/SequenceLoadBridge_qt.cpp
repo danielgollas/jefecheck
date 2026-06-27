@@ -734,6 +734,8 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     p.prefix       = src.prefix;
     p.postfix      = src.postfix;
     p.jpegQuality     = src.jpegQuality;
+    p.jpegProgressive = src.jpegProgressive;
+    p.jpegSubsampling = src.jpegSubsampling;
     p.pngQuality      = src.pngQuality;
     p.tiffCompression = src.tiffCompression;
     p.exrCompression  = src.exrCompression;

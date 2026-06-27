@@ -36,10 +36,13 @@ public:
     int jpegQuality;
     bool jpegProgressive;
     bool jpegOptimized;
+    int jpegSubsampling;   // 0 = 4:4:4, 1 = 4:2:2, 2 = 4:2:0
     int pngQuality;
     int tiffCompression;
     int videoCodec;
     int videoVBR;
+    int videoBitrateKbps;  // 0 = constant-quality (CRF); >0 = target bitrate
+    int videoPreset;       // x264/x265 preset index (0 ultrafast … 8 veryslow)
     std::string filename;
     int createMovie;
     int deleteFramesAfter;
