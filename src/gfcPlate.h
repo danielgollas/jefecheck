@@ -182,6 +182,13 @@ class gfcPlate: public gfcPickNotifee
         
         void draw();
         void setViewport(int x, int y, int w, int h);
+
+        // Source frame pixel size of whatever this plate last drew (0 if
+        // nothing loaded). Used by the render dialog to seed/scale the
+        // output-resolution controls.
+        void getRenderSourceSize(int& w, int& h) const {
+            w = theFrame.sizeX; h = theFrame.sizeY;
+        }
         
         void clearHistogramCache();
         void setHistogramQuality(int pQUality);

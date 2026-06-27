@@ -53,6 +53,13 @@ private:
     void startEncode();             // begins the ffmpeg pass (video formats)
     void cleanupVideoTemp();
 
+    // Output-resolution controls. refreshSourceSize() reads the active
+    // plate's source dims; applyResolutionPreset() recomputes W×H from the
+    // selected scale; the W/H spinners are the source of truth for the
+    // render's output size.
+    void refreshSourceSize();
+    void applyResolutionPreset();
+
     bool rendering_ = false;
     bool cancelRequested_ = false;
     int  renderCur_ = 0;        // next frame to render
@@ -76,7 +83,11 @@ private:
     QSpinBox* startFrameSpin_ = nullptr;
     QSpinBox* endFrameSpin_ = nullptr;
     QSpinBox* paddingSpin_ = nullptr;
-    QDoubleSpinBox* scaleSpin_ = nullptr;
+    QComboBox* resolutionCombo_ = nullptr;   // Source / 75% / 50% / 25% / Custom
+    QSpinBox* widthSpin_ = nullptr;
+    QSpinBox* heightSpin_ = nullptr;
+    int sourceW_ = 0;
+    int sourceH_ = 0;
     QLineEdit* pathEdit_ = nullptr;
     QPushButton* browseBtn_ = nullptr;
     QPushButton* autoRangeBtn_ = nullptr;

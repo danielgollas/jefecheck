@@ -20,6 +20,10 @@ public:
     int to;
     int sizeX;
     int sizeY;
+    // Target output resolution for render (0 = use the source frame size).
+    // gfcPlate sizes the forRender FBO to this, scaling the source into it.
+    int outWidth;
+    int outHeight;
     float scale;
     std::string prefix;
 	std::string postfix;
