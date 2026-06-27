@@ -253,6 +253,11 @@ class gfcPlate: public gfcPickNotifee
 	GLuint fbov[3];
 	GLuint fboTexturev[3];
 	int fboTexturevCount;
+	// Render-time request for a float (RGBA16F) FBO so a 16-bit / EXR render
+	// carries real >8-bit precision; fboIsFloat tracks the current FBO so the
+	// size/format check recreates it when the request flips.
+	bool createFloatFBO = false;
+	bool fboIsFloat = false;
 	GLuint fbo8bit;
 	GLuint fbo8bitTexture;
 	

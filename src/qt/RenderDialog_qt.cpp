@@ -157,23 +157,48 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         qualityStack_->insertWidget(1, exrRow);
     }
 
-    // 2 — TIFF: compression.
-    tiffCompCombo_ = new QComboBox(this);
-    tiffCompCombo_->setObjectName("dialog.render.tiffcomp.combo");
-    tiffCompCombo_->addItems({"LZW", "None", "ZIP"});  // 0/1/2
-    qualityStack_->insertWidget(2, tiffCompCombo_);
+    // 2 — TIFF: compression + bit depth.
+    {
+        auto* tiffPage = new QWidget(this);
+        auto* l = new QHBoxLayout(tiffPage);
+        l->setContentsMargins(0, 0, 0, 0);
+        tiffCompCombo_ = new QComboBox(tiffPage);
+        tiffCompCombo_->setObjectName("dialog.render.tiffcomp.combo");
+        tiffCompCombo_->addItems({"LZW", "None", "ZIP"});  // 0/1/2
+        tiffBitDepthCombo_ = new QComboBox(tiffPage);
+        tiffBitDepthCombo_->setObjectName("dialog.render.tiffbitdepth.combo");
+        tiffBitDepthCombo_->addItems({"8-bit", "16-bit"});
+        l->addWidget(new QLabel("Compression:", tiffPage));
+        l->addWidget(tiffCompCombo_);
+        l->addWidget(new QLabel("Depth:", tiffPage));
+        l->addWidget(tiffBitDepthCombo_);
+        l->addStretch(1);
+        qualityStack_->insertWidget(2, tiffPage);
+    }
 
     // 3 — TGA, 4 — BMP: no options.
     qualityStack_->insertWidget(3, new QLabel("(no options)", this));
     qualityStack_->insertWidget(4, new QLabel("(no options)", this));
 
-    // 5 — PNG: zlib compression level 0..9.
-    pngLevelSpin_ = new QSpinBox(this);
-    pngLevelSpin_->setObjectName("dialog.render.pnglevel.spin");
-    pngLevelSpin_->setRange(0, 9);
-    pngLevelSpin_->setValue(6);
-    pngLevelSpin_->setSuffix("  (compression 0–9)");
-    qualityStack_->insertWidget(5, pngLevelSpin_);
+    // 5 — PNG: zlib compression level + bit depth.
+    {
+        auto* pngPage = new QWidget(this);
+        auto* l = new QHBoxLayout(pngPage);
+        l->setContentsMargins(0, 0, 0, 0);
+        pngLevelSpin_ = new QSpinBox(pngPage);
+        pngLevelSpin_->setObjectName("dialog.render.pnglevel.spin");
+        pngLevelSpin_->setRange(0, 9);
+        pngLevelSpin_->setValue(6);
+        pngBitDepthCombo_ = new QComboBox(pngPage);
+        pngBitDepthCombo_->setObjectName("dialog.render.pngbitdepth.combo");
+        pngBitDepthCombo_->addItems({"8-bit", "16-bit"});
+        l->addWidget(new QLabel("Compression (0–9):", pngPage));
+        l->addWidget(pngLevelSpin_);
+        l->addWidget(new QLabel("Depth:", pngPage));
+        l->addWidget(pngBitDepthCombo_);
+        l->addStretch(1);
+        qualityStack_->insertWidget(5, pngPage);
+    }
 
     // 6 — Video (shared by all video codecs): fps + quality. The codec is
     // chosen by the format combo, so updateQualityPage() maps every video
@@ -602,6 +627,10 @@ void RenderDialog_Qt::startRender() {
     renderParams_.tiffCompression = tiffCompCombo_->currentIndex();
     renderParams_.exrCompression  = exrCompCombo_->currentIndex();
     renderParams_.exrFormat       = exrDepthCombo_->currentIndex();
+    // 16-bit only applies to PNG/TIFF (combo index 1 = 16-bit).
+    if (fmt == 5)      renderParams_.bitsPerChannel = pngBitDepthCombo_->currentIndex() ? 16 : 8;
+    else if (fmt == 2) renderParams_.bitsPerChannel = tiffBitDepthCombo_->currentIndex() ? 16 : 8;
+    else               renderParams_.bitsPerChannel = 8;
 
     if (renderIsVideo_) {
         // Render a PNG sequence into a temp dir, then encode it. f_%04d.png.

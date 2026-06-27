@@ -292,6 +292,7 @@ struct RenderParams {
     int tiffCompression = 0;    // 0 LZW, 1 none, 2 zip
     int exrCompression  = 3;    // index into the EXR compression list (zip)
     int exrFormat       = 0;    // GFC_HALF=0, GFC_FLOAT=1
+    int bitsPerChannel  = 8;    // 8 or 16 (PNG/TIFF)
 };
 
 // Returns a sample filename built from `params` using the existing
