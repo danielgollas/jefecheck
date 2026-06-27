@@ -140,11 +140,17 @@ private:
 
     void applyFormatAttributes(OIIO::ImageSpec& spec) const {
         switch (params.format) {
-            case GFC_RENDER_JPEG:
+            case GFC_RENDER_JPEG: {
                 spec.attribute("CompressionQuality", params.jpegQuality);
                 if (params.jpegProgressive)
                     spec.attribute("jpeg:progressive", 1);
+                // 0 = 4:4:4 (none), 1 = 4:2:2, 2 = 4:2:0.
+                const char* sub = params.jpegSubsampling == 1 ? "4:2:2"
+                                : params.jpegSubsampling == 2 ? "4:2:0"
+                                                              : "4:4:4";
+                spec.attribute("jpeg:subsampling", sub);
                 break;
+            }
             case GFC_RENDER_PNG: {
                 int level = params.pngQuality;
                 if (level < 0) level = 0;
@@ -159,13 +165,19 @@ private:
                                : params.tiffCompression == 2 ? "zip"
                                                              : "lzw");
                 break;
-            case GFC_RENDER_EXR:
-                // 0 = zip, 1 = piz, 2 = none.
-                spec.attribute("compression",
-                               params.exrCompression == 1 ? "piz"
-                               : params.exrCompression == 2 ? "none"
-                                                            : "zip");
+            case GFC_RENDER_EXR: {
+                // Index matches the dialog's EXR compression combo.
+                static const char* kExrComp[] = {
+                    "none", "rle", "zips", "zip", "piz",
+                    "pxr24", "b44", "b44a", "dwaa", "dwab"
+                };
+                const int n = sizeof(kExrComp) / sizeof(kExrComp[0]);
+                const int idx = (params.exrCompression >= 0 &&
+                                 params.exrCompression < n)
+                                    ? params.exrCompression : 3;  // default zip
+                spec.attribute("compression", kExrComp[idx]);
                 break;
+            }
             default:
                 break;
         }

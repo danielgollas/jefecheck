@@ -5,6 +5,7 @@
 #include "VideoEncoder_qt.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
@@ -111,13 +112,28 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     qualityStack_ = new QStackedWidget(this);
     qualityStack_->setObjectName("dialog.render.quality.stack");
 
-    // 0 — JPEG: quality 0..100.
-    jpegQualitySpin_ = new QSpinBox(this);
-    jpegQualitySpin_->setObjectName("dialog.render.jpegquality.spin");
-    jpegQualitySpin_->setRange(0, 100);
-    jpegQualitySpin_->setValue(95);
-    jpegQualitySpin_->setSuffix("  (quality)");
-    qualityStack_->insertWidget(0, jpegQualitySpin_);
+    // 0 — JPEG: quality + progressive + chroma subsampling.
+    {
+        auto* jpegPage = new QWidget(this);
+        auto* l = new QHBoxLayout(jpegPage);
+        l->setContentsMargins(0, 0, 0, 0);
+        jpegQualitySpin_ = new QSpinBox(jpegPage);
+        jpegQualitySpin_->setObjectName("dialog.render.jpegquality.spin");
+        jpegQualitySpin_->setRange(0, 100);
+        jpegQualitySpin_->setValue(95);
+        jpegProgressiveCheck_ = new QCheckBox("Progressive", jpegPage);
+        jpegProgressiveCheck_->setObjectName("dialog.render.jpegprogressive.check");
+        jpegSubsamplingCombo_ = new QComboBox(jpegPage);
+        jpegSubsamplingCombo_->setObjectName("dialog.render.jpegsubsampling.combo");
+        jpegSubsamplingCombo_->addItems({"4:4:4", "4:2:2", "4:2:0"});  // 0/1/2
+        l->addWidget(new QLabel("Quality:", jpegPage));
+        l->addWidget(jpegQualitySpin_);
+        l->addWidget(jpegProgressiveCheck_);
+        l->addWidget(new QLabel("Chroma:", jpegPage));
+        l->addWidget(jpegSubsamplingCombo_);
+        l->addStretch(1);
+        qualityStack_->insertWidget(0, jpegPage);
+    }
 
     // 1 — EXR: depth + compression.
     {
@@ -129,7 +145,10 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         exrDepthCombo_->addItems({"Half", "Float"});   // GFC_HALF=0, GFC_FLOAT=1
         exrCompCombo_ = new QComboBox(exrRow);
         exrCompCombo_->setObjectName("dialog.render.exrcomp.combo");
-        exrCompCombo_->addItems({"ZIP", "PIZ", "None"}); // 0/1/2
+        // Index order must match kExrComp in gfcimagesaver.cpp.
+        exrCompCombo_->addItems({"None", "RLE", "ZIPS", "ZIP", "PIZ",
+                                 "PXR24", "B44", "B44A", "DWAA", "DWAB"});
+        exrCompCombo_->setCurrentIndex(3);  // ZIP
         l->addWidget(new QLabel("Depth:", exrRow));
         l->addWidget(exrDepthCombo_);
         l->addWidget(new QLabel("Compression:", exrRow));
@@ -171,10 +190,36 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         videoQualitySpin_->setObjectName("dialog.render.videoquality.spin");
         videoQualitySpin_->setRange(0, 100);
         videoQualitySpin_->setValue(80);
+        videoBitrateModeCombo_ = new QComboBox(vpage);
+        videoBitrateModeCombo_->setObjectName("dialog.render.videobitratemode.combo");
+        videoBitrateModeCombo_->addItems({"Quality", "Bitrate"});
+        videoBitrateSpin_ = new QSpinBox(vpage);
+        videoBitrateSpin_->setObjectName("dialog.render.videobitrate.spin");
+        videoBitrateSpin_->setRange(1, 500);
+        videoBitrateSpin_->setValue(20);
+        videoBitrateSpin_->setSuffix(" Mbps");
+        videoBitrateSpin_->setEnabled(false);  // enabled only in Bitrate mode
+        videoPresetCombo_ = new QComboBox(vpage);
+        videoPresetCombo_->setObjectName("dialog.render.videopreset.combo");
+        videoPresetCombo_->addItems({"ultrafast", "superfast", "veryfast",
+                                     "faster", "medium", "slow", "slower",
+                                     "veryslow", "placebo"});
+        videoPresetCombo_->setCurrentIndex(4);  // medium
+        // Quality spin vs bitrate spin enable by mode.
+        connect(videoBitrateModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int idx) {
+            const bool bitrate = (idx == 1);
+            videoBitrateSpin_->setEnabled(bitrate);
+            videoQualitySpin_->setEnabled(!bitrate);
+        });
         l->addWidget(new QLabel("FPS:", vpage));
         l->addWidget(videoFpsSpin_);
-        l->addWidget(new QLabel("Quality:", vpage));
+        l->addWidget(new QLabel("Rate:", vpage));
+        l->addWidget(videoBitrateModeCombo_);
         l->addWidget(videoQualitySpin_);
+        l->addWidget(videoBitrateSpin_);
+        l->addWidget(new QLabel("Preset:", vpage));
+        l->addWidget(videoPresetCombo_);
         l->addStretch(1);
         qualityStack_->insertWidget(6, vpage);
     }
@@ -551,6 +596,8 @@ void RenderDialog_Qt::startRender() {
     renderParams_.outWidth  = widthSpin_->value();
     renderParams_.outHeight = heightSpin_->value();
     renderParams_.jpegQuality     = jpegQualitySpin_->value();
+    renderParams_.jpegProgressive = jpegProgressiveCheck_->isChecked();
+    renderParams_.jpegSubsampling = jpegSubsamplingCombo_->currentIndex();
     renderParams_.pngQuality      = pngLevelSpin_->value();
     renderParams_.tiffCompression = tiffCompCombo_->currentIndex();
     renderParams_.exrCompression  = exrCompCombo_->currentIndex();
@@ -712,6 +759,9 @@ void RenderDialog_Qt::startEncode() {
     ep.fps          = videoFpsSpin_->value();
     ep.codec        = codecForFormat(videoFormatIdx_);
     ep.quality      = videoQualitySpin_->value();
+    ep.bitrateKbps  = (videoBitrateModeCombo_->currentIndex() == 1)
+                          ? videoBitrateSpin_->value() * 1000 : 0;
+    ep.preset       = videoPresetCombo_->currentIndex();
     ep.outFile      = videoOutFile_;
     videoEncoder_->start(ep);
 }

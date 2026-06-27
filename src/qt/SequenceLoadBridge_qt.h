@@ -286,9 +286,11 @@ struct RenderParams {
     // Format-specific quality knobs. Defaults mirror gfcRenderParams's ctor
     // so a caller that doesn't set them keeps the prior behavior.
     int jpegQuality     = 95;   // 0..100
+    bool jpegProgressive = false;
+    int jpegSubsampling = 0;    // 0 4:4:4, 1 4:2:2, 2 4:2:0
     int pngQuality      = 6;    // zlib level 0..9
     int tiffCompression = 0;    // 0 LZW, 1 none, 2 zip
-    int exrCompression  = 0;    // 0 zip, 1 piz, 2 none
+    int exrCompression  = 3;    // index into the EXR compression list (zip)
     int exrFormat       = 0;    // GFC_HALF=0, GFC_FLOAT=1
 };
 

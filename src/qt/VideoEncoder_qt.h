@@ -38,6 +38,8 @@ public:
         int     fps         = 24;
         Codec   codec       = Codec::H264;
         int     quality     = 80; // 0..100 (maps to crf / prores profile)
+        int     bitrateKbps = 0;  // 0 = constant-quality (CRF); >0 = target bitrate
+        int     preset      = 4;  // x264/x265 preset index (0 ultrafast … 8 veryslow)
         QString outFile;          // full output path incl. extension
     };
 

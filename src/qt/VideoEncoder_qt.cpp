@@ -110,18 +110,35 @@ void VideoEncoder_Qt::start(const Params& p) {
          << "-i" << p.framePattern
          << "-vf" << vf;
 
+    // x264/x265 preset names by index (Params.preset).
+    static const char* kPresets[] = {
+        "ultrafast", "superfast", "veryfast", "faster", "medium",
+        "slow", "slower", "veryslow", "placebo"
+    };
+    const int pn = sizeof(kPresets) / sizeof(kPresets[0]);
+    const QString preset = kPresets[(p.preset >= 0 && p.preset < pn) ? p.preset : 4];
+
     switch (p.codec) {
         case Codec::H264: {
-            const int crf = 28 - int((p.quality / 100.0) * 14 + 0.5); // 14..28
-            args << "-c:v" << "libx264" << "-preset" << "medium"
-                 << "-crf" << QString::number(crf) << "-pix_fmt" << "yuv420p";
+            args << "-c:v" << "libx264" << "-preset" << preset
+                 << "-pix_fmt" << "yuv420p";
+            if (p.bitrateKbps > 0) {
+                args << "-b:v" << QString("%1k").arg(p.bitrateKbps);
+            } else {
+                const int crf = 28 - int((p.quality / 100.0) * 14 + 0.5); // 14..28
+                args << "-crf" << QString::number(crf);
+            }
             break;
         }
         case Codec::H265: {
-            const int crf = 30 - int((p.quality / 100.0) * 14 + 0.5); // 16..30
-            args << "-c:v" << "libx265" << "-preset" << "medium"
-                 << "-crf" << QString::number(crf) << "-pix_fmt" << "yuv420p"
-                 << "-tag:v" << "hvc1";
+            args << "-c:v" << "libx265" << "-preset" << preset
+                 << "-pix_fmt" << "yuv420p" << "-tag:v" << "hvc1";
+            if (p.bitrateKbps > 0) {
+                args << "-b:v" << QString("%1k").arg(p.bitrateKbps);
+            } else {
+                const int crf = 30 - int((p.quality / 100.0) * 14 + 0.5); // 16..30
+                args << "-crf" << QString::number(crf);
+            }
             break;
         }
         case Codec::ProRes: {

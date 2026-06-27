@@ -98,12 +98,17 @@ private:
     // on the format combo index (0 JPEG, 1 EXR, 2 TIFF, 3 TGA, 4 BMP, 5 PNG).
     QStackedWidget* qualityStack_ = nullptr;
     QSpinBox* jpegQualitySpin_ = nullptr;
+    class QCheckBox* jpegProgressiveCheck_ = nullptr;
+    QComboBox* jpegSubsamplingCombo_ = nullptr;
     QSpinBox* pngLevelSpin_ = nullptr;
     QComboBox* tiffCompCombo_ = nullptr;
     QComboBox* exrDepthCombo_ = nullptr;
     QComboBox* exrCompCombo_ = nullptr;
     QSpinBox* videoFpsSpin_ = nullptr;
     QSpinBox* videoQualitySpin_ = nullptr;
+    QComboBox* videoBitrateModeCombo_ = nullptr;   // Quality (CRF) / Bitrate
+    QSpinBox* videoBitrateSpin_ = nullptr;         // Mbps
+    QComboBox* videoPresetCombo_ = nullptr;        // encoder speed/quality
 
     QLabel* previewLabel_ = nullptr;
     QLabel* statusLabel_ = nullptr;
