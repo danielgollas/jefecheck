@@ -122,18 +122,34 @@ REMOTE_CLIENT_CONNECT = "remote.client.connect.button"
 REMOTE_DISCONNECT = "remote.disconnect.button"
 REMOTE_STATUS = "remote.status.label"
 
-# Playlist dock (PR-40)
-DOCK_PLAYLIST = "dock.playlist"
-PLAYLIST_PANEL = "playlist.panel"
-PLAYLIST_LIST = "playlist.list"
-PLAYLIST_ADD = "playlist.add.button"
-PLAYLIST_REMOVE = "playlist.remove.button"
-PLAYLIST_UP = "playlist.up.button"
-PLAYLIST_DOWN = "playlist.down.button"
-PLAYLIST_CLEAR = "playlist.clear.button"
-PLAYLIST_SAVE = "playlist.save.button"
-PLAYLIST_LOAD = "playlist.load.button"
-PLAYLIST_STATUS = "playlist.status.label"
+# Playlist dock (PlaylistPanel_Qt). Button object names follow the
+# playlist.button.* scheme; checkboxes/combo/status added in the rewritten
+# panel. Old names (playlist.add.button / playlist.remove.button /
+# playlist.up.button / playlist.down.button / playlist.clear.button /
+# playlist.save.button / playlist.load.button) are removed.
+# Per-card leaves (templated by item index i):
+#   playlist.card.<i>         — the PlaylistItemCard QFrame
+#   playlist.card.<i>.name    — item name label
+#   playlist.card.<i>.chevron — expand/collapse toggle
+#   playlist.card.<i>.remove  — per-card remove button
+DOCK_PLAYLIST           = "dock.playlist"
+PLAYLIST_PANEL          = "playlist.panel"
+PLAYLIST_LIST           = "playlist.list"
+PLAYLIST_ADD_CURRENT    = "playlist.button.addcurrent"
+PLAYLIST_ADD_FILES      = "playlist.button.addfiles"
+PLAYLIST_REMOVE         = "playlist.button.remove"
+PLAYLIST_UP             = "playlist.button.up"
+PLAYLIST_DOWN           = "playlist.button.down"
+PLAYLIST_CLEAR          = "playlist.button.clear"
+PLAYLIST_LOAD           = "playlist.button.load"
+PLAYLIST_SAVE           = "playlist.button.save"
+PLAYLIST_COMPACT        = "playlist.check.compact"
+PLAYLIST_FULLPATHS      = "playlist.check.fullpaths"
+PLAYLIST_AUTOADVANCE    = "playlist.check.autoadvance"
+PLAYLIST_LOOP           = "playlist.check.loop"
+PLAYLIST_SCALEOVERRIDE  = "playlist.check.scaleoverride"
+PLAYLIST_SCALECOMBO     = "playlist.combo.scale"
+PLAYLIST_STATUS         = "playlist.status.label"
 
 # Render dialog (PR-39a — minimal: quadrant/format/range/scale/path/prefix)
 DIALOG_RENDER = "dialog.render"
