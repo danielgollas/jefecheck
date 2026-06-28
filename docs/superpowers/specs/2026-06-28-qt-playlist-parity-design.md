@@ -79,7 +79,8 @@ as a plain POD struct, not a `gfcPlaylistItem`.
   - **Header row:** `☰` drag-handle affordance · index · item name ·
     track chips `[A][B]…` · `▸/▾` collapse chevron.
   - **Collapsible detail block:** one row per track —
-    `letter  filename  from-to (total)  scale%  filter  CC:on/off  [crop]  bitdepth`.
+    `letter  filename  from-to (total)  scale%  filter  [crop]  bitdepth`
+    (per-track fields all derive from `gfcLoadParams`).
     Honors the global **Show full paths** toggle (full path vs. basename).
   - Emits signals for load / remove / move / append-tracks / toggle-expand so
     the panel does the bridge calls (card stays dumb + glad-free).
@@ -184,10 +185,9 @@ struct PlaylistTrackDetail {                       // POD — keeps card glad-fr
     std::string path;          // full path (panel shortens per toggle)
     int  fromFrame, toFrame, totalFrames;
     int  scalePct;
-    std::string filter;        // "linear"/"bilinear"/...
-    bool ccOn;
+    std::string filter;        // "linear"/"bilinear"
     bool crop;
-    std::string bitDepth;      // "8"/"16"/"16f"/"32f"...
+    std::string bitDepth;      // "8"/"16"/"16f"/"32f"/"dxt1"
 };
 std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index);
 ```
