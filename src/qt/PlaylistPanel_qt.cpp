@@ -286,7 +286,7 @@ void PlaylistPanel_Qt::refreshList() {
     const auto names = jefe::qt::getPlaylistItemNames();
     const bool expanded = !compactCheck_->isChecked();
     const bool fullPaths = fullPathsCheck_->isChecked();
-    const int selected = jefe::qt::getSelectedPlaylistItem();
+    const int selected = jefe::qt::currentContentIsPlaylistItem() ? jefe::qt::getSelectedPlaylistItem() : -1;
     for (int i = 0; i < (int)names.size(); ++i) {
         auto* card = new PlaylistItemCard(
             i, QString::fromStdString(names[i]), expanded, fullPaths, list_);
@@ -395,6 +395,7 @@ void PlaylistPanel_Qt::loadRow(int row) {
 
 void PlaylistPanel_Qt::advanceToNext() {
     if (!autoAdvanceCheck_ || !autoAdvanceCheck_->isChecked()) return;
+    if (!jefe::qt::currentContentIsPlaylistItem()) return;
     const int cur = jefe::qt::getSelectedPlaylistItem();
     const int count = (int)jefe::qt::getPlaylistItemNames().size();
     if (count <= 0) { jefe::qt::pausePlaybackIfPlaying(); return; }

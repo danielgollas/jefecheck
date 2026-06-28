@@ -128,7 +128,7 @@ REMOTE_STATUS = "remote.status.label"
 # playlist.up.button / playlist.down.button / playlist.clear.button /
 # playlist.save.button / playlist.load.button) are removed.
 # Per-card leaves (templated by item index i):
-#   playlist.card.<i>         — the PlaylistItemCard QFrame
+#   playlist.card.<i>         — the PlaylistItemCard QWidget
 #   playlist.card.<i>.name    — item name label
 #   playlist.card.<i>.chevron — expand/collapse toggle
 #   playlist.card.<i>.remove  — per-card remove button

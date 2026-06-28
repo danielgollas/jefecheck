@@ -432,8 +432,14 @@ void setPlaylistScaleOverride(int pct);
 // once when forward playback reaches the end in ONCE mode (edge-detected in
 // the playback tick); reading it clears the latch. isPlaylistItemPlayingOnce
 // reports whether the current playback mode is ONCE.
+// currentContentIsPlaylistItem() returns true only when the content currently
+// loaded into the rendering chain was loaded via a playlist entry (either
+// loadPlaylistItem or loadPlaylistItemAndPlay). Quick-load (Cmd+O), drag-drop,
+// and clearPlaylist all clear this flag so auto-advance never fires against
+// content the user loaded independently of the playlist.
 bool consumePlaylistAdvanceSignal();
 bool isPlaylistItemPlayingOnce();
+bool currentContentIsPlaylistItem();
 
 // Load a playlist item and (re)start forward playback from its first frame —
 // used by auto-advance. Normal double-click load stays loadPlaylistItem().

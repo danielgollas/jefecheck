@@ -266,6 +266,11 @@ namespace {
 // the idle tick via consumePlaylistAdvanceSignal().
 int  gPrevPlaybackFrame = -1;
 bool gPlaylistAdvanceLatch = false;
+// True only when the currently-playing content was loaded via a playlist
+// entry (loadPlaylistItem / loadPlaylistItemAndPlay). Cleared by quick-load,
+// drag-drop (loadFileIntoPlate), and clearPlaylist so auto-advance can't
+// hijack unrelated playback.
+bool gCurrentContentFromPlaylist = false;
 
 // Mirror of gfcPlaybackManager::getEndLimit() (which is private) using only
 // public accessors, so auto-advance can read the effective forward end
@@ -913,6 +918,7 @@ void movePlaylistItem(int index, int direction) {
 
 void clearPlaylist() {
     playlistManager.clearPlaylist();
+    gCurrentContentFromPlaylist = false;
 }
 
 void loadPlaylistItem(int index) {
@@ -920,11 +926,14 @@ void loadPlaylistItem(int index) {
     if (!entries || index < 0 || index >= (int)entries->size()) return;
     trackManager.setPlaylistItem(playlistManager.getItem(index));
     playlistManager.setSelectedItem(index);
+    gCurrentContentFromPlaylist = true;
 }
 
 int getSelectedPlaylistItem() {
     return playlistManager.selectedItem;
 }
+
+bool currentContentIsPlaylistItem() { return gCurrentContentFromPlaylist; }
 
 void savePlaylistFile(const std::string& path) {
     if (path.empty()) return;
@@ -933,6 +942,7 @@ void savePlaylistFile(const std::string& path) {
 
 void loadPlaylistFile(const std::string& path) {
     if (path.empty()) return;
+    clearPlaylist();   // bridge wrapper — also clears the from-playlist flag
     playlistManager.loadPlaylist(path);
 }
 
@@ -1009,6 +1019,7 @@ void loadPlaylistItemAndPlay(int index) {
     gPlaylistAdvanceLatch = false;
     trackManager.setPlaylistItem(playlistManager.getItem(index));
     playlistManager.setSelectedItem(index);
+    gCurrentContentFromPlaylist = true;
     playbackManager.setCurrentFrame(playbackManager.getFromFrame());
     plateManager.setChanged();
     gPrevPlaybackFrame = playbackManager.getCurrentFrame();
@@ -1532,6 +1543,9 @@ bool loadFileIntoPlate(const std::string& path,
     if (!seq || !seq->myGUI || path.empty()) {
         return false;
     }
+    // Quick-load / drag-drop clears the playlist arming so auto-advance
+    // can't fire against content the user loaded independently.
+    gCurrentContentFromPlaylist = false;
     seq->myGUI->setFilename(path);
 
     // Apply the global default bit depth before loadPreview reads it.
@@ -1636,6 +1650,9 @@ void unloadAndClearTrack(int trackIdx) {
 }
 
 int startLoadingAllTracks() {
+    // Loading tracks directly (Load Window "Load All", Open Session) is not a
+    // playlist load — disarm auto-advance so it can't hijack this content.
+    gCurrentContentFromPlaylist = false;
     int started = 0;
     for (int i = 0; i < 4; ++i) {
         auto* seq = trackManager.getSequence(i);
