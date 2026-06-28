@@ -51,6 +51,9 @@ private:
     QVBoxLayout* detailLayout_ = nullptr;
 };
 
+class QCheckBox;
+class QComboBox;
+
 class PlaylistPanel_Qt : public QWidget {
     Q_OBJECT
 public:
@@ -58,25 +61,32 @@ public:
 
 public slots:
     void refreshList();
+    void advanceToNext();   // called by the idle tick when auto-advance fires
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* ev) override;  // list keyboard + drop
 
 private:
-    void onAddClicked();
+    void onAddCurrent();
+    void onAddFiles();
     void onRemoveClicked();
     void onUpClicked();
     void onDownClicked();
     void onClearClicked();
     void onSaveClicked();
     void onLoadClicked();
-    void onItemDoubleClicked(QListWidgetItem* item);
+    void loadRow(int row);
+    void applyScaleOverride();
+    void showContextMenu(const QPoint& pos);
+    int  selectedRow() const;
 
     QListWidget* list_ = nullptr;
-    QPushButton* addBtn_ = nullptr;
-    QPushButton* removeBtn_ = nullptr;
-    QPushButton* upBtn_ = nullptr;
-    QPushButton* downBtn_ = nullptr;
-    QPushButton* clearBtn_ = nullptr;
-    QPushButton* saveBtn_ = nullptr;
-    QPushButton* loadBtn_ = nullptr;
+    QCheckBox* compactCheck_ = nullptr;
+    QCheckBox* fullPathsCheck_ = nullptr;
+    QCheckBox* autoAdvanceCheck_ = nullptr;
+    QCheckBox* loopCheck_ = nullptr;
+    QCheckBox* scaleOverrideCheck_ = nullptr;
+    QComboBox* scaleCombo_ = nullptr;
     QLabel* status_ = nullptr;
 };
 
