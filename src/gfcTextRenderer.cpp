@@ -387,6 +387,26 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
     glDisable(GL_TEXTURE_RECTANGLE_ARB);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
 
+    // Texture env: the glyph atlas is GL_ALPHA, and the plate/image draw
+    // leaves GL_REPLACE active (gfcSequence/gfcframe). Under REPLACE a
+    // GL_ALPHA texture takes its alpha straight from the texture and IGNORES
+    // the vertex-color alpha — so setColor()'s alpha had no effect and faded
+    // text (e.g. the viewport feedback overlay) never dimmed, it just popped
+    // off when the message cleared. We can't use plain GL_MODULATE either:
+    // GL_ALPHA's RGB is 0, which would render black text. GL_COMBINE lets us
+    // take RGB from the primary color (colored text, same as REPLACE) while
+    // multiplying alpha = primaryAlpha * textureAlpha (so colorA fades).
+    // Restored by the glPopAttrib(GL_ALL_ATTRIB_BITS) below.
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+    glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB,   GL_REPLACE);
+    glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB,   GL_PRIMARY_COLOR);
+    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB,  GL_SRC_COLOR);
+    glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+    glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_PRIMARY_COLOR);
+    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+    glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA, GL_TEXTURE);
+    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
+
     // Pass 1: shadow (offset, dark color, optional blur via multi-pass)
     if (shadowEnabled) {
         if (shadowBlurRadius > 0.1f) {
@@ -667,6 +687,10 @@ float gfc_gl_height() {
 
 void gfc_gl_measure(const char *str, int &w, int &h, int wrap) {
     textRenderer().measure(str, w, h, wrap);
+}
+
+float gfc_gl_dpiscale() {
+    return textRenderer().getDPIScale();
 }
 
 // ---------------------------------------------------------------------------

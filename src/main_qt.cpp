@@ -111,6 +111,31 @@ static QString resolvePlaylistTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// Resolve --fx-test <image>. Headless FX-stack proof: load <image> into
+// plate 0, render a baseline PNG, add a visually-obvious shader FX to the
+// active plate via the same bridge call the UI uses, render again, and
+// compare. Exits 0 if the pixels differ (FX applied), nonzero otherwise.
+static QString resolveFXTestFile(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--fx-test") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
+// Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe:
+// load the image into plates 0 and 1 side-by-side, grab the framebuffer, add
+// an FX to plate 0 only, grab again, and report left/right half brightness.
+static QString resolveFXMultiTestFile(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--fx-multitest") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
 int main(int argc, char* argv[]) {
     // Make Qt's accessibility bridge live before QApplication touches
     // anything. On macOS this routes QAccessible → NSAccessibility,
@@ -230,6 +255,30 @@ int main(int argc, char* argv[]) {
             // gfcPlaybackGUI's destructor on macOS) so the harness gets a
             // deterministic exit code.
             std::_Exit(n > 0 ? 0 : 2);
+        });
+    }
+
+    // Headless FX-stack proof (--fx-test <image>): load the image, render a
+    // baseline, add a shader FX, render again, and report whether the output
+    // changed. Self-loads the image (does not rely on --open-file).
+    const QString fxTestFile = resolveFXTestFile(argc, argv);
+    if (!fxTestFile.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, fxTestFile]() {
+            const int code = window.runHeadlessFXTest(fxTestFile);
+            fflush(stdout);
+            // Skip Qt's global teardown (pre-existing trace trap in a
+            // destructor on macOS) so the harness gets a deterministic
+            // exit code — same workaround as --render-test.
+            std::_Exit(code);
+        });
+    }
+
+    const QString fxMultiTestFile = resolveFXMultiTestFile(argc, argv);
+    if (!fxMultiTestFile.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, fxMultiTestFile]() {
+            const int code = window.runHeadlessFXMultiTest(fxMultiTestFile);
+            fflush(stdout);
+            std::_Exit(code);
         });
     }
 

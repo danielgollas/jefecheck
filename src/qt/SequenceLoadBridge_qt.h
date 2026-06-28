@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 class gfcPlateGUI_Qt;
@@ -200,6 +201,32 @@ std::vector<std::string> getFXStackOnPlate(int plateIdx);
 void addFXToActivePlate(int fxIndex);
 void removeFXFromPlate(int plateIdx, int stackIndex);
 void clearFXStackOnPlate(int plateIdx);
+
+// Enable / disable an FX in-place on a plate's stack (active checkbox).
+// Bounds-checked in gfcFXStack::setActive; flags plateManager dirty so
+// the next paintGL re-composites with the new active set.
+void setFXActiveOnPlate(int plateIdx, int fxIndex, bool active);
+
+// Drag-to-reorder: move the FX at `from` to position `to` on the plate's
+// stack (erase + insert semantics, not an adjacent swap). No-op for
+// invalid/equal indices; flags plateManager dirty.
+void moveFXOnPlate(int plateIdx, int from, int to);
+
+// Categorized "+" menu source. Returns one entry per available FX where
+// `.first` is the fxManager index to pass to addFXToActivePlate and
+// `.second` is that FX's menuName ("Category/Subcategory/Name"), falling
+// back to its plain name when menuName is empty. The ordering/indexing
+// matches getAvailableFXNames() and addFXToActivePlate (both walk
+// fxManager's post-sortFXs fxArray), so .first is a valid fxIndex.
+std::vector<std::pair<int, std::string>> getAvailableFXMenu();
+
+// Choices for an FX cube (3D LUT) / lut (1D LUT) param picker. Each pair is
+// (globalLutIndex, displayName). The global index is what gfcFX::bind() reads
+// and what setFXParamValueOnPlate stores as the param value — NOT the list
+// position (display order ≠ stored value). Mirrors the FLTK Fl_Choice fed by
+// lutManager.get3DLutNames() / get1DLutNames().
+std::vector<std::pair<int, std::string>> getCubeLutChoices();
+std::vector<std::pair<int, std::string>> getLut1DChoices();
 
 // FX parameter metadata, flattened across groups in declaration order.
 // Mirrors gfcFXWidget without dragging glad/gfcfx.h into Qt translation
@@ -509,6 +536,13 @@ int plateAtViewportPos(int x, int y, int viewportW, int viewportH);
 // by the status-bar "Loaded:" label and by behavioral tests that
 // need to verify the load actually reached gfcSequence.
 std::string getLoadedSequenceName(int plateIdx);
+
+// Publishes the GL framebuffer that represents "the screen" for the current
+// context. QOpenGLWidget renders into its own FBO (not 0); the FX/FBO code in
+// gfcPlate must rebind THIS to return to screen, or the viewport (and sibling
+// plates) go black after an FX pass. GlViewport_Qt::paintGL calls this each
+// frame with defaultFramebufferObject().
+void setScreenFBO(unsigned fbo);
 
 // Keyboard-shortcut hooks. `framingMode` is one of UIConstants.h's
 // FRAMING*_ID values; the others operate on the currently-active

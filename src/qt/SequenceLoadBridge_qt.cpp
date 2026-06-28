@@ -215,6 +215,11 @@ bool needsPlaybackTick() {
         gfcSequence* seq = trackManager.getSequence(i);
         if (seq && seq->hasPendingRawFrames()) return true;
     }
+    // A fading feedback message (zoom/reset/flip overlay) or a settling
+    // flip/flop rotation needs the tick to keep animating + repainting while
+    // playback is stopped — otherwise it only appears/updates on the next
+    // forced repaint (mouse move, play).
+    if (plateManager.hasActiveAnimations()) return true;
     return false;
 }
 
@@ -683,6 +688,55 @@ void clearFXStackOnPlate(int plateIdx) {
     plateManager.setChanged();
 }
 
+void setFXActiveOnPlate(int plateIdx, int fxIndex, bool active) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    if (!stack) return;
+    stack->setActive(fxIndex, active);
+    plateManager.setChanged();
+}
+
+void moveFXOnPlate(int plateIdx, int from, int to) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    if (!stack) return;
+    stack->moveFX(from, to);
+    plateManager.setChanged();
+}
+
+std::vector<std::pair<int, std::string>> getAvailableFXMenu() {
+    // getMenuNames() walks fxManager's fxArray in order, and getFX(i)
+    // (which addFXToActivePlate calls) indexes the same fxArray — so the
+    // returned indices are valid fxIndex args for addFXToActivePlate.
+    std::vector<std::string> menuNames = fxManager.getMenuNames();
+    std::vector<std::pair<int, std::string>> result;
+    result.reserve(menuNames.size());
+    for (int i = 0; i < (int)menuNames.size(); ++i) {
+        std::string label = menuNames[i];
+        if (label.empty())
+            label = fxManager.getFX(i).name;  // fall back to plain name
+        result.emplace_back(i, label);
+    }
+    return result;
+}
+
+std::vector<std::pair<int, std::string>> getCubeLutChoices() {
+    // 3D LUTs for an FX cube param. `.first` is the GLOBAL lutManager index
+    // (what gfcFX::bind() reads via getLUT(value).texture3D and what
+    // setFXParamValueOnPlate stores); `.second` is the display name.
+    std::vector<std::pair<int, std::string>> result;
+    for (const std::string& name : lutManager.get3DLutNames())
+        result.emplace_back(lutManager.getLutIndexByName(name), name);
+    return result;
+}
+
+std::vector<std::pair<int, std::string>> getLut1DChoices() {
+    // 1D LUTs for an FX lut param. Same global-index convention as above
+    // (bind() reads getLUT(value).texture1D).
+    std::vector<std::pair<int, std::string>> result;
+    for (const std::string& name : lutManager.get1DLutNames())
+        result.emplace_back(lutManager.getLutIndexByName(name), name);
+    return result;
+}
+
 namespace {
 FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
     switch (t) {
@@ -1145,6 +1199,10 @@ int plateAtViewportPos(int x, int y, int viewportW, int viewportH) {
 void setFramingMode(int framingMode) {
     plateManager.setFramingMode(framingMode);
     plateManager.setChanged();
+}
+
+void setScreenFBO(unsigned fbo) {
+    gScreenFBO = (GLuint)fbo;
 }
 
 void fitActivePlate() {

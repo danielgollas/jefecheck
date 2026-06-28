@@ -108,6 +108,14 @@ void GlViewport_Qt::resizeGL(int w, int h) {
 
 void GlViewport_Qt::paintGL() {
     if (listener_) {
+        // QOpenGLWidget renders into its OWN framebuffer object, NOT screen
+        // FBO 0. The FX/FBO code (gfcPlate) was written for FLTK where the
+        // window framebuffer was 0, so it rebinds 0 to "return to screen" —
+        // which under Qt sends everything drawn after the first FX plate into
+        // an unpresented framebuffer (black viewport, sibling plates too).
+        // Publish Qt's real default FBO each frame so that code rebinds it
+        // instead of 0. It can change on resize, so refresh it every paint.
+        jefe::qt::setScreenFBO(defaultFramebufferObject());
         listener_->onDraw();
     } else {
         // No listener attached — clear the framebuffer so we don't show

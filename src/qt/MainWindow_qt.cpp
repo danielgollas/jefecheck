@@ -30,6 +30,7 @@
 #include <QUrl>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QImage>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
@@ -613,10 +614,7 @@ void MainWindow_Qt::buildMenuBar() {
     auto* dialogsMenu = mb->addMenu(tr("&Dialogs"));
     dialogsMenu->setObjectName("menu.dialogs");
     auto raiseDock = [](QDockWidget* d) { if (d) { d->show(); d->raise(); } };
-    dialogsMenu->addAction(tr("FX Stack"), QKeySequence(Qt::Key_F2),
-                           this, [this, raiseDock]() { raiseDock(fxDock_); })
-        ->setObjectName("menu.dialogs.fxstack");
-    dialogsMenu->addAction(tr("FX Parameters"), QKeySequence(Qt::Key_F3),
+    dialogsMenu->addAction(tr("FX"), QKeySequence(Qt::Key_F3),
                            this, [this, raiseDock]() { raiseDock(fxParamsDock_); })
         ->setObjectName("menu.dialogs.fxparams");
     dialogsMenu->addAction(tr("LUT Manager"), QKeySequence(Qt::Key_F4),
@@ -793,15 +791,7 @@ void MainWindow_Qt::buildDocks() {
     // bottom strip side-by-side.
     splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
 
-    // FX Stack and LUTs — right side, stacked as tabs.
-    fxDock_ = new QDockWidget("FX Stack", this);
-    fxDock_->setObjectName("dock.fxstack");
-    fxDock_->setAccessibleName("FX Stack dock");
-    fxPanelWidget_ = new FXStackPanel_Qt(fxDock_);
-    fxDock_->setWidget(fxPanelWidget_);
-    fxDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
-    addDockWidget(Qt::RightDockWidgetArea, fxDock_);
-
+    // LUTs — right side.
     lutDock_ = new QDockWidget("LUTs", this);
     lutDock_->setObjectName("dock.luts");
     lutDock_->setAccessibleName("LUT browser dock");
@@ -810,13 +800,13 @@ void MainWindow_Qt::buildDocks() {
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, lutDock_);
 
-    // FX Params — read-only snapshot of the active plate's FX stack
-    // parameter values. Editing comes in PR-38b. Lives on the left
-    // side of the window so it doesn't have to compete with the FX
-    // Stack / LUT tab group for vertical real estate, and so the
-    // value-text propagates to AX (Mac's AX bridge can elide AXValue
-    // for 0-sized labels in tab-overflowed docks).
-    fxParamsDock_ = new QDockWidget("FX Params", this);
+    // FX — the combined effect-controls panel for the active plate
+    // (+ Add FX menu, per-FX cards with active/remove + inline params,
+    // drag-to-reorder). Lives on the left side of the window so it
+    // doesn't compete with the LUT dock for vertical real estate, and so
+    // the value-text propagates to AX (Mac's AX bridge can elide AXValue
+    // for 0-sized labels in tab-overflowed docks). See developer_notes §23.
+    fxParamsDock_ = new QDockWidget("FX", this);
     fxParamsDock_->setObjectName("dock.fxparams");
     fxParamsDock_->setAccessibleName("FX parameters dock");
     fxParamPanelWidget_ = new FXParamPanel_Qt(fxParamsDock_);
@@ -827,13 +817,12 @@ void MainWindow_Qt::buildDocks() {
     // scroll viewport and prunes the editor widgets from the Mac AX
     // tree (the status label survives because it's outside the
     // scroll area).
-    fxParamPanelWidget_->setMinimumWidth(220);
+    // Floor wide enough that the per-FX header (drag handle + name + active
+    // checkbox + remove button) is always fully visible; the cards never
+    // scroll horizontally, so the buttons can't slide off-view.
+    fxParamPanelWidget_->setMinimumWidth(150);
     fxParamPanelWidget_->setMinimumHeight(240);
     addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
-
-    // Tab FX Stack and LUTs together on the right.
-    tabifyDockWidget(fxDock_, lutDock_);
-    fxDock_->raise();
 
     // Playlist — left side, vertically split below FX Params.
     // Tabifying with FX Params destabilized the AX bridge's view of
@@ -855,7 +844,7 @@ void MainWindow_Qt::buildDocks() {
     // Remote sessions — modal dialog launched from the File menu
     // (mirrors the FLTK `remoteWindow.fl` standalone window). Adding
     // it as a fourth left-side dock destabilized the Mac AX bridge's
-    // view of the FX Stack and FX Params children under sweep load,
+    // view of the FX and FX Params children under sweep load,
     // so we kept the dialog model the FLTK side already used.
     // Wired in buildMenuBar.
 
@@ -867,10 +856,12 @@ void MainWindow_Qt::buildDocks() {
     connect(viewport_, &GlViewport_Qt::plateStateChanged,
             fxParamPanelWidget_, &FXParamPanel_Qt::refresh,
             Qt::QueuedConnection);
-    // Also refresh after FX add/remove via the FX Stack panel — those
-    // mutate the stack but don't go through plateStateChanged.
-    connect(fxPanelWidget_, &FXStackPanel_Qt::stackChanged,
-            fxParamPanelWidget_, &FXParamPanel_Qt::refresh);
+    // Repaint the viewport when the combined FX panel mutates the active
+    // plate's stack (add / remove / reorder / active-toggle / param edit).
+    // The idle playback tick skips repaints when nothing's playing, so a
+    // stack change otherwise wouldn't show until the next viewport move.
+    connect(fxParamPanelWidget_, &FXParamPanel_Qt::viewportRepaintRequested,
+            this, [this]() { if (viewport_) viewport_->update(); });
 
     // Hook each dock's toggle into the View menu now that they exist.
     auto* viewMenu = menuBar()->findChild<QMenu*>(QString(), Qt::FindDirectChildrenOnly);
@@ -887,7 +878,6 @@ void MainWindow_Qt::buildDocks() {
     if (found) {
         found->addAction(plateDock_->toggleViewAction());
         found->addAction(timelineDock_->toggleViewAction());
-        found->addAction(fxDock_->toggleViewAction());
         found->addAction(fxParamsDock_->toggleViewAction());
         found->addAction(playlistDock_->toggleViewAction());
         found->addAction(lutDock_->toggleViewAction());
@@ -1115,6 +1105,217 @@ int MainWindow_Qt::runHeadlessRenderTest(const QString& dir) {
     }
     viewport_->doneCurrent();
     return total;
+}
+
+int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
+    if (!viewport_) {
+        printf("FX-TEST FAIL: no viewport\n");
+        fflush(stdout);
+        return 2;
+    }
+
+    // 1. Load the image into plate 0 (this makes the GL context current
+    // internally and uploads the texture). Make plate 0 the active plate so
+    // addFXToActivePlate() (which targets getActiveQuad()) hits the same
+    // plate the renderer reads from.
+    loadFileIntoPlate(0, imagePath);
+    jefe::qt::setActivePlate(0);
+
+    // A single still only populates each track's *preview* frame, not the
+    // numbered sequence frames the renderer reads by default. Flip every
+    // plate into showPreview mode so getFrameAndSequence() serves the loaded
+    // preview frame (theFrame.loaded == true) — otherwise the render path
+    // sees an unloaded frame and writes nothing.
+    jefe::qt::setAllPlatesShowPreview(true);
+
+    const QString outDir = QDir::tempPath() + "/jefecheck_fxtest";
+    QDir().mkpath(outDir);
+
+    // Render one PNG of plate 0's current frame with the given prefix, via
+    // the same triggerSyncRender path the Render dialog and --render-test
+    // use. Returns the absolute path of the file written.
+    auto renderOne = [&](const char* prefix) -> QString {
+        jefe::qt::RenderParams p;
+        p.quadrant     = 0;
+        p.format       = 5;        // PNG (8-bit FBO)
+        p.formatString = "png";
+        const int frame = jefe::qt::getCurrentFrame();
+        p.from = frame;
+        p.to   = frame;
+        p.padding = 4;
+        p.scale   = 1.0f;
+        p.path    = outDir.toStdString();
+        p.prefix  = prefix;
+        const QString fname =
+            QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        // triggerSyncRender → renderPlate → gfcPlate::draw issues GL calls,
+        // so the viewport context must be current (we're outside paintGL).
+        viewport_->makeCurrent();
+        jefe::qt::triggerSyncRender(p);
+        viewport_->doneCurrent();
+        return fname;
+    };
+
+    // On-screen capture: grabFramebuffer() forces paintGL() — i.e. the real
+    // on-screen draw() path (forRender=false, FXPASS_LAST + startSuperShader),
+    // which is DIFFERENT from the forRender FBO-readback path renderOne() uses.
+    // Reports mean channel value so a black screen (≈0) is obvious, and any
+    // glPrintError spew during the paint pinpoints where GL state breaks.
+    auto screenStats = [&](const char* tag) {
+        QImage img = viewport_->grabFramebuffer();
+        if (img.isNull()) { printf("FX-SCREEN %s: grab null\n", tag); fflush(stdout); return; }
+        img = img.convertToFormat(QImage::Format_RGBA8888);
+        double sum = 0.0; long long n = 0;
+        for (int y = 0; y < img.height(); ++y) {
+            const uchar* r = img.constScanLine(y);
+            for (int x = 0; x < img.width() * 4; ++x) { sum += r[x]; ++n; }
+        }
+        printf("FX-SCREEN %s: meanChannel=%.3f (0-255) over %dx%d\n",
+               tag, n ? sum / double(n) : 0.0, img.width(), img.height());
+        fflush(stdout);
+    };
+
+    // 2. Baseline render (empty FX stack; forRender still routes through
+    // draw3DrectWithFX as a pass-through).
+    const QString beforePath = renderOne("fxtest_before_");
+    printf("FX-SCREEN: --- grab BEFORE adding FX ---\n"); fflush(stdout);
+    screenStats("before-fx");
+
+    // 3. Add a visually-obvious FX through the SAME bridge call the UI uses.
+    // Flip Horizontal is geometric with no params — its default output is an
+    // unmistakable mirror of the input.
+    const std::vector<std::string> names = jefe::qt::getAvailableFXNames();
+    int fxIndex = -1;
+    for (int i = 0; i < (int)names.size(); ++i) {
+        if (names[i].find("Flip Horizontal") != std::string::npos) {
+            fxIndex = i;
+            break;
+        }
+    }
+    if (fxIndex < 0) {
+        printf("FX-TEST FAIL: 'Flip Horizontal' FX not found among %zu loaded FX\n",
+               names.size());
+        fflush(stdout);
+        return 3;
+    }
+    jefe::qt::addFXToActivePlate(fxIndex);
+    const int stackN = (int)jefe::qt::getFXStackOnPlate(0).size();
+    printf("FX-TEST: added FX index %d (\"%s\"); plate 0 stack size now %d\n",
+           fxIndex, names[fxIndex].c_str(), stackN);
+    fflush(stdout);
+
+    printf("FX-SCREEN: --- grab AFTER adding FX ---\n"); fflush(stdout);
+    screenStats("after-fx");
+
+    // 4. Render again with the FX in the stack.
+    const QString afterPath = renderOne("fxtest_after_");
+
+    // 5. Compute mean absolute pixel difference between the two PNGs.
+    QImage before(beforePath);
+    QImage after(afterPath);
+    if (before.isNull() || after.isNull()) {
+        printf("FX-TEST FAIL: could not read rendered PNGs\n  before=%s (%s)\n  after=%s (%s)\n",
+               beforePath.toLocal8Bit().constData(),
+               before.isNull() ? "null" : "ok",
+               afterPath.toLocal8Bit().constData(),
+               after.isNull() ? "null" : "ok");
+        fflush(stdout);
+        return 4;
+    }
+    before = before.convertToFormat(QImage::Format_RGBA8888);
+    after  = after.convertToFormat(QImage::Format_RGBA8888);
+
+    const int w = std::min(before.width(),  after.width());
+    const int h = std::min(before.height(), after.height());
+    double sum = 0.0;
+    long long count = 0;
+    for (int y = 0; y < h; ++y) {
+        const uchar* ra = before.constScanLine(y);
+        const uchar* rb = after.constScanLine(y);
+        for (int x = 0; x < w * 4; ++x) {
+            sum += std::abs(int(ra[x]) - int(rb[x]));
+            ++count;
+        }
+    }
+    const double meanAbsDiff = count ? (sum / double(count)) : 0.0;
+
+    const bool pass = meanAbsDiff > 1.0;
+    printf("FX-TEST %s: meanAbsPixelDiff=%.4f (0-255 scale) over %dx%d\n",
+           pass ? "PASS" : "FAIL", meanAbsDiff, w, h);
+    printf("  before=%s\n  after =%s\n",
+           beforePath.toLocal8Bit().constData(),
+           afterPath.toLocal8Bit().constData());
+    fflush(stdout);
+    return pass ? 0 : 1;
+}
+
+int MainWindow_Qt::runHeadlessFXMultiTest(const QString& imagePath) {
+    if (!viewport_) { printf("FX-MULTI FAIL: no viewport\n"); fflush(stdout); return 2; }
+
+    loadFileIntoPlate(0, imagePath);
+    loadFileIntoPlate(1, imagePath);
+    jefe::qt::setAllPlatesShowPreview(true);
+    jefe::qt::setFramingMode(FRAMINGDOUBLE_ID);   // side-by-side: plate 0 = left, plate 1 = right
+
+    auto grab = [&]() -> QImage {
+        QImage img = viewport_->grabFramebuffer();
+        return img.isNull() ? img : img.convertToFormat(QImage::Format_RGBA8888);
+    };
+    // Mean per-channel value of a half ("brightness"): ~0 means a black plate.
+    auto halfMean = [](const QImage& img, bool leftHalf) -> double {
+        if (img.isNull()) return -1.0;
+        const int W = img.width(), H = img.height(), midx = W / 2;
+        double sum = 0; long long n = 0;
+        for (int y = 0; y < H; ++y) {
+            const uchar* r = img.constScanLine(y);
+            const int x0 = leftHalf ? 0 : midx, x1 = leftHalf ? midx : W;
+            for (int x = x0; x < x1; ++x) { sum += (r[x*4]+r[x*4+1]+r[x*4+2])/3.0; ++n; }
+        }
+        return n ? sum/double(n) : 0.0;
+    };
+    // Mean abs per-channel diff of a half between two grabs.
+    auto halfDiff = [](const QImage& a, const QImage& b, bool leftHalf) -> double {
+        if (a.isNull() || b.isNull() || a.size() != b.size()) return -1.0;
+        const int W = a.width(), H = a.height(), midx = W / 2;
+        double sum = 0; long long n = 0;
+        for (int y = 0; y < H; ++y) {
+            const uchar* ra = a.constScanLine(y); const uchar* rb = b.constScanLine(y);
+            const int x0 = leftHalf ? 0 : midx, x1 = leftHalf ? midx : W;
+            for (int x = x0*4; x < x1*4; ++x) { sum += std::abs(int(ra[x])-int(rb[x])); ++n; }
+        }
+        return n ? sum/double(n) : 0.0;
+    };
+
+    const QImage baseline = grab();
+    printf("FX-MULTI baseline: leftHalf(plate0)=%.2f  rightHalf(plate1)=%.2f\n",
+           halfMean(baseline, true), halfMean(baseline, false)); fflush(stdout);
+
+    // Add an FX to plate 0 (left) ONLY.
+    jefe::qt::setActivePlate(0);
+    const std::vector<std::string> names = jefe::qt::getAvailableFXNames();
+    int fxIndex = -1;
+    for (int i = 0; i < (int)names.size(); ++i)
+        if (names[i].find("Flip Horizontal") != std::string::npos) { fxIndex = i; break; }
+    if (fxIndex < 0) { printf("FX-MULTI FAIL: 'Flip Horizontal' not found\n"); fflush(stdout); return 3; }
+    jefe::qt::addFXToActivePlate(fxIndex);
+
+    const QImage afterFx = grab();
+    const double rightMean = halfMean(afterFx, false);
+    const double leftDiff  = halfDiff(baseline, afterFx, true);   // plate 0: flip → should change
+    const double rightDiff = halfDiff(baseline, afterFx, false);  // plate 1: no FX → should NOT change
+    printf("FX-MULTI after-fx: leftHalf(plate0)=%.2f  rightHalf(plate1)=%.2f\n",
+           halfMean(afterFx, true), rightMean); fflush(stdout);
+    printf("FX-MULTI diff vs baseline: leftHalf(flip)=%.3f  rightHalf(sibling)=%.3f\n",
+           leftDiff, rightDiff); fflush(stdout);
+
+    // PASS: sibling plate 1 is NOT black (no FBO-leak) AND barely changed,
+    // while plate 0 visibly changed (the flip actually applied on screen).
+    const bool siblingOk   = rightMean > 1.0 && rightDiff < 1.0;
+    const bool fxApplied   = leftDiff   > 1.0;
+    const bool pass = siblingOk && fxApplied;
+    printf("FX-MULTI %s: siblingNotBlack&Stable=%d  fxAppliedOnScreen=%d\n",
+           pass ? "PASS" : "FAIL", (int)siblingOk, (int)fxApplied); fflush(stdout);
+    return pass ? 0 : 1;
 }
 
 void MainWindow_Qt::updateSessionTitle() {
@@ -1382,7 +1583,11 @@ void MainWindow_Qt::autoloadStep() {
                 .arg(gotLUT).arg(wantLUT));
         }
 
-        if (fxPanelWidget_) fxPanelWidget_->refreshLists();
+        // FX autoload just finished — rebuild the combined FX panel so the
+        // "+ Add FX" menu reflects the freshly-loaded effects (the menu is
+        // also rebuilt lazily on aboutToShow, but refresh keeps the rest of
+        // the panel in sync with the active plate).
+        if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
         if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
     }
 }

@@ -487,7 +487,7 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
 
     rewBtn_      = makeButton("⏮", "Rewind to start",
                               "transport.rewind.button", "Rewind to start");
-    stepBackBtn_ = makeButton("◀", "Step back one frame",
+    stepBackBtn_ = makeButton("|◀", "Step back one frame",
                               "transport.stepback.button", "Step back");
     playBtn_     = makeButton("▶", "Play / Pause",
                               "transport.play.button", "Play / Pause");

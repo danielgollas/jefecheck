@@ -44,6 +44,10 @@ public:
     void setSize(float pixelSize);
     void setBold(bool bold);
     void setDPIScale(float scale);
+    // Physical-pixels-per-logical-pixel (2.0 on Retina). gfc_gl_measure
+    // returns LOGICAL pixels; callers laying out in a physical-pixel ortho
+    // (e.g. the viewport feedback overlay) multiply by this to convert.
+    float getDPIScale() const { return dpiScale; }
 
     // Color
     void setColor(float r, float g, float b, float a);
@@ -128,5 +132,7 @@ void gfc_gl_draw(const char *str, float x, float y);
 void gfc_gl_draw(const char *str, int x, int y, int w, int h, int align);
 float gfc_gl_height();
 void gfc_gl_measure(const char *str, int &w, int &h, int wrap = 0);
+// Physical/logical pixel ratio of the text renderer (2.0 on Retina).
+float gfc_gl_dpiscale();
 
 #endif

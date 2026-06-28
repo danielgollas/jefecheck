@@ -22,7 +22,6 @@ STATUSBAR_DEPTH = "statusbar.depth.combo"
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
 DOCK_TIMELINE = "dock.timeline"
-DOCK_FXSTACK = "dock.fxstack"
 DOCK_LUTS = "dock.luts"
 
 # Timeline widgets (inside the timeline dock). The scrubber and the
@@ -94,18 +93,17 @@ LUT_REFRESH = "lut.refresh.button"
 LUT_PREVIEW = "lut.preview"
 LUT_PREVIEW_TOGGLE = "lut.preview.toggle"
 
-# FX Stack panel
-FXSTACK_AVAILABLE = "fxstack.available.list"
-FXSTACK_STACK = "fxstack.stack.list"
-FXSTACK_ADD = "fxstack.add.button"
-FXSTACK_REMOVE = "fxstack.remove.button"
-FXSTACK_REFRESH = "fxstack.refresh.button"
-FXSTACK_STATUS = "fxstack.status.label"
-
-# FX Params panel (read-only viewer of active plate's FX stack params)
+# FX panel (combined effect-controls for the active plate — replaces the
+# old separate FX Stack browser). "+ Add FX" menu button at top, a list of
+# per-FX cards (active checkbox + remove button + inline param editors),
+# drag-to-reorder. Per-FX object names are templated by stack index N:
+#   fxparams.fx{N}.active.check, fxparams.fx{N}.remove.button,
+#   fxparams.fx{N}.param.{name}.{spin|check|combo|value}
 DOCK_FXPARAMS = "dock.fxparams"
 FXPARAMS_PANEL = "fxparams.panel"
 FXPARAMS_STATUS = "fxparams.status.label"
+FXPARAMS_ADD = "fxparams.addfx.button"
+FXPARAMS_LIST = "fxparams.list"
 
 # Remote sessions dialog (PR-41a — modal File → Remote Session…)
 DIALOG_REMOTE = "dialog.remote"

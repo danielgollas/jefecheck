@@ -56,33 +56,13 @@ Singleton-style manager classes coordinate subsystems:
 - **Super Shader** — Dynamically generated GLSL in `gfcPlate::buildShader()` for gamma/exposure/BCS/LUT. Uses ARB extension functions (`glCreateShaderObjectARB`, etc.)
 
 ### Text Rendering (`GfcTextRenderer`)
-Custom text renderer replacing FLTK's `gl_draw`/`gl_font`. Fixes text squashing in multi-plate layouts.
-
-**Architecture:**
-- Singleton `GfcTextRenderer` accessed via `textRenderer()`
-- **FreeType** rasterizes glyphs with hinting into a dynamically-sized `GL_ALPHA` atlas texture
-- All text draws in a **pixel-exact orthographic projection** via `gluProject` — 1:1 texel-to-pixel mapping regardless of plate projection
-- **Two-pass shadow**: dark offset pass + foreground pass (configurable offset, color, blur)
-- **Wrapper functions** (`gfc_gl_font`, `gfc_gl_draw`, etc.) match FLTK signatures for minimal call site changes
-
-**Key implementation details:**
-- Atlas baked at `fontSize * dpiScale` texels for Retina support
-- `drawLine()` uses atlas pixel sizes directly (no dpiScale division) since rendering is in physical pixel space
-- `emitQuads()` snaps glyph positions to integer pixels; baseline and cursor snapped before glyph offsets applied
-- `GL_NEAREST` filter for pixel-perfect rendering; `GL_LINEAR` available via preferences
-- Hinting mode: `FT_LOAD_TARGET_LIGHT` (default, smooth diagonals) or `FT_LOAD_TARGET_NORMAL` / `FT_LOAD_FORCE_AUTOHINT`
-- Gamma correction (`powf(coverage, gamma)`) boosts semi-transparent edge pixels for bolder appearance
-- `loadFont()`/`loadBoldFont()` invalidate all cached atlases so font changes take effect immediately
-- System fonts enumerated via FreeType from platform-specific directories
-- Font data kept in memory vectors; `FT_Library` is a static singleton; `FT_Face` created per `bakeAtlas()` call
+Custom renderer replacing FLTK's `gl_draw`/`gl_font` (fixes text squashing in multi-plate layouts). Singleton via `textRenderer()`; FreeType glyphs in a `GL_ALPHA` atlas, drawn in a pixel-exact ortho projection; two-pass shadow; FLTK-signature wrappers (`gfc_gl_font`, `gfc_gl_draw`). **Implementation details, Retina/hinting/gamma notes, and preference persistence: `developer_notes.md` §22.** Files: `src/gfcTextRenderer.{h,cpp}`.
 
 **Alignment constants must match FLTK:**
 ```
 GFC_ALIGN_CENTER=0x0000, GFC_ALIGN_TOP=0x0001, GFC_ALIGN_BOTTOM=0x0002,
 GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIGN_WRAP=0x0080
 ```
-
-**Files:** `src/gfcTextRenderer.h`, `src/gfcTextRenderer.cpp`
 
 ### Image I/O
 - **gfcImageLoaderOIIO** — OpenImageIO for all general formats (JPEG, PNG, TIFF, EXR with multi-layer support)
@@ -92,7 +72,8 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 - Image saving stubbed out (TODO: implement via OIIO)
 
 ### UI
-- **Qt6** GUI hosted in `src/qt/`. Single `MainWindow_Qt` with native menu bar, central `GlViewport_Qt` (QOpenGLWidget), and dockable panels (Plate Manager, Timeline, FX Stack, FX Params, LUTs, Playlist).
+- **Qt6** GUI hosted in `src/qt/`. Single `MainWindow_Qt` with native menu bar, central `GlViewport_Qt` (QOpenGLWidget), and dockable panels (Plate Manager, Timeline, FX, LUTs, Playlist).
+- **FX panel** (`FXParamPanel_Qt`, dock "FX", F3) — one combined effect-controls panel for the active plate: a hierarchical "+ Add FX" menu (categorized by each FX's `menuName`), per-FX cards (active checkbox + remove button + inline param editors: float/bool/choice, texture source picker (Previous / Track A–D), and cube/1D-LUT pickers), and drag-to-reorder the stack. Texture/cube/LUT pickers match the FLTK Fl_Choice; cube/LUT combos store the global lutManager index (carried in item data), not the list position. See `developer_notes.md` §23. All FX autoload at startup, so there is no separate FX browser. See `developer_notes.md` §23.
 - Native file dialogs via `QFileDialog`.
 - Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Remote Session (`RemoteDialog_Qt`), Load Sequence Manager (`LoadWindowDialog_Qt`).
 - Dark VFX theme at `src/qt/theme/jefecheck_dark.qss`.
@@ -183,19 +164,13 @@ docs/manual-images/     Screenshots (2014, need updating)
 
 ### Qt UI code — read `developer_notes.md` first
 
-Before touching anything under `src/qt/` or wiring a new Qt control into the rendering chain, read **`developer_notes.md`** at the repo root. It captures the patterns the FLTK→Qt port landed on:
+**Before touching anything under `src/qt/` or wiring a new Qt control into the rendering chain, read `developer_notes.md` at the repo root.** It documents (in full, with line/file refs) every pattern the FLTK→Qt port landed on. Index of load-bearing gotchas:
 
-- **TU separation**: only `src/qt/SequenceLoadBridge_qt.cpp` may include the rendering-chain managers (`gfcPlateManager`, `gfcSequence`, etc.). Glad and Qt's QOpenGLWidget refuse to share a TU on macOS. Every other `src/qt/*.cpp` routes through `jefe::qt::*` bridge accessors in `SequenceLoadBridge_qt.h`.
-- **Plate-card slots must propagate**: writing to the Qt plate GUI alone (`gui->setGamma(v)`) is a silent no-op — the plate's actual fields stay stale. Every plate-card slot follows the GUI write with `jefe::qt::propagatePlateChanges()`.
-- **`updatePlatesFromGUI` vs `updateAllFromGUI`**: the latter resets layout (framingMode) and active-quad, which the Qt build drives via separate paths. Always use `updatePlatesFromGUI` from Qt-side update points.
-- **macOS drag-perf playbook**: `Qt::QueuedConnection` for slot wiring, targeted signals (`plateTransformChanged` / `plateColorChanged`) over the heavy `plateStateChanged`, cache-gated widget writes in `refreshFromState`, 60Hz throttle on continuous emissions. AppKit's accessibility cascade fires on every Qt widget write regardless of whether the value changed — caching reduces *write count*, not *per-write cost*.
-- **`gfcPlate::showPreview` has one writer**: `setLoadWindowOpen` via `setAllPlatesShowPreview`. Don't add another.
-- **CBArgs enum**: `LOOPMODEONCE_ID` etc. are positional values 22/23/24 inside a flat enum, not 0/1/2. Translate combo indices at the bridge boundary.
-- **Plate-card layout is orientation-aware & fixed-size**: the card has two internal layouts (wide-short / narrow-tall) swapped via a rebuilt content widget; the Plate Manager keys off `QDockWidget::dockLocationChanged` and fixes its own extent. Gotchas (see developer_notes.md §11): a `QComboBox` sizes to its longest item — use `QSizePolicy::Ignored` for a fill combo so it can't balloon a fixed card; never read a widget's `sizeHint()` synchronously during a dock/content swap (defer with `QTimer::singleShot(0)` + safety floors); use `resizeDocks` to pull a shared dock row to the panel's size rather than fighting a taller neighbor.
-- **AspectCropCombo is a `QToolButton`, not an editable combo** (developer_notes.md §12): an editable combo only opens its popup on the arrow, so a body click never opened it. Aspect (reshape) and crop/letterbox are orthogonal in the renderer — keep both reachable. The default shows as "source"/native ratio but its canonical value stays "original" (via the list item's `Qt::UserRole`).
-- **Playback FPS pacing** (developer_notes.md §13): `gfcPlaybackManager` must seed `targetFPS`/`timePerFrame` in its constructor (the fps spinbox's initial value is set before its signal is connected). `updateTimestep()` reads `std::chrono::steady_clock`, not the integer-ms `gfcTimer`. The Qt playback `QTimer` runs fine (4ms, `PreciseTimer`) with the per-tick GL upload gated on `hasPendingTextureUploads()` and UI read-back throttled to ~60Hz. The on-screen FPS is an EMA with a slow display refresh, a 2%-of-target deadband, and 1-decimal formatting — it's a "keeping up?" indicator, not raw instantaneous timing.
-- **Render/export** (developer_notes.md §18–20): `getImageSaverInstance` was a NULL-deref stub — the OIIO saver (`gfcImageSaverOIIO`) writes all still formats. The render dialog must get the viewport via `parentWidget()` (a modal `QDialog`'s `window()` is itself, not the MainWindow → null vp → black frames). `renderParams.outWidth/outHeight` size the FBO (resolution control); 16-bit/EXR renders need a float FBO (`createFloatFBO`) for real precision. Video export shells out to the **FFmpeg CLI** (`VideoEncoder_Qt`/`QProcess`, never libav*). Render is incremental (`singleShot(0)` per frame, cancellable); never a `QThread` (the GL context is thread-affine).
-- **Pick subsystem** (developer_notes.md §21): in-viewport overlay dragging (histogram, AOI) goes through the GL color-pick pass, registered in `initializeRenderingChain` and driven by `jefe::qt::viewportPick*` with the GL context current — not Qt mouse hit-testing.
+- §1 **TU separation** — only `SequenceLoadBridge_qt.cpp` includes the rendering-chain managers; everything else routes through `jefe::qt::*` accessors (glad + QOpenGLWidget can't share a TU on macOS).
+- §2 `updatePlatesFromGUI` vs `updateAllFromGUI` (use the former from Qt) · §3 **plate-card slots must call `propagatePlateChanges()`** (GUI write alone is a silent no-op) · §4 `gfcPlate::showPreview` has one writer (`setLoadWindowOpen`).
+- §5–6 **macOS drag-perf playbook** (QueuedConnection, targeted signals, cache-gated writes, 60Hz throttle; AppKit a11y cascade fires per write).
+- §8 CBArgs enum (`LOOPMODEONCE_ID` = positional 22/23/24, translate at the bridge) · §11 plate-card orientation-aware fixed-size layout · §12 AspectCropCombo is a `QToolButton` (aspect vs crop orthogonal).
+- §13 **playback FPS pacing** (seed `targetFPS` in ctor; `steady_clock`; on-screen FPS is an EMA indicator) · §18–20 **render/export** (OIIO saver; viewport via `parentWidget()`; float FBO for 16-bit/EXR; FFmpeg CLI not libav*; incremental, never a `QThread`) · §21 **pick subsystem** (GL color-pick pass, GL context current).
 
 ### Image Loading Flow
 1. `gfcFrame::loadFrame()` creates a loader based on file extension
@@ -220,16 +195,9 @@ Before touching anything under `src/qt/` or wiring a new Qt control into the ren
 - All shader handles (`ssProgram`, `ssVertexShader`, `ssFramgmentShader`) MUST be initialized to 0 in constructors — uninitialized handles cause trace traps on macOS
 - Text renderer disables active shader programs (`glGetHandleARB`/`glUseProgramObjectARB(0)`) before drawing text quads
 
-### File Chooser (`gfcfilechooser.h`)
-- `NativeFileChooser` wraps `Fl_Native_File_Chooser` with `Fl_File_Chooser` API compatibility
-- Converts FLTK filter format `"Desc (*.{ext1,ext2})"` to native format `"Desc\t*.{ext1,ext2}"`
-- Writes selected path to global `gFilename[2048]` for legacy code compatibility
-
 ### Preferences System
-- Settings saved/loaded via XML (`gfcStructures.cpp`) using `saveSetting()`/`setWidgetFromNode()` templates
-- Text rendering settings: font path, size, color, opacity, shadow, hinting mode, filter mode, gamma — all persisted
-- `PreferencesCB` callback in `UICallbacks.cpp` applies all preference changes including text renderer settings
-- System font enumeration (`enumerateSystemFonts()`) scans platform-specific directories via FreeType
+- Settings saved/loaded via XML (`gfcStructures.cpp`) using `saveSetting()`/`setWidgetFromNode()` templates; `PreferencesCB` (`UICallbacks.cpp`) applies all changes (including text-renderer settings — see `developer_notes.md` §22).
+- File dialogs are native `QFileDialog` (the old FLTK `NativeFileChooser` wrapper is gone).
 
 ## Known Issues
 
@@ -258,9 +226,6 @@ Before touching anything under `src/qt/` or wiring a new Qt control into the ren
 
 - No automated test suite exists.
 - The `gfc` prefix on classes stands for the project's internal namespace convention.
-- UI windows follow: `*Window.fl` → FLUID generates `*Window.cxx` + `*Window.h`. Editing `.cxx` directly is fine since FLUID is not actively used.
-- Never put `using namespace std;` in header files — causes `std::byte` conflict on Windows.
-- Always initialize GL object handles to 0 in constructors — uninitialized handles cause crashes when `glDeleteObjectARB` is called.
-- GLAD must be initialized before any GL calls. On macOS, `draw()` is called during `Fl::check()` before `main()` reaches the GL init code — GLAD is initialized in `GlViewport::draw()` on first call.
-- Version string is defined in `src/gfcStructures.h` (`JEFE_VERSION`), `CMakeLists.txt` (`project VERSION`), and `src/aboutWindow.cxx`/`.fl` (splash label).
-- Legacy branches (`floatEXR`, `gfcTrackIntroduced`, `subsequence`, `trackloading`) contain incomplete refactoring work from the original development period.
+- Always initialize GL object handles to 0 in constructors (uninitialized handles crash `glDeleteObjectARB`). GLAD must be initialized before any GL call — done on first `GlViewport::draw()`.
+- Version string lives in three places: `src/gfcStructures.h` (`JEFE_VERSION`), `CMakeLists.txt` (`project VERSION`), and `src/aboutWindow.cxx`/`.fl` (splash label).
+- Legacy branches (`floatEXR`, `gfcTrackIntroduced`, `subsequence`, `trackloading`) contain incomplete refactoring from the original development period.

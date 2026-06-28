@@ -299,7 +299,7 @@ std::vector< std::string > gfcFXManager::getHashes()
 
 gfcFX gfcFXManager::getFX(int index)
 {
-	if (index<=fxArray.size()) {
+	if (index>=0 && index<(int)fxArray.size()) {
         return fxArray[index];
     } else {
     	gfcFX empty;

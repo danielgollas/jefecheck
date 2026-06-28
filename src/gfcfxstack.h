@@ -54,6 +54,19 @@ public:
     
     int getNumOfFXs();
     int getNumOfActiveFXs();
+
+    // Sets the active flag on the FX at fxIndex. Bounds-checked; no-op
+    // when the index is out of range. Keeps the vestigial numOfActiveFX
+    // member consistent (getNumOfActiveFXs recomputes by iterating, so
+    // the member is only kept in sync so other code paths that read it
+    // don't drift).
+    void setActive(int fxIndex, bool active);
+
+    // Reorders the stack by moving the FX at `from` to position `to`
+    // (erase + insert semantics, NOT an adjacent swap — moving item 0 to
+    // position 3 lands it after the others). No-op when either index is
+    // out of range or they are equal.
+    void moveFX(int from, int to);
     // FX-control widget callbacks. The handle is opaque so the model class
     // doesn't pull a UI toolkit's headers; in the FLTK build it's an
     // Fl_Widget*, and in the Qt build it'll be the corresponding QWidget*.
