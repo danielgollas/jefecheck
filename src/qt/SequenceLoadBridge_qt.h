@@ -396,6 +396,34 @@ int  getSelectedPlaylistItem();
 void savePlaylistFile(const std::string& path);
 void loadPlaylistFile(const std::string& path);
 
+// Build a playlist item from the CURRENT live setup — every track's load
+// params, the per-plate FX stacks, and the full program state (layout,
+// playback mode/FPS, in/out, per-plate CC/flip/flop/crop/RGBA, per-track
+// offset/hold). Mirrors gfcTrackManager::getPlaylistItem().
+void addCurrentAsPlaylistItem();
+
+// Build one multi-track item (A..D) from the given files and append it.
+void addPlaylistFiles(const std::vector<std::string>& paths);
+
+// Append more tracks to an existing item (drop-media-on-card).
+void appendTracksToPlaylistItem(int index, const std::vector<std::string>& paths);
+
+// Per-track detail for one item, for the card's collapsible body. Plain
+// POD so the card TU stays glad-free (no gfc* headers). All fields derive
+// from gfcLoadParams.
+struct PlaylistTrackDetail {
+    std::string letter;       // "A".."D"
+    std::string path;         // full path; the panel shortens per toggle
+    int  fromFrame = 0;
+    int  toFrame = 0;
+    int  totalFrames = 0;
+    int  scalePct = 100;
+    std::string filter;       // "linear" / "bilinear"
+    bool crop = false;
+    std::string bitDepth;     // "8"/"16"/"16f"/"32f"/"dxt1"
+};
+std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index);
+
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for
 // "Ready" before driving the panel so they don't race the autoload.

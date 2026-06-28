@@ -896,6 +896,57 @@ void loadPlaylistFile(const std::string& path) {
     playlistManager.loadPlaylist(path);
 }
 
+void addCurrentAsPlaylistItem() {
+    playlistManager.addItemlist(trackManager.getPlaylistItem());
+}
+
+void addPlaylistFiles(const std::vector<std::string>& paths) {
+    if (paths.empty()) return;
+    playlistManager.addItemlist(playlistManager.createPlaylistItemFrom(paths));
+}
+
+void appendTracksToPlaylistItem(int index, const std::vector<std::string>& paths) {
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return;
+    if (paths.empty()) return;
+    playlistManager.appendTracksToItem(paths, index);
+}
+
+std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index) {
+    std::vector<PlaylistTrackDetail> out;
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return out;
+    const gfcPlaylistItem& item = (*entries)[index];
+    for (size_t i = 0; i < item.loadParams.size(); ++i) {
+        const gfcLoadParams& lp = item.loadParams[i];
+        PlaylistTrackDetail d;
+        d.letter = std::string(1, char('A' + (int)i));
+        d.path = lp.fileName;
+        d.fromFrame = lp.fromFrame;
+        d.toFrame = lp.toFrame;
+        d.totalFrames = (lp.toFrame >= lp.fromFrame)
+                        ? (lp.toFrame - lp.fromFrame + 1) : 0;
+        // scale is a float: a fraction (1.0 == 100%) or already a percent.
+        // Upsampling isn't supported, so anything > 1.5 is treated as a
+        // percent value; otherwise it's a 0..1 fraction.
+        d.scalePct = (lp.scale <= 1.5f)
+                     ? int(lp.scale * 100.0f + 0.5f)
+                     : int(lp.scale + 0.5f);
+        d.filter = (lp.filterType == 0) ? "linear" : "bilinear";
+        d.crop = lp.crop;
+        switch (lp.compressed) {
+            case GFC_8BPC:    d.bitDepth = "8";    break;
+            case GFC_16BPC:   d.bitDepth = "16";   break;
+            case GFC_16HALF:  d.bitDepth = "16f";  break;
+            case GFC_4BPC:    d.bitDepth = "32f";  break;
+            case GFC_S3TCDX1: d.bitDepth = "dxt1"; break;
+            default:          d.bitDepth = "?";    break;
+        }
+        out.push_back(d);
+    }
+    return out;
+}
+
 void connectAsServer(const RemoteServerParams& params) {
     if (networkManager.getConnected()) return;
     gfcServerParams sp;
