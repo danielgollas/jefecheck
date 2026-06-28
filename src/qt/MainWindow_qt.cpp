@@ -69,62 +69,20 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
 
     statusBar()->showMessage("Drop an image onto the viewport to load it.");
 
-    // Bit depth combo — selects the texture format used for new loads.
-    // Persists in QSettings; existing plates keep their depth until
-    // reloaded. Routes through the SequenceLoadBridge accessors so
-    // we don't pull gfcStructures.h (which drags glad) into this TU.
-    depthCombo_ = new QComboBox(this);
-    depthCombo_->setObjectName("statusbar.depth.combo");
-    depthCombo_->setAccessibleName("Default bit depth for new loads");
-    depthCombo_->setToolTip(tr(
-        "Bit depth used when loading new sequences. Existing plates "
-        "keep their current depth until reloaded."));
-    // Pairs are <display label, GFC_*BPC enum value>. GFC_4BPC is a
-    // historical misnomer in UIConstants.h — actually 4 bytes per
-    // component = 32-bit float. We label it "32-float" and silently
-    // use the misnamed enum. GFC_S3TCDX1 is intentionally omitted
-    // (storage optimization, not a quality choice).
-    depthCombo_->addItem("8",        QVariant::fromValue<int>(GFC_8BPC));
-    depthCombo_->addItem("16",       QVariant::fromValue<int>(GFC_16BPC));
-    depthCombo_->addItem("16-half",  QVariant::fromValue<int>(GFC_16HALF));
-    depthCombo_->addItem("32-float", QVariant::fromValue<int>(GFC_4BPC));
+    // Restore the engine load defaults persisted in QSettings — the default
+    // texture bit depth and the OIIO decode filter. Both are now edited in
+    // Preferences → Engine; here we just apply the saved values at startup
+    // (without opening Preferences). Routed through SequenceLoadBridge so this
+    // TU stays glad-free (gfcStructures.h drags glad, which can't share a TU
+    // with QOpenGLWidget on macOS — see developer_notes.md §1).
     {
         QSettings settings;
-        const int saved = settings.value("Engine/defaultTextureFormat",
-                                         GFC_16HALF).toInt();
-        // Fallback: if the persisted value isn't one of our combo
-        // entries (e.g. a future enum churn dropped the value the user
-        // saved), fall back to the GFC_16HALF item rather than coupling
-        // to its addItem position. findData on the default returns the
-        // item's index since GFC_16HALF is in the combo.
-        int idx = depthCombo_->findData(QVariant::fromValue<int>(saved));
-        if (idx < 0) {
-            idx = depthCombo_->findData(QVariant::fromValue<int>(GFC_16HALF));
-        }
-        depthCombo_->setCurrentIndex(idx);
         jefe::qt::setDefaultTextureFormat(
-            depthCombo_->currentData().toInt());
-    }
-    // Restore the OIIO loader's decode filter alongside defaultTextureFormat.
-    // The Preferences → Engine combo writes here too; mirroring the restore
-    // keeps the field consistent across launches and persists the user's
-    // last selection without round-tripping through the FLTK XML. Routed
-    // through SequenceLoadBridge so this TU can stay glad-free (same reason
-    // defaultTextureFormat goes through the bridge above).
-    {
-        QSettings settings;
+            settings.value("Engine/defaultTextureFormat", GFC_16HALF).toInt());
         jefe::qt::setDefaultDecodeFilter(
             settings.value("Engine/defaultDecodeFilter",
                            FILTERLANCZOS_ID).toInt());
     }
-    connect(depthCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [this](int) {
-        const int v = depthCombo_->currentData().toInt();
-        jefe::qt::setDefaultTextureFormat(v);
-        QSettings settings;
-        settings.setValue("Engine/defaultTextureFormat", v);
-    });
-    statusBar()->addPermanentWidget(depthCombo_);
 
     // Permanent right-aligned label that always reflects the current
     // framing mode. Status-bar text exposes via NSAccessibility (the
@@ -578,6 +536,24 @@ void MainWindow_Qt::buildMenuBar() {
     };
     // Filled in after buildDocks() runs, see below.
     (void)rememberDockToggle;
+
+    // Status bar show/hide. Checkable, persisted in QSettings; the saved
+    // state is applied to the status bar at startup just below.
+    {
+        QSettings settings;
+        const bool visible =
+            settings.value("UI/statusBarVisible", true).toBool();
+        statusBar()->setVisible(visible);
+        auto* sbAction = viewMenu->addAction(tr("Show Status &Bar"));
+        sbAction->setObjectName("menu.view.statusbar");
+        sbAction->setCheckable(true);
+        sbAction->setChecked(visible);
+        connect(sbAction, &QAction::toggled, this, [this](bool on) {
+            statusBar()->setVisible(on);
+            QSettings s;
+            s.setValue("UI/statusBarVisible", on);
+        });
+    }
 
     // View → Color Correction Favorites: 5 save/load slots on the active plate.
     // Menu-only (no Ctrl+1-5 shortcuts — they'd collide with the layout ones).
