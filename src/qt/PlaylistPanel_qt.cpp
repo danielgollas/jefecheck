@@ -2,16 +2,124 @@
 #include "SequenceLoadBridge_qt.h"
 
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSettings>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace {
 constexpr const char* kLastDirSettingKey = "Playlist/lastAddDir";
 }
+
+// ---------------------------------------------------------------------------
+// PlaylistItemCard implementation
+// ---------------------------------------------------------------------------
+
+PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded,
+                                   bool fullPaths, QWidget* parent)
+    : QWidget(parent), index_(index), expanded_(expanded), fullPaths_(fullPaths) {
+    setObjectName(QString("playlist.card.%1").arg(index));
+
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(4, 2, 4, 2);
+    outer->setSpacing(2);
+
+    auto* header = new QHBoxLayout();
+    header->setContentsMargins(0, 0, 0, 0);
+    header->setSpacing(6);
+
+    auto* handle = new QLabel("\xe2\x98\xb0", this);  // ☰ drag affordance
+    handle->setToolTip("Drag to reorder");
+    handle->setStyleSheet("color:#888;");
+    header->addWidget(handle);
+
+    auto* idx = new QLabel(QString::number(index + 1), this);
+    idx->setMinimumWidth(18);
+    header->addWidget(idx);
+
+    auto* nameLab = new QLabel(name, this);
+    nameLab->setObjectName(QString("playlist.card.%1.name").arg(index));
+    nameLab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    nameLab->setToolTip(name);
+    header->addWidget(nameLab, /*stretch*/ 1);
+
+    chevron_ = new QToolButton(this);
+    chevron_->setObjectName(QString("playlist.card.%1.chevron").arg(index));
+    chevron_->setAutoRaise(true);
+    chevron_->setText(expanded_ ? "\xe2\x96\xbe" : "\xe2\x96\xb8");  // ▾ / ▸
+    connect(chevron_, &QToolButton::clicked, this,
+            [this]() { emit toggleExpandRequested(index_); });
+    header->addWidget(chevron_);
+
+    auto* removeBtn = new QToolButton(this);
+    removeBtn->setObjectName(QString("playlist.card.%1.remove").arg(index));
+    removeBtn->setText("\xe2\x9c\x95");  // ✕
+    removeBtn->setAutoRaise(true);
+    removeBtn->setToolTip("Remove from playlist");
+    connect(removeBtn, &QToolButton::clicked, this,
+            [this]() { emit removeRequested(index_); });
+    header->addWidget(removeBtn);
+
+    outer->addLayout(header);
+
+    detail_ = new QWidget(this);
+    detailLayout_ = new QVBoxLayout(detail_);
+    detailLayout_->setContentsMargins(28, 0, 0, 0);
+    detailLayout_->setSpacing(0);
+    outer->addWidget(detail_);
+
+    rebuildDetail();
+    detail_->setVisible(expanded_);
+}
+
+void PlaylistItemCard::rebuildDetail() {
+    // Clear existing rows.
+    QLayoutItem* it;
+    while ((it = detailLayout_->takeAt(0)) != nullptr) {
+        if (it->widget()) it->widget()->deleteLater();
+        delete it;
+    }
+    for (const auto& d : jefe::qt::getPlaylistItemDetail(index_)) {
+        QString path = QString::fromStdString(d.path);
+        if (!fullPaths_) path = QFileInfo(path).fileName();
+        QString line = QString("%1  %2  %3-%4 (%5)  %6%%  %7%8  %9")
+            .arg(QString::fromStdString(d.letter))
+            .arg(path)
+            .arg(d.fromFrame).arg(d.toFrame).arg(d.totalFrames)
+            .arg(d.scalePct)
+            .arg(QString::fromStdString(d.filter))
+            .arg(d.crop ? "  crop" : "")
+            .arg(QString::fromStdString(d.bitDepth));
+        auto* row = new QLabel(line, detail_);
+        row->setStyleSheet("color:#aaa; font-size:11px;");
+        detailLayout_->addWidget(row);
+    }
+}
+
+void PlaylistItemCard::setExpanded(bool on) {
+    expanded_ = on;
+    if (chevron_) chevron_->setText(on ? "\xe2\x96\xbe" : "\xe2\x96\xb8");
+    if (detail_) detail_->setVisible(on);
+    updateGeometry();
+}
+
+void PlaylistItemCard::setSelectedHighlight(bool on) {
+    setStyleSheet(on ? "background:#33405a; border-radius:3px;" : "");
+}
+
+void PlaylistItemCard::mouseDoubleClickEvent(QMouseEvent* ev) {
+    emit loadRequested(index_);
+    QWidget::mouseDoubleClickEvent(ev);
+}
+
+// ---------------------------------------------------------------------------
+// PlaylistPanel_Qt implementation
+// ---------------------------------------------------------------------------
 
 PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("playlist.panel");

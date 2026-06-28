@@ -12,11 +12,44 @@
 #define JEFECHECK_QT_PLAYLIST_PANEL_H
 
 #include <QWidget>
+#include <QString>
 
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QToolButton;
+class QVBoxLayout;
+
+// One playlist row: header (drag handle, index, name, track chips, collapse
+// chevron) + a collapsible per-track detail body. Dumb widget — it emits
+// intent signals; PlaylistPanel_Qt does the bridge calls.
+class PlaylistItemCard : public QWidget {
+    Q_OBJECT
+public:
+    PlaylistItemCard(int index, const QString& name, bool expanded,
+                     bool fullPaths, QWidget* parent = nullptr);
+    void setExpanded(bool on);
+    bool isExpanded() const { return expanded_; }
+    void setSelectedHighlight(bool on);
+
+signals:
+    void loadRequested(int index);
+    void removeRequested(int index);
+    void toggleExpandRequested(int index);
+
+protected:
+    void mouseDoubleClickEvent(QMouseEvent* ev) override;  // emits loadRequested
+
+private:
+    void rebuildDetail();
+    int index_;
+    bool expanded_;
+    bool fullPaths_;
+    QToolButton* chevron_ = nullptr;
+    QWidget* detail_ = nullptr;
+    QVBoxLayout* detailLayout_ = nullptr;
+};
 
 class PlaylistPanel_Qt : public QWidget {
     Q_OBJECT
