@@ -17,7 +17,8 @@ STATUSBAR_LAYOUT = "statusbar.layout.label"
 STATUSBAR_TRACK = "statusbar.track.label"
 STATUSBAR_LOADED = "statusbar.loaded.label"
 STATUSBAR_STARTUP = "statusbar.startup.label"
-STATUSBAR_DEPTH = "statusbar.depth.combo"
+# Default bit depth moved to Preferences → Engine (prefs.engine.defaultTextureFormat);
+# status-bar visibility toggles via View → Show Status Bar (menu.view.statusbar).
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
@@ -49,6 +50,7 @@ MENU_VIEW_FULLSCREEN = "menu.view.fullscreen"
 MENU_VIEW_CCFAVORITES = "menu.view.ccfavorites"
 MENU_VIEW_HISTOGRAM = "menu.view.histogram"            # Ctrl+H (active quad)
 MENU_VIEW_HISTOGRAM_ALL = "menu.view.histogramall"     # Ctrl+Alt+H (all plates)
+MENU_VIEW_STATUSBAR = "menu.view.statusbar"            # checkable: show/hide status bar
 MENU_HELP = "menu.help"
 # NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's
 # objectName — every menu item appears with `identifier='qt_itemFired:'`

@@ -118,7 +118,6 @@ private:
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
     FXParamPanel_Qt* fxParamPanelWidget_ = nullptr;
     PlaylistPanel_Qt* playlistPanelWidget_ = nullptr;
-    QComboBox* depthCombo_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
     QLabel* trackStatusLabel_ = nullptr;
     QLabel* loadedStatusLabel_ = nullptr;

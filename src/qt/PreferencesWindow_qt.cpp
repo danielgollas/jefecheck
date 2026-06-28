@@ -275,6 +275,32 @@ void PreferencesWindow_Qt::buildEnginePage() {
     });
     form->addRow(filterLabel, filterCombo);
 
+    // Default bit depth for new loads (moved here from the status bar).
+    // Sets the texture format used when a sequence is loaded via Quick Load /
+    // drag-drop; existing plates keep their depth until reloaded. The Load
+    // Sequence Manager has its own per-track depth controls. GFC_4BPC is a
+    // historical misnomer for 32-bit float; GFC_S3TCDX1 is intentionally
+    // omitted (storage optimization, not a quality choice). Persisted under
+    // Engine/defaultTextureFormat; restored at startup by MainWindow_Qt.
+    auto* depthLabel = new QLabel("Default bit depth:", page);
+    auto* depthCombo = new QComboBox(page);
+    depthCombo->setObjectName("prefs.engine.defaultTextureFormat");
+    depthCombo->setAccessibleName("Default bit depth for new loads");
+    depthCombo->addItem("8",        GFC_8BPC);
+    depthCombo->addItem("16",       GFC_16BPC);
+    depthCombo->addItem("16-half",  GFC_16HALF);
+    depthCombo->addItem("32-float", GFC_4BPC);
+    int depthIdx = depthCombo->findData(sett.defaultTextureFormat);
+    if (depthIdx < 0) depthIdx = depthCombo->findData(GFC_16HALF);
+    depthCombo->setCurrentIndex(depthIdx);
+    connect(depthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [depthCombo](int i) {
+        sett.defaultTextureFormat = depthCombo->itemData(i).toInt();
+        QSettings s;
+        s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
+    });
+    form->addRow(depthLabel, depthCombo);
+
     addPage("Engine", page);
 }
 
