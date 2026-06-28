@@ -258,6 +258,34 @@ bool tickPlayback() {
     return dirty;
 }
 
+namespace {
+// Auto-advance edge state. ONCE mode clamps currentFrame at endLimit and
+// leaves isPlaying() true (the playback manager never stops itself), so the
+// "reached end" event is the transition prevFrame != endLimit -> currentFrame
+// == endLimit while playing forward in ONCE mode. Latched here, consumed by
+// the idle tick via consumePlaylistAdvanceSignal().
+int  gPrevPlaybackFrame = -1;
+bool gPlaylistAdvanceLatch = false;
+
+// Mirror of gfcPlaybackManager::getEndLimit() (which is private) using only
+// public accessors, so auto-advance can read the effective forward end
+// boundary without promoting an engine method. Kept in sync with the engine
+// definition in gfcplaybackmanager.cpp.
+int playlistEffectiveEndLimit() {
+    int tmp = 1;
+    switch (playbackManager.getLoopPriority()) {
+        case GFC_LOOPPRIORITY_SHORTEST:
+            tmp = trackManager.getFirstLastLoaded() + 1; break;
+        case GFC_LOOPPRIORITY_LONGEST:
+            tmp = trackManager.getLastLastLoaded() + 1; break;
+        case GFC_LOOPPRIORITY_TIMELINE:
+            tmp = playbackManager.getOutPoint(); break;
+    }
+    const int out = playbackManager.getOutPoint();
+    return (tmp < out) ? tmp : out;
+}
+}  // namespace
+
 bool tickPlaybackTiming() {
     // No-GL half of tickPlayback(). playbackManager.update() advances
     // currentFrame at the target FPS off the wall clock, so running this
@@ -266,6 +294,18 @@ bool tickPlaybackTiming() {
     // this is what keeps the measured FPS pinned at the target instead of
     // wobbling. None of these calls touch the GL context.
     playbackManager.update();
+    // Edge-detect once-mode end-of-playback for playlist auto-advance.
+    if (playbackManager.isPlaying() &&
+        playbackManager.getPlaybackMode() == LOOPMODEONCE_ID) {
+        const int cur = playbackManager.getCurrentFrame();
+        const int end = playlistEffectiveEndLimit();
+        if (cur == end && gPrevPlaybackFrame != end && gPrevPlaybackFrame >= 0) {
+            gPlaylistAdvanceLatch = true;
+        }
+        gPrevPlaybackFrame = cur;
+    } else {
+        gPrevPlaybackFrame = playbackManager.getCurrentFrame();
+    }
     plateManager.updateAnimations();
     trackManager.updateTrackWidgets();
     return plateManager.getChanged();
@@ -945,6 +985,38 @@ std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index) {
         out.push_back(d);
     }
     return out;
+}
+
+void setPlaylistScaleOverride(int pct) {
+    trackManager.setScaleOverride(pct);  // 0 = no override
+}
+
+bool consumePlaylistAdvanceSignal() {
+    const bool v = gPlaylistAdvanceLatch;
+    gPlaylistAdvanceLatch = false;
+    return v;
+}
+
+bool isPlaylistItemPlayingOnce() {
+    return playbackManager.getPlaybackMode() == LOOPMODEONCE_ID;
+}
+
+void loadPlaylistItemAndPlay(int index) {
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return;
+    // Clear any stale advance latch so starting fresh playback here (e.g. from
+    // a future direct-jump path) can't trigger an immediate spurious advance.
+    gPlaylistAdvanceLatch = false;
+    trackManager.setPlaylistItem(playlistManager.getItem(index));
+    playlistManager.setSelectedItem(index);
+    playbackManager.setCurrentFrame(playbackManager.getFromFrame());
+    plateManager.setChanged();
+    gPrevPlaybackFrame = playbackManager.getCurrentFrame();
+    playbackManager.startPlayFwd();
+}
+
+void pausePlaybackIfPlaying() {
+    if (playbackManager.isPlaying()) playbackManager.pause();
 }
 
 void connectAsServer(const RemoteServerParams& params) {

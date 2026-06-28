@@ -424,6 +424,25 @@ struct PlaylistTrackDetail {
 };
 std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index);
 
+// Scale override applied before each playlist load (RAM-limited / remote).
+// pct in {25,50,100}; 0 clears the override. Maps to setScaleOverride.
+void setPlaylistScaleOverride(int pct);
+
+// Auto-advance support. consumePlaylistAdvanceSignal() returns true exactly
+// once when forward playback reaches the end in ONCE mode (edge-detected in
+// the playback tick); reading it clears the latch. isPlaylistItemPlayingOnce
+// reports whether the current playback mode is ONCE.
+bool consumePlaylistAdvanceSignal();
+bool isPlaylistItemPlayingOnce();
+
+// Load a playlist item and (re)start forward playback from its first frame —
+// used by auto-advance. Normal double-click load stays loadPlaylistItem().
+void loadPlaylistItemAndPlay(int index);
+
+// Stop playback if currently playing (used to halt at the end of a non-looping
+// playlist so the once-mode end-clamp doesn't spin the idle tick).
+void pausePlaybackIfPlaying();
+
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for
 // "Ready" before driving the panel so they don't race the autoload.
