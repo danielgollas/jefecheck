@@ -401,9 +401,11 @@ void gfcPlateManager::updateAnimations()
 	static float previousOpacity=0;
 	feedbackMessageOpacity-=playbackManager.getTimestep();
 	feedbackMessageOpacity=max(feedbackMessageOpacity,0.0);
-	if (feedbackMessageOpacity>0.0 && previousOpacity!=feedbackMessageOpacity)
+	// Redraw on ANY change, including the final fade to 0 — otherwise the last
+	// faint frame lingers until the next forced repaint (the tick idles once
+	// hasActiveAnimations() goes false).
+	if (previousOpacity!=feedbackMessageOpacity)
 	{
-		//redraw in case we still have stuff to animate and it has changed
 		setChanged();
 	}
 	previousOpacity=feedbackMessageOpacity;
@@ -1073,8 +1075,16 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 			int textHeight=h/10;
 
 			gfc_gl_measure(feedbackMessage.c_str(), textWidth, textHeight);
-			//textWidth*=2;
-			
+			// gfc_gl_measure returns LOGICAL pixels, but this overlay is laid
+			// out and drawn in the viewport's PHYSICAL-pixel ortho (draw() is
+			// called with framebuffer dimensions). On Retina the two differ by
+			// dpiScale, so without this the box is ~half the text's real size —
+			// the message then wraps to two lines and runs off the edge. Scale
+			// the measurement up to physical pixels to match the ortho.
+			const float uiScale = gfc_gl_dpiscale();
+			textWidth  = (int)(textWidth  * uiScale);
+			textHeight = (int)(textHeight * uiScale);
+
 			textWidth*=1.2;
 			textHeight*=1.2;
 
@@ -1496,6 +1506,14 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
 
     printf ( "Done rendering\n\a" );
     stopRendering=true;
+}
+
+bool gfcPlateManager::hasActiveAnimations()
+{
+	if (feedbackMessageOpacity > 0.0) return true;
+	for (size_t i = 0; i < plates.size(); ++i)
+		if (plates[i].hasActiveAnimation()) return true;
+	return false;
 }
 
 void gfcPlateManager::setFeedbackMessage(std::string theMessage)

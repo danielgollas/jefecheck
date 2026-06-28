@@ -18,6 +18,7 @@ extern gfcFXManager fxManager;
 //extern std::vector<CubeLUT> lutArray; //contains loaded LUTs
 
 gfcFXStack::gfcFXStack() {
+    numOfActiveFX=0;
 }
 
 
@@ -26,7 +27,8 @@ gfcFXStack::~gfcFXStack() {
 
 void gfcFXStack::addFX(gfcFX theFX) {
     fxs.push_back(theFX);
-    numOfActiveFX++;
+    if (theFX.active)
+        numOfActiveFX++;
 }
 
 int gfcFXStack::getNumOfFXs() {
@@ -80,6 +82,26 @@ int gfcFXStack::getNumOfActiveFXs() {
             count++;
     }
     return count;
+}
+
+void gfcFXStack::setActive(int fxIndex, bool active) {
+    if (fxIndex < 0 || fxIndex >= (int)fxs.size()) return;
+    if (fxs[fxIndex].active == active) return;
+    fxs[fxIndex].active = active;
+    if (active)
+        numOfActiveFX++;
+    else
+        numOfActiveFX--;
+}
+
+void gfcFXStack::moveFX(int from, int to) {
+    const int n = (int)fxs.size();
+    if (from < 0 || from >= n) return;
+    if (to < 0 || to >= n) return;
+    if (from == to) return;
+    gfcFX moved = fxs[from];
+    fxs.erase(fxs.begin() + from);
+    fxs.insert(fxs.begin() + to, moved);
 }
 
 std::vector< int > gfcFXStack::getActiveFXIndexes() {

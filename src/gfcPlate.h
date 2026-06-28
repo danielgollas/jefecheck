@@ -29,6 +29,13 @@ class gfcSequence;
 class gfcFrame;
 class GlViewport;
 
+// The framebuffer that represents "the screen" for the current GL context.
+// On FLTK this was 0; on Qt's QOpenGLWidget the widget renders into its own
+// FBO (commonly id 1), so binding 0 sends rendering to an unpresented buffer.
+// GlViewport_Qt::paintGL publishes defaultFramebufferObject() here each frame
+// (via jefe::qt::setScreenFBO); the FX/FBO code rebinds this instead of 0.
+extern GLuint gScreenFBO;
+
 class gfcPlateRenderParams
 {
 	public:
@@ -179,6 +186,13 @@ class gfcPlate: public gfcPickNotifee
 		void updateTransformationValuesFromGUI(); //thisupdates just the transformation values
 
         void updateRot(float timeStep=1, bool flip=false, bool flop=false);
+
+        // True while a flip/flop rotation is still settling toward its target
+        // (rX→0/180, rY→0/180). Used to keep the idle tick alive so the
+        // animation actually plays instead of needing a forced repaint.
+        bool hasActiveAnimation() const {
+            return rX != (flip ? 180.0f : 0.0f) || rY != (flop ? 180.0f : 0.0f);
+        }
         
         void draw();
         void setViewport(int x, int y, int w, int h);

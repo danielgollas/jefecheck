@@ -286,6 +286,54 @@ Wires the GUI-free `gfcSessionManager` into Qt via `jefe::qt::*`. Key points:
 
 The in-viewport overlays (`gfcHistogramGLWindow`, AOI corners) are dragged via a GL color-pick pass, not Qt mouse hit-testing. FLTK wired this in `main.cpp`; the Qt port hadn't, so the overlays were undraggable until fixed. `initializeRenderingChain` now registers the pick subsystem (`pickManager.registerDrawee(&plateManager)` + `registerNotifee` + `registerPlatesAsPickNotifees`), and `GlViewport_Qt` press/move/release call `jefe::qt::viewportPickDown/Drag/Up` with the **GL context current** (the pick pass renders unique colors then `glReadPixels` the pixel under the cursor; coords are framebuffer pixels, bottom-left origin). A press that hits an overlay latches a drag and suppresses the plate pan; a press that hits nothing falls through to pan/active-plate (`gfcPlate::pickNotify` reports only the histogram + AOI corners, not the image frame). `update()` always fires after a pick so the transient selection render never reaches the screen.
 
+## 22. Text renderer (`GfcTextRenderer`) implementation details
+
+Custom renderer replacing FLTK's `gl_draw`/`gl_font` (fixes text squashing in multi-plate layouts). Singleton via `textRenderer()`; **FreeType** rasterizes hinted glyphs into a dynamically-sized `GL_ALPHA` atlas; all text draws in a **pixel-exact orthographic projection** via `gluProject` (1:1 texel-to-pixel regardless of plate projection); **two-pass shadow** (dark offset pass + foreground pass, configurable offset/color/blur); wrapper functions (`gfc_gl_font`, `gfc_gl_draw`, …) match FLTK signatures for minimal call-site changes. Files: `src/gfcTextRenderer.{h,cpp}`.
+
+- Atlas baked at `fontSize * dpiScale` texels for Retina; `drawLine()` uses atlas pixel sizes directly (no dpiScale division) since rendering is in physical pixel space.
+- `emitQuads()` snaps glyph positions to integer pixels; baseline and cursor snapped before glyph offsets applied.
+- `GL_NEAREST` filter for pixel-perfect rendering; `GL_LINEAR` available via preferences.
+- Hinting: `FT_LOAD_TARGET_LIGHT` (default, smooth diagonals) / `FT_LOAD_TARGET_NORMAL` / `FT_LOAD_FORCE_AUTOHINT`.
+- Gamma correction (`powf(coverage, gamma)`) boosts semi-transparent edge pixels for a bolder look.
+- `loadFont()`/`loadBoldFont()` invalidate all cached atlases so font changes take effect immediately.
+- System fonts enumerated via FreeType from platform dirs. Font data kept in memory vectors; `FT_Library` is a static singleton; `FT_Face` created per `bakeAtlas()`.
+- Before drawing text quads, disables the active shader program (`glGetHandleARB`/`glUseProgramObjectARB(0)`).
+
+Text-rendering preferences (font path, size, color, opacity, shadow, hinting, filter, gamma) persist via XML (`gfcStructures.cpp` `saveSetting()`/`setWidgetFromNode()`); applied in `PreferencesCB` (`UICallbacks.cpp`).
+
+## 23. Combined FX panel (`FXParamPanel_Qt`) + drag-to-reorder
+
+The FX UI is a **single combined "effect controls" panel** for the active plate — `FXParamPanel_Qt` (`src/qt/FXParamPanel_qt.{h,cpp}`), hosted in `fxParamsDock_` (title "FX", **F3**, objectName `dock.fxparams` / menu `menu.dialogs.fxparams`). The old separate FX browser (`FXStackPanel_Qt`, an available-list + stack-list + Add/Remove/Refresh) and its `fxDock_` (F2 "FX Stack") were **removed** — all FX autoload at startup, so there is no available/loaded-status browser to show. `LUTPanel_Qt` + `lutDock_` (F4) are untouched.
+
+Layout, top → bottom:
+- **"+ Add FX"** `QToolButton` (`fxparams.addfx.button`, `QToolButton::InstantPopup`) with a hierarchical `QMenu`. The menu is (re)built lazily on `aboutToShow` from `jefe::qt::getAvailableFXMenu()` → `vector<pair<int fxIndex, string menuName>>`. Each `menuName` is `"Category/Subcategory/Name"`; we split on `'/'`, walk/create submenus for all but the last segment, and hang the leaf `QAction` (carrying `fxIndex` via `setData`) under the last submenu. Triggering a leaf calls `setActivePlate(getActivePlate())` defensively, then `addFXToActivePlate(fxIndex)`, then `refresh()`.
+- A **`QListWidget` of per-FX cards** (`fxparams.list`) in render order. Each card is a `QFrame` containing a header row (drag-handle glyph `☰`, `"N. <name>"`, an **active `QCheckBox`** `fxparams.fxN.active.check`, a **remove `QToolButton`** `fxparams.fxN.remove.button` `⌫`) followed by that FX's **inline params** — the same float `QDoubleSpinBox` / bool `QCheckBox` / choice `QComboBox` editors as before; **texture/cube/LUT/other slots stay read-only `QLabel`s**.
+
+Wiring (all through `jefe::qt::*`, TU-safe per §1):
+- active checkbox → `setFXActiveOnPlate(plate, fxIdx, on)`; remove → `removeFXFromPlate(plate, fxIdx)`; param edits → existing `setFXParamValueOnPlate(...)`.
+- **Texture params** (`FX_GUI_TEXTURE`, e.g. the two inputs of a Comp/Add) are a `QComboBox` source picker with fixed options **Previous / Track A / Track B / Track C / Track D** — mirroring the FLTK `Fl_Choice` in `fxcontrolwindow.cpp`. The stored value is the option index; `gfcFX::bind()` maps `0 → previousTexID` (prior pass's FBO result), `1..4 → trackManager.getSequence(value-1)`. Wired exactly like the `Choice` combo (same `setFXParamValueOnPlate` + `viewportRepaintRequested`), and shares its fast-path value-update branch.
+- **Cube / LUT params** (`FX_GUI_CUBE` = 3D LUT, `FX_GUI_LUT` = 1D LUT; e.g. the Color/3D LUT and Color/1D LUT FX) are a `QComboBox` LUT picker fed by `jefe::qt::getCubeLutChoices()` / `getLut1DChoices()` → `vector<pair<int globalLutIndex, string name>>` (from `lutManager.get3DLutNames()` / `get1DLutNames()`). **Key gotcha:** the combo DISPLAYS lut names but the stored param value is the **global lutManager index, not the list position** — `gfcFX::bind()` reads `getLUT(value).texture3D/.texture1D`. So each item carries its global index in `Qt::UserRole`; selection writes `itemData(v)`, and both the initial set and the fast-path update locate the item whose `itemData == value` (not `setCurrentIndex(value)`). Empty list (no LUTs loaded yet) renders a "(no 3D/1D LUTs loaded)" label instead of an empty combo; a later full rebuild picks them up. This matches the FLTK `Fl_Choice` that matched the current LUT by name.
+- **Drag-to-reorder:** the list is `QAbstractItemView::InternalMove`. Editors inside the cards keep their own mouse events because spin/check/combo *accept* presses while the handle/empty card area (plain `QLabel`/`QFrame`) *ignore* them and the press propagates to the list viewport, which starts the drag. Reorder detection uses a `QListWidget` subclass `FXReorderList_Qt` that overrides `dropEvent`: it snapshots each item's stashed stack index (`Qt::UserRole`) **before** and **after** the base `dropEvent`, derives the single `(from, to)` move (compare first/last differing positions; up-move when `after[lo]==before[hi]`, else down-move), and emits `itemsReordered(from, to)`. The panel calls `moveFXOnPlate(plate, from, to)`. (We override `dropEvent` rather than listen to `rowsMoved` because `QListWidget` InternalMove drops don't reliably emit `rowsMoved` across Qt versions, and `setItemWidget` items get destroyed/recreated on the move anyway.)
+
+**Repaint:** the panel emits `viewportRepaintRequested()` after every stack-changing edit (add/remove/reorder/active-toggle/param edit); MainWindow connects it to `viewport_->update()`. Necessary because the idle playback tick (`needsPlaybackTick()` gate) skips repaints when nothing is playing, so a stack mutation otherwise wouldn't show until the next viewport mouse-move. The bridge mutators already call `plateManager.setChanged()` (§3 FX equivalent).
+
+**Refresh fast path preserved:** `refresh()` keeps the `lastActivePlate_`/`lastStack_` fingerprint + `rowCache_` from the old param panel — `plateStateChanged` fires per viewport mouse-move, so when the active plate and stack-name list are unchanged it walks `refreshValuesOnly()` (in-place editor value updates, signal-blocked) instead of tearing down + rebuilding the cards. The `refreshing_` reentrancy guard stops programmatic widget updates from firing bridge writes. Remove and reorder defer their rebuild via `QTimer::singleShot(0, …)` because the triggering widget lives inside the card being torn down.
+
+## 24. QOpenGLWidget's default framebuffer is NOT 0 — FX/FBO "return to screen" binds
+
+**Symptom:** with an FX active, the viewport renders **black — not even the text** — and in multiplate any *sibling* plate (even one with no FX) also goes black.
+
+**Root cause:** `QOpenGLWidget` renders into its **own** framebuffer object (commonly id **1**), reachable via `defaultFramebufferObject()`. The FX/FBO code in `gfcPlate.cpp` was written for FLTK, where the window framebuffer was **0**, so it did `glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0)` to "return to screen". Under Qt that binds the real (unpresented) default framebuffer, so the FX plate's final composite — and **everything drawn after it in the frame** (sibling plates, text) — lands in a buffer Qt never shows. Single-plate *looked* okay only because nothing else draws after it that frame; the bug bites the moment a second plate draws.
+
+**Fix:** publish Qt's default FBO into the rendering chain each frame and rebind *that* instead of `0`.
+- `extern GLuint gScreenFBO;` (decl in `gfcPlate.h`, def in `gfcPlate.cpp`, init 0 = FLTK behavior).
+- `GlViewport_Qt::paintGL()` calls `jefe::qt::setScreenFBO(defaultFramebufferObject())` **before** `onDraw()` (it can change on resize — refresh every paint).
+- The three `glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0)` "return to screen" sites in `gfcPlate.cpp` (`createFBO` ×2, `draw3DrectWithFX` last pass) now bind `gScreenFBO`. These were the only bind-0 sites in the codebase.
+
+**Diagnostic that nailed it:** a temporary probe in `paintGL` printing `defaultFramebufferObject()` + `GL_FRAMEBUFFER_BINDING` before/after `onDraw()` showed normal draws stay `1→1` but an FX draw goes `1→0` (left bound to 0).
+
+**Verification gap this exposed (important):** the original `--fx-test` proved FX worked via the **`forRender` FBO-readback path**, which reads the result texture *before* the bind-to-screen and so never hits this bug. Any "FX renders" check **must exercise the on-screen path**. Headless coverage now does: `--fx-test` adds an on-screen `grabFramebuffer()` (forces `paintGL`) before/after; `--fx-multitest <image>` loads two plates side-by-side, adds an FX to plate 0 only, and asserts (a) the sibling plate stays non-black and unchanged (no leak) and (b) plate 0 visibly changes (FX applied on screen). Use a **bright, horizontally-asymmetric** test image — a dark one makes the flip's absolute pixel diff too small to assert on.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.

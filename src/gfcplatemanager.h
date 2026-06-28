@@ -134,7 +134,13 @@ public:
    }
 	
    void setFeedbackMessage(std::string theMessage);
-   
+
+   // True while something needs the per-frame tick to keep animating even
+   // when playback is stopped: the fading feedback message, or a settling
+   // flip/flop rotation. The Qt idle tick (needsPlaybackTick) ORs this in so
+   // the animation plays + repaints without a forced viewport refresh.
+   bool hasActiveAnimations();
+
    /*Plate operations*/
 	 void drawPlate(int whichOne);
 	 

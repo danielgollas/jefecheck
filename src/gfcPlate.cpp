@@ -20,6 +20,11 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 
 #include "gfchistogram.h"
 
+// "Screen" framebuffer for the active GL context. 0 under FLTK; under Qt's
+// QOpenGLWidget it's defaultFramebufferObject() (published each frame by
+// GlViewport_Qt::paintGL via jefe::qt::setScreenFBO). See gfcPlate.h.
+GLuint gScreenFBO = 0;
+
 namespace {
 // Looks up an FLTK-compatible color index in the standard 8-color palette.
 // In the FLTK build we defer to Fl::get_color so the colors match exactly
@@ -663,7 +668,7 @@ bool gfcPlate::createFBO() {
 //         //glCheck();
 //         //printf("Q%i:\n *generated FBO id:%i\n *RTT Info: (%i,%i),%ix%i\n *rect: (%i,%i),%ix%i\n\n",quadID,fbo,fboVP.x,fboVP.y,fboVP.w,fboVP.h,rect.x,rect.y,rect.w,rect.h);
 //         //glPrintError();
-//         glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, 0 );
+//         glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, gScreenFBO ); // gScreenFBO = Qt's default FBO (0 under FLTK)
 //         glBindTexture ( GL_TEXTURE_RECTANGLE_ARB, 0 );
 //         }
 //         return 1;
@@ -753,7 +758,7 @@ bool gfcPlate::createFBO() {
                 FBOerrors=0;
             }
         }
-        glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, 0 );
+        glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, gScreenFBO ); // gScreenFBO = Qt's default FBO (0 under FLTK)
 
         /*TODO: Also create an 8 bit fbo so we can render the result there and use that
         	texture for the histogram and other operations that require readback.*/
@@ -797,7 +802,7 @@ bool gfcPlate::createFBO() {
         //END OF CREATING AN 8BIT FBO
 
 
-        glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, 0 );
+        glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, gScreenFBO ); // gScreenFBO = Qt's default FBO (0 under FLTK)
         glBindTexture ( GL_TEXTURE_RECTANGLE_ARB, 0 );
         return 1;
     } else {
@@ -1468,7 +1473,7 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
 
         }
         //disable the FBO render target
-        glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, 0 );
+        glBindFramebufferEXT ( GL_FRAMEBUFFER_EXT, gScreenFBO ); // gScreenFBO = Qt's default FBO (0 under FLTK)
         glPopAttrib(); //restore the viewport to the real viewport on screen, not the viewport of the FBO.
 
 

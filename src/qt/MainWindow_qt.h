@@ -18,7 +18,6 @@
 
 class QDockWidget;
 class FXParamPanel_Qt;
-class FXStackPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
 class PlaylistPanel_Qt;
@@ -58,6 +57,23 @@ public:
     // 1 on success. Verifies the full render → FFmpeg pipeline.
     int runHeadlessVideoTest(const QString& dir);
 
+    // Headless FX-stack proof (--fx-test <image>). Loads `imagePath` into
+    // plate 0, renders a baseline PNG, adds a visually-obvious shader FX
+    // (Flip Horizontal) to the active plate's stack through the same bridge
+    // call the UI uses, renders again, and compares the two PNGs.
+    // Returns 0 if the images differ (FX applied — PASS), nonzero on FAIL
+    // (identical output) or setup error. Prints a PASS/FAIL line with the
+    // mean absolute pixel difference.
+    int runHeadlessFXTest(const QString& imagePath);
+
+    // Headless multiplate FX state-leak probe (--fx-multitest <image>). Loads
+    // the image into plates 0 and 1, side-by-side (FRAMINGDOUBLE), grabs the
+    // on-screen framebuffer, then adds an FX to plate 0 ONLY and grabs again.
+    // Reports left/right half brightness so a sibling plate (plate 1, no FX)
+    // going black after the FX-on-plate-0 add reveals GL state leaking out of
+    // draw3DrectWithFX into the next plate's draw.
+    int runHeadlessFXMultiTest(const QString& imagePath);
+
 protected:
     void closeEvent(QCloseEvent* e) override;
 
@@ -94,14 +110,12 @@ private:
     GlViewport_Qt* viewport_ = nullptr;
     QDockWidget* plateDock_ = nullptr;
     QDockWidget* timelineDock_ = nullptr;
-    QDockWidget* fxDock_ = nullptr;
     QDockWidget* fxParamsDock_ = nullptr;
     QDockWidget* lutDock_ = nullptr;
     QDockWidget* playlistDock_ = nullptr;
     PlateManager_Qt* plateManagerWidget_ = nullptr;
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
-    FXStackPanel_Qt* fxPanelWidget_ = nullptr;
     FXParamPanel_Qt* fxParamPanelWidget_ = nullptr;
     PlaylistPanel_Qt* playlistPanelWidget_ = nullptr;
     QComboBox* depthCombo_ = nullptr;
