@@ -258,6 +258,39 @@ bool tickPlayback() {
     return dirty;
 }
 
+namespace {
+// Auto-advance edge state. ONCE mode clamps currentFrame at endLimit and
+// leaves isPlaying() true (the playback manager never stops itself), so the
+// "reached end" event is the transition prevFrame != endLimit -> currentFrame
+// == endLimit while playing forward in ONCE mode. Latched here, consumed by
+// the idle tick via consumePlaylistAdvanceSignal().
+int  gPrevPlaybackFrame = -1;
+bool gPlaylistAdvanceLatch = false;
+// True only when the currently-playing content was loaded via a playlist
+// entry (loadPlaylistItem / loadPlaylistItemAndPlay). Cleared by quick-load,
+// drag-drop (loadFileIntoPlate), and clearPlaylist so auto-advance can't
+// hijack unrelated playback.
+bool gCurrentContentFromPlaylist = false;
+
+// Mirror of gfcPlaybackManager::getEndLimit() (which is private) using only
+// public accessors, so auto-advance can read the effective forward end
+// boundary without promoting an engine method. Kept in sync with the engine
+// definition in gfcplaybackmanager.cpp.
+int playlistEffectiveEndLimit() {
+    int tmp = 1;
+    switch (playbackManager.getLoopPriority()) {
+        case GFC_LOOPPRIORITY_SHORTEST:
+            tmp = trackManager.getFirstLastLoaded() + 1; break;
+        case GFC_LOOPPRIORITY_LONGEST:
+            tmp = trackManager.getLastLastLoaded() + 1; break;
+        case GFC_LOOPPRIORITY_TIMELINE:
+            tmp = playbackManager.getOutPoint(); break;
+    }
+    const int out = playbackManager.getOutPoint();
+    return (tmp < out) ? tmp : out;
+}
+}  // namespace
+
 bool tickPlaybackTiming() {
     // No-GL half of tickPlayback(). playbackManager.update() advances
     // currentFrame at the target FPS off the wall clock, so running this
@@ -266,6 +299,18 @@ bool tickPlaybackTiming() {
     // this is what keeps the measured FPS pinned at the target instead of
     // wobbling. None of these calls touch the GL context.
     playbackManager.update();
+    // Edge-detect once-mode end-of-playback for playlist auto-advance.
+    if (playbackManager.isPlaying() &&
+        playbackManager.getPlaybackMode() == LOOPMODEONCE_ID) {
+        const int cur = playbackManager.getCurrentFrame();
+        const int end = playlistEffectiveEndLimit();
+        if (cur == end && gPrevPlaybackFrame != end && gPrevPlaybackFrame >= 0) {
+            gPlaylistAdvanceLatch = true;
+        }
+        gPrevPlaybackFrame = cur;
+    } else {
+        gPrevPlaybackFrame = playbackManager.getCurrentFrame();
+    }
     plateManager.updateAnimations();
     trackManager.updateTrackWidgets();
     return plateManager.getChanged();
@@ -873,6 +918,7 @@ void movePlaylistItem(int index, int direction) {
 
 void clearPlaylist() {
     playlistManager.clearPlaylist();
+    gCurrentContentFromPlaylist = false;
 }
 
 void loadPlaylistItem(int index) {
@@ -880,11 +926,14 @@ void loadPlaylistItem(int index) {
     if (!entries || index < 0 || index >= (int)entries->size()) return;
     trackManager.setPlaylistItem(playlistManager.getItem(index));
     playlistManager.setSelectedItem(index);
+    gCurrentContentFromPlaylist = true;
 }
 
 int getSelectedPlaylistItem() {
     return playlistManager.selectedItem;
 }
+
+bool currentContentIsPlaylistItem() { return gCurrentContentFromPlaylist; }
 
 void savePlaylistFile(const std::string& path) {
     if (path.empty()) return;
@@ -893,7 +942,92 @@ void savePlaylistFile(const std::string& path) {
 
 void loadPlaylistFile(const std::string& path) {
     if (path.empty()) return;
+    clearPlaylist();   // bridge wrapper — also clears the from-playlist flag
     playlistManager.loadPlaylist(path);
+}
+
+void addCurrentAsPlaylistItem() {
+    playlistManager.addItemlist(trackManager.getPlaylistItem());
+}
+
+void addPlaylistFiles(const std::vector<std::string>& paths) {
+    if (paths.empty()) return;
+    playlistManager.addItemlist(playlistManager.createPlaylistItemFrom(paths));
+}
+
+void appendTracksToPlaylistItem(int index, const std::vector<std::string>& paths) {
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return;
+    if (paths.empty()) return;
+    playlistManager.appendTracksToItem(paths, index);
+}
+
+std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index) {
+    std::vector<PlaylistTrackDetail> out;
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return out;
+    const gfcPlaylistItem& item = (*entries)[index];
+    for (size_t i = 0; i < item.loadParams.size(); ++i) {
+        const gfcLoadParams& lp = item.loadParams[i];
+        PlaylistTrackDetail d;
+        d.letter = std::string(1, char('A' + (int)i));
+        d.path = lp.fileName;
+        d.fromFrame = lp.fromFrame;
+        d.toFrame = lp.toFrame;
+        d.totalFrames = (lp.toFrame >= lp.fromFrame)
+                        ? (lp.toFrame - lp.fromFrame + 1) : 0;
+        // scale is a float: a fraction (1.0 == 100%) or already a percent.
+        // Upsampling isn't supported, so anything > 1.5 is treated as a
+        // percent value; otherwise it's a 0..1 fraction.
+        d.scalePct = (lp.scale <= 1.5f)
+                     ? int(lp.scale * 100.0f + 0.5f)
+                     : int(lp.scale + 0.5f);
+        d.filter = (lp.filterType == 0) ? "linear" : "bilinear";
+        d.crop = lp.crop;
+        switch (lp.compressed) {
+            case GFC_8BPC:    d.bitDepth = "8";    break;
+            case GFC_16BPC:   d.bitDepth = "16";   break;
+            case GFC_16HALF:  d.bitDepth = "16f";  break;
+            case GFC_4BPC:    d.bitDepth = "32f";  break;
+            case GFC_S3TCDX1: d.bitDepth = "dxt1"; break;
+            default:          d.bitDepth = "?";    break;
+        }
+        out.push_back(d);
+    }
+    return out;
+}
+
+void setPlaylistScaleOverride(int pct) {
+    trackManager.setScaleOverride(pct);  // 0 = no override
+}
+
+bool consumePlaylistAdvanceSignal() {
+    const bool v = gPlaylistAdvanceLatch;
+    gPlaylistAdvanceLatch = false;
+    return v;
+}
+
+bool isPlaylistItemPlayingOnce() {
+    return playbackManager.getPlaybackMode() == LOOPMODEONCE_ID;
+}
+
+void loadPlaylistItemAndPlay(int index) {
+    auto* entries = playlistManager.getPlaylist();
+    if (!entries || index < 0 || index >= (int)entries->size()) return;
+    // Clear any stale advance latch so starting fresh playback here (e.g. from
+    // a future direct-jump path) can't trigger an immediate spurious advance.
+    gPlaylistAdvanceLatch = false;
+    trackManager.setPlaylistItem(playlistManager.getItem(index));
+    playlistManager.setSelectedItem(index);
+    gCurrentContentFromPlaylist = true;
+    playbackManager.setCurrentFrame(playbackManager.getFromFrame());
+    plateManager.setChanged();
+    gPrevPlaybackFrame = playbackManager.getCurrentFrame();
+    playbackManager.startPlayFwd();
+}
+
+void pausePlaybackIfPlaying() {
+    if (playbackManager.isPlaying()) playbackManager.pause();
 }
 
 void connectAsServer(const RemoteServerParams& params) {
@@ -1409,6 +1543,9 @@ bool loadFileIntoPlate(const std::string& path,
     if (!seq || !seq->myGUI || path.empty()) {
         return false;
     }
+    // Quick-load / drag-drop clears the playlist arming so auto-advance
+    // can't fire against content the user loaded independently.
+    gCurrentContentFromPlaylist = false;
     seq->myGUI->setFilename(path);
 
     // Apply the global default bit depth before loadPreview reads it.
@@ -1513,6 +1650,9 @@ void unloadAndClearTrack(int trackIdx) {
 }
 
 int startLoadingAllTracks() {
+    // Loading tracks directly (Load Window "Load All", Open Session) is not a
+    // playlist load — disarm auto-advance so it can't hijack this content.
+    gCurrentContentFromPlaylist = false;
     int started = 0;
     for (int i = 0; i < 4; ++i) {
         auto* seq = trackManager.getSequence(i);

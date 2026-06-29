@@ -332,6 +332,12 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         // plenty smooth and avoids 4× the signal-blocked widget churn.
         if (++uiRefreshCounter_ < 4) return;
         uiRefreshCounter_ = 0;
+        // Playlist auto-advance: the bridge latches a one-shot when forward
+        // ONCE-mode playback hits the end; the panel decides whether it's
+        // armed and what "next" is. Cheap: a bool read on most ticks.
+        if (jefe::qt::consumePlaylistAdvanceSignal() && playlistPanelWidget_) {
+            playlistPanelWidget_->advanceToNext();
+        }
         // Pull playback state into the timeline widgets.
         // Cheap (a handful of getters + signal-blocked setValues), and
         // it's the only path that animates the playhead during play.

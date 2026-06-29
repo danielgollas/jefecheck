@@ -396,6 +396,59 @@ int  getSelectedPlaylistItem();
 void savePlaylistFile(const std::string& path);
 void loadPlaylistFile(const std::string& path);
 
+// Build a playlist item from the CURRENT live setup — every track's load
+// params, the per-plate FX stacks, and the full program state (layout,
+// playback mode/FPS, in/out, per-plate CC/flip/flop/crop/RGBA, per-track
+// offset/hold). Mirrors gfcTrackManager::getPlaylistItem().
+void addCurrentAsPlaylistItem();
+
+// Build one multi-track item (A..D) from the given files and append it.
+void addPlaylistFiles(const std::vector<std::string>& paths);
+
+// Append more tracks to an existing item (drop-media-on-card).
+void appendTracksToPlaylistItem(int index, const std::vector<std::string>& paths);
+
+// Per-track detail for one item, for the card's collapsible body. Plain
+// POD so the card TU stays glad-free (no gfc* headers). All fields derive
+// from gfcLoadParams.
+struct PlaylistTrackDetail {
+    std::string letter;       // "A".."D"
+    std::string path;         // full path; the panel shortens per toggle
+    int  fromFrame = 0;
+    int  toFrame = 0;
+    int  totalFrames = 0;
+    int  scalePct = 100;
+    std::string filter;       // "linear" / "bilinear"
+    bool crop = false;
+    std::string bitDepth;     // "8"/"16"/"16f"/"32f"/"dxt1"
+};
+std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index);
+
+// Scale override applied before each playlist load (RAM-limited / remote).
+// pct in {25,50,100}; 0 clears the override. Maps to setScaleOverride.
+void setPlaylistScaleOverride(int pct);
+
+// Auto-advance support. consumePlaylistAdvanceSignal() returns true exactly
+// once when forward playback reaches the end in ONCE mode (edge-detected in
+// the playback tick); reading it clears the latch. isPlaylistItemPlayingOnce
+// reports whether the current playback mode is ONCE.
+// currentContentIsPlaylistItem() returns true only when the content currently
+// loaded into the rendering chain was loaded via a playlist entry (either
+// loadPlaylistItem or loadPlaylistItemAndPlay). Quick-load (Cmd+O), drag-drop,
+// and clearPlaylist all clear this flag so auto-advance never fires against
+// content the user loaded independently of the playlist.
+bool consumePlaylistAdvanceSignal();
+bool isPlaylistItemPlayingOnce();
+bool currentContentIsPlaylistItem();
+
+// Load a playlist item and (re)start forward playback from its first frame —
+// used by auto-advance. Normal double-click load stays loadPlaylistItem().
+void loadPlaylistItemAndPlay(int index);
+
+// Stop playback if currently playing (used to halt at the end of a non-looping
+// playlist so the once-mode end-clamp doesn't spin the idle tick).
+void pausePlaybackIfPlaying();
+
 // Startup health checks. The main window's "Startup:" status label
 // reads these to render Loading / Ready / Errors. Tests poll for
 // "Ready" before driving the panel so they don't race the autoload.

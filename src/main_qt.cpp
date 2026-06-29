@@ -202,9 +202,16 @@ int main(int argc, char* argv[]) {
     // the window is even shown — playlist ops are pure data, no GL.
     const QString playlistTestFile = resolvePlaylistTestFile(argc, argv);
     if (!playlistTestFile.isEmpty()) {
+        // GUI stubs must exist before addCurrentAsPlaylistItem() calls
+        // getLoadParamsFromGUI() / getPlateStateInfo(). MainWindow_Qt hasn't
+        // been constructed yet, so initialize them here (once, safe in
+        // headless mode).
+        jefe::qt::initializeRenderingChain();
         jefe::qt::clearPlaylist();
         jefe::qt::addPlaylistFile(playlistTestFile.toStdString());
+        jefe::qt::addCurrentAsPlaylistItem();   // snapshot path (empty setup OK)
         const int added = int(jefe::qt::getPlaylistItemNames().size());
+        const auto detail0 = jefe::qt::getPlaylistItemDetail(0);
         const std::string jpl =
             (QDir::tempPath() + "/jefecheck_playlist_test.jpl").toStdString();
         jefe::qt::savePlaylistFile(jpl);
@@ -212,10 +219,16 @@ int main(int argc, char* argv[]) {
         const int afterClear = int(jefe::qt::getPlaylistItemNames().size());
         jefe::qt::loadPlaylistFile(jpl);
         const int afterLoad = int(jefe::qt::getPlaylistItemNames().size());
-        printf("PLAYLIST-TEST: added=%d afterClear=%d afterLoad=%d file=%s\n",
-               added, afterClear, afterLoad, jpl.c_str());
+        const auto detailAfter = jefe::qt::getPlaylistItemDetail(0);
+        const bool detailOk =
+            !detail0.empty() && !detailAfter.empty() &&
+            detailAfter[0].path == detail0[0].path &&
+            detailAfter[0].fromFrame == detail0[0].fromFrame &&
+            detailAfter[0].toFrame == detail0[0].toFrame;
+        printf("PLAYLIST-TEST: added=%d afterClear=%d afterLoad=%d detailOk=%d file=%s\n",
+               added, afterClear, afterLoad, detailOk ? 1 : 0, jpl.c_str());
         fflush(stdout);
-        const bool ok = (added == 1 && afterClear == 0 && afterLoad == 1);
+        const bool ok = (added == 2 && afterClear == 0 && afterLoad == 2 && detailOk);
         std::_Exit(ok ? 0 : 2);
     }
 
