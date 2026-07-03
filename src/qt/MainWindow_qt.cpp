@@ -464,15 +464,19 @@ void MainWindow_Qt::buildMenuBar() {
         dlg.exec();
     })->setObjectName("menu.file.render");
 
-    // File → Remote Session… opens RemoteDialog_Qt (PR-41a). Modal
-    // dialog with host/server + join/client form sections, mirroring
-    // the FLTK remoteWindow.fl. Chat log + participant list land in
-    // PR-41b once gfcNetworkManager exposes a connection-event signal
-    // we can subscribe to.
-    fileMenu->addAction("Remote &Session…", this, [this]() {
-        RemoteDialog_Qt dlg(this);
-        dlg.exec();
-    })->setObjectName("menu.file.remote");
+    // File → Remote Session… and Dialogs → Remote Session… share one
+    // modeless persistent dialog (Task 6 / JEF-4). Lazy-created on
+    // first open; show()/raise() on subsequent opens so the window
+    // comes to the front without creating a new instance.
+    auto showRemote = [this]() {
+        if (!remoteDialog_) remoteDialog_ = new RemoteDialog_Qt(this);
+        remoteDialog_->show();
+        remoteDialog_->raise();
+        remoteDialog_->activateWindow();
+        remoteDialog_->refreshConnectionState();
+    };
+    fileMenu->addAction("Remote &Session…", this, showRemote)
+        ->setObjectName("menu.file.remote");
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
@@ -607,7 +611,7 @@ void MainWindow_Qt::buildMenuBar() {
                            this, [this, raiseDock]() { raiseDock(lutDock_); })
         ->setObjectName("menu.dialogs.lut");
     dialogsMenu->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
-                           this, [this]() { RemoteDialog_Qt dlg(this); dlg.exec(); })
+                           this, showRemote)
         ->setObjectName("menu.dialogs.remote");
     dialogsMenu->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
                            this, [this]() { RenderDialog_Qt dlg(this); dlg.exec(); })

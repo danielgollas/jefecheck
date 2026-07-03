@@ -6,8 +6,10 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QTextEdit>
 #include <QVBoxLayout>
 
 namespace {
@@ -89,8 +91,8 @@ QGroupBox* makeClientGroup(QWidget* parent,
 RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
     setObjectName("dialog.remote");
     setWindowTitle("Remote Session");
-    setModal(true);
-    resize(420, 380);
+    setModal(false);
+    resize(420, 520);
 
     auto* serverBox = makeServerGroup(this,
         serverNameEdit_, serverPortSpin_, serverPasswordEdit_, startServerBtn_);
@@ -108,6 +110,27 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
     statusLabel_->setObjectName("remote.status.label");
     statusLabel_->setStyleSheet("color: #888; font-style: italic;");
 
+    participantsList_ = new QListWidget(this);
+    participantsList_->setObjectName("remote.participants");
+    participantsList_->setMaximumHeight(120);
+
+    errorLabel_ = new QLabel(QString(), this);
+    errorLabel_->setObjectName("remote.error");
+    errorLabel_->setStyleSheet("color:#e06c75;");
+    errorLabel_->setWordWrap(true);
+
+    chatLogBox_ = new QGroupBox(tr("Chat log"), this);
+    chatLogBox_->setObjectName("remote.chatlogbox");
+    chatLogBox_->setCheckable(true);
+    chatLogBox_->setChecked(false);
+    auto* chatLayout = new QVBoxLayout(chatLogBox_);
+    chatLogView_ = new QTextEdit(chatLogBox_);
+    chatLogView_->setObjectName("remote.chatlog");
+    chatLogView_->setReadOnly(true);
+    chatLayout->addWidget(chatLogView_);
+    connect(chatLogBox_, &QGroupBox::toggled, chatLogView_, &QWidget::setVisible);
+    chatLogView_->setVisible(false);
+
     auto* footer = new QHBoxLayout();
     footer->setContentsMargins(0, 0, 0, 0);
     footer->addWidget(statusLabel_, /*stretch*/ 1);
@@ -119,6 +142,9 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
     outer->setSpacing(8);
     outer->addWidget(serverBox);
     outer->addWidget(clientBox);
+    outer->addWidget(participantsList_);
+    outer->addWidget(errorLabel_);
+    outer->addWidget(chatLogBox_);
     outer->addLayout(footer);
 
     connect(startServerBtn_, &QPushButton::clicked,
@@ -159,13 +185,22 @@ void RemoteDialog_Qt::onDisconnectClicked() {
 
 void RemoteDialog_Qt::refreshConnectionState() {
     const bool connected = jefe::qt::isRemoteConnected();
-    const bool isServer  = jefe::qt::isRemoteServer();
-    if (connected) {
-        statusLabel_->setText(isServer ? "Hosting (server)" : "Connected (client)");
-    } else {
-        statusLabel_->setText("Not connected");
-    }
+
+    statusLabel_->setText(QString::fromStdString(jefe::qt::remoteStatusText()));
+
     startServerBtn_->setEnabled(!connected);
     connectClientBtn_->setEnabled(!connected);
     disconnectBtn_->setEnabled(connected);
+
+    participantsList_->clear();
+    for (const auto& name : jefe::qt::remoteParticipants())
+        participantsList_->addItem(QString::fromStdString(name));
+
+    const auto errs = jefe::qt::remoteErrors();
+    errorLabel_->setText(errs.empty() ? QString()
+                                      : QString::fromStdString(errs.back()));
+
+    chatLogView_->clear();
+    for (const auto& line : jefe::qt::remoteChatLog())
+        chatLogView_->append(QString::fromStdString(line));
 }

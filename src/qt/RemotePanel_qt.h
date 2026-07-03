@@ -16,10 +16,13 @@
 
 #include <QDialog>
 
+class QGroupBox;
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QPushButton;
 class QSpinBox;
+class QTextEdit;
 
 class RemoteDialog_Qt : public QDialog {
     Q_OBJECT
@@ -52,7 +55,13 @@ private:
 
     // Shared.
     QPushButton* disconnectBtn_ = nullptr;
-    QLabel* statusLabel_ = nullptr;
+    QLabel*      statusLabel_ = nullptr;
+
+    // Live state widgets (refreshed by refreshConnectionState).
+    QListWidget* participantsList_ = nullptr;
+    QLabel*      errorLabel_ = nullptr;
+    QTextEdit*   chatLogView_ = nullptr;   // collapsible full chat history
+    QGroupBox*   chatLogBox_ = nullptr;    // checkable → collapses chatLogView_
 };
 
 #endif
