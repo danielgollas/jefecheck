@@ -375,6 +375,7 @@ void disconnectRemote();
 // (optionally sending a play message), then return.
 int  remoteTestServerConnectCount(int port, int settleMs);
 void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play);
+bool remoteTestServerSawPlay(int port, int settleMs);
 bool isRemoteConnected();
 bool isRemoteServer();
 std::vector<std::string> remoteParticipants();

@@ -1941,4 +1941,18 @@ void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool pla
     }
 }
 
+// Orchestrator/server role: host, pump while the child connects and toggles
+// play, and report whether the mirrored play state arrived on this (server) side.
+bool remoteTestServerSawPlay(int port, int settleMs) {
+    RemoteServerParams sp; sp.serverName = "jefe-remote-test"; sp.port = port; sp.password = "";
+    connectAsServer(sp);
+    bool sawPlay = false;
+    for (int t = 0; t < settleMs; t += 10) {
+        pumpNetwork();
+        if (isPlaying()) { sawPlay = true; break; }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return sawPlay;
+}
+
 }  // namespace jefe::qt

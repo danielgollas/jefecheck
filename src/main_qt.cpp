@@ -261,8 +261,6 @@ int main(int argc, char* argv[]) {
             std::_Exit(0);
         }
     }
-    // --remote-test: orchestrator/server role. Hosts, spawns a peer child,
-    // asserts the server observed the client join.
     if (hasRemoteTest(argc, argv)) {
         jefe::qt::initializeRenderingChain();
         const int port = 60123;
@@ -270,12 +268,13 @@ int main(int argc, char* argv[]) {
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--remote-test-peer", "127.0.0.1", QString::number(port)});
         peer.start();
-        const int peak = jefe::qt::remoteTestServerConnectCount(port, /*settleMs=*/3000);
+        const bool sawPlay = jefe::qt::remoteTestServerSawPlay(port, /*settleMs=*/4000);
+        const int  peak    = (int)jefe::qt::remoteParticipants().size();
         peer.waitForFinished(3000);
         if (peer.state() != QProcess::NotRunning) peer.kill();
-        printf("REMOTE-TEST: participants_peak=%d\n", peak);
+        printf("REMOTE-TEST: participants=%d mirrored_play=%d\n", peak, sawPlay ? 1 : 0);
         fflush(stdout);
-        std::_Exit(peak >= 1 ? 0 : 2);
+        std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
     }
 
     MainWindow_Qt window;
