@@ -19,5 +19,14 @@ python3 -m http.server 4000
 
 ## Deployment
 
-Auto-deploys via `.github/workflows/pages.yml` on push to `main` (uploads `site/`
-as a static Pages artifact). Live: https://danielgollas.github.io/jefecheck
+Publishing is **tag-driven**, not on every push to `main`. Deploy a new version of
+the site by pushing a `website-v*` tag:
+
+```bash
+git tag website-v1.0.0
+git push origin website-v1.0.0
+```
+
+`.github/workflows/pages.yml` (triggered by `website-v*` tags, or manually via the
+Actions tab → "Run workflow") uploads `site/` as a static Pages artifact and deploys
+it. Live: https://danielgollas.github.io/jefecheck
