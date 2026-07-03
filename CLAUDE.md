@@ -172,6 +172,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 - §5–6 **macOS drag-perf playbook** (QueuedConnection, targeted signals, cache-gated writes, 60Hz throttle; AppKit a11y cascade fires per write).
 - §8 CBArgs enum (`LOOPMODEONCE_ID` = positional 22/23/24, translate at the bridge) · §11 plate-card orientation-aware fixed-size layout · §12 AspectCropCombo is a `QToolButton` (aspect vs crop orthogonal).
 - §13 **playback FPS pacing** (seed `targetFPS` in ctor; `steady_clock`; on-screen FPS is an EMA indicator) · §18–20 **render/export** (OIIO saver; viewport via `parentWidget()`; float FBO for 16-bit/EXR; FFmpeg CLI not libav*; incremental, never a `QThread`) · §21 **pick subsystem** (GL color-pick pass, GL context current).
+- §26 **remote-session runtime** (pump always-on outside `needsPlaybackTick`; TU-safe getters for status/participants/chat/errors; `remoteDialog_` modeless lazy-created; chat+pointer overlay in `paintGL`; `--remote-test` two-process harness).
 
 ### Image Loading Flow
 1. `gfcFrame::loadFrame()` creates a loader based on file extension

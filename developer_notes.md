@@ -348,6 +348,124 @@ Wiring (all through `jefe::qt::*`, TU-safe per §1):
 
 **Reorder: DropOnly + buttons/keyboard; drag is affordance only.** The list's drag-drop mode is `QAbstractItemView::DropOnly` (not `InternalMove`) — in-list drag reorder is intentionally disabled because a `QListWidget` InternalMove would reorder the visual rows but not the backing `playlistManager` vector, silently diverging. Reorder is implemented via the ↑/↓ toolbar buttons and `Shift+↑` / `Shift+↓` keys, each calling `movePlaylistItemUp`/`movePlaylistItemDown` then `refreshList`. The drag-handle glyph on cards is a visual affordance. External file drops (Finder/Explorer → list) are accepted via a `QEvent::DragEnter` / `QEvent::DragMove` event-filter that calls `de->acceptProposedAction()` for URL payloads — necessary because `DropOnly`'s model rejects URL mime by default and would suppress the `Drop` event. Drop routing: a `.jpl` file calls `loadPlaylistFile` (replaces the whole list); a media drop on an existing card calls `appendTracksToPlaylistItem`; a media drop on an empty area calls `addPlaylistFiles`.
 
+## 26. Remote-session runtime wiring (Qt / JEF-4)
+
+**Files:** `src/qt/RemotePanel_qt.{h,cpp}`, `src/qt/SequenceLoadBridge_qt.{h,cpp}`, `src/qt/GlViewport_qt.cpp`, `src/qt/MainWindow_qt.{h,cpp}`, `src/main_qt.cpp`.
+
+### Network pump — always-on, outside the playback gate
+
+`MainWindow_Qt::playbackTimer_` fires every 4 ms (`Qt::PreciseTimer`). The timer lambda calls `jefe::qt::pumpNetwork()` **before** the `needsPlaybackTick()` gate, so RakNet sockets are serviced even when playback is idle:
+
+```cpp
+// MainWindow_qt.cpp ~308
+if (jefe::qt::pumpNetwork() && remoteDialog_)
+    remoteDialog_->refreshConnectionState();
+const bool needsTick = jefe::qt::needsPlaybackTick();
+```
+
+`pumpNetwork()` (`SequenceLoadBridge_qt.cpp`) calls `networkManager.update()` and returns `true` when connection state, participant list, or chat log changed — that return value gates the cheap `refreshConnectionState()` call so the panel only repaints when something actually changed.
+
+### TU-safe getters — the only path to network state
+
+UI code (panel, overlay, dialog) never includes `gfcNetworkManager.h` directly; that header lives in the bridge TU. All state is read through four getters declared in `SequenceLoadBridge_qt.h`:
+
+| Getter | Manager call |
+|---|---|
+| `jefe::qt::remoteStatusText()` | `networkManager.connectionStatusText()` |
+| `jefe::qt::remoteParticipants()` | `networkManager.participantNames()` |
+| `jefe::qt::remoteChatLog()` | `networkManager.chatLogLines()` |
+| `jefe::qt::remoteErrors()` | `networkManager.drainErrors()` |
+
+`drainErrors()` currently returns an empty vector — errors still surface via the RED status string returned by `connectionStatusText()`; a dedicated error queue is a later refinement. The old `*gui_qt` stub-class approach was removed in favour of these plain-function getters.
+
+### Modeless Remote dialog — lazy-created, show/raise
+
+`MainWindow_Qt` holds `RemoteDialog_Qt* remoteDialog_ = nullptr`. Both "File → Remote Session…" and "Dialogs → Remote Session…" share one closure:
+
+```cpp
+// MainWindow_qt.cpp ~472
+if (!remoteDialog_) remoteDialog_ = new RemoteDialog_Qt(this);
+remoteDialog_->show();
+remoteDialog_->raise();
+remoteDialog_->activateWindow();
+remoteDialog_->refreshConnectionState();
+```
+
+`RemoteDialog_Qt` is a non-modal `QDialog`. It exposes **Start server** / **Connect** / **Disconnect** buttons, a status label, a participant list, an error label, and a chat-log text area — all refreshed via the TU-safe getters in `refreshConnectionState()`. The bridge functions `connectAsServer(RemoteServerParams)`, `connectAsClient(RemoteClientParams)`, and `disconnectRemote()` keep the button handlers free of manager includes.
+
+### Chat + remote-pointer overlay in `GlViewport_Qt::paintGL`
+
+After `onDraw()` the viewport calls:
+
+```cpp
+// GlViewport_qt.cpp ~123
+jefe::qt::drawNetworkOverlay(int(width() * dpr), int(height() * dpr));
+```
+
+`drawNetworkOverlay` forwards to `networkManager.draw(w, h)`, which composites the chat-compose line and all remote-pointer cursors over the plates using the existing FLTK-era GL overlay code.
+
+**Chat keyboard entry** (`GlViewport_Qt::keyPressEvent`, ~393):
+
+1. If `remoteChatModeActive()` is true (composing), keystrokes route to `remoteChatAppend` / `remoteChatBackspace` / `remoteChatSubmit` (Enter) / `remoteChatCancel` (Esc); the handler returns early so plate shortcuts are suppressed.
+2. If not composing and the user presses Return/Enter while `isRemoteConnected()`, `remoteChatBegin()` activates compose mode.
+
+**Remote pointer broadcast** (`GlViewport_Qt::mouseMoveEvent`, ~239):
+
+```cpp
+jefe::qt::sendRemotePointer(xPx, yPx);
+```
+
+`sendRemotePointer` (bridge) calls `networkManager.sendPointerInfoMessage(info)`, which no-ops internally when disconnected or when coordinates are unchanged.
+
+### Automated two-process `--remote-test`
+
+`--remote-test` (orchestrator/server, `main_qt.cpp`) and `--remote-test-peer <ip> <port>` (child/client) form a headless localhost harness. Port 60123 is used. The orchestrator:
+
+1. Calls `jefe::qt::remoteTestServerSawPlay(port, settleMs=4000)` which hosts a server, pumps for up to 4 s, and returns `true` as soon as `isPlaying()` becomes true (the peer's mirrored play message arrived).
+2. Spawns the peer via `QProcess` with `--remote-test-peer 127.0.0.1 60123`. The peer connects, calls `togglePlayFwd()` (sends a play/pause to the server), holds for 2 s, then exits.
+3. Asserts `peak participants >= 1` and `mirrored_play == 1`; exits 0 on success, 2 on failure.
+
+**Recorded test run (2026-07-03):**
+
+```
+$ ./build/jefecheck.app/Contents/MacOS/jefecheck --remote-test; echo "exit=$?"
+No timer
+Client Connected!
+Connections = 1
+Nickname added: jefe-remote-test
+...
+Connections = 2
+Nickname added: peer
+...
+REMOTE-TEST: participants=2 mirrored_play=1
+exit=0
+```
+
+### Manual two-instance verification recipe
+
+The steps below require two GUI windows (performed by a human; `--remote-test` covers the connect + mirrored-play assertions automatically).
+
+**Optional startup smoke-check (no human needed):** launch two instances backgrounded and confirm neither crashes before the kill:
+
+```bash
+./build/jefecheck.app/Contents/MacOS/jefecheck &
+./build/jefecheck.app/Contents/MacOS/jefecheck &
+sleep 2 && kill %1 %2
+```
+
+Both instances launched and terminated cleanly on 2026-07-03 (verified by the task-9 agent run). The full interactive steps were not performed by automation; they are for human verification:
+
+1. Launch two instances: `./build/jefecheck.app/Contents/MacOS/jefecheck` (twice).
+2. **Instance A:** File → Remote Session… → fill in a server name and port (e.g. 60000) → **Start server**. Status should read "Hosting on port 60000".
+3. **Instance B:** File → Remote Session… → fill in `127.0.0.1` and port 60000 → **Connect**. Status should read "Connected".
+4. Confirm both participant lists show the peer's name; both status labels show connected/hosting.
+5. Load the same media via the Playlist on both. On A, press Space to play/pause — confirm B mirrors the playback state. W-drag on the viewport to adjust gamma on A — confirm B reflects the change. Toggle an FX on A — confirm B shows the same FX active.
+6. On A, press Return to enter chat mode, type a message, press Enter to send — confirm the message appears in B's viewport overlay and in both panels' chat-log area.
+7. Move the cursor around A's viewport — confirm B shows A's remote-pointer cursor composite over its plates.
+8. On B, click **Disconnect** — confirm A's participant list shrinks to 1 (only itself). Reconnect via B's **Connect** button — confirm both participant lists grow to 2 again.
+
+**Known limitation:** single-frame/still items do not trigger auto-advance in the Playlist (the latch requires a frame-number transition into the end limit — see §25).
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.
