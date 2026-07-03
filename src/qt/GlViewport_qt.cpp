@@ -117,6 +117,10 @@ void GlViewport_Qt::paintGL() {
         // instead of 0. It can change on resize, so refresh it every paint.
         jefe::qt::setScreenFBO(defaultFramebufferObject());
         listener_->onDraw();
+        // Chat + remote-pointer overlay (ported from the FLTK GlViewport).
+        // Drawn last so it composites over the plates.
+        const float dpr = devicePixelRatioF();
+        jefe::qt::drawNetworkOverlay(int(width() * dpr), int(height() * dpr));
     } else {
         // No listener attached — clear the framebuffer so we don't show
         // garbage from an uninitialized backing store.
@@ -377,6 +381,28 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
 }
 
 void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
+    // Remote chat entry: when in chat mode, keystrokes build the message.
+    if (jefe::qt::remoteChatModeActive()) {
+        if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+            jefe::qt::remoteChatSubmit();
+        } else if (e->key() == Qt::Key_Escape) {
+            jefe::qt::remoteChatCancel();
+        } else if (e->key() == Qt::Key_Backspace) {
+            jefe::qt::remoteChatBackspace();
+        } else if (!e->text().isEmpty() && e->text().at(0).isPrint()) {
+            jefe::qt::remoteChatAppend(e->text().toStdString());
+        }
+        update();     // repaint the overlay with the new text
+        return;       // consume — don't fall through to plate shortcuts
+    }
+    // Enter chat mode with Return when connected and not already typing.
+    if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) &&
+        jefe::qt::isRemoteConnected()) {
+        jefe::qt::remoteChatBegin();
+        update();
+        return;
+    }
+
     // Track color-correction modifier keys (W/E/Q/D/S) — combined with
     // a left-drag in mouseMoveEvent they trigger the matching field
     // adjustment. Don't gate on autoRepeat: holding the key while

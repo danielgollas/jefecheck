@@ -384,6 +384,20 @@ std::vector<std::string> remoteChatLog();
 std::vector<std::string> remoteErrors();
 bool pumpNetwork();
 
+// Chat overlay + keyboard chat entry (Task 7).
+// drawNetworkOverlay renders the ported networkManager.draw() chat/pointer
+// overlay into the current GL context (w, h are framebuffer pixels).
+// remoteChatModeActive returns true while the user is composing a message.
+// remoteChatBegin / remoteChatCancel start/discard; remoteChatAppend /
+// remoteChatBackspace edit; remoteChatSubmit sends and resets.
+void drawNetworkOverlay(int w, int h);
+bool remoteChatModeActive();
+void remoteChatBegin();
+void remoteChatCancel();
+void remoteChatBackspace();
+void remoteChatAppend(const std::string& s);
+void remoteChatSubmit();
+
 // Playlist (PR-40). The Qt PlaylistPanel calls these to drive
 // gfcPlaylistManager + gfcTrackManager without dragging glad in.
 //

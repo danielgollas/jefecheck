@@ -1955,4 +1955,25 @@ bool remoteTestServerSawPlay(int port, int settleMs) {
     return sawPlay;
 }
 
+// --- Chat overlay + keyboard chat entry (Task 7) ----------------------------
+
+void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }
+
+bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
+void remoteChatBegin()      { networkManager.gChatMode = 1; }
+void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }
+void remoteChatBackspace()  {
+    auto& s = networkManager.gChatTextString;
+    if (!s.empty()) s.pop_back();
+}
+void remoteChatAppend(const std::string& s) {
+    if (networkManager.gChatTextString.size() + s.size() < 254)
+        networkManager.gChatTextString += s;
+}
+void remoteChatSubmit() {
+    networkManager.sendChatMessage();          // reads gChatTextString
+    networkManager.gChatTextString.clear();
+    networkManager.gChatMode = 0;
+}
+
 }  // namespace jefe::qt
