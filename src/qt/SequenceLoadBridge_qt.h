@@ -368,6 +368,13 @@ struct RemoteClientParams {
 void connectAsServer(const RemoteServerParams& params);
 void connectAsClient(const RemoteClientParams& params);
 void disconnectRemote();
+
+// Headless two-process connection smoke-test helpers (--remote-test).
+// Server role: host on `port`, pump for `settleMs` ms, return peak
+// participant count. Client role: connect to `ip:port`, hold for `holdMs` ms
+// (optionally sending a play message), then return.
+int  remoteTestServerConnectCount(int port, int settleMs);
+void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play);
 bool isRemoteConnected();
 bool isRemoteServer();
 std::vector<std::string> remoteParticipants();

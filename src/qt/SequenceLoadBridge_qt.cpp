@@ -25,9 +25,11 @@
 #include "gfcsequencegui_qt.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <thread>
 
 extern gfcPlateManager plateManager;
 extern gfcPlaybackManager playbackManager;
@@ -1907,6 +1909,36 @@ bool pumpNetwork() {
                          (nowPeers != prevPeers) || (nowChat != prevChat);
     prevConnected = nowConnected; prevPeers = nowPeers; prevChat = nowChat;
     return changed;
+}
+
+// Orchestrator/server role: host, pump for settleMs while a child connects,
+// return the peak participant count observed.
+int remoteTestServerConnectCount(int port, int settleMs) {
+    RemoteServerParams sp; sp.serverName = "jefe-remote-test"; sp.port = port; sp.password = "";
+    connectAsServer(sp);
+    int peak = 0;
+    for (int t = 0; t < settleMs; t += 10) {
+        pumpNetwork();
+        peak = std::max<int>(peak, (int)remoteParticipants().size());
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return peak;
+}
+
+// Child/client role: connect, pump until connected (or timeout), optionally
+// start playback (mirrors a play message — used by Task 5), then hold.
+void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play) {
+    RemoteClientParams cp; cp.clientName = "peer"; cp.serverIP = ip; cp.port = port; cp.password = "";
+    connectAsClient(cp);
+    for (int t = 0; t < 3000 && !isRemoteConnected(); t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (play) togglePlayFwd();   // sends a play/pause message to the server
+    for (int t = 0; t < holdMs; t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
 }
 
 }  // namespace jefe::qt

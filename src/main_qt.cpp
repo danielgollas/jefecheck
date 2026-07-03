@@ -15,6 +15,9 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <string>
+
+#include <QProcess>
 
 #include "gfcStructures.h"
 #include "qt/iapplication_qt.h"
@@ -136,6 +139,22 @@ static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// --remote-test : orchestrator/server role (spawns a peer child).
+static bool hasRemoteTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--remote-test") == 0) return true;
+    return false;
+}
+// --remote-test-peer <ip> <port> : child/client role.
+static bool resolveRemotePeer(int argc, char* argv[], std::string& ip, int& port) {
+    for (int i = 1; i + 2 < argc + 1; ++i) {
+        if (std::strcmp(argv[i], "--remote-test-peer") == 0 && i + 2 < argc) {
+            ip = argv[i + 1]; port = std::atoi(argv[i + 2]); return true;
+        }
+    }
+    return false;
+}
+
 int main(int argc, char* argv[]) {
     // Make Qt's accessibility bridge live before QApplication touches
     // anything. On macOS this routes QAccessible → NSAccessibility,
@@ -230,6 +249,33 @@ int main(int argc, char* argv[]) {
         fflush(stdout);
         const bool ok = (added == 2 && afterClear == 0 && afterLoad == 2 && detailOk);
         std::_Exit(ok ? 0 : 2);
+    }
+
+    // --remote-test-peer <ip> <port>: child client role. Connects, holds,
+    // exits. Headless; playback state is pure data (no GL needed).
+    {
+        std::string peerIp; int peerPort = 0;
+        if (resolveRemotePeer(argc, argv, peerIp, peerPort)) {
+            jefe::qt::initializeRenderingChain();
+            jefe::qt::remoteTestPeerConnect(peerIp, peerPort, /*holdMs=*/2000, /*play=*/true);
+            std::_Exit(0);
+        }
+    }
+    // --remote-test: orchestrator/server role. Hosts, spawns a peer child,
+    // asserts the server observed the client join.
+    if (hasRemoteTest(argc, argv)) {
+        jefe::qt::initializeRenderingChain();
+        const int port = 60123;
+        QProcess peer;
+        peer.setProgram(QCoreApplication::applicationFilePath());
+        peer.setArguments({"--remote-test-peer", "127.0.0.1", QString::number(port)});
+        peer.start();
+        const int peak = jefe::qt::remoteTestServerConnectCount(port, /*settleMs=*/3000);
+        peer.waitForFinished(3000);
+        if (peer.state() != QProcess::NotRunning) peer.kill();
+        printf("REMOTE-TEST: participants_peak=%d\n", peak);
+        fflush(stdout);
+        std::_Exit(peak >= 1 ? 0 : 2);
     }
 
     MainWindow_Qt window;
