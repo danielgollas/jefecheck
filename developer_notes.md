@@ -484,7 +484,9 @@ sleep 2 && kill %1 %2
 
 Both instances launched and terminated cleanly on 2026-07-03 (verified by the task-9 agent run). The full interactive steps were not performed by automation; they are for human verification:
 
-1. Launch two instances: `./build/jefecheck.app/Contents/MacOS/jefecheck` (twice).
+1. Launch two instances. On macOS, double-clicking or `open build/jefecheck.app` a second time just re-activates the one running instance (LaunchServices single-instance behavior) — you get only one window. Force two separate processes with either:
+   - `open -n build/jefecheck.app` (run twice — `-n` opens a new instance each time), or
+   - `./build/jefecheck.app/Contents/MacOS/jefecheck &` (run the inner Mach-O binary directly, twice — this is what `--remote-test` does via QProcess).
 2. **Instance A:** File → Remote Session… → fill in a server name and port (e.g. 60000) → **Start server**. Status should read "Hosting on port 60000".
 3. **Instance B:** File → Remote Session… → fill in `127.0.0.1` and port 60000 → **Connect**. Status should read "Connected".
 4. Confirm both participant lists show the peer's name; both status labels show connected/hosting.
