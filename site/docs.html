@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JefeCheck Handbook — Documentation</title>
+  <meta name="description" content="Everything you need to install, run, and wire JefeCheck into your color pipeline.">
+  <link rel="icon" href="assets/images/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/main.css">
+  <script defer src="assets/js/main.js"></script>
+</head>
+<body>
+<div id="top" style="--accent: #e8a020; --accent-hover: #f0c060; background-color: #000; background-image: radial-gradient(rgba(255,255,255,.028) 1px, transparent 1px); background-size: 34px 34px; color: #f2f2f2; min-height: 100vh;">
+
+  <!-- NAV -->
+  <nav style="position: sticky; top: 0; z-index: 60; background: rgba(7,7,7,.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid #191919;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 0 24px; height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 24px;">
+      <a href="index.html#top" style="display: flex; align-items: center; gap: 11px; text-decoration: none;">
+        <span style="position: relative; width: 18px; height: 18px; border-radius: 4px; background: var(--accent, #e8a020); box-shadow: 0 0 14px rgba(232,160,32,.5);"></span>
+        <span style="font-weight: 900; font-size: 19px; letter-spacing: -.02em; color: #fff;">JefeCheck</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: .08em; color: #6f6f6f; border: 1px solid #262626; border-radius: 4px; padding: 2px 6px;">GPL v2</span>
+      </a>
+
+      <!-- Desktop nav (CSS shows/hides based on 880px breakpoint) -->
+      <div class="nav-desktop" style="align-items: center; gap: 28px;">
+        <a href="index.html#top" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Home</a>
+        <a href="#quick-start" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Quick Start</a>
+        <a href="#manual" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Manual</a>
+        <a href="#pipeline" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Pipeline</a>
+        <a href="#build" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Build</a>
+        <a href="https://github.com/danielgollas/jefecheck" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">GitHub</a>
+        <a href="index.html#quick-start" class="btn-primary" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #000; background: var(--accent, #e8a020); padding: 8px 16px; border-radius: 6px; text-decoration: none; transition: all .18s ease-out;">
+          <span style="display: inline-block; width: 0; height: 0; border-style: solid; border-width: 5px 4px 0 4px; border-color: #000 transparent transparent transparent;"></span>
+          Download
+        </a>
+      </div>
+
+      <!-- Hamburger button (CSS shows on mobile) -->
+      <button class="nav-hamburger" aria-label="Menu" style="background: transparent; border: 1px solid #2a2a2a; border-radius: 6px; width: 40px; height: 38px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; padding: 0;">
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+      </button>
+    </div>
+
+    <!-- Mobile menu (JS toggles .open) -->
+    <div class="nav-mobile-menu" style="border-top: 1px solid #191919; background: rgba(9,9,9,.98); padding: 8px 24px 16px;">
+      <a href="index.html#top" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Home</a>
+      <a href="#quick-start" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Quick Start</a>
+      <a href="#manual" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Manual</a>
+      <a href="#pipeline" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Pipeline</a>
+      <a href="#build" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Build</a>
+      <a href="https://github.com/danielgollas/jefecheck" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">GitHub</a>
+      <a href="index.html#quick-start" class="btn-primary" style="display: block; text-align: center; margin-top: 14px; font-weight: 700; color: #000; background: var(--accent, #e8a020); padding: 12px; border-radius: 6px; text-decoration: none;">Download</a>
+    </div>
+  </nav>
+
+  <!-- DOC HERO -->
+  <header style="max-width: 880px; margin: 0 auto; padding: 64px 24px 28px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent, #e8a020);">Documentation</div>
+    <h1 style="margin: 14px 0 0; font-size: clamp(2rem, 5vw, 3rem); font-weight: 900; letter-spacing: -.03em; color: #fff;">JefeCheck Handbook</h1>
+    <p style="margin: 14px 0 0; font-size: 1.05rem; line-height: 1.55; color: #adadad;">Everything you need to install, run, and wire JefeCheck into your color pipeline.</p>
+  </header>
+
+  <!-- TOC -->
+  <div style="position: sticky; top: 64px; z-index: 40; background: rgba(8,8,8,.9); backdrop-filter: blur(10px); border-top: 1px solid #161616; border-bottom: 1px solid #161616;">
+    <div style="max-width: 880px; margin: 0 auto; padding: 12px 24px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <a href="#quick-start" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">Quick Start</a>
+      <a href="#manual" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">User Manual</a>
+      <a href="#pipeline" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">Color &amp; FX</a>
+      <a href="#build" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">Build from Source</a>
+    </div>
+  </div>
+
+  <!-- READING COLUMN -->
+  <main style="max-width: 880px; margin: 0 auto; padding: 16px 24px 96px;">
+
+    <section id="quick-start" style="padding: 44px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">Quick Start</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Install with your platform's package manager, launch JefeCheck, then drag an image sequence or movie onto the window. The frame range is detected automatically and cached for real-time scrubbing.</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto;">
+        <div><span style="color: var(--accent, #e8a020);">$ </span>brew install --cask danielgollas/jefecheck/jefecheck</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck /path/to/shot.[1001-1096].exr</div>
+      </div>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 18px 0 0;">Press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Space</kbd> to play, <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">[ ]</kbd> to set the loop range, and <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F</kbd> to fit the frame to the viewport.</p>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #1a1a1a; margin: 40px 0;">
+
+    <section id="manual" style="padding: 4px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">User Manual</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The interface is built around three regions: the <strong style="color: #fff;">viewport</strong>, the <strong style="color: #fff;">transport bar</strong>, and dockable <strong style="color: #fff;">inspector panels</strong>. All panels can be torn off, stacked, or hidden — your layout is remembered per project.</p>
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Playback &amp; transport</h3>
+      <ul style="margin: 0; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li>Scrub by dragging the timeline or using the <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 0 6px; color: #eee;">←</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 0 6px; color: #eee;">→</kbd> keys.</li>
+        <li>JefeCheck targets real-time playback — up to 4K sequences at 24 fps on consumer hardware — and scrubs with audio.</li>
+        <li>Toggle ping-pong, loop, or play-once from the transport bar.</li>
+      </ul>
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Channels &amp; comparison</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0;">Isolate the <span style="color: #ff3b30; font-weight: 600;">R</span>, <span style="color: #2fd75b; font-weight: 600;">G</span>, <span style="color: #4d9bff; font-weight: 600;">B</span>, or alpha channels and apply RGBA masks on the fly. Load several sequences into separate tracks to compare, wipe, or stack them side by side.</p>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #1a1a1a; margin: 40px 0;">
+
+    <section id="pipeline" style="padding: 4px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">Color &amp; FX</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Adjust color non-destructively as you watch. Apply 1D or 3D LUTs and log-to-lin conversions on the fly, or build your own real-time effects in the GLSL FX Stack — pre-comps, chromakeys, and stereo / anaglyph composites included.</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto;">
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck --lut /luts/show_rec709.cube shot.[1001-1096].exr</div>
+      </div>
+      <ul style="margin: 18px 0 0; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li>1D / 3D LUTs and log-to-lin applied live — no re-render.</li>
+        <li>RGBA masks and channel isolation for quick checks.</li>
+        <li>GLSL FX Stack — author effects, save them to disk, reuse them.</li>
+      </ul>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #1a1a1a; margin: 40px 0;">
+
+    <section id="build" style="padding: 4px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">Build from Source</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">JefeCheck is free software under GPL v2. Clone the repository and follow the platform build steps documented in the source:</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto;">
+        <div><span style="color: var(--accent, #e8a020);">$ </span>git clone https://github.com/danielgollas/jefecheck.git</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>cd jefecheck</div>
+        <div><span style="color: #6c6c6c;"># see BUILDING.md for platform build steps</span></div>
+      </div>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 18px 0 0;">Build instructions and dependencies live in <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">BUILDING.md</span>. Contributions are welcome.</p>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer style="border-top: 1px solid #161616; background: #000;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 32px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 14px; height: 14px; border-radius: 3px; background: var(--accent, #e8a020);"></span>
+        <span style="font-size: 13px; color: #7e7e7e;">© 2006–2026 Daniel Gollás · GPL v2</span>
+      </div>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #555; letter-spacing: .04em;">free · cross-platform · open source</span>
+      <a href="https://github.com/danielgollas/jefecheck" class="hover-white" style="font-size: 13px; font-weight: 500; color: #b4b4b4; text-decoration: none; transition: color .18s ease-out;">GitHub ↗</a>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
