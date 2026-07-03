@@ -229,15 +229,23 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
 
-    // Broadcast local cursor to the remote session — only while click-dragging
-    // over a plate (not on plain hover), matching the original behavior. dragPlate_
-    // is the plate under the press; the bridge converts to that plate's image
-    // space and throttles to ~60Hz. Framebuffer pixels, GL bottom-left origin.
-    if ((e->buttons() & Qt::LeftButton) && dragPlate_ >= 0) {
+    // Broadcast the remote pointer/trail on RIGHT-button drag (left-drag pans the
+    // plate; right-drag is the annotation/pointer gesture, matching the original
+    // FLTK button3 path). dragPlate_ is only set on a left press, so resolve the
+    // plate under the cursor fresh via plateAtViewportPos. The bridge converts to
+    // that plate's image space and throttles to ~60Hz; the receiver stores the
+    // stream per-nickname and draws it as a fading trail.
+    if (e->buttons() & Qt::RightButton) {
         const float dpr = devicePixelRatioF();
-        const int xPx = int(float(e->position().x()) * dpr);
-        const int yPx = int((float(height()) - float(e->position().y())) * dpr);
-        jefe::qt::sendRemotePointer(xPx, yPx, dragPlate_);
+        const int lx = int(e->position().x());
+        const int ly = int(e->position().y());
+        // Quad lookup wants logical, TOP-left coords (same as the left-press
+        // hit-test). Image-space conversion (gluUnProject in the plate's
+        // framebuffer viewport) wants framebuffer, BOTTOM-left coords.
+        const int quad = jefe::qt::plateAtViewportPos(lx, ly, width(), height());
+        const int xFb = int(float(lx) * dpr);
+        const int yFb = int((float(height()) - float(ly)) * dpr);
+        jefe::qt::sendRemotePointer(xFb, yFb, quad);
     }
 
     if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {
