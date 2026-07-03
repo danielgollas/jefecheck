@@ -1,0 +1,49 @@
+/* JefeCheck marketing site — shared styles (translated from Claude Design .dc) */
+html { color-scheme: dark; scroll-behavior: smooth; }
+body { margin: 0; background: #000; color: #f2f2f2;
+  font-family: 'Roboto', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+* { box-sizing: border-box; }
+::selection { background: rgba(232,160,32,.3); }
+
+@keyframes jcScrub { 0% { left: 4%; } 100% { left: 96%; } }
+@keyframes jcFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes jcBlink { 0%,55% { opacity: 1; } 56%,100% { opacity: .25; } }
+
+/* Responsive nav: CSS replaces the design's JS isMobile (<880px) */
+.nav-desktop { display: flex; align-items: center; }
+.nav-hamburger { display: none; }
+.nav-mobile-menu { display: none; }
+.nav-mobile-menu.open { display: block; }
+@media (max-width: 880px) {
+  .nav-desktop { display: none; }
+  .nav-hamburger { display: flex; }
+}
+
+/* Hover states (replace style-hover attrs). transitions are set inline on elements. */
+.nav-link:hover { color: #fff !important; }
+.hover-white:hover { color: #fff !important; }
+.btn-primary:hover { background: #f0c060 !important; box-shadow: 0 0 28px rgba(232,160,32,.5); transform: translateY(-2px); }
+.btn-secondary:hover { border-color: #444 !important; background: #1a1a1a !important; transform: translateY(-2px); }
+.badge-os:hover { border-color: #e8a020 !important; box-shadow: 0 0 18px rgba(232,160,32,.25); }
+.feat-card { transition: all .2s ease-out; }
+.feat-card.feat-r:hover { border-color: rgba(255,59,48,.45) !important; transform: translateY(-3px); box-shadow: 0 18px 40px rgba(0,0,0,.5); }
+.feat-card.feat-g:hover { border-color: rgba(47,215,91,.45) !important; transform: translateY(-3px); box-shadow: 0 18px 40px rgba(0,0,0,.5); }
+.feat-card.feat-b:hover { border-color: rgba(77,155,255,.45) !important; transform: translateY(-3px); box-shadow: 0 18px 40px rgba(0,0,0,.5); }
+.gallery-item { transition: all .2s ease-out; }
+.gallery-item:hover { border-color: #e8a020 !important; box-shadow: 0 0 0 1px rgba(232,160,32,.25), 0 16px 36px rgba(0,0,0,.5); transform: translateY(-2px); }
+.cmd-card { transition: border-color .18s ease-out; }
+.cmd-card:hover { border-color: #3a3a3a !important; }
+.copy-btn { transition: all .15s ease-out; }
+.copy-btn:hover { border-color: #e8a020 !important; background: rgba(232,160,32,.08) !important; }
+.doc-card { transition: all .2s ease-out; }
+.doc-card:hover { border-color: #e8a020 !important; transform: translateY(-2px); box-shadow: 0 14px 32px rgba(0,0,0,.5); }
+.toc-link { transition: all .15s ease-out; }
+.toc-link:hover { border-color: #e8a020 !important; color: #fff !important; }
+
+/* Interactive show/hide */
+.trouble-body { display: none; }
+.trouble-body.open { display: block; animation: jcFade .25s ease-out; }
+.demo-overlay { transition: opacity .3s; }
+.demo-overlay.hidden { opacity: 0; pointer-events: none; }
+.demo-video { display: block; width: 100%; height: 100%; object-fit: cover; background: #000; }
