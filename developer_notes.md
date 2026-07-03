@@ -433,10 +433,39 @@ No timer
 Client Connected!
 Connections = 1
 Nickname added: jefe-remote-test
-...
+ColorAdded-2139062272
+Sending 1 nicknames
+sending jefe-remote-test
+Got a LoadedFXHashes
+Creating bitstream
+Got 0 hashes
+fxManager.getHashmap returned a hash map with 0 members
+Client: Server requested we send 0 FXs...FXs sent
+Server: Got a GFCNETID_REQUESTEDFXS
+ parsing and loading 0 FXs
+ parsing and loading 0 FXs
+Got a LoadedLUTHashes
+Creating bitstream
+Got 0 hashes
+lutManager.getHashmap returned a hash map with 0 members
 Connections = 2
 Nickname added: peer
-...
+ColorAdded-2139062272
+Sending 2 nicknames
+sending jefe-remote-test
+sending peer
+Client: Got GFCNETID_REQUESTLUTS
+ 0 LUTs Requested
+Server: Got a GFCNETID_REQUESTEDLUTS
+ parsing and loading 0 LUTs
+Got a LoadedFXHashes
+Creating bitstream
+Got 0 hashes
+fxManager.getHashmap returned a hash map with 0 members
+ parsing and loading 0 LUTs
+Server: Got a GFCNETID_REQUESTEDFXS
+ parsing and loading 0 FXs
+No timer
 REMOTE-TEST: participants=2 mirrored_play=1
 exit=0
 ```
