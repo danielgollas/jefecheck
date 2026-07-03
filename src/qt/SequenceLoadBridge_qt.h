@@ -398,6 +398,11 @@ void remoteChatBackspace();
 void remoteChatAppend(const std::string& s);
 void remoteChatSubmit();
 
+// Remote pointer broadcast (Task 8). Sends the local cursor position to all
+// session peers. xPx/yPx are framebuffer pixel coords with GL bottom-left
+// origin (caller applies dpr scale and Y-flip). No-ops when disconnected.
+void sendRemotePointer(int xPx, int yPx);
+
 // Playlist (PR-40). The Qt PlaylistPanel calls these to drive
 // gfcPlaylistManager + gfcTrackManager without dragging glad in.
 //

@@ -1959,6 +1959,19 @@ bool remoteTestServerSawPlay(int port, int settleMs) {
 
 void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }
 
+// --- Remote pointer broadcast (Task 8) --------------------------------------
+
+void sendRemotePointer(int xPx, int yPx) {
+    if (!networkManager.getConnected()) return;
+    gfcNetPointerInfo info;
+    info.x = xPx;
+    info.y = yPx;
+    info.quadID = 0;
+    info.scale = 1.0f;
+    info.color = 0;
+    networkManager.sendPointerInfoMessage(info);   // no-ops internally if unchanged/!connected
+}
+
 bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
 void remoteChatBegin()      { networkManager.gChatMode = 1; }
 void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }

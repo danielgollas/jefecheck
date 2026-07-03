@@ -229,6 +229,16 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
 
+    // Broadcast local cursor to the remote session (framebuffer pixel coords,
+    // GL bottom-left origin). sendPointerInfoMessage no-ops when unchanged /
+    // disconnected.
+    {
+        const float dpr = devicePixelRatioF();
+        const int xPx = int(float(e->position().x()) * dpr);
+        const int yPx = int((float(height()) - float(e->position().y())) * dpr);
+        jefe::qt::sendRemotePointer(xPx, yPx);
+    }
+
     if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {
         const float dpr = devicePixelRatioF();
         const bool gang = (e->modifiers() & Qt::AltModifier) != 0;
