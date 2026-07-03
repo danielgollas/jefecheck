@@ -43,7 +43,8 @@
   var overlay = document.querySelector('.demo-overlay');
   if (frame && video) {
     frame.addEventListener('click', function () {
-      if (overlay) overlay.classList.add('hidden');
+      if (!overlay || overlay.classList.contains('hidden')) return; // already started — let native controls handle clicks
+      overlay.classList.add('hidden');
       video.controls = true;
       video.play();
     });
