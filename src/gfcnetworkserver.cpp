@@ -1,5 +1,4 @@
 #include "gfcnetworkserver.h"
-#include "qt/gfcnetworkservergui_qt.h"
 #include "StringCompressor.h"
 
 #include <iostream>
@@ -26,9 +25,14 @@ extern gfcPlaylistManager playlistManager;
 extern gfcNetworkManager networkManager;
 
 gfcNetworkServer::gfcNetworkServer() {
-    myGUI=new gfcNetworkServerGUI_Qt;
     peer = RakNetworkFactory::GetRakPeerInterface();
 	middleOfSync=false;
+}
+
+std::vector<std::string> gfcNetworkServer::getParticipantNames() {
+    std::vector<std::string> names;
+    for (const auto& kv : nickNameAddressMap) names.push_back(kv.second);
+    return names;
 }
 
 
@@ -48,11 +52,6 @@ void gfcNetworkServer::start(gfcServerParams * params) {
         thePort=params->port;
         thePassword=params->password;
         this->name=params->serverName;
-    } else {
-        thePort=myGUI->getPort();
-		printf("thePort=%i\n",thePort);
-        thePassword=myGUI->getPassword();
-        this->name=myGUI->getName();
     }
 
     this->port=thePort;
@@ -66,10 +65,6 @@ void gfcNetworkServer::start(gfcServerParams * params) {
     peer->SetIncomingPassword ( thePassword.c_str(),thePassword.size() );
 	
     peer->Startup ( ( unsigned short ) GFCNET_MAX_CLIENTS,15,&socketDescriptor,1 );
-    if (myGUI) {
-        myGUI->setIPAddress ( peer->GetInternalID().ToString() );
-        myGUI->setStartStopButton("Stop");
-    }
 
     peer->SetMaximumIncomingConnections ( GFCNET_MAX_CLIENTS );
 
@@ -84,11 +79,7 @@ void gfcNetworkServer::initializeWidgets() {
 void gfcNetworkServer::stop() {
     peer->Shutdown ( 30 );
     nickNameAddressMap.clear();
-    if (myGUI) {
-        myGUI->setIPAddress("");
-        myGUI->setStartStopButton("Start");
-        myGUI->setStatus("Offline",GFCCOLOR_GRAY);
-    }
+    // GUI updates (IP, start/stop button, status) are managed by Qt
 }
 
 void gfcNetworkServer::Update() {
@@ -804,11 +795,11 @@ int gfcNetworkServer::getConnectionCount() {
 }
 
 void gfcNetworkServer::disableGUI() {
-    myGUI->disable();
+    // GUI enable/disable is managed by Qt — no-op
 }
 
 void gfcNetworkServer::enableGUI() {
-    myGUI->enable();
+    // GUI enable/disable is managed by Qt — no-op
 }
 
 void gfcNetworkServer::startFXSinc(SystemAddress sysaddress, bool broadcast) {

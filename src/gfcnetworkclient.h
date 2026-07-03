@@ -22,8 +22,6 @@
 #include "gfcNetworkStructures.h"
 #include "gfcpointerstorage.h"
 
-#include "gfcnetworkclientgui.h"
-
 #include "gfcplaylistitem.h"
 
 /**
@@ -79,12 +77,15 @@ public:
     bool getGotNewChatMessage();
     SystemAddress getServerSystemAddress();
     std::vector<gfcChatLogEntry> getChatLog();
+    std::string getStatus();
+    int getStatusColor();
+    std::vector<std::string> getPeersInSession();
     gfcPointerStorage pointers;
-    
+
 private:
-    
+    void setStatusInternal(std::string s, int color);
+
     bool gotMessages;
-    gfcNetworkClientGUI* myGUI;
     bool isConnected;
     bool attemptingConnection;
     RakPeerInterface *peer;

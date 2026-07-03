@@ -1,5 +1,4 @@
 #include "gfcnetworkclient.h"
-#include "qt/gfcnetworkclientgui_qt.h"
 
 
 #include "RakPeerInterface.h"
@@ -48,10 +47,19 @@ extern gfcPlaybackManager playbackManager;
 extern gfcNetworkManager networkManager;
 
 gfcNetworkClient::gfcNetworkClient() {
-    myGUI=new gfcNetworkClientGUI_Qt;
     peer = RakNetworkFactory::GetRakPeerInterface();
 	haveSentMyPlaylist=false;
 }
+
+void gfcNetworkClient::setStatusInternal(std::string s, int color) {
+    status = s;
+    statusColor = color;
+    statusChange = true;
+}
+
+std::string gfcNetworkClient::getStatus() { return status; }
+int gfcNetworkClient::getStatusColor() { return statusColor; }
+std::vector<std::string> gfcNetworkClient::getPeersInSession() { return peersInSession; }
 
 
 gfcNetworkClient::~gfcNetworkClient() {
@@ -77,16 +85,14 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
     std::string thePassword;
 
     if (params) {
-        theServerIP=params->serverIP;
-        thePort=params->port;
-        thePassword=params->password;
-        this->nickName=params->nickname;
-    } else {
-        theServerIP=myGUI->getIPAddress();
-        thePort=myGUI->getPort();
-        thePassword=myGUI->getPassword();
-        this->nickName=myGUI->getName();
+        theServerIP  = params->serverIP;
+        thePort      = params->port;
+        thePassword  = params->password;
+        this->nickName = params->nickname;
     }
+    // Store for saveCurrentToRecentIPs()
+    this->serverIP = theServerIP;
+    this->port     = thePort;
 	std::string conectingMessage="Client: Starting Connection to:";
 	conectingMessage+=theServerIP;
 	conectingMessage+=":";
@@ -103,8 +109,7 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
         Disconnect();
     }
 
-    myGUI->setStartStopButton("Cancel");
-    myGUI->setStatus("Attempting Connection...",GFCCOLOR_GRAY);
+    setStatusInternal("Attempting Connection...", GFCCOLOR_GRAY);
     
 	//since the connection attempt was succesful, save the ip and port to the recent
 	this->saveCurrentToRecentIPs();
@@ -123,9 +128,9 @@ void gfcNetworkClient::initializeWidgets() {
 void gfcNetworkClient::saveCurrentToRecentIPs()
 {
 	std::stringstream mashed;
-	mashed<<myGUI->getIPAddress();
-	mashed<<":";
-	mashed<<myGUI->getPort();
+	mashed << this->serverIP;
+	mashed << ":";
+	mashed << this->port;
 
 	int found=-1;
 	for (int i=sett.recentIPs.size()-1;i>=0;i--)
@@ -134,7 +139,7 @@ void gfcNetworkClient::saveCurrentToRecentIPs()
 		{
 			found=i;
 			break;
-		}	
+		}
 	}
 
 	if(found>=0)
@@ -143,49 +148,48 @@ void gfcNetworkClient::saveCurrentToRecentIPs()
 	}
 
 	sett.recentIPs.insert(sett.recentIPs.begin(),mashed.str());
-	
+
 	//check if the last one is still in the max to store range.
-	
+
 	if (sett.recentIPs.size()> sett.maxRecentIPs)
 	{
 		sett.recentIPs.erase(sett.recentIPs.begin()+sett.maxRecentIPs,sett.recentIPs.end());
 	}
-	
-	myGUI->setRecent(sett.recentIPs);
-
+	// recent-IP UI update is out of scope for Qt port
 }
 
 void gfcNetworkClient::setRecent(std::vector<std::string> recents){
-	myGUI->setRecent(recents);
+	// recent-IP UI is out of scope for Qt port
+	(void)recents;
 }
 
 void gfcNetworkClient::setAddress(std::string pip, std::string pport)
 {
-	myGUI->setIPAddress(pip);
-	myGUI->setPort(atoi(pport.c_str()));
+	this->serverIP = pip;
+	this->port = atoi(pport.c_str());
 	this->saveCurrentToRecentIPs();
 }
 
 void gfcNetworkClient::disableGUI() {
-    myGUI->disable();
+    // GUI enable/disable is managed by Qt — no-op
 }
 
 void gfcNetworkClient::enableGUI() {
-    myGUI->enable();
+    // GUI enable/disable is managed by Qt — no-op
 }
 
 void gfcNetworkClient::Disconnect() {
     peer->CloseConnection ( peer->GetSystemAddressFromIndex ( 0 ),true,0 );
     std::vector<std::string> emptyVector;
-    myGUI->setPeersInSession(emptyVector);
+    peersInSession = emptyVector; statusChange = true;
 
     if (attemptingConnection) {
-        myGUI->setStatus("Offline: Connection Attempt Canceled",GFCCOLOR_GRAY);
+        setStatusInternal("Offline: Connection Attempt Canceled", GFCCOLOR_GRAY);
         networkLog.addToLog("Client: Connection Attempt Canceled");
     }
 	else
 	{
-		myGUI->setStatus("Offline",GFCCOLOR_GRAY);
+		setStatusInternal("Offline", GFCCOLOR_GRAY);
 		networkLog.addToLog("Client: Ended Session");
 	}
 
@@ -193,7 +197,6 @@ void gfcNetworkClient::Disconnect() {
     isConnected=false;
     attemptingConnection=false;
 	peer->Shutdown(30);
-    myGUI->setStartStopButton("Connect");
 
     statusChange=true;
 
@@ -221,10 +224,9 @@ void gfcNetworkClient::Update() {
         switch ( p->data[0] ) {
         case ID_CONNECTION_REQUEST_ACCEPTED: {
             printf("Client Connected!\n");
-            myGUI->setStatus("Connected!... getting acquainted with everyone",GFCCOLOR_YELLOW);
+            setStatusInternal("Connected!... getting acquainted with everyone", GFCCOLOR_YELLOW);
 			networkManager.handleSincStart();
             serverSystemAddress=p->systemAddress;
-            myGUI->setStartStopButton("Disconnect");
             RakNet::BitStream bs;
             attemptingConnection=false;
             bs.Write ( ( unsigned char ) GFCNETID_NICKNAMESEND );
@@ -241,7 +243,7 @@ void gfcNetworkClient::Update() {
             if (attemptingConnection) {
                 printf ( "Client Error: ID_CONNECTION_ATTEMPT_FAILED\n" );
 
-                myGUI->setStatus("Offline, Connection Attempt Failed",GFCCOLOR_RED);
+                setStatusInternal("Offline, Connection Attempt Failed", GFCCOLOR_RED);
                 attemptingConnection=false;
                 Disconnect();
             }
@@ -257,7 +259,7 @@ void gfcNetworkClient::Update() {
 
         case ID_NO_FREE_INCOMING_CONNECTIONS: {
             printf ( "Client Error: ID_NO_FREE_INCOMING_CONNECTIONS\n" );
-            myGUI->setStatus("Could not Connect, no free incoming connections on server",GFCCOLOR_RED);
+            setStatusInternal("Could not Connect, no free incoming connections on server", GFCCOLOR_RED);
             networkLog.addToLog("Client: Could not Connect, no free incoming connections on server",GFCNETLOGTYPE_ALERT);
             Disconnect();
         }
@@ -266,7 +268,7 @@ void gfcNetworkClient::Update() {
         case ID_DISCONNECTION_NOTIFICATION: {
             printf("ID_DISCONNECTION_NOTIFICATION\n");
             //gIsServer=false; //WE DON'T STOP BEING THE SERVER UNTIL THE INTERNAL CLIENT DISCONNECTS
-            myGUI->setStatus("Offline, Disconnected from Server",GFCCOLOR_GRAY);
+            setStatusInternal("Offline, Disconnected from Server", GFCCOLOR_GRAY);
             Disconnect();
             networkLog.addToLog("Client: Disconnected from Server");
         }
@@ -276,7 +278,7 @@ void gfcNetworkClient::Update() {
             printf ( "Client Error: ID_CONNECTION_LOST\n" );
 
 
-            myGUI->setStatus("Offline, Connection Lost",GFCCOLOR_RED);
+            setStatusInternal("Offline, Connection Lost", GFCCOLOR_RED);
             Disconnect();
             networkLog.addToLog("Client: Connection Lost",GFCNETLOGTYPE_ALERT);
             //insertIntoNetLog ( "Connection Lost" );
@@ -313,7 +315,7 @@ void gfcNetworkClient::Update() {
                 //rmw.peersInSession->add ( tmpNickname );
             }
 
-            myGUI->setPeersInSession(tmpPeersInSession);
+            peersInSession = tmpPeersInSession; statusChange = true;
             networkLog.addToLog("Client: Updated peers in session");
             statusChange=true;
             isConnected=true;
@@ -528,8 +530,8 @@ void gfcNetworkClient::Update() {
 				
 				
 
-				myGUI->setStatus("Online!",GFCCOLOR_GREEN);
-				
+				setStatusInternal("Online!", GFCCOLOR_GREEN);
+
 				networkManager.sincStatus_LUT=1;
 				networkManager.sincStatus_FX=1;
 				networkManager.sincStatus_Stacks=1;

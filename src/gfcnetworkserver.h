@@ -19,7 +19,6 @@
 #include "RakSleep.h"
 #include "BitStream.h"
 #include "gfcnetworklog.h"
-#include "gfcnetworkservergui.h"
 #include "gfcNetworkStructures.h"
 
 /**
@@ -55,8 +54,8 @@ public:
     std::string getPassowrd();
     void setPassword(std::string ppassword);
     int getConnectionCount();
-    gfcNetworkServerGUI* myGUI;
-    
+    std::vector<std::string> getParticipantNames();
+
     void sendChatMessage(unsigned char type, std::string sender, std::string message);
     
     void disableGUI();
