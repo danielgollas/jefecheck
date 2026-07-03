@@ -381,6 +381,7 @@ std::vector<std::string> remoteParticipants();
 std::string              remoteStatusText();
 std::vector<std::string> remoteChatLog();
 std::vector<std::string> remoteErrors();
+std::vector<std::string> remoteNetworkLog();
 bool pumpNetwork();
 
 // Chat overlay + keyboard chat entry (Task 7).
@@ -399,8 +400,10 @@ void remoteChatSubmit();
 
 // Remote pointer broadcast (Task 8). Sends the local cursor position to all
 // session peers. xPx/yPx are framebuffer pixel coords with GL bottom-left
-// origin (caller applies dpr scale and Y-flip). No-ops when disconnected.
-void sendRemotePointer(int xPx, int yPx);
+// framebuffer pixels, GL bottom-left origin (caller applies dpr scale and
+// Y-flip); quadID is the plate under the cursor (dragPlate_). Converts to the
+// plate's image space before sending. No-ops when disconnected or quadID < 0.
+void sendRemotePointer(int xPx, int yPx, int quadID);
 
 // Playlist (PR-40). The Qt PlaylistPanel calls these to drive
 // gfcPlaylistManager + gfcTrackManager without dragging glad in.

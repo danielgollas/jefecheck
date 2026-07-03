@@ -229,14 +229,15 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
 
-    // Broadcast local cursor to the remote session (framebuffer pixel coords,
-    // GL bottom-left origin). The bridge drops unchanged positions and
-    // throttles to ~60Hz so hover motion can't flood the network channel.
-    {
+    // Broadcast local cursor to the remote session — only while click-dragging
+    // over a plate (not on plain hover), matching the original behavior. dragPlate_
+    // is the plate under the press; the bridge converts to that plate's image
+    // space and throttles to ~60Hz. Framebuffer pixels, GL bottom-left origin.
+    if ((e->buttons() & Qt::LeftButton) && dragPlate_ >= 0) {
         const float dpr = devicePixelRatioF();
         const int xPx = int(float(e->position().x()) * dpr);
         const int yPx = int((float(height()) - float(e->position().y())) * dpr);
-        jefe::qt::sendRemotePointer(xPx, yPx);
+        jefe::qt::sendRemotePointer(xPx, yPx, dragPlate_);
     }
 
     if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {

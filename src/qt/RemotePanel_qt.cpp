@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTextEdit>
+#include <QSysInfo>
 #include <QVBoxLayout>
 
 namespace {
@@ -131,6 +132,27 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
     connect(chatLogBox_, &QGroupBox::toggled, chatLogView_, &QWidget::setVisible);
     chatLogView_->setVisible(false);
 
+    // Connection/handshake log — the RakNet networkLog (nicknames, sync steps,
+    // connect/disconnect). Separate collapsible box from the chat log.
+    netLogBox_ = new QGroupBox(tr("Connection log"), this);
+    netLogBox_->setObjectName("remote.netlogbox");
+    netLogBox_->setCheckable(true);
+    netLogBox_->setChecked(false);
+    auto* netLayout = new QVBoxLayout(netLogBox_);
+    netLogView_ = new QTextEdit(netLogBox_);
+    netLogView_->setObjectName("remote.netlog");
+    netLogView_->setReadOnly(true);
+    netLayout->addWidget(netLogView_);
+    connect(netLogBox_, &QGroupBox::toggled, netLogView_, &QWidget::setVisible);
+    netLogView_->setVisible(false);
+
+    // Sensible defaults so local testing needs no typing: connect to localhost,
+    // a server named "server", and the machine hostname as the nickname.
+    const QString host = QSysInfo::machineHostName();
+    serverNameEdit_->setText("server");
+    clientIPEdit_->setText("127.0.0.1");
+    clientNameEdit_->setText(host);
+
     auto* footer = new QHBoxLayout();
     footer->setContentsMargins(0, 0, 0, 0);
     footer->addWidget(statusLabel_, /*stretch*/ 1);
@@ -145,6 +167,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
     outer->addWidget(participantsList_);
     outer->addWidget(errorLabel_);
     outer->addWidget(chatLogBox_);
+    outer->addWidget(netLogBox_);
     outer->addLayout(footer);
 
     connect(startServerBtn_, &QPushButton::clicked,
@@ -203,4 +226,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
     chatLogView_->clear();
     for (const auto& line : jefe::qt::remoteChatLog())
         chatLogView_->append(QString::fromStdString(line));
+
+    netLogView_->clear();
+    for (const auto& line : jefe::qt::remoteNetworkLog())
+        netLogView_->append(QString::fromStdString(line));
 }

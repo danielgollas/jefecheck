@@ -305,8 +305,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         if (!viewport_) return;
         // Service the RakNet sockets on every tick — inbound messages must
         // be received even while playback is idle. Cheap (non-blocking).
-        if (jefe::qt::pumpNetwork() && remoteDialog_)
-            remoteDialog_->refreshConnectionState();
+        // Returns true when connection/chat state changed OR an inbound packet
+        // applied mirrored state: refresh the panel and repaint the viewport so
+        // remote changes show without needing a local interaction on this side.
+        if (jefe::qt::pumpNetwork()) {
+            if (remoteDialog_) remoteDialog_->refreshConnectionState();
+            viewport_->update();
+        }
         // Skip everything when nothing is playing and no raw frames are
         // pending. needsPlaybackTick is an isPlaying check + 4 O(1)
         // queue::empty() probes.

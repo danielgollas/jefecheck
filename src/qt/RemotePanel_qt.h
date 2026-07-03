@@ -62,6 +62,8 @@ private:
     QLabel*      errorLabel_ = nullptr;
     QTextEdit*   chatLogView_ = nullptr;   // collapsible full chat history
     QGroupBox*   chatLogBox_ = nullptr;    // checkable → collapses chatLogView_
+    QTextEdit*   netLogView_ = nullptr;    // collapsible connection/handshake log
+    QGroupBox*   netLogBox_ = nullptr;     // checkable → collapses netLogView_
 };
 
 #endif

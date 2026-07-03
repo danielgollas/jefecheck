@@ -59,6 +59,8 @@ public:
     
     bool getConnected();
     bool getIsServer();
+    bool consumeGotMessages(); // true if the client processed any inbound packet since last call (drives a viewport repaint)
+    std::vector<std::string> networkLogLines(); // connection-log snapshot for the panel
     
     void startFXSinc(); //used by other managers to notify the network manager that a new LUT or FX was loaded.
     void startLUTSinc(); 

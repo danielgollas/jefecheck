@@ -155,6 +155,20 @@ bool gfcNetworkManager::getIsServer()
 	return isServer;
 }
 
+bool gfcNetworkManager::consumeGotMessages()
+{
+	// client.GetGotMessages() returns true and clears the flag if any packet was
+	// processed since the last call. Used to repaint the receiver's viewport when
+	// mirrored state arrives (otherwise QOpenGLWidget only repaints on local input).
+	return client.GetGotMessages();
+}
+
+std::vector<std::string> gfcNetworkManager::networkLogLines()
+{
+	extern gfcNetworkLog networkLog;
+	return networkLog.getLog();
+}
+
 void gfcNetworkManager::update()
 {
 	//update client and server 
@@ -188,6 +202,13 @@ void gfcNetworkManager::update()
 	//Check the event notification flags from the rest of the program and send appropiate messages.
 	if(connected)
 	{
+	// JEF-4: the multi-step asset-sync readiness handshake (FX/LUT/stack/playlist
+	// merge -> SENDALLREADY) does not complete in the Qt port, so `allReady` was
+	// staying 0 forever and draw() rendered a blocking gray "please wait" box over
+	// the frames. Mirroring/chat/pointers do NOT depend on allReady, so treat the
+	// session as ready once connected. Full asset-sync completion is a follow-up
+	// ticket (out of JEF-4 scope).
+	allReady=1;
 	float timeStep=playbackManager.getTimestep();
 	//check transformations
 	if(events[GFCNETEVENT_TRANSFORMS].readyForSend(timeStep))

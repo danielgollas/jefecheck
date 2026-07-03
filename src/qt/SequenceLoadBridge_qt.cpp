@@ -1897,6 +1897,7 @@ std::vector<std::string> remoteParticipants() { return networkManager.participan
 std::string              remoteStatusText()   { return networkManager.connectionStatusText(); }
 std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLines(); }
 std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
+std::vector<std::string> remoteNetworkLog()   { return networkManager.networkLogLines(); }
 
 bool pumpNetwork() {
     static bool        prevConnected = false;
@@ -1908,9 +1909,14 @@ bool pumpNetwork() {
     const size_t      nowPeers     = networkManager.participantNames().size();
     const size_t      nowChat      = networkManager.chatLogLines().size();
     const std::string nowStatus    = networkManager.connectionStatusText();
+    // Repaint whenever any inbound packet was processed this tick: client.Update()
+    // applies mirrored plate/playback/FX state to the managers, but QOpenGLWidget
+    // only repaints on local input — without this the receiver wouldn't redraw
+    // remote changes until the user interacted locally.
+    const bool gotInbound = networkManager.consumeGotMessages();
     const bool changed = (nowConnected != prevConnected) ||
                          (nowPeers != prevPeers) || (nowChat != prevChat) ||
-                         (nowStatus != prevStatus);
+                         (nowStatus != prevStatus) || gotInbound;
     prevConnected = nowConnected; prevPeers = nowPeers; prevChat = nowChat;
     prevStatus = nowStatus;
     return changed;
@@ -1952,9 +1958,10 @@ void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }
 
 // --- Remote pointer broadcast (Task 8) --------------------------------------
 
-void sendRemotePointer(int xPx, int yPx) {
+void sendRemotePointer(int xPx, int yPx, int quadID) {
     if (!networkManager.getConnected()) return;
-    // Drop unchanged positions and throttle to ~60Hz so hover motion can't
+    if (quadID < 0) return;   // not over a plate
+    // Drop unchanged positions and throttle to ~60Hz so drag motion can't
     // flood the reliable-ordered channel shared with playback/CC/FX/chat.
     static int lastX = INT_MIN, lastY = INT_MIN;
     if (xPx == lastX && yPx == lastY) return;
@@ -1963,8 +1970,19 @@ void sendRemotePointer(int xPx, int yPx) {
     if (now - lastSend < std::chrono::milliseconds(16)) return;
     lastSend = now;
     lastX = xPx; lastY = yPx;
+    // Send the cursor in the plate's IMAGE space (not raw framebuffer pixels):
+    // the receiver draws the pointer inside the matching plate, transformed by
+    // that plate's pan/zoom/rotation, so it must arrive as (quadID, image-x,
+    // image-y, scale). getCursorPositionIn2DSpace packs the scale into z. (This
+    // matches the original FLTK send and also supplies the correct quad/scale
+    // that Task 8 had hardcoded to 0/1.)
+    Vec3D pos = plateManager.getCursorPositionIn2DSpace(xPx, yPx, quadID);
     gfcNetPointerInfo info;
-    info.x = xPx; info.y = yPx; info.quadID = 0; info.scale = 1.0f; info.color = 0;
+    info.quadID = quadID;
+    info.x = (int)pos.x;
+    info.y = (int)pos.y;
+    info.scale = pos.z;
+    info.color = 0;
     networkManager.sendPointerInfoMessage(info);
 }
 
