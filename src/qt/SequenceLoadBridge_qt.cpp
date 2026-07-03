@@ -1895,4 +1895,18 @@ std::string              remoteStatusText()   { return networkManager.connection
 std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLines(); }
 std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
 
+bool pumpNetwork() {
+    static bool   prevConnected = false;
+    static size_t prevPeers     = 0;
+    static size_t prevChat      = 0;
+    networkManager.update();
+    const bool   nowConnected = networkManager.getConnected();
+    const size_t nowPeers     = networkManager.participantNames().size();
+    const size_t nowChat      = networkManager.chatLogLines().size();
+    const bool changed = (nowConnected != prevConnected) ||
+                         (nowPeers != prevPeers) || (nowChat != prevChat);
+    prevConnected = nowConnected; prevPeers = nowPeers; prevChat = nowChat;
+    return changed;
+}
+
 }  // namespace jefe::qt

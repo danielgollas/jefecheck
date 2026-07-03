@@ -303,6 +303,10 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     playbackTimer_->setInterval(4);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
         if (!viewport_) return;
+        // Service the RakNet sockets on every tick — inbound messages must
+        // be received even while playback is idle. Cheap (non-blocking).
+        if (jefe::qt::pumpNetwork() && remoteDialog_)
+            remoteDialog_->refreshConnectionState();
         // Skip everything when nothing is playing and no raw frames are
         // pending. needsPlaybackTick is an isPlaying check + 4 O(1)
         // queue::empty() probes.

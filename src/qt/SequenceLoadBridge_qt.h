@@ -374,6 +374,7 @@ std::vector<std::string> remoteParticipants();
 std::string              remoteStatusText();
 std::vector<std::string> remoteChatLog();
 std::vector<std::string> remoteErrors();
+bool pumpNetwork();
 
 // Playlist (PR-40). The Qt PlaylistPanel calls these to drive
 // gfcPlaylistManager + gfcTrackManager without dragging glad in.
