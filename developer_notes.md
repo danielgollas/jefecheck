@@ -415,7 +415,7 @@ jefe::qt::drawNetworkOverlay(int(width() * dpr), int(height() * dpr));
 jefe::qt::sendRemotePointer(xPx, yPx);
 ```
 
-`sendRemotePointer` (bridge) calls `networkManager.sendPointerInfoMessage(info)`, which no-ops internally when disconnected or when coordinates are unchanged.
+`sendRemotePointer` (bridge) drops unchanged positions and throttles to ~60Hz (16ms gate) so hover motion cannot flood the reliable-ordered channel shared with playback/CC/FX/chat messages.
 
 ### Automated two-process `--remote-test`
 
@@ -489,7 +489,7 @@ Both instances launched and terminated cleanly on 2026-07-03 (verified by the ta
 3. **Instance B:** File → Remote Session… → fill in `127.0.0.1` and port 60000 → **Connect**. Status should read "Connected".
 4. Confirm both participant lists show the peer's name; both status labels show connected/hosting.
 5. Load the same media via the Playlist on both. On A, press Space to play/pause — confirm B mirrors the playback state. W-drag on the viewport to adjust gamma on A — confirm B reflects the change. Toggle an FX on A — confirm B shows the same FX active.
-6. On A, press Return to enter chat mode, type a message, press Enter to send — confirm the message appears in B's viewport overlay and in both panels' chat-log area.
+6. On A, press Return to enter chat mode, type a message, press Enter to send — confirm the message appears in B's viewport overlay and in both panels' chat-log area. **Note:** Entering chat mode requires the viewport to have keyboard focus (click the viewport first), since Return only enters chat mode when the GlViewport has focus.
 7. Move the cursor around A's viewport — confirm B shows A's remote-pointer cursor composite over its plates.
 8. On B, click **Disconnect** — confirm A's participant list shrinks to 1 (only itself). Reconnect via B's **Connect** button — confirm both participant lists grow to 2 again.
 

@@ -230,8 +230,8 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
     }
 
     // Broadcast local cursor to the remote session (framebuffer pixel coords,
-    // GL bottom-left origin). sendPointerInfoMessage no-ops when unchanged /
-    // disconnected.
+    // GL bottom-left origin). The bridge drops unchanged positions and
+    // throttles to ~60Hz so hover motion can't flood the network channel.
     {
         const float dpr = devicePixelRatioF();
         const int xPx = int(float(e->position().x()) * dpr);

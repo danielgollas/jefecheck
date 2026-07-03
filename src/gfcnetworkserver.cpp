@@ -45,8 +45,8 @@ void gfcNetworkServer::start(gfcServerParams * params) {
     networkLog.addToLog("Starting Server...");
 
 
-    int thePort;
-    std::string thePassword;
+    int thePort = 0;
+    std::string thePassword = "";
 
     if (params) {
         thePort=params->port;

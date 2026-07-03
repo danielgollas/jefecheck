@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -1898,31 +1899,21 @@ std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLin
 std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
 
 bool pumpNetwork() {
-    static bool   prevConnected = false;
-    static size_t prevPeers     = 0;
-    static size_t prevChat      = 0;
+    static bool        prevConnected = false;
+    static size_t      prevPeers     = 0;
+    static size_t      prevChat      = 0;
+    static std::string prevStatus;
     networkManager.update();
-    const bool   nowConnected = networkManager.getConnected();
-    const size_t nowPeers     = networkManager.participantNames().size();
-    const size_t nowChat      = networkManager.chatLogLines().size();
+    const bool        nowConnected = networkManager.getConnected();
+    const size_t      nowPeers     = networkManager.participantNames().size();
+    const size_t      nowChat      = networkManager.chatLogLines().size();
+    const std::string nowStatus    = networkManager.connectionStatusText();
     const bool changed = (nowConnected != prevConnected) ||
-                         (nowPeers != prevPeers) || (nowChat != prevChat);
+                         (nowPeers != prevPeers) || (nowChat != prevChat) ||
+                         (nowStatus != prevStatus);
     prevConnected = nowConnected; prevPeers = nowPeers; prevChat = nowChat;
+    prevStatus = nowStatus;
     return changed;
-}
-
-// Orchestrator/server role: host, pump for settleMs while a child connects,
-// return the peak participant count observed.
-int remoteTestServerConnectCount(int port, int settleMs) {
-    RemoteServerParams sp; sp.serverName = "jefe-remote-test"; sp.port = port; sp.password = "";
-    connectAsServer(sp);
-    int peak = 0;
-    for (int t = 0; t < settleMs; t += 10) {
-        pumpNetwork();
-        peak = std::max<int>(peak, (int)remoteParticipants().size());
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    return peak;
 }
 
 // Child/client role: connect, pump until connected (or timeout), optionally
@@ -1963,13 +1954,18 @@ void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }
 
 void sendRemotePointer(int xPx, int yPx) {
     if (!networkManager.getConnected()) return;
+    // Drop unchanged positions and throttle to ~60Hz so hover motion can't
+    // flood the reliable-ordered channel shared with playback/CC/FX/chat.
+    static int lastX = INT_MIN, lastY = INT_MIN;
+    if (xPx == lastX && yPx == lastY) return;
+    static std::chrono::steady_clock::time_point lastSend{};
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastSend < std::chrono::milliseconds(16)) return;
+    lastSend = now;
+    lastX = xPx; lastY = yPx;
     gfcNetPointerInfo info;
-    info.x = xPx;
-    info.y = yPx;
-    info.quadID = 0;
-    info.scale = 1.0f;
-    info.color = 0;
-    networkManager.sendPointerInfoMessage(info);   // no-ops internally if unchanged/!connected
+    info.x = xPx; info.y = yPx; info.quadID = 0; info.scale = 1.0f; info.color = 0;
+    networkManager.sendPointerInfoMessage(info);
 }
 
 bool remoteChatModeActive() { return networkManager.gChatMode == 1; }

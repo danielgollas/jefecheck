@@ -147,7 +147,7 @@ static bool hasRemoteTest(int argc, char* argv[]) {
 }
 // --remote-test-peer <ip> <port> : child/client role.
 static bool resolveRemotePeer(int argc, char* argv[], std::string& ip, int& port) {
-    for (int i = 1; i + 2 < argc + 1; ++i) {
+    for (int i = 1; i + 2 < argc; ++i) {
         if (std::strcmp(argv[i], "--remote-test-peer") == 0 && i + 2 < argc) {
             ip = argv[i + 1]; port = std::atoi(argv[i + 2]); return true;
         }
@@ -268,6 +268,7 @@ int main(int argc, char* argv[]) {
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--remote-test-peer", "127.0.0.1", QString::number(port)});
         peer.start();
+        if (!peer.waitForStarted(2000)) { printf("REMOTE-TEST: child failed to start: %s\n", peer.errorString().toUtf8().constData()); fflush(stdout); std::_Exit(3); }
         const bool sawPlay = jefe::qt::remoteTestServerSawPlay(port, /*settleMs=*/4000);
         const int  peak    = (int)jefe::qt::remoteParticipants().size();
         peer.waitForFinished(3000);

@@ -79,8 +79,8 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
 	
 
 	
-    std::string theServerIP;
-    int thePort;
+    std::string theServerIP = "";
+    int thePort = 0;
 	
     std::string thePassword;
 
