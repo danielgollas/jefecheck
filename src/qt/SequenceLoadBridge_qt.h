@@ -370,6 +370,10 @@ void connectAsClient(const RemoteClientParams& params);
 void disconnectRemote();
 bool isRemoteConnected();
 bool isRemoteServer();
+std::vector<std::string> remoteParticipants();
+std::string              remoteStatusText();
+std::vector<std::string> remoteChatLog();
+std::vector<std::string> remoteErrors();
 
 // Playlist (PR-40). The Qt PlaylistPanel calls these to drive
 // gfcPlaylistManager + gfcTrackManager without dragging glad in.

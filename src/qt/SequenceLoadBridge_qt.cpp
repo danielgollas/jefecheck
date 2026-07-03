@@ -1053,14 +1053,8 @@ void connectAsClient(const RemoteClientParams& params) {
 
 void disconnectRemote() {
     if (!networkManager.getConnected()) return;
-    // gfcNetworkManager::stopConnection is declared but never defined
-    // — the FLTK side never wired client-side disconnect either, and
-    // RakNet itself tears the client peer down on app exit. Server-
-    // side stop is supported. PR-41b will fill in the client-side
-    // disconnect path (likely via the existing peer destructor).
-    if (networkManager.getIsServer()) {
-        networkManager.stopServer();
-    }
+    if (networkManager.getIsServer()) networkManager.stopServer();
+    else                              networkManager.stopConnection();
 }
 
 bool isRemoteConnected() {
@@ -1895,5 +1889,10 @@ bool loadCCFavoritesFile(const std::string& path) {
 std::string getFavoritesFilePath() {
     return ::getApplicationDataPath() + "favorites.jcs";
 }
+
+std::vector<std::string> remoteParticipants() { return networkManager.participantNames(); }
+std::string              remoteStatusText()   { return networkManager.connectionStatusText(); }
+std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLines(); }
+std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
 
 }  // namespace jefe::qt

@@ -15,6 +15,7 @@
 
 
 #include <string>
+#include <vector>
 
 enum networkEventTypes{GFCNETEVENT_TRANSFORMS=0, GFCNETEVENT_FX, GFCNETEVENT_OTHER, GFCNETEVENT_COLOR, GFCNETEVENT_NUMOFEVENTTYPES};
 
@@ -36,6 +37,11 @@ public:
     void startConnection(gfcConnectionParams *params=0);
     void stopConnection();
     
+    std::vector<std::string> participantNames();
+    std::string connectionStatusText();
+    std::vector<std::string> chatLogLines();
+    std::vector<std::string> drainErrors();
+
     void sendChatMessage();
     
     void sendPlayPauseMessage(gfcNetPlayPauseInfo info);

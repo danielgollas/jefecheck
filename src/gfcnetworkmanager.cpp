@@ -110,8 +110,39 @@ void gfcNetworkManager::stopServer()
 	isServer=false;
 	connected=false;
 	client.enableGUI();
-	
-	
+
+
+}
+
+void gfcNetworkManager::stopConnection()
+{
+    client.Disconnect();
+    isServer = false;
+    connected = false;
+    server.enableGUI();
+}
+
+std::vector<std::string> gfcNetworkManager::participantNames() {
+    if (isServer) return server.getParticipantNames();
+    return client.getPeersInSession();
+}
+
+std::string gfcNetworkManager::connectionStatusText() {
+    if (isServer) return connected ? "Hosting (server)" : "Not hosting";
+    return client.getStatus();   // e.g. "Online!", "Attempting Connection...", "Offline"
+}
+
+std::vector<std::string> gfcNetworkManager::chatLogLines() {
+    std::vector<std::string> out;
+    for (auto& e : client.getChatLog())
+        out.push_back(e.sender + ": " + e.message);
+    return out;
+}
+
+std::vector<std::string> gfcNetworkManager::drainErrors() {
+    // Errors already surface through client status strings (RED). Reserved
+    // for a dedicated error queue; empty for now so callers compile.
+    return {};
 }
 
 bool gfcNetworkManager::getConnected()
@@ -139,6 +170,7 @@ void gfcNetworkManager::update()
 		if(!client.getIsConnected() && !client.getAttemptingConnection())
 		{
 			server.enableGUI();
+			if(!isServer) connected = false;   // client peer dropped
 		}
 		
 		if(client.getIsConnected())
