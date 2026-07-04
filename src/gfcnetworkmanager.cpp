@@ -155,6 +155,14 @@ bool gfcNetworkManager::getIsServer()
 	return isServer;
 }
 
+bool gfcNetworkManager::overlayAnimating()
+{
+	// The chat/status overlay is fading out (chatFadeCounter counting down) or
+	// the user is typing a chat message — either needs the idle tick to keep
+	// repainting so the fade actually animates instead of jumping.
+	return chatFadeCounter > 0 || gChatMode != 0;
+}
+
 bool gfcNetworkManager::consumeGotMessages()
 {
 	// client.GetGotMessages() returns true and clears the flag if any packet was

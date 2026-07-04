@@ -223,7 +223,17 @@ bool needsPlaybackTick() {
     // playback is stopped — otherwise it only appears/updates on the next
     // forced repaint (mouse move, play).
     if (plateManager.hasActiveAnimations()) return true;
+    // The remote chat/status overlay fading out (or chat entry) needs the tick
+    // to keep repainting while playback is stopped, same as plate animations.
+    if (networkManager.overlayAnimating()) return true;
     return false;
+}
+
+// Any time-based animation that needs the viewport repainted every tick even
+// when playback is stopped and no new frame is dirty: settling flip/flop,
+// fading remote-pointer trails, or the fading chat/status overlay.
+bool hasActiveViewportAnimation() {
+    return plateManager.hasActiveAnimations() || networkManager.overlayAnimating();
 }
 
 bool tickPlayback() {

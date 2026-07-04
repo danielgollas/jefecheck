@@ -94,6 +94,7 @@ void uploadPendingTextures();
 // callback in MainWindow_qt.cpp can skip the makeCurrent/tickPlayback
 // pair entirely — saves ~60 GL-context switches per second at idle.
 bool needsPlaybackTick();
+bool hasActiveViewportAnimation();
 
 // Hands back the gfcPlateGUI_Qt that gfcPlate reads its rendering
 // state from for plate `whichPlate`. PlateCard_Qt binds its widgets

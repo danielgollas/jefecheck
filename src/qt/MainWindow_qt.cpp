@@ -331,7 +331,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                 viewport_->doneCurrent();
                 dirty = true;
             }
-            if (dirty) {
+            // Repaint on a new frame (dirty) OR while any time-based animation
+            // is settling: updateAnimations() advances flip/flop, pointer-trail
+            // fade, and the overlay status fade without always flipping the
+            // changed flag, so those would otherwise only animate during
+            // playback. hasActiveViewportAnimation() keeps them repainting while
+            // stopped.
+            if (dirty || jefe::qt::hasActiveViewportAnimation()) {
                 viewport_->update();
             }
         }
