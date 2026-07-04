@@ -1,522 +1,364 @@
----
-layout: default
-title: Home
----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JefeCheck — high-res image flipbook for film &amp; TV post</title>
+  <meta name="description" content="A free, easy-to-use yet highly flexible high-res image flipbook for film and TV post work.">
+  <link rel="icon" href="assets/images/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/main.css">
+  <script defer src="assets/js/main.js"></script>
+</head>
+<body>
+<div id="top" style="--accent: #e8a020; --accent-hover: #f0c060; background-color: #000; background-image: radial-gradient(rgba(255,255,255,.028) 1px, transparent 1px); background-size: 34px 34px; color: #f2f2f2; min-height: 100vh;">
 
-<style>
-  .hero {
-    text-align: center;
-    padding: 4rem 1rem 3rem;
-    background: #000;
-    margin: -2rem -2rem 2rem -2rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .hero .logo {
-    max-width: 420px;
-    width: 80%;
-    height: auto;
-    margin: 0 auto 2rem;
-    display: block;
-  }
-  .hero .description {
-    font-size: 1.1rem;
-    color: var(--text-secondary);
-    max-width: 640px;
-    margin: 0 auto 2rem;
-    line-height: 1.6;
-  }
-  .hero .cta-buttons {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 2rem;
-  }
-  .hero .cta-buttons a {
-    display: inline-block;
-    padding: 0.75rem 1.75rem;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 1rem;
-    transition: background 0.2s, color 0.2s;
-  }
-  .open-source-badge {
-    display: inline-block;
-    margin-top: 1.5rem;
-    padding: 0.4rem 1rem;
-    background: rgba(232, 160, 32, 0.12);
-    border: 1px solid var(--accent);
-    border-radius: 999px;
-    color: var(--accent) !important;
-    font-size: 0.9rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    transition: background 0.2s, transform 0.2s;
-  }
-  .open-source-badge:hover {
-    background: rgba(232, 160, 32, 0.25);
-    text-decoration: none !important;
-    transform: translateY(-1px);
-  }
-  .btn-primary { background: var(--accent); color: #121212 !important; }
-  .btn-primary:hover { background: #f0c060; text-decoration: none !important; color: #121212 !important; }
-  .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary) !important; border: 1px solid var(--border); }
-  .btn-secondary:hover { background: var(--border); text-decoration: none !important; color: var(--text-primary) !important; }
+  <!-- NAV -->
+  <nav style="position: sticky; top: 0; z-index: 60; background: rgba(7,7,7,.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid #191919;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 0 24px; height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 24px;">
+      <a href="#top" style="display: flex; align-items: center; gap: 11px; text-decoration: none;">
+        <span style="position: relative; width: 18px; height: 18px; border-radius: 4px; background: var(--accent, #e8a020); box-shadow: 0 0 14px rgba(232,160,32,.5);"></span>
+        <span style="font-weight: 900; font-size: 19px; letter-spacing: -.02em; color: #fff;">JefeCheck</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: .08em; color: #6f6f6f; border: 1px solid #262626; border-radius: 4px; padding: 2px 6px;">GPL v2</span>
+      </a>
 
-  .demo-video {
-    max-width: 900px;
-    margin: 0 auto 2rem;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-    position: relative;
-    cursor: pointer;
-  }
-  .demo-video video {
-    display: block;
-    width: 100%;
-    height: auto;
-    background: #000;
-  }
-  .play-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.35);
-    transition: background 0.2s, opacity 0.3s;
-  }
-  .demo-video:hover .play-overlay {
-    background: rgba(0, 0, 0, 0.15);
-  }
-  .play-overlay.hidden {
-    opacity: 0;
-    pointer-events: none;
-  }
-  .play-button {
-    width: 110px;
-    height: 110px;
-    border-radius: 50%;
-    background: rgba(232, 160, 32, 0.95);
-    box-shadow: 0 0 40px rgba(232, 160, 32, 0.6),
-                0 8px 32px rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s, background 0.2s;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-  }
-  .demo-video:hover .play-button {
-    transform: scale(1.08);
-    background: #f0c060;
-  }
-  .play-button::before {
-    content: "";
-    display: block;
-    width: 0;
-    height: 0;
-    margin-left: 8px;
-    border-style: solid;
-    border-width: 22px 0 22px 36px;
-    border-color: transparent transparent transparent #121212;
-  }
-  @media (max-width: 700px) {
-    .play-button { width: 80px; height: 80px; }
-    .play-button::before { border-width: 16px 0 16px 26px; margin-left: 6px; }
-  }
-
-  .features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1.5rem;
-    margin: 3rem 0;
-  }
-  .feature-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.75rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
-  }
-  .feature-card:hover {
-    border-color: var(--accent-dim);
-    box-shadow: 0 0 20px var(--accent-glow);
-  }
-  .feature-card h3 {
-    color: var(--accent);
-    margin: 0 0 0.75rem;
-    font-size: 1.4rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-  }
-  .feature-card p {
-    color: var(--text-secondary);
-    margin: 0;
-    font-size: 0.95rem;
-    line-height: 1.6;
-  }
-  .feature-card ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.6;
-  }
-  .feature-card li {
-    padding: 0.25rem 0 0.25rem 1.25rem;
-    position: relative;
-  }
-  .feature-card li::before {
-    content: "▸";
-    position: absolute;
-    left: 0;
-    color: var(--accent);
-    font-size: 0.85rem;
-  }
-
-  .screenshot-gallery {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1rem;
-    margin: 2rem 0;
-  }
-  .screenshot-gallery figure {
-    margin: 0;
-    text-align: center;
-  }
-  .screenshot-gallery img {
-    width: 100%;
-    height: auto;
-    border: none;
-    border-radius: 4px;
-    margin: 0 0 0.5rem;
-  }
-  .screenshot-gallery figcaption {
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    font-style: italic;
-  }
-
-  .download-section {
-    text-align: center;
-    padding: 2.5rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin: 3rem 0 2rem;
-  }
-  .download-section h2 {
-    color: var(--text-primary) !important;
-    border: none;
-    margin: 0 0 0.75rem;
-    font-size: 1.75rem;
-  }
-  .download-section p {
-    color: var(--text-secondary);
-    margin-bottom: 1.5rem;
-  }
-  .platform-badges {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .platform-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.6rem 1.25rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-primary) !important;
-    font-size: 0.95rem;
-    font-weight: 500;
-    transition: border-color 0.2s, transform 0.2s;
-  }
-  .platform-badge:hover {
-    border-color: var(--accent);
-    text-decoration: none !important;
-    transform: translateY(-2px);
-  }
-  .platform-badge img { height: 24px; width: auto; border: none; margin: 0; }
-
-  .install-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
-    margin: 0 0 1.5rem;
-    text-align: left;
-  }
-  @media (max-width: 800px) { .install-grid { grid-template-columns: minmax(0, 1fr); } }
-  .install-card {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    min-width: 0;
-  }
-  .install-card-header {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    color: var(--text-primary);
-    font-weight: 600;
-    font-size: 1rem;
-  }
-  .install-card-header img { height: 22px; width: auto; border: none; margin: 0; }
-  .install-card-cmd {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.55rem 0.75rem;
-    font-family: "SF Mono", Consolas, monospace;
-    font-size: 0.78rem;
-    color: var(--text-primary);
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-  .install-card-fallback {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: auto;
-  }
-  .install-card-fallback a { color: var(--text-secondary); }
-
-  .install-notes {
-    margin: 1.5rem auto 0;
-    max-width: 640px;
-    text-align: left;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem 1.25rem;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-  }
-  .install-notes summary {
-    cursor: pointer;
-    color: var(--text-primary);
-    font-weight: 500;
-    font-size: 0.9rem;
-  }
-  .install-notes summary:hover { color: var(--accent); }
-  .install-notes h4 {
-    margin: 1rem 0 0.4rem;
-    color: var(--accent);
-    font-size: 0.9rem;
-  }
-  .install-notes h4:first-of-type { margin-top: 0.75rem; }
-  .install-notes code {
-    background: var(--code-bg);
-    padding: 0.1em 0.4em;
-    border-radius: 3px;
-    font-size: 0.85em;
-    font-family: "SF Mono", Consolas, monospace;
-    color: #d4976c;
-  }
-  .install-notes pre {
-    background: var(--code-bg);
-    padding: 0.6rem 0.8rem;
-    border-radius: 4px;
-    overflow-x: auto;
-    margin: 0.4rem 0;
-    border: 1px solid var(--border);
-    font-size: 0.8rem;
-  }
-  .install-notes pre code { background: none; padding: 0; color: var(--text-primary); }
-
-  .mexico-badge {
-    display: inline-block;
-    margin: 1rem 0 0;
-  }
-  .mexico-badge img {
-    height: 64px;
-    width: auto;
-    border: none;
-    margin: 0;
-  }
-
-  .links-section {
-    display: flex;
-    gap: 2rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin: 3rem 0 2rem;
-    padding: 1.5rem;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-  }
-  .links-section a {
-    font-weight: 500;
-    font-size: 1rem;
-  }
-
-  @media (max-width: 700px) {
-    .hero { padding: 2.5rem 1rem 2rem; }
-    .hero .logo { width: 90%; }
-  }
-</style>
-
-<div class="hero">
-  <img src="{{ '/assets/images/JefeCheck_LogoTiny.png' | relative_url }}" alt="JefeCheck" class="logo">
-  <p class="description">
-    A free, easy-to-use yet highly flexible high-res image flipbook for film and TV post work.
-    Artist, TD, and budget friendly.
-  </p>
-  <div class="cta-buttons">
-    <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary">Download</a>
-    <a href="{{ '/quick-start' | relative_url }}" class="btn-secondary">Quick Start</a>
-  </div>
-  <div><a href="https://github.com/danielgollas/jefecheck" class="open-source-badge">Now Fully Open Source</a></div>
-</div>
-
-<div class="demo-video" id="demoVideoContainer">
-  <video id="demoVideo" poster="{{ '/assets/images/ScreenShotHome.jpg' | relative_url }}" preload="metadata" playsinline>
-    <source src="{{ '/assets/DemoVideo.mp4' | relative_url }}" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-  <div class="play-overlay" id="playOverlay">
-    <button class="play-button" aria-label="Play demo video"></button>
-  </div>
-</div>
-
-<script>
-  (function() {
-    var container = document.getElementById('demoVideoContainer');
-    var video = document.getElementById('demoVideo');
-    var overlay = document.getElementById('playOverlay');
-    function startVideo(e) {
-      if (e) e.stopPropagation();
-      overlay.classList.add('hidden');
-      video.controls = true;
-      video.play();
-    }
-    container.addEventListener('click', startVideo);
-    video.addEventListener('play', function() { overlay.classList.add('hidden'); });
-  })();
-</script>
-
-<div class="features">
-  <div class="feature-card">
-    <h3>PLAY</h3>
-    <ul>
-      <li>Up to 4 sequences side by side</li>
-      <li>Full resolution, no proxies</li>
-      <li>Compare, scrub, zoom, pan</li>
-      <li>Variable playback speed</li>
-      <li>Frame-accurate inspection</li>
-    </ul>
-  </div>
-  <div class="feature-card">
-    <h3>PROCESS</h3>
-    <ul>
-      <li>Non-destructive, real-time, full resolution</li>
-      <li>GLSL shader plug-in system</li>
-      <li>3D Lookup Tables (LUTs)</li>
-      <li>Brightness, contrast, saturation, gamma</li>
-      <li>Composite sequences over each other</li>
-    </ul>
-  </div>
-  <div class="feature-card">
-    <h3>SHARE</h3>
-    <ul>
-      <li>Remote sessions over LAN or Internet</li>
-      <li>Synchronized playback &amp; controls</li>
-      <li>Shared FX stacks and LUTs</li>
-      <li>Text chat</li>
-      <li>Remote pointers</li>
-    </ul>
-  </div>
-</div>
-
-<div class="screenshot-gallery">
-  <figure>
-    <img src="{{ '/assets/images/ss_GreenKM31.jpg' | relative_url }}" alt="Quick and dirty realtime 2K chromas">
-    <figcaption>Quick and dirty realtime 2K chromas</figcaption>
-  </figure>
-  <figure>
-    <img src="{{ '/assets/images/ss_mount.jpg' | relative_url }}" alt="Load 16 bit OpenEXR sequences">
-    <figcaption>Load 16 bit OpenEXR sequences</figcaption>
-  </figure>
-  <figure>
-    <img src="{{ '/assets/images/ss_colibriOver.jpg' | relative_url }}" alt="Real Time 2K Over pre-comps">
-    <figcaption>Real Time 2K Over pre-comps</figcaption>
-  </figure>
-  <figure>
-    <img src="{{ '/assets/images/ss_exrRange.jpg' | relative_url }}" alt="Adjust exposure in EXRs with High Dynamic Range">
-    <figcaption>Adjust exposure in EXRs with High Dynamic Range</figcaption>
-  </figure>
-  <figure>
-    <img src="{{ '/assets/images/ss_dpxMetadata.jpg' | relative_url }}" alt="Read embedded DPX, EXIF or OpenEXR metadata">
-    <figcaption>Read embedded DPX, EXIF or OpenEXR metadata</figcaption>
-  </figure>
-  <figure>
-    <img src="{{ '/assets/images/ss_colibriAlpha.jpg' | relative_url }}" alt="Different Views of the same track">
-    <figcaption>Different views of the same track</figcaption>
-  </figure>
-</div>
-
-<div class="download-section">
-  <h2>Install JefeCheck</h2>
-  <p>Free and open source. One-line install on all major platforms.</p>
-  <div class="install-grid">
-    <div class="install-card">
-      <div class="install-card-header">
-        <img src="{{ '/assets/images/Mac-lightblue-32.png' | relative_url }}" alt=""> macOS (ARM64)
+      <!-- Desktop nav (CSS shows/hides based on 880px breakpoint) -->
+      <div class="nav-desktop" style="align-items: center; gap: 28px;">
+        <a href="#top" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Home</a>
+        <a href="#quick-start" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Quick Start</a>
+        <a href="docs.html#manual" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Manual</a>
+        <a href="#pipeline" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Pipeline</a>
+        <a href="docs.html#build" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Build</a>
+        <a href="https://github.com/danielgollas/jefecheck" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">GitHub</a>
+        <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #000; background: var(--accent, #e8a020); padding: 8px 16px; border-radius: 6px; text-decoration: none; transition: all .18s ease-out;">
+          <span style="display: inline-block; width: 0; height: 0; border-style: solid; border-width: 5px 4px 0 4px; border-color: #000 transparent transparent transparent;"></span>
+          Download
+        </a>
       </div>
-      <div class="install-card-cmd">brew install --cask danielgollas/jefecheck/jefecheck</div>
-      <div class="install-card-fallback">
-        Auto-taps <a href="https://github.com/danielgollas/homebrew-jefecheck">danielgollas/homebrew-jefecheck</a>, strips quarantine. Or <a href="https://github.com/danielgollas/jefecheck/releases/latest">download .dmg</a>.
+
+      <!-- Hamburger button (CSS shows on mobile) -->
+      <button class="nav-hamburger" aria-label="Menu" style="background: transparent; border: 1px solid #2a2a2a; border-radius: 6px; width: 40px; height: 38px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; padding: 0;">
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+      </button>
+    </div>
+
+    <!-- Mobile menu (JS toggles .open) -->
+    <div class="nav-mobile-menu" style="border-top: 1px solid #191919; background: rgba(9,9,9,.98); padding: 8px 24px 16px;">
+      <a href="#top" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Home</a>
+      <a href="#quick-start" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Quick Start</a>
+      <a href="docs.html#manual" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Manual</a>
+      <a href="#pipeline" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Pipeline</a>
+      <a href="docs.html#build" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Build</a>
+      <a href="https://github.com/danielgollas/jefecheck" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">GitHub</a>
+      <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary" style="display: block; text-align: center; margin-top: 14px; font-weight: 700; color: #000; background: var(--accent, #e8a020); padding: 12px; border-radius: 6px; text-decoration: none;">Download</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header style="position: relative; max-width: 980px; margin: 0 auto; padding: 96px 24px 56px; text-align: center;">
+    <div style="position: absolute; top: -20px; left: 50%; transform: translateX(-50%); width: 720px; max-width: 92%; height: 440px; background: radial-gradient(ellipse at center, rgba(232,160,32,.14), transparent 66%); pointer-events: none;"></div>
+    <div style="position: relative;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: #6f6f6f; margin-bottom: 22px;">High-res image flipbook · film &amp; TV post</div>
+      <a href="https://github.com/danielgollas/jefecheck" class="badge-os" style="display: inline-flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--accent, #e8a020); border: 1px solid rgba(232,160,32,.35); background: rgba(232,160,32,.06); padding: 7px 14px; border-radius: 100px; text-decoration: none; transition: all .18s ease-out;">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #e8a020); box-shadow: 0 0 8px var(--accent, #e8a020); animation: jcBlink 2.4s steps(1) infinite;"></span>
+        Now Fully Open Source
+      </a>
+      <h1 style="margin: 24px 0 0; font-size: clamp(2.9rem, 8.2vw, 5.8rem); line-height: .96; font-weight: 900; letter-spacing: -.04em; color: #fff;">JefeCheck</h1>
+      <p style="margin: 22px auto 0; max-width: 660px; font-size: clamp(1.05rem, 2.4vw, 1.3rem); line-height: 1.5; color: #b3b3b3; font-weight: 400;">A free, easy-to-use yet highly flexible high-res image flipbook for film and TV post work. Artist, TD, and budget friendly.</p>
+      <div style="margin-top: 32px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center;">
+        <a href="https://github.com/danielgollas/jefecheck/releases/latest" class="btn-primary" style="font-size: 15px; font-weight: 700; color: #000; background: var(--accent, #e8a020); padding: 14px 28px; border-radius: 7px; text-decoration: none; transition: all .18s ease-out;">Download</a>
+        <a href="#quick-start" class="btn-secondary" style="font-size: 15px; font-weight: 600; color: #f2f2f2; background: #131313; border: 1px solid #2c2c2c; padding: 14px 28px; border-radius: 7px; text-decoration: none; transition: all .18s ease-out;">Quick Start</a>
       </div>
     </div>
-    <div class="install-card">
-      <div class="install-card-header">
-        <img src="{{ '/assets/images/Windows-32.png' | relative_url }}" alt=""> Windows (x64)
-      </div>
-      <div class="install-card-cmd">winget install danielgollas.JefeCheck</div>
-      <div class="install-card-fallback">
-        Or <a href="https://github.com/danielgollas/jefecheck/releases/latest">download .zip</a> and run <code>jefecheck.exe</code>.
-      </div>
-    </div>
-    <div class="install-card">
-      <div class="install-card-header">
-        <img src="{{ '/assets/images/109px-Tux-G2-32x32.png' | relative_url }}" alt=""> Linux (x64)
-      </div>
-      <div class="install-card-cmd">curl -L https://github.com/danielgollas/jefecheck/releases/latest/download/jefecheck-linux-x64.tar.gz | tar xz</div>
-      <div class="install-card-fallback">
-        Then <code>cd jefecheck-* && ./install.sh</code>. Or <a href="https://github.com/danielgollas/jefecheck/releases/latest">download tarball</a>.
-      </div>
-    </div>
-  </div>
-  <details class="install-notes">
-    <summary>Troubleshooting</summary>
-    <h4>macOS .dmg shows "JefeCheck is damaged"</h4>
-    <p>Only happens with the direct .dmg download (the Homebrew install avoids this). Drag the app to <code>/Applications</code>, then run:</p>
-    <pre><code>xattr -dr com.apple.quarantine /Applications/JefeCheck.app</code></pre>
-    <p>The app is ad-hoc signed but not notarized; the first launch will still show an unidentified-developer warning — right-click the app and choose <strong>Open</strong> to bypass.</p>
-    <h4>Winget submission pending</h4>
-    <p>The <code>winget</code> command is in review at <a href="https://github.com/microsoft/winget-pkgs">microsoft/winget-pkgs</a>. Until accepted, download the .zip directly from the releases page.</p>
-  </details>
-  <div class="mexico-badge">
-    <img src="{{ '/assets/images/hecho-en-mexico1.jpg' | relative_url }}" alt="Hecho en México">
-  </div>
-</div>
+  </header>
 
-<div class="links-section">
-  <a href="{{ '/quick-start' | relative_url }}">Quick Start Guide</a>
-  <a href="{{ '/manual' | relative_url }}">Full Manual</a>
-  <a href="{{ '/integration' | relative_url }}">Pipeline Integration</a>
-  <a href="{{ '/building' | relative_url }}">Build from Source</a>
-  <a href="https://github.com/danielgollas/jefecheck">GitHub Repository</a>
+  <!-- DEMO -->
+  <section style="max-width: 1040px; margin: 0 auto; padding: 8px 24px 64px;">
+    <div class="demo-frame" style="position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #262626; box-shadow: 0 40px 100px rgba(0,0,0,.6); cursor: pointer; background: #000;">
+      <video class="demo-video" poster="assets/images/ScreenShotHome.jpg" preload="metadata" playsinline>
+        <source src="assets/DemoVideo.mp4" type="video/mp4">
+      </video>
+      <!-- decorative amber corner crop-marks -->
+      <div style="position: absolute; top: 16px; left: 16px; width: 16px; height: 16px; border-left: 1px solid rgba(232,160,32,.55); border-top: 1px solid rgba(232,160,32,.55);"></div>
+      <div style="position: absolute; top: 16px; right: 16px; width: 16px; height: 16px; border-right: 1px solid rgba(232,160,32,.55); border-top: 1px solid rgba(232,160,32,.55);"></div>
+      <div style="position: absolute; bottom: 16px; left: 16px; width: 16px; height: 16px; border-left: 1px solid rgba(232,160,32,.55); border-bottom: 1px solid rgba(232,160,32,.55);"></div>
+      <div style="position: absolute; bottom: 16px; right: 16px; width: 16px; height: 16px; border-right: 1px solid rgba(232,160,32,.55); border-bottom: 1px solid rgba(232,160,32,.55);"></div>
+      <div class="demo-overlay" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 42%, rgba(0,0,0,.45));">
+        <div style="width: 76px; height: 76px; border-radius: 50%; border: 1px solid rgba(232,160,32,.5); background: rgba(232,160,32,.1); display: flex; align-items: center; justify-content: center;">
+          <span style="display: block; width: 0; height: 0; border-style: solid; border-width: 12px 0 12px 21px; border-color: transparent transparent transparent #e8a020; margin-left: 5px;"></span>
+        </div>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #8a8a8a;">Watch the demo reel · 16:9</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SPEC STRIP -->
+  <section style="border-top: 1px solid #181818; border-bottom: 1px solid #181818; background: #0a0a0a;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 0 24px; display: flex; flex-wrap: wrap;">
+      <div style="flex: 1 1 180px; padding: 24px 20px; border-left: 1px solid #181818;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: .16em; color: #6c6c6c;">FORMATS</div>
+        <div style="margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #ededed;">JPEG → 5K EXR</div>
+      </div>
+      <div style="flex: 1 1 180px; padding: 24px 20px; border-left: 1px solid #181818;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: .16em; color: #6c6c6c;">PLAYBACK</div>
+        <div style="margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #ededed;">up to 4K · 24 fps</div>
+      </div>
+      <div style="flex: 1 1 180px; padding: 24px 20px; border-left: 1px solid #181818;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: .16em; color: #6c6c6c;">COLOR</div>
+        <div style="margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #ededed;">1D / 3D LUTs</div>
+      </div>
+      <div style="flex: 1 1 180px; padding: 24px 20px; border-left: 1px solid #181818;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: .16em; color: #6c6c6c;">PLATFORMS</div>
+        <div style="margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #ededed;">Win · macOS · Linux</div>
+      </div>
+      <div style="flex: 1 1 180px; padding: 24px 20px; border-left: 1px solid #181818;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: .16em; color: #6c6c6c;">LICENSE</div>
+        <div style="margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #ededed;">free · GPL v2</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" style="max-width: 1240px; margin: 0 auto; padding: 88px 24px 84px; scroll-margin-top: 80px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--accent, #e8a020);">Capabilities</div>
+    <h2 style="margin: 12px 0 36px; font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -.02em; color: #fff;">Play. Process. Share.</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+
+      <article class="feat-card feat-r" style="position: relative; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 28px;">
+        <div style="position: absolute; top: 18px; right: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #4a4a4a; letter-spacing: .1em;">01</div>
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: rgba(255,59,48,.12); border: 1px solid rgba(255,59,48,.4); color: #ff3b30; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px;">R</span>
+        <h3 style="margin: 18px 0 10px; font-size: 21px; font-weight: 700; letter-spacing: .04em; color: #fff;">PLAY</h3>
+        <p style="margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: #a4a4a4;">Real-time playback of high-res sequences — up to 4K at 24 fps on everyday hardware, from JPEG to 5K 16-bit OpenEXR.</p>
+        <ul style="margin: 0; padding: 16px 0 0; list-style: none; display: flex; flex-direction: column; gap: 9px; border-top: 1px solid #1c1c1c;">
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #ff3b30;">›</span> JPEG → 5K 16-bit EXR</li>
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #ff3b30;">›</span> Up to 4K · 24 fps</li>
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #ff3b30;">›</span> Scrub with audio</li>
+        </ul>
+      </article>
+
+      <article class="feat-card feat-g" style="position: relative; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 28px;">
+        <div style="position: absolute; top: 18px; right: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #4a4a4a; letter-spacing: .1em;">02</div>
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: rgba(47,215,91,.12); border: 1px solid rgba(47,215,91,.4); color: #2fd75b; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px;">G</span>
+        <h3 style="margin: 18px 0 10px; font-size: 21px; font-weight: 700; letter-spacing: .04em; color: #fff;">PROCESS</h3>
+        <p style="margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: #a4a4a4;">Apply 1D / 3D LUTs, RGBA masks, and log-to-lin conversions on the fly — or author your own effects in GLSL.</p>
+        <ul style="margin: 0; padding: 16px 0 0; list-style: none; display: flex; flex-direction: column; gap: 9px; border-top: 1px solid #1c1c1c;">
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #2fd75b;">›</span> 1D / 3D LUTs · log-to-lin</li>
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #2fd75b;">›</span> RGBA masks on the fly</li>
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #2fd75b;">›</span> GLSL FX Stack</li>
+        </ul>
+      </article>
+
+      <article class="feat-card feat-b" style="position: relative; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 28px;">
+        <div style="position: absolute; top: 18px; right: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #4a4a4a; letter-spacing: .1em;">03</div>
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: rgba(77,155,255,.12); border: 1px solid rgba(77,155,255,.4); color: #4d9bff; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px;">B</span>
+        <h3 style="margin: 18px 0 10px; font-size: 21px; font-weight: 700; letter-spacing: .04em; color: #fff;">SHARE</h3>
+        <p style="margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: #a4a4a4;">Run live shot reviews with a real-time pointer and in-session text chat — on Windows, macOS, and Linux.</p>
+        <ul style="margin: 0; padding: 16px 0 0; list-style: none; display: flex; flex-direction: column; gap: 9px; border-top: 1px solid #1c1c1c;">
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #4d9bff;">›</span> Real-time review pointer</li>
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #4d9bff;">›</span> In-session text chat</li>
+          <li style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8e8e8e;"><span style="color: #4d9bff;">›</span> Nuke flipbook integration</li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- GALLERY -->
+  <section id="pipeline" style="background: #0a0a0a; border-top: 1px solid #161616; border-bottom: 1px solid #161616; scroll-margin-top: 64px;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 84px 24px;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--accent, #e8a020);">Screenshots</div>
+      <h2 style="margin: 12px 0 36px; font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -.02em; color: #fff;">Built for the review room</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+
+        <figure class="gallery-item" style="margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid #222; background: #0c0c0c;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid #1a1a1a;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent, #e8a020); letter-spacing: .08em;">SH-01</span>
+            <span style="margin-left: auto; display: flex; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span></span>
+          </div>
+          <img src="assets/images/ss_GreenKM31.jpg" alt="Quick and dirty realtime 2K chromas" style="display:block; width:100%; aspect-ratio:16/10; object-fit:cover;">
+          <figcaption style="padding: 8px 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; color: #888;">Quick and dirty realtime 2K chromas</figcaption>
+        </figure>
+
+        <figure class="gallery-item" style="margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid #222; background: #0c0c0c;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid #1a1a1a;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent, #e8a020); letter-spacing: .08em;">SH-02</span>
+            <span style="margin-left: auto; display: flex; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span></span>
+          </div>
+          <img src="assets/images/ss_mount.jpg" alt="Load 16-bit OpenEXR sequences" style="display:block; width:100%; aspect-ratio:16/10; object-fit:cover;">
+          <figcaption style="padding: 8px 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; color: #888;">Load 16-bit OpenEXR sequences</figcaption>
+        </figure>
+
+        <figure class="gallery-item" style="margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid #222; background: #0c0c0c;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid #1a1a1a;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent, #e8a020); letter-spacing: .08em;">SH-03</span>
+            <span style="margin-left: auto; display: flex; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span></span>
+          </div>
+          <img src="assets/images/ss_colibriOver.jpg" alt="Real-time 2K Over pre-comps" style="display:block; width:100%; aspect-ratio:16/10; object-fit:cover;">
+          <figcaption style="padding: 8px 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; color: #888;">Real-time 2K Over pre-comps</figcaption>
+        </figure>
+
+        <figure class="gallery-item" style="margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid #222; background: #0c0c0c;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid #1a1a1a;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent, #e8a020); letter-spacing: .08em;">SH-04</span>
+            <span style="margin-left: auto; display: flex; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span></span>
+          </div>
+          <img src="assets/images/ss_exrRange.jpg" alt="Adjust exposure in HDR EXRs" style="display:block; width:100%; aspect-ratio:16/10; object-fit:cover;">
+          <figcaption style="padding: 8px 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; color: #888;">Adjust exposure in HDR EXRs</figcaption>
+        </figure>
+
+        <figure class="gallery-item" style="margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid #222; background: #0c0c0c;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid #1a1a1a;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent, #e8a020); letter-spacing: .08em;">SH-05</span>
+            <span style="margin-left: auto; display: flex; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span></span>
+          </div>
+          <img src="assets/images/ss_dpxMetadata.jpg" alt="Read DPX / EXIF / OpenEXR metadata" style="display:block; width:100%; aspect-ratio:16/10; object-fit:cover;">
+          <figcaption style="padding: 8px 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; color: #888;">Read DPX / EXIF / OpenEXR metadata</figcaption>
+        </figure>
+
+        <figure class="gallery-item" style="margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid #222; background: #0c0c0c;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid #1a1a1a;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent, #e8a020); letter-spacing: .08em;">SH-06</span>
+            <span style="margin-left: auto; display: flex; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span><span style="width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;"></span></span>
+          </div>
+          <img src="assets/images/ss_colibriAlpha.jpg" alt="Different views of the same track" style="display:block; width:100%; aspect-ratio:16/10; object-fit:cover;">
+          <figcaption style="padding: 8px 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .03em; color: #888;">Different views of the same track</figcaption>
+        </figure>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALL / QUICK START -->
+  <section id="quick-start" style="scroll-margin-top: 64px;">
+    <div style="max-width: 1040px; margin: 0 auto; padding: 88px 24px;">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--accent, #e8a020);">Quick Start</div>
+          <h2 style="margin: 12px 0 0; font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -.02em; color: #fff;">Install in one line</h2>
+        </div>
+        <span style="display: inline-flex; align-items: center; gap: 9px; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .06em; color: #b7b7b7; border: 1px solid #2a2a2a; background: #111; padding: 8px 14px; border-radius: 100px;">
+          <span style="display: inline-flex; gap: 3px;"><span style="width: 7px; height: 11px; background: #2fd75b; border-radius: 1px;"></span><span style="width: 7px; height: 11px; background: #f2f2f2; border-radius: 1px;"></span><span style="width: 7px; height: 11px; background: #ff3b30; border-radius: 1px;"></span></span>
+          Hecho en México
+        </span>
+      </div>
+
+      <div style="margin-top: 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+
+        <div class="cmd-card" style="background: #0b0b0b; border: 1px solid #222; border-radius: 8px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid #1a1a1a;">
+            <span style="display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #cfcfcf;"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #e8a020);"></span>macOS</span>
+            <button class="copy-btn" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--accent, #e8a020); background: transparent; border: 1px solid #2a2a2a; border-radius: 5px; padding: 5px 11px; cursor: pointer;">Copy</button>
+          </div>
+          <div style="padding: 18px 16px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.5; color: #e6e6e6; word-break: break-all;"><span style="color: var(--accent, #e8a020); user-select: none;">$ </span><span class="cmd-text" data-cmd="brew install --cask danielgollas/jefecheck/jefecheck">brew install --cask danielgollas/jefecheck/jefecheck</span></div>
+        </div>
+
+        <div class="cmd-card" style="background: #0b0b0b; border: 1px solid #222; border-radius: 8px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid #1a1a1a;">
+            <span style="display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #cfcfcf;"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #e8a020);"></span>Windows</span>
+            <button class="copy-btn" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--accent, #e8a020); background: transparent; border: 1px solid #2a2a2a; border-radius: 5px; padding: 5px 11px; cursor: pointer;">Copy</button>
+          </div>
+          <div style="padding: 18px 16px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.5; color: #e6e6e6; word-break: break-all;"><span style="color: var(--accent, #e8a020); user-select: none;">$ </span><span class="cmd-text" data-cmd="winget install danielgollas.JefeCheck">winget install danielgollas.JefeCheck</span></div>
+        </div>
+
+        <div class="cmd-card" style="background: #0b0b0b; border: 1px solid #222; border-radius: 8px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid #1a1a1a;">
+            <span style="display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #cfcfcf;"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #e8a020);"></span>Linux</span>
+            <button class="copy-btn" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--accent, #e8a020); background: transparent; border: 1px solid #2a2a2a; border-radius: 5px; padding: 5px 11px; cursor: pointer;">Copy</button>
+          </div>
+          <div style="padding: 18px 16px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.5; color: #e6e6e6; word-break: break-all;"><span style="color: var(--accent, #e8a020); user-select: none;">$ </span><span class="cmd-text" data-cmd="curl -L https://github.com/danielgollas/jefecheck/releases/latest/download/jefecheck-linux-x64.tar.gz | tar xz">curl -L https://github.com/danielgollas/jefecheck/releases/latest/download/jefecheck-linux-x64.tar.gz | tar xz</span></div>
+        </div>
+
+      </div>
+
+      <!-- TROUBLESHOOTING -->
+      <div style="margin-top: 24px; background: #0b0b0b; border: 1px solid #222; border-radius: 8px; overflow: hidden;">
+        <button class="trouble-toggle" style="width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; background: transparent; border: none; cursor: pointer; text-align: left;">
+          <span style="font-size: 15px; font-weight: 600; color: #ededed;">Troubleshooting &amp; first-launch notes</span>
+          <span class="trouble-sign" style="font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent, #e8a020); line-height: 1;">+</span>
+        </button>
+        <div class="trouble-body" style="padding: 4px 20px 22px; border-top: 1px solid #1a1a1a;">
+          <dl style="margin: 0; display: flex; flex-direction: column; gap: 18px;">
+            <div>
+              <dt style="font-size: 14px; font-weight: 600; color: #e6e6e6; margin-bottom: 5px;">macOS · "app can't be opened"</dt>
+              <dd style="margin: 0; font-size: 13.5px; line-height: 1.55; color: #9c9c9c;">The cask is notarized, but if Gatekeeper blocks it, right-click the app and choose <span style="font-family: 'JetBrains Mono', monospace; color: #c8c8c8;">Open</span>, or run <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent, #e8a020);">xattr -dr com.apple.quarantine /Applications/JefeCheck.app</span>.</dd>
+            </div>
+            <div>
+              <dt style="font-size: 14px; font-weight: 600; color: #e6e6e6; margin-bottom: 5px;">Windows · winget not found</dt>
+              <dd style="margin: 0; font-size: 13.5px; line-height: 1.55; color: #9c9c9c;">Update App Installer from the Microsoft Store, then re-run the command in a fresh terminal. Portable .zip builds are on the Releases page.</dd>
+            </div>
+            <div>
+              <dt style="font-size: 14px; font-weight: 600; color: #e6e6e6; margin-bottom: 5px;">Linux · missing shared libraries</dt>
+              <dd style="margin: 0; font-size: 13.5px; line-height: 1.55; color: #9c9c9c;">Install <span style="font-family: 'JetBrains Mono', monospace; color: #c8c8c8;">libgl1</span> and <span style="font-family: 'JetBrains Mono', monospace; color: #c8c8c8;">libxcb-cursor0</span>. For OCIO config support, set <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent, #e8a020);">$OCIO</span> to your config path before launch.</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOC LINKS -->
+  <section id="manual" style="background: #0a0a0a; border-top: 1px solid #161616; scroll-margin-top: 64px;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 72px 24px;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--accent, #e8a020);">Documentation</div>
+      <h2 style="margin: 12px 0 32px; font-size: clamp(1.6rem, 3.5vw, 2.3rem); font-weight: 800; letter-spacing: -.02em; color: #fff;">Read the docs</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px;">
+
+        <a href="docs.html#quick-start" class="doc-card" style="display: block; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 22px; text-decoration: none;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent, #e8a020); letter-spacing: .06em;">/quick-start</div>
+          <div style="margin-top: 8px; font-size: 16px; font-weight: 600; color: #fff;">Quick Start</div>
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #909090;">Install and load your first sequence in two minutes.</div>
+        </a>
+
+        <a href="docs.html#manual" class="doc-card" style="display: block; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 22px; text-decoration: none;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent, #e8a020); letter-spacing: .06em;">/manual</div>
+          <div style="margin-top: 8px; font-size: 16px; font-weight: 600; color: #fff;">User Manual</div>
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #909090;">Every panel, shortcut, and playback control explained.</div>
+        </a>
+
+        <a href="docs.html#pipeline" class="doc-card" style="display: block; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 22px; text-decoration: none;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent, #e8a020); letter-spacing: .06em;">/color-fx</div>
+          <div style="margin-top: 8px; font-size: 16px; font-weight: 600; color: #fff;">Color &amp; FX</div>
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #909090;">1D/3D LUTs, log-to-lin, and the GLSL FX Stack.</div>
+        </a>
+
+        <a href="docs.html#build" class="doc-card" style="display: block; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 22px; text-decoration: none;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent, #e8a020); letter-spacing: .06em;">/build</div>
+          <div style="margin-top: 8px; font-size: 16px; font-weight: 600; color: #fff;">Build from Source</div>
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #909090;">Compile JefeCheck on macOS, Windows, and Linux.</div>
+        </a>
+
+        <a href="https://github.com/danielgollas/jefecheck/releases" class="doc-card" style="display: block; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 22px; text-decoration: none;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent, #e8a020); letter-spacing: .06em;">/changelog</div>
+          <div style="margin-top: 8px; font-size: 16px; font-weight: 600; color: #fff;">Changelog</div>
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #909090;">Release notes and version history on GitHub.</div>
+        </a>
+
+        <a href="https://github.com/danielgollas/jefecheck/blob/main/LICENSE" class="doc-card" style="display: block; background: #0e0e0e; border: 1px solid #222; border-radius: 8px; padding: 22px; text-decoration: none;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent, #e8a020); letter-spacing: .06em;">/license</div>
+          <div style="margin-top: 8px; font-size: 16px; font-weight: 600; color: #fff;">License</div>
+          <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #909090;">Free and open source under GPL v2.</div>
+        </a>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer style="border-top: 1px solid #161616; background: #000;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 32px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 14px; height: 14px; border-radius: 3px; background: var(--accent, #e8a020);"></span>
+        <span style="font-size: 13px; color: #7e7e7e;">© 2006–2026 Daniel Gollás · GPL v2</span>
+      </div>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #555; letter-spacing: .04em;">free · cross-platform · open source</span>
+      <a href="https://github.com/danielgollas/jefecheck" class="hover-white" style="font-size: 13px; font-weight: 500; color: #b4b4b4; text-decoration: none; transition: color .18s ease-out;">GitHub ↗</a>
+    </div>
+  </footer>
+
 </div>
+</body>
+</html>

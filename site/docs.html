@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JefeCheck Handbook — Documentation</title>
+  <meta name="description" content="Everything you need to install, run, and wire JefeCheck into your color pipeline.">
+  <link rel="icon" href="assets/images/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/main.css">
+  <script defer src="assets/js/main.js"></script>
+</head>
+<body>
+<div id="top" style="--accent: #e8a020; --accent-hover: #f0c060; background-color: #000; background-image: radial-gradient(rgba(255,255,255,.028) 1px, transparent 1px); background-size: 34px 34px; color: #f2f2f2; min-height: 100vh;">
+
+  <!-- NAV -->
+  <nav style="position: sticky; top: 0; z-index: 60; background: rgba(7,7,7,.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid #191919;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 0 24px; height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 24px;">
+      <a href="index.html#top" style="display: flex; align-items: center; gap: 11px; text-decoration: none;">
+        <span style="position: relative; width: 18px; height: 18px; border-radius: 4px; background: var(--accent, #e8a020); box-shadow: 0 0 14px rgba(232,160,32,.5);"></span>
+        <span style="font-weight: 900; font-size: 19px; letter-spacing: -.02em; color: #fff;">JefeCheck</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: .08em; color: #6f6f6f; border: 1px solid #262626; border-radius: 4px; padding: 2px 6px;">GPL v2</span>
+      </a>
+
+      <!-- Desktop nav (CSS shows/hides based on 880px breakpoint) -->
+      <div class="nav-desktop" style="align-items: center; gap: 28px;">
+        <a href="index.html#top" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Home</a>
+        <a href="#quick-start" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Quick Start</a>
+        <a href="#manual" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Manual</a>
+        <a href="#pipeline" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Pipeline</a>
+        <a href="#build" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">Build</a>
+        <a href="https://github.com/danielgollas/jefecheck" class="nav-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; letter-spacing: .02em; color: #9a9a9a; text-decoration: none; transition: color .18s ease-out;">GitHub</a>
+        <a href="index.html#quick-start" class="btn-primary" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #000; background: var(--accent, #e8a020); padding: 8px 16px; border-radius: 6px; text-decoration: none; transition: all .18s ease-out;">
+          <span style="display: inline-block; width: 0; height: 0; border-style: solid; border-width: 5px 4px 0 4px; border-color: #000 transparent transparent transparent;"></span>
+          Download
+        </a>
+      </div>
+
+      <!-- Hamburger button (CSS shows on mobile) -->
+      <button class="nav-hamburger" aria-label="Menu" style="background: transparent; border: 1px solid #2a2a2a; border-radius: 6px; width: 40px; height: 38px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; padding: 0;">
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+        <span style="width: 18px; height: 2px; background: #ddd; border-radius: 2px;"></span>
+      </button>
+    </div>
+
+    <!-- Mobile menu (JS toggles .open) -->
+    <div class="nav-mobile-menu" style="border-top: 1px solid #191919; background: rgba(9,9,9,.98); padding: 8px 24px 16px;">
+      <a href="index.html#top" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Home</a>
+      <a href="#quick-start" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Quick Start</a>
+      <a href="#manual" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Manual</a>
+      <a href="#pipeline" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Pipeline</a>
+      <a href="#build" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">Build</a>
+      <a href="https://github.com/danielgollas/jefecheck" class="nav-link" style="display: block; padding: 13px 4px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: #cfcfcf; text-decoration: none; border-bottom: 1px solid #161616;">GitHub</a>
+      <a href="index.html#quick-start" class="btn-primary" style="display: block; text-align: center; margin-top: 14px; font-weight: 700; color: #000; background: var(--accent, #e8a020); padding: 12px; border-radius: 6px; text-decoration: none;">Download</a>
+    </div>
+  </nav>
+
+  <!-- DOC HERO -->
+  <header style="max-width: 880px; margin: 0 auto; padding: 64px 24px 28px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent, #e8a020);">Documentation</div>
+    <h1 style="margin: 14px 0 0; font-size: clamp(2rem, 5vw, 3rem); font-weight: 900; letter-spacing: -.03em; color: #fff;">JefeCheck Handbook</h1>
+    <p style="margin: 14px 0 0; font-size: 1.05rem; line-height: 1.55; color: #adadad;">Everything you need to install, run, and wire JefeCheck into your color pipeline.</p>
+  </header>
+
+  <!-- TOC -->
+  <div style="position: sticky; top: 64px; z-index: 40; background: rgba(8,8,8,.9); backdrop-filter: blur(10px); border-top: 1px solid #161616; border-bottom: 1px solid #161616;">
+    <div style="max-width: 880px; margin: 0 auto; padding: 12px 24px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <a href="#quick-start" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">Quick Start</a>
+      <a href="#manual" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">User Manual</a>
+      <a href="#pipeline" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">Color &amp; FX</a>
+      <a href="#build" class="toc-link" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #b0b0b0; text-decoration: none; border: 1px solid #262626; border-radius: 100px; padding: 6px 13px; transition: all .15s ease-out;">Build from Source</a>
+    </div>
+  </div>
+
+  <!-- READING COLUMN -->
+  <main style="max-width: 880px; margin: 0 auto; padding: 16px 24px 96px;">
+
+    <!-- ═══════════════════════════════ QUICK START ══════════════════════════════ -->
+    <section id="quick-start" style="padding: 44px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">Quick Start</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Get JefeCheck running in minutes. Install a pre-built binary for your platform, load any image sequence, and start scrubbing.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Install</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;"><strong style="color: #fff;">macOS</strong> — install via Homebrew cask:</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 12px;">
+        <div><span style="color: var(--accent, #e8a020);">$ </span>brew install --cask danielgollas/jefecheck/jefecheck</div>
+      </div>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;"><strong style="color: #fff;">Linux &amp; Windows</strong> — download the latest pre-built archive from the <a href="https://github.com/danielgollas/jefecheck/releases" style="color: var(--accent, #e8a020); text-decoration: none;">GitHub Releases page</a> (<span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">jefecheck-linux-x64.tar.gz</span> / <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">jefecheck-windows-x64.zip</span>). Extract and run the <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">jefecheck</span> binary. To build from source instead, see <a href="#build" style="color: var(--accent, #e8a020); text-decoration: none;">Build from Source</a>.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Load your first sequence</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Three ways to open a sequence:</p>
+      <ul style="margin: 0 0 8px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><strong style="color: #e6e6e6;">Command line</strong> — pass any frame; the full range is detected automatically from adjacent files:</li>
+      </ul>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 8px;">
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck /path/shot.1001.exr</div>
+        <div><span style="color: #6c6c6c;"># explicit range notation also works</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck /path/shot.[1001-1096].exr</div>
+      </div>
+      <ul style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><strong style="color: #e6e6e6;">Drag and drop</strong> — drag any frame (or a folder) from your file browser onto the viewport. The sequence loads into whichever track is assigned to that viewport. Hold <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift</kbd> while dragging to load at 50% resolution as a proxy.</li>
+        <li><strong style="color: #e6e6e6;">Load Window</strong> — press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+L</kbd>, click Browse for a track, select any frame from the sequence, then click Start.</li>
+      </ul>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Essential playback keys</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 0.92rem;">
+        <thead><tr>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Key</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Action</th>
+        </tr></thead>
+        <tbody>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Space</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Play / pause in current direction</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Z / V</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Rewind to first / fast-forward to last frame</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">X / C &nbsp;or&nbsp; ← / →</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Step one frame back / forward</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">. / ,</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Play/pause forward / reverse</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">8 / 9 / 0</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Playback mode: Once / Loop / Swing (ping-pong)</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">i / o</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Set In / Out point on the timeline</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">F / Alt+F</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Fit frame to current / all viewports</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">T / Alt+T</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Cycle text overlay (current / all viewports)</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">R / G / B / A</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Isolate Red / Green / Blue / Alpha channel</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Ctrl+F</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Toggle fullscreen</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Ctrl+R / Shift+R</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Reset viewport transform / color correction</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Ctrl+H</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Show RGB histogram for current viewport</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Scrub the timeline by clicking and dragging on the viewport while holding <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift</kbd>. Zoom with the mouse wheel; pan by left-click drag.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Viewport layouts</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Switch layouts with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+1</kbd> through <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+4</kbd>: single, two side-by-side, two stacked, or four-up. Press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">1</kbd>–<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">4</kbd> to assign Tracks A–D to the active viewport, or <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Up</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Down</kbd> to cycle through tracks.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Quick color check</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Hold a key and drag on the viewport to adjust on the fly — <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">W</kbd> Gamma, <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">E</kbd> Exposure, <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Q</kbd> Brightness, <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">D</kbd> Contrast, <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">S</kbd> Saturation. To load and apply a LUT: open the LUT Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F4</kbd>), browse and select a file, then pick it from the viewport's LUT list. Reset color corrections with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+R</kbd>.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Start or join a remote session</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Open the Remote Session Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F5</kbd>): to host, fill in a server name, port (32000+ recommended), optional password, then click <strong style="color: #fff;">Start</strong> and share your IP and port. To join, enter the server IP, port, password (if any), and a nickname, then click <strong style="color: #fff;">Connect</strong>. Everything — playback, FXs, viewport transforms — is mirrored to all participants in real time.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 0;">For full reference on loading options, FX stacks, LUT formats, custom plug-ins, and collaboration, read the sections below.</p>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #1a1a1a; margin: 40px 0;">
+
+    <!-- ═══════════════════════════════ USER MANUAL ══════════════════════════════ -->
+    <section id="manual" style="padding: 4px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">User Manual</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">JefeCheck is built around three concepts: <strong style="color: #fff;">Tracks</strong> hold image sequences, <strong style="color: #fff;">Viewports</strong> display them, and <strong style="color: #fff;">Real-Time Modifications</strong> (color, LUTs, GLSL FX) are applied by the GPU on the fly without touching source files. Up to four tracks (A–D) can be loaded simultaneously and watched on up to four viewports in configurable layouts.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Interface overview</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Opening JefeCheck shows the <strong style="color: #fff;">Main Window</strong> with the <strong style="color: #fff;">Load Window</strong> floating on top. The Main Window has three areas:</p>
+      <ul style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><strong style="color: #e6e6e6;">Menu Bar</strong> — access all windows, display settings, and help.</li>
+        <li><strong style="color: #e6e6e6;">Viewports Area</strong> — where image sequences are rendered. Splits into 1, 2, or 4 viewports depending on the chosen layout.</li>
+        <li><strong style="color: #e6e6e6;">Control Bar</strong> — timeline, track controls, playback controls, and per-viewport settings.</li>
+      </ul>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Hide the Menu and Control Bars for a clean display with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+Alt+F</kbd>; press again to restore. The Load Window opens automatically on startup (configurable in Preferences).</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Loading sequences</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">The <strong style="color: #fff;">Load Window</strong> (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+L</kbd>) has one section per track. Key load-time options — these are baked into the track and cannot be changed without reloading:</p>
+      <ul style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><strong style="color: #e6e6e6;">Range</strong> — drag In/Out sliders to load only a subset. Numbers match the filename frame numbers.</li>
+        <li><strong style="color: #e6e6e6;">Scale</strong> — load at 100%, 50%, 25%, or any value as a proxy. Linear resampling is faster; Bilinear is smoother.</li>
+        <li><strong style="color: #e6e6e6;">Crop</strong> — enable the checkbox and drag the crop region in the preview to load only a rectangular sub-region, saving RAM. No real-time counterpart.</li>
+        <li><strong style="color: #e6e6e6;">BitDepth</strong> — choose the in-memory format for loaded frames:
+          <ul style="margin: 4px 0 0; padding-left: 18px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+            <li><strong style="color: #e6e6e6;">8bpc</strong> — 8 bits/channel; the default. Good balance of memory use and image quality for standard display.</li>
+            <li><strong style="color: #e6e6e6;">16bpc</strong> — 16-bit integer per channel (0–65535), stored as float16 on the GPU; roughly double the RAM of 8bpc, and reduces banding under heavy color processing.</li>
+            <li><strong style="color: #e6e6e6;">HALF</strong> — a 16-bit half-float option. With the current OpenImageIO backend it behaves the same as 16bpc (frames are read as 16-bit integer); the native half-float EXR path is not compiled in this build. Prefer 16bpc.</li>
+            <li><strong style="color: #e6e6e6;">4bpc</strong> — 4 bits/channel; ~2× more frames in memory at the cost of serious banding and color inaccuracies — useful only for checking black or missing frames.</li>
+            <li><strong style="color: #e6e6e6;">S3TC</strong> — GPU texture compression; up to ~8× more frames in memory; small compression artifacts; not suitable for pixel-accurate quality checking.</li>
+          </ul>
+        </li>
+        <li><strong style="color: #e6e6e6;">Channels</strong> — for multi-channel EXR files, choose which channel set to load (e.g., Diffuse, Specular, Depth, RGBA).</li>
+      </ul>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Click <strong style="color: #fff;">Start</strong> to begin loading a single track, or <strong style="color: #fff;">Start All</strong> to load all configured tracks simultaneously. Cancel any in-progress load with the red X button next to the track in the Control Bar.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">To reload from a specific point: <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Alt+Left Click</kbd> on the timeline to restart all tracks, or on a specific track bar to restart only that track. Press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Alt+I</kbd> to set the In point and begin reloading from there.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Playback &amp; transport</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">The Control Bar timeline shows all four track bars alongside the scrub knob. The <strong style="color: #fff;">SMPTE Counter</strong> shows elapsed time as <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">HH:MM:SS:FF</span> from the timeline start.</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 0.92rem;">
+        <thead><tr>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Control</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Shortcut</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Action</th>
+        </tr></thead>
+        <tbody>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Rewind</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Z</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Jump to first frame</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">One Back</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">X or ←</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Step one frame back</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Play Reverse</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">,</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Play / pause in reverse</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Play / Pause</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Space</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Play or pause in current direction</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Play Forward</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">.</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Play / pause forward</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">One Forward</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">C or →</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Step one frame forward</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">Fast Forward</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">V</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Jump to last frame</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Loop modes — <strong style="color: #fff;">Once</strong> (plays and stops on last frame), <strong style="color: #fff;">Loop</strong> (repeats forward), <strong style="color: #fff;">Swing</strong> (plays back and forth) — are toggled with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">8</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">9</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">0</kbd>.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Set In/Out points with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">i</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">o</kbd> (or drag the markers on the timeline); reset with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+I</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+O</kbd>. The <strong style="color: #fff;">Loop Priority</strong> control determines when multiple tracks of different lengths loop: Shortest, Longest, or match the Timeline range.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The <strong style="color: #fff;">Track Options</strong> button (right-click on a track bar) gives access to <strong style="color: #fff;">Frame Offset</strong> (shift a track in time relative to the timeline), <strong style="color: #fff;">Hold Frame</strong> (None / Current / Edge when the timeline is outside the loaded range), and <strong style="color: #fff;">Unload Track</strong>. You can also drag the track bar left or right to change the offset interactively.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Viewports &amp; layouts</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Four layouts are available from the Control Bar or <strong style="color: #fff;">View &gt; Viewport Layout</strong>:</p>
+      <ul style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><strong style="color: #e6e6e6;">1×1</strong> (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+1</kbd>) — single full-window viewport.</li>
+        <li><strong style="color: #e6e6e6;">2×1</strong> (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+2</kbd>) — two viewports side by side.</li>
+        <li><strong style="color: #e6e6e6;">1×2</strong> (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+3</kbd>) — two viewports stacked vertically.</li>
+        <li><strong style="color: #e6e6e6;">2×2</strong> (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+4</kbd>) — four viewports.</li>
+      </ul>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Each viewport independently controls: <strong style="color: #fff;">Track Assignment</strong> (A–D, keys <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">1</kbd>–<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">4</kbd>); <strong style="color: #fff;">Aspect Ratio</strong> (original, 4:3, 16:9, 2.39:1, 2.35:1, 1.85:1, 1.37:1, or any custom typed ratio); <strong style="color: #fff;">Crop Bars</strong> (mask the letterbox area rather than squashing the image); <strong style="color: #fff;">Flip / Flop</strong> (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+8</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+9</kbd>); and <strong style="color: #fff;">Transform</strong> (zoom, pan, rotate).</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Holding <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Alt</kbd> while panning or zooming applies the transformation to all viewports simultaneously (gang mode). Hold <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift</kbd> while zooming for 10× finer control. Reset one viewport with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+R</kbd>, all viewports with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+Alt+R</kbd>.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The <strong style="color: #fff;">text overlay</strong> (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">T</kbd>) cycles through: off → basic info (frame, time, FPS, filename, resolution) → basic + DPX/EXR/EXIF metadata. Press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Alt+T</kbd> to toggle all viewports. Right-click with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl</kbd> held to activate the color picker (display pixel value under cursor).</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Channels &amp; comparison</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Isolate the <span style="color: #ff3b30; font-weight: 600;">R</span>, <span style="color: #2fd75b; font-weight: 600;">G</span>, <span style="color: #4d9bff; font-weight: 600;">B</span>, or <strong style="color: #e6e6e6;">A</strong> channels with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">R</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">G</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">B</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">A</kbd>, or click the RGB button in the Control Bar to cycle. Load multiple sequences into separate tracks and assign them to different viewports for side-by-side comparison. The <strong style="color: #e6e6e6;">Difference Matte</strong> FX and the <strong style="color: #e6e6e6;">Split</strong> FX (adjustable wipe) are available in the FX Stack for advanced comparison work.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Menus</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 6px;"><strong style="color: #fff;">File</strong> — Load Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+L</kbd>), Playlist Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+P</kbd>), Save/Open Session (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+S</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+O</kbd>), Save Chat Log, Preferences, Quit (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+Q</kbd>).</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 6px;"><strong style="color: #fff;">View</strong> — Layout, Zoom Filtering (Point / Bilinear), Aspect Bars Opacity, Fit to viewport (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Alt+F</kbd>), Flip/Flop, Reset transforms, Histogram (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+H</kbd>), Fullscreen (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+F</kbd>), Hide Controls (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+Alt+F</kbd>).</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 6px;"><strong style="color: #fff;">Dialogs</strong> — FX Stack Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F2</kbd>), FX Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F3</kbd>), LUT Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F4</kbd>), Remote Session Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F5</kbd>), Render Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F6</kbd>).</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;"><strong style="color: #fff;">Help</strong> — User Manual (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F1</kbd>), toggle on-screen help (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">H</kbd>), System Requirements check, About.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Playlists</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">A <strong style="color: #fff;">Playlist Item</strong> is a complete application snapshot: loaded tracks with their parameters, viewport layout, playback settings, and FX stacks. Use playlists to jump instantly between different shot setups.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Open the Playlist Window with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+P</kbd>. Add items from the Load Window's <strong style="color: #fff;">Add to Playlist</strong> button, from the Main Window button, or by dragging a sequence frame into the Playlist Window. Double-click or press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Enter</kbd> to recall an item. Reorder with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+Up</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+Down</kbd>. Save to a <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.jpl</span> file; loading multiple playlists appends their items. Only sequences loaded through the Playlist Window are automatically shared in remote sessions.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Remote sessions</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">A <strong style="color: #fff;">Remote Session</strong> links two or more JefeCheck instances over a LAN or the Internet. No image data is transmitted — each participant loads their own local copy of the sequences. All playback, scrubbing, FX changes, and viewport transforms are mirrored in real time.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;"><strong style="color: #fff;">To host:</strong> open the Remote Session Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F5</kbd>), fill in a server name, port (32000+ recommended), and optional password, then click <strong style="color: #fff;">Start</strong>. The Server IP box shows the address to share with participants.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;"><strong style="color: #fff;">To join:</strong> enter the server IP, port, password (if any), and a nickname, then click <strong style="color: #fff;">Connect</strong>. The status bar turns green when online.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;"><strong style="color: #fff;">Chat:</strong> press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Y</kbd> to enter chat mode, type a message, press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Enter</kbd> to send. Navigate history with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">↑</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">↓</kbd>. Press <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Escape</kbd> to exit chat mode. Toggle incoming message display outside chat mode with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+Y</kbd>. Save the full chat log via <strong style="color: #fff;">File &gt; Save Chat Log</strong>.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;"><strong style="color: #fff;">Remote Pointers:</strong> right-click and drag on the viewport to show your cursor (with your nickname) to all participants. JefeCheck compensates for different scales and monitor resolutions so pointers refer to the same pixel on the image regardless of proxy scale.</p>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #1a1a1a; margin: 40px 0;">
+
+    <!-- ═══════════════════════════════ COLOR & FX ═══════════════════════════════ -->
+    <section id="pipeline" style="padding: 4px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">Color &amp; FX</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">JefeCheck processes images non-destructively in two stages: <strong style="color: #fff;">Load-Time Modifications</strong> (baked into the track — scale, crop, bit depth) and <strong style="color: #fff;">Real-Time Modifications</strong> (applied by the GPU as frames are drawn — color corrections, LUTs, GLSL FX). Nothing touches source files on disk.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Color correction controls</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">The Control Bar exposes six real-time adjustments per viewport, applied in this order: LUT → Exposure → Gamma → Brightness → Saturation → Contrast. Hold a key and drag on the viewport to adjust interactively:</p>
+      <ul style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">W</kbd> + drag — <strong style="color: #e6e6e6;">Gamma</strong></li>
+        <li><kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">E</kbd> + drag — <strong style="color: #e6e6e6;">Exposure</strong></li>
+        <li><kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Q</kbd> + drag — <strong style="color: #e6e6e6;">Brightness</strong></li>
+        <li><kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">D</kbd> + drag — <strong style="color: #e6e6e6;">Contrast</strong></li>
+        <li><kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">S</kbd> + drag — <strong style="color: #e6e6e6;">Saturation</strong></li>
+      </ul>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Reset the active viewport's corrections with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+R</kbd>, all viewports with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+Alt+R</kbd>. Save up to 5 color-correction favorites with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+Shift+1–5</kbd>; recall with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+1–5</kbd>.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">LUT Manager</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Open the LUT Manager with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F4</kbd> or <strong style="color: #fff;">Dialogs &gt; LUT Manager</strong>. Click <strong style="color: #fff;">Browse</strong> to select one or more LUT files. Check <strong style="color: #fff;">Auto-Load</strong> next to each LUT to have it load automatically on next launch. Scroll through loaded LUTs in the Control Bar by holding <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">L</kbd> and pressing <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Up</kbd> / <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Down</kbd> (L+Up / L+Down).</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The LUT Manager can <strong style="color: #fff;">visualize</strong> any loaded LUT: 1D LUTs plot as an X/Y curve (input on X, output on Y); 3D LUTs render as a color cube in the viewport — a deformed cube indicates a color transformation, a straight line means desaturation. A default LUT for all viewports can be set in the LUT Manager or overridden with the environment variable <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">JEFECHECK_DEFAULT_LUT</span>.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Supported LUT formats</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 0.92rem;">
+        <thead><tr>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Format</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Type</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Notes</th>
+        </tr></thead>
+        <tbody>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">.cub</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">3D — Truelight cube</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Tested at 16³ and 32³; generated from Nuke's CMS node</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">.tga (JefeCheck)</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">3D — native format</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">64×64 px image encoding a 16³ LUT; process the included UnitCube.tga through any pipeline and save as TGA — <em>not currently loadable; image-based LUT loading is disabled pending OpenImageIO support</em></td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">.tga (Nuke CMS)</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">3D — Nuke export</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">448×448 px TGA from a Nuke CMS node at size 16; render with linear color space — <em>not currently loadable; image-based LUT loading is disabled pending OpenImageIO support</em></td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">.lut</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">1D — native format</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Plain text; header + entry count + normalized float values (0.0–1.0 per entry)</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The working LUT formats today are Truelight <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.cub</span> (3D) and JefeCheck <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.lut</span> (1D); <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.tga</span> 3D LUTs are not yet supported by the current OpenImageIO backend.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Apply a LUT at launch:</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 18px;">
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck shot.1001.exr --lut LogToLinToSRGB.lut</div>
+        <div><span style="color: #6c6c6c;"># --lut takes the LUT filename (not the full path); must be in the LUT path or set to auto-load</span></div>
+      </div>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">FX Manager, FX Stack &amp; FX Control</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">JefeCheck uses a GLSL plug-in system for real-time effects. The workflow:</p>
+      <ol style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><strong style="color: #e6e6e6;">Load FX plug-ins</strong> — open the FX Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F3</kbd>), click Browse, select one or more <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.jfx</span> files. Check Auto-Load to persist across launches.</li>
+        <li><strong style="color: #e6e6e6;">Apply to a viewport</strong> — open the FX Stack Manager (<kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">F2</kbd>), click the target viewport, then choose an FX from the <strong style="color: #fff;">Available FX</strong> menu. FXs stack in order — each FX's output feeds the next. Different viewports carry independent FX stacks.</li>
+        <li><strong style="color: #e6e6e6;">Adjust parameters</strong> — each FX shows its own controls. Click-drag to change numeric values (left-click = fine, middle = 10×, right = 100×). Toggle On/Off to compare without removing the FX.</li>
+      </ol>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Save and recall complete stacks (<span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.fxs</span> files) from the FX Control Window menu. Five FX Favorites: save with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+Shift+F1–F5</kbd>, recall with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Shift+F1–F5</kbd>, append with <kbd style="font-family: 'JetBrains Mono', monospace; background: #1a1a1a; border: 1px solid #2c2c2c; border-radius: 4px; padding: 1px 7px; color: #eee;">Ctrl+F1–F5</kbd>. Reorder FXs in the stack with the Up/Down buttons on each FX entry.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Included FX categories</h3>
+      <ul style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><strong style="color: #e6e6e6;">Color</strong> — 1D LUT, 3D LUT, Brightness/Contrast/Saturation, Gamma, Primary Color Correction (per-channel BCS).</li>
+        <li><strong style="color: #e6e6e6;">Comp (compositing)</strong> — Chroma Key (Blue/Green screen with matte preview), Difference Matte (abs(A−B)×multiplier), Inside, Mix (blend by amount), Over (with premult option), Split (wipe with adjustable slope and softness), Subtract.</li>
+        <li><strong style="color: #e6e6e6;">Special</strong> — Anaglyph Color Stereo (left/right tracks → cyan/red anaglyph), OpenEXR (gamma/exposure for HDR half-float images), Fields (interlace line simulation).</li>
+        <li><strong style="color: #e6e6e6;">Transitions</strong> — Fade (animated cross-fade between two tracks, configurable start frame and length), Radial (growing radial matte transition with edge softness).</li>
+        <li><strong style="color: #e6e6e6;">Fun</strong> — miscellaneous creative effects available in the Fun category of the FX Manager.</li>
+      </ul>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Authoring custom FX plug-ins (.jfx)</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Each FX is three files placed in the FX folder:</p>
+      <ul style="margin: 0 0 8px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">plugin.jfx</span> — XML descriptor: FX name, menu path (<span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">menuName="Comp/Mix"</span>), author, widget definitions, and shader filenames.</li>
+        <li><span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">plugin.frag</span> — GLSL fragment shader. Declare uniform variables matching the <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">varName</span> attributes in the <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.jfx</span>. Write result to <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">gl_FragColor</span>. Textures use <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">sampler2DRect</span> (pixel-space coordinates, not normalized 0–1).</li>
+        <li><span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">plugin.vert</span> — GLSL vertex shader. Most FXs share the standard <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">fixed.vert</span>, which passes four texture coordinate sets to the fragment shader.</li>
+      </ul>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Widget types available in the <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.jfx</span> descriptor: <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">float</span>, <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">bool</span>, <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">texture</span> (track A/B/C/D or previous FX output), <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">cube</span> (3D LUT), <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">lut</span> (1D LUT), <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">choice</span>, <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">newline</span>, <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">spacer</span>.</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The application also injects these uniform variables — declare them in your shader if you need them: <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">currentFrame</span> (float), <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">timeStep</span> (ms since last draw), <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">targetFPS</span>, and texture size vectors <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">texCoord0</span>–<span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">texCoord4</span>. Study <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">MIX.jfx</span> / <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">MIX.frag</span> and <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">OVER.jfx</span> in the FX folder as starting points.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Pipeline integration — command-line flags</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">The first sequence argument goes into Track A, the second into Track B, and so on. Track options (<span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">-f</span>, <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">-t</span>, <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">-s</span>) and viewport options (<span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">-x</span>, <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">-l</span>) apply in the order they appear relative to others of the same type.</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 0.92rem;">
+        <thead><tr>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Flag</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Long form</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Description</th>
+        </tr></thead>
+        <tbody>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">-h</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">--help</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Show help message</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">-f</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">--from</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Start loading from this frame <em>(track option)</em></td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">-t</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">--to</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Stop loading at this frame <em>(track option)</em></td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">-s</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">--scale</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Load at this scale percentage (100, 50, 25…) <em>(track option)</em></td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">-r</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">--frameRate</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Target playback frame rate <em>(global option)</em></td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">-x</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">--fx</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">FX Stack file (.fxs) to apply to a viewport <em>(viewport option)</em></td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">-l</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">--lut</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">LUT filename to apply to a viewport <em>(viewport option)</em></td></tr>
+        </tbody>
+      </table>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 18px;">
+        <div><span style="color: #6c6c6c;"># Load two sequences, frames 12–45 for A and 520–530 for B, at 24 fps</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck seq1.0001.dpx -f 12 -t 45 seq2.0001.dpx -f 520 -t 530 -r 24</div>
+        <div style="margin-top:8px;"><span style="color: #6c6c6c;"># Load A at full res, B at 50% proxy, apply a LUT to viewport 1</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck seq1.0001.exr -s 100 seq2.0001.exr -s 50 -l show_rec709.cub</div>
+        <div style="margin-top:8px;"><span style="color: #6c6c6c;"># Use 4-digit hash padding; range must be explicit</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>jefecheck seq1.####.dpx -f 12 -t 45</div>
+      </div>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Environment variables</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 0.92rem;">
+        <thead><tr>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Variable</th>
+          <th style="text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; color: var(--accent, #e8a020); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .04em;">Description</th>
+        </tr></thead>
+        <tbody>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">JEFECHECK_LUT_PATH</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Override the default LUT search path</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">JEFECHECK_FX_PATH</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Override the default FX plug-in search path</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">JEFECHECK_DEFAULT_BROWSE_PATH</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">Default folder opened in the Load Window file browser</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #cfcfcf; font-family: 'JetBrains Mono', monospace;">JEFECHECK_DEFAULT_LUT</td><td style="padding: 8px 12px; border-bottom: 1px solid #1a1a1a; color: #bcbcbc;">LUT name applied to all viewports on launch; --lut on the command line takes precedence</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Nuke &amp; Maya integration</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Integration scripts to replace the default flipbook in Nuke and Maya are in progress. Contributions are welcome — see the <a href="https://github.com/danielgollas/jefecheck" style="color: var(--accent, #e8a020); text-decoration: none;">GitHub repository</a>. In the meantime, wire <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">jefecheck</span> into a Nuke render callback or Maya flipbook script by passing the rendered output path and frame range as command-line arguments.</p>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #1a1a1a; margin: 40px 0;">
+
+    <!-- ═══════════════════════════════ BUILD FROM SOURCE ════════════════════════ -->
+    <section id="build" style="padding: 4px 0 8px; scroll-margin-top: 128px;">
+      <h2 style="font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: #fff; margin: 0 0 8px;">Build from Source</h2>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">JefeCheck is free software under <strong style="color: #fff;">GPL v2</strong>. It uses CMake across all platforms targeting C++20. If you prefer not to build, download pre-built binaries from the <a href="https://github.com/danielgollas/jefecheck/releases" style="color: var(--accent, #e8a020); text-decoration: none;">GitHub Releases page</a>.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">macOS</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Tested on Apple Silicon (ARM64). OpenGL runs via Apple's Metal translation layer — deprecated by Apple but fully functional for JefeCheck. Retina displays are supported automatically.</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 18px;">
+        <div><span style="color: #6c6c6c;"># Install dependencies via Homebrew</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>brew install fltk openimageio openexr curl zlib cmake freetype</div>
+        <div style="margin-top:8px;"><span style="color: #6c6c6c;"># Clone and build</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>git clone https://github.com/danielgollas/jefecheck.git</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>cd jefecheck</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>cmake -B build &amp;&amp; cmake --build build</div>
+      </div>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Linux (Ubuntu 24.04)</h3>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 18px;">
+        <div><span style="color: #6c6c6c;"># Install dependencies</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>sudo apt install cmake build-essential \</div>
+        <div style="padding-left:18px;">libfltk1.3-dev libopenimageio-dev openimageio-tools \</div>
+        <div style="padding-left:18px;">libopenexr-dev libimath-dev libilmbase-dev libcurl4-openssl-dev zlib1g-dev \</div>
+        <div style="padding-left:18px;">freeglut3-dev libgl-dev libglu1-mesa-dev \</div>
+        <div style="padding-left:18px;">libx11-dev libxext-dev libxft-dev libxinerama-dev \</div>
+        <div style="padding-left:18px;">libxcursor-dev libxrender-dev libxfixes-dev \</div>
+        <div style="padding-left:18px;">libopencv-dev libfreetype6-dev</div>
+        <div style="margin-top:8px;"><span style="color: #6c6c6c;"># Clone and build</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>git clone https://github.com/danielgollas/jefecheck.git &amp;&amp; cd jefecheck</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>cmake -B build &amp;&amp; cmake --build build -j$(nproc)</div>
+        <div style="margin-top:8px;"><span style="color: #6c6c6c;"># Or use the convenience script</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>bash build_linux.sh</div>
+      </div>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Windows (MSYS2 / MinGW)</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Install <a href="https://www.msys2.org/" style="color: var(--accent, #e8a020); text-decoration: none;">MSYS2</a>, then from the MinGW 64-bit shell:</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 8px;">
+        <div><span style="color: #6c6c6c;"># Install dependencies via pacman</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>pacman -S --noconfirm \</div>
+        <div style="padding-left:18px;">mingw-w64-x86_64-cmake mingw-w64-x86_64-toolchain \</div>
+        <div style="padding-left:18px;">mingw-w64-x86_64-fltk mingw-w64-x86_64-openimageio \</div>
+        <div style="padding-left:18px;">mingw-w64-x86_64-openexr mingw-w64-x86_64-imath \</div>
+        <div style="padding-left:18px;">mingw-w64-x86_64-curl mingw-w64-x86_64-zlib \</div>
+        <div style="padding-left:18px;">mingw-w64-x86_64-freeglut mingw-w64-x86_64-freetype \</div>
+        <div style="padding-left:18px;">mingw-w64-x86_64-fmt</div>
+        <div style="margin-top:8px;"><span style="color: #6c6c6c;"># Clone and build</span></div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>git clone https://github.com/danielgollas/jefecheck.git &amp;&amp; cd jefecheck</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>cmake -B build -G "MinGW Makefiles" &amp;&amp; cmake --build build</div>
+      </div>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The Windows build uses <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">-fpermissive</span> for FLTK callback casts. CI builds are automated via GitHub Actions — see <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.github/workflows/build.yml</span>.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Runtime resources</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">JefeCheck looks for FX plug-ins and fonts relative to the binary. For development builds, create symlinks from the source tree:</p>
+      <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 18px;">
+        <div><span style="color: var(--accent, #e8a020);">$ </span>ln -sf $(pwd)/src/FX FX</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>ln -sf $(pwd)/src/fonts fonts</div>
+      </div>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">Release builds package <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">src/FX/</span> and <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">src/fonts/</span> alongside the binary automatically.</p>
+
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">CI &amp; pre-built binaries</h3>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">GitHub Actions builds on all three platforms for every push to <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">main</span>. Tagged <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">v*</span> releases publish downloadable archives on the <a href="https://github.com/danielgollas/jefecheck/releases" style="color: var(--accent, #e8a020); text-decoration: none;">Releases page</a>:</p>
+      <ul style="margin: 0 0 18px; padding-left: 20px; color: #bcbcbc; font-size: 1rem; line-height: 1.7;">
+        <li><span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">jefecheck-macos-arm64.dmg</span></li>
+        <li><span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">jefecheck-linux-x64.tar.gz</span></li>
+        <li><span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">jefecheck-windows-x64.zip</span></li>
+      </ul>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 0;">JefeCheck is licensed under <strong style="color: #fff;">GPL v2</strong>. Contributions are welcome — open an issue or pull request on GitHub.</p>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer style="border-top: 1px solid #161616; background: #000;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 32px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 14px; height: 14px; border-radius: 3px; background: var(--accent, #e8a020);"></span>
+        <span style="font-size: 13px; color: #7e7e7e;">© 2006–2026 Daniel Gollás · GPL v2</span>
+      </div>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #555; letter-spacing: .04em;">free · cross-platform · open source</span>
+      <a href="https://github.com/danielgollas/jefecheck" class="hover-white" style="font-size: 13px; font-weight: 500; color: #b4b4b4; text-decoration: none; transition: color .18s ease-out;">GitHub ↗</a>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>

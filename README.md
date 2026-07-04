@@ -2,6 +2,8 @@
 
 Professional video frame processing and playback application for color correction, effects, and real-time review of digital cinema content.
 
+**Website:** https://danielgollas.github.io/jefecheck
+
 ## Features
 
 - Real-time playback of image sequences (DPX, EXR, and common formats via OpenImageIO)
