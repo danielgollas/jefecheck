@@ -474,11 +474,8 @@ void MainWindow_Qt::buildMenuBar() {
     // first open; show()/raise() on subsequent opens so the window
     // comes to the front without creating a new instance.
     auto showRemote = [this]() {
-        if (!remoteDialog_) remoteDialog_ = new RemoteDialog_Qt(this);
-        remoteDialog_->show();
-        remoteDialog_->raise();
-        remoteDialog_->activateWindow();
-        remoteDialog_->refreshConnectionState();
+        if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
+        if (remoteDialog_) remoteDialog_->refreshConnectionState();
     };
     fileMenu->addAction("Remote &Session…", this, showRemote)
         ->setObjectName("menu.file.remote");
@@ -836,12 +833,21 @@ void MainWindow_Qt::buildDocks() {
     addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
     splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
 
-    // Remote sessions — modal dialog launched from the File menu
-    // (mirrors the FLTK `remoteWindow.fl` standalone window). Adding
-    // it as a fourth left-side dock destabilized the Mac AX bridge's
-    // view of the FX and FX Params children under sweep load,
-    // so we kept the dialog model the FLTK side already used.
-    // Wired in buildMenuBar.
+    // Remote Session — a dockable panel like the others (host/join forms,
+    // live status + participants + errors, collapsible chat & connection
+    // logs, chat input). Tabified with the LUTs dock on the right so it
+    // doesn't crowd the left stack. remoteDialog_ is the panel widget the
+    // network pump refreshes; menu actions raise the dock.
+    remoteDock_ = new QDockWidget("Remote Session", this);
+    remoteDock_->setObjectName("dock.remote");
+    remoteDock_->setAccessibleName("Remote session dock");
+    remoteDialog_ = new RemoteDialog_Qt(remoteDock_);
+    remoteDock_->setWidget(remoteDialog_);
+    remoteDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    remoteDialog_->setMinimumWidth(300);
+    addDockWidget(Qt::RightDockWidgetArea, remoteDock_);
+    if (lutDock_) tabifyDockWidget(lutDock_, remoteDock_);
+    remoteDock_->hide();   // hidden until the user opens it from a menu
 
     // Refresh the FX param panel whenever viewport-driven plate edits
     // fire (this also catches active-plate changes — clicking a plate

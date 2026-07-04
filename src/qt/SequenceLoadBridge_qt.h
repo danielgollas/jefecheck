@@ -382,6 +382,7 @@ std::string              remoteStatusText();
 std::vector<std::string> remoteChatLog();
 std::vector<std::string> remoteErrors();
 std::vector<std::string> remoteNetworkLog();
+void sendChatMessageText(const std::string& text);
 bool pumpNetwork();
 
 // Chat overlay + keyboard chat entry (Task 7).

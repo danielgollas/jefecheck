@@ -1,20 +1,12 @@
-// Remote sessions modal dialog for the Qt port. PR-41a ships the
-// dialog scaffolding plus connect-as-server / connect-as-client form
-// fields. The actual chat log, participant list, and a per-event
-// refresh signal land in PR-41b — that work needs the existing
-// `gfcnetworkclientgui_qt` / `gfcnetworkservergui_qt` adapters to
-// be hooked up to live widgets, which we'll do once the network
-// manager exposes a connection-state signal we can subscribe to.
-//
-// Modal-dialog rather than dock: we already have three left-side
-// docks (FX Params, Playlist) and adding a fourth caused the Mac AX
-// bridge to drop child widgets out of its tree under sweep load.
-// Mirrors the FLTK side, where `remoteWindow.fl` was a separate
-// window too.
+// Remote-session panel for the Qt port. A dockable QWidget (hosted in a
+// QDockWidget by MainWindow, like the FX / LUT / Playlist panels) with
+// connect-as-server / connect-as-client forms, live status + participant
+// list + error line, a collapsible chat log and connection log, and a chat
+// input field. Received chat/pointers also render as the GL viewport overlay.
 #ifndef JEFECHECK_QT_REMOTE_PANEL_H
 #define JEFECHECK_QT_REMOTE_PANEL_H
 
-#include <QDialog>
+#include <QWidget>
 
 class QGroupBox;
 class QLabel;
@@ -24,7 +16,7 @@ class QPushButton;
 class QSpinBox;
 class QTextEdit;
 
-class RemoteDialog_Qt : public QDialog {
+class RemoteDialog_Qt : public QWidget {
     Q_OBJECT
 public:
     explicit RemoteDialog_Qt(QWidget* parent = nullptr);
@@ -39,6 +31,7 @@ private:
     void onStartServerClicked();
     void onConnectClientClicked();
     void onDisconnectClicked();
+    void onChatSubmit();   // send the chat input field's text
 
     // Server tab.
     QLineEdit* serverNameEdit_ = nullptr;
@@ -64,6 +57,7 @@ private:
     QGroupBox*   chatLogBox_ = nullptr;    // checkable → collapses chatLogView_
     QTextEdit*   netLogView_ = nullptr;    // collapsible connection/handshake log
     QGroupBox*   netLogBox_ = nullptr;     // checkable → collapses netLogView_
+    QLineEdit*   chatInput_ = nullptr;     // type + Enter to send a chat message
 };
 
 #endif

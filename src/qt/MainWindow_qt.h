@@ -114,6 +114,7 @@ private:
     QDockWidget* fxParamsDock_ = nullptr;
     QDockWidget* lutDock_ = nullptr;
     QDockWidget* playlistDock_ = nullptr;
+    QDockWidget* remoteDock_ = nullptr;
     PlateManager_Qt* plateManagerWidget_ = nullptr;
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;

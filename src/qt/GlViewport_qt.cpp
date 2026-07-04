@@ -229,23 +229,28 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
 
-    // Broadcast the remote pointer/trail on RIGHT-button drag (left-drag pans the
-    // plate; right-drag is the annotation/pointer gesture, matching the original
-    // FLTK button3 path). dragPlate_ is only set on a left press, so resolve the
-    // plate under the cursor fresh via plateAtViewportPos. The bridge converts to
-    // that plate's image space and throttles to ~60Hz; the receiver stores the
-    // stream per-nickname and draws it as a fading trail.
-    if (e->buttons() & Qt::RightButton) {
+    // Remote pointer/trail gesture: SHIFT + left-drag over a plate. Avoids the
+    // macOS right-click context-menu ambiguity and is distinct from plain left-
+    // drag (pan) and W/E/Q/D/S+drag (color correction). dragPlate_ was set on the
+    // left press, so the quad is already known. The bridge converts framebuffer
+    // bottom-left coords to the plate's image space and throttles to ~60Hz; the
+    // receiver stores the stream per-nickname and draws a fading trail. Shift-drag
+    // is pointer-only — return so it doesn't also pan the plate.
+    if ((e->buttons() & Qt::LeftButton) &&
+        e->modifiers().testFlag(Qt::ShiftModifier) && dragPlate_ >= 0) {
         const float dpr = devicePixelRatioF();
-        const int lx = int(e->position().x());
-        const int ly = int(e->position().y());
-        // Quad lookup wants logical, TOP-left coords (same as the left-press
-        // hit-test). Image-space conversion (gluUnProject in the plate's
-        // framebuffer viewport) wants framebuffer, BOTTOM-left coords.
-        const int quad = jefe::qt::plateAtViewportPos(lx, ly, width(), height());
-        const int xFb = int(float(lx) * dpr);
-        const int yFb = int((float(height()) - float(ly)) * dpr);
-        jefe::qt::sendRemotePointer(xFb, yFb, quad);
+        const int xFb = int(float(e->position().x()) * dpr);
+        const int yFb = int((float(height()) - float(e->position().y())) * dpr);
+        // getCursorPositionIn2DSpace inside the bridge does gluUnProject against
+        // the plate's live GL matrices, so the context MUST be current — without
+        // it, glGet returns stale matrices (constant garbage coords) and the
+        // out-of-context GL calls error-spam (the stutter). Same makeCurrent
+        // discipline as the pick-drag path above.
+        makeCurrent();
+        jefe::qt::sendRemotePointer(xFb, yFb, dragPlate_);
+        doneCurrent();
+        update();
+        return;
     }
 
     if (e->buttons() & Qt::LeftButton && dragPlate_ >= 0) {

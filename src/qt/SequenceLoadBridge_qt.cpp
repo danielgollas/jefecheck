@@ -1986,6 +1986,13 @@ void sendRemotePointer(int xPx, int yPx, int quadID) {
     networkManager.sendPointerInfoMessage(info);
 }
 
+void sendChatMessageText(const std::string& text) {
+    // Panel chat-send path: set the text the manager reads and send it.
+    networkManager.gChatTextString = text;
+    networkManager.sendChatMessage();
+    networkManager.gChatTextString.clear();
+}
+
 bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
 void remoteChatBegin()      { networkManager.gChatMode = 1; }
 void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }

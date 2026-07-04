@@ -89,11 +89,8 @@ QGroupBox* makeClientGroup(QWidget* parent,
 
 }  // namespace
 
-RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
-    setObjectName("dialog.remote");
-    setWindowTitle("Remote Session");
-    setModal(false);
-    resize(420, 520);
+RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
+    setObjectName("panel.remote");
 
     auto* serverBox = makeServerGroup(this,
         serverNameEdit_, serverPortSpin_, serverPasswordEdit_, startServerBtn_);
@@ -103,9 +100,6 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
 
     disconnectBtn_ = new QPushButton("Disconnect", this);
     disconnectBtn_->setObjectName("remote.disconnect.button");
-
-    auto* doneBtn = new QPushButton("Done", this);
-    doneBtn->setObjectName("remote.done.button");
 
     statusLabel_ = new QLabel("Not connected", this);
     statusLabel_->setObjectName("remote.status.label");
@@ -153,11 +147,17 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
     clientIPEdit_->setText("127.0.0.1");
     clientNameEdit_->setText(host);
 
+    // Chat input — type + Enter to send. Reliable path that doesn't depend on
+    // the GL viewport having keyboard focus (the overlay-typing path does).
+    chatInput_ = new QLineEdit(this);
+    chatInput_->setObjectName("remote.chatinput");
+    chatInput_->setPlaceholderText("Type a message and press Enter…");
+    chatInput_->setClearButtonEnabled(true);
+
     auto* footer = new QHBoxLayout();
     footer->setContentsMargins(0, 0, 0, 0);
     footer->addWidget(statusLabel_, /*stretch*/ 1);
     footer->addWidget(disconnectBtn_);
-    footer->addWidget(doneBtn);
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(12, 12, 12, 12);
@@ -168,6 +168,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
     outer->addWidget(errorLabel_);
     outer->addWidget(chatLogBox_);
     outer->addWidget(netLogBox_);
+    outer->addWidget(chatInput_);
     outer->addLayout(footer);
 
     connect(startServerBtn_, &QPushButton::clicked,
@@ -176,10 +177,18 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QDialog(parent) {
             this, &RemoteDialog_Qt::onConnectClientClicked);
     connect(disconnectBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::onDisconnectClicked);
-    connect(doneBtn, &QPushButton::clicked,
-            this, &QDialog::accept);
+    connect(chatInput_, &QLineEdit::returnPressed,
+            this, &RemoteDialog_Qt::onChatSubmit);
 
     refreshConnectionState();
+}
+
+void RemoteDialog_Qt::onChatSubmit() {
+    const QString text = chatInput_->text().trimmed();
+    if (text.isEmpty() || !jefe::qt::isRemoteConnected()) return;
+    jefe::qt::sendChatMessageText(text.toStdString());
+    chatInput_->clear();
+    refreshConnectionState();   // reflect the sent line in the chat log
 }
 
 void RemoteDialog_Qt::onStartServerClicked() {
