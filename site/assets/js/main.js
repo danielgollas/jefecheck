@@ -37,16 +37,16 @@
     });
   }
 
-  // Demo video click-to-play
-  var frame = document.querySelector('.demo-frame');
+  // Demo: video grows out of the thumbnail on click
+  var launch = document.querySelector('.demo-launch');
+  var player = document.querySelector('.demo-player');
   var video = document.querySelector('.demo-video');
-  var overlay = document.querySelector('.demo-overlay');
-  if (frame && video) {
-    frame.addEventListener('click', function () {
-      if (!overlay || overlay.classList.contains('hidden')) return; // already started — let native controls handle clicks
-      overlay.classList.add('hidden');
+  if (launch && player && video) {
+    launch.addEventListener('click', function () {
+      launch.classList.add('hidden');
+      player.classList.add('open');
       video.controls = true;
-      video.play();
+      video.play().catch(function () {});
     });
   }
 })();
