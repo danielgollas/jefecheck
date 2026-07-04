@@ -62,6 +62,18 @@ void gfcFXStack::setWidgetValue(int fxIndex,
     wIt->second.value = value;
 }
 
+GFC_FX_GUI_TYPE gfcFXStack::getWidgetType(int fxIndex,
+                                          const std::string& groupName,
+                                          const std::string& widgetName) const {
+    if (fxIndex < 0 || fxIndex >= (int)fxs.size()) return FX_GUI_UNKNOWN;
+    const auto& fx = fxs[fxIndex];
+    auto gIt = fx.groups.find(groupName);
+    if (gIt == fx.groups.end()) return FX_GUI_UNKNOWN;
+    auto wIt = gIt->second.widgets.find(widgetName);
+    if (wIt == gIt->second.widgets.end()) return FX_GUI_UNKNOWN;
+    return wIt->second.type;
+}
+
 /**
  *
  * @param o

@@ -955,6 +955,63 @@ void gfcPlateManager::addFXToPlate(int whichOne, gfcFX theFX) {
 
 }
 
+void gfcPlateManager::setFXWidgetValue(int whichOne, int fxIndex,
+                                       const std::string& groupName,
+                                       const std::string& widgetName,
+                                       float value) {
+    setChanged();
+    if (whichOne < 0 || whichOne >= (int)plates.size()) {
+        printf("gfcPlateManager::setFXWidgetValue: requested plate out of range\n");
+        return;
+    }
+    gfcFXStack* stack = &plates[whichOne].fxStack;
+    stack->setWidgetValue(fxIndex, groupName, widgetName, value);
+    this->clearHistogramCache(whichOne);
+
+    // Broadcast the live param edit to remote peers (mirrors the throttled
+    // COLOR/TRANSFORMS streams). sendFXAttribMessage no-ops when not in a
+    // session, but skip building the message entirely when solo. The receiver
+    // (gfcFXStack::processNetFXAttribInfo) keys off attribType to pick which
+    // field it reads, so fill the one matching this widget's type.
+    if (!networkManager.getConnected())
+        return;
+
+    gfcNetFXAttribInfo info;
+    info.id.quadID    = whichOne;
+    info.id.index     = fxIndex;
+    info.groupName    = groupName;
+    info.variableName = widgetName;
+    info.theFloat     = 0.0f;
+    info.theInt       = 0;
+    info.attribType   = stack->getWidgetType(fxIndex, groupName, widgetName);
+
+    switch (info.attribType) {
+    case FX_GUI_FLOAT:
+        info.theFloat = value;
+        break;
+    case FX_GUI_BOOL:
+    case FX_GUI_CHOICE:
+    case FX_GUI_TEXTURE:
+        info.theInt = (int)value;
+        break;
+    case FX_GUI_LUT:
+    case FX_GUI_CUBE: {
+        // The panel stores the GLOBAL lutManager index as the value; the wire
+        // carries the LUT's name (getAllNames is indexed by that same global
+        // index, and the receiver maps name -> index via getLutIndexByName).
+        std::vector<std::string> names = lutManager.getAllNames();
+        int idx = (int)value;
+        if (idx >= 0 && idx < (int)names.size())
+            info.lutOrCube = names[idx];
+        break;
+    }
+    default:
+        return;  // unknown widget type — nothing meaningful to send
+    }
+
+    networkManager.sendFXAttribMessage(info);
+}
+
 gfcFXStack * gfcPlateManager::getFXStack(int whichOne) {
     if (whichOne>=plates.size()) {
         printf("gfcPlateManager::getFXStack: requested plate out of range\n");

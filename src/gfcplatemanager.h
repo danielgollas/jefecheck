@@ -196,6 +196,12 @@ public:
 	 void setChannelA(int whichOne, int value);
 
 	gfcFXStack* getFXStack(int whichOne);
+	// Sets a single FX widget value on a plate AND broadcasts the edit to
+	// remote peers as a live FX-attrib message (mirrors how CC/transforms
+	// stream). This is the choke point the Qt FX param panel writes through.
+	void setFXWidgetValue(int whichOne, int fxIndex,
+	                      const std::string& groupName,
+	                      const std::string& widgetName, float value);
 	void setFXStack(gfcFXStack theStack, int whichOne);
 	void appendFXStack(gfcFXStack theStack, int whichOne);
 

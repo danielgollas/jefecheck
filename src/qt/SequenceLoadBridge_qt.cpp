@@ -817,10 +817,10 @@ void setFXParamValueOnPlate(int plateIdx,
                             const std::string& groupName,
                             const std::string& widgetName,
                             float value) {
-    auto* stack = plateManager.getFXStack(plateIdx);
-    if (!stack) return;
-    stack->setWidgetValue(fxIndex, groupName, widgetName, value);
-    plateManager.setChanged();
+    // Routes through the plate manager so the edit is both applied and
+    // broadcast to remote peers (live FX-attrib streaming); setChanged() and
+    // the histogram-cache clear happen inside setFXWidgetValue.
+    plateManager.setFXWidgetValue(plateIdx, fxIndex, groupName, widgetName, value);
 }
 
 namespace {
