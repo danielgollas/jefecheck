@@ -12,26 +12,26 @@
 #include <QSysInfo>
 #include <QTabWidget>
 #include <QTextEdit>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace {
 
-// Scoped stylesheet — a clean dark surface with a warm coral accent for the
+// Scoped stylesheet — a clean dark surface with a muted slate accent for the
 // primary (Host/Join) actions. Applied to the panel; children inherit.
 const char* kRemoteStyle = R"(
 #panel_remote { background: #1c1c1f; }
 #panel_remote QLabel { color: #c8c8cc; }
 #panel_remote QLabel[role="section"] {
-    color: #8a8a90; font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 1px; padding-top: 2px;
+    color: #8a8a90; font-size: 11px; font-weight: 600; padding-top: 2px;
 }
 #panel_remote QLabel[role="status"] { color: #e8e8ea; font-size: 13px; }
 #panel_remote QLineEdit, #panel_remote QSpinBox {
     background: #2a2a2e; border: 1px solid #3a3a40; border-radius: 6px;
-    padding: 6px 9px; color: #ececee; selection-background-color: #cc785c;
+    padding: 6px 9px; color: #ececee; selection-background-color: #4a6172;
 }
 #panel_remote QLineEdit:focus, #panel_remote QSpinBox:focus {
-    border: 1px solid #cc785c;
+    border: 1px solid #55707f;
 }
 #panel_remote QPushButton {
     background: #33333a; border: 1px solid #45454d; border-radius: 6px;
@@ -39,9 +39,9 @@ const char* kRemoteStyle = R"(
 }
 #panel_remote QPushButton:hover { background: #3c3c44; }
 #panel_remote QPushButton[accent="true"] {
-    background: #cc785c; border: none; color: #ffffff; font-weight: 600;
+    background: #3f5666; border: 1px solid #4c6577; color: #eef2f5; font-weight: 600;
 }
-#panel_remote QPushButton[accent="true"]:hover { background: #d6866b; }
+#panel_remote QPushButton[accent="true"]:hover { background: #486274; }
 #panel_remote QPushButton:disabled { background: #2a2a2e; color: #6a6a70; border-color: #333; }
 #panel_remote QTabWidget::pane {
     border: 1px solid #3a3a40; border-radius: 8px; top: -1px; background: #232327;
@@ -56,13 +56,37 @@ const char* kRemoteStyle = R"(
     background: #202024; border: 1px solid #34343a; border-radius: 8px;
     color: #dcdce0; padding: 4px;
 }
-#panel_remote QGroupBox {
-    border: 1px solid #34343a; border-radius: 8px; margin-top: 8px; color: #9a9aa0;
+#panel_remote QToolButton[role="accordion"] {
+    color: #9a9aa0; font-size: 11px; font-weight: 600; border: none;
+    padding: 4px 2px; background: transparent;
 }
-#panel_remote QGroupBox::title {
-    subcontrol-origin: margin; left: 10px; padding: 0 4px;
-}
+#panel_remote QToolButton[role="accordion"]:hover { color: #cfcfd4; }
 )";
+
+// A lightweight accordion section: a flat disclosure header (arrow + title) that
+// toggles a content widget. Cleaner than a checkable QGroupBox for logs.
+QWidget* makeCollapsible(const QString& title, QWidget* content, QWidget* parent) {
+    auto* wrap = new QWidget(parent);
+    auto* v = new QVBoxLayout(wrap);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(4);
+    auto* header = new QToolButton(wrap);
+    header->setText(title);
+    header->setProperty("role", "accordion");
+    header->setCheckable(true);
+    header->setChecked(false);
+    header->setArrowType(Qt::RightArrow);
+    header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    content->setVisible(false);
+    QObject::connect(header, &QToolButton::toggled, content, &QWidget::setVisible);
+    QObject::connect(header, &QToolButton::toggled, header, [header](bool on) {
+        header->setArrowType(on ? Qt::DownArrow : Qt::RightArrow);
+    });
+    v->addWidget(header);
+    v->addWidget(content);
+    return wrap;
+}
 
 // Build a Host form into `page` and expose its fields. Returns the page widget.
 QWidget* makeHostPage(QLineEdit*& nameOut, QSpinBox*& portOut,
@@ -195,19 +219,13 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     sessionLayout->addWidget(chatInput_);
     sessionLayout->addWidget(disconnectBtn_);
 
-    // ---- Connection log (collapsible, de-emphasized, always at bottom) ---
-    netLogBox_ = new QGroupBox(tr("Connection log"), this);
-    netLogBox_->setObjectName("remote.netlogbox");
-    netLogBox_->setCheckable(true);
-    netLogBox_->setChecked(false);
-    auto* netLayout = new QVBoxLayout(netLogBox_);
-    netLogView_ = new QTextEdit(netLogBox_);
+    // ---- Connection log (accordion, de-emphasized, always at bottom) -----
+    netLogView_ = new QTextEdit(this);
     netLogView_->setObjectName("remote.netlog");
     netLogView_->setReadOnly(true);
     netLogView_->setMaximumHeight(120);
-    netLayout->addWidget(netLogView_);
-    connect(netLogBox_, &QGroupBox::toggled, netLogView_, &QWidget::setVisible);
-    netLogView_->setVisible(false);
+    QWidget* netLogSection = makeCollapsible(tr("Connection log"), netLogView_, this);
+    netLogBox_ = nullptr;   // replaced by the accordion section
 
     // Sensible defaults so local testing needs no typing.
     serverNameEdit_->setText("server");
@@ -222,7 +240,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     outer->addWidget(connectTabs_);
     outer->addWidget(sessionBox_);
     outer->addWidget(errorLabel_);
-    outer->addWidget(netLogBox_);
+    outer->addWidget(netLogSection);
     outer->addStretch(1);
 
     connect(startServerBtn_, &QPushButton::clicked,
@@ -273,14 +291,14 @@ void RemoteDialog_Qt::refreshConnectionState() {
     const bool connected = jefe::qt::isRemoteConnected();
     const bool isServer  = jefe::qt::isRemoteServer();
 
-    statusLabel_->setText(QString::fromStdString(jefe::qt::remoteStatusText()));
+    QString statusText = QString::fromStdString(jefe::qt::remoteStatusText());
+    if (statusText.trimmed().isEmpty())
+        statusText = connected ? (isServer ? "Hosting" : "Connected") : "Not connected";
+    statusLabel_->setText(statusText);
     // Dot color: green connected/hosting, amber connecting, gray offline.
     QString dotColor = "#6a6a70";
-    if (connected) dotColor = isServer ? "#5bb07a" : "#5bb07a";
-    else if (!jefe::qt::remoteStatusText().empty() &&
-             QString::fromStdString(jefe::qt::remoteStatusText())
-                 .contains("Attempt", Qt::CaseInsensitive))
-        dotColor = "#d6a15b";
+    if (connected) dotColor = "#5bb07a";
+    else if (statusText.contains("Attempt", Qt::CaseInsensitive)) dotColor = "#d6a15b";
     statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
 
     // Contextual sections: forms when offline, session when connected.
