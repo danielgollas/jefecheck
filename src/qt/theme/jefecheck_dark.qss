@@ -41,80 +41,129 @@ QGroupBox::title {
 
 QLabel { background: transparent; }
 
+/* Discreet button style: small, transparent, thin border with a subtle hint of
+   the accent — readable, understated. Applies app-wide. */
 QPushButton {
-    background-color: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 3px;
-    padding: 4px 12px;
-    color: #e0e0e0;
+    background: transparent;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 3px 11px;
+    font-size: 11px;
+    color: #cbcbcb;
 }
-QPushButton:hover { border-color: #d4771e; }
+QPushButton:hover {
+    background-color: #2d2d2d;
+    border-color: #8a5a2a;   /* muted accent hint */
+    color: #ededed;
+}
 QPushButton:pressed, QPushButton:checked {
-    background-color: #d4771e;
-    color: #1a1a1a;
-    border-color: #b86819;
+    background-color: #2e2620;   /* subtle accent-tinted fill, not a bold block */
+    border-color: #d4771e;
+    color: #e8b884;
 }
-QPushButton:disabled { color: #707070; border-color: #2a2a2a; }
+QPushButton:disabled { color: #666666; border-color: #2c2c2c; background: transparent; }
 
 QLineEdit, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {
-    background-color: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 3px;
-    padding: 3px 6px;
-    color: #e0e0e0;
-    selection-background-color: #d4771e;
-    selection-color: #1a1a1a;
+    background-color: #1c1c1c;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 3px 7px;
+    color: #dcdcdc;
+    selection-background-color: #7a4a1e;
+    selection-color: #f0f0f0;
 }
+QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover { border-color: #4a4a4a; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QPlainTextEdit:focus, QTextEdit:focus {
-    border-color: #d4771e;
+    border-color: #a8631f;
 }
 QLineEdit:read-only { color: #a0a0a0; }
 
-QComboBox {
-    background-color: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 3px;
-    padding: 3px 22px 3px 6px;
-    color: #e0e0e0;
+/* Spinbox steppers — thin, flat, muted triangles (the default ones are clunky). */
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    subcontrol-origin: border; subcontrol-position: top right;
+    width: 15px; background: transparent; border-left: 1px solid #333333;
+    border-top-right-radius: 4px;
 }
-QComboBox:hover { border-color: #d4771e; }
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    subcontrol-origin: border; subcontrol-position: bottom right;
+    width: 15px; background: transparent; border-left: 1px solid #333333;
+    border-bottom-right-radius: 4px;
+}
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover { background: #2a2620; }
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+    width: 0; height: 0; border-left: 3px solid transparent;
+    border-right: 3px solid transparent; border-bottom: 4px solid #9a9a9a;
+}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    width: 0; height: 0; border-left: 3px solid transparent;
+    border-right: 3px solid transparent; border-top: 4px solid #9a9a9a;
+}
+
+QComboBox {
+    background-color: #242424;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 3px 22px 3px 8px;
+    color: #dcdcdc;
+    min-height: 20px;
+}
+QComboBox:hover { border-color: #4a4a4a; }
+QComboBox:focus, QComboBox:on { border-color: #a8631f; }
 QComboBox::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: right center;
     width: 18px;
-    border-left: 1px solid #3a3a3a;
+    border: none;
 }
 QComboBox::down-arrow { image: none; width: 0; height: 0;
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
-    border-top: 5px solid #a0a0a0;
+    border-top: 5px solid #9a9a9a;
+    margin-right: 6px;
 }
 QComboBox QAbstractItemView {
-    background-color: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    color: #e0e0e0;
-    selection-background-color: #d4771e;
-    selection-color: #1a1a1a;
+    background-color: #1c1c1c;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    color: #dcdcdc;
+    padding: 3px;
+    selection-background-color: #7a4a1e;
+    selection-color: #f4f4f4;
+    outline: none;
 }
 
 QCheckBox, QRadioButton {
     background: transparent;
-    color: #e0e0e0;
-    spacing: 6px;
+    color: #dcdcdc;
+    spacing: 7px;
 }
 QCheckBox::indicator, QRadioButton::indicator {
-    width: 13px;
-    height: 13px;
-    background-color: #1a1a1a;
-    border: 1px solid #3a3a3a;
+    width: 15px;
+    height: 15px;
+    background-color: #242424;
+    border: 1px solid #4a4a4a;
 }
-QCheckBox::indicator { border-radius: 2px; }
-QRadioButton::indicator { border-radius: 7px; }
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+QCheckBox::indicator { border-radius: 4px; }
+QRadioButton::indicator { border-radius: 8px; }
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: #8a5a2a; background-color: #2a2622;
+}
+/* Checked: a muted accent fill, not the hard bright square. (A checkmark SVG
+   can be dropped in via image: url(:/...) for extra polish.) */
+QCheckBox::indicator:checked {
+    background-color: #c07429; border-color: #d4771e; border-radius: 4px;
+}
+QRadioButton::indicator:checked {
+    background-color: #c07429; border-color: #d4771e;
+}
+QCheckBox::indicator:checked:hover, QRadioButton::indicator:checked:hover {
     background-color: #d4771e;
-    border-color: #b86819;
 }
-QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: #d4771e; }
+QCheckBox:disabled, QRadioButton:disabled { color: #6a6a6a; }
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    background-color: #202020; border-color: #333333;
+}
 
 QSlider::groove:horizontal {
     height: 4px;
