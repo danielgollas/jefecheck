@@ -55,7 +55,11 @@ private:
 
     // Contextual sections: connect forms show when disconnected, the session
     // (participants + chat) shows when connected. Toggled in refreshConnectionState.
-    QTabWidget*  connectTabs_ = nullptr;   // Host / Join
+    QWidget*     connectPanel_ = nullptr;  // segmented Host/Join toggle + forms
+    QPushButton* hostToggle_ = nullptr;    // segmented control (Host)
+    QPushButton* joinToggle_ = nullptr;    // segmented control (Join)
+    QWidget*     hostForm_ = nullptr;
+    QWidget*     joinForm_ = nullptr;
     QWidget*     sessionBox_ = nullptr;    // participants + chat + disconnect
     QLabel*      participantsHeader_ = nullptr;
 

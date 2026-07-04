@@ -44,15 +44,24 @@ const char* kRemoteStyle = R"(
 }
 #panel_remote QPushButton[accent="true"]:hover { background: #486274; }
 #panel_remote QPushButton:disabled { background: #2a2a2e; color: #6a6a70; border-color: #333; }
-#panel_remote QTabWidget::pane {
-    border: 1px solid #3a3a40; border-radius: 8px; top: -1px; background: #232327;
+#panel_remote QPushButton[segment="true"] {
+    background: #26262b; border: 1px solid #3a3a40; color: #9a9aa0;
+    padding: 6px 0; font-weight: 600; border-radius: 0;
 }
-#panel_remote QTabBar::tab {
-    background: transparent; color: #9a9aa0; padding: 7px 20px; margin-right: 2px;
-    border-top-left-radius: 8px; border-top-right-radius: 8px;
+#panel_remote QPushButton[segment="true"][segpos="left"] {
+    border-top-left-radius: 7px; border-bottom-left-radius: 7px;
 }
-#panel_remote QTabBar::tab:selected { background: #232327; color: #ffffff; }
-#panel_remote QTabBar::tab:hover:!selected { color: #cfcfd4; }
+#panel_remote QPushButton[segment="true"][segpos="right"] {
+    border-top-right-radius: 7px; border-bottom-right-radius: 7px; border-left: none;
+}
+#panel_remote QPushButton[segment="true"]:hover { color: #cfcfd4; }
+#panel_remote QPushButton[segment="true"]:checked {
+    background: #3f5666; border-color: #4c6577; color: #eef2f5;
+}
+#panel_remote QWidget[card="true"] {
+    background: #232327; border: 1px solid #3a3a40; border-radius: 8px;
+    margin-top: 6px;
+}
 #panel_remote QListWidget, #panel_remote QTextEdit {
     background: #202024; border: 1px solid #34343a; border-radius: 8px;
     color: #dcdce0; padding: 4px;
@@ -143,15 +152,55 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     statusRow->addWidget(statusDot_);
     statusRow->addWidget(statusLabel_, /*stretch*/ 1);
 
-    // ---- Connect section (shown when disconnected): Host / Join tabs ------
-    connectTabs_ = new QTabWidget(this);
-    connectTabs_->setObjectName("remote.connect.tabs");
-    connectTabs_->addTab(
-        makeHostPage(serverNameEdit_, serverPortSpin_, serverPasswordEdit_,
-                     startServerBtn_), "Host");
-    connectTabs_->addTab(
-        makeJoinPage(clientNameEdit_, clientIPEdit_, clientPortSpin_,
-                     clientPasswordEdit_, connectClientBtn_), "Join");
+    // ---- Connect section (shown when disconnected): Host / Join ----------
+    // A segmented toggle that shows exactly one of the two forms, so the panel
+    // sizes to the visible form (no dead space; avoids QTabWidget's stacked
+    // layout always sizing to the tallest page).
+    hostToggle_ = new QPushButton("Host", this);
+    joinToggle_ = new QPushButton("Join", this);
+    for (auto* b : {hostToggle_, joinToggle_}) {
+        b->setCheckable(true);
+        b->setProperty("segment", true);
+        b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+    hostToggle_->setObjectName("remote.toggle.host");
+    joinToggle_->setObjectName("remote.toggle.join");
+    hostToggle_->setProperty("segpos", "left");
+    joinToggle_->setProperty("segpos", "right");
+    hostToggle_->setChecked(true);
+    auto* segRow = new QHBoxLayout();
+    segRow->setContentsMargins(0, 0, 0, 0);
+    segRow->setSpacing(0);
+    segRow->addWidget(hostToggle_);
+    segRow->addWidget(joinToggle_);
+
+    hostForm_ = makeHostPage(serverNameEdit_, serverPortSpin_,
+                             serverPasswordEdit_, startServerBtn_);
+    joinForm_ = makeJoinPage(clientNameEdit_, clientIPEdit_, clientPortSpin_,
+                             clientPasswordEdit_, connectClientBtn_);
+    hostForm_->setProperty("card", true);
+    joinForm_->setProperty("card", true);
+    hostForm_->setAttribute(Qt::WA_StyledBackground, true);  // paint QSS bg on plain QWidget
+    joinForm_->setAttribute(Qt::WA_StyledBackground, true);
+    joinForm_->setVisible(false);
+
+    connectPanel_ = new QWidget(this);
+    connectPanel_->setObjectName("remote.connect.panel");
+    auto* connectLayout = new QVBoxLayout(connectPanel_);
+    connectLayout->setContentsMargins(0, 0, 0, 0);
+    connectLayout->setSpacing(0);
+    connectLayout->addLayout(segRow);
+    connectLayout->addWidget(hostForm_);
+    connectLayout->addWidget(joinForm_);
+
+    auto selectHost = [this](bool host) {
+        hostToggle_->setChecked(host);
+        joinToggle_->setChecked(!host);
+        hostForm_->setVisible(host);
+        joinForm_->setVisible(!host);
+    };
+    connect(hostToggle_, &QPushButton::clicked, this, [selectHost]() { selectHost(true); });
+    connect(joinToggle_, &QPushButton::clicked, this, [selectHost]() { selectHost(false); });
 
     // ---- Session section (shown when connected) --------------------------
     participantsHeader_ = sectionLabel("Participants", this);
@@ -194,7 +243,11 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     netLogView_ = new QTextEdit(this);
     netLogView_->setObjectName("remote.netlog");
     netLogView_->setReadOnly(true);
-    netLogView_->setMaximumHeight(120);
+    netLogView_->setMinimumHeight(90);
+    netLogView_->setMaximumHeight(160);
+    netLogView_->setPlaceholderText(
+        "Connection activity (nicknames, sync, connect/disconnect) appears here "
+        "once you host or join a session.");
     auto* netLogSection = new CollapsibleSection(tr("Connection log"), this);
     netLogSection->setObjectName("remote.netlogsection");
     netLogSection->setContentWidget(netLogView_);
@@ -210,7 +263,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     outer->setContentsMargins(14, 14, 14, 14);
     outer->setSpacing(12);
     outer->addLayout(statusRow);
-    outer->addWidget(connectTabs_);
+    outer->addWidget(connectPanel_);
     outer->addWidget(sessionBox_);
     outer->addWidget(errorLabel_);
     outer->addWidget(netLogSection);
@@ -275,7 +328,7 @@ void RemoteDialog_Qt::refreshConnectionState() {
     statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
 
     // Contextual sections: forms when offline, session when connected.
-    connectTabs_->setVisible(!connected);
+    connectPanel_->setVisible(!connected);
     sessionBox_->setVisible(connected);
 
     participantsList_->clear();
