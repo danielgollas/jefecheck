@@ -14,7 +14,9 @@ class QLineEdit;
 class QListWidget;
 class QPushButton;
 class QSpinBox;
+class QTabWidget;
 class QTextEdit;
+class QWidget;
 
 class RemoteDialog_Qt : public QWidget {
     Q_OBJECT
@@ -49,6 +51,13 @@ private:
     // Shared.
     QPushButton* disconnectBtn_ = nullptr;
     QLabel*      statusLabel_ = nullptr;
+    QLabel*      statusDot_ = nullptr;     // colored ● reflecting connection state
+
+    // Contextual sections: connect forms show when disconnected, the session
+    // (participants + chat) shows when connected. Toggled in refreshConnectionState.
+    QTabWidget*  connectTabs_ = nullptr;   // Host / Join
+    QWidget*     sessionBox_ = nullptr;    // participants + chat + disconnect
+    QLabel*      participantsHeader_ = nullptr;
 
     // Live state widgets (refreshed by refreshConnectionState).
     QListWidget* participantsList_ = nullptr;

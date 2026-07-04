@@ -9,125 +9,193 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QTextEdit>
 #include <QSysInfo>
+#include <QTabWidget>
+#include <QTextEdit>
 #include <QVBoxLayout>
 
 namespace {
 
-QGroupBox* makeServerGroup(QWidget* parent,
-                           QLineEdit*& nameOut,
-                           QSpinBox*& portOut,
-                           QLineEdit*& passwordOut,
-                           QPushButton*& startBtnOut) {
-    auto* group = new QGroupBox("Host (Server)", parent);
-    group->setObjectName("remote.server.group");
+// Scoped stylesheet — a clean dark surface with a warm coral accent for the
+// primary (Host/Join) actions. Applied to the panel; children inherit.
+const char* kRemoteStyle = R"(
+#panel_remote { background: #1c1c1f; }
+#panel_remote QLabel { color: #c8c8cc; }
+#panel_remote QLabel[role="section"] {
+    color: #8a8a90; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1px; padding-top: 2px;
+}
+#panel_remote QLabel[role="status"] { color: #e8e8ea; font-size: 13px; }
+#panel_remote QLineEdit, #panel_remote QSpinBox {
+    background: #2a2a2e; border: 1px solid #3a3a40; border-radius: 6px;
+    padding: 6px 9px; color: #ececee; selection-background-color: #cc785c;
+}
+#panel_remote QLineEdit:focus, #panel_remote QSpinBox:focus {
+    border: 1px solid #cc785c;
+}
+#panel_remote QPushButton {
+    background: #33333a; border: 1px solid #45454d; border-radius: 6px;
+    padding: 7px 14px; color: #e8e8ea;
+}
+#panel_remote QPushButton:hover { background: #3c3c44; }
+#panel_remote QPushButton[accent="true"] {
+    background: #cc785c; border: none; color: #ffffff; font-weight: 600;
+}
+#panel_remote QPushButton[accent="true"]:hover { background: #d6866b; }
+#panel_remote QPushButton:disabled { background: #2a2a2e; color: #6a6a70; border-color: #333; }
+#panel_remote QTabWidget::pane {
+    border: 1px solid #3a3a40; border-radius: 8px; top: -1px; background: #232327;
+}
+#panel_remote QTabBar::tab {
+    background: transparent; color: #9a9aa0; padding: 7px 20px; margin-right: 2px;
+    border-top-left-radius: 8px; border-top-right-radius: 8px;
+}
+#panel_remote QTabBar::tab:selected { background: #232327; color: #ffffff; }
+#panel_remote QTabBar::tab:hover:!selected { color: #cfcfd4; }
+#panel_remote QListWidget, #panel_remote QTextEdit {
+    background: #202024; border: 1px solid #34343a; border-radius: 8px;
+    color: #dcdce0; padding: 4px;
+}
+#panel_remote QGroupBox {
+    border: 1px solid #34343a; border-radius: 8px; margin-top: 8px; color: #9a9aa0;
+}
+#panel_remote QGroupBox::title {
+    subcontrol-origin: margin; left: 10px; padding: 0 4px;
+}
+)";
 
-    nameOut = new QLineEdit(group);
+// Build a Host form into `page` and expose its fields. Returns the page widget.
+QWidget* makeHostPage(QLineEdit*& nameOut, QSpinBox*& portOut,
+                      QLineEdit*& passwordOut, QPushButton*& startBtnOut) {
+    auto* page = new QWidget();
+    nameOut = new QLineEdit(page);
     nameOut->setObjectName("remote.server.name.edit");
     nameOut->setPlaceholderText("Session name");
-
-    portOut = new QSpinBox(group);
+    portOut = new QSpinBox(page);
     portOut->setObjectName("remote.server.port.spin");
     portOut->setRange(1024, 65535);
     portOut->setValue(60000);
-
-    passwordOut = new QLineEdit(group);
+    passwordOut = new QLineEdit(page);
     passwordOut->setObjectName("remote.server.password.edit");
     passwordOut->setEchoMode(QLineEdit::Password);
     passwordOut->setPlaceholderText("Optional");
-
-    startBtnOut = new QPushButton("Start server", group);
+    startBtnOut = new QPushButton("Start hosting", page);
     startBtnOut->setObjectName("remote.server.start.button");
+    startBtnOut->setProperty("accent", true);
 
-    auto* form = new QFormLayout(group);
-    form->addRow("Name:", nameOut);
-    form->addRow("Port:", portOut);
-    form->addRow("Password:", passwordOut);
-    form->addRow("", startBtnOut);
-    return group;
+    auto* form = new QFormLayout(page);
+    form->setContentsMargins(12, 14, 12, 12);
+    form->setSpacing(9);
+    form->addRow("Name", nameOut);
+    form->addRow("Port", portOut);
+    form->addRow("Password", passwordOut);
+    form->addRow(QString(), startBtnOut);
+    return page;
 }
 
-QGroupBox* makeClientGroup(QWidget* parent,
-                           QLineEdit*& nameOut,
-                           QLineEdit*& ipOut,
-                           QSpinBox*& portOut,
-                           QLineEdit*& passwordOut,
-                           QPushButton*& connectBtnOut) {
-    auto* group = new QGroupBox("Join (Client)", parent);
-    group->setObjectName("remote.client.group");
-
-    nameOut = new QLineEdit(group);
+QWidget* makeJoinPage(QLineEdit*& nameOut, QLineEdit*& ipOut, QSpinBox*& portOut,
+                      QLineEdit*& passwordOut, QPushButton*& connectBtnOut) {
+    auto* page = new QWidget();
+    nameOut = new QLineEdit(page);
     nameOut->setObjectName("remote.client.name.edit");
     nameOut->setPlaceholderText("Your nickname");
-
-    ipOut = new QLineEdit(group);
+    ipOut = new QLineEdit(page);
     ipOut->setObjectName("remote.client.ip.edit");
     ipOut->setPlaceholderText("Server IP / hostname");
-
-    portOut = new QSpinBox(group);
+    portOut = new QSpinBox(page);
     portOut->setObjectName("remote.client.port.spin");
     portOut->setRange(1024, 65535);
     portOut->setValue(60000);
-
-    passwordOut = new QLineEdit(group);
+    passwordOut = new QLineEdit(page);
     passwordOut->setObjectName("remote.client.password.edit");
     passwordOut->setEchoMode(QLineEdit::Password);
     passwordOut->setPlaceholderText("Optional");
-
-    connectBtnOut = new QPushButton("Connect", group);
+    connectBtnOut = new QPushButton("Connect", page);
     connectBtnOut->setObjectName("remote.client.connect.button");
+    connectBtnOut->setProperty("accent", true);
 
-    auto* form = new QFormLayout(group);
-    form->addRow("Nickname:", nameOut);
-    form->addRow("Server IP:", ipOut);
-    form->addRow("Port:", portOut);
-    form->addRow("Password:", passwordOut);
-    form->addRow("", connectBtnOut);
-    return group;
+    auto* form = new QFormLayout(page);
+    form->setContentsMargins(12, 14, 12, 12);
+    form->setSpacing(9);
+    form->addRow("Nickname", nameOut);
+    form->addRow("Server", ipOut);
+    form->addRow("Port", portOut);
+    form->addRow("Password", passwordOut);
+    form->addRow(QString(), connectBtnOut);
+    return page;
+}
+
+QLabel* sectionLabel(const QString& text, QWidget* parent) {
+    auto* l = new QLabel(text, parent);
+    l->setProperty("role", "section");
+    return l;
 }
 
 }  // namespace
 
 RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
-    setObjectName("panel.remote");
+    setObjectName("panel_remote");
+    setStyleSheet(kRemoteStyle);
 
-    auto* serverBox = makeServerGroup(this,
-        serverNameEdit_, serverPortSpin_, serverPasswordEdit_, startServerBtn_);
-    auto* clientBox = makeClientGroup(this,
-        clientNameEdit_, clientIPEdit_, clientPortSpin_, clientPasswordEdit_,
-        connectClientBtn_);
-
-    disconnectBtn_ = new QPushButton("Disconnect", this);
-    disconnectBtn_->setObjectName("remote.disconnect.button");
-
+    // ---- Status header: colored dot + text -------------------------------
+    statusDot_ = new QLabel(QStringLiteral("●"), this);  // ●
+    statusDot_->setObjectName("remote.status.dot");
     statusLabel_ = new QLabel("Not connected", this);
     statusLabel_->setObjectName("remote.status.label");
-    statusLabel_->setStyleSheet("color: #888; font-style: italic;");
+    statusLabel_->setProperty("role", "status");
+    auto* statusRow = new QHBoxLayout();
+    statusRow->setSpacing(8);
+    statusRow->addWidget(statusDot_);
+    statusRow->addWidget(statusLabel_, /*stretch*/ 1);
 
+    // ---- Connect section (shown when disconnected): Host / Join tabs ------
+    connectTabs_ = new QTabWidget(this);
+    connectTabs_->setObjectName("remote.connect.tabs");
+    connectTabs_->addTab(
+        makeHostPage(serverNameEdit_, serverPortSpin_, serverPasswordEdit_,
+                     startServerBtn_), "Host");
+    connectTabs_->addTab(
+        makeJoinPage(clientNameEdit_, clientIPEdit_, clientPortSpin_,
+                     clientPasswordEdit_, connectClientBtn_), "Join");
+
+    // ---- Session section (shown when connected) --------------------------
+    participantsHeader_ = sectionLabel("Participants", this);
     participantsList_ = new QListWidget(this);
     participantsList_->setObjectName("remote.participants");
-    participantsList_->setMaximumHeight(120);
+    participantsList_->setMaximumHeight(96);
+
+    auto* chatHeader = sectionLabel("Chat", this);
+    chatHeader->setObjectName("remote.chat.header");
+    chatLogView_ = new QTextEdit(this);
+    chatLogView_->setObjectName("remote.chatlog");
+    chatLogView_->setReadOnly(true);
+    chatLogBox_ = nullptr;   // chat log is now always visible in the session view
+
+    chatInput_ = new QLineEdit(this);
+    chatInput_->setObjectName("remote.chatinput");
+    chatInput_->setPlaceholderText("Message… (Enter to send)");
+    chatInput_->setClearButtonEnabled(true);
+
+    disconnectBtn_ = new QPushButton("Leave session", this);
+    disconnectBtn_->setObjectName("remote.disconnect.button");
 
     errorLabel_ = new QLabel(QString(), this);
     errorLabel_->setObjectName("remote.error");
-    errorLabel_->setStyleSheet("color:#e06c75;");
+    errorLabel_->setStyleSheet("color:#e0836c;");
     errorLabel_->setWordWrap(true);
 
-    chatLogBox_ = new QGroupBox(tr("Chat log"), this);
-    chatLogBox_->setObjectName("remote.chatlogbox");
-    chatLogBox_->setCheckable(true);
-    chatLogBox_->setChecked(false);
-    auto* chatLayout = new QVBoxLayout(chatLogBox_);
-    chatLogView_ = new QTextEdit(chatLogBox_);
-    chatLogView_->setObjectName("remote.chatlog");
-    chatLogView_->setReadOnly(true);
-    chatLayout->addWidget(chatLogView_);
-    connect(chatLogBox_, &QGroupBox::toggled, chatLogView_, &QWidget::setVisible);
-    chatLogView_->setVisible(false);
+    sessionBox_ = new QWidget(this);
+    auto* sessionLayout = new QVBoxLayout(sessionBox_);
+    sessionLayout->setContentsMargins(0, 0, 0, 0);
+    sessionLayout->setSpacing(6);
+    sessionLayout->addWidget(participantsHeader_);
+    sessionLayout->addWidget(participantsList_);
+    sessionLayout->addWidget(chatHeader);
+    sessionLayout->addWidget(chatLogView_, /*stretch*/ 1);
+    sessionLayout->addWidget(chatInput_);
+    sessionLayout->addWidget(disconnectBtn_);
 
-    // Connection/handshake log — the RakNet networkLog (nicknames, sync steps,
-    // connect/disconnect). Separate collapsible box from the chat log.
+    // ---- Connection log (collapsible, de-emphasized, always at bottom) ---
     netLogBox_ = new QGroupBox(tr("Connection log"), this);
     netLogBox_->setObjectName("remote.netlogbox");
     netLogBox_->setCheckable(true);
@@ -136,40 +204,26 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     netLogView_ = new QTextEdit(netLogBox_);
     netLogView_->setObjectName("remote.netlog");
     netLogView_->setReadOnly(true);
+    netLogView_->setMaximumHeight(120);
     netLayout->addWidget(netLogView_);
     connect(netLogBox_, &QGroupBox::toggled, netLogView_, &QWidget::setVisible);
     netLogView_->setVisible(false);
 
-    // Sensible defaults so local testing needs no typing: connect to localhost,
-    // a server named "server", and the machine hostname as the nickname.
-    const QString host = QSysInfo::machineHostName();
+    // Sensible defaults so local testing needs no typing.
     serverNameEdit_->setText("server");
     clientIPEdit_->setText("127.0.0.1");
-    clientNameEdit_->setText(host);
+    clientNameEdit_->setText(QSysInfo::machineHostName());
 
-    // Chat input — type + Enter to send. Reliable path that doesn't depend on
-    // the GL viewport having keyboard focus (the overlay-typing path does).
-    chatInput_ = new QLineEdit(this);
-    chatInput_->setObjectName("remote.chatinput");
-    chatInput_->setPlaceholderText("Type a message and press Enter…");
-    chatInput_->setClearButtonEnabled(true);
-
-    auto* footer = new QHBoxLayout();
-    footer->setContentsMargins(0, 0, 0, 0);
-    footer->addWidget(statusLabel_, /*stretch*/ 1);
-    footer->addWidget(disconnectBtn_);
-
+    // ---- Assemble --------------------------------------------------------
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(12, 12, 12, 12);
-    outer->setSpacing(8);
-    outer->addWidget(serverBox);
-    outer->addWidget(clientBox);
-    outer->addWidget(participantsList_);
+    outer->setContentsMargins(14, 14, 14, 14);
+    outer->setSpacing(12);
+    outer->addLayout(statusRow);
+    outer->addWidget(connectTabs_);
+    outer->addWidget(sessionBox_);
     outer->addWidget(errorLabel_);
-    outer->addWidget(chatLogBox_);
     outer->addWidget(netLogBox_);
-    outer->addWidget(chatInput_);
-    outer->addLayout(footer);
+    outer->addStretch(1);
 
     connect(startServerBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::onStartServerClicked);
@@ -217,16 +271,27 @@ void RemoteDialog_Qt::onDisconnectClicked() {
 
 void RemoteDialog_Qt::refreshConnectionState() {
     const bool connected = jefe::qt::isRemoteConnected();
+    const bool isServer  = jefe::qt::isRemoteServer();
 
     statusLabel_->setText(QString::fromStdString(jefe::qt::remoteStatusText()));
+    // Dot color: green connected/hosting, amber connecting, gray offline.
+    QString dotColor = "#6a6a70";
+    if (connected) dotColor = isServer ? "#5bb07a" : "#5bb07a";
+    else if (!jefe::qt::remoteStatusText().empty() &&
+             QString::fromStdString(jefe::qt::remoteStatusText())
+                 .contains("Attempt", Qt::CaseInsensitive))
+        dotColor = "#d6a15b";
+    statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
 
-    startServerBtn_->setEnabled(!connected);
-    connectClientBtn_->setEnabled(!connected);
-    disconnectBtn_->setEnabled(connected);
+    // Contextual sections: forms when offline, session when connected.
+    connectTabs_->setVisible(!connected);
+    sessionBox_->setVisible(connected);
 
     participantsList_->clear();
     for (const auto& name : jefe::qt::remoteParticipants())
         participantsList_->addItem(QString::fromStdString(name));
+    participantsHeader_->setText(
+        QString("Participants (%1)").arg(participantsList_->count()));
 
     const auto errs = jefe::qt::remoteErrors();
     errorLabel_->setText(errs.empty() ? QString()
