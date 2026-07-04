@@ -44,6 +44,13 @@ const char* kRemoteStyle = R"(
 }
 #panel_remote QPushButton[accent="true"]:hover { background: #486274; }
 #panel_remote QPushButton:disabled { background: #2a2a2e; color: #6a6a70; border-color: #333; }
+#panel_remote QPushButton[danger="true"] {
+    background: transparent; border: 1px solid #4a3a3a; color: #c98b82;
+    padding: 3px 12px; font-size: 11px;
+}
+#panel_remote QPushButton[danger="true"]:hover {
+    background: #3a2a2a; border-color: #6a4444; color: #e0a097;
+}
 #panel_remote QPushButton[segment="true"] {
     background: #26262b; border: 1px solid #3a3a40; color: #9a9aa0;
     padding: 6px 0; font-weight: 600; border-radius: 0;
@@ -217,11 +224,29 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
 
     chatInput_ = new QLineEdit(this);
     chatInput_->setObjectName("remote.chatinput");
-    chatInput_->setPlaceholderText("Message… (Enter to send)");
+    chatInput_->setPlaceholderText("Message…");
     chatInput_->setClearButtonEnabled(true);
+    // Dedicated Send button next to the input — the native chat pattern, and it
+    // makes the send affordance obvious (Enter also sends).
+    auto* sendBtn = new QPushButton("Send", this);
+    sendBtn->setObjectName("remote.chat.send");
+    sendBtn->setProperty("accent", true);
+    auto* chatInputRow = new QHBoxLayout();
+    chatInputRow->setContentsMargins(0, 0, 0, 0);
+    chatInputRow->setSpacing(6);
+    chatInputRow->addWidget(chatInput_, /*stretch*/ 1);
+    chatInputRow->addWidget(sendBtn);
 
-    disconnectBtn_ = new QPushButton("Leave session", this);
+    // End/Leave lives in the session header (top), away from the chat input, so
+    // it can't be mistaken for a send button. Text is set contextually in
+    // refreshConnectionState (host "End Session" vs client "Leave").
+    disconnectBtn_ = new QPushButton("Leave", this);
     disconnectBtn_->setObjectName("remote.disconnect.button");
+    disconnectBtn_->setProperty("danger", true);
+    auto* sessionHeader = new QHBoxLayout();
+    sessionHeader->setContentsMargins(0, 0, 0, 0);
+    sessionHeader->addWidget(participantsHeader_, /*stretch*/ 1);
+    sessionHeader->addWidget(disconnectBtn_);
 
     errorLabel_ = new QLabel(QString(), this);
     errorLabel_->setObjectName("remote.error");
@@ -232,12 +257,13 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     auto* sessionLayout = new QVBoxLayout(sessionBox_);
     sessionLayout->setContentsMargins(0, 0, 0, 0);
     sessionLayout->setSpacing(6);
-    sessionLayout->addWidget(participantsHeader_);
+    sessionLayout->addLayout(sessionHeader);
     sessionLayout->addWidget(participantsList_);
     sessionLayout->addWidget(chatHeader);
     sessionLayout->addWidget(chatLogView_, /*stretch*/ 1);
-    sessionLayout->addWidget(chatInput_);
-    sessionLayout->addWidget(disconnectBtn_);
+    sessionLayout->addLayout(chatInputRow);
+
+    connect(sendBtn, &QPushButton::clicked, this, &RemoteDialog_Qt::onChatSubmit);
 
     // ---- Connection log (collapsible section, de-emphasized, at bottom) --
     netLogView_ = new QTextEdit(this);
@@ -330,6 +356,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
     // Contextual sections: forms when offline, session when connected.
     connectPanel_->setVisible(!connected);
     sessionBox_->setVisible(connected);
+    // Host ends the session for everyone; a client just leaves it.
+    disconnectBtn_->setText(isServer ? "End Session" : "Leave");
 
     participantsList_->clear();
     for (const auto& name : jefe::qt::remoteParticipants())
