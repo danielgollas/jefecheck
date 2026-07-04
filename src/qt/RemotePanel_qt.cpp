@@ -1,4 +1,5 @@
 #include "RemotePanel_qt.h"
+#include "CollapsibleSection_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QFormLayout>
@@ -56,37 +57,7 @@ const char* kRemoteStyle = R"(
     background: #202024; border: 1px solid #34343a; border-radius: 8px;
     color: #dcdce0; padding: 4px;
 }
-#panel_remote QToolButton[role="accordion"] {
-    color: #9a9aa0; font-size: 11px; font-weight: 600; border: none;
-    padding: 4px 2px; background: transparent;
-}
-#panel_remote QToolButton[role="accordion"]:hover { color: #cfcfd4; }
 )";
-
-// A lightweight accordion section: a flat disclosure header (arrow + title) that
-// toggles a content widget. Cleaner than a checkable QGroupBox for logs.
-QWidget* makeCollapsible(const QString& title, QWidget* content, QWidget* parent) {
-    auto* wrap = new QWidget(parent);
-    auto* v = new QVBoxLayout(wrap);
-    v->setContentsMargins(0, 0, 0, 0);
-    v->setSpacing(4);
-    auto* header = new QToolButton(wrap);
-    header->setText(title);
-    header->setProperty("role", "accordion");
-    header->setCheckable(true);
-    header->setChecked(false);
-    header->setArrowType(Qt::RightArrow);
-    header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    content->setVisible(false);
-    QObject::connect(header, &QToolButton::toggled, content, &QWidget::setVisible);
-    QObject::connect(header, &QToolButton::toggled, header, [header](bool on) {
-        header->setArrowType(on ? Qt::DownArrow : Qt::RightArrow);
-    });
-    v->addWidget(header);
-    v->addWidget(content);
-    return wrap;
-}
 
 // Build a Host form into `page` and expose its fields. Returns the page widget.
 QWidget* makeHostPage(QLineEdit*& nameOut, QSpinBox*& portOut,
@@ -219,13 +190,15 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     sessionLayout->addWidget(chatInput_);
     sessionLayout->addWidget(disconnectBtn_);
 
-    // ---- Connection log (accordion, de-emphasized, always at bottom) -----
+    // ---- Connection log (collapsible section, de-emphasized, at bottom) --
     netLogView_ = new QTextEdit(this);
     netLogView_->setObjectName("remote.netlog");
     netLogView_->setReadOnly(true);
     netLogView_->setMaximumHeight(120);
-    QWidget* netLogSection = makeCollapsible(tr("Connection log"), netLogView_, this);
-    netLogBox_ = nullptr;   // replaced by the accordion section
+    auto* netLogSection = new CollapsibleSection(tr("Connection log"), this);
+    netLogSection->setObjectName("remote.netlogsection");
+    netLogSection->setContentWidget(netLogView_);
+    netLogBox_ = nullptr;   // replaced by the reusable CollapsibleSection
 
     // Sensible defaults so local testing needs no typing.
     serverNameEdit_->setText("server");
