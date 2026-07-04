@@ -44,6 +44,10 @@ body { margin: 0; background: #000; color: #f2f2f2;
 /* Interactive show/hide */
 .trouble-body { display: none; }
 .trouble-body.open { display: block; animation: jcFade .25s ease-out; }
-.demo-overlay { transition: opacity .3s; }
-.demo-overlay.hidden { opacity: 0; pointer-events: none; }
+.demo-launch { display: inline-block; transition: transform .18s ease-out; }
+.demo-launch:hover { transform: translateY(-3px); }
+.demo-launch.hidden { display: none; }
+.demo-player { display: none; transform-origin: center; }
+.demo-player.open { display: block; animation: demoGrow .5s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes demoGrow { from { transform: scale(.28); opacity: .35; } to { transform: scale(1); opacity: 1; } }
 .demo-video { display: block; width: 100%; height: 100%; object-fit: cover; background: #000; }
