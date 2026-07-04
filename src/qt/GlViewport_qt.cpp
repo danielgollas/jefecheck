@@ -130,6 +130,11 @@ void GlViewport_Qt::paintGL() {
 }
 
 void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
+    // Reclaim keyboard focus on any click so viewport shortcuts (space, W/E/Q/D/S,
+    // etc.) work after the user has been in a text field — e.g. the Remote panel's
+    // chat input, which otherwise keeps focus. The overridden handler doesn't get
+    // Qt's implicit click-focus, so set it explicitly.
+    setFocus(Qt::MouseFocusReason);
     if (e->button() == Qt::LeftButton) {
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
