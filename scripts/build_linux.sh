@@ -28,13 +28,14 @@ sudo apt-get install -y \
     libxrender-dev \
     libxfixes-dev \
     libopencv-dev \
+    libfreetype6-dev \
     libglu1-mesa-dev
 
 # Symlink FX resources if not already done
-if [ ! -L "Resources/FX" ] && [ ! -d "Resources/FX" ]; then
-    echo "Creating Resources/FX symlink..."
-    mkdir -p Resources
-    ln -sf "$(pwd)/common/FX" Resources/FX
+if [ ! -L "FX" ] && [ ! -d "FX" ]; then
+    echo "Creating FX and fonts symlinks..."
+    ln -sf "$(pwd)/src/FX" FX
+    ln -sf "$(pwd)/src/fonts" fonts
 fi
 
 # Build

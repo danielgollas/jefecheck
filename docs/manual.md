@@ -159,7 +159,7 @@ The **BitDepth** drop-down box allows you to choose different formats to load th
 
 - **8bpc** — Loads the image and transforms it to an 8-bit-per-component image to be displayed on normal monitors. This is the format you will usually use, as it offers a good balance of memory usage and provides perfect image quality unless heavy processing is applied later.
 
-- **16bpc** — Loads images in their native bit depth and transforms them to 16-bit floating-point images. This uses up twice the amount of memory than the normal format, but allows greater flexibility during processing, preventing banding and other color artifacts when applying real-time color modifications.
+- **16bpc** — Loads images in their native bit depth and transforms them to 16-bit integer (0–65535) images, stored as float16 on the GPU. This uses up twice the amount of memory than the normal format, but allows greater flexibility during processing, preventing banding and other color artifacts when applying real-time color modifications.
 
 - **HALF** — This image format is specific to OpenEXR image files. If you select it while loading another image format, the effect will be the same as choosing 16bpc. Loading OpenEXR images using the HALF bit depth allows JefeCheck to display the image using its native format (16-bit half-float numbers). Loading from OpenEXR files will be much faster as well, since no processing has to be done on the image. When loading using the HALF format, you will have the entire high dynamic range of the image available for processing. You will usually need to use the Gamma and Exposure controls to view it correctly, since OpenEXR pixels need gamma correction to be viewed directly on an 8-bit screen. Loading in HALF format will result in each frame using double the RAM of a normal 8bpc image.
 
@@ -262,7 +262,7 @@ The Timeline controls from left to right are:
 
 You can also reach the Track Options menu by right-clicking on the track.
 
-Many times a whole sequence won't fit into memory. You can tell JefeCheck to unload the loaded frames and start loading the sequence from a different point by `Alt`+right-mouse-button-clicking on the track at the point where you would like to start loading. If instead of `Alt`+right-clicking on the track bar you do it on the timeline, then all tracks will unload and start loading from that point on.
+Many times a whole sequence won't fit into memory. You can tell JefeCheck to unload the loaded frames and start loading the sequence from a different point by `Alt`+left-mouse-button-clicking on the track at the point where you would like to start loading. If instead of `Alt`+left-clicking on the track bar you do it on the timeline, then all tracks will unload and start loading from that point on.
 
 > **Summary:** You use the Timeline controls to change the timeline range and current timeline frame, which controls what is displayed for each track according to its own settings. You can also use the track bars and timeline to start loading frames at a particular point.
 
@@ -345,12 +345,12 @@ When you activate the **Crop Bars** control and the Aspect Ratio is set to anyth
 
 **Color Correction Controls** — Adjust several color aspects of the viewport. Applied in the following order:
 
-- **LUT** — Apply a 1D or 3D LUT to the viewport. Loading LUTs is described in Section 2. To scroll through available LUTs use `Ctrl+Up/Down`. You can select a default LUT in the **LUT Manager** (shortcut `F4`). This default LUT can be overridden by setting the environment variable `JEFECHECK_DEFAULT_LUT` to the name of the desired LUT.
-- **Gamma** — Adjust screen gamma. Shortcut: hold `W` and click-drag on the viewport.
+- **LUT** — Apply a 1D or 3D LUT to the viewport. Loading LUTs is described in Section 2. To scroll through available LUTs hold the `L` key and press `Up`/`Down` (`L+Up` / `L+Down`). You can select a default LUT in the **LUT Manager** (shortcut `F4`). This default LUT can be overridden by setting the environment variable `JEFECHECK_DEFAULT_LUT` to the name of the desired LUT.
 - **Exposure** — Adjust screen exposure. Shortcut: hold `E` and click-drag on the viewport.
+- **Gamma** — Adjust screen gamma. Shortcut: hold `W` and click-drag on the viewport.
 - **Brightness** — Adjust screen brightness. Shortcut: hold `Q` and click-drag on the viewport.
-- **Contrast** — Adjust screen contrast. Shortcut: hold `D` and click-drag on the viewport.
 - **Saturation** — Adjust screen saturation. Shortcut: hold `S` and click-drag on the viewport.
+- **Contrast** — Adjust screen contrast. Shortcut: hold `D` and click-drag on the viewport.
 
 To reset the viewport's color corrections click `Shift+R`.
 
@@ -481,7 +481,7 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 - **Save Session** (`Ctrl+S`) — Saves a complete JefeCheck session including loaded tracks, load-time parameters, and viewport configurations into a single file for later recall.
 - **Open Session** (`Ctrl+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
 - **Save Chat Log** — Saves the complete chat log after a remote session.
-- **Preferences** (`Ctrl+P`) — Opens the Preferences Window. See Section 4: Other Stuff.
+- **Preferences** — Opens the Preferences Window. See Section 4: Other Stuff.
 - **Quit** (`Ctrl+Q`) — Quits JefeCheck.
 - **Recent Sessions** — Shows the last few loaded sessions.
 
@@ -797,7 +797,7 @@ This section covers topics that don't quite fit anywhere else: the Preferences W
 
 ### Preferences Window
 
-The **Preferences Window** (`Ctrl+P` or **File > Preferences**) is used to change settings that affect the whole application.
+The **Preferences Window** (**File > Preferences**) is used to change settings that affect the whole application.
 
 You can close the Preferences Window by clicking **Done**, or click **Save** first to save settings to your preferences file. Preferences are also saved automatically when you close the application.
 

@@ -106,7 +106,7 @@ Press keyboard keys `Up` or `Down` to move through the tracks.
 - If you press the `Alt` key while doing any of this, transformations will apply to all viewports (Gang Transformation).
 - If you don't have a mouse wheel, you can zoom in and out by clicking and dragging the viewport's zoom box on the Main Window's control panel. From this box you can also change the pan values.
 - You can also flip and flop the image by clicking on the flip and flop buttons.
-- You can reset the transformation on a viewport by pressing `Ctrl+R` on your keyboard, or `Alt+R` to reset all viewports.
+- You can reset the transformation on a viewport by pressing `Ctrl+R` on your keyboard, or `Ctrl+Alt+R` to reset all viewports.
 
 ### How to Color Correct a Viewport
 
@@ -141,7 +141,7 @@ Toggle through the RGBA channels by pressing the RGB button, or use shortcut key
 
 - Click on the play/pause, rewind, fast forward, back one frame and forward one frame buttons.
 - Scrub the timeline by clicking and dragging the current frame notch on the timeline or `Shift+Click` and dragging on the viewport.
-- Click on the Playback Mode Radio Buttons to control if you want to play the sequence once (Once) (shortcut `8`), Loop it (Loop) (shortcut `9`), or play it back and forth (Swing) (shortcut `10`).
+- Click on the Playback Mode Radio Buttons to control if you want to play the sequence once (Once) (shortcut `8`), Loop it (Loop) (shortcut `9`), or play it back and forth (Swing) (shortcut `0`).
 
 ### How to Offset a Track on the Timeline
 

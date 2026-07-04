@@ -43,7 +43,7 @@ cmake --build build
 ```bash
 sudo apt install cmake build-essential \
   libfltk1.3-dev libopenimageio-dev openimageio-tools \
-  libopenexr-dev libimath-dev libcurl4-openssl-dev zlib1g-dev \
+  libopenexr-dev libilmbase-dev libimath-dev libcurl4-openssl-dev zlib1g-dev \
   freeglut3-dev libgl-dev libglu1-mesa-dev \
   libx11-dev libxext-dev libxft-dev libxinerama-dev \
   libxcursor-dev libxrender-dev libxfixes-dev \
@@ -76,14 +76,16 @@ Install [MSYS2](https://www.msys2.org/), then from the MSYS2 MinGW 64-bit shell:
 ```bash
 pacman -S --noconfirm \
   mingw-w64-x86_64-cmake \
-  mingw-w64-x86_64-gcc \
+  mingw-w64-x86_64-toolchain \
   mingw-w64-x86_64-fltk \
   mingw-w64-x86_64-openimageio \
   mingw-w64-x86_64-openexr \
+  mingw-w64-x86_64-imath \
   mingw-w64-x86_64-curl \
   mingw-w64-x86_64-zlib \
   mingw-w64-x86_64-freeglut \
-  mingw-w64-x86_64-freetype
+  mingw-w64-x86_64-freetype \
+  mingw-w64-x86_64-fmt
 ```
 
 ### Build
@@ -120,6 +122,6 @@ Release builds package `src/FX/` and `src/fonts/` alongside the binary automatic
 GitHub Actions builds JefeCheck on all three platforms for every push to `main`. Tagged releases (`v*`) produce downloadable binaries on the [Releases page](https://github.com/danielgollas/jefecheck/releases).
 
 Artifacts:
-- `jefecheck-macos-arm64.tar.gz`
+- `jefecheck-macos-arm64.dmg`
 - `jefecheck-linux-x64.tar.gz`
 - `jefecheck-windows-x64.zip`
