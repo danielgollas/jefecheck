@@ -34,16 +34,18 @@ const char* kRemoteStyle = R"(
 #panel_remote QLineEdit:focus, #panel_remote QSpinBox:focus {
     border: 1px solid #55707f;
 }
+/* Discreet buttons: small, transparent, thin border with a subtle color hint. */
 #panel_remote QPushButton {
-    background: #33333a; border: 1px solid #45454d; border-radius: 6px;
-    padding: 7px 14px; color: #e8e8ea;
+    background: transparent; border: 1px solid #3a3a40; border-radius: 5px;
+    padding: 4px 12px; font-size: 11px; color: #cfcfd4;
 }
-#panel_remote QPushButton:hover { background: #3c3c44; }
+#panel_remote QPushButton:hover { background: #2c2c31; border-color: #55707f; color: #e8e8ea; }
+#panel_remote QPushButton:disabled { background: transparent; color: #6a6a70; border-color: #333; }
+/* Primary (Start hosting / Connect / Send): a slate-tinted border + text hint. */
 #panel_remote QPushButton[accent="true"] {
-    background: #3f5666; border: 1px solid #4c6577; color: #eef2f5; font-weight: 600;
+    background: transparent; border: 1px solid #4c6577; color: #a6c0d2; font-weight: 600;
 }
-#panel_remote QPushButton[accent="true"]:hover { background: #486274; }
-#panel_remote QPushButton:disabled { background: #2a2a2e; color: #6a6a70; border-color: #333; }
+#panel_remote QPushButton[accent="true"]:hover { background: #263038; border-color: #5f7d90; color: #cfe0ec; }
 #panel_remote QPushButton[danger="true"] {
     background: transparent; border: 1px solid #4a3a3a; color: #c98b82;
     padding: 3px 12px; font-size: 11px;
@@ -52,18 +54,18 @@ const char* kRemoteStyle = R"(
     background: #3a2a2a; border-color: #6a4444; color: #e0a097;
 }
 #panel_remote QPushButton[segment="true"] {
-    background: #26262b; border: 1px solid #3a3a40; color: #9a9aa0;
-    padding: 6px 0; font-weight: 600; border-radius: 0;
+    background: transparent; border: 1px solid #3a3a40; color: #9a9aa0;
+    padding: 5px 0; font-weight: 600; border-radius: 0; font-size: 11px;
 }
 #panel_remote QPushButton[segment="true"][segpos="left"] {
-    border-top-left-radius: 7px; border-bottom-left-radius: 7px;
+    border-top-left-radius: 6px; border-bottom-left-radius: 6px;
 }
 #panel_remote QPushButton[segment="true"][segpos="right"] {
-    border-top-right-radius: 7px; border-bottom-right-radius: 7px; border-left: none;
+    border-top-right-radius: 6px; border-bottom-right-radius: 6px; border-left: none;
 }
-#panel_remote QPushButton[segment="true"]:hover { color: #cfcfd4; }
+#panel_remote QPushButton[segment="true"]:hover { color: #cfcfd4; background: #2a2a2f; }
 #panel_remote QPushButton[segment="true"]:checked {
-    background: #3f5666; border-color: #4c6577; color: #eef2f5;
+    background: #263038; border-color: #4c6577; color: #bcd2e0;
 }
 #panel_remote QWidget[card="true"] {
     background: #232327; border: 1px solid #3a3a40; border-radius: 8px;
