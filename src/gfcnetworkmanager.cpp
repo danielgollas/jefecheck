@@ -15,6 +15,31 @@ extern gfcPlateManager plateManager;
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
 
+#include <sstream>
+
+namespace {
+std::vector<std::string> wrapToWidth(const std::string& text, int maxW) {
+    std::vector<std::string> lines;
+    std::istringstream iss(text);
+    std::string word, cur;
+    while (iss >> word) {
+        std::string trial = cur.empty() ? word : cur + " " + word;
+        if (cur.empty() || (int)textRenderer().textWidth(trial.c_str()) <= maxW)
+            cur = trial;
+        else { lines.push_back(cur); cur = word; }
+    }
+    if (!cur.empty()) lines.push_back(cur);
+    if (lines.empty()) lines.push_back("");
+    return lines;
+}
+inline void unpackRGB(int packed, float& r, float& g, float& b) {
+    if (packed == 0) { r = g = b = 0.6f; return; }   // neutral
+    r = ((packed >> 24) & 0xff) / 255.0f;
+    g = ((packed >> 16) & 0xff) / 255.0f;
+    b = ((packed >>  8) & 0xff) / 255.0f;
+}
+}  // namespace
+
 
 gfcNetworkManager networkManager;
 
@@ -513,80 +538,88 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                 glLoadIdentity();
                 glViewport ( 0,0,w,h );
 
-                std::string chatDisplayString="";
-                std::vector<gfcChatLogEntry> chatLog=client.getChatLog();
-                
-                int logSize=chatLog.size();
-
-                if ( chatLineOffset>abs ( logSize-chatDisplayLines ) )
-                    chatLineOffset=abs ( logSize-chatDisplayLines );
-
-                if ( chatLineOffset>=logSize )
-                    chatLineOffset=logSize;
-
-                int beginLine=logSize-chatDisplayLines-chatLineOffset;
-                if ( beginLine<0 )
-                    beginLine=0;
-
-
-
-                int endLine;
-                logSize-=chatLineOffset;
-                //get the last n lines from the chatLog
-                for ( int i=beginLine;i<logSize;i++ ) {
-                    chatDisplayString+=chatLog[i].getFormattedString();
-                    chatDisplayString+="\n";
-                }
-
-                std::string tmpChatTextString=gChatTextString;
-
-               	if ( blinkerOn) {
-					tmpChatTextString.insert(chatPosOffset,"|");//chatDisplayString+="][";
-				} else {
-					if (tmpChatTextString.empty())
-						tmpChatTextString+=" ";
-				}
-				
-                /*if ( cursorBlinkCounter>0.25 ) {
-                    tmpChatTextString.insert(chatPosOffset,"|");//chatDisplayString+="][";
-                } else {
-                    if (tmpChatTextString.empty())
-                        tmpChatTextString+=" ";
-                }*/
-
-                if ( gChatMode==1 ) {
-                    chatDisplayString+="________________________________________________________\n";
-                    chatDisplayString+=tmpChatTextString;
-                }
-                //chatDisplayString+="";
-                								
-		//printf ( "chatFadeCounter: %f\n",chatFadeCounter );
-
-
-                //gl_draw("This is the chat text\nAnd another Line\nOne More\n---------------------------\nThis is what the user is typing ",-w/2+10,-h/2+10,200,w,Fl_Align(FL_ALIGN_LEFT | FL_ALIGN_BOTTOM | FL_ALIGN_WRAP));
                 glEnable ( GL_BLEND );
                 glDisable ( GL_TEXTURE_RECTANGLE_ARB );
                 glBlendFunc ( GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA );
 
+                const float alpha = chatFadeCounter > chatOpacity ? chatOpacity : chatFadeCounter;
                 gfc_gl_font(FL_HELVETICA, chatFontSize);
+                const int lineH   = (int)gfc_gl_height();
+                const int pad     = 6;
+                const int margin  = 12;
+                const int gap     = 8;
+                const int maxW    = (int)(0.6 * w);
+                const std::string me = client.getNickName();
 
-                //how many lines to draw?
-                int linesToDraw=0;
-                std::string::iterator linesToDrawIter=chatDisplayString.begin(), linesToDrawEnd=chatDisplayString.end();
+                std::vector<gfcChatLogEntry> log = client.getChatLog();
+                int logSize = (int)log.size();
+                int begin = logSize - chatDisplayLines - chatLineOffset;
+                if (begin < 0) begin = 0;
+                int end = logSize - chatLineOffset;
+                if (end > logSize) end = logSize;
 
-                for (linesToDrawIter;linesToDrawIter!=linesToDrawEnd;linesToDrawIter++) {
-                    if ((char)(*linesToDrawIter)=='\n')
-                        linesToDraw++;
+                // Layout bottom-up: y is the current baseline stack cursor from the bottom.
+                int y = -h / 2 + margin;
+
+                // Typing bubble first (lowest), if composing.
+                if (gChatMode == 1) {
+                    std::string typed = gChatTextString;
+                    if (blinkerOn) typed.insert(std::min((size_t)chatPosOffset, typed.size()), "|");
+                    if (typed.empty()) typed = " ";
+                    std::vector<std::string> lines = wrapToWidth(typed, maxW - 2 * pad);
+                    int bw = 0;
+                    for (auto& l : lines) bw = std::max(bw, (int)textRenderer().textWidth(l.c_str()));
+                    bw += 2 * pad;
+                    int bh = (int)lines.size() * lineH + 2 * pad;
+                    int x = w / 2 - margin - bw;   // self = right
+                    glColor4f(0.18f, 0.15f, 0.12f, alpha);      // accent-tint
+                    gl_rectf(x, y, bw, bh);
+                    textRenderer().setColor(0.91f, 0.72f, 0.52f, alpha);
+                    std::string joined; for (auto& l : lines) { joined += l; joined += "\n"; }
+                    gfc_gl_draw(joined.c_str(), x + pad, y + pad, bw - 2 * pad, bh - pad,
+                                FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
+                    y += bh + gap;
                 }
 
-                if ( chatTextBG && ( gChatMode || logSize>0 ) ) {
-                    glColor4f ( 0.1,0.1,0.1,chatFadeCounter>chatOpacity?chatOpacity:chatFadeCounter );
-                    gl_rectf ( -w /2,  -h/2+10, w, (int)( gfc_gl_height() * ( linesToDraw+gChatMode ) ) );
+                // Messages, newest just above the typing bubble, older stacking upward.
+                for (int i = end - 1; i >= begin; --i) {
+                    const gfcChatLogEntry& e = log[i];
+                    if (e.type != GFCNETMESSAGETYPE_NORMAL) {
+                        // System/load: centered dim single line.
+                        std::string s = e.message;
+                        int tw = (int)textRenderer().textWidth(s.c_str());
+                        int x = -tw / 2;
+                        textRenderer().setColor(0.5f, 0.5f, 0.5f, alpha);
+                        gfc_gl_draw(s.c_str(), x, y, tw + 4, lineH,
+                                    FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+                        y += lineH + gap;
+                        continue;
+                    }
+                    const bool self = (!e.sender.empty() && e.sender == me);
+                    std::string header = (self ? "You" : e.sender) + " \xC2\xB7 " + shortTime(e.time); // "·"
+                    std::vector<std::string> lines = wrapToWidth(e.message, maxW - 2 * pad);
+                    int bw = (int)textRenderer().textWidth(header.c_str());
+                    for (auto& l : lines) bw = std::max(bw, (int)textRenderer().textWidth(l.c_str()));
+                    bw += 2 * pad;
+                    int bh = (int)(lines.size() + 1) * lineH + 2 * pad;   // +1 header line
+                    int x = self ? (w / 2 - margin - bw) : (-w / 2 + margin);
+
+                    if (self) glColor4f(0.18f, 0.15f, 0.12f, alpha);       // accent-tint
+                    else      glColor4f(0.14f, 0.14f, 0.14f, alpha);       // neutral
+                    gl_rectf(x, y, bw, bh);
+
+                    float cr, cg, cb; unpackRGB(e.color, cr, cg, cb);
+                    textRenderer().setColor(cr, cg, cb, alpha);
+                    gfc_gl_draw(header.c_str(), x + pad, y + bh - pad - lineH, bw - 2 * pad, lineH,
+                                FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+                    textRenderer().setColor(0.86f, 0.86f, 0.86f, alpha);
+                    std::string joined; for (auto& l : lines) { joined += l; joined += "\n"; }
+                    gfc_gl_draw(joined.c_str(), x + pad, y + pad, bw - 2 * pad,
+                                (int)lines.size() * lineH,
+                                FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
+                    y += bh + gap;
                 }
 
-                textRenderer().setColor(1, 1, 1, chatFadeCounter>chatOpacity?chatOpacity:chatFadeCounter);
-
-                gfc_gl_draw(chatDisplayString.c_str(), -w/2+10, -h/2+10, w, (int)(gfc_gl_height() * (logSize-beginLine+1+gChatMode)), FL_ALIGN_LEFT | FL_ALIGN_BOTTOM | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
                 glDisable ( GL_BLEND );
                 glPopMatrix(); //pop modelview
                 glMatrixMode ( GL_PROJECTION );
