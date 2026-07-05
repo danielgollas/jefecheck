@@ -78,12 +78,19 @@ void unserializeFX ( RakNet::BitStream* bs );
 void serializeLUT ( CubeLUT* theLUT, RakNet::BitStream* bs );
 void unserializeLUT ( RakNet::BitStream* bs );
 
+// Extracts the HH:MM token from an asctime-style string
+// ("Jul  4 14:32:56 2026" -> "14:32"). Returns the input unchanged
+// if no NN:NN run is found. Never throws.
+std::string shortTime(const std::string& asctimeStr);
+
 class gfcChatLogEntry{
 public:
+gfcChatLogEntry() : type(0), color(0) {}   // color 0 = unset
 unsigned char type;
 std::string time;
 std::string sender;
 std::string message;
+int color;   // sender's server-assigned packed-RGB color (0 = unset -> neutral)
 
 std::string getFormattedString();
 };

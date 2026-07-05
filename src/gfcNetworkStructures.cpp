@@ -8,6 +8,7 @@
 #include <set>
 #include <stdlib.h> // For atoi
 #include <cstring> // For strlen
+#include <cctype>
 #include "Rand.h"
 #include "RakNetStatistics.h"
 #include "MessageIdentifiers.h"
@@ -241,11 +242,11 @@ void unserializeFX ( RakNet::BitStream* bs ) {
 }
 
 std::string gfcChatLogEntry::getFormattedString() {
-    
+
     std::string tmp="( ";
     tmp+=time;
-    
-    
+
+
     switch( type ){
     	case GFCNETMESSAGETYPE_NORMAL:
     		tmp+=") ";
@@ -253,13 +254,13 @@ std::string gfcChatLogEntry::getFormattedString() {
     		tmp+=" says: ";
     		tmp+=message;
     		break;
-    	
+
     	case GFCNETMESSAGETYPE_SYSTEM:
     		tmp+=" ";
     		tmp+=message;
     		tmp+=")";
     		break;
-    	
+
     	case GFCNETMESSAGETYPE_LOAD:
     		tmp+=") ";
     		tmp+=sender;
@@ -267,6 +268,20 @@ std::string gfcChatLogEntry::getFormattedString() {
     		tmp+=message;
     		break;
     }
-    
+
     return tmp;
+}
+
+std::string shortTime(const std::string& asctimeStr) {
+    // Find the first "NN:NN" run and return those 5 chars.
+    for (size_t i = 0; i + 4 < asctimeStr.size(); ++i) {
+        if (std::isdigit((unsigned char)asctimeStr[i]) &&
+            std::isdigit((unsigned char)asctimeStr[i + 1]) &&
+            asctimeStr[i + 2] == ':' &&
+            std::isdigit((unsigned char)asctimeStr[i + 3]) &&
+            std::isdigit((unsigned char)asctimeStr[i + 4])) {
+            return asctimeStr.substr(i, 5);
+        }
+    }
+    return asctimeStr;   // fallback: unrecognized format
 }
