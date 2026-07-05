@@ -56,7 +56,7 @@ public:
     int getConnectionCount();
     std::vector<std::string> getParticipantNames();
 
-    void sendChatMessage(unsigned char type, std::string sender, std::string message);
+    void sendChatMessage(unsigned char type, std::string sender, std::string message, int color = 0);
     
     void disableGUI();
     void enableGUI();

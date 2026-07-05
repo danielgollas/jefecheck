@@ -718,7 +718,7 @@ void gfcNetworkServer::Update() {
 //                 break;
 //             }
 
-            sendChatMessage(messageType,nickNameAddressMap[p->systemAddress],tempChatMessage);
+            sendChatMessage(messageType,nickNameAddressMap[p->systemAddress],tempChatMessage,colorAddressMap[p->systemAddress]);
 
             break;
         }
@@ -918,7 +918,7 @@ void gfcNetworkServer::startPlaylistMerge() {
 	startPlaylistMerge(peer->GetSystemAddressFromIndex(0),true);
 }
 
-void gfcNetworkServer::sendChatMessage(unsigned char type, std::string sender, std::string message) {
+void gfcNetworkServer::sendChatMessage(unsigned char type, std::string sender, std::string message, int color) {
     //server sends messageID, messageType, asciiTime, sender and message
     //The message is reconstruted on the clients side and used as deemes apropiately by the client, depending on the messageType
     RakNet::BitStream outBS2;
@@ -927,5 +927,6 @@ void gfcNetworkServer::sendChatMessage(unsigned char type, std::string sender, s
     StringCompressor::Instance()->EncodeString ( asciiTime(true).c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS2 ); //time
     StringCompressor::Instance()->EncodeString ( sender.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS2 ); //sender nickname (can be servers own notification messages)
     StringCompressor::Instance()->EncodeString ( message.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS2 ); //message
+    outBS2.WriteCompressed ( ( int ) color ); //sender's assigned color (0 for system msgs)
     peer->Send ( &outBS2,HIGH_PRIORITY,RELIABLE_ORDERED,0,UNASSIGNED_SYSTEM_ADDRESS,true ); //send!
 }

@@ -80,6 +80,7 @@ public:
     std::string getStatus();
     int getStatusColor();
     std::vector<std::string> getPeersInSession();
+    std::string getNickName() { return nickName; }
     gfcPointerStorage pointers;
 
 private:

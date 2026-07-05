@@ -652,6 +652,10 @@ void gfcNetworkClient::Update() {
             StringCompressor::Instance()->DecodeString ( message,GFCNET_MAX_TEXT_LENGHT,&bs ); //message
             tmpEntry.message=message;
 
+            int chatColor = 0;
+            bs.ReadCompressed ( chatColor );
+            tmpEntry.color = chatColor;
+
             chatLog.push_back ( tmpEntry );
             statusChange=true;
             gotNewChatMessage=true;
