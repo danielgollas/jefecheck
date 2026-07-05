@@ -418,10 +418,14 @@ void RemoteDialog_Qt::refreshConnectionState() {
         }
         auto* bar = chatScroll_->verticalScrollBar();
         const bool atBottom = bar->value() >= bar->maximum() - 4;
+        const int appended = total - shownChatLines_;
         for (int i = shownChatLines_; i < total; ++i)
             appendChatBubble(entries[i]);
         shownChatLines_ = total;
-        if (atBottom) {
+        // Only when new bubbles actually arrived AND the user was at the bottom.
+        // refreshConnectionState() runs at up to ~60Hz during a session, so an
+        // unconditional post here would queue a no-op every tick while idle.
+        if (appended > 0 && atBottom) {
             // Defer so the layout has sized the new bubbles before we scroll.
             QMetaObject::invokeMethod(this, [bar]{ bar->setValue(bar->maximum()); },
                                       Qt::QueuedConnection);
@@ -462,6 +466,7 @@ void RemoteDialog_Qt::appendChatBubble(const jefe::qt::ChatEntry& e) {
     if (e.type != 0 /* GFCNETMESSAGETYPE_NORMAL */) {
         auto* sys = new QLabel(QString::fromStdString(e.message), chatContent_);
         sys->setObjectName("chat_system");
+        sys->setTextFormat(Qt::PlainText);   // never interpret message as markup
         sys->setAlignment(Qt::AlignHCenter);
         sys->setWordWrap(true);
         chatLayout_->insertWidget(chatLayout_->count() - 1, sys);  // before stretch
@@ -489,6 +494,7 @@ void RemoteDialog_Qt::appendChatBubble(const jefe::qt::ChatEntry& e) {
                              QString::fromStdString(e.timeHHMM)));
     auto* msg = new QLabel(QString::fromStdString(e.message), bubble);
     msg->setObjectName("chat_message");
+    msg->setTextFormat(Qt::PlainText);   // never interpret message as markup
     msg->setWordWrap(true);
     msg->setTextInteractionFlags(Qt::TextSelectableByMouse);
     bLay->addWidget(header);
