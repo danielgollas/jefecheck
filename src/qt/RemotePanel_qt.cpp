@@ -79,7 +79,7 @@ const char* kRemoteStyle = R"(
     color: #dcdce0; padding: 4px;
 }
 /* Chat bubbles: alternating alignment, per-user color, phone-width. */
-QScrollArea#remote.chatscroll, QWidget#remote.chatcontent { background: #202024; border: 1px solid #34343a; border-radius: 8px; }
+#panel_remote QScrollArea[chatsurface="true"], #panel_remote QWidget[chatsurface="true"] { background: #202024; border: 1px solid #34343a; border-radius: 8px; }
 QFrame#chat_bubble { background: #2a2a2e; border: 1px solid #3a3a40; border-radius: 8px; }
 QFrame#chat_bubble[self="true"] { background: #2e2620; border-color: #7a4a1e; }
 QLabel#chat_header { color: #9a9aa0; font-size: 10px; background: transparent; border: none; }
@@ -231,11 +231,14 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     chatHeader->setObjectName("remote.chat.header");
     chatScroll_ = new QScrollArea(this);
     chatScroll_->setObjectName("remote.chatscroll");
+    chatScroll_->setProperty("chatsurface", true);   // styled via [chatsurface]
     chatScroll_->setWidgetResizable(true);
     chatScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     chatScroll_->setFrameShape(QFrame::NoFrame);
     chatContent_ = new QWidget(chatScroll_);
     chatContent_->setObjectName("remote.chatcontent");
+    chatContent_->setProperty("chatsurface", true);
+    chatContent_->setAttribute(Qt::WA_StyledBackground, true);  // paint QSS bg
     chatLayout_ = new QVBoxLayout(chatContent_);
     chatLayout_->setContentsMargins(6, 6, 6, 6);
     chatLayout_->setSpacing(6);

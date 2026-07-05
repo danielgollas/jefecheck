@@ -26,23 +26,16 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 GLuint gScreenFBO = 0;
 
 namespace {
-// Looks up an FLTK-compatible color index in the standard 8-color palette.
-// In the FLTK build we defer to Fl::get_color so the colors match exactly
-// whatever FLTK reports (including any custom palette overrides). In other
-// builds we fall back to a static table for the named colors and white for
-// out-of-range indices.
-inline void gfcLookupPointerColor(int colorIdx, unsigned char& r, unsigned char& g, unsigned char& b) {
-    static const unsigned char table[8][3] = {
-        {  0,  0,  0}, {255,  0,  0}, {  0,255,  0}, {255,255,  0},
-        {  0,  0,255}, {255,  0,255}, {  0,255,255}, {255,255,255}
-    };
-    if (colorIdx >= 0 && colorIdx < 8) {
-        r = table[colorIdx][0];
-        g = table[colorIdx][1];
-        b = table[colorIdx][2];
-    } else {
-        r = g = b = 255;
-    }
+// Unpacks a remote participant's packed-RGB color (the same value the server
+// assigns at join and the chat bubbles use: (r<<24)|(g<<16)|(b<<8)) into
+// float components in [0,1] for glColor4f. This keeps a participant's pointer
+// the SAME color as their chat bubble name. 0 = unset -> neutral gray. Mirrors
+// unpackRGB() in gfcnetworkmanager.cpp.
+inline void gfcUnpackPointerColor(int packed, float& r, float& g, float& b) {
+    if (packed == 0) { r = g = b = 0.6f; return; }
+    r = ((packed >> 24) & 0xff) / 255.0f;
+    g = ((packed >> 16) & 0xff) / 255.0f;
+    b = ((packed >>  8) & 0xff) / 255.0f;
 }
 }  // namespace
 
@@ -846,10 +839,11 @@ void gfcPlate::drawRemotePointers() {
             pIter=nickIter->second.begin();
             pEnd=nickIter->second.end();
             int maxPointer=nickIter->second.size();
-			unsigned char red, green, blue;
-			gfcLookupPointerColor(pIter->color, red, green, blue);
+			float red = 1, green = 1, blue = 1;
 
             if (pIter!=pEnd) {
+                // Decode inside the guard (pIter is only valid when != pEnd).
+                gfcUnpackPointerColor(pIter->color, red, green, blue);
 
                 float scaleBy=theFrame.scale/pIter->scale;
                 glScalef(scaleBy,scaleBy,1);

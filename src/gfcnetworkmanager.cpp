@@ -63,6 +63,11 @@ gfcNetworkManager::gfcNetworkManager()
 	gChatMode=0;
 	chatFadeCounter=0;
 	cursorBlinkCounter=0;
+	// The overlay bubble draw reads these for the visible-message window and
+	// the typing-cursor position; never assigned elsewhere, so init to 0 to
+	// avoid reading indeterminate values (garbage would blank the overlay).
+	chatLineOffset=0;
+	chatPosOffset=0;
 
 	sendRemoteLoadRequests=true;
 
