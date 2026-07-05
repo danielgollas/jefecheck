@@ -148,6 +148,22 @@ std::vector<std::string> gfcNetworkManager::chatLogLines() {
     return out;
 }
 
+std::vector<gfcNetworkManager::ChatEntryData> gfcNetworkManager::chatEntries() {
+    std::vector<ChatEntryData> out;
+    const std::string me = client.getNickName();
+    for (auto& e : client.getChatLog()) {
+        ChatEntryData d;
+        d.sender   = e.sender;
+        d.message  = e.message;
+        d.timeHHMM = shortTime(e.time);
+        d.type     = e.type;
+        d.isSelf   = (!e.sender.empty() && e.sender == me);
+        d.color    = e.color;
+        out.push_back(d);
+    }
+    return out;
+}
+
 std::vector<std::string> gfcNetworkManager::drainErrors() {
     // Errors already surface through client status strings (RED). Reserved
     // for a dedicated error queue; empty for now so callers compile.

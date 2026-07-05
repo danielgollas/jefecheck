@@ -392,6 +392,16 @@ std::vector<std::string> remoteNetworkLog();
 void sendChatMessageText(const std::string& text);
 bool pumpNetwork();
 
+struct ChatEntry {
+    std::string sender;
+    std::string message;
+    std::string timeHHMM;
+    int  type;     // GFCNETMESSAGETYPE_NORMAL / _SYSTEM / _LOAD
+    bool isSelf;
+    int  color;    // packed RGB, 0 = unset
+};
+std::vector<ChatEntry> remoteChatEntries();
+
 // Chat overlay + keyboard chat entry (Task 7).
 // drawNetworkOverlay renders the ported networkManager.draw() chat/pointer
 // overlay into the current GL context (w, h are framebuffer pixels).

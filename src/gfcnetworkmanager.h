@@ -70,6 +70,9 @@ public:
     bool consumeGotMessages(); // true if the client processed any inbound packet since last call (drives a viewport repaint)
     bool overlayAnimating();   // true while the chat/status overlay is fading or in chat entry (needs continuous repaint)
     std::vector<std::string> networkLogLines(); // connection-log snapshot for the panel
+
+    struct ChatEntryData { std::string sender, message, timeHHMM; int type; bool isSelf; int color; };
+    std::vector<ChatEntryData> chatEntries();
     
     void startFXSinc(); //used by other managers to notify the network manager that a new LUT or FX was loaded.
     void startLUTSinc(); 

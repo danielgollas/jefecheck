@@ -1920,6 +1920,21 @@ std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLin
 std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
 std::vector<std::string> remoteNetworkLog()   { return networkManager.networkLogLines(); }
 
+std::vector<ChatEntry> remoteChatEntries() {
+    std::vector<ChatEntry> out;
+    for (auto& d : networkManager.chatEntries()) {
+        ChatEntry e;
+        e.sender   = d.sender;
+        e.message  = d.message;
+        e.timeHHMM = d.timeHHMM;
+        e.type     = d.type;
+        e.isSelf   = d.isSelf;
+        e.color    = d.color;
+        out.push_back(e);
+    }
+    return out;
+}
+
 bool pumpNetwork() {
     static bool        prevConnected = false;
     static size_t      prevPeers     = 0;
