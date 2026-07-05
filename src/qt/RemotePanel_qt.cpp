@@ -3,12 +3,15 @@
 #include "SequenceLoadBridge_qt.h"
 
 #include <QFormLayout>
+#include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QSysInfo>
 #include <QTabWidget>
@@ -75,6 +78,13 @@ const char* kRemoteStyle = R"(
     background: #202024; border: 1px solid #34343a; border-radius: 8px;
     color: #dcdce0; padding: 4px;
 }
+/* Chat bubbles: alternating alignment, per-user color, phone-width. */
+QScrollArea#remote.chatscroll, QWidget#remote.chatcontent { background: #202024; border: 1px solid #34343a; border-radius: 8px; }
+QFrame#chat_bubble { background: #2a2a2e; border: 1px solid #3a3a40; border-radius: 8px; }
+QFrame#chat_bubble[self="true"] { background: #2e2620; border-color: #7a4a1e; }
+QLabel#chat_header { color: #9a9aa0; font-size: 10px; background: transparent; border: none; }
+QLabel#chat_message { color: #dcdce0; font-size: 12px; background: transparent; border: none; }
+QLabel#chat_system { color: #6a6a70; font-size: 10px; font-style: italic; background: transparent; border: none; }
 )";
 
 // Build a Host form into `page` and expose its fields. Returns the page widget.
@@ -219,9 +229,18 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
 
     auto* chatHeader = sectionLabel("Chat", this);
     chatHeader->setObjectName("remote.chat.header");
-    chatLogView_ = new QTextEdit(this);
-    chatLogView_->setObjectName("remote.chatlog");
-    chatLogView_->setReadOnly(true);
+    chatScroll_ = new QScrollArea(this);
+    chatScroll_->setObjectName("remote.chatscroll");
+    chatScroll_->setWidgetResizable(true);
+    chatScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    chatScroll_->setFrameShape(QFrame::NoFrame);
+    chatContent_ = new QWidget(chatScroll_);
+    chatContent_->setObjectName("remote.chatcontent");
+    chatLayout_ = new QVBoxLayout(chatContent_);
+    chatLayout_->setContentsMargins(6, 6, 6, 6);
+    chatLayout_->setSpacing(6);
+    chatLayout_->addStretch(1);   // keeps bubbles packed to the top
+    chatScroll_->setWidget(chatContent_);
     chatLogBox_ = nullptr;   // chat log is now always visible in the session view
 
     chatInput_ = new QLineEdit(this);
@@ -262,7 +281,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     sessionLayout->addLayout(sessionHeader);
     sessionLayout->addWidget(participantsList_);
     sessionLayout->addWidget(chatHeader);
-    sessionLayout->addWidget(chatLogView_, /*stretch*/ 1);
+    sessionLayout->addWidget(chatScroll_, /*stretch*/ 1);
     sessionLayout->addLayout(chatInputRow);
 
     connect(sendBtn, &QPushButton::clicked, this, &RemoteDialog_Qt::onChatSubmit);
@@ -383,10 +402,33 @@ void RemoteDialog_Qt::refreshConnectionState() {
     errorLabel_->setText(errs.empty() ? QString()
                                       : QString::fromStdString(errs.back()));
 
-    // Chat and network logs are append-only, so append just the new lines and
-    // leave the user's scroll position/selection intact. A shrink (reconnect
-    // resets the log) triggers a one-time full rebuild.
-    appendNewLogLines(chatLogView_, jefe::qt::remoteChatLog(), shownChatLines_);
+    // Chat: append new bubbles incrementally (preserve scroll unless at bottom);
+    // full rebuild if the log shrank (reconnect reset).
+    {
+        const auto entries = jefe::qt::remoteChatEntries();
+        const int total = (int)entries.size();
+        if (total < shownChatLines_) {   // log reset (reconnect): rebuild
+            QLayoutItem* it;
+            while ((it = chatLayout_->takeAt(0)) != nullptr) {
+                if (it->widget()) it->widget()->deleteLater();
+                delete it;
+            }
+            chatLayout_->addStretch(1);
+            shownChatLines_ = 0;
+        }
+        auto* bar = chatScroll_->verticalScrollBar();
+        const bool atBottom = bar->value() >= bar->maximum() - 4;
+        for (int i = shownChatLines_; i < total; ++i)
+            appendChatBubble(entries[i]);
+        shownChatLines_ = total;
+        if (atBottom) {
+            // Defer so the layout has sized the new bubbles before we scroll.
+            QMetaObject::invokeMethod(this, [bar]{ bar->setValue(bar->maximum()); },
+                                      Qt::QueuedConnection);
+        }
+    }
+
+    // Network log is append-only text — append just the new lines.
     appendNewLogLines(netLogView_, jefe::qt::remoteNetworkLog(), shownNetLogLines_);
 }
 
@@ -404,4 +446,56 @@ void RemoteDialog_Qt::appendNewLogLines(QTextEdit* view,
     for (int i = shownCount; i < total; ++i)
         view->append(QString::fromStdString(lines[i]));
     shownCount = total;
+}
+
+namespace {
+// packed = (r<<24)|(g<<16)|(b<<8); 0 = unset -> neutral gray.
+QString colorToHex(int packed) {
+    if (packed == 0) return QStringLiteral("#9a9a9a");
+    int r = (packed >> 24) & 0xff, g = (packed >> 16) & 0xff, b = (packed >> 8) & 0xff;
+    return QString::asprintf("#%02x%02x%02x", r, g, b);
+}
+}  // namespace
+
+void RemoteDialog_Qt::appendChatBubble(const jefe::qt::ChatEntry& e) {
+    // System / load messages: centered dim line, no bubble.
+    if (e.type != 0 /* GFCNETMESSAGETYPE_NORMAL */) {
+        auto* sys = new QLabel(QString::fromStdString(e.message), chatContent_);
+        sys->setObjectName("chat_system");
+        sys->setAlignment(Qt::AlignHCenter);
+        sys->setWordWrap(true);
+        chatLayout_->insertWidget(chatLayout_->count() - 1, sys);  // before stretch
+        return;
+    }
+
+    auto* row = new QWidget(chatContent_);
+    auto* rowLay = new QHBoxLayout(row);
+    rowLay->setContentsMargins(0, 0, 0, 0);
+
+    auto* bubble = new QFrame(row);
+    bubble->setObjectName("chat_bubble");
+    bubble->setProperty("self", e.isSelf);
+    bubble->setMaximumWidth(320);
+    auto* bLay = new QVBoxLayout(bubble);
+    bLay->setContentsMargins(9, 5, 9, 6);
+    bLay->setSpacing(1);
+
+    const QString name = e.isSelf ? QStringLiteral("You")
+                                  : QString::fromStdString(e.sender);
+    auto* header = new QLabel(bubble);
+    header->setObjectName("chat_header");
+    header->setText(QString("<span style='color:%1'>%2</span> · %3")
+                        .arg(colorToHex(e.color), name.toHtmlEscaped(),
+                             QString::fromStdString(e.timeHHMM)));
+    auto* msg = new QLabel(QString::fromStdString(e.message), bubble);
+    msg->setObjectName("chat_message");
+    msg->setWordWrap(true);
+    msg->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    bLay->addWidget(header);
+    bLay->addWidget(msg);
+
+    if (e.isSelf) { rowLay->addStretch(1); rowLay->addWidget(bubble); }
+    else          { rowLay->addWidget(bubble); rowLay->addStretch(1); }
+
+    chatLayout_->insertWidget(chatLayout_->count() - 1, row);  // before stretch
 }

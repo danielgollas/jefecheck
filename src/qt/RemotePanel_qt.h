@@ -16,10 +16,14 @@ class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
+class QScrollArea;
 class QSpinBox;
 class QTabWidget;
 class QTextEdit;
+class QVBoxLayout;
 class QWidget;
+
+namespace jefe::qt { struct ChatEntry; }
 
 class RemoteDialog_Qt : public QWidget {
     Q_OBJECT
@@ -44,6 +48,10 @@ private:
     void appendNewLogLines(QTextEdit* view,
                            const std::vector<std::string>& lines,
                            int& shownCount);
+
+    // Appends one chat message as a bubble row (alternating alignment,
+    // per-user color, HH:MM). System/LOAD types render centered without a bubble.
+    void appendChatBubble(const jefe::qt::ChatEntry& e);
 
     // Server tab.
     QLineEdit* serverNameEdit_ = nullptr;
@@ -76,8 +84,10 @@ private:
     // Live state widgets (refreshed by refreshConnectionState).
     QListWidget* participantsList_ = nullptr;
     QLabel*      errorLabel_ = nullptr;
-    QTextEdit*   chatLogView_ = nullptr;   // collapsible full chat history
-    QGroupBox*   chatLogBox_ = nullptr;    // checkable → collapses chatLogView_
+    QScrollArea* chatScroll_ = nullptr;    // replaces chatLogView_
+    QWidget*     chatContent_ = nullptr;   // scroll content
+    QVBoxLayout* chatLayout_ = nullptr;    // top-packed; bubbles appended here
+    QGroupBox*   chatLogBox_ = nullptr;    // unused (chat is always-visible bubbles now)
     QTextEdit*   netLogView_ = nullptr;    // collapsible connection/handshake log
     QGroupBox*   netLogBox_ = nullptr;     // checkable → collapses netLogView_
     QLineEdit*   chatInput_ = nullptr;     // type + Enter to send a chat message
