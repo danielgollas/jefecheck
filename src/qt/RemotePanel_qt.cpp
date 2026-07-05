@@ -348,34 +348,60 @@ void RemoteDialog_Qt::refreshConnectionState() {
     QString statusText = QString::fromStdString(jefe::qt::remoteStatusText());
     if (statusText.trimmed().isEmpty())
         statusText = connected ? (isServer ? "Hosting" : "Connected") : "Not connected";
-    statusLabel_->setText(statusText);
-    // Dot color: green connected/hosting, amber connecting, gray offline.
-    QString dotColor = "#6a6a70";
-    if (connected) dotColor = "#5bb07a";
-    else if (statusText.contains("Attempt", Qt::CaseInsensitive)) dotColor = "#d6a15b";
-    statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
+    // Only touch the status label / dot when the text actually changed —
+    // setStyleSheet forces a re-polish, and this runs at up to tick rate.
+    if (statusText != shownStatusText_) {
+        shownStatusText_ = statusText;
+        statusLabel_->setText(statusText);
+        // Dot color: green connected/hosting, amber connecting, gray offline.
+        QString dotColor = "#6a6a70";
+        if (connected) dotColor = "#5bb07a";
+        else if (statusText.contains("Attempt", Qt::CaseInsensitive)) dotColor = "#d6a15b";
+        statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
+    }
 
     // Contextual sections: forms when offline, session when connected.
+    // setVisible / setText are no-ops when unchanged, so these are cheap.
     connectPanel_->setVisible(!connected);
     sessionBox_->setVisible(connected);
     // Host ends the session for everyone; a client just leaves it.
     disconnectBtn_->setText(isServer ? "End Session" : "Leave");
 
-    participantsList_->clear();
-    for (const auto& name : jefe::qt::remoteParticipants())
-        participantsList_->addItem(QString::fromStdString(name));
-    participantsHeader_->setText(
-        QString("Participants (%1)").arg(participantsList_->count()));
+    // Participants change only on join/leave (which changes the count), so
+    // rebuild the list only when the count moved — not on every packet.
+    const auto participants = jefe::qt::remoteParticipants();
+    if ((int)participants.size() != shownParticipants_) {
+        shownParticipants_ = (int)participants.size();
+        participantsList_->clear();
+        for (const auto& name : participants)
+            participantsList_->addItem(QString::fromStdString(name));
+        participantsHeader_->setText(
+            QString("Participants (%1)").arg(participantsList_->count()));
+    }
 
     const auto errs = jefe::qt::remoteErrors();
     errorLabel_->setText(errs.empty() ? QString()
                                       : QString::fromStdString(errs.back()));
 
-    chatLogView_->clear();
-    for (const auto& line : jefe::qt::remoteChatLog())
-        chatLogView_->append(QString::fromStdString(line));
+    // Chat and network logs are append-only, so append just the new lines and
+    // leave the user's scroll position/selection intact. A shrink (reconnect
+    // resets the log) triggers a one-time full rebuild.
+    appendNewLogLines(chatLogView_, jefe::qt::remoteChatLog(), shownChatLines_);
+    appendNewLogLines(netLogView_, jefe::qt::remoteNetworkLog(), shownNetLogLines_);
+}
 
-    netLogView_->clear();
-    for (const auto& line : jefe::qt::remoteNetworkLog())
-        netLogView_->append(QString::fromStdString(line));
+// Appends only lines beyond `shownCount` to `view`, updating `shownCount`.
+// If the source shrank below what's shown (e.g. a reconnect cleared the log),
+// clears and rebuilds once so the view can't drift out of sync.
+void RemoteDialog_Qt::appendNewLogLines(QTextEdit* view,
+                                        const std::vector<std::string>& lines,
+                                        int& shownCount) {
+    const int total = (int)lines.size();
+    if (total < shownCount) {         // source reset — rebuild from scratch
+        view->clear();
+        shownCount = 0;
+    }
+    for (int i = shownCount; i < total; ++i)
+        view->append(QString::fromStdString(lines[i]));
+    shownCount = total;
 }

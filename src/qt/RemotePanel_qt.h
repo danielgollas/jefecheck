@@ -8,6 +8,9 @@
 
 #include <QWidget>
 
+#include <string>
+#include <vector>
+
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -34,6 +37,13 @@ private:
     void onConnectClientClicked();
     void onDisconnectClicked();
     void onChatSubmit();   // send the chat input field's text
+
+    // Appends only the log lines past `shownCount` to `view` (append-only
+    // fast path that preserves scroll/selection); rebuilds if the source
+    // shrank. Updates `shownCount` in place.
+    void appendNewLogLines(QTextEdit* view,
+                           const std::vector<std::string>& lines,
+                           int& shownCount);
 
     // Server tab.
     QLineEdit* serverNameEdit_ = nullptr;
@@ -71,6 +81,16 @@ private:
     QTextEdit*   netLogView_ = nullptr;    // collapsible connection/handshake log
     QGroupBox*   netLogBox_ = nullptr;     // checkable → collapses netLogView_
     QLineEdit*   chatInput_ = nullptr;     // type + Enter to send a chat message
+
+    // Incremental-refresh caches. refreshConnectionState() runs on every
+    // inbound packet (up to ~60Hz while remote pointers stream), so it must
+    // not clear+rebuild the append-only log views each time — that churns the
+    // widgets and resets the user's scroll position and text selection. Track
+    // how many lines/participants were last shown and only apply the delta.
+    int          shownChatLines_ = 0;
+    int          shownNetLogLines_ = 0;
+    int          shownParticipants_ = -1;  // -1 forces the first rebuild
+    QString      shownStatusText_;
 };
 
 #endif
