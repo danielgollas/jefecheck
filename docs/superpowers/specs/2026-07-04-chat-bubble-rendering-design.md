@@ -30,18 +30,60 @@ same feature.
 - **Timestamp:** short `HH:MM` (24h), small/dim, in each bubble's header. No
   protocol change — reformatted on display.
 - **Scope:** both surfaces in this pass, sharing the design language.
-- **Per-user color:** reuse each participant's remote-pointer color as the
-  sender-name accent, tying chat identity to pointer identity.
+- **Per-user color:** each participant has a server-assigned color (see below),
+  reused as the chat sender-name accent, tying chat identity to pointer identity.
+- **Color assignment:** the server assigns a color at join time — honoring the
+  client's preferred color when free, otherwise picking a distinct one. Preferred
+  color is respected but **not guaranteed**.
 
 Out of scope (YAGNI): message editing, reactions, read receipts, history
 persistence, search. GL-overlay corner rounding is a cheap approximation, not
 pixel-perfect.
 
+## Color assignment (join time)
+
+Today the "color" is a **packed RGB int** (`sett.remotePointerColor`, from the
+pointer-color preference — this *is* the "preferred color", no new UI). The
+client sends it in `GFCNETID_NICKNAMESEND` at join; the server records it in
+`colorAddressMap[address]` verbatim, with **no collision handling**, so two users
+can share a color. Pointer broadcasts already use `colorAddressMap` (the
+server's authoritative value), not the raw client-sent color.
+
+Change: make the server **assign** a color at join instead of recording blindly.
+In the `GFCNETID_NICKNAMESEND` handler:
+
+1. Read the client's preferred packed-RGB color.
+2. If it is non-default (not the gray sentinel `(128,128,128)`) and not already a
+   value in `colorAddressMap`, grant it.
+3. Otherwise pick the first color from a fixed **distinct palette** (a
+   server-side table of ~10 visually distinct packed-RGB colors) that is not
+   currently in `colorAddressMap`.
+4. If the palette is exhausted (more participants than palette entries — possible
+   up to `GFCNET_MAX_CLIENTS`), fall back to the preferred color (allowing a
+   duplicate). "Not guaranteed" is acceptable and documented.
+5. Store the assigned color in `colorAddressMap[address]`.
+
+Because both pointers and chat read the authoritative `colorAddressMap`, one user
+renders in one color everywhere, available from the moment they join (not
+dependent on moving their pointer). The mid-session `GFCNETID_SENDREMOTEPOINTERCOLOR`
+path stays, but should run the same "prefer-then-disambiguate" assignment so a
+color change can't collide either.
+
+**Carrying color to clients (chat):** extend the chat broadcast so each message
+carries its sender's assigned color. The server's `sendChatMessage` encoder adds
+the sender's `colorAddressMap` value as a new field after `message`; the client's
+`GFCNETID_CHATBROADCASTMESSAGE` decoder reads it into a new
+`gfcChatLogEntry.color`. This is an **additive protocol change** (both ends
+updated together). No separate color-map broadcast is needed — every message
+self-describes its color, and the sender receives its own message back (self
+bubbles get the authoritative color too).
+
 ## Data model + plumbing
 
-The chat entry already carries everything needed: `gfcChatLogEntry { unsigned
-char type; std::string time; std::string sender; std::string message; }` with
-`type ∈ { GFCNETMESSAGETYPE_NORMAL, _SYSTEM, _LOAD }`.
+The chat entry gains a color field: `gfcChatLogEntry { unsigned char type;
+std::string time; std::string sender; std::string message; int color; }` where
+`color` is the sender's packed-RGB assigned color (`0` = unset → neutral
+fallback). `type ∈ { GFCNETMESSAGETYPE_NORMAL, _SYSTEM, _LOAD }`.
 
 New/changed interfaces:
 
@@ -53,16 +95,19 @@ New/changed interfaces:
   `NN:NN` digit run; return it). Falls back to the raw string if no match.
 - **`jefe::qt::ChatEntry`** (new struct in `SequenceLoadBridge_qt.h`):
   `{ std::string sender; std::string message; std::string timeHHMM; int type;
-  bool isSelf; int color; }` where `color` is the sender's pointer-color index
-  (or a default when unknown).
+  bool isSelf; int color; }` where `color` is the sender's assigned packed-RGB
+  color straight from `gfcChatLogEntry.color` (`0` → neutral fallback).
 - **`std::vector<ChatEntry> jefe::qt::remoteChatEntries()`** — replaces the
   flattened `remoteChatLog()`/`chatLogLines()` path for the panel. Built in
   `gfcNetworkManager` from `client.getChatLog()`, setting `isSelf =
-  (entry.sender == client.getNickName())` and `timeHHMM = shortTime(entry.time)`.
-  `chatLogLines()` may be kept only if still needed elsewhere; otherwise removed.
-- Per-user color lookup reuses the same nickname→color association the pointer
-  path uses. If a message's sender has no known color, fall back to a neutral
-  accent. (Self always uses the accent tint regardless.)
+  (entry.sender == client.getNickName())`, `timeHHMM = shortTime(entry.time)`,
+  and `color = entry.color`. `chatLogLines()` may be kept only if still needed
+  elsewhere; otherwise removed.
+- Per-user color comes from the message itself (server-assigned, carried on the
+  wire), so it is available immediately and consistent with the sender's pointer
+  color. `color == 0` (unset / pre-assignment legacy) → neutral accent fallback.
+  Self bubbles use the accent tint for their background regardless, but the
+  sender-name still uses the assigned color.
 
 Self-detection edge case: the host's loopback client has the server's name as
 its nickname, so the host's own messages compare equal to `getNickName()` and
@@ -142,22 +187,29 @@ does.
 
 ## Testing / verification
 
-- `--remote-test` remains green (no protocol/state change; only rendering +
-  read-side accessors).
+- `--remote-test` remains green (the chat-broadcast field is additive and both
+  ends update together; play/connect assertions unaffected).
 - Build clean on the touched TUs.
+- Color assignment: two clients requesting the **same** preferred color get
+  distinct assigned colors; a client's chat color matches its pointer color.
 - Two-instance manual check, on **both** the panel and the overlay:
   - self messages right/accent, others left/neutral;
   - bubble width capped (~phone width), long messages wrap inside the bubble;
   - timestamps read `HH:MM`;
-  - sender name color matches that user's pointer color;
+  - sender name color matches that user's pointer color (and is stable from join);
   - system/load messages centered and dim;
   - panel auto-scrolls to newest but preserves position when scrolled up;
   - overlay fades as before and the typing line shows as a self bubble.
 
 ## Affected files
 
-- `src/gfcNetworkStructures.{h,cpp}` — `shortTime()` helper.
-- `src/gfcnetworkclient.{h,cpp}` — `getNickName()`.
+- `src/gfcNetworkStructures.{h,cpp}` — `shortTime()` helper; `gfcChatLogEntry`
+  gains `int color`.
+- `src/gfcnetworkclient.{h,cpp}` — `getNickName()`; chat-broadcast decoder reads
+  the new color field.
+- `src/gfcnetworkserver.{h,cpp}` — join-time color assignment + distinct palette;
+  same assignment on mid-session color change; chat-broadcast encoder writes the
+  sender's assigned color.
 - `src/gfcnetworkmanager.{h,cpp}` — structured chat entries; overlay bubble draw.
 - `src/qt/SequenceLoadBridge_qt.{h,cpp}` — `ChatEntry`, `remoteChatEntries()`.
 - `src/qt/RemotePanel_qt.{h,cpp}` — bubble-list widget replacing `chatLogView_`.
