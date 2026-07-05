@@ -341,6 +341,17 @@ bool hasPendingTextureUploads() {
     return false;
 }
 
+bool consumePlateChanged() {
+    // Destructively reads plateManager's dirty flag (set by setChanged() from
+    // ANY state edit — local or remote). The idle timer uses this so that a
+    // bare setChanged() while playback is stopped and nothing is animating
+    // still forces exactly one repaint, instead of relying on every edit call
+    // site to also request a viewport refresh. When playback/animation is
+    // running, tickPlaybackTiming() drains the same flag instead, so it's
+    // consumed exactly once per tick either way.
+    return plateManager.getChanged();
+}
+
 void uploadPendingTextures() {
     // GL half of tickPlayback(): drain one frame from each sequence's
     // rawFrames queue and upload it via glTexImage2D. Caller MUST make the

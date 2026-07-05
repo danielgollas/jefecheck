@@ -340,6 +340,14 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             if (dirty || jefe::qt::hasActiveViewportAnimation()) {
                 viewport_->update();
             }
+        } else if (jefe::qt::consumePlateChanged()) {
+            // Stopped and nothing animating, but a bare setChanged() landed
+            // (any state edit whose call site didn't force its own repaint —
+            // e.g. a mirrored remote change that isn't an animation). Honor the
+            // dirty flag so the viewport still refreshes without needing a
+            // local interaction. Drained here exactly once (tickPlaybackTiming
+            // drains it in the needsTick branch instead).
+            viewport_->update();
         }
         // The timeline/status read-back only needs ~60Hz, so throttle it to
         // every 4th tick (≈16ms) rather than running it at the full 250Hz

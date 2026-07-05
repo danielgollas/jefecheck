@@ -96,6 +96,12 @@ void uploadPendingTextures();
 bool needsPlaybackTick();
 bool hasActiveViewportAnimation();
 
+// Destructively reads plateManager's dirty flag. The idle timer calls this
+// when NOT ticking playback/animation so a bare setChanged() (any state edit
+// whose call site didn't force its own viewport repaint — e.g. a mirrored
+// remote change) still repaints once while playback is stopped.
+bool consumePlateChanged();
+
 // Hands back the gfcPlateGUI_Qt that gfcPlate reads its rendering
 // state from for plate `whichPlate`. PlateCard_Qt binds its widgets
 // to this so user edits land on the plate the viewport is drawing,
