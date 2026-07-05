@@ -899,7 +899,32 @@ void gfcNetworkClient::Update() {
             networkManager.setTakeNotifications(true);
         }
         break;
-		
+
+        case GFCNETID_LAYERCHANGEMESSAGE: {
+            // A peer switched the EXR layer/channel on a plate's track. Apply
+            // the same channel name, then re-decode via the ASYNC loader — NOT
+            // gfcSequence::loadPreview(), which calls generateTexture() (a GL
+            // upload) and we're not in a current GL context here. The async
+            // path decodes on the loader thread into rawFrames; the receiver's
+            // per-tick generateTextures() (which does makeCurrent) uploads them.
+            int quadID = 0;
+            char layerChar[GFCNET_MAX_TEXT_LENGHT];
+            RakNet::BitStream bs ( p->data,p->length,false );
+            bs.IgnoreBits ( 8 );
+            bs.ReadCompressed ( quadID );
+            StringCompressor::Instance()->DecodeString ( layerChar,GFCNET_MAX_TEXT_LENGHT,&bs );
+
+            networkManager.setTakeNotifications(false);
+            int track = plateManager.getTrackOnPlate(quadID);
+            gfcSequence* seq = (track >= 0) ? trackManager.getSequence(track) : nullptr;
+            if (seq && seq->myGUI) {
+                seq->myGUI->setChannel(layerChar);
+                trackManager.startLoadingSequence(track);
+            }
+            networkManager.setTakeNotifications(true);
+        }
+        break;
+
 		case GFCNETID_FXSTACKMESSAGE:
 		{
 			gfcNetFXStackMessage message;
@@ -1246,7 +1271,16 @@ void gfcNetworkClient::SendFXStackMessage(gfcNetFXStackMessage message)
 	outBS.WriteCompressed ( ( int ) stackLenght );
 
 	StringCompressor::Instance()->EncodeString ( message.theStack.c_str(),stackLenght,&outBS );
-	
+
+	peer->Send ( &outBS,HIGH_PRIORITY,RELIABLE_ORDERED,0,serverSystemAddress,false );
+}
+
+void gfcNetworkClient::SendLayerChangeMessage(int quadID, std::string layerName)
+{
+	RakNet::BitStream outBS;
+	outBS.Write ( ( unsigned char ) GFCNETID_LAYERCHANGEMESSAGE );
+	outBS.WriteCompressed ( ( int ) quadID );
+	StringCompressor::Instance()->EncodeString ( layerName.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
 	peer->Send ( &outBS,HIGH_PRIORITY,RELIABLE_ORDERED,0,serverSystemAddress,false );
 }
 

@@ -771,6 +771,12 @@ void gfcNetworkManager::sendFXAttribMessage(gfcNetFXAttribInfo info)
 	    client.SendFXAttribMessage(info);
 }
 
+void gfcNetworkManager::sendLayerChange(int quadID, std::string layerName)
+{
+	if(connected && takeNotifications)
+	    client.SendLayerChangeMessage(quadID, layerName);
+}
+
 void gfcNetworkManager::queueFXAttrib(const gfcNetFXAttribInfo& info)
 {
 	if(!connected || !takeNotifications) return;

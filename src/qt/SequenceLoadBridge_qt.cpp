@@ -1550,6 +1550,10 @@ void setLayerOnPlate(int plateIdx, const std::string& layerName) {
         trackManager.startLoadingSequence(trackIdx);
     }
 
+    // Mirror the layer choice to remote peers (they re-decode via the async
+    // loader; no-op when not in a session).
+    networkManager.sendLayerChange(plateIdx, layerName);
+
     plateManager.setChanged();
 }
 

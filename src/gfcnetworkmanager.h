@@ -54,6 +54,11 @@ public:
     
 	void sendFXStackMessage(gfcNetFXStackMessage message);
 
+    // Broadcasts an EXR layer/channel change on a plate's track so remote
+    // peers re-decode the same layer. No-op when solo. Called from the Qt
+    // layer-combo path (bridge).
+    void sendLayerChange(int quadID, std::string layerName);
+
     // Queues a live FX-attrib edit to be sent coalesced at the GFCNETEVENT_FX
     // throttle rate (~60Hz), keyed per widget so a slider drag collapses to
     // one send per interval and the trailing value always ships (no desync).

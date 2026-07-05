@@ -65,6 +65,7 @@ public:
     void SendFXAttribMessage ( gfcNetFXAttribInfo info );
     void SendPlaylistItem(gfcPlaylistItem item);
     void SendFXStackMessage(gfcNetFXStackMessage message);
+    void SendLayerChangeMessage(int quadID, std::string layerName);
 	void SendPlaylistMessage(gfcNetPlaylistMessage message);
 	void sendPlaylistEvent(gfcNetPlaylistEvent theEvent);
 
