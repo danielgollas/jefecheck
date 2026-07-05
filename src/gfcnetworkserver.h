@@ -73,6 +73,13 @@ public:
 
     std::map<SystemAddress,std::string> nickNameAddressMap;
 	std::map<SystemAddress,int> colorAddressMap; //color map for pointers
+
+	// Picks a color for a joining/recoloring participant: the preferred color
+	// when it's non-default and not already in use, otherwise the first unused
+	// color from a fixed distinct palette, otherwise the preferred color
+	// (duplicate allowed when the palette is exhausted).
+	int assignColor(int preferred);
+
     std::map<SystemAddress, std::set<std::string> > clientsMissingFXsMap; /*when we sinc fxs, we analize what fxs we are missing and what fxs the client is missing, 
     first we request the ones we are missing, and once we get them (even if they are none) we get send the ones the client is missing. 
     Therefore we need to store the ones that the client is missing for a later time, this is what this map of sets of md5 hash strings holds, a set for each connected client*/

@@ -24,6 +24,43 @@ extern gfcPlaylistManager playlistManager;
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
 
+namespace {
+// Distinct, VFX-friendly palette in the packed-RGB format
+// ((r&0xff)<<24)|((g&0xff)<<16)|((b&0xff)<<8).
+inline int packRGB(int r, int g, int b) {
+    return ((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8);
+}
+const int kColorPalette[] = {
+    packRGB(0xE0, 0x83, 0x6C), // coral
+    packRGB(0x5B, 0xB0, 0x7A), // green
+    packRGB(0x6C, 0x9C, 0xE0), // blue
+    packRGB(0xD4, 0xA0, 0x1E), // amber
+    packRGB(0xB0, 0x7A, 0xD4), // violet
+    packRGB(0x4C, 0xC0, 0xC0), // teal
+    packRGB(0xE0, 0x6C, 0xB0), // pink
+    packRGB(0xA0, 0xC0, 0x4C), // lime
+    packRGB(0xE0, 0xB0, 0x6C), // sand
+    packRGB(0x8C, 0x8C, 0xE0), // periwinkle
+};
+const int kColorPaletteSize = sizeof(kColorPalette) / sizeof(kColorPalette[0]);
+// Default "no preference" sentinel: gray (128,128,128), matching gfcStructures.h.
+const int kDefaultColor = packRGB(128, 128, 128);
+}  // namespace
+
+int gfcNetworkServer::assignColor(int preferred) {
+    auto inUse = [this](int c) {
+        for (const auto& kv : colorAddressMap)
+            if (kv.second == c) return true;
+        return false;
+    };
+    if (preferred != kDefaultColor && !inUse(preferred))
+        return preferred;
+    for (int i = 0; i < kColorPaletteSize; ++i)
+        if (!inUse(kColorPalette[i]))
+            return kColorPalette[i];
+    return preferred;   // palette exhausted -> allow a duplicate
+}
+
 gfcNetworkServer::gfcNetworkServer() {
     peer = RakNetworkFactory::GetRakPeerInterface();
 	middleOfSync=false;
@@ -610,7 +647,7 @@ void gfcNetworkServer::Update() {
                 break;
 
             nickNameAddressMap[p->systemAddress]= receivedNickname;
-			colorAddressMap[p->systemAddress]=theColor;
+			colorAddressMap[p->systemAddress]=assignColor(theColor);
 
             printf ( "Nickname added: %s\nColorAdded%i\n",nickNameAddressMap[p->systemAddress].c_str(),theColor);
 			
@@ -741,7 +778,7 @@ void gfcNetworkServer::Update() {
 						bs.ReadCompressed ( theInt );
 
 						printf("%s changed color to %i\n",nickNameAddressMap[p->systemAddress].c_str(),theInt);
-						colorAddressMap[p->systemAddress]=theInt;
+						colorAddressMap[p->systemAddress]=assignColor(theInt);
 
 					}
 					break;
