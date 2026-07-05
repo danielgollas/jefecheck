@@ -53,7 +53,7 @@ gfcNetworkManager::gfcNetworkManager()
     chatAutoFade=true;
     chatOpacity=0.75;
     chatDisplayLines=8;
-    chatFadeDelay=10;
+    chatFadeDelay=25;   // seconds the chat overlay holds before fading (tunable in Preferences)
     takeNotifications=true;
 	blinkerOn=false;
 
@@ -532,11 +532,21 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
             if ( chatFadeCounter>0 || gChatMode!=0 ) {
 
 		glPushAttrib(GL_ALL_ATTRIB_BITS);
-		
+
+                // Work in LOGICAL pixels: gfc_gl_height()/textWidth() report in
+                // logical px (they divide by the renderer's DPI scale), so the
+                // bubble geometry must use a logical-px ortho or the boxes come
+                // out half-size on a 2x Retina display while the text (rendered
+                // at physical glyph size) overflows them. The viewport stays at
+                // the full framebuffer size; only the ortho extents are logical.
+                const float dprS = textRenderer().getDPIScale();
+                const int wl = dprS > 0 ? (int)(w / dprS) : w;
+                const int hl = dprS > 0 ? (int)(h / dprS) : h;
+
                 glMatrixMode ( GL_PROJECTION );
                 glPushMatrix();
                 glLoadIdentity();
-                glOrtho ( -w /2.0, w /2.0, -h /2.0, h /2.0, -5000.0, 5000.0 );
+                glOrtho ( -wl /2.0, wl /2.0, -hl /2.0, hl /2.0, -5000.0, 5000.0 );
 
                 glMatrixMode ( GL_MODELVIEW );
                 glPushMatrix();
@@ -553,7 +563,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                 const int pad     = 6;
                 const int margin  = 12;
                 const int gap     = 8;
-                const int maxW    = (int)(0.6 * w);
+                const int maxW    = (int)(0.6 * wl);
                 const std::string me = client.getNickName();
 
                 std::vector<gfcChatLogEntry> log = client.getChatLog();
@@ -564,7 +574,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                 if (end > logSize) end = logSize;
 
                 // Layout bottom-up: y is the current baseline stack cursor from the bottom.
-                int y = -h / 2 + margin;
+                int y = -hl / 2 + margin;
 
                 // Typing bubble first (lowest), if composing.
                 if (gChatMode == 1) {
@@ -576,7 +586,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                     for (auto& l : lines) bw = std::max(bw, (int)textRenderer().textWidth(l.c_str()));
                     bw += 2 * pad;
                     int bh = (int)lines.size() * lineH + 2 * pad;
-                    int x = w / 2 - margin - bw;   // self = right
+                    int x = wl / 2 - margin - bw;   // self = right
                     glColor4f(0.18f, 0.15f, 0.12f, alpha);      // accent-tint
                     gl_rectf(x, y, bw, bh);
                     textRenderer().setColor(0.91f, 0.72f, 0.52f, alpha);
@@ -611,7 +621,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                     for (auto& l : lines) bw = std::max(bw, (int)textRenderer().textWidth(l.c_str()));
                     bw += 2 * pad;
                     int bh = (int)(lines.size() + 1) * lineH + 2 * pad;   // +1 header line
-                    int x = self ? (w / 2 - margin - bw) : (-w / 2 + margin);
+                    int x = self ? (wl / 2 - margin - bw) : (-wl / 2 + margin);
 
                     if (self) glColor4f(0.18f, 0.15f, 0.12f, alpha);       // accent-tint
                     else      glColor4f(0.14f, 0.14f, 0.14f, alpha);       // neutral
