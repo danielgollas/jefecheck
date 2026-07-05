@@ -576,7 +576,7 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                     gl_rectf(x, y, bw, bh);
                     textRenderer().setColor(0.91f, 0.72f, 0.52f, alpha);
                     std::string joined; for (auto& l : lines) { joined += l; joined += "\n"; }
-                    gfc_gl_draw(joined.c_str(), x + pad, y + pad, bw - 2 * pad, bh - pad,
+                    gfc_gl_draw(joined.c_str(), x + pad, y + pad, bw - 2 * pad, bh - 2 * pad,
                                 FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP | FL_ALIGN_INSIDE);
                     y += bh + gap;
                 }
@@ -596,7 +596,11 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                         continue;
                     }
                     const bool self = (!e.sender.empty() && e.sender == me);
-                    std::string header = (self ? "You" : e.sender) + " \xC2\xB7 " + shortTime(e.time); // "·"
+                    // ASCII separator: the GL text renderer's glyph atlas is
+                    // ASCII-only (32-127), so a UTF-8 middle-dot would render as
+                    // an invisible gap. The Qt panel (Task 5) uses a real "·"
+                    // because QLabel handles UTF-8; the overlay uses " - ".
+                    std::string header = (self ? "You" : e.sender) + " - " + shortTime(e.time);
                     std::vector<std::string> lines = wrapToWidth(e.message, maxW - 2 * pad);
                     int bw = (int)textRenderer().textWidth(header.c_str());
                     for (auto& l : lines) bw = std::max(bw, (int)textRenderer().textWidth(l.c_str()));
