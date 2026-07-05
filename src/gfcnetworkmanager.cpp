@@ -109,6 +109,7 @@ void gfcNetworkManager::stopServer()
 	server.stop();
 	isServer=false;
 	connected=false;
+	pendingFXAttribs_.clear();   // drop un-flushed edits so they can't replay
 	client.enableGUI();
 
 
@@ -119,6 +120,7 @@ void gfcNetworkManager::stopConnection()
     client.Disconnect();
     isServer = false;
     connected = false;
+    pendingFXAttribs_.clear();   // drop un-flushed edits so they can't replay
     server.enableGUI();
 }
 
@@ -233,11 +235,13 @@ void gfcNetworkManager::update()
 	}
 	
 	
-	//check fx
+	//check fx — flush the coalesced live param edits at the throttle rate.
 	if(events[GFCNETEVENT_FX].readyForSend(timeStep))
 	{
 		events[GFCNETEVENT_FX].processed();
-		printf("Sending FX\n");
+		for (auto& kv : pendingFXAttribs_)
+			client.SendFXAttribMessage(kv.second);
+		pendingFXAttribs_.clear();
 	}
 	
 	
@@ -690,6 +694,18 @@ void gfcNetworkManager::sendFXAttribMessage(gfcNetFXAttribInfo info)
 {
 	if(connected && takeNotifications)
 	    client.SendFXAttribMessage(info);
+}
+
+void gfcNetworkManager::queueFXAttrib(const gfcNetFXAttribInfo& info)
+{
+	if(!connected || !takeNotifications) return;
+	// Key per widget so a drag on one param collapses to its latest value
+	// while edits to other widgets stay distinct. Flushed in update().
+	std::string key = std::to_string(info.id.quadID) + "/" +
+	                  std::to_string(info.id.index) + "/" +
+	                  info.groupName + "/" + info.variableName;
+	pendingFXAttribs_[key] = info;
+	notifyEvent(GFCNETEVENT_FX);
 }
 
 void gfcNetworkManager::setRecent(std::vector<std::string> recents)

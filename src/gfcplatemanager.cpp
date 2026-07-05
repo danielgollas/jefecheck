@@ -1009,7 +1009,9 @@ void gfcPlateManager::setFXWidgetValue(int whichOne, int fxIndex,
         return;  // unknown widget type — nothing meaningful to send
     }
 
-    networkManager.sendFXAttribMessage(info);
+    // Queue rather than send immediately: coalesced + throttled to ~60Hz like
+    // the COLOR/TRANSFORMS streams, so a slider drag doesn't flood the channel.
+    networkManager.queueFXAttrib(info);
 }
 
 gfcFXStack * gfcPlateManager::getFXStack(int whichOne) {

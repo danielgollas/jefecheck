@@ -14,6 +14,7 @@
 #include "StringCompressor.h"
 
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,13 @@ public:
     void sendFXAttribMessage(gfcNetFXAttribInfo info);
     
 	void sendFXStackMessage(gfcNetFXStackMessage message);
+
+    // Queues a live FX-attrib edit to be sent coalesced at the GFCNETEVENT_FX
+    // throttle rate (~60Hz), keyed per widget so a slider drag collapses to
+    // one send per interval and the trailing value always ships (no desync).
+    // Mirrors how COLOR/TRANSFORMS are rate-limited. Called from local edits
+    // only (the receive path applies directly, so no echo).
+    void queueFXAttrib(const gfcNetFXAttribInfo& info);
         
     void sendSystemChatMessage(std::string message, int type);
     
@@ -138,6 +146,11 @@ int sendRemoteLoadRequests;
 ///sent everytime we update, only every ms so we don't saturate the server and cpu.
 ///They are turned on by the notifyEvent method.
 gfcNetworkEventNotification events[GFCNETEVENT_NUMOFEVENTTYPES];
+
+// Pending live FX-attrib edits, keyed "quad/index/group/var" so repeated
+// edits to the same widget within a throttle interval collapse to the latest
+// value. Flushed in update() when events[GFCNETEVENT_FX] fires.
+std::map<std::string, gfcNetFXAttribInfo> pendingFXAttribs_;
 
 };
 
