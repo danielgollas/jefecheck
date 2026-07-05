@@ -13,6 +13,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSpinBox>
+#include <QSplitter>
 #include <QSysInfo>
 #include <QTabWidget>
 #include <QTextEdit>
@@ -293,8 +294,9 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     netLogView_ = new QTextEdit(this);
     netLogView_->setObjectName("remote.netlog");
     netLogView_->setReadOnly(true);
-    netLogView_->setMinimumHeight(90);
-    netLogView_->setMaximumHeight(160);
+    netLogView_->setMinimumHeight(60);
+    // No max height — the splitter below lets the user size the log against
+    // the chat area.
     netLogView_->setPlaceholderText(
         "Connection activity (nicknames, sync, connect/disconnect) appears here "
         "once you host or join a session.");
@@ -308,16 +310,27 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     clientIPEdit_->setText("127.0.0.1");
     clientNameEdit_->setText(QSysInfo::machineHostName());
 
+    // Chat area (sessionBox_) and the connection log share a vertical splitter
+    // so the chat fills available space and the user can drag the boundary to
+    // grow/shrink the log. The chat gets the stretch; the log stays compact by
+    // default but is freely resizable.
+    auto* sessionSplitter = new QSplitter(Qt::Vertical, this);
+    sessionSplitter->setObjectName("remote.sessionsplitter");
+    sessionSplitter->setChildrenCollapsible(false);
+    sessionSplitter->addWidget(sessionBox_);
+    sessionSplitter->addWidget(netLogSection);
+    sessionSplitter->setStretchFactor(0, 1);   // chat grows
+    sessionSplitter->setStretchFactor(1, 0);   // log stays compact
+    sessionSplitter->setSizes({400, 120});
+
     // ---- Assemble --------------------------------------------------------
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(14, 14, 14, 14);
     outer->setSpacing(12);
     outer->addLayout(statusRow);
     outer->addWidget(connectPanel_);
-    outer->addWidget(sessionBox_);
     outer->addWidget(errorLabel_);
-    outer->addWidget(netLogSection);
-    outer->addStretch(1);
+    outer->addWidget(sessionSplitter, /*stretch*/ 1);   // fills remaining space
 
     connect(startServerBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::onStartServerClicked);
