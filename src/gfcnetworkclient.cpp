@@ -49,6 +49,16 @@ extern gfcNetworkManager networkManager;
 gfcNetworkClient::gfcNetworkClient() {
     peer = RakNetworkFactory::GetRakPeerInterface();
 	haveSentMyPlaylist=false;
+	// Explicit init: pumpNetwork() reads these from the very first tick.
+	// Safe today only because networkManager is a global (static zero-init),
+	// but don't rely on that.
+	gotMessages=false;
+	isConnected=false;
+	attemptingConnection=false;
+	statusChange=false;
+	statusColor=0;
+	gotNewChatMessage=false;
+	isServerClient=false;
 }
 
 void gfcNetworkClient::setStatusInternal(std::string s, int color) {

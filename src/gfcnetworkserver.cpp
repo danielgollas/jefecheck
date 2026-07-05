@@ -711,10 +711,11 @@ void gfcNetworkServer::Update() {
 						outBS.WriteCompressed ( ( int ) theInt ); //y
 						bs.Read ( theFloat );
 						outBS.Write ( ( float ) theFloat ); //scale
-						
-						char messageNickname[GFCNET_MAX_TEXT_LENGHT];
-						StringCompressor::Instance()->DecodeString ( messageNickname,GFCNET_MAX_TEXT_LENGHT,&bs );
 
+						// The client's pointer message ends at scale — it does not
+						// encode a nickname (SendPointerInfoMessage writes only
+						// quad/x/y/scale). Don't decode one here; the broadcast
+						// nickname comes from nickNameAddressMap below.
 						StringCompressor::Instance()->EncodeString ( nickNameAddressMap[p->systemAddress].c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
 
 						//also send the color

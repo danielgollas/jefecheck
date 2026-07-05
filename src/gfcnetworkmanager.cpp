@@ -32,6 +32,13 @@ gfcNetworkManager::gfcNetworkManager()
     takeNotifications=true;
 	blinkerOn=false;
 
+	// Connection/chat state read by pumpNetwork() from the first tick.
+	connected=false;
+	isServer=false;
+	gChatMode=0;
+	chatFadeCounter=0;
+	cursorBlinkCounter=0;
+
 	sendRemoteLoadRequests=true;
 
 	allReady=0;

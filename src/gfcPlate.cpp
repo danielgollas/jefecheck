@@ -815,7 +815,15 @@ void gfcPlate::updateAnimations() {
     //we separete it from the drawing function
     //so we can have a smooth animation but still only draw when something has changed.
     pointerStorage.updateFaders();
-    updateRot(playbackManager.getTimestep(),flip,flop);
+    // Clamp the rotation timestep. When the app is idle the tick loop stops
+    // calling playbackManager.update(), so the first getTimestep() after a
+    // flip/flop is triggered from idle is the whole idle gap (seconds) — which
+    // makes updateRot overshoot and snap to the target in one step instead of
+    // animating. Cap it so the animation always plays smoothly; playback pacing
+    // still uses the raw timestep, so this doesn't affect frame timing.
+    float animStep = playbackManager.getTimestep();
+    if (animStep > 0.05f) animStep = 0.05f;
+    updateRot(animStep,flip,flop);
 }
 
 void gfcPlate::drawRemotePointers() {
