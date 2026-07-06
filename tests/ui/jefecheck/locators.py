@@ -17,8 +17,9 @@ STATUSBAR_LAYOUT = "statusbar.layout.label"
 STATUSBAR_TRACK = "statusbar.track.label"
 STATUSBAR_LOADED = "statusbar.loaded.label"
 STATUSBAR_STARTUP = "statusbar.startup.label"
-# Default bit depth moved to Preferences → Engine (prefs.engine.defaultTextureFormat);
-# status-bar visibility toggles via View → Show Status Bar (menu.view.statusbar).
+# Default bit depth moved to Preferences → Playback & Engine
+# (preferences.engine.bitdepth.combo); status-bar visibility toggles via
+# View → Show Status Bar (menu.view.statusbar).
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
@@ -211,12 +212,11 @@ PREFERENCES_SIDEBAR = "preferences.sidebar"
 PREFERENCES_DONE = "preferences.done.button"
 PREFERENCES_CANCEL = "preferences.cancel.button"
 
-# Preferences → Engine panel widgets. PREFS_* prefix mirrors the
-# object-name pattern the PR-introducing-this-feature uses on the
-# widget side ("prefs.engine.<field>") — note the leaf objectName
-# differs from the `preferences.engine.*.combo` convention used by
-# pre-existing Engine widgets.
-PREFS_DEFAULT_DECODE_FILTER = "prefs.engine.defaultDecodeFilter"
+# Preferences → Playback & Engine panel widgets. Standardized (JEF-16
+# Task 2) onto the `preferences.engine.*.combo` leaf convention used by
+# the other Engine widgets.
+PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
+PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
 
 
 def plate(plate_id: int, role: str) -> str:

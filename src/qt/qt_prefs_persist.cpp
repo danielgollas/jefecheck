@@ -16,6 +16,13 @@ void loadPreferences() {
     // Engine (already persisted in MainWindow_qt today — centralize here).
     sett.defaultDecodeFilter  = s.value("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter).toInt();
     sett.defaultTextureFormat = s.value("Engine/defaultTextureFormat", sett.defaultTextureFormat).toInt();
+    // Engine (JEF-16 Task 2 — Playback & Engine section).
+    sett.vsync                 = s.value("Engine/vsync",                 sett.vsync).toInt();
+    sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
+    sett.numOfPartitions       = s.value("Engine/numOfPartitions",       sett.numOfPartitions).toInt();
+    sett.balanceReads          = s.value("Engine/balanceReads",          sett.balanceReads).toInt();
+    sett.forcePBO              = s.value("Engine/forcePBO",              sett.forcePBO).toInt();
+    sett.renderingEngine       = s.value("Engine/renderingEngine",       sett.renderingEngine).toInt();
     // Session behavior.
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
@@ -36,6 +43,12 @@ void writePreferences() {
     QSettings s;
     s.setValue("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter);
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
+    s.setValue("Engine/vsync",                sett.vsync);
+    s.setValue("Engine/maximumFramesInQueue", sett.maximumFramesInQueue);
+    s.setValue("Engine/numOfPartitions",      sett.numOfPartitions);
+    s.setValue("Engine/balanceReads",         sett.balanceReads);
+    s.setValue("Engine/forcePBO",             sett.forcePBO);
+    s.setValue("Engine/renderingEngine",      sett.renderingEngine);
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);
 
     // General (JEF-16 Task 1).

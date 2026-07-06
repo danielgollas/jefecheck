@@ -41,7 +41,7 @@ def test_placeholder():
 def test_default_decode_filter_combo_default_is_lanczos3(prefs_app):
     """Engine panel exposes Default decode filter combo, default = lanczos3."""
     prefs_app.open_preferences()
-    prefs_app.select_prefs_panel("Engine")
+    prefs_app.select_prefs_panel("Playback & Engine")
     combo = prefs_app.by_object_name(locators.PREFS_DEFAULT_DECODE_FILTER)
     assert combo is not None, "Default decode filter combo missing from Engine panel"
     assert combo.get_attribute("title") == "lanczos3"

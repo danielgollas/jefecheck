@@ -54,6 +54,8 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     connect(sidebar_, &QListWidget::currentRowChanged,
             pages_, &QStackedWidget::setCurrentIndex);
 
+    // Sidebar order mirrors page-build order below: General, Text (stub),
+    // Playback & Engine, Formats, Remote (stub), Paths (stub).
     buildGeneralPage();
     buildPlaceholderPage("Text", "Text rendering settings — coming soon.");
     buildEnginePage();
@@ -215,17 +217,6 @@ void PreferencesWindow_Qt::buildGeneralPage() {
             page, [](double v) { sett.aspectBarsOpacity = float(v); });
     form->addRow("Aspect-bar opacity", aspect);
 
-    auto* procPri = new QSpinBox(page);
-    procPri->setRange(0, 10);
-    procPri->setValue(sett.processorPriority);
-    procPri->setObjectName("preferences.general.priority.spin");
-    procPri->setAccessibleName("Processor priority");
-    connect(procPri, QOverload<int>::of(&QSpinBox::valueChanged),
-            page, [](int v) { sett.processorPriority = v; });
-    form->addRow("Processor priority", procPri);
-    // NOTE: processorPriority row's removal is owned by Task 2 (JEF-16) —
-    // intentionally left in place here to avoid overlap.
-
     auto* thumbs = new QCheckBox("Timeline thumbnails", page);
     thumbs->setChecked(sett.showThumbnails);
     thumbs->setObjectName("preferences.general.thumbnails.check");
@@ -317,7 +308,7 @@ void PreferencesWindow_Qt::buildEnginePage() {
     // MainWindow_Qt next to defaultTextureFormat.
     auto* filterLabel = new QLabel("Default decode filter:", page);
     auto* filterCombo = new QComboBox(page);
-    filterCombo->setObjectName("prefs.engine.defaultDecodeFilter");
+    filterCombo->setObjectName("preferences.engine.decodefilter.combo");
     filterCombo->setAccessibleName("Default decode filter");
     filterCombo->addItem("nearest",   FILTERBOX_ID);
     filterCombo->addItem("triangle",  FILTERTRIANGLE_ID);
@@ -326,11 +317,11 @@ void PreferencesWindow_Qt::buildEnginePage() {
     int idx = filterCombo->findData(sett.defaultDecodeFilter);
     if (idx < 0) idx = filterCombo->findData(FILTERLANCZOS_ID);
     filterCombo->setCurrentIndex(idx);
+    // In-memory only — persistence happens centrally via writePreferences()
+    // on Done, so Cancel can revert this (see sett_backup_ in the ctor).
     connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [filterCombo](int i) {
         sett.defaultDecodeFilter = filterCombo->itemData(i).toInt();
-        QSettings s;
-        s.setValue("Engine/defaultDecodeFilter", sett.defaultDecodeFilter);
     });
     form->addRow(filterLabel, filterCombo);
 
@@ -343,7 +334,7 @@ void PreferencesWindow_Qt::buildEnginePage() {
     // Engine/defaultTextureFormat; restored at startup by MainWindow_Qt.
     auto* depthLabel = new QLabel("Default bit depth:", page);
     auto* depthCombo = new QComboBox(page);
-    depthCombo->setObjectName("prefs.engine.defaultTextureFormat");
+    depthCombo->setObjectName("preferences.engine.bitdepth.combo");
     depthCombo->setAccessibleName("Default bit depth for new loads");
     depthCombo->addItem("8",        GFC_8BPC);
     depthCombo->addItem("16",       GFC_16BPC);
@@ -352,15 +343,15 @@ void PreferencesWindow_Qt::buildEnginePage() {
     int depthIdx = depthCombo->findData(sett.defaultTextureFormat);
     if (depthIdx < 0) depthIdx = depthCombo->findData(GFC_16HALF);
     depthCombo->setCurrentIndex(depthIdx);
+    // In-memory only — persistence happens centrally via writePreferences()
+    // on Done, so Cancel can revert this (see sett_backup_ in the ctor).
     connect(depthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [depthCombo](int i) {
         sett.defaultTextureFormat = depthCombo->itemData(i).toInt();
-        QSettings s;
-        s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
     });
     form->addRow(depthLabel, depthCombo);
 
-    addPage("Engine", page);
+    addPage("Playback & Engine", page);
 }
 
 void PreferencesWindow_Qt::buildFormatsPage() {
