@@ -1,0 +1,195 @@
+# JEF-16 — Wire up all preferences + redesign the Preferences window
+
+**Ticket:** JEF-16 (Story) — "Wire up all preferences to actually affect the product"
+**Branch:** `JEF-16-wire-up-preferences` (off `qt-experimental`, sitting on the merged JEF-13 design tokens)
+**Date:** 2026-07-06
+
+## Goal
+
+Two intertwined deliverables:
+
+1. **Correctness** — every preference the user can see either actually affects the
+   product or is removed. Go section by section; for each setting decide *used /
+   desired / works* and act on it.
+2. **Redesign** — refresh the Preferences window and its sections in the newest
+   design language (JEF-13 discreet VFX-dark tokens), as we touch each section.
+
+Disposition bias: **wire-up-biased** — prefer making a dead setting work; only
+remove settings that are truly obsolete or duplicated.
+
+## Context (current state)
+
+### The window
+`src/qt/PreferencesWindow_qt.{h,cpp}`. A modal `QDialog`: a fixed-width
+`QListWidget` sidebar selects pages in a `QStackedWidget`; each page is a plain
+`QFormLayout`. Six pages today:
+
+- **General**, **Engine**, **Formats** — real pages.
+- **Text**, **Remote**, **Paths** — `buildPlaceholderPage()` stubs ("coming soon").
+
+Widgets bind to the global `sett` (`gfcSettings`) and mutate it **live** on
+change. **Done** calls `saveSettings(&sett)` (writes the JefeCheck XML in
+`getApplicationDataPath()`); **Cancel** just closes.
+
+### Two persistence systems (cross-cutting problem)
+Settings persist through **two** parallel mechanisms:
+- **Legacy XML** via `gfcSettings` + `saveSettings()`/`saveSetting()` /
+  `setWidgetFromNode()` (`gfcStructures.cpp`) — the global `sett`.
+- **Qt `QSettings`** — used ad hoc for `Session/startupBehavior`,
+  `Engine/defaultDecodeFilter`, `Engine/defaultTextureFormat`, `Playlist/compactView`,
+  `Playlist/showFullPaths`, and others.
+
+Some settings are duplicated/split across both (e.g. `playlistShowCompactView`
+in `gfcSettings` is a dead orphan; the live playlist toggle uses the `QSettings`
+key `Playlist/compactView`).
+
+### Two behavior bugs to fold in
+- **Cancel doesn't revert.** Widgets write `sett` live, so Cancel closes with the
+  changes already applied in memory (they just aren't saved to XML).
+- **Duplicate persistence.** A setting can be read from one store and written to
+  another, so the UI and the consumer disagree.
+
+## The audit
+
+Method: cross-reference **exposed in the current UI** against **consumed in the
+active build** (excluding the build-filtered `gfcimageloaderexr` / `gfcimagesaver_exr`,
+and the definition/UI files themselves). "Consumed" = name referenced in active
+source; per-setting *does it actually take effect* is verified during that
+section's execution pass.
+
+### Quadrant ① — Exposed + wired (keep; verify each takes effect)
+`bgColor`, `enableCrashRecoverySession`, `startupSessionBehavior`,
+`aspectBarsOpacity`, `renderingEngine`, `vsync`, `maximumFramesInQueue`,
+`numOfPartitions`, `balanceReads`, `forcePBO`, `defaultDecodeFilter`,
+`defaultTextureFormat`.
+
+### Quadrant ② — Exposed + DEAD (the core problem — fix each)
+| Setting | Verdict |
+|---|---|
+| `defaultBrowsePath` | **Wire** — seed file dialogs' initial directory |
+| `startFullscreen` | **Wire** — apply fullscreen at startup |
+| `openLoadWindowAtStartup` | **Wire** — open the Load window at startup when set (today nothing reads it) |
+| `processorPriority` | **Remove** — low value on modern macOS; wire cost ≫ benefit |
+| `exrIgnoreDisplayWindow` | **Wire** to the OIIO loader (current, real behavior) |
+| `exrIgnoreHeadersAspectRatio` | **Wire** to the OIIO loader |
+| `exrExposure`, `exrDefog`, `exrGamma`, `exrKneeLow`, `exrKneeHigh` | **Remove** — obsolete; only the *disabled* custom EXR loader consumed them (OIIO owns EXR now) |
+
+### Quadrant ③ — Hidden + wired (add UI for user-facing ones)
+Surface: `showThumbnails`, `feedbackMessageFadeDelay`, `feedbackMessageSize`,
+chat group (`chatFadeDelay`, `chatAutoFade`, `chatTextBG`, `chatFontSize`,
+`chatOpacity`, `chatDisplayLines`), `remotePointerFadeDelay`, `remotePointerColor`,
+`nickName`, `sendRemoteLoadRequests`, `autoAcceptRemoteLoadRequests`,
+`useSearchPaths`.
+
+Keep hidden (internal GL/runtime state, not user prefs): `glsl`, `fbo`, `fp16`,
+`filterMin`, `filterMax`, `textureRectangles`, `framingMode`, `loopMode`,
+`loopPriority`, `lutPath`, `maxRecentSessions/Browsed/IPs`.
+
+### Quadrant ④ — Hidden + DEAD (remove from struct)
+`playbackOnLoad`, `textureCompression`, `maxRecentFXStacks`, `maxRecentFXs`,
+`defaultLUTName`, `feedbackMessageOn`, `serverNickname`, `clientPort`,
+`serverPort`, `licensePath`, and the duplicate `playlistShowCompactView` /
+`playlistShowFullPaths` (live feature already in `QSettings`).
+
+### Half-implemented features (decided)
+- **Search Paths** (`searchPaths`, `searchPathsRecursive`, `useSearchPaths`) —
+  **complete it.** `useSearchPaths` is consumed in `gfcSequence.cpp`; wire the
+  path list + recursive flag and give it a UI section.
+- **Mirror Paths** (`mirrorPaths[16]`) — **defer.** `numOfPartitions` is wired but
+  the mirror-path strings aren't; multi-mirror parallel loading is a large, niche
+  feature. Remove `mirrorPaths` from the UI surface for now (leave the struct
+  field or drop it — decided in the Engine section pass); revisit in a later ticket.
+
+> The full per-field matrix above is the **starting** classification. Each section's
+> execution pass re-verifies "does it actually work" by reading the consumer, and
+> updates the verdict if reality differs. Treat the matrix as living.
+
+## Redesigned window
+
+Replace the flat sidebar+form with the JEF-13 discreet aesthetic
+(`src/qt/theme/design-tokens.md`, `jefecheck_dark.qss`), grouping related controls
+with `CollapsibleSection_qt`. Keep the sidebar-selects-page shell (it works and is
+a11y-mapped) but restyle it and give pages real structure.
+
+### Sections (post-redesign)
+1. **General** — background color, default browse path, start fullscreen, open Load
+   window at startup, on-launch session behavior, crash recovery, timeline
+   thumbnails, aspect-bar opacity, feedback-message group (size / fade).
+2. **Playback & Engine** — rendering engine, vsync, max frames in queue, loader
+   partitions, balance reads, force PBO, default decode filter, default bit depth.
+3. **Formats** — EXR: ignore display window, ignore header aspect ratio (both wired
+   to the OIIO loader). *Tonemap floats removed.*
+4. **Search Paths** *(new)* — enable, path list (add/remove), recursive.
+5. **Remote** *(fills placeholder)* — nickname, chat group, remote-pointer group
+   (color + fade), send/auto-accept load-request toggles.
+6. **Text** *(fills placeholder)* — `GfcTextRenderer` prefs: font / bold, size,
+   color, opacity, shadow (offset / color / blur / enabled), hint mode,
+   nearest-vs-linear filter, gamma. Persistence path (XML per developer_notes §22
+   vs `QSettings`) pinned during this section's pass; wire through the renderer's
+   setter API and confirm it applies live.
+
+The standalone **Paths** tab is removed (default browse path → General; LUT/search
+paths handled in General/Search Paths).
+
+### Behavior changes (window-shell section)
+- **Cancel reverts.** Snapshot `sett` (and any touched `QSettings` keys) on open;
+  restore on Cancel/reject. Done saves + closes.
+- **One persistence path per setting.** Each control reads and writes the single
+  store that its consumer actually reads. Remove orphan duplicate fields.
+- **Token styling.** Controls adopt the discreet button/input/checkbox/combo
+  recipes; sections use `CollapsibleSection_qt`; object names keep the dotted-leaf
+  scheme (see `tests/ui/jefecheck/locators.py`) so Mac2/XCUITest still resolves them.
+
+## Execution order
+
+Each step is its own commit with verification. Approach A: shell first, then
+sections.
+
+0. **Window-shell redesign** — new chrome (token styling, `CollapsibleSection`
+   scaffolding, sidebar restyle), Cancel-reverts snapshot/restore, persistence-path
+   discipline. No setting changes yet; existing three pages render in the new shell.
+1. **General** — redesign + wire `defaultBrowsePath`, `startFullscreen`,
+   `openLoadWindowAtStartup`; add `showThumbnails` + feedback-message group; verify
+   quadrant-① General settings.
+2. **Playback & Engine** — redesign + verify wired settings; remove
+   `processorPriority`; decide `mirrorPaths` struct disposition.
+3. **Formats** — remove 5 tonemap floats; wire the 2 EXR ignore-* toggles to the
+   OIIO loader.
+4. **Search Paths** (new) — UI + wire `searchPaths` / `searchPathsRecursive` /
+   `useSearchPaths`.
+5. **Remote** (new) — UI + wire nickname, chat group, remote-pointer group,
+   load-request toggles.
+6. **Text** (new) — UI + wire `GfcTextRenderer` prefs; confirm live apply.
+7. **Struct cleanup** — remove quadrant-④ dead fields and their save/load lines;
+   build clean.
+8. **Final verification** — full build, launch, walk every section, screenshot.
+
+## Verification strategy
+
+- **Build:** `cmake --build build` clean after each section.
+- **Behavioral:** for each newly-wired setting, exercise the actual product effect
+  (e.g. set `startFullscreen` → relaunch → window is fullscreen; set decode filter →
+  load a downscaled image → correct filter used). Prefer driving the real app
+  (`/run`, `/verify`) over asserting on the widget alone.
+- **Visual:** launch and screenshot each redesigned section; compare against the
+  JEF-13 token recipes.
+- **Regression:** confirm object names still match `tests/ui/jefecheck/locators.py`.
+
+## Out of scope (explicit)
+
+- Multi-mirror parallel loading (`mirrorPaths`) — deferred to a later ticket.
+- Re-implementing EXR tonemap-on-load via OIIO — the 5 tonemap settings are removed,
+  not reimplemented.
+- Wholesale migration of persistence to a single store — we enforce *one path per
+  setting* and remove duplicates, but don't rewrite the persistence layer.
+
+## Risks
+
+- **"Consumed" ≠ "works."** Grep found references, not correctness; the per-section
+  read-the-consumer pass is where real verification happens. Budget for verdicts
+  flipping.
+- **Persistence duplication** can hide bugs where UI and consumer use different
+  stores — the one-path rule addresses this but each case needs checking.
+- **Struct field removal** touches `saveSetting`/`setWidgetFromNode` in
+  `gfcStructures.cpp`; must remove both the field and its save/load lines together,
+  and confirm old XML files still load (unknown/missing keys tolerated).
