@@ -1422,23 +1422,29 @@ void gfcPlateManager::loadStackFromFile(int whichOne, std::string filename) {
     }
 }
 
+void gfcPlateManager::broadcastFXStack(int whichOne) {
+	if (whichOne < 0 || whichOne >= (int)plates.size()) {
+		printf("gfcPlateManager::broadcastFXStack: requested plate out of range\n");
+		return;
+	}
+	gfcNetFXStackMessage message;
+	message.quadID = whichOne;
+	XMLNode node = XMLNode::createXMLTopNode("Stack");
+	plates[whichOne].fxStack.saveStackToNode(node);
+	message.theStack = node.createXMLString();
+	networkManager.sendFXStackMessage(message);
+}
+
 void gfcPlateManager::clearFXStack(int whichOne ) {
 	setChanged();
     if (whichOne>=plates.size()) {
         printf("gfcPlateManager::clearFXStack: requested plate out of range\n");
     } else {
         plates[whichOne].fxStack.clearStack();
-
-		//send notification that a stack was loaded
-		gfcNetFXStackMessage message;
-		message.quadID=whichOne;
-		XMLNode node = XMLNode::createXMLTopNode("Stack");
-		plates[whichOne].fxStack.saveStackToNode(node);
-		message.theStack=node.createXMLString();
-
-		networkManager.sendFXStackMessage(message);
+		//send notification that the stack changed
+		broadcastFXStack(whichOne);
     }
-	
+
 }
 
 std::vector<gfcFXStack> gfcPlateManager::getPlateFXStacks()

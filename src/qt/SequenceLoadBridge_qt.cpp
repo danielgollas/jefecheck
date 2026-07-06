@@ -732,6 +732,7 @@ void addFXToActivePlate(int fxIndex) {
     if (fx.name.empty() && fx.menuName.empty()) return;
     stack->addFX(fx);
     plateManager.setChanged();
+    plateManager.broadcastFXStack(q);   // mirror structural change to peers
 }
 
 void removeFXFromPlate(int plateIdx, int stackIndex) {
@@ -748,6 +749,7 @@ void removeFXFromPlate(int plateIdx, int stackIndex) {
         stack->addFX(all[i]);
     }
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 void clearFXStackOnPlate(int plateIdx) {
@@ -755,6 +757,7 @@ void clearFXStackOnPlate(int plateIdx) {
     if (!stack) return;
     stack->clearStack();
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 void setFXActiveOnPlate(int plateIdx, int fxIndex, bool active) {
@@ -762,6 +765,7 @@ void setFXActiveOnPlate(int plateIdx, int fxIndex, bool active) {
     if (!stack) return;
     stack->setActive(fxIndex, active);
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 void moveFXOnPlate(int plateIdx, int from, int to) {
@@ -769,6 +773,7 @@ void moveFXOnPlate(int plateIdx, int from, int to) {
     if (!stack) return;
     stack->moveFX(from, to);
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 std::vector<std::pair<int, std::string>> getAvailableFXMenu() {
