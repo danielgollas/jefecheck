@@ -2,6 +2,8 @@
 
 #include "../gfcStructures.h"
 #include "../UIConstants.h"
+#include "CollapsibleSection_qt.h"
+#include "qt_prefs_persist.h"
 
 #include <QCheckBox>
 #include <QColorDialog>
@@ -27,9 +29,18 @@ extern gfcSettings sett;
 PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
     setObjectName("preferences.dialog");
+    setStyleSheet(R"(
+        QLabel[role="section"] { color:#9a9a9a; font-size:11px; font-weight:600; }
+        QWidget[card="true"]   { background:#232327; border:1px solid #333; border-radius:8px; }
+        QPushButton[accent="true"] { border-color:#4c6577; color:#a6c0d2; font-weight:600; }
+    )");
     setAccessibleName("Preferences");
     setModal(true);
     resize(640, 480);
+
+    // Snapshot the live settings on open so Cancel can restore them verbatim
+    // — pages below mutate `sett` directly as the user edits.
+    sett_backup_ = std::make_unique<gfcSettings>(sett);
 
     sidebar_ = new QListWidget(this);
     sidebar_->setFixedWidth(140);
@@ -59,12 +70,13 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     buttons->button(QDialogButtonBox::Save)->setObjectName("preferences.done.button");
     buttons->button(QDialogButtonBox::Cancel)->setObjectName("preferences.cancel.button");
     connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
-        // FLTK's prefs window does this on the Done callback. Persists
-        // to the JefeCheck XML in getApplicationDataPath().
-        saveSettings(&sett);
+        jefe::qt::writePreferences();   // real persistence (was a no-op)
         accept();
     });
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::rejected, this, [this]() {
+        sett = *sett_backup_;           // revert live mutations
+        reject();
+    });
 
     auto* split = new QHBoxLayout();
     split->setContentsMargins(0, 0, 0, 0);
@@ -77,9 +89,21 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     outer->addWidget(buttons);
 }
 
+// Out-of-line so the unique_ptr<gfcSettings> destructor is instantiated here,
+// where gfcStructures.h (included above) provides the complete type — the
+// header only forward-declares gfcSettings (see PreferencesWindow_qt.h).
+PreferencesWindow_Qt::~PreferencesWindow_Qt() = default;
+
 void PreferencesWindow_Qt::addPage(const QString& title, QWidget* page) {
     sidebar_->addItem(title);
     pages_->addWidget(page);
+}
+
+QWidget* PreferencesWindow_Qt::section(const QString& title, QWidget* content) {
+    auto* sec = new CollapsibleSection(title, this);
+    sec->setContentWidget(content);
+    sec->setExpanded(true);
+    return sec;
 }
 
 namespace {

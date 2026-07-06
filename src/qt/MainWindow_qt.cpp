@@ -10,6 +10,7 @@
 #include "PlateManager_qt.h"
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
+#include "qt_prefs_persist.h"
 #include "RenderBridge_qt.h"
 #include "RenderDialog_qt.h"
 #include "VideoEncoder_qt.h"
@@ -73,17 +74,11 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // Restore the engine load defaults persisted in QSettings — the default
     // texture bit depth and the OIIO decode filter. Both are now edited in
     // Preferences → Engine; here we just apply the saved values at startup
-    // (without opening Preferences). Routed through SequenceLoadBridge so this
-    // TU stays glad-free (gfcStructures.h drags glad, which can't share a TU
-    // with QOpenGLWidget on macOS — see developer_notes.md §1).
-    {
-        QSettings settings;
-        jefe::qt::setDefaultTextureFormat(
-            settings.value("Engine/defaultTextureFormat", GFC_16HALF).toInt());
-        jefe::qt::setDefaultDecodeFilter(
-            settings.value("Engine/defaultDecodeFilter",
-                           FILTERLANCZOS_ID).toInt());
-    }
+    // (without opening Preferences). Centralized in qt_prefs_persist.cpp,
+    // which stays the only TU responsible for the sett <-> QSettings mapping;
+    // this call itself is glad-free (gfcStructures.h drags glad, which can't
+    // share a TU with QOpenGLWidget on macOS — see developer_notes.md §1).
+    jefe::qt::loadPreferences();
 
     // Permanent right-aligned label that always reflects the current
     // framing mode. Status-bar text exposes via NSAccessibility (the
