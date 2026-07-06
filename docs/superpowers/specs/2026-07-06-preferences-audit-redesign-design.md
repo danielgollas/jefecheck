@@ -58,14 +58,20 @@ source; per-setting *does it actually take effect* is verified during that
 section's execution pass.
 
 ### Quadrant ① — Exposed + wired (keep; verify each takes effect)
-`bgColor`, `enableCrashRecoverySession`, `startupSessionBehavior`,
+`enableCrashRecoverySession`, `startupSessionBehavior`,
 `aspectBarsOpacity`, `renderingEngine`, `vsync`, `maximumFramesInQueue`,
 `numOfPartitions`, `balanceReads`, `forcePBO`, `defaultDecodeFilter`,
 `defaultTextureFormat`.
 
+> **Note:** `bgColor` was initially assumed wired but is actually **dead** — the
+> viewport background is a hardcoded black clear (`GlViewport_qt.cpp` fallback +
+> the plate render path); nothing reads `sett.bgColor` to color it, and
+> `gfcsessionmanager.cpp` even saves a hardcoded literal. Moved to quadrant ②.
+
 ### Quadrant ② — Exposed + DEAD (the core problem — fix each)
 | Setting | Verdict |
 |---|---|
+| `bgColor` | **Wire** — drive the viewport background clear from `sett.bgColor` (grayscale); today it's hardcoded black. Basis for the checkerboard feature below. |
 | `defaultBrowsePath` | **Wire** — seed file dialogs' initial directory |
 | `startFullscreen` | **Wire** — apply fullscreen at startup |
 | `openLoadWindowAtStartup` | **Wire** — open the Load window at startup when set (today nothing reads it) |
@@ -104,6 +110,27 @@ Keep hidden (internal GL/runtime state, not user prefs): `glsl`, `fbo`, `fp16`,
 > execution pass re-verifies "does it actually work" by reading the consumer, and
 > updates the verdict if reality differs. Treat the matrix as living.
 
+## New feature — checkerboard background
+
+Add a **"Checkerboard background"** option (new setting, e.g. `bgCheckerboard`,
+default off) in the General section next to the background-color picker. Behavior:
+
+- **Off** — the viewport background is a flat fill of `sett.bgColor` (grayscale).
+  (This alone is the `bgColor` wiring from quadrant ②.)
+- **On** — instead of a flat fill, draw a checkerboard whose two shades are
+  **derived from `bgColor`**: one cell = `bgColor`, the other = `bgColor` offset by
+  a fixed delta (lighten if dark, darken if light, clamped to [0,1]) so the pattern
+  reads at any background value. VFX-viewer convention (shows image alpha/extent).
+
+Implementation notes:
+- Drawn in the viewport-background pass (the flat clear the plate render currently
+  does behind/around the plates) — exact site pinned during the General pass; it is
+  the same place `bgColor` gets wired, so the two ship together.
+- Checker cell size: a sensible fixed pixel size (e.g. 16–32 px), in **physical**
+  pixels (respect `dpiScale`/`devicePixelRatioF` like the text/overlay code, so it
+  doesn't halve on Retina). A cell-size preference is out of scope unless trivial.
+- Persist alongside `bgColor` in the same store (single-path rule).
+
 ## Redesigned window
 
 Replace the flat sidebar+form with the JEF-13 discreet aesthetic
@@ -112,9 +139,10 @@ with `CollapsibleSection_qt`. Keep the sidebar-selects-page shell (it works and 
 a11y-mapped) but restyle it and give pages real structure.
 
 ### Sections (post-redesign)
-1. **General** — background color, default browse path, start fullscreen, open Load
-   window at startup, on-launch session behavior, crash recovery, timeline
-   thumbnails, aspect-bar opacity, feedback-message group (size / fade).
+1. **General** — background color **+ checkerboard-background toggle**, default
+   browse path, start fullscreen, open Load window at startup, on-launch session
+   behavior, crash recovery, timeline thumbnails, aspect-bar opacity,
+   feedback-message group (size / fade).
 2. **Playback & Engine** — rendering engine, vsync, max frames in queue, loader
    partitions, balance reads, force PBO, default decode filter, default bit depth.
 3. **Formats** — EXR: ignore display window, ignore header aspect ratio (both wired
@@ -148,7 +176,8 @@ sections.
 0. **Window-shell redesign** — new chrome (token styling, `CollapsibleSection`
    scaffolding, sidebar restyle), Cancel-reverts snapshot/restore, persistence-path
    discipline. No setting changes yet; existing three pages render in the new shell.
-1. **General** — redesign + wire `defaultBrowsePath`, `startFullscreen`,
+1. **General** — redesign + wire `bgColor` (viewport background) **and add the
+   checkerboard-background option**; wire `defaultBrowsePath`, `startFullscreen`,
    `openLoadWindowAtStartup`; add `showThumbnails` + feedback-message group; verify
    quadrant-① General settings.
 2. **Playback & Engine** — redesign + verify wired settings; remove
