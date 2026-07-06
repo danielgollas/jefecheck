@@ -26,23 +26,16 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 GLuint gScreenFBO = 0;
 
 namespace {
-// Looks up an FLTK-compatible color index in the standard 8-color palette.
-// In the FLTK build we defer to Fl::get_color so the colors match exactly
-// whatever FLTK reports (including any custom palette overrides). In other
-// builds we fall back to a static table for the named colors and white for
-// out-of-range indices.
-inline void gfcLookupPointerColor(int colorIdx, unsigned char& r, unsigned char& g, unsigned char& b) {
-    static const unsigned char table[8][3] = {
-        {  0,  0,  0}, {255,  0,  0}, {  0,255,  0}, {255,255,  0},
-        {  0,  0,255}, {255,  0,255}, {  0,255,255}, {255,255,255}
-    };
-    if (colorIdx >= 0 && colorIdx < 8) {
-        r = table[colorIdx][0];
-        g = table[colorIdx][1];
-        b = table[colorIdx][2];
-    } else {
-        r = g = b = 255;
-    }
+// Unpacks a remote participant's packed-RGB color (the same value the server
+// assigns at join and the chat bubbles use: (r<<24)|(g<<16)|(b<<8)) into
+// float components in [0,1] for glColor4f. This keeps a participant's pointer
+// the SAME color as their chat bubble name. 0 = unset -> neutral gray. Mirrors
+// unpackRGB() in gfcnetworkmanager.cpp.
+inline void gfcUnpackPointerColor(int packed, float& r, float& g, float& b) {
+    if (packed == 0) { r = g = b = 0.6f; return; }
+    r = ((packed >> 24) & 0xff) / 255.0f;
+    g = ((packed >> 16) & 0xff) / 255.0f;
+    b = ((packed >>  8) & 0xff) / 255.0f;
 }
 }  // namespace
 
@@ -176,6 +169,32 @@ gfcPlate::gfcPlate ( void )
     ssProgram=0;
     useShader=false;
 	
+	// Color-correction neutral defaults. Without these the members are
+	// left uninitialized: gamma reads as 0 and lutID as 0 (a valid-looking
+	// LUT texture id, since useLUT tests lutID>=0), so recompileSuperShader
+	// builds a broken shader (gamma 0 + a LUT that was never loaded) and the
+	// plate renders flat gray. It stays gray because the config never changes
+	// until the user nudges a color-correction control — which is exactly the
+	// "gray until I touch exposure" symptom. A freshly-loaded plate (playlist
+	// load, remote-synced load) must display correctly with no interaction.
+	gamma=1.0;
+	exposure=0.0;
+	brightness=1.0;
+	contrast=1.0;
+	saturation=1.0;
+	lutID=-1;
+	lutSize=0;
+	lutType=CubeLUT::JEFECHECK1D;
+	currentLUTType=CubeLUT::JEFECHECK1D;
+	// Shader-config trackers: usingTextureType=-1 forces the first recompile
+	// to build a real (passthrough) shader; the rest must not report a LUT/CC
+	// as already active before buildShader runs.
+	usingLUT=0;
+	usingGammaExp=0;
+	usingBCS=0;
+	usingRGBAMasks=0;
+	usingTextureType=-1;
+
 	fbov[0]=fbov[1]=fbov[2]=0;
 	fboTexturev[0]=fboTexturev[1]=fboTexturev[2]=0;
 
@@ -815,7 +834,15 @@ void gfcPlate::updateAnimations() {
     //we separete it from the drawing function
     //so we can have a smooth animation but still only draw when something has changed.
     pointerStorage.updateFaders();
-    updateRot(playbackManager.getTimestep(),flip,flop);
+    // Clamp the rotation timestep. When the app is idle the tick loop stops
+    // calling playbackManager.update(), so the first getTimestep() after a
+    // flip/flop is triggered from idle is the whole idle gap (seconds) — which
+    // makes updateRot overshoot and snap to the target in one step instead of
+    // animating. Cap it so the animation always plays smoothly; playback pacing
+    // still uses the raw timestep, so this doesn't affect frame timing.
+    float animStep = playbackManager.getTimestep();
+    if (animStep > 0.05f) animStep = 0.05f;
+    updateRot(animStep,flip,flop);
 }
 
 void gfcPlate::drawRemotePointers() {
@@ -838,10 +865,11 @@ void gfcPlate::drawRemotePointers() {
             pIter=nickIter->second.begin();
             pEnd=nickIter->second.end();
             int maxPointer=nickIter->second.size();
-			unsigned char red, green, blue;
-			gfcLookupPointerColor(pIter->color, red, green, blue);
+			float red = 1, green = 1, blue = 1;
 
             if (pIter!=pEnd) {
+                // Decode inside the guard (pIter is only valid when != pEnd).
+                gfcUnpackPointerColor(pIter->color, red, green, blue);
 
                 float scaleBy=theFrame.scale/pIter->scale;
                 glScalef(scaleBy,scaleBy,1);

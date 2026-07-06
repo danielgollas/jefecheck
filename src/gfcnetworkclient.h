@@ -22,8 +22,6 @@
 #include "gfcNetworkStructures.h"
 #include "gfcpointerstorage.h"
 
-#include "gfcnetworkclientgui.h"
-
 #include "gfcplaylistitem.h"
 
 /**
@@ -67,6 +65,7 @@ public:
     void SendFXAttribMessage ( gfcNetFXAttribInfo info );
     void SendPlaylistItem(gfcPlaylistItem item);
     void SendFXStackMessage(gfcNetFXStackMessage message);
+    void SendLayerChangeMessage(int quadID, std::string layerName);
 	void SendPlaylistMessage(gfcNetPlaylistMessage message);
 	void sendPlaylistEvent(gfcNetPlaylistEvent theEvent);
 
@@ -79,12 +78,16 @@ public:
     bool getGotNewChatMessage();
     SystemAddress getServerSystemAddress();
     std::vector<gfcChatLogEntry> getChatLog();
+    std::string getStatus();
+    int getStatusColor();
+    std::vector<std::string> getPeersInSession();
+    std::string getNickName() { return nickName; }
     gfcPointerStorage pointers;
-    
+
 private:
-    
+    void setStatusInternal(std::string s, int color);
+
     bool gotMessages;
-    gfcNetworkClientGUI* myGUI;
     bool isConnected;
     bool attemptingConnection;
     RakPeerInterface *peer;

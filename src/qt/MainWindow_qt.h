@@ -106,6 +106,7 @@ private:
     void autoloadStep();
 
     class LoadWindowDialog_Qt* loadWindowDialog_ = nullptr;
+    RemoteDialog_Qt* remoteDialog_ = nullptr;
 
     GlViewport_Qt* viewport_ = nullptr;
     QDockWidget* plateDock_ = nullptr;
@@ -113,6 +114,7 @@ private:
     QDockWidget* fxParamsDock_ = nullptr;
     QDockWidget* lutDock_ = nullptr;
     QDockWidget* playlistDock_ = nullptr;
+    QDockWidget* remoteDock_ = nullptr;
     PlateManager_Qt* plateManagerWidget_ = nullptr;
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;

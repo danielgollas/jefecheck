@@ -51,7 +51,14 @@ public:
                         const std::string& groupName,
                         const std::string& widgetName,
                         float value);
-    
+
+    // Returns the GUI type of a widget (FX_GUI_FLOAT / BOOL / CHOICE /
+    // TEXTURE / LUT / CUBE), needed to decide which field a network attrib
+    // message carries. Returns FX_GUI_UNKNOWN when the widget doesn't exist.
+    GFC_FX_GUI_TYPE getWidgetType(int fxIndex,
+                                  const std::string& groupName,
+                                  const std::string& widgetName) const;
+
     int getNumOfFXs();
     int getNumOfActiveFXs();
 

@@ -14,7 +14,9 @@
 #include "StringCompressor.h"
 
 
+#include <map>
 #include <string>
+#include <vector>
 
 enum networkEventTypes{GFCNETEVENT_TRANSFORMS=0, GFCNETEVENT_FX, GFCNETEVENT_OTHER, GFCNETEVENT_COLOR, GFCNETEVENT_NUMOFEVENTTYPES};
 
@@ -36,6 +38,11 @@ public:
     void startConnection(gfcConnectionParams *params=0);
     void stopConnection();
     
+    std::vector<std::string> participantNames();
+    std::string connectionStatusText();
+    std::vector<std::string> chatLogLines();
+    std::vector<std::string> drainErrors();
+
     void sendChatMessage();
     
     void sendPlayPauseMessage(gfcNetPlayPauseInfo info);
@@ -46,6 +53,18 @@ public:
     void sendFXAttribMessage(gfcNetFXAttribInfo info);
     
 	void sendFXStackMessage(gfcNetFXStackMessage message);
+
+    // Broadcasts an EXR layer/channel change on a plate's track so remote
+    // peers re-decode the same layer. No-op when solo. Called from the Qt
+    // layer-combo path (bridge).
+    void sendLayerChange(int quadID, std::string layerName);
+
+    // Queues a live FX-attrib edit to be sent coalesced at the GFCNETEVENT_FX
+    // throttle rate (~60Hz), keyed per widget so a slider drag collapses to
+    // one send per interval and the trailing value always ships (no desync).
+    // Mirrors how COLOR/TRANSFORMS are rate-limited. Called from local edits
+    // only (the receive path applies directly, so no echo).
+    void queueFXAttrib(const gfcNetFXAttribInfo& info);
         
     void sendSystemChatMessage(std::string message, int type);
     
@@ -53,6 +72,12 @@ public:
     
     bool getConnected();
     bool getIsServer();
+    bool consumeGotMessages(); // true if the client processed any inbound packet since last call (drives a viewport repaint)
+    bool overlayAnimating();   // true while the chat/status overlay is fading or in chat entry (needs continuous repaint)
+    std::vector<std::string> networkLogLines(); // connection-log snapshot for the panel
+
+    struct ChatEntryData { std::string sender, message, timeHHMM; int type; bool isSelf; int color; };
+    std::vector<ChatEntryData> chatEntries();
     
     void startFXSinc(); //used by other managers to notify the network manager that a new LUT or FX was loaded.
     void startLUTSinc(); 
@@ -129,6 +154,11 @@ int sendRemoteLoadRequests;
 ///sent everytime we update, only every ms so we don't saturate the server and cpu.
 ///They are turned on by the notifyEvent method.
 gfcNetworkEventNotification events[GFCNETEVENT_NUMOFEVENTTYPES];
+
+// Pending live FX-attrib edits, keyed "quad/index/group/var" so repeated
+// edits to the same widget within a throttle interval collapse to the latest
+// value. Flushed in update() when events[GFCNETEVENT_FX] fires.
+std::map<std::string, gfcNetFXAttribInfo> pendingFXAttribs_;
 
 };
 

@@ -955,6 +955,65 @@ void gfcPlateManager::addFXToPlate(int whichOne, gfcFX theFX) {
 
 }
 
+void gfcPlateManager::setFXWidgetValue(int whichOne, int fxIndex,
+                                       const std::string& groupName,
+                                       const std::string& widgetName,
+                                       float value) {
+    setChanged();
+    if (whichOne < 0 || whichOne >= (int)plates.size()) {
+        printf("gfcPlateManager::setFXWidgetValue: requested plate out of range\n");
+        return;
+    }
+    gfcFXStack* stack = &plates[whichOne].fxStack;
+    stack->setWidgetValue(fxIndex, groupName, widgetName, value);
+    this->clearHistogramCache(whichOne);
+
+    // Broadcast the live param edit to remote peers (mirrors the throttled
+    // COLOR/TRANSFORMS streams). sendFXAttribMessage no-ops when not in a
+    // session, but skip building the message entirely when solo. The receiver
+    // (gfcFXStack::processNetFXAttribInfo) keys off attribType to pick which
+    // field it reads, so fill the one matching this widget's type.
+    if (!networkManager.getConnected())
+        return;
+
+    gfcNetFXAttribInfo info;
+    info.id.quadID    = whichOne;
+    info.id.index     = fxIndex;
+    info.groupName    = groupName;
+    info.variableName = widgetName;
+    info.theFloat     = 0.0f;
+    info.theInt       = 0;
+    info.attribType   = stack->getWidgetType(fxIndex, groupName, widgetName);
+
+    switch (info.attribType) {
+    case FX_GUI_FLOAT:
+        info.theFloat = value;
+        break;
+    case FX_GUI_BOOL:
+    case FX_GUI_CHOICE:
+    case FX_GUI_TEXTURE:
+        info.theInt = (int)value;
+        break;
+    case FX_GUI_LUT:
+    case FX_GUI_CUBE: {
+        // The panel stores the GLOBAL lutManager index as the value; the wire
+        // carries the LUT's name (getAllNames is indexed by that same global
+        // index, and the receiver maps name -> index via getLutIndexByName).
+        std::vector<std::string> names = lutManager.getAllNames();
+        int idx = (int)value;
+        if (idx >= 0 && idx < (int)names.size())
+            info.lutOrCube = names[idx];
+        break;
+    }
+    default:
+        return;  // unknown widget type — nothing meaningful to send
+    }
+
+    // Queue rather than send immediately: coalesced + throttled to ~60Hz like
+    // the COLOR/TRANSFORMS streams, so a slider drag doesn't flood the channel.
+    networkManager.queueFXAttrib(info);
+}
+
 gfcFXStack * gfcPlateManager::getFXStack(int whichOne) {
     if (whichOne>=plates.size()) {
         printf("gfcPlateManager::getFXStack: requested plate out of range\n");
@@ -1363,23 +1422,29 @@ void gfcPlateManager::loadStackFromFile(int whichOne, std::string filename) {
     }
 }
 
+void gfcPlateManager::broadcastFXStack(int whichOne) {
+	if (whichOne < 0 || whichOne >= (int)plates.size()) {
+		printf("gfcPlateManager::broadcastFXStack: requested plate out of range\n");
+		return;
+	}
+	gfcNetFXStackMessage message;
+	message.quadID = whichOne;
+	XMLNode node = XMLNode::createXMLTopNode("Stack");
+	plates[whichOne].fxStack.saveStackToNode(node);
+	message.theStack = node.createXMLString();
+	networkManager.sendFXStackMessage(message);
+}
+
 void gfcPlateManager::clearFXStack(int whichOne ) {
 	setChanged();
     if (whichOne>=plates.size()) {
         printf("gfcPlateManager::clearFXStack: requested plate out of range\n");
     } else {
         plates[whichOne].fxStack.clearStack();
-
-		//send notification that a stack was loaded
-		gfcNetFXStackMessage message;
-		message.quadID=whichOne;
-		XMLNode node = XMLNode::createXMLTopNode("Stack");
-		plates[whichOne].fxStack.saveStackToNode(node);
-		message.theStack=node.createXMLString();
-
-		networkManager.sendFXStackMessage(message);
+		//send notification that the stack changed
+		broadcastFXStack(whichOne);
     }
-	
+
 }
 
 std::vector<gfcFXStack> gfcPlateManager::getPlateFXStacks()

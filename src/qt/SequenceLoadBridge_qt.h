@@ -94,6 +94,13 @@ void uploadPendingTextures();
 // callback in MainWindow_qt.cpp can skip the makeCurrent/tickPlayback
 // pair entirely — saves ~60 GL-context switches per second at idle.
 bool needsPlaybackTick();
+bool hasActiveViewportAnimation();
+
+// Destructively reads plateManager's dirty flag. The idle timer calls this
+// when NOT ticking playback/animation so a bare setChanged() (any state edit
+// whose call site didn't force its own viewport repaint — e.g. a mirrored
+// remote change) still repaints once while playback is stopped.
+bool consumePlateChanged();
 
 // Hands back the gfcPlateGUI_Qt that gfcPlate reads its rendering
 // state from for plate `whichPlate`. PlateCard_Qt binds its widgets
@@ -368,8 +375,53 @@ struct RemoteClientParams {
 void connectAsServer(const RemoteServerParams& params);
 void connectAsClient(const RemoteClientParams& params);
 void disconnectRemote();
+
+// Headless two-process connection smoke-test helpers (--remote-test).
+// Server role: host on `port`, pump for `settleMs` ms, return peak
+// participant count. Client role: connect to `ip:port`, hold for `holdMs` ms
+// (optionally sending a play message), then return.
+void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play);
+bool remoteTestServerSawPlay(int port, int settleMs);
 bool isRemoteConnected();
 bool isRemoteServer();
+std::vector<std::string> remoteParticipants();
+std::string              remoteStatusText();
+std::vector<std::string> remoteChatLog();
+std::vector<std::string> remoteErrors();
+std::vector<std::string> remoteNetworkLog();
+void sendChatMessageText(const std::string& text);
+bool pumpNetwork();
+
+struct ChatEntry {
+    std::string sender;
+    std::string message;
+    std::string timeHHMM;
+    int  type;     // GFCNETMESSAGETYPE_NORMAL / _SYSTEM / _LOAD
+    bool isSelf;
+    int  color;    // packed RGB, 0 = unset
+};
+std::vector<ChatEntry> remoteChatEntries();
+
+// Chat overlay + keyboard chat entry (Task 7).
+// drawNetworkOverlay renders the ported networkManager.draw() chat/pointer
+// overlay into the current GL context (w, h are framebuffer pixels).
+// remoteChatModeActive returns true while the user is composing a message.
+// remoteChatBegin / remoteChatCancel start/discard; remoteChatAppend /
+// remoteChatBackspace edit; remoteChatSubmit sends and resets.
+void drawNetworkOverlay(int w, int h);
+bool remoteChatModeActive();
+void remoteChatBegin();
+void remoteChatCancel();
+void remoteChatBackspace();
+void remoteChatAppend(const std::string& s);
+void remoteChatSubmit();
+
+// Remote pointer broadcast (Task 8). Sends the local cursor position to all
+// session peers. xPx/yPx are framebuffer pixel coords with GL bottom-left
+// framebuffer pixels, GL bottom-left origin (caller applies dpr scale and
+// Y-flip); quadID is the plate under the cursor (dragPlate_). Converts to the
+// plate's image space before sending. No-ops when disconnected or quadID < 0.
+void sendRemotePointer(int xPx, int yPx, int quadID);
 
 // Playlist (PR-40). The Qt PlaylistPanel calls these to drive
 // gfcPlaylistManager + gfcTrackManager without dragging glad in.

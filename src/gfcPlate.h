@@ -187,11 +187,13 @@ class gfcPlate: public gfcPickNotifee
 
         void updateRot(float timeStep=1, bool flip=false, bool flop=false);
 
-        // True while a flip/flop rotation is still settling toward its target
-        // (rX→0/180, rY→0/180). Used to keep the idle tick alive so the
-        // animation actually plays instead of needing a forced repaint.
+        // True while an animation still needs the idle tick to keep playing +
+        // repainting without a forced viewport refresh: a flip/flop rotation
+        // settling toward its target (rX→0/180, rY→0/180), OR fading remote
+        // pointer trails still present in the pointer store.
         bool hasActiveAnimation() const {
-            return rX != (flip ? 180.0f : 0.0f) || rY != (flop ? 180.0f : 0.0f);
+            return rX != (flip ? 180.0f : 0.0f) || rY != (flop ? 180.0f : 0.0f)
+                   || !pointerStorage.empty();
         }
         
         void draw();

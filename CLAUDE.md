@@ -76,7 +76,8 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 - **FX panel** (`FXParamPanel_Qt`, dock "FX", F3) — one combined effect-controls panel for the active plate: a hierarchical "+ Add FX" menu (categorized by each FX's `menuName`), per-FX cards (active checkbox + remove button + inline param editors: float/bool/choice, texture source picker (Previous / Track A–D), and cube/1D-LUT pickers), and drag-to-reorder the stack. Texture/cube/LUT pickers match the FLTK Fl_Choice; cube/LUT combos store the global lutManager index (carried in item data), not the list position. See `developer_notes.md` §23. All FX autoload at startup, so there is no separate FX browser. See `developer_notes.md` §23.
 - **Playlist dock** (`PlaylistPanel_Qt`) — snapshots the current multi-track setup as a playlist item (Add Current), or builds items from arbitrary file sets (Add Files…). Each item shows collapsible per-track detail cards (filename, range, scale); Compact and Full-paths checkboxes control label verbosity. Drag-drop: drop a `.jpl` file to replace the list, drop media onto a card to append tracks to that item, drop media on empty space to add a new item. Keyboard: Enter/double-click to load, Delete/Backspace to remove, Shift+↑/↓ to reorder (drag-handle on cards is affordance only — reorder via buttons/keys to keep the backing vector in sync). Scale override combo applies a decode scale to all tracks on load. Auto-advance (loop-once → advance to next item and resume play) + Loop (wrap at end). See `developer_notes.md` §25.
 - Native file dialogs via `QFileDialog`.
-- Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Remote Session (`RemoteDialog_Qt`), Load Sequence Manager (`LoadWindowDialog_Qt`).
+- Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Load Sequence Manager (`LoadWindowDialog_Qt`).
+- The Remote Session dialog (`RemoteDialog_Qt`) is **modeless** (persistent, `show()`/`raise()`, owned by `MainWindow_Qt::remoteDialog_`) so status/participants/chat stay visible during a live session — see `developer_notes.md` §26.
 - Dark VFX theme at `src/qt/theme/jefecheck_dark.qss`.
 - Object names follow the dotted-leaf scheme documented in `tests/ui/jefecheck/locators.py` so Mac2/XCUITest can resolve widgets via `identifier ENDSWITH '<leaf>'`.
 
@@ -172,6 +173,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 - §5–6 **macOS drag-perf playbook** (QueuedConnection, targeted signals, cache-gated writes, 60Hz throttle; AppKit a11y cascade fires per write).
 - §8 CBArgs enum (`LOOPMODEONCE_ID` = positional 22/23/24, translate at the bridge) · §11 plate-card orientation-aware fixed-size layout · §12 AspectCropCombo is a `QToolButton` (aspect vs crop orthogonal).
 - §13 **playback FPS pacing** (seed `targetFPS` in ctor; `steady_clock`; on-screen FPS is an EMA indicator) · §18–20 **render/export** (OIIO saver; viewport via `parentWidget()`; float FBO for 16-bit/EXR; FFmpeg CLI not libav*; incremental, never a `QThread`) · §21 **pick subsystem** (GL color-pick pass, GL context current).
+- §26 **remote-session runtime** (pump always-on outside `needsPlaybackTick`; TU-safe getters for status/participants/chat/errors; `remoteDialog_` modeless lazy-created; chat+pointer overlay in `paintGL`; `--remote-test` two-process harness).
 
 ### Image Loading Flow
 1. `gfcFrame::loadFrame()` creates a loader based on file extension

@@ -34,7 +34,10 @@ float aspectFromString(const std::string& s) {
     if (s == "2.35:1")  return 2.35f;
     if (s == "1.85:1")  return 1.85f;
     if (s == "1.37:1")  return 1.37f;
-    return 1.0f;  // "original" or unknown — caller derives from frame.
+    // "original" / unknown: -1 is gfcPlate's sentinel for "use the frame's
+    // native size" (calculatePolySizesCropEtc). Returning 1.0 here forced a
+    // square (960x960) poly that squashed the image; -1 keeps native aspect.
+    return -1.0f;
 }
 }  // namespace
 

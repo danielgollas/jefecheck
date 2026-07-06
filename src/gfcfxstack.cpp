@@ -62,6 +62,18 @@ void gfcFXStack::setWidgetValue(int fxIndex,
     wIt->second.value = value;
 }
 
+GFC_FX_GUI_TYPE gfcFXStack::getWidgetType(int fxIndex,
+                                          const std::string& groupName,
+                                          const std::string& widgetName) const {
+    if (fxIndex < 0 || fxIndex >= (int)fxs.size()) return FX_GUI_UNKNOWN;
+    const auto& fx = fxs[fxIndex];
+    auto gIt = fx.groups.find(groupName);
+    if (gIt == fx.groups.end()) return FX_GUI_UNKNOWN;
+    auto wIt = gIt->second.widgets.find(widgetName);
+    if (wIt == gIt->second.widgets.end()) return FX_GUI_UNKNOWN;
+    return wIt->second.type;
+}
+
 /**
  *
  * @param o
@@ -112,37 +124,48 @@ std::vector< int > gfcFXStack::getActiveFXIndexes() {
 void gfcFXStack::processNetFXAttribInfo(gfcNetFXAttribInfo &info) {
     //printf("Processing attrib info\n");
 
-    switch ( info.attribType ) {
-    case FX_GUI_FLOAT: {
-        fxs[info.id.index].groups[info.groupName].widgets[info.variableName].value=info.theFloat;
+    // Bounds-guard the wire-supplied FX index and names. Peers' FX stacks can
+    // diverge (late join, add/remove/reorder races) because asset/stack sync
+    // isn't complete in the Qt port, and this path is now driven continuously
+    // by live parameter streaming — an out-of-range index would do an OOB
+    // std::vector access, and using map::operator[] on an unknown group/widget
+    // name would silently insert a phantom entry (quiet state drift). Drop the
+    // message instead.
+    if (info.id.index < 0 || info.id.index >= (int)fxs.size()) return;
+    auto gIt = fxs[info.id.index].groups.find(info.groupName);
+    if (gIt == fxs[info.id.index].groups.end()) return;
+    auto wIt = gIt->second.widgets.find(info.variableName);
+    if (wIt == gIt->second.widgets.end()) return;
+    gfcFXWidget& widget = wIt->second;
 
-    }
-    break;
+    switch ( info.attribType ) {
+    case FX_GUI_FLOAT:
+        widget.value = info.theFloat;
+        break;
 
     case FX_GUI_BOOL:
     case FX_GUI_CHOICE:
-    case FX_GUI_TEXTURE: {
-        fxs[info.id.index].groups[info.groupName].widgets[info.variableName].value=info.theInt;
-    }
-    break;
+    case FX_GUI_TEXTURE:
+        widget.value = info.theInt;
+        break;
 
     case FX_GUI_LUT:
-    case FX_GUI_CUBE: {
-        int lutArrayIndex=0;
-
-        fxs[info.id.index].groups[info.groupName].widgets[info.variableName].value=lutManager.getLutIndexByName(info.lutOrCube);
-    }
-    break;
+    case FX_GUI_CUBE:
+        // -1 when the receiver lacks this LUT (LUT files aren't synced yet);
+        // getLUT(-1) is bounds-checked and yields an empty LUT, no crash.
+        widget.value = lutManager.getLutIndexByName(info.lutOrCube);
+        break;
     }
 }
 
 void gfcFXStack::processNetFXCommonInfo(gfcNetFXCommonInfo &info) {
     //printf("Processing common info\n");
+    // Same divergence guard as processNetFXAttribInfo: a wire index outside the
+    // local stack must not index fxs (the reset/onOff/upDown cases below assume
+    // it's valid). Drop the message when it is.
+    if ( info.id.index < 0 || info.id.index >= (int)fxs.size() ) return;
     //delete?
     if ( info.remove ) {
-
-        if ( info.id.index >= fxs.size() ) //dont delete if we don't have it
-            return;
 
         if ( fxs[ info.id.index].active )
             numOfActiveFX--;

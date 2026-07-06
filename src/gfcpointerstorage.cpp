@@ -119,9 +119,9 @@ void gfcPointerStorage::removeFromMap(gfcNetRemotePointerInfo info)
 	
 }
 
-bool gfcPointerStorage::empty()
+bool gfcPointerStorage::empty() const
 {
-	std::map<std::string, std::deque<gfcNetRemotePointerInfo> >::iterator iter=pointerMap.begin(), end=pointerMap.end();
+	std::map<std::string, std::deque<gfcNetRemotePointerInfo> >::const_iterator iter=pointerMap.begin(), end=pointerMap.end();
 	//printf("mapSize=%i\n",pointerMap.size());
 	for( iter;iter!=end ;iter++ ){
 		if(!iter->second.empty())

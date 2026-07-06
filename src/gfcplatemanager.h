@@ -196,7 +196,18 @@ public:
 	 void setChannelA(int whichOne, int value);
 
 	gfcFXStack* getFXStack(int whichOne);
+	// Sets a single FX widget value on a plate AND broadcasts the edit to
+	// remote peers as a live FX-attrib message (mirrors how CC/transforms
+	// stream). This is the choke point the Qt FX param panel writes through.
+	void setFXWidgetValue(int whichOne, int fxIndex,
+	                      const std::string& groupName,
+	                      const std::string& widgetName, float value);
 	void setFXStack(gfcFXStack theStack, int whichOne);
+	// Serialize a plate's current FX stack and broadcast it to remote peers
+	// (GFCNETID_FXSTACKMESSAGE). Call after any structural change — add,
+	// remove, reorder, or active-toggle — so those changes mirror; the live
+	// param stream (setFXWidgetValue) handles value edits. No-op when solo.
+	void broadcastFXStack(int whichOne);
 	void appendFXStack(gfcFXStack theStack, int whichOne);
 
 	// Flips a plate's GUI into preview mode so gfcPlate::draw3Drect

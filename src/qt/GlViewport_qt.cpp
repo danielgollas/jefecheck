@@ -117,6 +117,10 @@ void GlViewport_Qt::paintGL() {
         // instead of 0. It can change on resize, so refresh it every paint.
         jefe::qt::setScreenFBO(defaultFramebufferObject());
         listener_->onDraw();
+        // Chat + remote-pointer overlay (ported from the FLTK GlViewport).
+        // Drawn last so it composites over the plates.
+        const float dpr = devicePixelRatioF();
+        jefe::qt::drawNetworkOverlay(int(width() * dpr), int(height() * dpr));
     } else {
         // No listener attached — clear the framebuffer so we don't show
         // garbage from an uninitialized backing store.
@@ -126,6 +130,11 @@ void GlViewport_Qt::paintGL() {
 }
 
 void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
+    // Reclaim keyboard focus on any click so viewport shortcuts (space, W/E/Q/D/S,
+    // etc.) work after the user has been in a text field — e.g. the Remote panel's
+    // chat input, which otherwise keeps focus. The overridden handler doesn't get
+    // Qt's implicit click-focus, so set it explicitly.
+    setFocus(Qt::MouseFocusReason);
     if (e->button() == Qt::LeftButton) {
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
@@ -222,6 +231,30 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
         if (listener_) listener_->onEvent(jefe::ui::EventType::Drag);
+        return;
+    }
+
+    // Remote pointer/trail gesture: SHIFT + left-drag over a plate. Avoids the
+    // macOS right-click context-menu ambiguity and is distinct from plain left-
+    // drag (pan) and W/E/Q/D/S+drag (color correction). dragPlate_ was set on the
+    // left press, so the quad is already known. The bridge converts framebuffer
+    // bottom-left coords to the plate's image space and throttles to ~60Hz; the
+    // receiver stores the stream per-nickname and draws a fading trail. Shift-drag
+    // is pointer-only — return so it doesn't also pan the plate.
+    if ((e->buttons() & Qt::LeftButton) &&
+        e->modifiers().testFlag(Qt::ShiftModifier) && dragPlate_ >= 0) {
+        const float dpr = devicePixelRatioF();
+        const int xFb = int(float(e->position().x()) * dpr);
+        const int yFb = int((float(height()) - float(e->position().y())) * dpr);
+        // getCursorPositionIn2DSpace inside the bridge does gluUnProject against
+        // the plate's live GL matrices, so the context MUST be current — without
+        // it, glGet returns stale matrices (constant garbage coords) and the
+        // out-of-context GL calls error-spam (the stutter). Same makeCurrent
+        // discipline as the pick-drag path above.
+        makeCurrent();
+        jefe::qt::sendRemotePointer(xFb, yFb, dragPlate_);
+        doneCurrent();
+        update();
         return;
     }
 
@@ -377,6 +410,28 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
 }
 
 void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
+    // Remote chat entry: when in chat mode, keystrokes build the message.
+    if (jefe::qt::remoteChatModeActive()) {
+        if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+            jefe::qt::remoteChatSubmit();
+        } else if (e->key() == Qt::Key_Escape) {
+            jefe::qt::remoteChatCancel();
+        } else if (e->key() == Qt::Key_Backspace) {
+            jefe::qt::remoteChatBackspace();
+        } else if (!e->text().isEmpty() && e->text().at(0).isPrint()) {
+            jefe::qt::remoteChatAppend(e->text().toStdString());
+        }
+        update();     // repaint the overlay with the new text
+        return;       // consume — don't fall through to plate shortcuts
+    }
+    // Enter chat mode with Return when connected and not already typing.
+    if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) &&
+        jefe::qt::isRemoteConnected()) {
+        jefe::qt::remoteChatBegin();
+        update();
+        return;
+    }
+
     // Track color-correction modifier keys (W/E/Q/D/S) — combined with
     // a left-drag in mouseMoveEvent they trigger the matching field
     // adjustment. Don't gate on autoRepeat: holding the key while

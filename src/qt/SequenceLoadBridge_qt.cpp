@@ -25,9 +25,12 @@
 #include "gfcsequencegui_qt.h"
 
 #include <algorithm>
+#include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <thread>
 
 extern gfcPlateManager plateManager;
 extern gfcPlaybackManager playbackManager;
@@ -220,7 +223,17 @@ bool needsPlaybackTick() {
     // playback is stopped — otherwise it only appears/updates on the next
     // forced repaint (mouse move, play).
     if (plateManager.hasActiveAnimations()) return true;
+    // The remote chat/status overlay fading out (or chat entry) needs the tick
+    // to keep repainting while playback is stopped, same as plate animations.
+    if (networkManager.overlayAnimating()) return true;
     return false;
+}
+
+// Any time-based animation that needs the viewport repainted every tick even
+// when playback is stopped and no new frame is dirty: settling flip/flop,
+// fading remote-pointer trails, or the fading chat/status overlay.
+bool hasActiveViewportAnimation() {
+    return plateManager.hasActiveAnimations() || networkManager.overlayAnimating();
 }
 
 bool tickPlayback() {
@@ -326,6 +339,17 @@ bool hasPendingTextureUploads() {
         if (seq && seq->hasPendingRawFrames()) return true;
     }
     return false;
+}
+
+bool consumePlateChanged() {
+    // Destructively reads plateManager's dirty flag (set by setChanged() from
+    // ANY state edit — local or remote). The idle timer uses this so that a
+    // bare setChanged() while playback is stopped and nothing is animating
+    // still forces exactly one repaint, instead of relying on every edit call
+    // site to also request a viewport refresh. When playback/animation is
+    // running, tickPlaybackTiming() drains the same flag instead, so it's
+    // consumed exactly once per tick either way.
+    return plateManager.getChanged();
 }
 
 void uploadPendingTextures() {
@@ -708,6 +732,7 @@ void addFXToActivePlate(int fxIndex) {
     if (fx.name.empty() && fx.menuName.empty()) return;
     stack->addFX(fx);
     plateManager.setChanged();
+    plateManager.broadcastFXStack(q);   // mirror structural change to peers
 }
 
 void removeFXFromPlate(int plateIdx, int stackIndex) {
@@ -724,6 +749,7 @@ void removeFXFromPlate(int plateIdx, int stackIndex) {
         stack->addFX(all[i]);
     }
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 void clearFXStackOnPlate(int plateIdx) {
@@ -731,6 +757,7 @@ void clearFXStackOnPlate(int plateIdx) {
     if (!stack) return;
     stack->clearStack();
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 void setFXActiveOnPlate(int plateIdx, int fxIndex, bool active) {
@@ -738,6 +765,7 @@ void setFXActiveOnPlate(int plateIdx, int fxIndex, bool active) {
     if (!stack) return;
     stack->setActive(fxIndex, active);
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 void moveFXOnPlate(int plateIdx, int from, int to) {
@@ -745,6 +773,7 @@ void moveFXOnPlate(int plateIdx, int from, int to) {
     if (!stack) return;
     stack->moveFX(from, to);
     plateManager.setChanged();
+    plateManager.broadcastFXStack(plateIdx);   // mirror structural change to peers
 }
 
 std::vector<std::pair<int, std::string>> getAvailableFXMenu() {
@@ -804,10 +833,10 @@ void setFXParamValueOnPlate(int plateIdx,
                             const std::string& groupName,
                             const std::string& widgetName,
                             float value) {
-    auto* stack = plateManager.getFXStack(plateIdx);
-    if (!stack) return;
-    stack->setWidgetValue(fxIndex, groupName, widgetName, value);
-    plateManager.setChanged();
+    // Routes through the plate manager so the edit is both applied and
+    // broadcast to remote peers (live FX-attrib streaming); setChanged() and
+    // the histogram-cache clear happen inside setFXWidgetValue.
+    plateManager.setFXWidgetValue(plateIdx, fxIndex, groupName, widgetName, value);
 }
 
 namespace {
@@ -1053,14 +1082,8 @@ void connectAsClient(const RemoteClientParams& params) {
 
 void disconnectRemote() {
     if (!networkManager.getConnected()) return;
-    // gfcNetworkManager::stopConnection is declared but never defined
-    // — the FLTK side never wired client-side disconnect either, and
-    // RakNet itself tears the client peer down on app exit. Server-
-    // side stop is supported. PR-41b will fill in the client-side
-    // disconnect path (likely via the existing peer destructor).
-    if (networkManager.getIsServer()) {
-        networkManager.stopServer();
-    }
+    if (networkManager.getIsServer()) networkManager.stopServer();
+    else                              networkManager.stopConnection();
 }
 
 bool isRemoteConnected() {
@@ -1532,6 +1555,10 @@ void setLayerOnPlate(int plateIdx, const std::string& layerName) {
         trackManager.startLoadingSequence(trackIdx);
     }
 
+    // Mirror the layer choice to remote peers (they re-decode via the async
+    // loader; no-op when not in a session).
+    networkManager.sendLayerChange(plateIdx, layerName);
+
     plateManager.setChanged();
 }
 
@@ -1894,6 +1921,138 @@ bool loadCCFavoritesFile(const std::string& path) {
 
 std::string getFavoritesFilePath() {
     return ::getApplicationDataPath() + "favorites.jcs";
+}
+
+std::vector<std::string> remoteParticipants() { return networkManager.participantNames(); }
+std::string              remoteStatusText()   { return networkManager.connectionStatusText(); }
+std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLines(); }
+std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
+std::vector<std::string> remoteNetworkLog()   { return networkManager.networkLogLines(); }
+
+std::vector<ChatEntry> remoteChatEntries() {
+    std::vector<ChatEntry> out;
+    for (auto& d : networkManager.chatEntries()) {
+        ChatEntry e;
+        e.sender   = d.sender;
+        e.message  = d.message;
+        e.timeHHMM = d.timeHHMM;
+        e.type     = d.type;
+        e.isSelf   = d.isSelf;
+        e.color    = d.color;
+        out.push_back(e);
+    }
+    return out;
+}
+
+bool pumpNetwork() {
+    static bool        prevConnected = false;
+    static size_t      prevPeers     = 0;
+    static size_t      prevChat      = 0;
+    static std::string prevStatus;
+    networkManager.update();
+    const bool        nowConnected = networkManager.getConnected();
+    const size_t      nowPeers     = networkManager.participantNames().size();
+    const size_t      nowChat      = networkManager.chatLogLines().size();
+    const std::string nowStatus    = networkManager.connectionStatusText();
+    // Repaint whenever any inbound packet was processed this tick: client.Update()
+    // applies mirrored plate/playback/FX state to the managers, but QOpenGLWidget
+    // only repaints on local input — without this the receiver wouldn't redraw
+    // remote changes until the user interacted locally.
+    const bool gotInbound = networkManager.consumeGotMessages();
+    const bool changed = (nowConnected != prevConnected) ||
+                         (nowPeers != prevPeers) || (nowChat != prevChat) ||
+                         (nowStatus != prevStatus) || gotInbound;
+    prevConnected = nowConnected; prevPeers = nowPeers; prevChat = nowChat;
+    prevStatus = nowStatus;
+    return changed;
+}
+
+// Child/client role: connect, pump until connected (or timeout), optionally
+// start playback (mirrors a play message — used by Task 5), then hold.
+void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play) {
+    RemoteClientParams cp; cp.clientName = "peer"; cp.serverIP = ip; cp.port = port; cp.password = "";
+    connectAsClient(cp);
+    for (int t = 0; t < 3000 && !isRemoteConnected(); t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (play) togglePlayFwd();   // sends a play/pause message to the server
+    for (int t = 0; t < holdMs; t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+// Orchestrator/server role: host, pump while the child connects and toggles
+// play, and report whether the mirrored play state arrived on this (server) side.
+bool remoteTestServerSawPlay(int port, int settleMs) {
+    RemoteServerParams sp; sp.serverName = "jefe-remote-test"; sp.port = port; sp.password = "";
+    connectAsServer(sp);
+    bool sawPlay = false;
+    for (int t = 0; t < settleMs; t += 10) {
+        pumpNetwork();
+        if (isPlaying()) { sawPlay = true; break; }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return sawPlay;
+}
+
+// --- Chat overlay + keyboard chat entry (Task 7) ----------------------------
+
+void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }
+
+// --- Remote pointer broadcast (Task 8) --------------------------------------
+
+void sendRemotePointer(int xPx, int yPx, int quadID) {
+    if (!networkManager.getConnected()) return;
+    if (quadID < 0) return;   // not over a plate
+    // Drop unchanged positions and throttle to ~60Hz so drag motion can't
+    // flood the reliable-ordered channel shared with playback/CC/FX/chat.
+    static int lastX = INT_MIN, lastY = INT_MIN;
+    if (xPx == lastX && yPx == lastY) return;
+    static std::chrono::steady_clock::time_point lastSend{};
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastSend < std::chrono::milliseconds(16)) return;
+    lastSend = now;
+    lastX = xPx; lastY = yPx;
+    // Send the cursor in the plate's IMAGE space (not raw framebuffer pixels):
+    // the receiver draws the pointer inside the matching plate, transformed by
+    // that plate's pan/zoom/rotation, so it must arrive as (quadID, image-x,
+    // image-y, scale). getCursorPositionIn2DSpace packs the scale into z. (This
+    // matches the original FLTK send and also supplies the correct quad/scale
+    // that Task 8 had hardcoded to 0/1.)
+    Vec3D pos = plateManager.getCursorPositionIn2DSpace(xPx, yPx, quadID);
+    gfcNetPointerInfo info;
+    info.quadID = quadID;
+    info.x = (int)pos.x;
+    info.y = (int)pos.y;
+    info.scale = pos.z;
+    info.color = 0;
+    networkManager.sendPointerInfoMessage(info);
+}
+
+void sendChatMessageText(const std::string& text) {
+    // Panel chat-send path: set the text the manager reads and send it.
+    networkManager.gChatTextString = text;
+    networkManager.sendChatMessage();
+    networkManager.gChatTextString.clear();
+}
+
+bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
+void remoteChatBegin()      { networkManager.gChatMode = 1; }
+void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }
+void remoteChatBackspace()  {
+    auto& s = networkManager.gChatTextString;
+    if (!s.empty()) s.pop_back();
+}
+void remoteChatAppend(const std::string& s) {
+    if (networkManager.gChatTextString.size() + s.size() < 254)
+        networkManager.gChatTextString += s;
+}
+void remoteChatSubmit() {
+    networkManager.sendChatMessage();          // reads gChatTextString
+    networkManager.gChatTextString.clear();
+    networkManager.gChatMode = 0;
 }
 
 }  // namespace jefe::qt

@@ -39,6 +39,7 @@
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QElapsedTimer>
 #include <QTimer>
 
 namespace {
@@ -303,10 +304,37 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     playbackTimer_->setInterval(4);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
         if (!viewport_) return;
+        // The 4ms timer fires at 250Hz for playback-pacing precision, but a
+        // QOpenGLWidget::update() on *every* tick starves the macOS paint
+        // event loop — paintGL never wins and the viewport freezes (gray
+        // frame after load, pointers/trails invisible until playback shifts
+        // the cadence). So collect the repaint *intent* here and flush it
+        // through a ~60Hz coalescing throttle at the end of the tick. A
+        // skipped repaint stays pending and flushes on a later tick (the
+        // timer is always on), so the trailing frame is never dropped.
+        bool wantRepaint = false;
+
+        // Service the RakNet sockets on every tick — inbound messages must
+        // be received even while playback is idle. Cheap (non-blocking).
+        // Returns true when connection/chat state changed OR an inbound packet
+        // applied mirrored state: refresh the panel and repaint the viewport so
+        // remote changes show without needing a local interaction on this side.
+        if (jefe::qt::pumpNetwork()) {
+            if (remoteDialog_) remoteDialog_->refreshConnectionState();
+            wantRepaint = true;
+        }
         // Skip everything when nothing is playing and no raw frames are
         // pending. needsPlaybackTick is an isPlaying check + 4 O(1)
         // queue::empty() probes.
         const bool needsTick = jefe::qt::needsPlaybackTick();
+        // A time-based animation (fading pointer trail, flip/flop settle, status
+        // overlay fade) driving the repaint on its own — no mouse, no playback,
+        // no inbound packet this tick. macOS does NOT service an async
+        // QOpenGLWidget::update() posted from a timer while the app is otherwise
+        // idle (mouse-drag and playback supply the OS events that flush paints),
+        // so such animations freeze until the next real event. Flushing those
+        // with a synchronous repaint() instead forces the paint immediately.
+        const bool animActive = jefe::qt::hasActiveViewportAnimation();
         bool dirty = false;
         if (needsTick) {
             // No-GL timing step — advances currentFrame at the target FPS
@@ -322,9 +350,42 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                 viewport_->doneCurrent();
                 dirty = true;
             }
-            if (dirty) {
-                viewport_->update();
+            // Repaint on a new frame (dirty) OR while any time-based animation
+            // is settling: updateAnimations() advances flip/flop, pointer-trail
+            // fade, and the overlay status fade without always flipping the
+            // changed flag, so those would otherwise only animate during
+            // playback. hasActiveViewportAnimation() keeps them repainting while
+            // stopped.
+            if (dirty || animActive) {
+                wantRepaint = true;
             }
+        } else if (jefe::qt::consumePlateChanged()) {
+            // Stopped and nothing animating, but a bare setChanged() landed
+            // (any state edit whose call site didn't force its own repaint —
+            // e.g. a mirrored remote change that isn't an animation). Honor the
+            // dirty flag so the viewport still refreshes without needing a
+            // local interaction. Drained here exactly once (tickPlaybackTiming
+            // drains it in the needsTick branch instead).
+            wantRepaint = true;
+        }
+
+        // ~60Hz coalescing repaint flush. Keeps at most one update() in
+        // flight per display refresh so paintGL is never starved, while a
+        // pending intent always flushes within ~16ms.
+        static QElapsedTimer repaintThrottle;
+        static bool repaintPending = false;
+        if (!repaintThrottle.isValid()) repaintThrottle.start();
+        if (wantRepaint) repaintPending = true;
+        if (repaintPending && repaintThrottle.elapsed() >= 16) {
+            // Synchronous repaint for idle animations (macOS drops async timer
+            // updates when idle); async update() everywhere else so normal
+            // playback stays vsync-friendly and coalesced.
+            if (animActive)
+                viewport_->repaint();
+            else
+                viewport_->update();
+            repaintPending = false;
+            repaintThrottle.restart();
         }
         // The timeline/status read-back only needs ~60Hz, so throttle it to
         // every 4th tick (≈16ms) rather than running it at the full 250Hz
@@ -460,15 +521,16 @@ void MainWindow_Qt::buildMenuBar() {
         dlg.exec();
     })->setObjectName("menu.file.render");
 
-    // File → Remote Session… opens RemoteDialog_Qt (PR-41a). Modal
-    // dialog with host/server + join/client form sections, mirroring
-    // the FLTK remoteWindow.fl. Chat log + participant list land in
-    // PR-41b once gfcNetworkManager exposes a connection-event signal
-    // we can subscribe to.
-    fileMenu->addAction("Remote &Session…", this, [this]() {
-        RemoteDialog_Qt dlg(this);
-        dlg.exec();
-    })->setObjectName("menu.file.remote");
+    // File → Remote Session… and Dialogs → Remote Session… share one
+    // modeless persistent dialog (Task 6 / JEF-4). Lazy-created on
+    // first open; show()/raise() on subsequent opens so the window
+    // comes to the front without creating a new instance.
+    auto showRemote = [this]() {
+        if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
+        if (remoteDialog_) remoteDialog_->refreshConnectionState();
+    };
+    fileMenu->addAction("Remote &Session…", this, showRemote)
+        ->setObjectName("menu.file.remote");
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
@@ -603,7 +665,7 @@ void MainWindow_Qt::buildMenuBar() {
                            this, [this, raiseDock]() { raiseDock(lutDock_); })
         ->setObjectName("menu.dialogs.lut");
     dialogsMenu->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
-                           this, [this]() { RemoteDialog_Qt dlg(this); dlg.exec(); })
+                           this, showRemote)
         ->setObjectName("menu.dialogs.remote");
     dialogsMenu->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
                            this, [this]() { RenderDialog_Qt dlg(this); dlg.exec(); })
@@ -823,12 +885,21 @@ void MainWindow_Qt::buildDocks() {
     addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
     splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
 
-    // Remote sessions — modal dialog launched from the File menu
-    // (mirrors the FLTK `remoteWindow.fl` standalone window). Adding
-    // it as a fourth left-side dock destabilized the Mac AX bridge's
-    // view of the FX and FX Params children under sweep load,
-    // so we kept the dialog model the FLTK side already used.
-    // Wired in buildMenuBar.
+    // Remote Session — a dockable panel like the others (host/join forms,
+    // live status + participants + errors, collapsible chat & connection
+    // logs, chat input). Tabified with the LUTs dock on the right so it
+    // doesn't crowd the left stack. remoteDialog_ is the panel widget the
+    // network pump refreshes; menu actions raise the dock.
+    remoteDock_ = new QDockWidget("Remote Session", this);
+    remoteDock_->setObjectName("dock.remote");
+    remoteDock_->setAccessibleName("Remote session dock");
+    remoteDialog_ = new RemoteDialog_Qt(remoteDock_);
+    remoteDock_->setWidget(remoteDialog_);
+    remoteDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    remoteDialog_->setMinimumWidth(300);
+    addDockWidget(Qt::RightDockWidgetArea, remoteDock_);
+    if (lutDock_) tabifyDockWidget(lutDock_, remoteDock_);
+    remoteDock_->hide();   // hidden until the user opens it from a menu
 
     // Refresh the FX param panel whenever viewport-driven plate edits
     // fire (this also catches active-plate changes — clicking a plate

@@ -21,6 +21,7 @@ public:
     void initialize();
     void addToLog(std::string, int type=GFCNETLOGTYPE_NORMAL,int NoDate=0);
     void outputToFile(std::string fileName);
+    std::vector<std::string> getLog() { return log; }
     bool writeToConsole;
 
 private:

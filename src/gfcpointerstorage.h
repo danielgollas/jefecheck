@@ -21,7 +21,7 @@ public:
 
     ~gfcPointerStorage();
     
-    bool empty();
+    bool empty() const;
     void store(gfcNetRemotePointerInfo info);
     void removeFromMap(gfcNetRemotePointerInfo info);
     

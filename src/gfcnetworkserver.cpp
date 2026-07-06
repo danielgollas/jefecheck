@@ -1,5 +1,4 @@
 #include "gfcnetworkserver.h"
-#include "qt/gfcnetworkservergui_qt.h"
 #include "StringCompressor.h"
 
 #include <iostream>
@@ -25,10 +24,52 @@ extern gfcPlaylistManager playlistManager;
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
 
+namespace {
+// Distinct, VFX-friendly palette in the packed-RGB format
+// ((r&0xff)<<24)|((g&0xff)<<16)|((b&0xff)<<8).
+inline int packRGB(int r, int g, int b) {
+    return ((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8);
+}
+const int kColorPalette[] = {
+    packRGB(0xE0, 0x83, 0x6C), // coral
+    packRGB(0x5B, 0xB0, 0x7A), // green
+    packRGB(0x6C, 0x9C, 0xE0), // blue
+    packRGB(0xD4, 0xA0, 0x1E), // amber
+    packRGB(0xB0, 0x7A, 0xD4), // violet
+    packRGB(0x4C, 0xC0, 0xC0), // teal
+    packRGB(0xE0, 0x6C, 0xB0), // pink
+    packRGB(0xA0, 0xC0, 0x4C), // lime
+    packRGB(0xE0, 0xB0, 0x6C), // sand
+    packRGB(0x8C, 0x8C, 0xE0), // periwinkle
+};
+const int kColorPaletteSize = sizeof(kColorPalette) / sizeof(kColorPalette[0]);
+// Default "no preference" sentinel: gray (128,128,128), matching gfcStructures.h.
+const int kDefaultColor = packRGB(128, 128, 128);
+}  // namespace
+
+int gfcNetworkServer::assignColor(int preferred) {
+    auto inUse = [this](int c) {
+        for (const auto& kv : colorAddressMap)
+            if (kv.second == c) return true;
+        return false;
+    };
+    if (preferred != kDefaultColor && !inUse(preferred))
+        return preferred;
+    for (int i = 0; i < kColorPaletteSize; ++i)
+        if (!inUse(kColorPalette[i]))
+            return kColorPalette[i];
+    return preferred;   // palette exhausted -> allow a duplicate
+}
+
 gfcNetworkServer::gfcNetworkServer() {
-    myGUI=new gfcNetworkServerGUI_Qt;
     peer = RakNetworkFactory::GetRakPeerInterface();
 	middleOfSync=false;
+}
+
+std::vector<std::string> gfcNetworkServer::getParticipantNames() {
+    std::vector<std::string> names;
+    for (const auto& kv : nickNameAddressMap) names.push_back(kv.second);
+    return names;
 }
 
 
@@ -41,18 +82,13 @@ void gfcNetworkServer::start(gfcServerParams * params) {
     networkLog.addToLog("Starting Server...");
 
 
-    int thePort;
-    std::string thePassword;
+    int thePort = 0;
+    std::string thePassword = "";
 
     if (params) {
         thePort=params->port;
         thePassword=params->password;
         this->name=params->serverName;
-    } else {
-        thePort=myGUI->getPort();
-		printf("thePort=%i\n",thePort);
-        thePassword=myGUI->getPassword();
-        this->name=myGUI->getName();
     }
 
     this->port=thePort;
@@ -66,10 +102,6 @@ void gfcNetworkServer::start(gfcServerParams * params) {
     peer->SetIncomingPassword ( thePassword.c_str(),thePassword.size() );
 	
     peer->Startup ( ( unsigned short ) GFCNET_MAX_CLIENTS,15,&socketDescriptor,1 );
-    if (myGUI) {
-        myGUI->setIPAddress ( peer->GetInternalID().ToString() );
-        myGUI->setStartStopButton("Stop");
-    }
 
     peer->SetMaximumIncomingConnections ( GFCNET_MAX_CLIENTS );
 
@@ -84,11 +116,7 @@ void gfcNetworkServer::initializeWidgets() {
 void gfcNetworkServer::stop() {
     peer->Shutdown ( 30 );
     nickNameAddressMap.clear();
-    if (myGUI) {
-        myGUI->setIPAddress("");
-        myGUI->setStartStopButton("Start");
-        myGUI->setStatus("Offline",GFCCOLOR_GRAY);
-    }
+    // GUI updates (IP, start/stop button, status) are managed by Qt
 }
 
 void gfcNetworkServer::Update() {
@@ -619,7 +647,7 @@ void gfcNetworkServer::Update() {
                 break;
 
             nickNameAddressMap[p->systemAddress]= receivedNickname;
-			colorAddressMap[p->systemAddress]=theColor;
+			colorAddressMap[p->systemAddress]=assignColor(theColor);
 
             printf ( "Nickname added: %s\nColorAdded%i\n",nickNameAddressMap[p->systemAddress].c_str(),theColor);
 			
@@ -690,7 +718,7 @@ void gfcNetworkServer::Update() {
 //                 break;
 //             }
 
-            sendChatMessage(messageType,nickNameAddressMap[p->systemAddress],tempChatMessage);
+            sendChatMessage(messageType,nickNameAddressMap[p->systemAddress],tempChatMessage,colorAddressMap[p->systemAddress]);
 
             break;
         }
@@ -720,10 +748,11 @@ void gfcNetworkServer::Update() {
 						outBS.WriteCompressed ( ( int ) theInt ); //y
 						bs.Read ( theFloat );
 						outBS.Write ( ( float ) theFloat ); //scale
-						
-						char messageNickname[GFCNET_MAX_TEXT_LENGHT];
-						StringCompressor::Instance()->DecodeString ( messageNickname,GFCNET_MAX_TEXT_LENGHT,&bs );
 
+						// The client's pointer message ends at scale — it does not
+						// encode a nickname (SendPointerInfoMessage writes only
+						// quad/x/y/scale). Don't decode one here; the broadcast
+						// nickname comes from nickNameAddressMap below.
 						StringCompressor::Instance()->EncodeString ( nickNameAddressMap[p->systemAddress].c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
 
 						//also send the color
@@ -749,7 +778,7 @@ void gfcNetworkServer::Update() {
 						bs.ReadCompressed ( theInt );
 
 						printf("%s changed color to %i\n",nickNameAddressMap[p->systemAddress].c_str(),theInt);
-						colorAddressMap[p->systemAddress]=theInt;
+						colorAddressMap[p->systemAddress]=assignColor(theInt);
 
 					}
 					break;
@@ -764,6 +793,7 @@ void gfcNetworkServer::Update() {
 					case GFCNETID_FXATTRIBMESSAGE:
 					case GFCNETID_PLAYLISTITEMLOADMESSAGE:
 					case GFCNETID_FXSTACKMESSAGE:
+					case GFCNETID_LAYERCHANGEMESSAGE:
 					case GFCNETID_SENDPLAYLIST:
 					case GFCNETID_PLAYLISTEVENTOTHER:
 					{
@@ -804,11 +834,11 @@ int gfcNetworkServer::getConnectionCount() {
 }
 
 void gfcNetworkServer::disableGUI() {
-    myGUI->disable();
+    // GUI enable/disable is managed by Qt — no-op
 }
 
 void gfcNetworkServer::enableGUI() {
-    myGUI->enable();
+    // GUI enable/disable is managed by Qt — no-op
 }
 
 void gfcNetworkServer::startFXSinc(SystemAddress sysaddress, bool broadcast) {
@@ -889,7 +919,7 @@ void gfcNetworkServer::startPlaylistMerge() {
 	startPlaylistMerge(peer->GetSystemAddressFromIndex(0),true);
 }
 
-void gfcNetworkServer::sendChatMessage(unsigned char type, std::string sender, std::string message) {
+void gfcNetworkServer::sendChatMessage(unsigned char type, std::string sender, std::string message, int color) {
     //server sends messageID, messageType, asciiTime, sender and message
     //The message is reconstruted on the clients side and used as deemes apropiately by the client, depending on the messageType
     RakNet::BitStream outBS2;
@@ -898,5 +928,6 @@ void gfcNetworkServer::sendChatMessage(unsigned char type, std::string sender, s
     StringCompressor::Instance()->EncodeString ( asciiTime(true).c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS2 ); //time
     StringCompressor::Instance()->EncodeString ( sender.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS2 ); //sender nickname (can be servers own notification messages)
     StringCompressor::Instance()->EncodeString ( message.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS2 ); //message
+    outBS2.WriteCompressed ( ( int ) color ); //sender's assigned color (0 for system msgs)
     peer->Send ( &outBS2,HIGH_PRIORITY,RELIABLE_ORDERED,0,UNASSIGNED_SYSTEM_ADDRESS,true ); //send!
 }
