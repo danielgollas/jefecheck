@@ -531,7 +531,7 @@ void MainWindow_Qt::buildMenuBar() {
                         QKeySequence(Qt::CTRL | Qt::Key_P),
                         this, [this]() {
                             // Modal — settings persist on Done via
-                            // saveSettings(&sett) inside the dialog.
+                            // jefe::qt::writePreferences() inside the dialog.
                             PreferencesWindow_Qt dlg(this);
                             dlg.exec();
                         });

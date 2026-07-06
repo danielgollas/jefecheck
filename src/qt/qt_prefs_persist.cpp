@@ -5,7 +5,6 @@
 #include "qt_prefs_persist.h"
 #include "../gfcStructures.h"
 #include <QSettings>
-#include <string>
 
 extern gfcSettings sett;
 
