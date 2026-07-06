@@ -146,6 +146,13 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     });
     form->addRow("Background color", bgBtn);
 
+    auto* checker = new QCheckBox("Checkerboard background", page);
+    checker->setChecked(sett.bgCheckerboard != 0);
+    checker->setObjectName("preferences.general.checkerboard.check");
+    checker->setAccessibleName("Checkerboard background");
+    connect(checker, &QCheckBox::toggled, page, [](bool on){ sett.bgCheckerboard = on ? 1 : 0; });
+    form->addRow(QString(), checker);
+
     auto* browsePath = new QLineEdit(QString::fromStdString(sett.defaultBrowsePath), page);
     browsePath->setObjectName("preferences.general.browsepath.edit");
     browsePath->setAccessibleName("Default browse path");
@@ -216,6 +223,34 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     connect(procPri, QOverload<int>::of(&QSpinBox::valueChanged),
             page, [](int v) { sett.processorPriority = v; });
     form->addRow("Processor priority", procPri);
+    // NOTE: processorPriority row's removal is owned by Task 2 (JEF-16) —
+    // intentionally left in place here to avoid overlap.
+
+    auto* thumbs = new QCheckBox("Timeline thumbnails", page);
+    thumbs->setChecked(sett.showThumbnails);
+    thumbs->setObjectName("preferences.general.thumbnails.check");
+    thumbs->setAccessibleName("Timeline thumbnails");
+    connect(thumbs, &QCheckBox::toggled, page, [](bool on){ sett.showThumbnails = on; });
+    form->addRow(QString(), thumbs);
+
+    auto* fbSize = new QSpinBox(page);
+    fbSize->setRange(6, 72);
+    fbSize->setValue(sett.feedbackMessageSize);
+    fbSize->setObjectName("preferences.general.feedbacksize.spin");
+    fbSize->setAccessibleName("Feedback message size");
+    connect(fbSize, QOverload<int>::of(&QSpinBox::valueChanged), page,
+            [](int v){ sett.feedbackMessageSize = v; });
+    form->addRow("Feedback message size", fbSize);
+
+    auto* fbFade = new QDoubleSpinBox(page);
+    fbFade->setRange(0.0, 30.0);
+    fbFade->setSingleStep(0.5);
+    fbFade->setValue(sett.feedbackMessageFadeDelay);
+    fbFade->setObjectName("preferences.general.feedbackfade.spin");
+    fbFade->setAccessibleName("Feedback message fade delay");
+    connect(fbFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged), page,
+            [](double v){ sett.feedbackMessageFadeDelay = float(v); });
+    form->addRow("Feedback fade delay (s)", fbFade);
 
     addPage("General", page);
 }

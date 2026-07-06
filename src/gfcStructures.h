@@ -231,6 +231,7 @@ public:
         startFullscreen=false;
         playbackOnLoad=false;
         bgColor=0.149019;
+        bgCheckerboard=0;
         bool enableCrashRecoverySession=true;
         defaultBrowsePath=getApplicationDataPath();
         framingMode=FRAMINGSINGLE_ID;
@@ -303,6 +304,7 @@ public:
     int startFullscreen;
     int playbackOnLoad;
     float bgColor;
+    int bgCheckerboard;   // 0 = flat bgColor fill, 1 = checkerboard (General prefs)
     int enableCrashRecoverySession;
     std::string defaultBrowsePath;
 	std::string defaultBrowsePathBackup;

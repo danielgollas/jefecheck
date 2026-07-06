@@ -869,6 +869,14 @@ void setRecentSessions(const std::vector<std::string>& paths);
 // Startup-session preference (0 Empty / 1 Reopen / 2 Ask).
 int  getStartupSessionBehavior();
 void setStartupSessionBehavior(int mode);
+// General prefs (JEF-16 Task 1) — read-only accessors so MainWindow_qt.cpp
+// can apply "start in fullscreen" / "open Load window at startup" and seed
+// the Quick Load dialog's default directory without including
+// gfcStructures.h (which drags glad, incompatible with QOpenGLWidget in
+// this TU — see developer_notes.md §1).
+bool getStartFullscreen();
+bool getOpenLoadWindowAtStartup();
+std::string getDefaultBrowsePath();
 // Color-correction favorites (slot 0..4, on the active plate).
 void saveCCFavoriteFromActive(int slot);
 void applyCCFavoriteToActive(int slot);

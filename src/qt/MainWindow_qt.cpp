@@ -282,6 +282,18 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // preview textures) — deferred past the autoload kick.
     QTimer::singleShot(400, this, [this]() { maybeRestoreSessionAtStartup(); });
 
+    // General prefs (JEF-16 Task 1): apply "start in fullscreen" / "open
+    // Load window at startup" now that loadPreferences() (above) has
+    // populated `sett`. Deferred via singleShot(0) like the other startup
+    // hooks above, so this runs once the event loop is pumping — main_qt.cpp
+    // has already called show() by the time this fires — rather than
+    // fighting the window manager mid-construction. Bridged through
+    // SequenceLoadBridge_qt so this TU stays glad-free (see developer_notes.md §1).
+    QTimer::singleShot(0, this, [this]() {
+        if (jefe::qt::getStartFullscreen()) showFullScreen();
+        if (jefe::qt::getOpenLoadWindowAtStartup()) openLoadWindow();
+    });
+
     // Fast playback tick (~250Hz) for tight FPS pacing. The frame-advance
     // logic in gfcPlaybackManager accumulates real wall-clock time and only
     // advances when it crosses the target frame interval, so ticking finely
@@ -467,10 +479,16 @@ void MainWindow_Qt::buildMenuBar() {
                         QKeySequence(Qt::CTRL | Qt::Key_O),
                         this, [this]() {
         QSettings settings;
-        const QString lastDir = settings.value(
-            "MainWindow/lastLoadDir",
-            QStandardPaths::writableLocation(
-                QStandardPaths::PicturesLocation)).toString();
+        // Prefer the most-recently-used load directory; fall back to the
+        // General-prefs default browse path (JEF-16 Task 1), then to the
+        // platform Pictures folder if neither is set.
+        QString lastDir = settings.value("MainWindow/lastLoadDir", QString()).toString();
+        if (lastDir.isEmpty()) {
+            lastDir = QString::fromStdString(jefe::qt::getDefaultBrowsePath());
+        }
+        if (lastDir.isEmpty()) {
+            lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+        }
         const QString filter = tr(
             "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff "
             "*.tga *.bmp);;All files (*)");
