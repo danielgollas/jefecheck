@@ -31,17 +31,31 @@ Widgets bind to the global `sett` (`gfcSettings`) and mutate it **live** on
 change. **Done** calls `saveSettings(&sett)` (writes the JefeCheck XML in
 `getApplicationDataPath()`); **Cancel** just closes.
 
-### Two persistence systems (cross-cutting problem)
-Settings persist through **two** parallel mechanisms:
-- **Legacy XML** via `gfcSettings` + `saveSettings()`/`saveSetting()` /
-  `setWidgetFromNode()` (`gfcStructures.cpp`) — the global `sett`.
-- **Qt `QSettings`** — used ad hoc for `Session/startupBehavior`,
-  `Engine/defaultDecodeFilter`, `Engine/defaultTextureFormat`, `Playlist/compactView`,
-  `Playlist/showFullPaths`, and others.
+### Persistence is effectively broken (cross-cutting problem)
+**Critical finding:** `saveSettings(const gfcSettings*)` and `readSettings(gfcSettings&)`
+in `gfcStructures.cpp:314` / `:379` are **empty stubs**. There is **no global
+settings file** written or read. So the Preferences dialog's Done →
+`saveSettings(&sett)` is a **no-op**: changes mutate the in-memory `sett`, take
+effect for the current session (only if consumed), and are **lost on restart**.
 
-Some settings are duplicated/split across both (e.g. `playlistShowCompactView`
-in `gfcSettings` is a dead orphan; the live playlist toggle uses the `QSettings`
-key `Playlist/compactView`).
+The only settings that actually persist today go through **Qt `QSettings`**, set ad
+hoc in a handful of call sites: `Engine/defaultDecodeFilter`,
+`Engine/defaultTextureFormat` (`MainWindow_qt.cpp:80`), `Session/startupBehavior`,
+`Playlist/compactView`, `Playlist/showFullPaths`, `MainWindow/lastLoadDir`,
+`UI/statusBarVisible`. Everything else in the Preferences window is session-only.
+
+**Consequence for this ticket:** "wire up all preferences to actually affect the
+product" includes *making them persist*. We standardize on **`QSettings`** (the only
+working store) and add a small persistence backbone in the shell task:
+- **Load** — at startup, read persisted keys into `sett` (extend the existing
+  `MainWindow_qt.cpp` QSettings-load block to cover every persisted preference).
+- **Save** — on Done, write every preference to `QSettings` (replace the no-op
+  `saveSettings(&sett)` call with a real `writePreferences()` that enumerates them).
+- **Cancel** — snapshot `sett` (+ touched keys) on open; restore on reject.
+
+The dead legacy XML `saveSettings`/`readSettings`/`saveSetting`/`setWidgetFromNode`
+path is left as-is (not resurrected); we do not add a second store. Removing the 19
+dead struct fields is safe — none are persisted anywhere.
 
 ### Two behavior bugs to fold in
 - **Cancel doesn't revert.** Widgets write `sett` live, so Cancel closes with the
@@ -76,8 +90,8 @@ section's execution pass.
 | `startFullscreen` | **Wire** — apply fullscreen at startup |
 | `openLoadWindowAtStartup` | **Wire** — open the Load window at startup when set (today nothing reads it) |
 | `processorPriority` | **Remove** — low value on modern macOS; wire cost ≫ benefit |
-| `exrIgnoreDisplayWindow` | **Wire** to the OIIO loader (current, real behavior) |
-| `exrIgnoreHeadersAspectRatio` | **Wire** to the OIIO loader |
+| `exrIgnoreDisplayWindow` | **Wire** to the OIIO loader. *Note:* the OIIO loader currently always uses the EXR **data window** (= "ignore display window" already). Wiring the **default (0 = honor display window)** requires implementing display-window compositing (mirror legacy `gfcimageloaderexr.cpp:884-918`) — the larger of the two. |
+| `exrIgnoreHeadersAspectRatio` | **Wire** to the OIIO loader — trivial: `if (!sett.exrIgnoreHeadersAspectRatio) quadSizeX *= spec.get_float_attribute("PixelAspectRatio",1.0f)` (mirror `exr.cpp:1447-1450`). |
 | `exrExposure`, `exrDefog`, `exrGamma`, `exrKneeLow`, `exrKneeHigh` | **Remove** — obsolete; only the *disabled* custom EXR loader consumed them (OIIO owns EXR now) |
 
 ### Quadrant ③ — Hidden + wired (add UI for user-facing ones)
@@ -164,9 +178,18 @@ paths handled in General/Search Paths).
   restore on Cancel/reject. Done saves + closes.
 - **One persistence path per setting.** Each control reads and writes the single
   store that its consumer actually reads. Remove orphan duplicate fields.
-- **Token styling.** Controls adopt the discreet button/input/checkbox/combo
-  recipes; sections use `CollapsibleSection_qt`; object names keep the dotted-leaf
-  scheme (see `tests/ui/jefecheck/locators.py`) so Mac2/XCUITest still resolves them.
+- **Token styling.** The global `jefecheck_dark.qss` styles by class selector, so
+  plain widgets inherit the discreet button/input/checkbox/combo recipes for free.
+  For section headers / cards / accent buttons, add a small dialog-scoped stylesheet
+  with `[role="section"]` / `[card="true"]` / `[accent="true"]` property hooks
+  mirroring RemotePanel's `kRemoteStyle` (`RemotePanel_qt.cpp:27-89`); group controls
+  with `CollapsibleSection_qt` (`setContentWidget()` idiom). Follow the global **warm
+  orange** accent (not RemotePanel's slate).
+- **Object-name standardization.** The window currently mixes two schemes
+  (`preferences.<section>.<field>.<role>` vs `prefs.engine.<field>`). Standardize on
+  the dotted **`preferences.<section>.<field>.<role>`** leaf scheme and update
+  `tests/ui/jefecheck/locators.py` in lockstep, so Mac2/XCUITest keeps resolving
+  widgets by trailing leaf.
 
 ## Execution order
 
