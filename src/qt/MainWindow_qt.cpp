@@ -39,6 +39,7 @@
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QElapsedTimer>
 #include <QTimer>
 
 namespace {
@@ -303,6 +304,16 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     playbackTimer_->setInterval(4);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
         if (!viewport_) return;
+        // The 4ms timer fires at 250Hz for playback-pacing precision, but a
+        // QOpenGLWidget::update() on *every* tick starves the macOS paint
+        // event loop — paintGL never wins and the viewport freezes (gray
+        // frame after load, pointers/trails invisible until playback shifts
+        // the cadence). So collect the repaint *intent* here and flush it
+        // through a ~60Hz coalescing throttle at the end of the tick. A
+        // skipped repaint stays pending and flushes on a later tick (the
+        // timer is always on), so the trailing frame is never dropped.
+        bool wantRepaint = false;
+
         // Service the RakNet sockets on every tick — inbound messages must
         // be received even while playback is idle. Cheap (non-blocking).
         // Returns true when connection/chat state changed OR an inbound packet
@@ -310,7 +321,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         // remote changes show without needing a local interaction on this side.
         if (jefe::qt::pumpNetwork()) {
             if (remoteDialog_) remoteDialog_->refreshConnectionState();
-            viewport_->update();
+            wantRepaint = true;
         }
         // Skip everything when nothing is playing and no raw frames are
         // pending. needsPlaybackTick is an isPlaying check + 4 O(1)
@@ -338,7 +349,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             // playback. hasActiveViewportAnimation() keeps them repainting while
             // stopped.
             if (dirty || jefe::qt::hasActiveViewportAnimation()) {
-                viewport_->update();
+                wantRepaint = true;
             }
         } else if (jefe::qt::consumePlateChanged()) {
             // Stopped and nothing animating, but a bare setChanged() landed
@@ -347,7 +358,20 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             // dirty flag so the viewport still refreshes without needing a
             // local interaction. Drained here exactly once (tickPlaybackTiming
             // drains it in the needsTick branch instead).
+            wantRepaint = true;
+        }
+
+        // ~60Hz coalescing repaint flush. Keeps at most one update() in
+        // flight per display refresh so paintGL is never starved, while a
+        // pending intent always flushes within ~16ms.
+        static QElapsedTimer repaintThrottle;
+        static bool repaintPending = false;
+        if (!repaintThrottle.isValid()) repaintThrottle.start();
+        if (wantRepaint) repaintPending = true;
+        if (repaintPending && repaintThrottle.elapsed() >= 16) {
             viewport_->update();
+            repaintPending = false;
+            repaintThrottle.restart();
         }
         // The timeline/status read-back only needs ~60Hz, so throttle it to
         // every 4th tick (≈16ms) rather than running it at the full 250Hz
