@@ -169,6 +169,32 @@ gfcPlate::gfcPlate ( void )
     ssProgram=0;
     useShader=false;
 	
+	// Color-correction neutral defaults. Without these the members are
+	// left uninitialized: gamma reads as 0 and lutID as 0 (a valid-looking
+	// LUT texture id, since useLUT tests lutID>=0), so recompileSuperShader
+	// builds a broken shader (gamma 0 + a LUT that was never loaded) and the
+	// plate renders flat gray. It stays gray because the config never changes
+	// until the user nudges a color-correction control — which is exactly the
+	// "gray until I touch exposure" symptom. A freshly-loaded plate (playlist
+	// load, remote-synced load) must display correctly with no interaction.
+	gamma=1.0;
+	exposure=0.0;
+	brightness=1.0;
+	contrast=1.0;
+	saturation=1.0;
+	lutID=-1;
+	lutSize=0;
+	lutType=CubeLUT::JEFECHECK1D;
+	currentLUTType=CubeLUT::JEFECHECK1D;
+	// Shader-config trackers: usingTextureType=-1 forces the first recompile
+	// to build a real (passthrough) shader; the rest must not report a LUT/CC
+	// as already active before buildShader runs.
+	usingLUT=0;
+	usingGammaExp=0;
+	usingBCS=0;
+	usingRGBAMasks=0;
+	usingTextureType=-1;
+
 	fbov[0]=fbov[1]=fbov[2]=0;
 	fboTexturev[0]=fboTexturev[1]=fboTexturev[2]=0;
 
