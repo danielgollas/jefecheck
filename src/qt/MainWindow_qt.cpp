@@ -327,6 +327,14 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         // pending. needsPlaybackTick is an isPlaying check + 4 O(1)
         // queue::empty() probes.
         const bool needsTick = jefe::qt::needsPlaybackTick();
+        // A time-based animation (fading pointer trail, flip/flop settle, status
+        // overlay fade) driving the repaint on its own — no mouse, no playback,
+        // no inbound packet this tick. macOS does NOT service an async
+        // QOpenGLWidget::update() posted from a timer while the app is otherwise
+        // idle (mouse-drag and playback supply the OS events that flush paints),
+        // so such animations freeze until the next real event. Flushing those
+        // with a synchronous repaint() instead forces the paint immediately.
+        const bool animActive = jefe::qt::hasActiveViewportAnimation();
         bool dirty = false;
         if (needsTick) {
             // No-GL timing step — advances currentFrame at the target FPS
@@ -348,7 +356,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             // changed flag, so those would otherwise only animate during
             // playback. hasActiveViewportAnimation() keeps them repainting while
             // stopped.
-            if (dirty || jefe::qt::hasActiveViewportAnimation()) {
+            if (dirty || animActive) {
                 wantRepaint = true;
             }
         } else if (jefe::qt::consumePlateChanged()) {
@@ -369,7 +377,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         if (!repaintThrottle.isValid()) repaintThrottle.start();
         if (wantRepaint) repaintPending = true;
         if (repaintPending && repaintThrottle.elapsed() >= 16) {
-            viewport_->update();
+            // Synchronous repaint for idle animations (macOS drops async timer
+            // updates when idle); async update() everywhere else so normal
+            // playback stays vsync-friendly and coalesced.
+            if (animActive)
+                viewport_->repaint();
+            else
+                viewport_->update();
             repaintPending = false;
             repaintThrottle.restart();
         }
