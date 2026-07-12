@@ -230,12 +230,10 @@ PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 # Preferences → Playback & Engine panel widgets. Standardized (JEF-16
 # Task 2) onto the `preferences.engine.*.combo` leaf convention used by
 # the other Engine widgets.
-PREFS_ENGINE_ENGINE = "preferences.engine.engine.combo"
-PREFS_ENGINE_VSYNC = "preferences.engine.vsync.check"
+# renderingEngine / vsync / numOfPartitions / forcePBO controls were removed
+# (JEF-16 audit: inert — no runtime effect); only queue + balance remain.
 PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
-PREFS_ENGINE_PARTITIONS = "preferences.engine.partitions.spin"
 PREFS_ENGINE_BALANCE = "preferences.engine.balance.check"
-PREFS_ENGINE_PBO = "preferences.engine.pbo.spin"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
 

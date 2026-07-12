@@ -462,22 +462,13 @@ void PreferencesWindow_Qt::buildEnginePage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
 
-    auto* engine = new QComboBox(page);
-    engine->addItems({"3D", "2D"});
-    engine->setCurrentIndex(sett.renderingEngine == 0 ? 0 : 1);
-    engine->setObjectName("preferences.engine.engine.combo");
-    engine->setAccessibleName("Rendering engine");
-    connect(engine, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            page, [](int idx) { sett.renderingEngine = idx; });
-    form->addRow("Rendering engine", engine);
-
-    auto* vsync = new QCheckBox("VSync", page);
-    vsync->setChecked(sett.vsync != 0);
-    vsync->setObjectName("preferences.engine.vsync.check");
-    vsync->setAccessibleName("VSync");
-    connect(vsync, &QCheckBox::toggled, page,
-            [](bool on) { sett.vsync = on ? 1 : 0; });
-    form->addRow(QString(), vsync);
+    // NOTE (JEF-16): renderingEngine, vsync, numOfPartitions and forcePBO are
+    // intentionally NOT exposed here — the audit found they don't affect the
+    // product today (vsync is a hardcoded swap interval in main_qt.cpp;
+    // renderingEngine/forcePBO are only read inside a dead code block in
+    // gfcSequence.cpp; numOfPartitions is read but its only effect is a no-op).
+    // They remain in gfcSettings (still referenced inertly) but are hidden until
+    // their subsystems are revived, so the panel only shows controls that work.
 
     auto* queue = new QSpinBox(page);
     queue->setRange(0, 32);
@@ -488,15 +479,6 @@ void PreferencesWindow_Qt::buildEnginePage() {
             page, [](int v) { sett.maximumFramesInQueue = v; });
     form->addRow("Max frames in raw queue", queue);
 
-    auto* partitions = new QSpinBox(page);
-    partitions->setRange(1, 16);
-    partitions->setValue(sett.numOfPartitions);
-    partitions->setObjectName("preferences.engine.partitions.spin");
-    partitions->setAccessibleName("Loader partitions");
-    connect(partitions, QOverload<int>::of(&QSpinBox::valueChanged),
-            page, [](int v) { sett.numOfPartitions = v; });
-    form->addRow("Loader partitions", partitions);
-
     auto* balance = new QCheckBox("Balance read mutex across tracks", page);
     balance->setChecked(sett.balanceReads != 0);
     balance->setObjectName("preferences.engine.balance.check");
@@ -504,15 +486,6 @@ void PreferencesWindow_Qt::buildEnginePage() {
     connect(balance, &QCheckBox::toggled, page,
             [](bool on) { sett.balanceReads = on ? 1 : 0; });
     form->addRow(QString(), balance);
-
-    auto* pbo = new QSpinBox(page);
-    pbo->setRange(0, 4);
-    pbo->setValue(sett.forcePBO);
-    pbo->setObjectName("preferences.engine.pbo.spin");
-    pbo->setAccessibleName("Force PBO mode");
-    connect(pbo, QOverload<int>::of(&QSpinBox::valueChanged),
-            page, [](int v) { sett.forcePBO = v; });
-    form->addRow("Force PBO mode", pbo);
 
     // Default decode filter — shared by all tracks via OIIO loader's
     // Filter2D resize path (see gfcImageLoaderOIIO scale handling).
