@@ -2,11 +2,10 @@
 // a sidebar list selects a page, each page binds widgets to the global
 // `sett` (gfcSettings). Done writes the settings via saveSettings().
 //
-// Pages cover: General, Engine, Formats. Remote, Paths, Text are
+// Pages cover: General, Engine, Formats, Search Paths. Remote, Text are
 // placeholder pages for now — they need extra plumbing (per-track UI,
-// filesystem pickers, font enumeration) that's better as follow-up
-// PRs. The shell handles them so adding a page later is just an
-// addPage() call.
+// font enumeration) that's better as follow-up PRs. The shell handles
+// them so adding a page later is just an addPage() call.
 #ifndef JEFECHECK_QT_PREFERENCES_WINDOW_H
 #define JEFECHECK_QT_PREFERENCES_WINDOW_H
 
@@ -36,6 +35,7 @@ private:
     void buildGeneralPage();
     void buildEnginePage();
     void buildFormatsPage();
+    void buildSearchPathsPage();
     void buildPlaceholderPage(const QString& title, const QString& note);
 
     // Wraps `content` in a CollapsibleSection and returns it for adding to a

@@ -6,6 +6,7 @@
 #include "../gfcStructures.h"
 #include <QSettings>
 #include <QString>
+#include <QStringList>
 
 extern gfcSettings sett;
 
@@ -40,6 +41,17 @@ void loadPreferences() {
     // Formats (JEF-16 Task 3).
     sett.exrIgnoreDisplayWindow      = s.value("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow).toInt();
     sett.exrIgnoreHeadersAspectRatio = s.value("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio).toInt();
+
+    // Search Paths (JEF-16 Task 4).
+    sett.useSearchPaths       = s.value("Search/useSearchPaths", sett.useSearchPaths).toBool();
+    sett.searchPathsRecursive = s.value("Search/recursive",      sett.searchPathsRecursive).toBool();
+    {
+        QStringList defaultPaths;
+        for (const auto& p : sett.searchPaths) defaultPaths << QString::fromStdString(p);
+        const QStringList paths = s.value("Search/paths", defaultPaths).toStringList();
+        sett.searchPaths.clear();
+        for (const QString& p : paths) sett.searchPaths.push_back(p.toStdString());
+    }
     // NOTE: later tasks append their sections' keys here.
 }
 
@@ -69,6 +81,15 @@ void writePreferences() {
     // Formats (JEF-16 Task 3).
     s.setValue("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow);
     s.setValue("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio);
+
+    // Search Paths (JEF-16 Task 4).
+    s.setValue("Search/useSearchPaths", sett.useSearchPaths);
+    s.setValue("Search/recursive",      sett.searchPathsRecursive);
+    {
+        QStringList paths;
+        for (const auto& p : sett.searchPaths) paths << QString::fromStdString(p);
+        s.setValue("Search/paths", paths);
+    }
     // NOTE: later tasks append their sections' keys here.
 }
 

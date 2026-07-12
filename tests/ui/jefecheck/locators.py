@@ -218,6 +218,13 @@ PREFERENCES_CANCEL = "preferences.cancel.button"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
 
+# Preferences → Search Paths panel widgets (JEF-16 Task 4).
+PREFS_SEARCH_ENABLE = "preferences.search.enable.check"
+PREFS_SEARCH_RECURSIVE = "preferences.search.recursive.check"
+PREFS_SEARCH_PATHS_LIST = "preferences.search.paths.list"
+PREFS_SEARCH_ADD = "preferences.search.add.button"
+PREFS_SEARCH_REMOVE = "preferences.search.remove.button"
+
 
 def plate(plate_id: int, role: str) -> str:
     """Build a per-plate locator: plate(0, 'gamma.spin') -> 'plate.0.gamma.spin'."""

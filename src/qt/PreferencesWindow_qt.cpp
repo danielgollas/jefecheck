@@ -10,6 +10,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -55,13 +56,13 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
             pages_, &QStackedWidget::setCurrentIndex);
 
     // Sidebar order mirrors page-build order below: General, Text (stub),
-    // Playback & Engine, Formats, Remote (stub), Paths (stub).
+    // Playback & Engine, Formats, Search Paths, Remote (stub).
     buildGeneralPage();
     buildPlaceholderPage("Text", "Text rendering settings — coming soon.");
     buildEnginePage();
     buildFormatsPage();
+    buildSearchPathsPage();
     buildPlaceholderPage("Remote", "Remote-session settings — coming soon.");
-    buildPlaceholderPage("Paths", "Path / mirror settings — coming soon.");
 
     sidebar_->setCurrentRow(0);
 
@@ -375,6 +376,56 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     form->addRow(QString(), exrIgnoreAspect);
 
     addPage("Formats", page);
+}
+
+// Consumer: gfcSequence.cpp:114/:1660 call findFileInSearchPaths(...) when
+// !fileExists(...) && sett.useSearchPaths — that function (gfcStructures.cpp:944+)
+// iterates sett.searchPaths and honors sett.searchPathsRecursive via
+// findFileInPath. Wiring here is UI-only: bind the checkboxes/list to `sett`
+// and persist; no consumer changes needed.
+void PreferencesWindow_Qt::buildSearchPathsPage() {
+    auto* page = new QWidget(this);
+    auto* v = new QVBoxLayout(page);
+
+    auto* enable = new QCheckBox("Use search paths", page);
+    enable->setChecked(sett.useSearchPaths);
+    enable->setObjectName("preferences.search.enable.check");
+    connect(enable, &QCheckBox::toggled, page, [](bool on){ sett.useSearchPaths = on; });
+    v->addWidget(enable);
+
+    auto* recursive = new QCheckBox("Search recursively", page);
+    recursive->setChecked(sett.searchPathsRecursive);
+    recursive->setObjectName("preferences.search.recursive.check");
+    connect(recursive, &QCheckBox::toggled, page, [](bool on){ sett.searchPathsRecursive = on; });
+    v->addWidget(recursive);
+
+    auto* list = new QListWidget(page);
+    list->setObjectName("preferences.search.paths.list");
+    for (const auto& p : sett.searchPaths) list->addItem(QString::fromStdString(p));
+    v->addWidget(list, 1);
+
+    auto* row = new QHBoxLayout();
+    auto* add = new QPushButton("Add…", page);
+    add->setObjectName("preferences.search.add.button");
+    auto* rem = new QPushButton("Remove", page);
+    rem->setObjectName("preferences.search.remove.button");
+    row->addWidget(add); row->addWidget(rem); row->addStretch(1);
+    v->addLayout(row);
+
+    auto syncToSett = [list]() {
+        sett.searchPaths.clear();
+        for (int i = 0; i < list->count(); ++i)
+            sett.searchPaths.push_back(list->item(i)->text().toStdString());
+    };
+    connect(add, &QPushButton::clicked, page, [page, list, syncToSett]() {
+        const QString d = QFileDialog::getExistingDirectory(page, "Add search path");
+        if (!d.isEmpty()) { list->addItem(d); syncToSett(); }
+    });
+    connect(rem, &QPushButton::clicked, page, [list, syncToSett]() {
+        qDeleteAll(list->selectedItems()); syncToSett();
+    });
+
+    addPage("Search Paths", page);
 }
 
 void PreferencesWindow_Qt::buildPlaceholderPage(const QString& title,
