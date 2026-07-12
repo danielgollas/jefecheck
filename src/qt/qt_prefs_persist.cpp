@@ -52,6 +52,21 @@ void loadPreferences() {
         sett.searchPaths.clear();
         for (const QString& p : paths) sett.searchPaths.push_back(p.toStdString());
     }
+    // Remote (JEF-16 Task 5).
+    sett.nickName = s.value("Remote/nickName",
+                             QString::fromStdString(sett.nickName)).toString().toStdString();
+    sett.chatFadeDelay            = s.value("Remote/chatFadeDelay",            sett.chatFadeDelay).toFloat();
+    sett.chatAutoFade             = s.value("Remote/chatAutoFade",             sett.chatAutoFade).toInt();
+    sett.chatTextBG               = s.value("Remote/chatTextBG",               sett.chatTextBG).toInt();
+    sett.chatFontSize             = s.value("Remote/chatFontSize",             sett.chatFontSize).toInt();
+    sett.chatOpacity              = s.value("Remote/chatOpacity",              sett.chatOpacity).toFloat();
+    sett.chatDisplayLines         = s.value("Remote/chatDisplayLines",         sett.chatDisplayLines).toInt();
+    sett.remotePointerFadeDelay   = s.value("Remote/remotePointerFadeDelay",   sett.remotePointerFadeDelay).toFloat();
+    sett.remotePointerColor       = s.value("Remote/remotePointerColor",       sett.remotePointerColor).toInt();
+    sett.sendRemoteLoadRequests   = s.value("Remote/sendRemoteLoadRequests",   sett.sendRemoteLoadRequests).toInt();
+    sett.autoAcceptRemoteLoadRequests = s.value("Remote/autoAcceptRemoteLoadRequests",
+                                                 sett.autoAcceptRemoteLoadRequests).toInt();
+
     // NOTE: later tasks append their sections' keys here.
 }
 
@@ -90,6 +105,19 @@ void writePreferences() {
         for (const auto& p : sett.searchPaths) paths << QString::fromStdString(p);
         s.setValue("Search/paths", paths);
     }
+    // Remote (JEF-16 Task 5).
+    s.setValue("Remote/nickName", QString::fromStdString(sett.nickName));
+    s.setValue("Remote/chatFadeDelay",            sett.chatFadeDelay);
+    s.setValue("Remote/chatAutoFade",             sett.chatAutoFade);
+    s.setValue("Remote/chatTextBG",               sett.chatTextBG);
+    s.setValue("Remote/chatFontSize",             sett.chatFontSize);
+    s.setValue("Remote/chatOpacity",              sett.chatOpacity);
+    s.setValue("Remote/chatDisplayLines",         sett.chatDisplayLines);
+    s.setValue("Remote/remotePointerFadeDelay",   sett.remotePointerFadeDelay);
+    s.setValue("Remote/remotePointerColor",       sett.remotePointerColor);
+    s.setValue("Remote/sendRemoteLoadRequests",   sett.sendRemoteLoadRequests);
+    s.setValue("Remote/autoAcceptRemoteLoadRequests", sett.autoAcceptRemoteLoadRequests);
+
     // NOTE: later tasks append their sections' keys here.
 }
 

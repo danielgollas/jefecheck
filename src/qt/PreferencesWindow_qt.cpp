@@ -56,13 +56,13 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
             pages_, &QStackedWidget::setCurrentIndex);
 
     // Sidebar order mirrors page-build order below: General, Text (stub),
-    // Playback & Engine, Formats, Search Paths, Remote (stub).
+    // Playback & Engine, Formats, Search Paths, Remote.
     buildGeneralPage();
     buildPlaceholderPage("Text", "Text rendering settings — coming soon.");
     buildEnginePage();
     buildFormatsPage();
     buildSearchPathsPage();
-    buildPlaceholderPage("Remote", "Remote-session settings — coming soon.");
+    buildRemotePage();
 
     sidebar_->setCurrentRow(0);
 
@@ -426,6 +426,159 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     });
 
     addPage("Search Paths", page);
+}
+
+namespace {
+// remotePointerColor packs (r<<24)|(g<<16)|(b<<8) with the low (alpha) byte
+// zero; 0 is a sentinel meaning "unset -> default gray 0.6" (mirrors
+// gfcUnpackPointerColor in gfcPlate.cpp and unpackRGB in gfcnetworkmanager.cpp).
+QColor pointerColorToQ() {
+    if (sett.remotePointerColor == 0) return QColor(153, 153, 153);
+    const int r = (sett.remotePointerColor >> 24) & 0xff;
+    const int g = (sett.remotePointerColor >> 16) & 0xff;
+    const int b = (sett.remotePointerColor >> 8) & 0xff;
+    return QColor(r, g, b);
+}
+void qToPointerColor(const QColor& c) {
+    sett.remotePointerColor = (c.red() << 24) | (c.green() << 16) | (c.blue() << 8);
+}
+}  // namespace
+
+// Consumers: gfcnetworkclient.cpp / gfcnetworkmanager.cpp read nickName,
+// chat*, remotePointerFadeDelay, remotePointerColor, sendRemoteLoadRequests
+// and autoAcceptRemoteLoadRequests at connect/render time; gfcPlate.cpp
+// unpacks remotePointerColor for the pointer overlay and gfcTrackManager.cpp
+// consults the load-request toggles. Wiring here is UI-only: bind widgets to
+// `sett` and persist; no consumer changes needed (see task-5-brief.md).
+void PreferencesWindow_Qt::buildRemotePage() {
+    auto* page = new QWidget(this);
+    auto* outer = new QVBoxLayout(page);
+
+    auto* topForm = new QFormLayout();
+    outer->addLayout(topForm);
+
+    auto* nickname = new QLineEdit(QString::fromStdString(sett.nickName), page);
+    nickname->setObjectName("preferences.remote.nickname.edit");
+    nickname->setAccessibleName("Nickname");
+    connect(nickname, &QLineEdit::editingFinished, page, [nickname]() {
+        sett.nickName = nickname->text().toStdString();
+    });
+    topForm->addRow("Nickname", nickname);
+
+    auto* sendLoad = new QCheckBox("Send remote load requests", page);
+    sendLoad->setChecked(sett.sendRemoteLoadRequests != 0);
+    sendLoad->setObjectName("preferences.remote.sendload.check");
+    sendLoad->setAccessibleName("Send remote load requests");
+    connect(sendLoad, &QCheckBox::toggled, page,
+            [](bool on) { sett.sendRemoteLoadRequests = on ? 1 : 0; });
+    topForm->addRow(QString(), sendLoad);
+
+    auto* autoAccept = new QCheckBox("Auto-accept remote load requests", page);
+    autoAccept->setChecked(sett.autoAcceptRemoteLoadRequests != 0);
+    autoAccept->setObjectName("preferences.remote.autoaccept.check");
+    autoAccept->setAccessibleName("Auto-accept remote load requests");
+    connect(autoAccept, &QCheckBox::toggled, page,
+            [](bool on) { sett.autoAcceptRemoteLoadRequests = on ? 1 : 0; });
+    topForm->addRow(QString(), autoAccept);
+
+    // Chat group.
+    auto* chatPage = new QWidget(page);
+    auto* chatForm = new QFormLayout(chatPage);
+
+    auto* chatFade = new QDoubleSpinBox(chatPage);
+    chatFade->setRange(0.0, 60.0);
+    chatFade->setSingleStep(0.5);
+    chatFade->setValue(sett.chatFadeDelay);
+    chatFade->setObjectName("preferences.remote.chatfade.spin");
+    chatFade->setAccessibleName("Chat fade delay");
+    connect(chatFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            chatPage, [](double v) { sett.chatFadeDelay = float(v); });
+    chatForm->addRow("Fade delay (s)", chatFade);
+
+    auto* chatAutoFade = new QCheckBox("Auto-fade chat", chatPage);
+    chatAutoFade->setChecked(sett.chatAutoFade != 0);
+    chatAutoFade->setObjectName("preferences.remote.chatautofade.check");
+    chatAutoFade->setAccessibleName("Auto-fade chat");
+    connect(chatAutoFade, &QCheckBox::toggled, chatPage,
+            [](bool on) { sett.chatAutoFade = on ? 1 : 0; });
+    chatForm->addRow(QString(), chatAutoFade);
+
+    auto* chatTextBG = new QCheckBox("Chat text background", chatPage);
+    chatTextBG->setChecked(sett.chatTextBG != 0);
+    chatTextBG->setObjectName("preferences.remote.chattextbg.check");
+    chatTextBG->setAccessibleName("Chat text background");
+    connect(chatTextBG, &QCheckBox::toggled, chatPage,
+            [](bool on) { sett.chatTextBG = on ? 1 : 0; });
+    chatForm->addRow(QString(), chatTextBG);
+
+    auto* chatFontSize = new QSpinBox(chatPage);
+    chatFontSize->setRange(6, 72);
+    chatFontSize->setValue(sett.chatFontSize);
+    chatFontSize->setObjectName("preferences.remote.chatfontsize.spin");
+    chatFontSize->setAccessibleName("Chat font size");
+    connect(chatFontSize, QOverload<int>::of(&QSpinBox::valueChanged),
+            chatPage, [](int v) { sett.chatFontSize = v; });
+    chatForm->addRow("Font size", chatFontSize);
+
+    auto* chatOpacity = new QDoubleSpinBox(chatPage);
+    chatOpacity->setRange(0.0, 1.0);
+    chatOpacity->setSingleStep(0.05);
+    chatOpacity->setValue(sett.chatOpacity);
+    chatOpacity->setObjectName("preferences.remote.chatopacity.spin");
+    chatOpacity->setAccessibleName("Chat opacity");
+    connect(chatOpacity, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            chatPage, [](double v) { sett.chatOpacity = float(v); });
+    chatForm->addRow("Opacity", chatOpacity);
+
+    auto* chatLines = new QSpinBox(chatPage);
+    chatLines->setRange(1, 50);
+    chatLines->setValue(sett.chatDisplayLines);
+    chatLines->setObjectName("preferences.remote.chatlines.spin");
+    chatLines->setAccessibleName("Chat display lines");
+    connect(chatLines, QOverload<int>::of(&QSpinBox::valueChanged),
+            chatPage, [](int v) { sett.chatDisplayLines = v; });
+    chatForm->addRow("Display lines", chatLines);
+
+    outer->addWidget(section("Chat", chatPage));
+
+    // Remote pointer group.
+    auto* pointerPage = new QWidget(page);
+    auto* pointerForm = new QFormLayout(pointerPage);
+
+    auto* pointerFade = new QDoubleSpinBox(pointerPage);
+    pointerFade->setRange(0.0, 60.0);
+    pointerFade->setSingleStep(0.5);
+    pointerFade->setValue(sett.remotePointerFadeDelay);
+    pointerFade->setObjectName("preferences.remote.pointerfade.spin");
+    pointerFade->setAccessibleName("Remote pointer fade delay");
+    connect(pointerFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            pointerPage, [](double v) { sett.remotePointerFadeDelay = float(v); });
+    pointerForm->addRow("Fade delay (s)", pointerFade);
+
+    auto* pointerColorBtn = new QPushButton(pointerPage);
+    pointerColorBtn->setFixedSize(60, 22);
+    pointerColorBtn->setObjectName("preferences.remote.pointercolor.button");
+    pointerColorBtn->setAccessibleName("Remote pointer color");
+    auto applyPointerColor = [pointerColorBtn]() {
+        const QColor c = pointerColorToQ();
+        pointerColorBtn->setStyleSheet(QString("background: %1;").arg(c.name()));
+    };
+    applyPointerColor();
+    connect(pointerColorBtn, &QPushButton::clicked, pointerPage,
+            [pointerPage, applyPointerColor]() {
+        const QColor chosen = QColorDialog::getColor(pointerColorToQ(), pointerPage,
+            "Remote pointer color");
+        if (chosen.isValid()) {
+            qToPointerColor(chosen);
+            applyPointerColor();
+        }
+    });
+    pointerForm->addRow("Color", pointerColorBtn);
+
+    outer->addWidget(section("Remote pointer", pointerPage));
+    outer->addStretch(1);
+
+    addPage("Remote", page);
 }
 
 void PreferencesWindow_Qt::buildPlaceholderPage(const QString& title,
