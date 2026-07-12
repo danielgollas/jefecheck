@@ -229,7 +229,6 @@ public:
     gfcSettings()
     {
         startFullscreen=false;
-        playbackOnLoad=false;
         bgColor=0.149019;
         bgCheckerboard=0;
         bool enableCrashRecoverySession=true;
@@ -240,20 +239,9 @@ public:
         numOfPartitions=1;
         loopPriority=1;
         forcePBO=0;
-        for(int i=0;i<16;i++)
-        {
-	    char tmpPath[600];
-	    sprintf(tmpPath,"~/tmp%i",i+1);
-            mirrorPaths[i]=tmpPath;
-        }
 
 		exrIgnoreDisplayWindow=0;
 		exrIgnoreHeadersAspectRatio=0;
-		exrExposure=0;
-		exrDefog=0;
-		exrGamma=2.2;
-		exrKneeLow=0;
-		exrKneeHigh=5;
 
         renderingEngine=0; //0==3D, 1==2D
         chatFadeDelay=20;
@@ -263,8 +251,6 @@ public:
         chatTextBG=true;
         chatDisplayLines=8;
         remotePointerFadeDelay=2;
-        maxRecentFXStacks=5;
-		maxRecentFXs=5;
         maxRecentSessions=5;
         startupSessionBehavior=2;  // 0=Empty, 1=Reopen last, 2=Ask
         maxRecentBrowsed=10;
@@ -281,18 +267,12 @@ public:
 
 		sendRemoteLoadRequests=false;
 		autoAcceptRemoteLoadRequests=false;
-		
-		playlistShowCompactView=1;
-		playlistShowFullPaths=0;
-		
-		aspectBarsOpacity=1.0;
 
-		processorPriority=1.0;
+		aspectBarsOpacity=1.0;
 
 		remotePointerColor=((128u&0xff)<<24) | ((128u&0xff)<<16) | ((128u&0xff)<<8);
 
 		feedbackMessageFadeDelay=2.0;
-		feedbackMessageOn=1;
 		feedbackMessageSize=12;
 
 		defaultTextureFormat=GFC_16HALF;
@@ -302,7 +282,6 @@ public:
 	}
     bool showThumbnails;   // timeline filmstrip thumbnails (default on)
     int startFullscreen;
-    int playbackOnLoad;
     float bgColor;
     int bgCheckerboard;   // 0 = flat bgColor fill, 1 = checkerboard (General prefs)
     int enableCrashRecoverySession;
@@ -314,9 +293,8 @@ public:
     int vsync; //1 on, 0 off.
     int maximumFramesInQueue; //determines if the raw queue should limit how many frames are loaded before they are converted to textures, 0 means no limiting.
     int numOfPartitions; ///how many mirrors will be used to strip and load images
-    int balanceReads; //if this is on, then all tracks share a mutex for read operations. 
-	std::string mirrorPaths[16]; ///the paths to the mirrors for parallel loading, up to 16
-    
+    int balanceReads; //if this is on, then all tracks share a mutex for read operations.
+
     std::vector<std::string> searchPaths;
     bool searchPathsRecursive;
     bool useSearchPaths;
@@ -325,9 +303,7 @@ public:
     int filterMin; //filtering modes for minificaion and maxification
     int filterMax;
     bool textureRectangles;
-    bool textureCompression;
 	float aspectBarsOpacity;
-	int processorPriority;
     bool glsl;
     bool fbo;
     int fp16;
@@ -348,14 +324,7 @@ public:
 	int exrIgnoreDisplayWindow;
 	int exrIgnoreHeadersAspectRatio;
 	int exrEnableExposureTransformOnLoad;
-	float exrExposure;
-	float exrDefog;
-	float exrGamma;
-	float exrKneeLow;
-	float exrKneeHigh;
 
-    int maxRecentFXStacks;
-	int maxRecentFXs;
     int maxRecentSessions;
     int startupSessionBehavior;  // 0=Empty, 1=Reopen last, 2=Ask
     int maxRecentBrowsed;
@@ -366,19 +335,11 @@ public:
     std::vector<std::string> recentSessions;
     std::vector<std::string> recentBrowsed;
     std::vector<std::string> recentIPs;
-    
-	std::string defaultLUTName;
-	std::string defaultLUTNameBackup; //stores the lutname read from the settings or set in the GUI, which can be overriden by the JEFECHECK_DEFAULT_LUT env var. Always save this one to save users preferences. 
+
     void addToRecentFXs(std::string pname);
-    
- 
-	//playlistWindow options
-	int playlistShowCompactView;
-	int playlistShowFullPaths;
 
 	//feedback Message options
 	float feedbackMessageFadeDelay;
-	int feedbackMessageOn;
 	int feedbackMessageSize;
 
     //Online options
@@ -390,13 +351,9 @@ public:
     int chatDisplayLines;
     float remotePointerFadeDelay;
     std::string nickName;
-    std::string serverNickname;
-    int clientPort;
-    int serverPort;
 	int sendRemoteLoadRequests;
 	int autoAcceptRemoteLoadRequests;
 	int remotePointerColor;
-	std::string licensePath;
 
 };
 
