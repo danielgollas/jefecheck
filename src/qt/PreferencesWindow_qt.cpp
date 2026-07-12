@@ -202,15 +202,10 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     startup->addItem("Ask");                  // 2
     startup->setObjectName("preferences.general.startup.combo");
     startup->setAccessibleName("On launch session behavior");
-    {
-        QSettings s;
-        startup->setCurrentIndex(s.value("Session/startupBehavior", 2).toInt());
-    }
+    startup->setCurrentIndex(sett.startupSessionBehavior);
     connect(startup, QOverload<int>::of(&QComboBox::currentIndexChanged),
             page, [](int idx) {
         sett.startupSessionBehavior = idx;
-        QSettings s;
-        s.setValue("Session/startupBehavior", idx);
     });
     form->addRow("On launch", startup);
 
@@ -795,17 +790,4 @@ void PreferencesWindow_Qt::buildRemotePage() {
     outer->addStretch(1);
 
     addPage("Remote", page);
-}
-
-void PreferencesWindow_Qt::buildPlaceholderPage(const QString& title,
-                                                const QString& note) {
-    auto* page = new QWidget(this);
-    auto* layout = new QVBoxLayout(page);
-    auto* lbl = new QLabel(note, page);
-    lbl->setStyleSheet("color: #888; font-style: italic;");
-    lbl->setAlignment(Qt::AlignCenter);
-    layout->addStretch(1);
-    layout->addWidget(lbl);
-    layout->addStretch(1);
-    addPage(title, page);
 }

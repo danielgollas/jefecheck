@@ -87,6 +87,13 @@ private:
     std::map<int, GfcFontAtlas> atlasCache;
     std::map<int, GfcFontAtlas> boldAtlasCache;
 
+    // Texture IDs orphaned by a cache invalidation that happened with no GL
+    // context current (e.g. setHintMode/setGamma called live from the
+    // Preferences dialog). Deleted lazily at the top of getAtlas(), which is
+    // only reached from drawLine() during paintGL where the context is
+    // guaranteed current.
+    std::vector<GLuint> pendingTexDeletes_;
+
     // Current state
     float currentSize;
     float dpiScale;
@@ -103,6 +110,11 @@ private:
 
     // Get or create atlas for current size/DPI
     GfcFontAtlas& getAtlas();
+
+    // Move all cached texture IDs into pendingTexDeletes_ and clear the
+    // caches, WITHOUT calling glDeleteTextures (may run with no GL context
+    // current). Actual deletion happens lazily in getAtlas().
+    void queueAtlasInvalidation();
 
     // Bake a new atlas
     GfcFontAtlas bakeAtlas(const std::vector<unsigned char> &data, float pixelSize, float dpiScale);

@@ -45,7 +45,6 @@ private:
     void buildFormatsPage();
     void buildSearchPathsPage();
     void buildRemotePage();
-    void buildPlaceholderPage(const QString& title, const QString& note);
 
     // Wraps `content` in a CollapsibleSection and returns it for adding to a
     // page layout. Scaffolding for later tasks — the three current pages
