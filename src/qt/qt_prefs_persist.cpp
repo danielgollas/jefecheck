@@ -4,6 +4,7 @@
 // their sections' keys to both functions as those sections come on-line.
 #include "qt_prefs_persist.h"
 #include "../gfcStructures.h"
+#include "../gfcTextRenderer.h"
 #include <QSettings>
 #include <QString>
 #include <QStringList>
@@ -67,7 +68,37 @@ void loadPreferences() {
     sett.autoAcceptRemoteLoadRequests = s.value("Remote/autoAcceptRemoteLoadRequests",
                                                  sett.autoAcceptRemoteLoadRequests).toInt();
 
+    // Text (JEF-16 Task 6) — GfcTextRenderer is a separate singleton, not
+    // part of `sett`; applied via its own setters rather than assigned here.
+    applyTextPrefs();
+
     // NOTE: later tasks append their sections' keys here.
+}
+
+void applyTextPrefs() {
+    QSettings s;
+    GfcTextRenderer& tr = textRenderer();
+
+    // Fallbacks below mirror GfcTextRenderer's constructor defaults
+    // (gfcTextRenderer.cpp) exactly, so a first run (no Text/* keys yet)
+    // causes zero visual change.
+    tr.setSize(s.value("Text/size", 14.0f).toFloat());
+    tr.setColor(s.value("Text/colorR", 1.0f).toFloat(),
+                s.value("Text/colorG", 1.0f).toFloat(),
+                s.value("Text/colorB", 1.0f).toFloat(),
+                s.value("Text/colorA", 1.0f).toFloat());
+    tr.setShadowEnabled(s.value("Text/shadowEnabled", true).toBool());
+    tr.setShadowOffset(s.value("Text/shadowOffX", 1.0f).toFloat(),
+                        s.value("Text/shadowOffY", -1.0f).toFloat());
+    tr.setShadowColor(s.value("Text/shadowColorR", 0.0f).toFloat(),
+                       s.value("Text/shadowColorG", 0.0f).toFloat(),
+                       s.value("Text/shadowColorB", 0.0f).toFloat(),
+                       s.value("Text/shadowColorA", 0.5f).toFloat());
+    tr.setShadowBlur(s.value("Text/shadowBlur", 0.0f).toFloat());
+    tr.setHintMode(static_cast<GfcTextRenderer::HintMode>(
+        s.value("Text/hintMode", int(GfcTextRenderer::HINT_LIGHT)).toInt()));
+    tr.setFilterNearest(s.value("Text/filterNearest", true).toBool());
+    tr.setGamma(s.value("Text/gamma", 0.65f).toFloat());
 }
 
 void writePreferences() {

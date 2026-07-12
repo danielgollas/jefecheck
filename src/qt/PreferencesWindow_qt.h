@@ -2,13 +2,15 @@
 // a sidebar list selects a page, each page binds widgets to the global
 // `sett` (gfcSettings). Done writes the settings via saveSettings().
 //
-// Pages cover: General, Engine, Formats, Search Paths, Remote. Text is a
-// placeholder page for now — it needs extra plumbing (font enumeration)
-// that's better as a follow-up PR. The shell handles placeholders so
-// adding a page later is just an addPage() call.
+// Pages cover: General, Text, Engine, Formats, Search Paths, Remote. Text
+// binds to the GfcTextRenderer singleton (not `sett`) with deferred
+// QSettings persistence — see writeTextPrefs() and qt_prefs_persist's
+// applyTextPrefs(). The shell handles placeholders so adding a page later
+// is just an addPage() call.
 #ifndef JEFECHECK_QT_PREFERENCES_WINDOW_H
 #define JEFECHECK_QT_PREFERENCES_WINDOW_H
 
+#include <QColor>
 #include <QDialog>
 
 #include <memory>
@@ -20,7 +22,12 @@
 // gfcSettings definition must stay confined to the .cpp.
 class gfcSettings;
 
+class QCheckBox;
+class QComboBox;
+class QDoubleSpinBox;
 class QListWidget;
+class QPushButton;
+class QSpinBox;
 class QStackedWidget;
 class QWidget;
 
@@ -33,6 +40,7 @@ public:
 private:
     void addPage(const QString& title, QWidget* page);
     void buildGeneralPage();
+    void buildTextPage();
     void buildEnginePage();
     void buildFormatsPage();
     void buildSearchPathsPage();
@@ -44,8 +52,33 @@ private:
     // don't use it yet.
     QWidget* section(const QString& title, QWidget* content);
 
+    // Text prefs use deferred (Done-writes) persistence rather than the
+    // per-change QSettings writes other pages use, matching the Engine
+    // combos' pattern (see developer_notes / task-6 brief). Reads the
+    // current Text-page widget values and writes them to `Text/*`
+    // QSettings; called from the Done handler.
+    void writeTextPrefs();
+
     QListWidget* sidebar_ = nullptr;
     QStackedWidget* pages_ = nullptr;
+
+    // Text page widgets — kept as members so writeTextPrefs() (called on
+    // Done) can read their current values. Live edits only call the
+    // textRenderer() setters for immediate preview; QSettings is untouched
+    // until Done, so Cancel (which calls jefe::qt::applyTextPrefs() to
+    // reapply the unchanged QSettings) reverts them like every other page.
+    QSpinBox* textSizeSpin_ = nullptr;
+    QComboBox* textHintCombo_ = nullptr;
+    QComboBox* textFilterCombo_ = nullptr;
+    QDoubleSpinBox* textGammaSpin_ = nullptr;
+    QCheckBox* textShadowEnabledCheck_ = nullptr;
+    QDoubleSpinBox* textShadowOffXSpin_ = nullptr;
+    QDoubleSpinBox* textShadowOffYSpin_ = nullptr;
+    QDoubleSpinBox* textShadowBlurSpin_ = nullptr;
+    QPushButton* textColorBtn_ = nullptr;
+    QPushButton* textShadowColorBtn_ = nullptr;
+    QColor textColor_;
+    QColor textShadowColor_;
 
     // Snapshot of `sett` taken on open; restored verbatim on Cancel so
     // in-progress edits don't leak into the live global. Held behind a

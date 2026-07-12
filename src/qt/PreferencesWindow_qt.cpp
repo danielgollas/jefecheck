@@ -1,6 +1,7 @@
 #include "PreferencesWindow_qt.h"
 
 #include "../gfcStructures.h"
+#include "../gfcTextRenderer.h"
 #include "../UIConstants.h"
 #include "CollapsibleSection_qt.h"
 #include "qt_prefs_persist.h"
@@ -55,10 +56,10 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     connect(sidebar_, &QListWidget::currentRowChanged,
             pages_, &QStackedWidget::setCurrentIndex);
 
-    // Sidebar order mirrors page-build order below: General, Text (stub),
+    // Sidebar order mirrors page-build order below: General, Text,
     // Playback & Engine, Formats, Search Paths, Remote.
     buildGeneralPage();
-    buildPlaceholderPage("Text", "Text rendering settings — coming soon.");
+    buildTextPage();
     buildEnginePage();
     buildFormatsPage();
     buildSearchPathsPage();
@@ -73,11 +74,16 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     buttons->button(QDialogButtonBox::Save)->setObjectName("preferences.done.button");
     buttons->button(QDialogButtonBox::Cancel)->setObjectName("preferences.cancel.button");
     connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
+        writeTextPrefs();                // Text/* (deferred persistence — see header)
         jefe::qt::writePreferences();   // real persistence (was a no-op)
         accept();
     });
     connect(buttons, &QDialogButtonBox::rejected, this, [this]() {
         sett = *sett_backup_;           // revert live mutations
+        jefe::qt::applyTextPrefs();     // revert live text-renderer edits (Text/*
+                                         // QSettings are untouched since Text is
+                                         // deferred-persistence, so this reapplies
+                                         // the pre-dialog state)
         reject();
     });
 
@@ -245,6 +251,216 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     form->addRow("Feedback fade delay (s)", fbFade);
 
     addPage("General", page);
+}
+
+namespace {
+QColor floatsToQColor(float r, float g, float b, float a) {
+    const auto c01 = [](float v) { return std::clamp(v, 0.0f, 1.0f); };
+    return QColor::fromRgbF(c01(r), c01(g), c01(b), c01(a));
+}
+}  // namespace
+
+// Text page binds to the GfcTextRenderer singleton (declared in
+// gfcTextRenderer.h), not `sett` — there is no gfcSettings storage for text
+// prefs. Unlike the rest of this dialog, edits here call ONLY the renderer's
+// setters for live preview; QSettings ("Text/*") is written once on Done
+// (writeTextPrefs(), below) and reapplied via jefe::qt::applyTextPrefs() on
+// Cancel, matching the deferred-persistence pattern the Engine combos use
+// (see qt_prefs_persist.cpp and developer_notes.md).
+void PreferencesWindow_Qt::buildTextPage() {
+    auto* page = new QWidget(this);
+    auto* form = new QFormLayout(page);
+
+    // Seed every control from persisted Text/* QSettings, falling back to
+    // GfcTextRenderer's constructor defaults (gfcTextRenderer.cpp) so a
+    // first run (no keys yet) reflects the renderer's actual live state.
+    QSettings s;
+    const float initSize          = s.value("Text/size", 14.0f).toFloat();
+    textColor_ = floatsToQColor(s.value("Text/colorR", 1.0f).toFloat(),
+                                 s.value("Text/colorG", 1.0f).toFloat(),
+                                 s.value("Text/colorB", 1.0f).toFloat(),
+                                 s.value("Text/colorA", 1.0f).toFloat());
+    const int initHintMode        = s.value("Text/hintMode", int(GfcTextRenderer::HINT_LIGHT)).toInt();
+    const bool initFilterNearest  = s.value("Text/filterNearest", true).toBool();
+    const float initGamma         = s.value("Text/gamma", 0.65f).toFloat();
+    const bool initShadowEnabled  = s.value("Text/shadowEnabled", true).toBool();
+    const float initShadowOffX    = s.value("Text/shadowOffX", 1.0f).toFloat();
+    const float initShadowOffY    = s.value("Text/shadowOffY", -1.0f).toFloat();
+    const float initShadowBlur    = s.value("Text/shadowBlur", 0.0f).toFloat();
+    textShadowColor_ = floatsToQColor(s.value("Text/shadowColorR", 0.0f).toFloat(),
+                                       s.value("Text/shadowColorG", 0.0f).toFloat(),
+                                       s.value("Text/shadowColorB", 0.0f).toFloat(),
+                                       s.value("Text/shadowColorA", 0.5f).toFloat());
+
+    // Size.
+    textSizeSpin_ = new QSpinBox(page);
+    textSizeSpin_->setRange(6, 72);
+    textSizeSpin_->setValue(qRound(initSize));
+    textSizeSpin_->setObjectName("preferences.text.size.spin");
+    textSizeSpin_->setAccessibleName("Text size");
+    connect(textSizeSpin_, QOverload<int>::of(&QSpinBox::valueChanged), page,
+            [](int v) { textRenderer().setSize(float(v)); });
+    form->addRow("Size", textSizeSpin_);
+
+    // Color.
+    textColorBtn_ = new QPushButton(page);
+    textColorBtn_->setFixedSize(60, 22);
+    textColorBtn_->setObjectName("preferences.text.color.button");
+    textColorBtn_->setAccessibleName("Text color");
+    auto applyTextColorSwatch = [this]() {
+        textColorBtn_->setStyleSheet(QString("background: %1;").arg(textColor_.name()));
+    };
+    applyTextColorSwatch();
+    connect(textColorBtn_, &QPushButton::clicked, page, [this, page, applyTextColorSwatch]() {
+        const QColor chosen = QColorDialog::getColor(textColor_, page, "Text color",
+            QColorDialog::ShowAlphaChannel);
+        if (chosen.isValid()) {
+            textColor_ = chosen;
+            applyTextColorSwatch();
+            textRenderer().setColor(float(textColor_.redF()), float(textColor_.greenF()),
+                                     float(textColor_.blueF()), float(textColor_.alphaF()));
+        }
+    });
+    form->addRow("Color", textColorBtn_);
+
+    // Hint mode.
+    textHintCombo_ = new QComboBox(page);
+    textHintCombo_->addItem("Light",          int(GfcTextRenderer::HINT_LIGHT));
+    textHintCombo_->addItem("Normal",         int(GfcTextRenderer::HINT_NORMAL));
+    textHintCombo_->addItem("Force autohint", int(GfcTextRenderer::HINT_AUTO));
+    textHintCombo_->setObjectName("preferences.text.hint.combo");
+    textHintCombo_->setAccessibleName("Text hinting");
+    {
+        int idx = textHintCombo_->findData(initHintMode);
+        if (idx < 0) idx = textHintCombo_->findData(int(GfcTextRenderer::HINT_LIGHT));
+        textHintCombo_->setCurrentIndex(idx);
+    }
+    connect(textHintCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            page, [this](int i) {
+        textRenderer().setHintMode(
+            static_cast<GfcTextRenderer::HintMode>(textHintCombo_->itemData(i).toInt()));
+    });
+    form->addRow("Hinting", textHintCombo_);
+
+    // Filter — atlas texture sampling. true=GL_NEAREST (pixel-exact, default).
+    textFilterCombo_ = new QComboBox(page);
+    textFilterCombo_->addItem("Nearest (pixel-exact)", true);
+    textFilterCombo_->addItem("Linear",                false);
+    textFilterCombo_->setObjectName("preferences.text.filter.combo");
+    textFilterCombo_->setAccessibleName("Text atlas filter");
+    {
+        int idx = textFilterCombo_->findData(initFilterNearest);
+        if (idx < 0) idx = 0;
+        textFilterCombo_->setCurrentIndex(idx);
+    }
+    connect(textFilterCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            page, [this](int i) {
+        textRenderer().setFilterNearest(textFilterCombo_->itemData(i).toBool());
+    });
+    form->addRow("Filter", textFilterCombo_);
+
+    // Gamma — atlas coverage correction (0.5-1.0).
+    textGammaSpin_ = new QDoubleSpinBox(page);
+    textGammaSpin_->setRange(0.5, 1.0);
+    textGammaSpin_->setSingleStep(0.05);
+    textGammaSpin_->setValue(initGamma);
+    textGammaSpin_->setObjectName("preferences.text.gamma.spin");
+    textGammaSpin_->setAccessibleName("Text gamma");
+    connect(textGammaSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), page,
+            [](double v) { textRenderer().setGamma(float(v)); });
+    form->addRow("Gamma", textGammaSpin_);
+
+    // Shadow.
+    textShadowEnabledCheck_ = new QCheckBox("Shadow enabled", page);
+    textShadowEnabledCheck_->setChecked(initShadowEnabled);
+    textShadowEnabledCheck_->setObjectName("preferences.text.shadowenabled.check");
+    textShadowEnabledCheck_->setAccessibleName("Text shadow enabled");
+    connect(textShadowEnabledCheck_, &QCheckBox::toggled, page,
+            [](bool on) { textRenderer().setShadowEnabled(on); });
+    form->addRow(QString(), textShadowEnabledCheck_);
+
+    textShadowOffXSpin_ = new QDoubleSpinBox(page);
+    textShadowOffXSpin_->setRange(-20.0, 20.0);
+    textShadowOffXSpin_->setSingleStep(0.5);
+    textShadowOffXSpin_->setValue(initShadowOffX);
+    textShadowOffXSpin_->setObjectName("preferences.text.shadowoffx.spin");
+    textShadowOffXSpin_->setAccessibleName("Text shadow X offset");
+
+    textShadowOffYSpin_ = new QDoubleSpinBox(page);
+    textShadowOffYSpin_->setRange(-20.0, 20.0);
+    textShadowOffYSpin_->setSingleStep(0.5);
+    textShadowOffYSpin_->setValue(initShadowOffY);
+    textShadowOffYSpin_->setObjectName("preferences.text.shadowoffy.spin");
+    textShadowOffYSpin_->setAccessibleName("Text shadow Y offset");
+
+    auto applyShadowOffset = [this](double) {
+        textRenderer().setShadowOffset(float(textShadowOffXSpin_->value()),
+                                        float(textShadowOffYSpin_->value()));
+    };
+    connect(textShadowOffXSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            page, applyShadowOffset);
+    connect(textShadowOffYSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            page, applyShadowOffset);
+    form->addRow("Shadow offset X", textShadowOffXSpin_);
+    form->addRow("Shadow offset Y", textShadowOffYSpin_);
+
+    textShadowBlurSpin_ = new QDoubleSpinBox(page);
+    textShadowBlurSpin_->setRange(0.0, 10.0);
+    textShadowBlurSpin_->setSingleStep(0.5);
+    textShadowBlurSpin_->setValue(initShadowBlur);
+    textShadowBlurSpin_->setObjectName("preferences.text.shadowblur.spin");
+    textShadowBlurSpin_->setAccessibleName("Text shadow blur radius");
+    connect(textShadowBlurSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            page, [](double v) { textRenderer().setShadowBlur(float(v)); });
+    form->addRow("Shadow blur radius", textShadowBlurSpin_);
+
+    textShadowColorBtn_ = new QPushButton(page);
+    textShadowColorBtn_->setFixedSize(60, 22);
+    textShadowColorBtn_->setObjectName("preferences.text.shadowcolor.button");
+    textShadowColorBtn_->setAccessibleName("Text shadow color");
+    auto applyShadowColorSwatch = [this]() {
+        textShadowColorBtn_->setStyleSheet(QString("background: %1;").arg(textShadowColor_.name()));
+    };
+    applyShadowColorSwatch();
+    connect(textShadowColorBtn_, &QPushButton::clicked, page,
+            [this, page, applyShadowColorSwatch]() {
+        const QColor chosen = QColorDialog::getColor(textShadowColor_, page,
+            "Text shadow color", QColorDialog::ShowAlphaChannel);
+        if (chosen.isValid()) {
+            textShadowColor_ = chosen;
+            applyShadowColorSwatch();
+            textRenderer().setShadowColor(float(textShadowColor_.redF()), float(textShadowColor_.greenF()),
+                                           float(textShadowColor_.blueF()), float(textShadowColor_.alphaF()));
+        }
+    });
+    form->addRow("Shadow color", textShadowColorBtn_);
+
+    addPage("Text", page);
+}
+
+// Reads the Text page widgets' current values and persists them to
+// `Text/*` QSettings — called from the Done handler alongside
+// jefe::qt::writePreferences(). Text prefs are deferred-write (see the
+// buildTextPage() comment above): live edits only touch the renderer, so
+// this is the single point where they land in QSettings.
+void PreferencesWindow_Qt::writeTextPrefs() {
+    QSettings s;
+    s.setValue("Text/size", textSizeSpin_->value());
+    s.setValue("Text/colorR", textColor_.redF());
+    s.setValue("Text/colorG", textColor_.greenF());
+    s.setValue("Text/colorB", textColor_.blueF());
+    s.setValue("Text/colorA", textColor_.alphaF());
+    s.setValue("Text/hintMode", textHintCombo_->currentData().toInt());
+    s.setValue("Text/filterNearest", textFilterCombo_->currentData().toBool());
+    s.setValue("Text/gamma", textGammaSpin_->value());
+    s.setValue("Text/shadowEnabled", textShadowEnabledCheck_->isChecked());
+    s.setValue("Text/shadowOffX", textShadowOffXSpin_->value());
+    s.setValue("Text/shadowOffY", textShadowOffYSpin_->value());
+    s.setValue("Text/shadowBlur", textShadowBlurSpin_->value());
+    s.setValue("Text/shadowColorR", textShadowColor_.redF());
+    s.setValue("Text/shadowColorG", textShadowColor_.greenF());
+    s.setValue("Text/shadowColorB", textShadowColor_.blueF());
+    s.setValue("Text/shadowColorA", textShadowColor_.alphaF());
 }
 
 void PreferencesWindow_Qt::buildEnginePage() {

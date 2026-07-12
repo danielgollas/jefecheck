@@ -238,6 +238,20 @@ PREFS_REMOTE_POINTER_COLOR = "preferences.remote.pointercolor.button"
 PREFS_REMOTE_SEND_LOAD = "preferences.remote.sendload.check"
 PREFS_REMOTE_AUTOACCEPT = "preferences.remote.autoaccept.check"
 
+# Preferences → Text panel widgets (JEF-16 Task 6). Deferred (Done-writes)
+# persistence — see qt_prefs_persist.cpp applyTextPrefs()/PreferencesWindow_Qt
+# writeTextPrefs().
+PREFS_TEXT_SIZE = "preferences.text.size.spin"
+PREFS_TEXT_COLOR = "preferences.text.color.button"
+PREFS_TEXT_HINT = "preferences.text.hint.combo"
+PREFS_TEXT_FILTER = "preferences.text.filter.combo"
+PREFS_TEXT_GAMMA = "preferences.text.gamma.spin"
+PREFS_TEXT_SHADOW_ENABLED = "preferences.text.shadowenabled.check"
+PREFS_TEXT_SHADOW_OFFSET_X = "preferences.text.shadowoffx.spin"
+PREFS_TEXT_SHADOW_OFFSET_Y = "preferences.text.shadowoffy.spin"
+PREFS_TEXT_SHADOW_BLUR = "preferences.text.shadowblur.spin"
+PREFS_TEXT_SHADOW_COLOR = "preferences.text.shadowcolor.button"
+
 
 def plate(plate_id: int, role: str) -> str:
     """Build a per-plate locator: plate(0, 'gamma.spin') -> 'plate.0.gamma.spin'."""

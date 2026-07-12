@@ -15,5 +15,13 @@ void loadPreferences();
 // Preferences "Done".
 void writePreferences();
 
+// Read every persisted `Text/*` key from QSettings (falling back to the
+// GfcTextRenderer constructor defaults) and push them into the textRenderer()
+// singleton via its setters. Call once at startup (from loadPreferences())
+// and again on Preferences "Cancel" to revert live text-page edits, since
+// text prefs use deferred (Done-writes) persistence — see
+// PreferencesWindow_Qt::writeTextPrefs().
+void applyTextPrefs();
+
 } }  // namespace jefe::qt
 #endif
