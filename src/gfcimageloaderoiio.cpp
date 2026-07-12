@@ -266,8 +266,12 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     // Apply scale via OIIO (the filter actually matters here — our
     // local gflResize ignores filter selection and is nearest-only).
     if (params.scale > 0 && params.scale != 100) {
-        int newW = (int)(width * params.scale / 100.0f);
-        int newH = (int)(height * params.scale / 100.0f);
+        // Base the target on the composited bitmap (display-window size),
+        // not the raw data-window width/height — otherwise an overscan EXR
+        // (data window != display window) plus a non-100 decode scale would
+        // resize to the wrong dimensions and squash the image.
+        int newW = (int)(theBitmap->Width  * params.scale / 100.0f);
+        int newH = (int)(theBitmap->Height * params.scale / 100.0f);
 
         const char* filterName = oiioFilterNameFor(params.filterType);
 
