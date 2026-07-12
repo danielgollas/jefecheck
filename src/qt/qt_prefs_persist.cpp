@@ -36,7 +36,11 @@ void loadPreferences() {
     sett.showThumbnails  = s.value("General/showThumbnails", sett.showThumbnails).toBool();
     sett.feedbackMessageSize = s.value("General/feedbackMessageSize", sett.feedbackMessageSize).toInt();
     sett.feedbackMessageFadeDelay = s.value("General/feedbackMessageFadeDelay", sett.feedbackMessageFadeDelay).toFloat();
-    // NOTE: later tasks append their sections' keys here (Formats/*, ...).
+
+    // Formats (JEF-16 Task 3).
+    sett.exrIgnoreDisplayWindow      = s.value("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow).toInt();
+    sett.exrIgnoreHeadersAspectRatio = s.value("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio).toInt();
+    // NOTE: later tasks append their sections' keys here.
 }
 
 void writePreferences() {
@@ -61,6 +65,10 @@ void writePreferences() {
     s.setValue("General/showThumbnails",            sett.showThumbnails);
     s.setValue("General/feedbackMessageSize",       sett.feedbackMessageSize);
     s.setValue("General/feedbackMessageFadeDelay",  sett.feedbackMessageFadeDelay);
+
+    // Formats (JEF-16 Task 3).
+    s.setValue("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow);
+    s.setValue("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio);
     // NOTE: later tasks append their sections' keys here.
 }
 

@@ -374,37 +374,6 @@ void PreferencesWindow_Qt::buildFormatsPage() {
             [](bool on) { sett.exrIgnoreHeadersAspectRatio = on ? 1 : 0; });
     form->addRow(QString(), exrIgnoreAspect);
 
-    auto makeEXRSpin = [page](float& field, double min_, double max_, double step,
-                              const QString& objectName,
-                              const QString& accessibleName) {
-        auto* s = new QDoubleSpinBox(page);
-        s->setRange(min_, max_);
-        s->setSingleStep(step);
-        s->setDecimals(3);
-        s->setValue(field);
-        s->setObjectName(objectName);
-        s->setAccessibleName(accessibleName);
-        QObject::connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                         page, [&field](double v) { field = float(v); });
-        return s;
-    };
-
-    form->addRow("EXR exposure", makeEXRSpin(sett.exrExposure, -20.0, 20.0, 0.1,
-                                             "preferences.formats.exrexposure.spin",
-                                             "EXR exposure"));
-    form->addRow("EXR defog",    makeEXRSpin(sett.exrDefog, 0.0, 1.0, 0.01,
-                                             "preferences.formats.exrdefog.spin",
-                                             "EXR defog"));
-    form->addRow("EXR gamma",    makeEXRSpin(sett.exrGamma, 0.1, 5.0, 0.05,
-                                             "preferences.formats.exrgamma.spin",
-                                             "EXR gamma"));
-    form->addRow("EXR knee low", makeEXRSpin(sett.exrKneeLow, -10.0, 10.0, 0.1,
-                                             "preferences.formats.exrkneelow.spin",
-                                             "EXR knee low"));
-    form->addRow("EXR knee high",makeEXRSpin(sett.exrKneeHigh, -10.0, 10.0, 0.1,
-                                             "preferences.formats.exrkneehigh.spin",
-                                             "EXR knee high"));
-
     addPage("Formats", page);
 }
 

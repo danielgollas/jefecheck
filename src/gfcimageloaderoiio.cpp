@@ -1,10 +1,10 @@
 #include "gfcimageloaderoiio.h"
 #include "UIConstants.h"
 #include "gfcStructures.h"
+extern gfcSettings sett;
 #include <OpenImageIO/imageio.h>
 #include <OpenImageIO/imagebufalgo.h>
 #include <cstring>
-#include <set>
 #include <algorithm>
 
 gfcImageLoaderOIIO::gfcImageLoaderOIIO() : theBitmap(nullptr) {
@@ -120,6 +120,23 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     int width = spec.width;
     int height = spec.height;
     int totalChannels = spec.nchannels;
+    const float par = spec.get_float_attribute("PixelAspectRatio", 1.0f);
+
+    // EXR display window vs. data window (overscan/crop). Non-EXR formats
+    // (and EXRs where the two windows coincide) leave this a no-op: outW/outH
+    // == width/height and dispDX/dispDY == 0, so the composite below
+    // degenerates to the original 1:1 copy.
+    const bool hasDistinctDisplayWindow =
+        (spec.full_width != spec.width || spec.full_height != spec.height ||
+         spec.full_x != spec.x || spec.full_y != spec.y);
+    int dispDX = 0, dispDY = 0;      // data-window offset within the display window
+    int outW = width, outH = height; // bitmap allocation size
+    if (hasDistinctDisplayWindow && !sett.exrIgnoreDisplayWindow) {
+        dispDX = spec.x - spec.full_x;
+        dispDY = spec.y - spec.full_y;
+        outW = spec.full_width;
+        outH = spec.full_height;
+    }
 
     // Determine bit depth from the requested compression mode
     int bitsPerComponent = 8;
@@ -171,14 +188,23 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         }
     }
 
-    // Allocate output bitmap (always BGRA)
+    // Allocate output bitmap (always BGRA), sized to the display window so
+    // an EXR data window smaller/offset from the display window is padded
+    // into the full frame (unless the user opted to ignore the display
+    // window, in which case outW/outH == width/height, see above).
     int outChannels = 4;
-    theBitmap = gflAllockBitmapEx(GFL_BGRA, width, height, bitsPerComponent, outChannels, nullptr);
+    theBitmap = gflAllockBitmapEx(GFL_BGRA, outW, outH, bitsPerComponent, outChannels, nullptr);
     if (!theBitmap || !theBitmap->Data) {
         loadErrorString = "OIIO: Failed to allocate bitmap";
         inp->close();
         return -1;
     }
+    // Zero the full bitmap so any area not covered by the data window
+    // (display-window padding) reads as transparent/black rather than
+    // uninitialized memory. gflAllockBitmapEx already callocs its buffer,
+    // but re-zero explicitly since that's an implementation detail we
+    // shouldn't rely on here.
+    memset(theBitmap->Data, 0, (size_t)theBitmap->BytesPerLine * outH);
 
     // Read selected channels
     int bytesPerSample = bitsPerComponent / 8;
@@ -188,17 +214,26 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     inp->read_image(0, 0, chBegin, chBegin + srcChannels, readType, imgBuf.data());
 
-    // Convert to BGRA
+    // Convert to BGRA, compositing the data window into the (possibly
+    // larger/offset) display window at (x + dispDX, y + dispDY). In the
+    // common case (no distinct display window, or the user asked to ignore
+    // it) dispDX == dispDY == 0 and outW/outH == width/height, so this is
+    // just a 1:1 copy identical to the pre-Task-3 behavior.
     for (int y = 0; y < height; y++) {
+        int dy = y + dispDY;
+        if (dy < 0 || dy >= outH) continue; // whole source row falls outside the display window
+
         unsigned char *src = imgBuf.data() + (size_t)y * srcRowBytes;
-        unsigned char *dst = theBitmap->Data + (size_t)y * theBitmap->BytesPerLine;
+        unsigned char *dst = theBitmap->Data + (size_t)dy * theBitmap->BytesPerLine;
 
         if (bitsPerComponent == 16) {
             unsigned short *src16 = (unsigned short*)src;
             unsigned short *dst16 = (unsigned short*)dst;
             for (int x = 0; x < width; x++) {
+                int dx = x + dispDX;
+                if (dx < 0 || dx >= outW) continue;
                 int si = x * srcChannels;
-                int di = x * outChannels;
+                int di = dx * outChannels;
                 unsigned short r = src16[si + 0];
                 unsigned short g = (srcChannels > 1) ? src16[si + 1] : r;
                 unsigned short b = (srcChannels > 2) ? src16[si + 2] : r;
@@ -210,8 +245,10 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
             }
         } else {
             for (int x = 0; x < width; x++) {
+                int dx = x + dispDX;
+                if (dx < 0 || dx >= outW) continue;
                 int si = x * srcChannels;
-                int di = x * outChannels;
+                int di = dx * outChannels;
                 unsigned char r = src[si + 0];
                 unsigned char g = (srcChannels > 1) ? src[si + 1] : r;
                 unsigned char b = (srcChannels > 2) ? src[si + 2] : r;
@@ -297,6 +334,9 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     texCoords.h = (float)theBitmap->Height;
     quadSizeX = theBitmap->Width;
     quadSizeY = theBitmap->Height;
+    if (!sett.exrIgnoreHeadersAspectRatio) {
+        quadSizeX = (int)(quadSizeX * par); // stretches horizontally to correct for non-square pixels
+    }
 
     format = spec.format.c_str();
     formatDescription = "";
@@ -365,8 +405,16 @@ int gfcImageLoaderOIIO::peek(gfcLoadParams params, gfcPeekInfo *results) {
     auto inp = OIIO::ImageInput::open(params.fileName);
     if (!inp) return -1;
     const OIIO::ImageSpec &spec = inp->spec();
-    sizeX = spec.width;
-    sizeY = spec.height;
+    const bool hasDistinctDisplayWindow =
+        (spec.full_width != spec.width || spec.full_height != spec.height ||
+         spec.full_x != spec.x || spec.full_y != spec.y);
+    if (hasDistinctDisplayWindow && !sett.exrIgnoreDisplayWindow) {
+        sizeX = spec.full_width;
+        sizeY = spec.full_height;
+    } else {
+        sizeX = spec.width;
+        sizeY = spec.height;
+    }
     bitDepth = spec.format.size() * 8;
     numOfComponents = spec.nchannels;
 
