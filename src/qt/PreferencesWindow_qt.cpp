@@ -200,7 +200,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     startup->addItem("Start empty");          // 0
     startup->addItem("Reopen last session");  // 1
     startup->addItem("Ask");                  // 2
-    startup->setObjectName("prefs.session.startup");
+    startup->setObjectName("preferences.general.startup.combo");
     startup->setAccessibleName("On launch session behavior");
     {
         QSettings s;

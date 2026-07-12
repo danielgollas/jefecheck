@@ -209,14 +209,39 @@ LOAD_HEADER_FMT        = "dialog.loadwindow.strip.{idx}.header"
 # Preferences
 PREFERENCES_DIALOG = "preferences.dialog"
 PREFERENCES_SIDEBAR = "preferences.sidebar"
+PREFERENCES_PAGES = "preferences.pages"
+PREFERENCES_BUTTONS = "preferences.buttons"
 PREFERENCES_DONE = "preferences.done.button"
 PREFERENCES_CANCEL = "preferences.cancel.button"
+
+# Preferences → General panel widgets (JEF-16 Task 1/8).
+PREFS_GENERAL_BGCOLOR = "preferences.general.bgcolor.button"
+PREFS_GENERAL_CHECKERBOARD = "preferences.general.checkerboard.check"
+PREFS_GENERAL_BROWSEPATH = "preferences.general.browsepath.edit"
+PREFS_GENERAL_FULLSCREEN = "preferences.general.fullscreen.check"
+PREFS_GENERAL_OPENLOAD_AT_START = "preferences.general.openloadatstart.check"
+PREFS_GENERAL_RECOVERY = "preferences.general.recovery.check"
+PREFS_GENERAL_STARTUP = "preferences.general.startup.combo"
+PREFS_GENERAL_ASPECT_OPACITY = "preferences.general.aspectopacity.spin"
+PREFS_GENERAL_THUMBNAILS = "preferences.general.thumbnails.check"
+PREFS_GENERAL_FEEDBACK_SIZE = "preferences.general.feedbacksize.spin"
+PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 
 # Preferences → Playback & Engine panel widgets. Standardized (JEF-16
 # Task 2) onto the `preferences.engine.*.combo` leaf convention used by
 # the other Engine widgets.
+PREFS_ENGINE_ENGINE = "preferences.engine.engine.combo"
+PREFS_ENGINE_VSYNC = "preferences.engine.vsync.check"
+PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
+PREFS_ENGINE_PARTITIONS = "preferences.engine.partitions.spin"
+PREFS_ENGINE_BALANCE = "preferences.engine.balance.check"
+PREFS_ENGINE_PBO = "preferences.engine.pbo.spin"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
+
+# Preferences → Formats panel widgets (JEF-16 Task 3).
+PREFS_FORMATS_EXR_IGNORE_DISPLAY = "preferences.formats.exrignoredisplay.check"
+PREFS_FORMATS_EXR_IGNORE_ASPECT = "preferences.formats.exrignoreaspect.check"
 
 # Preferences → Search Paths panel widgets (JEF-16 Task 4).
 PREFS_SEARCH_ENABLE = "preferences.search.enable.check"
