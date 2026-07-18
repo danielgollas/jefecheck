@@ -56,11 +56,10 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     connect(sidebar_, &QListWidget::currentRowChanged,
             pages_, &QStackedWidget::setCurrentIndex);
 
-    // Sidebar order mirrors page-build order below: General, Text,
-    // Playback & Engine, Formats, Search Paths, Remote.
+    // Sidebar order mirrors page-build order below. Playback & Engine controls
+    // are folded into the General page (no separate section).
     buildGeneralPage();
     buildTextPage();
-    buildEnginePage();
     buildFormatsPage();
     buildSearchPathsPage();
     buildRemotePage();
@@ -162,13 +161,33 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     connect(checker, &QCheckBox::toggled, page, [](bool on){ sett.bgCheckerboard = on ? 1 : 0; });
     form->addRow(QString(), checker);
 
-    auto* browsePath = new QLineEdit(QString::fromStdString(sett.defaultBrowsePath), page);
+    auto* browseRow = new QWidget(page);
+    auto* browseLay = new QHBoxLayout(browseRow);
+    browseLay->setContentsMargins(0, 0, 0, 0);
+    browseLay->setSpacing(6);
+    auto* browsePath = new QLineEdit(QString::fromStdString(sett.defaultBrowsePath), browseRow);
     browsePath->setObjectName("preferences.general.browsepath.edit");
     browsePath->setAccessibleName("Default browse path");
+    browsePath->setMinimumWidth(280);
     connect(browsePath, &QLineEdit::editingFinished, page, [browsePath]() {
         sett.defaultBrowsePath = browsePath->text().toStdString();
     });
-    form->addRow("Default browse path", browsePath);
+    auto* browseBtn = new QPushButton("Browse…", browseRow);
+    browseBtn->setObjectName("preferences.general.browsepath.button");
+    browseBtn->setAccessibleName("Choose default browse path");
+    connect(browseBtn, &QPushButton::clicked, page, [browsePath]() {
+        const QString start = browsePath->text().isEmpty()
+            ? QString::fromStdString(sett.defaultBrowsePath) : browsePath->text();
+        const QString dir = QFileDialog::getExistingDirectory(
+            browsePath->window(), "Default browse path", start);
+        if (!dir.isEmpty()) {
+            browsePath->setText(dir);
+            sett.defaultBrowsePath = dir.toStdString();
+        }
+    });
+    browseLay->addWidget(browsePath, /*stretch*/ 1);
+    browseLay->addWidget(browseBtn);
+    form->addRow("Default browse path", browseRow);
 
     auto* fullscreen = new QCheckBox("Start in fullscreen", page);
     fullscreen->setChecked(sett.startFullscreen != 0);
@@ -245,6 +264,66 @@ void PreferencesWindow_Qt::buildGeneralPage() {
             [](double v){ sett.feedbackMessageFadeDelay = float(v); });
     form->addRow("Feedback fade delay (s)", fbFade);
 
+    // ---- Playback & Engine (folded into General) -----------------------------
+    // renderingEngine, vsync, numOfPartitions and forcePBO are intentionally not
+    // exposed — the JEF-16 audit found they don't affect the product today.
+    auto* engineHeader = new QLabel("Playback & Engine", page);
+    engineHeader->setProperty("role", "section");
+    form->addRow(engineHeader);
+
+    auto* queue = new QSpinBox(page);
+    queue->setRange(0, 32);
+    queue->setValue(sett.maximumFramesInQueue);
+    queue->setObjectName("preferences.engine.queue.spin");
+    queue->setAccessibleName("Max frames in raw queue");
+    connect(queue, QOverload<int>::of(&QSpinBox::valueChanged),
+            page, [](int v) { sett.maximumFramesInQueue = v; });
+    form->addRow("Max frames in raw queue", queue);
+
+    auto* balance = new QCheckBox("Balance read mutex across tracks", page);
+    balance->setChecked(sett.balanceReads != 0);
+    balance->setObjectName("preferences.engine.balance.check");
+    balance->setAccessibleName("Balance read mutex across tracks");
+    connect(balance, &QCheckBox::toggled, page,
+            [](bool on) { sett.balanceReads = on ? 1 : 0; });
+    form->addRow(QString(), balance);
+
+    // Default decode filter — shared by all tracks via the OIIO loader's
+    // Filter2D resize path. In-memory only; persisted centrally on Done.
+    auto* filterCombo = new QComboBox(page);
+    filterCombo->setObjectName("preferences.engine.decodefilter.combo");
+    filterCombo->setAccessibleName("Default decode filter");
+    filterCombo->addItem("nearest",   FILTERBOX_ID);
+    filterCombo->addItem("triangle",  FILTERTRIANGLE_ID);
+    filterCombo->addItem("mitchell",  FILTERMITCHELL_ID);
+    filterCombo->addItem("lanczos3",  FILTERLANCZOS_ID);
+    int fidx = filterCombo->findData(sett.defaultDecodeFilter);
+    if (fidx < 0) fidx = filterCombo->findData(FILTERLANCZOS_ID);
+    filterCombo->setCurrentIndex(fidx);
+    connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [filterCombo](int i) {
+        sett.defaultDecodeFilter = filterCombo->itemData(i).toInt();
+    });
+    form->addRow("Default decode filter", filterCombo);
+
+    // Default bit depth for new loads (Quick Load / drag-drop). Existing plates
+    // keep their depth until reloaded. In-memory only; persisted on Done.
+    auto* depthCombo = new QComboBox(page);
+    depthCombo->setObjectName("preferences.engine.bitdepth.combo");
+    depthCombo->setAccessibleName("Default bit depth for new loads");
+    depthCombo->addItem("8",        GFC_8BPC);
+    depthCombo->addItem("16",       GFC_16BPC);
+    depthCombo->addItem("16-half",  GFC_16HALF);
+    depthCombo->addItem("32-float", GFC_4BPC);
+    int didx = depthCombo->findData(sett.defaultTextureFormat);
+    if (didx < 0) didx = depthCombo->findData(GFC_16HALF);
+    depthCombo->setCurrentIndex(didx);
+    connect(depthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [depthCombo](int i) {
+        sett.defaultTextureFormat = depthCombo->itemData(i).toInt();
+    });
+    form->addRow("Default bit depth", depthCombo);
+
     addPage("General", page);
 }
 
@@ -270,7 +349,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     // GfcTextRenderer's constructor defaults (gfcTextRenderer.cpp) so a
     // first run (no keys yet) reflects the renderer's actual live state.
     QSettings s;
-    const float initSize          = s.value("Text/size", 14.0f).toFloat();
+    const float initSize          = s.value("Text/size", 12.0f).toFloat();
     textColor_ = floatsToQColor(s.value("Text/colorR", 1.0f).toFloat(),
                                  s.value("Text/colorG", 1.0f).toFloat(),
                                  s.value("Text/colorB", 1.0f).toFloat(),
@@ -294,7 +373,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textSizeSpin_->setObjectName("preferences.text.size.spin");
     textSizeSpin_->setAccessibleName("Text size");
     connect(textSizeSpin_, QOverload<int>::of(&QSpinBox::valueChanged), page,
-            [](int v) { textRenderer().setSize(float(v)); });
+            [](int v) { textRenderer().setLabelSize(float(v)); });
     form->addRow("Size", textSizeSpin_);
 
     // Color.
@@ -312,8 +391,8 @@ void PreferencesWindow_Qt::buildTextPage() {
         if (chosen.isValid()) {
             textColor_ = chosen;
             applyTextColorSwatch();
-            textRenderer().setColor(float(textColor_.redF()), float(textColor_.greenF()),
-                                     float(textColor_.blueF()), float(textColor_.alphaF()));
+            textRenderer().setLabelColor(float(textColor_.redF()), float(textColor_.greenF()),
+                                          float(textColor_.blueF()));
         }
     });
     form->addRow("Color", textColorBtn_);
@@ -458,87 +537,6 @@ void PreferencesWindow_Qt::writeTextPrefs() {
     s.setValue("Text/shadowColorA", textShadowColor_.alphaF());
 }
 
-void PreferencesWindow_Qt::buildEnginePage() {
-    auto* page = new QWidget(this);
-    auto* form = new QFormLayout(page);
-
-    // NOTE (JEF-16): renderingEngine, vsync, numOfPartitions and forcePBO are
-    // intentionally NOT exposed here — the audit found they don't affect the
-    // product today (vsync is a hardcoded swap interval in main_qt.cpp;
-    // renderingEngine/forcePBO are only read inside a dead code block in
-    // gfcSequence.cpp; numOfPartitions is read but its only effect is a no-op).
-    // They remain in gfcSettings (still referenced inertly) but are hidden until
-    // their subsystems are revived, so the panel only shows controls that work.
-
-    auto* queue = new QSpinBox(page);
-    queue->setRange(0, 32);
-    queue->setValue(sett.maximumFramesInQueue);
-    queue->setObjectName("preferences.engine.queue.spin");
-    queue->setAccessibleName("Max frames in raw queue");
-    connect(queue, QOverload<int>::of(&QSpinBox::valueChanged),
-            page, [](int v) { sett.maximumFramesInQueue = v; });
-    form->addRow("Max frames in raw queue", queue);
-
-    auto* balance = new QCheckBox("Balance read mutex across tracks", page);
-    balance->setChecked(sett.balanceReads != 0);
-    balance->setObjectName("preferences.engine.balance.check");
-    balance->setAccessibleName("Balance read mutex across tracks");
-    connect(balance, &QCheckBox::toggled, page,
-            [](bool on) { sett.balanceReads = on ? 1 : 0; });
-    form->addRow(QString(), balance);
-
-    // Default decode filter — shared by all tracks via OIIO loader's
-    // Filter2D resize path (see gfcImageLoaderOIIO scale handling).
-    // Persisted under Engine/defaultDecodeFilter; restored at startup by
-    // MainWindow_Qt next to defaultTextureFormat.
-    auto* filterLabel = new QLabel("Default decode filter:", page);
-    auto* filterCombo = new QComboBox(page);
-    filterCombo->setObjectName("preferences.engine.decodefilter.combo");
-    filterCombo->setAccessibleName("Default decode filter");
-    filterCombo->addItem("nearest",   FILTERBOX_ID);
-    filterCombo->addItem("triangle",  FILTERTRIANGLE_ID);
-    filterCombo->addItem("mitchell",  FILTERMITCHELL_ID);
-    filterCombo->addItem("lanczos3",  FILTERLANCZOS_ID);
-    int idx = filterCombo->findData(sett.defaultDecodeFilter);
-    if (idx < 0) idx = filterCombo->findData(FILTERLANCZOS_ID);
-    filterCombo->setCurrentIndex(idx);
-    // In-memory only — persistence happens centrally via writePreferences()
-    // on Done, so Cancel can revert this (see sett_backup_ in the ctor).
-    connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [filterCombo](int i) {
-        sett.defaultDecodeFilter = filterCombo->itemData(i).toInt();
-    });
-    form->addRow(filterLabel, filterCombo);
-
-    // Default bit depth for new loads (moved here from the status bar).
-    // Sets the texture format used when a sequence is loaded via Quick Load /
-    // drag-drop; existing plates keep their depth until reloaded. The Load
-    // Sequence Manager has its own per-track depth controls. GFC_4BPC is a
-    // historical misnomer for 32-bit float; GFC_S3TCDX1 is intentionally
-    // omitted (storage optimization, not a quality choice). Persisted under
-    // Engine/defaultTextureFormat; restored at startup by MainWindow_Qt.
-    auto* depthLabel = new QLabel("Default bit depth:", page);
-    auto* depthCombo = new QComboBox(page);
-    depthCombo->setObjectName("preferences.engine.bitdepth.combo");
-    depthCombo->setAccessibleName("Default bit depth for new loads");
-    depthCombo->addItem("8",        GFC_8BPC);
-    depthCombo->addItem("16",       GFC_16BPC);
-    depthCombo->addItem("16-half",  GFC_16HALF);
-    depthCombo->addItem("32-float", GFC_4BPC);
-    int depthIdx = depthCombo->findData(sett.defaultTextureFormat);
-    if (depthIdx < 0) depthIdx = depthCombo->findData(GFC_16HALF);
-    depthCombo->setCurrentIndex(depthIdx);
-    // In-memory only — persistence happens centrally via writePreferences()
-    // on Done, so Cancel can revert this (see sett_backup_ in the ctor).
-    connect(depthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [depthCombo](int i) {
-        sett.defaultTextureFormat = depthCombo->itemData(i).toInt();
-    });
-    form->addRow(depthLabel, depthCombo);
-
-    addPage("Playback & Engine", page);
-}
-
 void PreferencesWindow_Qt::buildFormatsPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
@@ -649,21 +647,8 @@ void PreferencesWindow_Qt::buildRemotePage() {
     });
     topForm->addRow("Nickname", nickname);
 
-    auto* sendLoad = new QCheckBox("Send remote load requests", page);
-    sendLoad->setChecked(sett.sendRemoteLoadRequests != 0);
-    sendLoad->setObjectName("preferences.remote.sendload.check");
-    sendLoad->setAccessibleName("Send remote load requests");
-    connect(sendLoad, &QCheckBox::toggled, page,
-            [](bool on) { sett.sendRemoteLoadRequests = on ? 1 : 0; });
-    topForm->addRow(QString(), sendLoad);
-
-    auto* autoAccept = new QCheckBox("Auto-accept remote load requests", page);
-    autoAccept->setChecked(sett.autoAcceptRemoteLoadRequests != 0);
-    autoAccept->setObjectName("preferences.remote.autoaccept.check");
-    autoAccept->setAccessibleName("Auto-accept remote load requests");
-    connect(autoAccept, &QCheckBox::toggled, page,
-            [](bool on) { sett.autoAcceptRemoteLoadRequests = on ? 1 : 0; });
-    topForm->addRow(QString(), autoAccept);
+    // Send / auto-accept remote-load-request toggles removed — loads come only
+    // through playlists, so these are not user-configurable.
 
     // Chat group.
     auto* chatPage = new QWidget(page);

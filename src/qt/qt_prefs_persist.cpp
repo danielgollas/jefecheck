@@ -63,9 +63,6 @@ void loadPreferences() {
     sett.chatDisplayLines         = s.value("Remote/chatDisplayLines",         sett.chatDisplayLines).toInt();
     sett.remotePointerFadeDelay   = s.value("Remote/remotePointerFadeDelay",   sett.remotePointerFadeDelay).toFloat();
     sett.remotePointerColor       = s.value("Remote/remotePointerColor",       sett.remotePointerColor).toInt();
-    sett.sendRemoteLoadRequests   = s.value("Remote/sendRemoteLoadRequests",   sett.sendRemoteLoadRequests).toInt();
-    sett.autoAcceptRemoteLoadRequests = s.value("Remote/autoAcceptRemoteLoadRequests",
-                                                 sett.autoAcceptRemoteLoadRequests).toInt();
 
     // Text (JEF-16 Task 6) — GfcTextRenderer is a separate singleton, not
     // part of `sett`; applied via its own setters rather than assigned here.
@@ -81,11 +78,20 @@ void applyTextPrefs() {
     // Fallbacks below mirror GfcTextRenderer's constructor defaults
     // (gfcTextRenderer.cpp) exactly, so a first run (no Text/* keys yet)
     // causes zero visual change.
-    tr.setSize(s.value("Text/size", 14.0f).toFloat());
+    // Size + color drive the on-plate label overlay (gfcPlate::drawText) via the
+    // renderer's label style — those are the visible knobs. Default 12 px / white
+    // matches the historical textDisplaySize/textDisplayColor so first run is a
+    // no-op. (setSize/setColor here are transient and get overwritten per-draw.)
+    const float textSize = s.value("Text/size", 12.0f).toFloat();
+    tr.setSize(textSize);
+    tr.setLabelSize(textSize);
     tr.setColor(s.value("Text/colorR", 1.0f).toFloat(),
                 s.value("Text/colorG", 1.0f).toFloat(),
                 s.value("Text/colorB", 1.0f).toFloat(),
                 s.value("Text/colorA", 1.0f).toFloat());
+    tr.setLabelColor(s.value("Text/colorR", 1.0f).toFloat(),
+                     s.value("Text/colorG", 1.0f).toFloat(),
+                     s.value("Text/colorB", 1.0f).toFloat());
     tr.setShadowEnabled(s.value("Text/shadowEnabled", true).toBool());
     tr.setShadowOffset(s.value("Text/shadowOffX", 1.0f).toFloat(),
                         s.value("Text/shadowOffY", -1.0f).toFloat());
@@ -141,8 +147,6 @@ void writePreferences() {
     s.setValue("Remote/chatDisplayLines",         sett.chatDisplayLines);
     s.setValue("Remote/remotePointerFadeDelay",   sett.remotePointerFadeDelay);
     s.setValue("Remote/remotePointerColor",       sett.remotePointerColor);
-    s.setValue("Remote/sendRemoteLoadRequests",   sett.sendRemoteLoadRequests);
-    s.setValue("Remote/autoAcceptRemoteLoadRequests", sett.autoAcceptRemoteLoadRequests);
 
     // NOTE: later tasks append their sections' keys here.
 }

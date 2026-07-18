@@ -41,7 +41,6 @@ private:
     void addPage(const QString& title, QWidget* page);
     void buildGeneralPage();
     void buildTextPage();
-    void buildEnginePage();
     void buildFormatsPage();
     void buildSearchPathsPage();
     void buildRemotePage();

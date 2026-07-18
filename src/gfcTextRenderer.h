@@ -52,6 +52,15 @@ public:
     // Color
     void setColor(float r, float g, float b, float a);
 
+    // Plate-label text style — the on-plate filename/info overlay drawn by
+    // gfcPlate::drawText(). Set from the Preferences → Text page so its Size and
+    // Color controls actually drive visible text (the transient setSize/setColor
+    // above are overwritten every frame by each draw site, so they can't).
+    void setLabelSize(float pixelSize) { labelSize_ = pixelSize; }
+    void setLabelColor(float r, float g, float b) { labelR_ = r; labelG_ = g; labelB_ = b; }
+    float labelSize() const { return labelSize_; }
+    void labelColor(float& r, float& g, float& b) const { r = labelR_; g = labelG_; b = labelB_; }
+
     // Shadow (drawn as a second pass with offset)
     void setShadowEnabled(bool enabled);
     void setShadowOffset(float x, float y);
@@ -107,6 +116,11 @@ private:
     HintMode hintMode;
     bool filterNearest;
     float gammaValue;
+
+    // Plate-label style (see setLabelSize/setLabelColor). Defaults match the
+    // historical gfcPlate textDisplaySize/textDisplayColor (12 px, white).
+    float labelSize_ = 12.0f;
+    float labelR_ = 1.0f, labelG_ = 1.0f, labelB_ = 1.0f;
 
     // Get or create atlas for current size/DPI
     GfcFontAtlas& getAtlas();

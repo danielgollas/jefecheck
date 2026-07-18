@@ -258,8 +258,6 @@ PREFS_REMOTE_CHAT_OPACITY = "preferences.remote.chatopacity.spin"
 PREFS_REMOTE_CHAT_LINES = "preferences.remote.chatlines.spin"
 PREFS_REMOTE_POINTER_FADE = "preferences.remote.pointerfade.spin"
 PREFS_REMOTE_POINTER_COLOR = "preferences.remote.pointercolor.button"
-PREFS_REMOTE_SEND_LOAD = "preferences.remote.sendload.check"
-PREFS_REMOTE_AUTOACCEPT = "preferences.remote.autoaccept.check"
 
 # Preferences → Text panel widgets (JEF-16 Task 6). Deferred (Done-writes)
 # persistence — see qt_prefs_persist.cpp applyTextPrefs()/PreferencesWindow_Qt

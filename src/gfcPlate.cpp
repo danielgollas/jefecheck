@@ -2347,8 +2347,13 @@ void gfcPlate::drawText() {
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
         glDisable(GL_TEXTURE_2D);
 
-        gfc_gl_font(FL_HELVETICA, textDisplaySize);
-        textRenderer().setColor(textDisplayColor, textDisplayColor, textDisplayColor, textDisplayOpacity);
+        // Size + color come from the Preferences → Text page (via the text
+        // renderer's label style), so those controls drive this overlay. Opacity
+        // stays per-plate (textDisplayOpacity).
+        float lr, lg, lb;
+        textRenderer().labelColor(lr, lg, lb);
+        gfc_gl_font(FL_HELVETICA, (int)textRenderer().labelSize());
+        textRenderer().setColor(lr, lg, lb, textDisplayOpacity);
 
         gfc_gl_draw(labelString.c_str(),
                 rect.x+10, rect.y-15,
