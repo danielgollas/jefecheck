@@ -401,7 +401,14 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     quadSizeX = theBitmap->Width;
     quadSizeY = theBitmap->Height;
     if (!sett.exrIgnoreHeadersAspectRatio) {
-        quadSizeX = (int)(quadSizeX * par); // stretches horizontally to correct for non-square pixels
+        // par stretches the ORIGINAL horizontal axis to correct non-square pixels.
+        // A 90°/270° reorient (Orientation 5..8) swapped the axes, so apply par to
+        // the vertical axis instead. (Rotated non-square-pixel images are rare, but
+        // keep it correct.)
+        if (orientation >= 5 && orientation <= 8)
+            quadSizeY = (int)(quadSizeY * par);
+        else
+            quadSizeX = (int)(quadSizeX * par);
     }
 
     format = spec.format.c_str();
