@@ -194,6 +194,10 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // so tests prefer Cmd+, — real users get either.
     auto openPrefs = [this]() {
         PreferencesWindow_Qt dlg(this);
+        // Live preview: repaint the viewport as viewport-affecting settings
+        // (text style, background, aspect bars) change while the dialog is open.
+        connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
+                this, [this]() { if (viewport_) viewport_->update(); });
         dlg.exec();
     };
     auto bindPrefsShortcut = [this, openPrefs](QKeySequence seq) {
@@ -551,6 +555,8 @@ void MainWindow_Qt::buildMenuBar() {
                             // Modal — settings persist on Done via
                             // jefe::qt::writePreferences() inside the dialog.
                             PreferencesWindow_Qt dlg(this);
+                            connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
+                                    this, [this]() { if (viewport_) viewport_->update(); });
                             dlg.exec();
                         });
     prefsAction->setObjectName("menu.file.preferences");

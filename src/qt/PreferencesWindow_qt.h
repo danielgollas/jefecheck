@@ -1,12 +1,17 @@
-// Preferences dialog for the Qt build. Mirrors FLTK's preferencesWindow:
-// a sidebar list selects a page, each page binds widgets to the global
-// `sett` (gfcSettings). Done writes the settings via saveSettings().
+// Preferences dialog for the Qt build. A sidebar list selects a page; each
+// page binds widgets to the global `sett` (gfcSettings). Persistence is Qt
+// QSettings via jefe::qt::writePreferences() (Done); Cancel reverts from a
+// `sett` snapshot.
 //
-// Pages cover: General, Text, Engine, Formats, Search Paths, Remote. Text
-// binds to the GfcTextRenderer singleton (not `sett`) with deferred
-// QSettings persistence — see writeTextPrefs() and qt_prefs_persist's
-// applyTextPrefs(). The shell handles placeholders so adding a page later
-// is just an addPage() call.
+// Pages cover: General (incl. the folded Playback & Engine controls), Text,
+// Formats, Search Paths, Remote. Text binds to the GfcTextRenderer singleton
+// (not `sett`) with deferred QSettings persistence — see writeTextPrefs() and
+// qt_prefs_persist's applyTextPrefs().
+//
+// While the (modal) dialog is open a repaint timer emits
+// viewportRepaintRequested() so viewport-affecting settings (text style,
+// background color/checkerboard, aspect bars) preview in real time; the owner
+// connects it to the viewport's update().
 #ifndef JEFECHECK_QT_PREFERENCES_WINDOW_H
 #define JEFECHECK_QT_PREFERENCES_WINDOW_H
 
@@ -29,6 +34,7 @@ class QListWidget;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
+class QTimer;
 class QWidget;
 
 class PreferencesWindow_Qt : public QDialog {
@@ -36,6 +42,11 @@ class PreferencesWindow_Qt : public QDialog {
 public:
     explicit PreferencesWindow_Qt(QWidget* parent = nullptr);
     ~PreferencesWindow_Qt() override;
+
+signals:
+    // Emitted continuously while the dialog is open so the owner can repaint
+    // the viewport for live preview of viewport-affecting settings.
+    void viewportRepaintRequested();
 
 private:
     void addPage(const QString& title, QWidget* page);
@@ -59,6 +70,7 @@ private:
 
     QListWidget* sidebar_ = nullptr;
     QStackedWidget* pages_ = nullptr;
+    QTimer* liveTimer_ = nullptr;  // drives viewportRepaintRequested() while open
 
     // Text page widgets — kept as members so writeTextPrefs() (called on
     // Done) can read their current values. Live edits only call the

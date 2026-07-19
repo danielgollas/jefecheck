@@ -7,6 +7,7 @@
 #include "qt_prefs_persist.h"
 
 #include <QCheckBox>
+#include <QTimer>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -83,8 +84,20 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
                                          // QSettings are untouched since Text is
                                          // deferred-persistence, so this reapplies
                                          // the pre-dialog state)
+        emit viewportRepaintRequested(); // paint the reverted state before closing
         reject();
     });
+
+    // Live preview: while this (modal) dialog is open, repaint the viewport at
+    // ~30 Hz so text style / background color / checkerboard / aspect-bar changes
+    // show in real time. A modal exec() still processes the parent's paint
+    // events, so the owner's connected viewport->update() runs. The timer is
+    // parented to `this`, so it stops and is destroyed with the dialog.
+    liveTimer_ = new QTimer(this);
+    liveTimer_->setInterval(33);
+    connect(liveTimer_, &QTimer::timeout, this,
+            [this]() { emit viewportRepaintRequested(); });
+    liveTimer_->start();
 
     auto* split = new QHBoxLayout();
     split->setContentsMargins(0, 0, 0, 0);
