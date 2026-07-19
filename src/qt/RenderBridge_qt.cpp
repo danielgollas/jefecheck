@@ -15,15 +15,20 @@ namespace {
 // fill (General prefs → "Checkerboard background"). Immediate-mode /
 // glOrtho to match the compatibility-profile drawing gfcplatemanager.cpp
 // already uses elsewhere in the rendering chain.
-void drawCheckerboardBackground(int wPx, int hPx) {
-    glClear(GL_DEPTH_BUFFER_BIT);
-    const float b = sett.bgColor;
-    // Two shades: nudge away from bgColor by a fixed delta, clamped.
+// One checkerboard shade of channel value `b`: nudge away by a fixed delta
+// (lighten if dark, darken if light), clamped to [0,1].
+inline float checkerShade(float b, bool light) {
     const float d = 0.06f;
     float lo = b - d, hi = b + d;
     if (b < d)        { lo = b; hi = b + 2*d; }
     if (b > 1.0f - d) { hi = b; lo = b - 2*d; }
     lo = lo < 0 ? 0 : lo;  hi = hi > 1 ? 1 : hi;
+    return light ? hi : lo;
+}
+
+void drawCheckerboardBackground(int wPx, int hPx) {
+    glClear(GL_DEPTH_BUFFER_BIT);
+    const float r = sett.bgColorR, g = sett.bgColorG, b = sett.bgColorB;
 
     const int cell = int(24 * gfc_gl_dpiscale());   // ~24 logical px per cell
     glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
@@ -34,9 +39,8 @@ void drawCheckerboardBackground(int wPx, int hPx) {
     glBegin(GL_QUADS);
     for (int y = 0; y < hPx; y += cell) {
         for (int x = 0; x < wPx; x += cell) {
-            const bool even = ((x / cell) + (y / cell)) & 1;
-            const float c = even ? hi : lo;
-            glColor3f(c, c, c);
+            const bool light = ((x / cell) + (y / cell)) & 1;
+            glColor3f(checkerShade(r, light), checkerShade(g, light), checkerShade(b, light));
             const float x1 = float(x), y1 = float(y);
             const float x2 = float(x + cell), y2 = float(y + cell);
             glVertex2f(x1,y1); glVertex2f(x2,y1); glVertex2f(x2,y2); glVertex2f(x1,y2);
@@ -77,7 +81,7 @@ void RenderBridge_Qt::onDraw() {
     if (sett.bgCheckerboard) {
         drawCheckerboardBackground(width_, height_);   // fills the whole framebuffer
     } else {
-        glClearColor(sett.bgColor, sett.bgColor, sett.bgColor, 1.0f);
+        glClearColor(sett.bgColorR, sett.bgColorG, sett.bgColorB, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 

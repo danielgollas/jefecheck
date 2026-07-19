@@ -28,7 +28,12 @@ void loadPreferences() {
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
     // General (JEF-16 Task 1).
+    // RGB background. Migrate from the legacy grayscale General/bgColor: if the
+    // RGB keys are absent, each channel falls back to the old gray value.
     sett.bgColor        = s.value("General/bgColor", sett.bgColor).toFloat();
+    sett.bgColorR       = s.value("General/bgColorR", sett.bgColor).toFloat();
+    sett.bgColorG       = s.value("General/bgColorG", sett.bgColor).toFloat();
+    sett.bgColorB       = s.value("General/bgColorB", sett.bgColor).toFloat();
     sett.bgCheckerboard = s.value("General/bgCheckerboard", sett.bgCheckerboard).toInt();
     sett.defaultBrowsePath = s.value("General/defaultBrowsePath",
                                      QString::fromStdString(sett.defaultBrowsePath)).toString().toStdString();
@@ -115,7 +120,10 @@ void writePreferences() {
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);
 
     // General (JEF-16 Task 1).
-    s.setValue("General/bgColor",        sett.bgColor);
+    s.setValue("General/bgColor",        sett.bgColor);   // luminance, for legacy readers
+    s.setValue("General/bgColorR",       sett.bgColorR);
+    s.setValue("General/bgColorG",       sett.bgColorG);
+    s.setValue("General/bgColorB",       sett.bgColorB);
     s.setValue("General/bgCheckerboard", sett.bgCheckerboard);
     s.setValue("General/defaultBrowsePath",
                QString::fromStdString(sett.defaultBrowsePath));

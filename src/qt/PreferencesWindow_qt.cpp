@@ -9,6 +9,8 @@
 #include <QCheckBox>
 #include <QTimer>
 #include <QColorDialog>
+
+#include <functional>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -128,17 +130,43 @@ QWidget* PreferencesWindow_Qt::section(const QString& title, QWidget* content) {
 }
 
 namespace {
-// FLTK stores bgColor as a 0..1 grayscale (`float bgColor`). Bridge to
-// a Qt color picker by reading/writing a QColor with that gray value.
+// The viewport background is a full RGB color (sett.bgColorR/G/B). bgColor is
+// kept as its luminance for legacy readers.
 QColor bgColorToQ() {
-    const int g = std::clamp(int(std::round(sett.bgColor * 255.0f)), 0, 255);
-    return QColor(g, g, g);
+    return QColor::fromRgbF(std::clamp(sett.bgColorR, 0.0f, 1.0f),
+                            std::clamp(sett.bgColorG, 0.0f, 1.0f),
+                            std::clamp(sett.bgColorB, 0.0f, 1.0f));
 }
 void qToBgColor(const QColor& c) {
-    // Average the channels so picking a tinted color still degrades
-    // gracefully into FLTK's gray scalar.
-    const float g = (c.redF() + c.greenF() + c.blueF()) / 3.0f;
-    sett.bgColor = g;
+    sett.bgColorR = float(c.redF());
+    sett.bgColorG = float(c.greenF());
+    sett.bgColorB = float(c.blueF());
+    sett.bgColor  = (sett.bgColorR + sett.bgColorG + sett.bgColorB) / 3.0f;
+}
+
+// Style a small button as a pure color swatch (no text) showing `c`.
+void styleSwatch(QPushButton* btn, const QColor& c) {
+    btn->setText(QString());
+    btn->setStyleSheet(QString("background:%1; border:1px solid #555; border-radius:4px;")
+                           .arg(c.name()));
+}
+
+// Runs a color dialog that applies each intermediate color live (via `apply`)
+// so the viewport previews in real time as the user drags. Reverts to `start`
+// if the dialog is cancelled. Returns the accepted color (or `start`).
+QColor liveColorDialog(QWidget* parent, const QColor& start, const QString& title,
+                       bool withAlpha, const std::function<void(const QColor&)>& apply) {
+    QColorDialog dlg(start, parent);
+    dlg.setWindowTitle(title);
+    dlg.setOption(QColorDialog::ShowAlphaChannel, withAlpha);
+    QObject::connect(&dlg, &QColorDialog::currentColorChanged, parent,
+                     [&apply](const QColor& c) { if (c.isValid()) apply(c); });
+    if (dlg.exec() == QDialog::Accepted && dlg.selectedColor().isValid()) {
+        apply(dlg.selectedColor());
+        return dlg.selectedColor();
+    }
+    apply(start);
+    return start;
 }
 }  // namespace
 
@@ -146,24 +174,17 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
 
-    // Background color — clickable swatch button that pops a color picker.
+    // Background color — a pure color swatch that opens a live RGB picker
+    // (the viewport repaint timer previews each intermediate color).
     auto* bgBtn = new QPushButton(page);
     bgBtn->setFixedSize(60, 22);
     bgBtn->setObjectName("preferences.general.bgcolor.button");
     bgBtn->setAccessibleName("Background color");
-    auto applyBg = [bgBtn]() {
-        const QColor c = bgColorToQ();
-        bgBtn->setStyleSheet(QString("background: %1;").arg(c.name()));
-        bgBtn->setText(QString::number(int(sett.bgColor * 255)));
-    };
+    auto applyBg = [bgBtn]() { styleSwatch(bgBtn, bgColorToQ()); };
     applyBg();
     connect(bgBtn, &QPushButton::clicked, page, [page, applyBg]() {
-        const QColor chosen = QColorDialog::getColor(bgColorToQ(), page,
-            "Background color");
-        if (chosen.isValid()) {
-            qToBgColor(chosen);
-            applyBg();
-        }
+        liveColorDialog(page, bgColorToQ(), "Background color", /*withAlpha*/ false,
+                        [applyBg](const QColor& c) { qToBgColor(c); applyBg(); });
     });
     form->addRow("Background color", bgBtn);
 
@@ -394,19 +415,15 @@ void PreferencesWindow_Qt::buildTextPage() {
     textColorBtn_->setFixedSize(60, 22);
     textColorBtn_->setObjectName("preferences.text.color.button");
     textColorBtn_->setAccessibleName("Text color");
-    auto applyTextColorSwatch = [this]() {
-        textColorBtn_->setStyleSheet(QString("background: %1;").arg(textColor_.name()));
-    };
+    auto applyTextColorSwatch = [this]() { styleSwatch(textColorBtn_, textColor_); };
     applyTextColorSwatch();
     connect(textColorBtn_, &QPushButton::clicked, page, [this, page, applyTextColorSwatch]() {
-        const QColor chosen = QColorDialog::getColor(textColor_, page, "Text color",
-            QColorDialog::ShowAlphaChannel);
-        if (chosen.isValid()) {
-            textColor_ = chosen;
-            applyTextColorSwatch();
-            textRenderer().setLabelColor(float(textColor_.redF()), float(textColor_.greenF()),
-                                          float(textColor_.blueF()));
-        }
+        textColor_ = liveColorDialog(page, textColor_, "Text color", /*withAlpha*/ false,
+            [this, applyTextColorSwatch](const QColor& c) {
+                textColor_ = c;
+                textRenderer().setLabelColor(float(c.redF()), float(c.greenF()), float(c.blueF()));
+                applyTextColorSwatch();
+            });
     });
     form->addRow("Color", textColorBtn_);
 
@@ -505,20 +522,17 @@ void PreferencesWindow_Qt::buildTextPage() {
     textShadowColorBtn_->setFixedSize(60, 22);
     textShadowColorBtn_->setObjectName("preferences.text.shadowcolor.button");
     textShadowColorBtn_->setAccessibleName("Text shadow color");
-    auto applyShadowColorSwatch = [this]() {
-        textShadowColorBtn_->setStyleSheet(QString("background: %1;").arg(textShadowColor_.name()));
-    };
+    auto applyShadowColorSwatch = [this]() { styleSwatch(textShadowColorBtn_, textShadowColor_); };
     applyShadowColorSwatch();
     connect(textShadowColorBtn_, &QPushButton::clicked, page,
             [this, page, applyShadowColorSwatch]() {
-        const QColor chosen = QColorDialog::getColor(textShadowColor_, page,
-            "Text shadow color", QColorDialog::ShowAlphaChannel);
-        if (chosen.isValid()) {
-            textShadowColor_ = chosen;
-            applyShadowColorSwatch();
-            textRenderer().setShadowColor(float(textShadowColor_.redF()), float(textShadowColor_.greenF()),
-                                           float(textShadowColor_.blueF()), float(textShadowColor_.alphaF()));
-        }
+        textShadowColor_ = liveColorDialog(page, textShadowColor_, "Text shadow color",
+            /*withAlpha*/ true, [this, applyShadowColorSwatch](const QColor& c) {
+                textShadowColor_ = c;
+                textRenderer().setShadowColor(float(c.redF()), float(c.greenF()),
+                                              float(c.blueF()), float(c.alphaF()));
+                applyShadowColorSwatch();
+            });
     });
     form->addRow("Shadow color", textShadowColorBtn_);
 
@@ -741,19 +755,16 @@ void PreferencesWindow_Qt::buildRemotePage() {
     pointerColorBtn->setFixedSize(60, 22);
     pointerColorBtn->setObjectName("preferences.remote.pointercolor.button");
     pointerColorBtn->setAccessibleName("Remote pointer color");
-    auto applyPointerColor = [pointerColorBtn]() {
-        const QColor c = pointerColorToQ();
-        pointerColorBtn->setStyleSheet(QString("background: %1;").arg(c.name()));
-    };
+    auto applyPointerColor = [pointerColorBtn]() { styleSwatch(pointerColorBtn, pointerColorToQ()); };
     applyPointerColor();
     connect(pointerColorBtn, &QPushButton::clicked, pointerPage,
             [pointerPage, applyPointerColor]() {
-        const QColor chosen = QColorDialog::getColor(pointerColorToQ(), pointerPage,
-            "Remote pointer color");
-        if (chosen.isValid()) {
-            qToPointerColor(chosen);
+        liveColorDialog(pointerPage, pointerColorToQ(), "Remote pointer color",
+                        /*withAlpha*/ false,
+                        [applyPointerColor](const QColor& c) {
+            qToPointerColor(c);
             applyPointerColor();
-        }
+        });
     });
     pointerForm->addRow("Color", pointerColorBtn);
 

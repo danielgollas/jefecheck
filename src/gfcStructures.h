@@ -230,6 +230,7 @@ public:
     {
         startFullscreen=false;
         bgColor=0.149019;
+        bgColorR=bgColorG=bgColorB=0.149019f;  // RGB viewport background (grayscale by default)
         bgCheckerboard=0;
         bool enableCrashRecoverySession=true;
         defaultBrowsePath=getApplicationDataPath();
@@ -282,7 +283,8 @@ public:
 	}
     bool showThumbnails;   // timeline filmstrip thumbnails (default on)
     int startFullscreen;
-    float bgColor;
+    float bgColor;        // legacy grayscale (kept as the luminance of bgColorRGB)
+    float bgColorR, bgColorG, bgColorB;  // RGB viewport background (General prefs)
     int bgCheckerboard;   // 0 = flat bgColor fill, 1 = checkerboard (General prefs)
     int enableCrashRecoverySession;
     std::string defaultBrowsePath;
