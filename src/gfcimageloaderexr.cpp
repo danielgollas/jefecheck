@@ -812,7 +812,11 @@ int gfcImageLoaderEXR::load ( gfcLoadParams params ) {
 
 
         //3.4 Read the pixels into the framebuffer
-        
+        // NOTE (JEF-16): this file is EXCLUDED from the build (CMakeLists.txt —
+        // OpenEXR 3.x migration). The balanceReads read-throttle feature and its
+        // machinery (sett.balanceReads, trackManager.readMutex/ioBusy,
+        // balanceReadCond) were REMOVED elsewhere; the references below are dead
+        // and would not compile if this loader were re-enabled as-is.
 		try {
 			if (sett.balanceReads)
 			{

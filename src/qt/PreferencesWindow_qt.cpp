@@ -312,7 +312,12 @@ void PreferencesWindow_Qt::buildGeneralPage() {
 
     // ---- Playback & Engine (folded into General) -----------------------------
     // renderingEngine, vsync, numOfPartitions and forcePBO are intentionally not
-    // exposed — the JEF-16 audit found they don't affect the product today.
+    // exposed. vsync/renderingEngine are genuinely inert (only a hardcoded swap
+    // interval / commented-out reads). numOfPartitions/forcePBO ARE read live in
+    // gfcSequence.cpp, but only gate a partitioned-PBO upload path that is
+    // half-implemented (a //TODO stub + a redundant glDeleteTextures loop), so
+    // enabling them takes an unfinished path rather than a working alternative.
+    // Pinned to their safe ctor defaults (1 / 0); revisit if the PBO path lands.
     auto* engineHeader = new QLabel("Playback & Engine", page);
     engineHeader->setProperty("role", "section");
     form->addRow(engineHeader);
