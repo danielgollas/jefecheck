@@ -231,9 +231,9 @@ PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 # Task 2) onto the `preferences.engine.*.combo` leaf convention used by
 # the other Engine widgets.
 # renderingEngine / vsync / numOfPartitions / forcePBO controls were removed
-# (JEF-16 audit: inert — no runtime effect); only queue + balance remain.
+# (JEF-16 audit: inert — no runtime effect); balanceReads was dropped entirely
+# (superseded by the read-ahead queue cap). Only the queue control remains.
 PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
-PREFS_ENGINE_BALANCE = "preferences.engine.balance.check"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
 

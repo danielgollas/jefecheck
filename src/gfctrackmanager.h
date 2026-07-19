@@ -92,9 +92,7 @@ public:
 
 	void setAutoAcceptRemoteLoadRequests(int value);
 	int getAutoAcceptRemoteLoadRequests();
-	
-	std::mutex readMutex;
-	int ioBusy;
+
 private:
 gfcSequence sequences[GFC_MAX_SEQUENCES];
 int numOfSequences;

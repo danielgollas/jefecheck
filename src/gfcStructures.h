@@ -264,7 +264,6 @@ public:
 		
 
 
-		balanceReads=1;
 
 		sendRemoteLoadRequests=false;
 		autoAcceptRemoteLoadRequests=false;
@@ -295,7 +294,6 @@ public:
     int vsync; //1 on, 0 off.
     int maximumFramesInQueue; //determines if the raw queue should limit how many frames are loaded before they are converted to textures, 0 means no limiting.
     int numOfPartitions; ///how many mirrors will be used to strip and load images
-    int balanceReads; //if this is on, then all tracks share a mutex for read operations.
 
     std::vector<std::string> searchPaths;
     bool searchPathsRecursive;

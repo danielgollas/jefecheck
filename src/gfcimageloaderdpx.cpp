@@ -850,31 +850,8 @@ int gfcImageLoaderDPX::readSlice(long startOffset, long numLines, long bitmapSto
 	//fs.read((char*)rawBytes,totalImageBytes);
 	
 	
-	{
-		//this mutex is used to limit the reading to one frame at a time. 
-		if (sett.balanceReads)
-		{
-			//printf("Checking read condition\n");
-			std::lock_guard<std::mutex> lock ( trackManager.readMutex );
-			while (trackManager.ioBusy!=0)
-			{
-			//printf("Waiting for read condition\n");
-			//balanceReadCond.wait(lock);
-			}
-			trackManager.ioBusy=1;
-			fs.rdbuf()->sgetn((char*)rawBytes,totalImageBytes);
-			//read((char*)rawBytes,totalImageBytes);
-			fs.close();
-			trackManager.ioBusy=0;
-			balanceReadCond.notify_one();
-		}
-		else
-		{
-			fs.rdbuf()->sgetn((char*)rawBytes,totalImageBytes);
-			//read((char*)rawBytes,totalImageBytes);
-			fs.close();
-		}
-	}
+	fs.rdbuf()->sgetn((char*)rawBytes,totalImageBytes);
+	fs.close();
 	
 
     // printf("Reading %i scanlines of %i bytes each\n",numLines,bytesPerRow);

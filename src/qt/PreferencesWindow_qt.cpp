@@ -310,17 +310,20 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     queue->setValue(sett.maximumFramesInQueue);
     queue->setObjectName("preferences.engine.queue.spin");
     queue->setAccessibleName("Max frames in raw queue");
+    const QString queueTip =
+        "How many decoded frames each track may read ahead of playback and hold "
+        "in RAM before its loader pauses.\n\n"
+        "This keeps multiple sequences aligned by frame position: a track with "
+        "small, fast-loading frames can't race ahead and fill memory while a "
+        "track with large frames lags — it fills its queue and waits. Lower "
+        "values use less RAM; higher values buffer further ahead for smoother "
+        "playback of slow sources.";
+    queue->setToolTip(queueTip);
     connect(queue, QOverload<int>::of(&QSpinBox::valueChanged),
             page, [](int v) { sett.maximumFramesInQueue = v; });
-    form->addRow("Max frames in raw queue", queue);
-
-    auto* balance = new QCheckBox("Balance read mutex across tracks", page);
-    balance->setChecked(sett.balanceReads != 0);
-    balance->setObjectName("preferences.engine.balance.check");
-    balance->setAccessibleName("Balance read mutex across tracks");
-    connect(balance, &QCheckBox::toggled, page,
-            [](bool on) { sett.balanceReads = on ? 1 : 0; });
-    form->addRow(QString(), balance);
+    auto* queueLabel = new QLabel("Frames to read ahead", page);
+    queueLabel->setToolTip(queueTip);
+    form->addRow(queueLabel, queue);
 
     // Default decode filter — shared by all tracks via the OIIO loader's
     // Filter2D resize path. In-memory only; persisted centrally on Done.

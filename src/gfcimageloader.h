@@ -59,7 +59,6 @@ public:
     protected:
     std::vector<std::string> channelNames;
     gfcGLFrameInfo frameInfo;
-	std::condition_variable balanceReadCond;
 
 };
 

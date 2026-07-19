@@ -19,11 +19,10 @@ void loadPreferences() {
     sett.defaultDecodeFilter  = s.value("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter).toInt();
     sett.defaultTextureFormat = s.value("Engine/defaultTextureFormat", sett.defaultTextureFormat).toInt();
     // Engine (JEF-16 Task 2 — Playback & Engine section).
-    // Only maximumFramesInQueue and balanceReads have live effect and a UI control;
-    // vsync/numOfPartitions/forcePBO/renderingEngine were hidden (JEF-16 audit: inert)
+    // Only maximumFramesInQueue has a live effect and a UI control; the other
+    // engine settings were hidden (JEF-16 audit: inert) or removed (balanceReads),
     // so they are no longer persisted.
     sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
-    sett.balanceReads          = s.value("Engine/balanceReads",          sett.balanceReads).toInt();
     // Session behavior.
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
@@ -116,7 +115,6 @@ void writePreferences() {
     s.setValue("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter);
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
     s.setValue("Engine/maximumFramesInQueue", sett.maximumFramesInQueue);
-    s.setValue("Engine/balanceReads",         sett.balanceReads);
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);
 
     // General (JEF-16 Task 1).
