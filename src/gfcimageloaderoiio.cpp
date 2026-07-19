@@ -106,10 +106,64 @@ static std::vector<LayerInfo> discoverLayers(const OIIO::ImageSpec &spec) {
     return layers;
 }
 
+namespace {
+// Remap a packed BGRA bitmap in place for an EXIF/TIFF Orientation (1..8).
+// Rotation cases (5..8) swap width/height. Orientation 1 is a no-op.
+void reorientBitmap(GFL_BITMAP* bmp, int orientation) {
+    if (!bmp || !bmp->Data || orientation < 2 || orientation > 8) return;
+    const int W = bmp->Width, H = bmp->Height;
+    const int px = bmp->ComponentsPerPixel * (bmp->BitsPerComponent / 8);
+    const int srcStride = bmp->BytesPerLine;
+    const bool swap = (orientation >= 5);
+    const int outW = swap ? H : W;
+    const int outH = swap ? W : H;
+    const int dstStride = outW * px;
+    unsigned char* dst = (unsigned char*)calloc(1, (size_t)dstStride * outH);
+    if (!dst) return;
+    for (int y = 0; y < H; ++y) {
+        const unsigned char* srow = bmp->Data + (size_t)y * srcStride;
+        for (int x = 0; x < W; ++x) {
+            int dx, dy;
+            switch (orientation) {
+                case 2: dx = W-1-x; dy = y;     break;  // mirror horizontal
+                case 3: dx = W-1-x; dy = H-1-y; break;  // rotate 180
+                case 4: dx = x;     dy = H-1-y; break;  // mirror vertical
+                case 5: dx = y;     dy = x;     break;  // transpose
+                case 6: dx = H-1-y; dy = x;     break;  // rotate 90 CW
+                case 7: dx = H-1-y; dy = W-1-x; break;  // transverse
+                case 8: dx = y;     dy = W-1-x; break;  // rotate 90 CCW
+                default: dx = x; dy = y; break;
+            }
+            memcpy(dst + (size_t)dy * dstStride + (size_t)dx * px,
+                   srow + (size_t)x * px, (size_t)px);
+        }
+    }
+    free(bmp->Data);
+    bmp->Data = dst;
+    bmp->Width = outW;
+    bmp->Height = outH;
+    bmp->BytesPerLine = dstStride;
+}
+}  // namespace
+
+// Sets OIIO's global worker-thread pool size (0 = auto/all cores). Used by
+// ImageBufAlgo (our resize) and some readers' internal parallelism. Declared
+// as a plain free function so the Qt preference TUs can call it without
+// pulling in OIIO headers.
+void gfcSetOIIOThreadCount(int n) {
+    OIIO::attribute("threads", n < 0 ? 0 : n);
+}
+
 int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     this->params = params;
 
-    auto inp = OIIO::ImageInput::open(params.fileName);
+    // Straight (unassociated) alpha: hint OIIO not to auto-premultiply on read.
+    // Passed as a config ImageSpec to open() (Formats prefs). Default off keeps
+    // OIIO's normal behavior.
+    OIIO::ImageSpec config;
+    if (sett.oiioUnassociatedAlpha)
+        config.attribute("oiio:UnassociatedAlpha", 1);
+    auto inp = OIIO::ImageInput::open(params.fileName, &config);
     if (!inp) {
         loadErrorString = "OIIO: Cannot open " + params.fileName;
         printf("OIIO Error: %s\n", loadErrorString.c_str());
@@ -121,6 +175,10 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     int height = spec.height;
     int totalChannels = spec.nchannels;
     const float par = spec.get_float_attribute("PixelAspectRatio", 1.0f);
+    // EXIF/TIFF Orientation (1 = normal .. 8). Captured before close(); applied
+    // to the decoded bitmap below when the Formats pref is on.
+    const int orientation = sett.applyExifOrientation
+                                ? spec.get_int_attribute("Orientation", 1) : 1;
 
     // EXR display window vs. data window (overscan/crop). Non-EXR formats
     // (and EXRs where the two windows coincide) leave this a no-op: outW/outH
@@ -262,6 +320,10 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     }
 
     inp->close();
+
+    // Apply embedded orientation (before scale/crop) so the image displays
+    // upright. No-op when the pref is off (orientation == 1).
+    reorientBitmap(theBitmap, orientation);
 
     // Apply scale via OIIO (the filter actually matters here — our
     // local gflResize ignores filter selection and is nearest-only).
@@ -418,6 +480,12 @@ int gfcImageLoaderOIIO::peek(gfcLoadParams params, gfcPeekInfo *results) {
     } else {
         sizeX = spec.width;
         sizeY = spec.height;
+    }
+    // Match load()'s orientation handling: a 90°/270° rotation (Orientation
+    // 5..8) swaps the reported dimensions.
+    if (sett.applyExifOrientation) {
+        const int orientation = spec.get_int_attribute("Orientation", 1);
+        if (orientation >= 5 && orientation <= 8) std::swap(sizeX, sizeY);
     }
     bitDepth = spec.format.size() * 8;
     numOfComponents = spec.nchannels;

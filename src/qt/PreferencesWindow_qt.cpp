@@ -342,6 +342,27 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     queueLabel->setToolTip(queueTip);
     form->addRow(queueLabel, queue);
 
+    auto* oiioThreads = new QSpinBox(page);
+    oiioThreads->setRange(0, 64);
+    oiioThreads->setValue(sett.oiioThreads);
+    oiioThreads->setSpecialValueText("auto");   // 0 shows as "auto"
+    oiioThreads->setObjectName("preferences.engine.oiiothreads.spin");
+    oiioThreads->setAccessibleName("OIIO decode threads");
+    const QString oiioTip =
+        "Size of OpenImageIO's internal worker-thread pool (0 = auto / all cores), "
+        "used for image resize and some decoders (e.g. EXR decompression).\n\n"
+        "This is separate from — and stacks on top of — JefeCheck's per-track loader "
+        "threads (one per active track). A high value speeds up loading a single "
+        "sequence, but can oversubscribe the CPU when several tracks load at once. "
+        "If you routinely load many tracks together, try a low value (1–2); for a "
+        "single heavy sequence, leave it on auto.";
+    oiioThreads->setToolTip(oiioTip);
+    connect(oiioThreads, QOverload<int>::of(&QSpinBox::valueChanged),
+            page, [](int v) { sett.oiioThreads = v; });
+    auto* oiioThreadsLabel = new QLabel("OIIO decode threads", page);
+    oiioThreadsLabel->setToolTip(oiioTip);
+    form->addRow(oiioThreadsLabel, oiioThreads);
+
     // Default decode filter — shared by all tracks via the OIIO loader's
     // Filter2D resize path. In-memory only; persisted centrally on Done.
     auto* filterCombo = new QComboBox(page);
@@ -617,6 +638,24 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     connect(exrIgnoreAspect, &QCheckBox::toggled, page,
             [](bool on) { sett.exrIgnoreHeadersAspectRatio = on ? 1 : 0; });
     form->addRow(QString(), exrIgnoreAspect);
+
+    auto* straightAlpha = new QCheckBox("Read straight (unassociated) alpha", page);
+    straightAlpha->setChecked(sett.oiioUnassociatedAlpha != 0);
+    straightAlpha->setObjectName("preferences.formats.straightalpha.check");
+    straightAlpha->setToolTip(QStringLiteral("Read non-premultiplied (straight) alpha instead of OIIO's default associated/premultiplied alpha. Match this to how your images were authored for correct compositing. Takes effect on next load."));
+    straightAlpha->setAccessibleName("Read straight (unassociated) alpha");
+    connect(straightAlpha, &QCheckBox::toggled, page,
+            [](bool on) { sett.oiioUnassociatedAlpha = on ? 1 : 0; });
+    form->addRow(QString(), straightAlpha);
+
+    auto* applyOrient = new QCheckBox("Apply embedded orientation", page);
+    applyOrient->setChecked(sett.applyExifOrientation != 0);
+    applyOrient->setObjectName("preferences.formats.applyorientation.check");
+    applyOrient->setToolTip(QStringLiteral("Rotate/flip stills to match the file's EXIF/TIFF Orientation metadata so they display upright (JPEG/TIFF). Off by default; irrelevant to rendered EXR/DPX sequences. Takes effect on next load."));
+    applyOrient->setAccessibleName("Apply embedded orientation");
+    connect(applyOrient, &QCheckBox::toggled, page,
+            [](bool on) { sett.applyExifOrientation = on ? 1 : 0; });
+    form->addRow(QString(), applyOrient);
 
     addPage("Formats", page);
 }

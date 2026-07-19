@@ -235,12 +235,15 @@ PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 # (JEF-16 audit: inert — no runtime effect); balanceReads was dropped entirely
 # (superseded by the read-ahead queue cap). Only the queue control remains.
 PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
+PREFS_ENGINE_OIIO_THREADS = "preferences.engine.oiiothreads.spin"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
 
 # Preferences → Formats panel widgets (JEF-16 Task 3).
 PREFS_FORMATS_EXR_IGNORE_DISPLAY = "preferences.formats.exrignoredisplay.check"
 PREFS_FORMATS_EXR_IGNORE_ASPECT = "preferences.formats.exrignoreaspect.check"
+PREFS_FORMATS_STRAIGHT_ALPHA = "preferences.formats.straightalpha.check"
+PREFS_FORMATS_APPLY_ORIENTATION = "preferences.formats.applyorientation.check"
 
 # Preferences → Search Paths panel widgets (JEF-16 Task 4).
 PREFS_SEARCH_ENABLE = "preferences.search.enable.check"

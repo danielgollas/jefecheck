@@ -243,6 +243,9 @@ public:
 
 		exrIgnoreDisplayWindow=0;
 		exrIgnoreHeadersAspectRatio=0;
+		oiioUnassociatedAlpha=0;   // read straight (non-premultiplied) alpha
+		applyExifOrientation=0;    // apply embedded Orientation metadata
+		oiioThreads=0;             // OIIO global thread pool (0 = auto/all cores)
 
         renderingEngine=0; //0==3D, 1==2D
         chatFadeDelay=20;
@@ -323,6 +326,9 @@ public:
 
 	int exrIgnoreDisplayWindow;
 	int exrIgnoreHeadersAspectRatio;
+	int oiioUnassociatedAlpha;  // OIIO: read straight (unassociated) alpha
+	int applyExifOrientation;   // OIIO: apply the file's Orientation metadata
+	int oiioThreads;            // OIIO global thread-pool size (0 = auto)
 	int exrEnableExposureTransformOnLoad;
 
     int maxRecentSessions;

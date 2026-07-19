@@ -11,6 +11,10 @@
 
 extern gfcSettings sett;
 
+// Defined in gfcimageloaderoiio.cpp — sets OIIO's global thread pool. Forward-
+// declared here so this TU doesn't need OIIO headers.
+void gfcSetOIIOThreadCount(int n);
+
 namespace jefe { namespace qt {
 
 void loadPreferences() {
@@ -23,6 +27,8 @@ void loadPreferences() {
     // engine settings were hidden (JEF-16 audit: inert) or removed (balanceReads),
     // so they are no longer persisted.
     sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
+    sett.oiioThreads           = s.value("Engine/oiioThreads",           sett.oiioThreads).toInt();
+    gfcSetOIIOThreadCount(sett.oiioThreads);   // apply at startup
     // Session behavior.
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
@@ -45,6 +51,8 @@ void loadPreferences() {
     // Formats (JEF-16 Task 3).
     sett.exrIgnoreDisplayWindow      = s.value("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow).toInt();
     sett.exrIgnoreHeadersAspectRatio = s.value("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio).toInt();
+    sett.oiioUnassociatedAlpha       = s.value("Formats/oiioUnassociatedAlpha",       sett.oiioUnassociatedAlpha).toInt();
+    sett.applyExifOrientation        = s.value("Formats/applyExifOrientation",        sett.applyExifOrientation).toInt();
 
     // Search Paths (JEF-16 Task 4).
     sett.useSearchPaths       = s.value("Search/useSearchPaths", sett.useSearchPaths).toBool();
@@ -113,6 +121,8 @@ void writePreferences() {
     s.setValue("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter);
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
     s.setValue("Engine/maximumFramesInQueue", sett.maximumFramesInQueue);
+    s.setValue("Engine/oiioThreads",          sett.oiioThreads);
+    gfcSetOIIOThreadCount(sett.oiioThreads);   // apply on Done
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);
 
     // General (JEF-16 Task 1).
@@ -132,6 +142,8 @@ void writePreferences() {
     // Formats (JEF-16 Task 3).
     s.setValue("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow);
     s.setValue("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio);
+    s.setValue("Formats/oiioUnassociatedAlpha",       sett.oiioUnassociatedAlpha);
+    s.setValue("Formats/applyExifOrientation",        sett.applyExifOrientation);
 
     // Search Paths (JEF-16 Task 4).
     s.setValue("Search/useSearchPaths", sett.useSearchPaths);
