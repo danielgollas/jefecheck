@@ -179,6 +179,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* bgBtn = new QPushButton(page);
     bgBtn->setFixedSize(60, 22);
     bgBtn->setObjectName("preferences.general.bgcolor.button");
+    bgBtn->setToolTip(QStringLiteral("The viewport background color, shown behind and around image plates. Opens a color picker with live preview."));
     bgBtn->setAccessibleName("Background color");
     auto applyBg = [bgBtn]() { styleSwatch(bgBtn, bgColorToQ()); };
     applyBg();
@@ -191,6 +192,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* checker = new QCheckBox("Checkerboard background", page);
     checker->setChecked(sett.bgCheckerboard != 0);
     checker->setObjectName("preferences.general.checkerboard.check");
+    checker->setToolTip(QStringLiteral("Draw a checkerboard (two shades derived from the background color) instead of a flat fill — useful for judging image edges and alpha."));
     checker->setAccessibleName("Checkerboard background");
     connect(checker, &QCheckBox::toggled, page, [](bool on){ sett.bgCheckerboard = on ? 1 : 0; });
     form->addRow(QString(), checker);
@@ -201,6 +203,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     browseLay->setSpacing(6);
     auto* browsePath = new QLineEdit(QString::fromStdString(sett.defaultBrowsePath), browseRow);
     browsePath->setObjectName("preferences.general.browsepath.edit");
+    browsePath->setToolTip(QStringLiteral("The default folder that file dialogs open to when there is no more-recent location."));
     browsePath->setAccessibleName("Default browse path");
     browsePath->setMinimumWidth(280);
     connect(browsePath, &QLineEdit::editingFinished, page, [browsePath]() {
@@ -208,6 +211,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     });
     auto* browseBtn = new QPushButton("Browse…", browseRow);
     browseBtn->setObjectName("preferences.general.browsepath.button");
+    browseBtn->setToolTip(QStringLiteral("Browse for the default folder that file dialogs open to."));
     browseBtn->setAccessibleName("Choose default browse path");
     connect(browseBtn, &QPushButton::clicked, page, [browsePath]() {
         const QString start = browsePath->text().isEmpty()
@@ -226,6 +230,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* fullscreen = new QCheckBox("Start in fullscreen", page);
     fullscreen->setChecked(sett.startFullscreen != 0);
     fullscreen->setObjectName("preferences.general.fullscreen.check");
+    fullscreen->setToolTip(QStringLiteral("Open the main window in fullscreen when the application starts."));
     fullscreen->setAccessibleName("Start in fullscreen");
     connect(fullscreen, &QCheckBox::toggled, page,
             [](bool on) { sett.startFullscreen = on ? 1 : 0; });
@@ -234,6 +239,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* showLoad = new QCheckBox("Open Load window at startup", page);
     showLoad->setChecked(sett.openLoadWindowAtStartup != 0);
     showLoad->setObjectName("preferences.general.openloadatstart.check");
+    showLoad->setToolTip(QStringLiteral("Automatically open the Load window when the application starts."));
     showLoad->setAccessibleName("Open Load window at startup");
     connect(showLoad, &QCheckBox::toggled, page,
             [](bool on) { sett.openLoadWindowAtStartup = on ? 1 : 0; });
@@ -242,6 +248,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* recovery = new QCheckBox("Enable crash recovery session", page);
     recovery->setChecked(sett.enableCrashRecoverySession != 0);
     recovery->setObjectName("preferences.general.recovery.check");
+    recovery->setToolTip(QStringLiteral("Keep a crash-recovery snapshot of the current session so it can be restored after an unexpected exit."));
     recovery->setAccessibleName("Enable crash recovery session");
     connect(recovery, &QCheckBox::toggled, page,
             [](bool on) { sett.enableCrashRecoverySession = on ? 1 : 0; });
@@ -254,6 +261,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     startup->addItem("Reopen last session");  // 1
     startup->addItem("Ask");                  // 2
     startup->setObjectName("preferences.general.startup.combo");
+    startup->setToolTip(QStringLiteral("What to do with the previous session on launch: start empty, reopen the last session, or ask each time."));
     startup->setAccessibleName("On launch session behavior");
     startup->setCurrentIndex(sett.startupSessionBehavior);
     connect(startup, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -267,6 +275,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     aspect->setSingleStep(0.05);
     aspect->setValue(sett.aspectBarsOpacity);
     aspect->setObjectName("preferences.general.aspectopacity.spin");
+    aspect->setToolTip(QStringLiteral("Opacity of the letterbox/pillarbox aspect-ratio bars drawn over the image (0 = invisible, 1 = solid)."));
     aspect->setAccessibleName("Aspect-bar opacity");
     connect(aspect, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             page, [](double v) { sett.aspectBarsOpacity = float(v); });
@@ -275,6 +284,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* thumbs = new QCheckBox("Timeline thumbnails", page);
     thumbs->setChecked(sett.showThumbnails);
     thumbs->setObjectName("preferences.general.thumbnails.check");
+    thumbs->setToolTip(QStringLiteral("Show filmstrip thumbnails in the timeline."));
     thumbs->setAccessibleName("Timeline thumbnails");
     connect(thumbs, &QCheckBox::toggled, page, [](bool on){ sett.showThumbnails = on; });
     form->addRow(QString(), thumbs);
@@ -283,6 +293,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     fbSize->setRange(6, 72);
     fbSize->setValue(sett.feedbackMessageSize);
     fbSize->setObjectName("preferences.general.feedbacksize.spin");
+    fbSize->setToolTip(QStringLiteral("Font size of the on-screen feedback messages (load and playback notifications)."));
     fbSize->setAccessibleName("Feedback message size");
     connect(fbSize, QOverload<int>::of(&QSpinBox::valueChanged), page,
             [](int v){ sett.feedbackMessageSize = v; });
@@ -293,6 +304,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     fbFade->setSingleStep(0.5);
     fbFade->setValue(sett.feedbackMessageFadeDelay);
     fbFade->setObjectName("preferences.general.feedbackfade.spin");
+    fbFade->setToolTip(QStringLiteral("How long on-screen feedback messages stay before fading out, in seconds."));
     fbFade->setAccessibleName("Feedback message fade delay");
     connect(fbFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged), page,
             [](double v){ sett.feedbackMessageFadeDelay = float(v); });
@@ -329,6 +341,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     // Filter2D resize path. In-memory only; persisted centrally on Done.
     auto* filterCombo = new QComboBox(page);
     filterCombo->setObjectName("preferences.engine.decodefilter.combo");
+    filterCombo->setToolTip(QStringLiteral("Resampling filter used when a sequence is loaded at a reduced decode scale. nearest = fastest and blockiest; lanczos3 = sharpest and slowest."));
     filterCombo->setAccessibleName("Default decode filter");
     filterCombo->addItem("nearest",   FILTERBOX_ID);
     filterCombo->addItem("triangle",  FILTERTRIANGLE_ID);
@@ -347,6 +360,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     // keep their depth until reloaded. In-memory only; persisted on Done.
     auto* depthCombo = new QComboBox(page);
     depthCombo->setObjectName("preferences.engine.bitdepth.combo");
+    depthCombo->setToolTip(QStringLiteral("Texture bit depth for newly loaded sequences (drag-drop / Quick Load). Higher depth keeps more tonal precision but uses more memory. Existing plates keep their depth until reloaded."));
     depthCombo->setAccessibleName("Default bit depth for new loads");
     depthCombo->addItem("8",        GFC_8BPC);
     depthCombo->addItem("16",       GFC_16BPC);
@@ -382,32 +396,34 @@ void PreferencesWindow_Qt::buildTextPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
 
-    // Seed every control from persisted Text/* QSettings, falling back to
-    // GfcTextRenderer's constructor defaults (gfcTextRenderer.cpp) so a
-    // first run (no keys yet) reflects the renderer's actual live state.
+    // Seed every control from persisted Text/* QSettings, falling back to the
+    // shared GfcTextDefaults (gfcTextRenderer.h) so a first run (no keys yet)
+    // matches the renderer's live state and applyTextPrefs exactly.
+    using namespace GfcTextDefaults;
     QSettings s;
-    const float initSize          = s.value("Text/size", 12.0f).toFloat();
-    textColor_ = floatsToQColor(s.value("Text/colorR", 1.0f).toFloat(),
-                                 s.value("Text/colorG", 1.0f).toFloat(),
-                                 s.value("Text/colorB", 1.0f).toFloat(),
-                                 s.value("Text/colorA", 1.0f).toFloat());
-    const int initHintMode        = s.value("Text/hintMode", int(GfcTextRenderer::HINT_LIGHT)).toInt();
-    const bool initFilterNearest  = s.value("Text/filterNearest", true).toBool();
-    const float initGamma         = s.value("Text/gamma", 0.65f).toFloat();
-    const bool initShadowEnabled  = s.value("Text/shadowEnabled", true).toBool();
-    const float initShadowOffX    = s.value("Text/shadowOffX", 1.0f).toFloat();
-    const float initShadowOffY    = s.value("Text/shadowOffY", -1.0f).toFloat();
-    const float initShadowBlur    = s.value("Text/shadowBlur", 0.0f).toFloat();
-    textShadowColor_ = floatsToQColor(s.value("Text/shadowColorR", 0.0f).toFloat(),
-                                       s.value("Text/shadowColorG", 0.0f).toFloat(),
-                                       s.value("Text/shadowColorB", 0.0f).toFloat(),
-                                       s.value("Text/shadowColorA", 0.5f).toFloat());
+    const float initSize          = s.value("Text/size", kLabelSize).toFloat();
+    textColor_ = floatsToQColor(s.value("Text/colorR", kColorR).toFloat(),
+                                 s.value("Text/colorG", kColorG).toFloat(),
+                                 s.value("Text/colorB", kColorB).toFloat(),
+                                 1.0f);   // text label color has no alpha
+    const int initHintMode        = s.value("Text/hintMode", kHintMode).toInt();
+    const bool initFilterNearest  = s.value("Text/filterNearest", kFilterNearest).toBool();
+    const float initGamma         = s.value("Text/gamma", kGamma).toFloat();
+    const bool initShadowEnabled  = s.value("Text/shadowEnabled", kShadowEnabled).toBool();
+    const float initShadowOffX    = s.value("Text/shadowOffX", kShadowOffX).toFloat();
+    const float initShadowOffY    = s.value("Text/shadowOffY", kShadowOffY).toFloat();
+    const float initShadowBlur    = s.value("Text/shadowBlur", kShadowBlur).toFloat();
+    textShadowColor_ = floatsToQColor(s.value("Text/shadowColorR", kShadowColorR).toFloat(),
+                                       s.value("Text/shadowColorG", kShadowColorG).toFloat(),
+                                       s.value("Text/shadowColorB", kShadowColorB).toFloat(),
+                                       s.value("Text/shadowColorA", kShadowColorA).toFloat());
 
     // Size.
     textSizeSpin_ = new QSpinBox(page);
     textSizeSpin_->setRange(6, 72);
     textSizeSpin_->setValue(qRound(initSize));
     textSizeSpin_->setObjectName("preferences.text.size.spin");
+    textSizeSpin_->setToolTip(QStringLiteral("Font size (px) of the on-plate label overlay — the filename/info drawn on each plate."));
     textSizeSpin_->setAccessibleName("Text size");
     connect(textSizeSpin_, QOverload<int>::of(&QSpinBox::valueChanged), page,
             [](int v) { textRenderer().setLabelSize(float(v)); });
@@ -417,6 +433,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textColorBtn_ = new QPushButton(page);
     textColorBtn_->setFixedSize(60, 22);
     textColorBtn_->setObjectName("preferences.text.color.button");
+    textColorBtn_->setToolTip(QStringLiteral("Color of the on-plate label text. Live preview."));
     textColorBtn_->setAccessibleName("Text color");
     auto applyTextColorSwatch = [this]() { styleSwatch(textColorBtn_, textColor_); };
     applyTextColorSwatch();
@@ -436,6 +453,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textHintCombo_->addItem("Normal",         int(GfcTextRenderer::HINT_NORMAL));
     textHintCombo_->addItem("Force autohint", int(GfcTextRenderer::HINT_AUTO));
     textHintCombo_->setObjectName("preferences.text.hint.combo");
+    textHintCombo_->setToolTip(QStringLiteral("FreeType hinting for glyphs. Light = smooth (best for diagonals); Normal = crisper stems; Force autohint = FreeType's own hinter."));
     textHintCombo_->setAccessibleName("Text hinting");
     {
         int idx = textHintCombo_->findData(initHintMode);
@@ -454,6 +472,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textFilterCombo_->addItem("Nearest (pixel-exact)", true);
     textFilterCombo_->addItem("Linear",                false);
     textFilterCombo_->setObjectName("preferences.text.filter.combo");
+    textFilterCombo_->setToolTip(QStringLiteral("Texture filtering for the glyph atlas. Nearest = pixel-exact and crisp; Linear = smoother when scaled."));
     textFilterCombo_->setAccessibleName("Text atlas filter");
     {
         int idx = textFilterCombo_->findData(initFilterNearest);
@@ -472,6 +491,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textGammaSpin_->setSingleStep(0.05);
     textGammaSpin_->setValue(initGamma);
     textGammaSpin_->setObjectName("preferences.text.gamma.spin");
+    textGammaSpin_->setToolTip(QStringLiteral("Gamma correction applied to glyph edge coverage. Lower values render text bolder and darker at the edges (0.5–1.0)."));
     textGammaSpin_->setAccessibleName("Text gamma");
     connect(textGammaSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), page,
             [](double v) { textRenderer().setGamma(float(v)); });
@@ -481,6 +501,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textShadowEnabledCheck_ = new QCheckBox("Shadow enabled", page);
     textShadowEnabledCheck_->setChecked(initShadowEnabled);
     textShadowEnabledCheck_->setObjectName("preferences.text.shadowenabled.check");
+    textShadowEnabledCheck_->setToolTip(QStringLiteral("Draw a drop shadow behind text so it stays legible over bright images."));
     textShadowEnabledCheck_->setAccessibleName("Text shadow enabled");
     connect(textShadowEnabledCheck_, &QCheckBox::toggled, page,
             [](bool on) { textRenderer().setShadowEnabled(on); });
@@ -491,6 +512,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textShadowOffXSpin_->setSingleStep(0.5);
     textShadowOffXSpin_->setValue(initShadowOffX);
     textShadowOffXSpin_->setObjectName("preferences.text.shadowoffx.spin");
+    textShadowOffXSpin_->setToolTip(QStringLiteral("Horizontal offset of the text shadow, in pixels."));
     textShadowOffXSpin_->setAccessibleName("Text shadow X offset");
 
     textShadowOffYSpin_ = new QDoubleSpinBox(page);
@@ -498,6 +520,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textShadowOffYSpin_->setSingleStep(0.5);
     textShadowOffYSpin_->setValue(initShadowOffY);
     textShadowOffYSpin_->setObjectName("preferences.text.shadowoffy.spin");
+    textShadowOffYSpin_->setToolTip(QStringLiteral("Vertical offset of the text shadow, in pixels."));
     textShadowOffYSpin_->setAccessibleName("Text shadow Y offset");
 
     auto applyShadowOffset = [this](double) {
@@ -516,6 +539,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textShadowBlurSpin_->setSingleStep(0.5);
     textShadowBlurSpin_->setValue(initShadowBlur);
     textShadowBlurSpin_->setObjectName("preferences.text.shadowblur.spin");
+    textShadowBlurSpin_->setToolTip(QStringLiteral("Blur radius of the text shadow, in pixels (0 = hard shadow)."));
     textShadowBlurSpin_->setAccessibleName("Text shadow blur radius");
     connect(textShadowBlurSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             page, [](double v) { textRenderer().setShadowBlur(float(v)); });
@@ -524,6 +548,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textShadowColorBtn_ = new QPushButton(page);
     textShadowColorBtn_->setFixedSize(60, 22);
     textShadowColorBtn_->setObjectName("preferences.text.shadowcolor.button");
+    textShadowColorBtn_->setToolTip(QStringLiteral("Color and opacity of the text shadow. Live preview."));
     textShadowColorBtn_->setAccessibleName("Text shadow color");
     auto applyShadowColorSwatch = [this]() { styleSwatch(textShadowColorBtn_, textShadowColor_); };
     applyShadowColorSwatch();
@@ -553,7 +578,6 @@ void PreferencesWindow_Qt::writeTextPrefs() {
     s.setValue("Text/colorR", textColor_.redF());
     s.setValue("Text/colorG", textColor_.greenF());
     s.setValue("Text/colorB", textColor_.blueF());
-    s.setValue("Text/colorA", textColor_.alphaF());
     s.setValue("Text/hintMode", textHintCombo_->currentData().toInt());
     s.setValue("Text/filterNearest", textFilterCombo_->currentData().toBool());
     s.setValue("Text/gamma", textGammaSpin_->value());
@@ -574,6 +598,7 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     auto* exrIgnoreDisplay = new QCheckBox("EXR: ignore display window", page);
     exrIgnoreDisplay->setChecked(sett.exrIgnoreDisplayWindow != 0);
     exrIgnoreDisplay->setObjectName("preferences.formats.exrignoredisplay.check");
+    exrIgnoreDisplay->setToolTip(QStringLiteral("For EXR files, ignore the header display window and show only the data (pixel) window instead of compositing it into the full frame."));
     exrIgnoreDisplay->setAccessibleName("EXR: ignore display window");
     connect(exrIgnoreDisplay, &QCheckBox::toggled, page,
             [](bool on) { sett.exrIgnoreDisplayWindow = on ? 1 : 0; });
@@ -582,6 +607,7 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     auto* exrIgnoreAspect = new QCheckBox("EXR: ignore header aspect ratio", page);
     exrIgnoreAspect->setChecked(sett.exrIgnoreHeadersAspectRatio != 0);
     exrIgnoreAspect->setObjectName("preferences.formats.exrignoreaspect.check");
+    exrIgnoreAspect->setToolTip(QStringLiteral("For EXR files, ignore the header pixel aspect ratio (do not stretch to correct for non-square pixels)."));
     exrIgnoreAspect->setAccessibleName("EXR: ignore header aspect ratio");
     connect(exrIgnoreAspect, &QCheckBox::toggled, page,
             [](bool on) { sett.exrIgnoreHeadersAspectRatio = on ? 1 : 0; });
@@ -602,25 +628,30 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     auto* enable = new QCheckBox("Use search paths", page);
     enable->setChecked(sett.useSearchPaths);
     enable->setObjectName("preferences.search.enable.check");
+    enable->setToolTip(QStringLiteral("When a sequence file is not found at its original path, look for it in the search paths below."));
     connect(enable, &QCheckBox::toggled, page, [](bool on){ sett.useSearchPaths = on; });
     v->addWidget(enable);
 
     auto* recursive = new QCheckBox("Search recursively", page);
     recursive->setChecked(sett.searchPathsRecursive);
     recursive->setObjectName("preferences.search.recursive.check");
+    recursive->setToolTip(QStringLiteral("Search inside subfolders of each search path as well."));
     connect(recursive, &QCheckBox::toggled, page, [](bool on){ sett.searchPathsRecursive = on; });
     v->addWidget(recursive);
 
     auto* list = new QListWidget(page);
     list->setObjectName("preferences.search.paths.list");
+    list->setToolTip(QStringLiteral("Folders searched (in order) to relocate missing sequence files."));
     for (const auto& p : sett.searchPaths) list->addItem(QString::fromStdString(p));
     v->addWidget(list, 1);
 
     auto* row = new QHBoxLayout();
     auto* add = new QPushButton("Add…", page);
     add->setObjectName("preferences.search.add.button");
+    add->setToolTip(QStringLiteral("Add a folder to the search paths."));
     auto* rem = new QPushButton("Remove", page);
     rem->setObjectName("preferences.search.remove.button");
+    rem->setToolTip(QStringLiteral("Remove the selected folder(s) from the search paths."));
     row->addWidget(add); row->addWidget(rem); row->addStretch(1);
     v->addLayout(row);
 
@@ -631,7 +662,10 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     };
     connect(add, &QPushButton::clicked, page, [page, list, syncToSett]() {
         const QString d = QFileDialog::getExistingDirectory(page, "Add search path");
-        if (!d.isEmpty()) { list->addItem(d); syncToSett(); }
+        if (d.isEmpty()) return;
+        if (!list->findItems(d, Qt::MatchExactly).isEmpty()) return;  // no duplicates
+        list->addItem(d);
+        syncToSett();
     });
     connect(rem, &QPushButton::clicked, page, [list, syncToSett]() {
         qDeleteAll(list->selectedItems()); syncToSett();
@@ -652,7 +686,12 @@ QColor pointerColorToQ() {
     return QColor(r, g, b);
 }
 void qToPointerColor(const QColor& c) {
-    sett.remotePointerColor = (c.red() << 24) | (c.green() << 16) | (c.blue() << 8);
+    int packed = (c.red() << 24) | (c.green() << 16) | (c.blue() << 8);
+    // 0 is the "unset → default gray" sentinel (see pointerColorToQ and
+    // gfcPlate's gfcUnpackPointerColor), so a deliberately-picked pure black
+    // would render as gray. Nudge it to a near-black that isn't the sentinel.
+    if (packed == 0) packed = (1 << 8);   // B=1/255 ≈ black, non-zero
+    sett.remotePointerColor = packed;
 }
 }  // namespace
 
@@ -671,6 +710,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
 
     auto* nickname = new QLineEdit(QString::fromStdString(sett.nickName), page);
     nickname->setObjectName("preferences.remote.nickname.edit");
+    nickname->setToolTip(QStringLiteral("Your display name shown to other participants in a remote session."));
     nickname->setAccessibleName("Nickname");
     connect(nickname, &QLineEdit::editingFinished, page, [nickname]() {
         sett.nickName = nickname->text().toStdString();
@@ -689,6 +729,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     chatFade->setSingleStep(0.5);
     chatFade->setValue(sett.chatFadeDelay);
     chatFade->setObjectName("preferences.remote.chatfade.spin");
+    chatFade->setToolTip(QStringLiteral("How long chat messages stay before fading out, in seconds."));
     chatFade->setAccessibleName("Chat fade delay");
     connect(chatFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             chatPage, [](double v) { sett.chatFadeDelay = float(v); });
@@ -697,6 +738,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     auto* chatAutoFade = new QCheckBox("Auto-fade chat", chatPage);
     chatAutoFade->setChecked(sett.chatAutoFade != 0);
     chatAutoFade->setObjectName("preferences.remote.chatautofade.check");
+    chatAutoFade->setToolTip(QStringLiteral("Automatically fade chat messages after the fade delay (off = keep them visible)."));
     chatAutoFade->setAccessibleName("Auto-fade chat");
     connect(chatAutoFade, &QCheckBox::toggled, chatPage,
             [](bool on) { sett.chatAutoFade = on ? 1 : 0; });
@@ -705,6 +747,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     auto* chatTextBG = new QCheckBox("Chat text background", chatPage);
     chatTextBG->setChecked(sett.chatTextBG != 0);
     chatTextBG->setObjectName("preferences.remote.chattextbg.check");
+    chatTextBG->setToolTip(QStringLiteral("Draw a semi-opaque background behind chat text for legibility."));
     chatTextBG->setAccessibleName("Chat text background");
     connect(chatTextBG, &QCheckBox::toggled, chatPage,
             [](bool on) { sett.chatTextBG = on ? 1 : 0; });
@@ -714,6 +757,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     chatFontSize->setRange(6, 72);
     chatFontSize->setValue(sett.chatFontSize);
     chatFontSize->setObjectName("preferences.remote.chatfontsize.spin");
+    chatFontSize->setToolTip(QStringLiteral("Font size of on-screen chat messages."));
     chatFontSize->setAccessibleName("Chat font size");
     connect(chatFontSize, QOverload<int>::of(&QSpinBox::valueChanged),
             chatPage, [](int v) { sett.chatFontSize = v; });
@@ -724,6 +768,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     chatOpacity->setSingleStep(0.05);
     chatOpacity->setValue(sett.chatOpacity);
     chatOpacity->setObjectName("preferences.remote.chatopacity.spin");
+    chatOpacity->setToolTip(QStringLiteral("Opacity of the on-screen chat overlay (0–1)."));
     chatOpacity->setAccessibleName("Chat opacity");
     connect(chatOpacity, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             chatPage, [](double v) { sett.chatOpacity = float(v); });
@@ -733,6 +778,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     chatLines->setRange(1, 50);
     chatLines->setValue(sett.chatDisplayLines);
     chatLines->setObjectName("preferences.remote.chatlines.spin");
+    chatLines->setToolTip(QStringLiteral("Maximum number of chat lines shown on screen at once."));
     chatLines->setAccessibleName("Chat display lines");
     connect(chatLines, QOverload<int>::of(&QSpinBox::valueChanged),
             chatPage, [](int v) { sett.chatDisplayLines = v; });
@@ -749,6 +795,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     pointerFade->setSingleStep(0.5);
     pointerFade->setValue(sett.remotePointerFadeDelay);
     pointerFade->setObjectName("preferences.remote.pointerfade.spin");
+    pointerFade->setToolTip(QStringLiteral("How long a remote participant's pointer stays visible after they stop moving it, in seconds."));
     pointerFade->setAccessibleName("Remote pointer fade delay");
     connect(pointerFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             pointerPage, [](double v) { sett.remotePointerFadeDelay = float(v); });
@@ -757,6 +804,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     auto* pointerColorBtn = new QPushButton(pointerPage);
     pointerColorBtn->setFixedSize(60, 22);
     pointerColorBtn->setObjectName("preferences.remote.pointercolor.button");
+    pointerColorBtn->setToolTip(QStringLiteral("The color of your pointer as seen by other participants. Live preview."));
     pointerColorBtn->setAccessibleName("Remote pointer color");
     auto applyPointerColor = [pointerColorBtn]() { styleSwatch(pointerColorBtn, pointerColorToQ()); };
     applyPointerColor();

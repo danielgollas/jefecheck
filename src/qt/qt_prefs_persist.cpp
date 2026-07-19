@@ -79,35 +79,33 @@ void applyTextPrefs() {
     QSettings s;
     GfcTextRenderer& tr = textRenderer();
 
-    // Fallbacks below mirror GfcTextRenderer's constructor defaults
-    // (gfcTextRenderer.cpp) exactly, so a first run (no Text/* keys yet)
-    // causes zero visual change.
+    // Fallbacks come from GfcTextDefaults (gfcTextRenderer.h), the single source
+    // shared with buildTextPage and the renderer ctor, so a first run (no Text/*
+    // keys) is a visual no-op and the sites can't drift.
+    using namespace GfcTextDefaults;
     // Size + color drive the on-plate label overlay (gfcPlate::drawText) via the
-    // renderer's label style — those are the visible knobs. Default 12 px / white
-    // matches the historical textDisplaySize/textDisplayColor so first run is a
-    // no-op. (setSize/setColor here are transient and get overwritten per-draw.)
-    const float textSize = s.value("Text/size", 12.0f).toFloat();
+    // renderer's label style — the visible knobs. (setSize/setColor here are
+    // transient and get overwritten per-draw; the label setters are what stick.)
+    const float textSize = s.value("Text/size", kLabelSize).toFloat();
     tr.setSize(textSize);
     tr.setLabelSize(textSize);
-    tr.setColor(s.value("Text/colorR", 1.0f).toFloat(),
-                s.value("Text/colorG", 1.0f).toFloat(),
-                s.value("Text/colorB", 1.0f).toFloat(),
-                s.value("Text/colorA", 1.0f).toFloat());
-    tr.setLabelColor(s.value("Text/colorR", 1.0f).toFloat(),
-                     s.value("Text/colorG", 1.0f).toFloat(),
-                     s.value("Text/colorB", 1.0f).toFloat());
-    tr.setShadowEnabled(s.value("Text/shadowEnabled", true).toBool());
-    tr.setShadowOffset(s.value("Text/shadowOffX", 1.0f).toFloat(),
-                        s.value("Text/shadowOffY", -1.0f).toFloat());
-    tr.setShadowColor(s.value("Text/shadowColorR", 0.0f).toFloat(),
-                       s.value("Text/shadowColorG", 0.0f).toFloat(),
-                       s.value("Text/shadowColorB", 0.0f).toFloat(),
-                       s.value("Text/shadowColorA", 0.5f).toFloat());
-    tr.setShadowBlur(s.value("Text/shadowBlur", 0.0f).toFloat());
+    const float cr = s.value("Text/colorR", kColorR).toFloat();
+    const float cg = s.value("Text/colorG", kColorG).toFloat();
+    const float cb = s.value("Text/colorB", kColorB).toFloat();
+    tr.setColor(cr, cg, cb, 1.0f);   // label is opaque; text color has no alpha
+    tr.setLabelColor(cr, cg, cb);
+    tr.setShadowEnabled(s.value("Text/shadowEnabled", kShadowEnabled).toBool());
+    tr.setShadowOffset(s.value("Text/shadowOffX", kShadowOffX).toFloat(),
+                        s.value("Text/shadowOffY", kShadowOffY).toFloat());
+    tr.setShadowColor(s.value("Text/shadowColorR", kShadowColorR).toFloat(),
+                       s.value("Text/shadowColorG", kShadowColorG).toFloat(),
+                       s.value("Text/shadowColorB", kShadowColorB).toFloat(),
+                       s.value("Text/shadowColorA", kShadowColorA).toFloat());
+    tr.setShadowBlur(s.value("Text/shadowBlur", kShadowBlur).toFloat());
     tr.setHintMode(static_cast<GfcTextRenderer::HintMode>(
-        s.value("Text/hintMode", int(GfcTextRenderer::HINT_LIGHT)).toInt()));
-    tr.setFilterNearest(s.value("Text/filterNearest", true).toBool());
-    tr.setGamma(s.value("Text/gamma", 0.65f).toFloat());
+        s.value("Text/hintMode", kHintMode).toInt()));
+    tr.setFilterNearest(s.value("Text/filterNearest", kFilterNearest).toBool());
+    tr.setGamma(s.value("Text/gamma", kGamma).toFloat());
 }
 
 void writePreferences() {

@@ -15,6 +15,23 @@
 #define GFC_ALIGN_INSIDE  0x0010
 #define GFC_ALIGN_WRAP    0x0080
 
+// Default text-rendering preferences — the single source shared by the
+// GfcTextRenderer constructor and the Preferences → Text page / applyTextPrefs
+// QSettings fallbacks, so a first run (no Text/* keys) causes zero visual
+// change and the sites can't drift apart.
+namespace GfcTextDefaults {
+    inline constexpr float kLabelSize     = 12.0f;   // on-plate label size (px)
+    inline constexpr float kColorR = 1.0f, kColorG = 1.0f, kColorB = 1.0f;  // white
+    inline constexpr int   kHintMode      = 0;       // HINT_LIGHT
+    inline constexpr bool  kFilterNearest = true;    // GL_NEAREST
+    inline constexpr float kGamma         = 0.65f;
+    inline constexpr bool  kShadowEnabled = true;
+    inline constexpr float kShadowOffX = 1.0f, kShadowOffY = -1.0f;
+    inline constexpr float kShadowBlur    = 0.0f;
+    inline constexpr float kShadowColorR = 0.0f, kShadowColorG = 0.0f,
+                           kShadowColorB = 0.0f, kShadowColorA = 0.5f;
+}
+
 struct GfcBakedGlyph {
     float x0, y0, x1, y1;   // quad position offset from cursor (in pixels)
     float u0, v0, u1, v1;   // texture coordinates (GL convention: v=0 at bottom)
@@ -117,10 +134,11 @@ private:
     bool filterNearest;
     float gammaValue;
 
-    // Plate-label style (see setLabelSize/setLabelColor). Defaults match the
-    // historical gfcPlate textDisplaySize/textDisplayColor (12 px, white).
-    float labelSize_ = 12.0f;
-    float labelR_ = 1.0f, labelG_ = 1.0f, labelB_ = 1.0f;
+    // Plate-label style (see setLabelSize/setLabelColor).
+    float labelSize_ = GfcTextDefaults::kLabelSize;
+    float labelR_ = GfcTextDefaults::kColorR;
+    float labelG_ = GfcTextDefaults::kColorG;
+    float labelB_ = GfcTextDefaults::kColorB;
 
     // Get or create atlas for current size/DPI
     GfcFontAtlas& getAtlas();

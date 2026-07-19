@@ -30,6 +30,9 @@ void drawCheckerboardBackground(int wPx, int hPx) {
     glClear(GL_DEPTH_BUFFER_BIT);
     const float r = sett.bgColorR, g = sett.bgColorG, b = sett.bgColorB;
 
+    // Self-contained: save the enable flags + current color we touch so the
+    // subsequent plates().draw() isn't affected by our state changes.
+    glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT);
     const int cell = int(24 * gfc_gl_dpiscale());   // ~24 logical px per cell
     glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
     glOrtho(0, wPx, 0, hPx, -1, 1);
@@ -49,6 +52,7 @@ void drawCheckerboardBackground(int wPx, int hPx) {
     glEnd();
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
+    glPopAttrib();
 }
 }  // namespace
 
