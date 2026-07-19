@@ -19,7 +19,6 @@ gfcTrackManager::gfcTrackManager()
 {
 	numOfSequences=GFC_MAX_SEQUENCES;
 	autoAcceptRemoteLoadRequests=false;
-	ioBusy=0;
 }
 
 

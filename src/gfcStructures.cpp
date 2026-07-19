@@ -362,7 +362,8 @@ void gfcSettings::addToRecentFXs(std::string pname)
 	}
 	else
 	{	//not in there, max limit reached?
-		if (recentFXs.size()<sett.maxRecentFXs)
+		const size_t kMaxRecentFXs = 5; // matches the old gfcSettings::maxRecentFXs default
+		if (recentFXs.size()<kMaxRecentFXs)
 		{
 			//not in limit, just add it.
 			recentFXs.push_back(pname);

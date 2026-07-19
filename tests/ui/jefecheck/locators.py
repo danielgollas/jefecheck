@@ -17,8 +17,9 @@ STATUSBAR_LAYOUT = "statusbar.layout.label"
 STATUSBAR_TRACK = "statusbar.track.label"
 STATUSBAR_LOADED = "statusbar.loaded.label"
 STATUSBAR_STARTUP = "statusbar.startup.label"
-# Default bit depth moved to Preferences → Engine (prefs.engine.defaultTextureFormat);
-# status-bar visibility toggles via View → Show Status Bar (menu.view.statusbar).
+# Default bit depth moved to Preferences → Playback & Engine
+# (preferences.engine.bitdepth.combo); status-bar visibility toggles via
+# View → Show Status Bar (menu.view.statusbar).
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
@@ -208,15 +209,73 @@ LOAD_HEADER_FMT        = "dialog.loadwindow.strip.{idx}.header"
 # Preferences
 PREFERENCES_DIALOG = "preferences.dialog"
 PREFERENCES_SIDEBAR = "preferences.sidebar"
+PREFERENCES_PAGES = "preferences.pages"
+PREFERENCES_BUTTONS = "preferences.buttons"
 PREFERENCES_DONE = "preferences.done.button"
 PREFERENCES_CANCEL = "preferences.cancel.button"
 
-# Preferences → Engine panel widgets. PREFS_* prefix mirrors the
-# object-name pattern the PR-introducing-this-feature uses on the
-# widget side ("prefs.engine.<field>") — note the leaf objectName
-# differs from the `preferences.engine.*.combo` convention used by
-# pre-existing Engine widgets.
-PREFS_DEFAULT_DECODE_FILTER = "prefs.engine.defaultDecodeFilter"
+# Preferences → General panel widgets (JEF-16 Task 1/8).
+PREFS_GENERAL_BGCOLOR = "preferences.general.bgcolor.button"
+PREFS_GENERAL_CHECKERBOARD = "preferences.general.checkerboard.check"
+PREFS_GENERAL_BROWSEPATH = "preferences.general.browsepath.edit"
+PREFS_GENERAL_BROWSEPATH_BUTTON = "preferences.general.browsepath.button"
+PREFS_GENERAL_FULLSCREEN = "preferences.general.fullscreen.check"
+PREFS_GENERAL_OPENLOAD_AT_START = "preferences.general.openloadatstart.check"
+PREFS_GENERAL_RECOVERY = "preferences.general.recovery.check"
+PREFS_GENERAL_STARTUP = "preferences.general.startup.combo"
+PREFS_GENERAL_ASPECT_OPACITY = "preferences.general.aspectopacity.spin"
+PREFS_GENERAL_THUMBNAILS = "preferences.general.thumbnails.check"
+PREFS_GENERAL_FEEDBACK_SIZE = "preferences.general.feedbacksize.spin"
+PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
+
+# Preferences → Playback & Engine panel widgets. Standardized (JEF-16
+# Task 2) onto the `preferences.engine.*.combo` leaf convention used by
+# the other Engine widgets.
+# renderingEngine / vsync / numOfPartitions / forcePBO controls were removed
+# (JEF-16 audit: inert — no runtime effect); balanceReads was dropped entirely
+# (superseded by the read-ahead queue cap). Only the queue control remains.
+PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
+PREFS_ENGINE_OIIO_THREADS = "preferences.engine.oiiothreads.spin"
+PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
+PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
+
+# Preferences → Formats panel widgets (JEF-16 Task 3).
+PREFS_FORMATS_EXR_IGNORE_DISPLAY = "preferences.formats.exrignoredisplay.check"
+PREFS_FORMATS_EXR_IGNORE_ASPECT = "preferences.formats.exrignoreaspect.check"
+PREFS_FORMATS_STRAIGHT_ALPHA = "preferences.formats.straightalpha.check"
+PREFS_FORMATS_APPLY_ORIENTATION = "preferences.formats.applyorientation.check"
+
+# Preferences → Search Paths panel widgets (JEF-16 Task 4).
+PREFS_SEARCH_ENABLE = "preferences.search.enable.check"
+PREFS_SEARCH_RECURSIVE = "preferences.search.recursive.check"
+PREFS_SEARCH_PATHS_LIST = "preferences.search.paths.list"
+PREFS_SEARCH_ADD = "preferences.search.add.button"
+PREFS_SEARCH_REMOVE = "preferences.search.remove.button"
+
+# Preferences → Remote panel widgets (JEF-16 Task 5).
+PREFS_REMOTE_NICKNAME = "preferences.remote.nickname.edit"
+PREFS_REMOTE_CHAT_FADE = "preferences.remote.chatfade.spin"
+PREFS_REMOTE_CHAT_AUTOFADE = "preferences.remote.chatautofade.check"
+PREFS_REMOTE_CHAT_TEXTBG = "preferences.remote.chattextbg.check"
+PREFS_REMOTE_CHAT_FONTSIZE = "preferences.remote.chatfontsize.spin"
+PREFS_REMOTE_CHAT_OPACITY = "preferences.remote.chatopacity.spin"
+PREFS_REMOTE_CHAT_LINES = "preferences.remote.chatlines.spin"
+PREFS_REMOTE_POINTER_FADE = "preferences.remote.pointerfade.spin"
+PREFS_REMOTE_POINTER_COLOR = "preferences.remote.pointercolor.button"
+
+# Preferences → Text panel widgets (JEF-16 Task 6). Deferred (Done-writes)
+# persistence — see qt_prefs_persist.cpp applyTextPrefs()/PreferencesWindow_Qt
+# writeTextPrefs().
+PREFS_TEXT_SIZE = "preferences.text.size.spin"
+PREFS_TEXT_COLOR = "preferences.text.color.button"
+PREFS_TEXT_HINT = "preferences.text.hint.combo"
+PREFS_TEXT_FILTER = "preferences.text.filter.combo"
+PREFS_TEXT_GAMMA = "preferences.text.gamma.spin"
+PREFS_TEXT_SHADOW_ENABLED = "preferences.text.shadowenabled.check"
+PREFS_TEXT_SHADOW_OFFSET_X = "preferences.text.shadowoffx.spin"
+PREFS_TEXT_SHADOW_OFFSET_Y = "preferences.text.shadowoffy.spin"
+PREFS_TEXT_SHADOW_BLUR = "preferences.text.shadowblur.spin"
+PREFS_TEXT_SHADOW_COLOR = "preferences.text.shadowcolor.button"
 
 
 def plate(plate_id: int, role: str) -> str:

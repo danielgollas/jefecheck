@@ -1,10 +1,10 @@
 #include "gfcimageloaderoiio.h"
 #include "UIConstants.h"
 #include "gfcStructures.h"
+extern gfcSettings sett;
 #include <OpenImageIO/imageio.h>
 #include <OpenImageIO/imagebufalgo.h>
 #include <cstring>
-#include <set>
 #include <algorithm>
 
 gfcImageLoaderOIIO::gfcImageLoaderOIIO() : theBitmap(nullptr) {
@@ -106,10 +106,64 @@ static std::vector<LayerInfo> discoverLayers(const OIIO::ImageSpec &spec) {
     return layers;
 }
 
+namespace {
+// Remap a packed BGRA bitmap in place for an EXIF/TIFF Orientation (1..8).
+// Rotation cases (5..8) swap width/height. Orientation 1 is a no-op.
+void reorientBitmap(GFL_BITMAP* bmp, int orientation) {
+    if (!bmp || !bmp->Data || orientation < 2 || orientation > 8) return;
+    const int W = bmp->Width, H = bmp->Height;
+    const int px = bmp->ComponentsPerPixel * (bmp->BitsPerComponent / 8);
+    const int srcStride = bmp->BytesPerLine;
+    const bool swap = (orientation >= 5);
+    const int outW = swap ? H : W;
+    const int outH = swap ? W : H;
+    const int dstStride = outW * px;
+    unsigned char* dst = (unsigned char*)calloc(1, (size_t)dstStride * outH);
+    if (!dst) return;
+    for (int y = 0; y < H; ++y) {
+        const unsigned char* srow = bmp->Data + (size_t)y * srcStride;
+        for (int x = 0; x < W; ++x) {
+            int dx, dy;
+            switch (orientation) {
+                case 2: dx = W-1-x; dy = y;     break;  // mirror horizontal
+                case 3: dx = W-1-x; dy = H-1-y; break;  // rotate 180
+                case 4: dx = x;     dy = H-1-y; break;  // mirror vertical
+                case 5: dx = y;     dy = x;     break;  // transpose
+                case 6: dx = H-1-y; dy = x;     break;  // rotate 90 CW
+                case 7: dx = H-1-y; dy = W-1-x; break;  // transverse
+                case 8: dx = y;     dy = W-1-x; break;  // rotate 90 CCW
+                default: dx = x; dy = y; break;
+            }
+            memcpy(dst + (size_t)dy * dstStride + (size_t)dx * px,
+                   srow + (size_t)x * px, (size_t)px);
+        }
+    }
+    free(bmp->Data);
+    bmp->Data = dst;
+    bmp->Width = outW;
+    bmp->Height = outH;
+    bmp->BytesPerLine = dstStride;
+}
+}  // namespace
+
+// Sets OIIO's global worker-thread pool size (0 = auto/all cores). Used by
+// ImageBufAlgo (our resize) and some readers' internal parallelism. Declared
+// as a plain free function so the Qt preference TUs can call it without
+// pulling in OIIO headers.
+void gfcSetOIIOThreadCount(int n) {
+    OIIO::attribute("threads", n < 0 ? 0 : n);
+}
+
 int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     this->params = params;
 
-    auto inp = OIIO::ImageInput::open(params.fileName);
+    // Straight (unassociated) alpha: hint OIIO not to auto-premultiply on read.
+    // Passed as a config ImageSpec to open() (Formats prefs). Default off keeps
+    // OIIO's normal behavior.
+    OIIO::ImageSpec config;
+    if (sett.oiioUnassociatedAlpha)
+        config.attribute("oiio:UnassociatedAlpha", 1);
+    auto inp = OIIO::ImageInput::open(params.fileName, &config);
     if (!inp) {
         loadErrorString = "OIIO: Cannot open " + params.fileName;
         printf("OIIO Error: %s\n", loadErrorString.c_str());
@@ -120,6 +174,27 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     int width = spec.width;
     int height = spec.height;
     int totalChannels = spec.nchannels;
+    const float par = spec.get_float_attribute("PixelAspectRatio", 1.0f);
+    // EXIF/TIFF Orientation (1 = normal .. 8). Captured before close(); applied
+    // to the decoded bitmap below when the Formats pref is on.
+    const int orientation = sett.applyExifOrientation
+                                ? spec.get_int_attribute("Orientation", 1) : 1;
+
+    // EXR display window vs. data window (overscan/crop). Non-EXR formats
+    // (and EXRs where the two windows coincide) leave this a no-op: outW/outH
+    // == width/height and dispDX/dispDY == 0, so the composite below
+    // degenerates to the original 1:1 copy.
+    const bool hasDistinctDisplayWindow =
+        (spec.full_width != spec.width || spec.full_height != spec.height ||
+         spec.full_x != spec.x || spec.full_y != spec.y);
+    int dispDX = 0, dispDY = 0;      // data-window offset within the display window
+    int outW = width, outH = height; // bitmap allocation size
+    if (hasDistinctDisplayWindow && !sett.exrIgnoreDisplayWindow) {
+        dispDX = spec.x - spec.full_x;
+        dispDY = spec.y - spec.full_y;
+        outW = spec.full_width;
+        outH = spec.full_height;
+    }
 
     // Determine bit depth from the requested compression mode
     int bitsPerComponent = 8;
@@ -171,14 +246,23 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         }
     }
 
-    // Allocate output bitmap (always BGRA)
+    // Allocate output bitmap (always BGRA), sized to the display window so
+    // an EXR data window smaller/offset from the display window is padded
+    // into the full frame (unless the user opted to ignore the display
+    // window, in which case outW/outH == width/height, see above).
     int outChannels = 4;
-    theBitmap = gflAllockBitmapEx(GFL_BGRA, width, height, bitsPerComponent, outChannels, nullptr);
+    theBitmap = gflAllockBitmapEx(GFL_BGRA, outW, outH, bitsPerComponent, outChannels, nullptr);
     if (!theBitmap || !theBitmap->Data) {
         loadErrorString = "OIIO: Failed to allocate bitmap";
         inp->close();
         return -1;
     }
+    // Zero the full bitmap so any area not covered by the data window
+    // (display-window padding) reads as transparent/black rather than
+    // uninitialized memory. gflAllockBitmapEx already callocs its buffer,
+    // but re-zero explicitly since that's an implementation detail we
+    // shouldn't rely on here.
+    memset(theBitmap->Data, 0, (size_t)theBitmap->BytesPerLine * outH);
 
     // Read selected channels
     int bytesPerSample = bitsPerComponent / 8;
@@ -188,17 +272,26 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     inp->read_image(0, 0, chBegin, chBegin + srcChannels, readType, imgBuf.data());
 
-    // Convert to BGRA
+    // Convert to BGRA, compositing the data window into the (possibly
+    // larger/offset) display window at (x + dispDX, y + dispDY). In the
+    // common case (no distinct display window, or the user asked to ignore
+    // it) dispDX == dispDY == 0 and outW/outH == width/height, so this is
+    // just a 1:1 copy identical to the pre-Task-3 behavior.
     for (int y = 0; y < height; y++) {
+        int dy = y + dispDY;
+        if (dy < 0 || dy >= outH) continue; // whole source row falls outside the display window
+
         unsigned char *src = imgBuf.data() + (size_t)y * srcRowBytes;
-        unsigned char *dst = theBitmap->Data + (size_t)y * theBitmap->BytesPerLine;
+        unsigned char *dst = theBitmap->Data + (size_t)dy * theBitmap->BytesPerLine;
 
         if (bitsPerComponent == 16) {
             unsigned short *src16 = (unsigned short*)src;
             unsigned short *dst16 = (unsigned short*)dst;
             for (int x = 0; x < width; x++) {
+                int dx = x + dispDX;
+                if (dx < 0 || dx >= outW) continue;
                 int si = x * srcChannels;
-                int di = x * outChannels;
+                int di = dx * outChannels;
                 unsigned short r = src16[si + 0];
                 unsigned short g = (srcChannels > 1) ? src16[si + 1] : r;
                 unsigned short b = (srcChannels > 2) ? src16[si + 2] : r;
@@ -210,8 +303,10 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
             }
         } else {
             for (int x = 0; x < width; x++) {
+                int dx = x + dispDX;
+                if (dx < 0 || dx >= outW) continue;
                 int si = x * srcChannels;
-                int di = x * outChannels;
+                int di = dx * outChannels;
                 unsigned char r = src[si + 0];
                 unsigned char g = (srcChannels > 1) ? src[si + 1] : r;
                 unsigned char b = (srcChannels > 2) ? src[si + 2] : r;
@@ -226,11 +321,19 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     inp->close();
 
+    // Apply embedded orientation (before scale/crop) so the image displays
+    // upright. No-op when the pref is off (orientation == 1).
+    reorientBitmap(theBitmap, orientation);
+
     // Apply scale via OIIO (the filter actually matters here — our
     // local gflResize ignores filter selection and is nearest-only).
     if (params.scale > 0 && params.scale != 100) {
-        int newW = (int)(width * params.scale / 100.0f);
-        int newH = (int)(height * params.scale / 100.0f);
+        // Base the target on the composited bitmap (display-window size),
+        // not the raw data-window width/height — otherwise an overscan EXR
+        // (data window != display window) plus a non-100 decode scale would
+        // resize to the wrong dimensions and squash the image.
+        int newW = (int)(theBitmap->Width  * params.scale / 100.0f);
+        int newH = (int)(theBitmap->Height * params.scale / 100.0f);
 
         const char* filterName = oiioFilterNameFor(params.filterType);
 
@@ -297,6 +400,16 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     texCoords.h = (float)theBitmap->Height;
     quadSizeX = theBitmap->Width;
     quadSizeY = theBitmap->Height;
+    if (!sett.exrIgnoreHeadersAspectRatio) {
+        // par stretches the ORIGINAL horizontal axis to correct non-square pixels.
+        // A 90°/270° reorient (Orientation 5..8) swapped the axes, so apply par to
+        // the vertical axis instead. (Rotated non-square-pixel images are rare, but
+        // keep it correct.)
+        if (orientation >= 5 && orientation <= 8)
+            quadSizeY = (int)(quadSizeY * par);
+        else
+            quadSizeX = (int)(quadSizeX * par);
+    }
 
     format = spec.format.c_str();
     formatDescription = "";
@@ -365,8 +478,22 @@ int gfcImageLoaderOIIO::peek(gfcLoadParams params, gfcPeekInfo *results) {
     auto inp = OIIO::ImageInput::open(params.fileName);
     if (!inp) return -1;
     const OIIO::ImageSpec &spec = inp->spec();
-    sizeX = spec.width;
-    sizeY = spec.height;
+    const bool hasDistinctDisplayWindow =
+        (spec.full_width != spec.width || spec.full_height != spec.height ||
+         spec.full_x != spec.x || spec.full_y != spec.y);
+    if (hasDistinctDisplayWindow && !sett.exrIgnoreDisplayWindow) {
+        sizeX = spec.full_width;
+        sizeY = spec.full_height;
+    } else {
+        sizeX = spec.width;
+        sizeY = spec.height;
+    }
+    // Match load()'s orientation handling: a 90°/270° rotation (Orientation
+    // 5..8) swaps the reported dimensions.
+    if (sett.applyExifOrientation) {
+        const int orientation = spec.get_int_attribute("Orientation", 1);
+        if (orientation >= 5 && orientation <= 8) std::swap(sizeX, sizeY);
+    }
     bitDepth = spec.format.size() * 8;
     numOfComponents = spec.nchannels;
 

@@ -38,13 +38,14 @@ GfcTextRenderer::GfcTextRenderer()
     , dpiScale(1.0f)
     , currentBold(false)
     , colorR(1.0f), colorG(1.0f), colorB(1.0f), colorA(1.0f)
-    , shadowEnabled(true)
-    , shadowOffX(1.0f), shadowOffY(-1.0f)
-    , shadowR(0.0f), shadowG(0.0f), shadowB(0.0f), shadowA(0.5f)
-    , shadowBlurRadius(0.0f)
+    , shadowEnabled(GfcTextDefaults::kShadowEnabled)
+    , shadowOffX(GfcTextDefaults::kShadowOffX), shadowOffY(GfcTextDefaults::kShadowOffY)
+    , shadowR(GfcTextDefaults::kShadowColorR), shadowG(GfcTextDefaults::kShadowColorG)
+    , shadowB(GfcTextDefaults::kShadowColorB), shadowA(GfcTextDefaults::kShadowColorA)
+    , shadowBlurRadius(GfcTextDefaults::kShadowBlur)
     , hintMode(HINT_LIGHT)
-    , filterNearest(true)
-    , gammaValue(0.65f)
+    , filterNearest(GfcTextDefaults::kFilterNearest)
+    , gammaValue(GfcTextDefaults::kGamma)
 {
 }
 
@@ -123,11 +124,10 @@ void GfcTextRenderer::setShadowBlur(float radius) { shadowBlurRadius = radius; }
 void GfcTextRenderer::setHintMode(HintMode mode) {
     if (hintMode != mode) {
         hintMode = mode;
-        // Invalidate caches — need to rebake with new hinting
-        for (auto &p : atlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
-        for (auto &p : boldAtlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
-        atlasCache.clear();
-        boldAtlasCache.clear();
+        // Invalidate caches — need to rebake with new hinting. May be called
+        // live from the Preferences dialog with no GL context current, so
+        // defer the actual glDeleteTextures to the next draw.
+        queueAtlasInvalidation();
     }
 }
 
@@ -136,11 +136,16 @@ void GfcTextRenderer::setFilterNearest(bool nearest) { filterNearest = nearest; 
 void GfcTextRenderer::setGamma(float gamma) {
     if (gammaValue != gamma) {
         gammaValue = gamma;
-        for (auto &p : atlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
-        for (auto &p : boldAtlasCache) { if (p.second.textureID) glDeleteTextures(1, &p.second.textureID); }
-        atlasCache.clear();
-        boldAtlasCache.clear();
+        // See setHintMode() — deferred deletion, no GL context guaranteed here.
+        queueAtlasInvalidation();
     }
+}
+
+void GfcTextRenderer::queueAtlasInvalidation() {
+    for (auto &p : atlasCache)     if (p.second.textureID) pendingTexDeletes_.push_back(p.second.textureID);
+    for (auto &p : boldAtlasCache) if (p.second.textureID) pendingTexDeletes_.push_back(p.second.textureID);
+    atlasCache.clear();
+    boldAtlasCache.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -318,6 +323,11 @@ GfcFontAtlas GfcTextRenderer::bakeAtlas(const std::vector<unsigned char> &data, 
 }
 
 GfcFontAtlas& GfcTextRenderer::getAtlas() {
+    if (!pendingTexDeletes_.empty()) {
+        for (GLuint t : pendingTexDeletes_) if (t) glDeleteTextures(1, &t);
+        pendingTexDeletes_.clear();
+    }
+
     int key = (int)(currentSize * dpiScale * 100.0f);
     auto &cache = currentBold ? boldAtlasCache : atlasCache;
     auto it = cache.find(key);

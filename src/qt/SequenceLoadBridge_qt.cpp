@@ -1894,6 +1894,10 @@ void setRecentSessions(const std::vector<std::string>& paths) {
 int  getStartupSessionBehavior() { return sett.startupSessionBehavior; }
 void setStartupSessionBehavior(int mode) { sett.startupSessionBehavior = mode; }
 
+bool getStartFullscreen() { return sett.startFullscreen != 0; }
+bool getOpenLoadWindowAtStartup() { return sett.openLoadWindowAtStartup != 0; }
+std::string getDefaultBrowsePath() { return sett.defaultBrowsePath; }
+
 void saveCCFavoriteFromActive(int slot) {
     plateManager.saveFavoriteColorCorrectionFromPlate(slot);  // active quad
 }

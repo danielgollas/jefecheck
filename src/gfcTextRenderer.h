@@ -15,6 +15,23 @@
 #define GFC_ALIGN_INSIDE  0x0010
 #define GFC_ALIGN_WRAP    0x0080
 
+// Default text-rendering preferences — the single source shared by the
+// GfcTextRenderer constructor and the Preferences → Text page / applyTextPrefs
+// QSettings fallbacks, so a first run (no Text/* keys) causes zero visual
+// change and the sites can't drift apart.
+namespace GfcTextDefaults {
+    inline constexpr float kLabelSize     = 12.0f;   // on-plate label size (px)
+    inline constexpr float kColorR = 1.0f, kColorG = 1.0f, kColorB = 1.0f;  // white
+    inline constexpr int   kHintMode      = 0;       // HINT_LIGHT
+    inline constexpr bool  kFilterNearest = true;    // GL_NEAREST
+    inline constexpr float kGamma         = 0.65f;
+    inline constexpr bool  kShadowEnabled = true;
+    inline constexpr float kShadowOffX = 1.0f, kShadowOffY = -1.0f;
+    inline constexpr float kShadowBlur    = 0.0f;
+    inline constexpr float kShadowColorR = 0.0f, kShadowColorG = 0.0f,
+                           kShadowColorB = 0.0f, kShadowColorA = 0.5f;
+}
+
 struct GfcBakedGlyph {
     float x0, y0, x1, y1;   // quad position offset from cursor (in pixels)
     float u0, v0, u1, v1;   // texture coordinates (GL convention: v=0 at bottom)
@@ -52,6 +69,15 @@ public:
     // Color
     void setColor(float r, float g, float b, float a);
 
+    // Plate-label text style — the on-plate filename/info overlay drawn by
+    // gfcPlate::drawText(). Set from the Preferences → Text page so its Size and
+    // Color controls actually drive visible text (the transient setSize/setColor
+    // above are overwritten every frame by each draw site, so they can't).
+    void setLabelSize(float pixelSize) { labelSize_ = pixelSize; }
+    void setLabelColor(float r, float g, float b) { labelR_ = r; labelG_ = g; labelB_ = b; }
+    float labelSize() const { return labelSize_; }
+    void labelColor(float& r, float& g, float& b) const { r = labelR_; g = labelG_; b = labelB_; }
+
     // Shadow (drawn as a second pass with offset)
     void setShadowEnabled(bool enabled);
     void setShadowOffset(float x, float y);
@@ -87,6 +113,13 @@ private:
     std::map<int, GfcFontAtlas> atlasCache;
     std::map<int, GfcFontAtlas> boldAtlasCache;
 
+    // Texture IDs orphaned by a cache invalidation that happened with no GL
+    // context current (e.g. setHintMode/setGamma called live from the
+    // Preferences dialog). Deleted lazily at the top of getAtlas(), which is
+    // only reached from drawLine() during paintGL where the context is
+    // guaranteed current.
+    std::vector<GLuint> pendingTexDeletes_;
+
     // Current state
     float currentSize;
     float dpiScale;
@@ -101,8 +134,19 @@ private:
     bool filterNearest;
     float gammaValue;
 
+    // Plate-label style (see setLabelSize/setLabelColor).
+    float labelSize_ = GfcTextDefaults::kLabelSize;
+    float labelR_ = GfcTextDefaults::kColorR;
+    float labelG_ = GfcTextDefaults::kColorG;
+    float labelB_ = GfcTextDefaults::kColorB;
+
     // Get or create atlas for current size/DPI
     GfcFontAtlas& getAtlas();
+
+    // Move all cached texture IDs into pendingTexDeletes_ and clear the
+    // caches, WITHOUT calling glDeleteTextures (may run with no GL context
+    // current). Actual deletion happens lazily in getAtlas().
+    void queueAtlasInvalidation();
 
     // Bake a new atlas
     GfcFontAtlas bakeAtlas(const std::vector<unsigned char> &data, float pixelSize, float dpiScale);

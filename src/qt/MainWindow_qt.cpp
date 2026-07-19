@@ -10,6 +10,7 @@
 #include "PlateManager_qt.h"
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
+#include "qt_prefs_persist.h"
 #include "RenderBridge_qt.h"
 #include "RenderDialog_qt.h"
 #include "VideoEncoder_qt.h"
@@ -73,17 +74,11 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // Restore the engine load defaults persisted in QSettings — the default
     // texture bit depth and the OIIO decode filter. Both are now edited in
     // Preferences → Engine; here we just apply the saved values at startup
-    // (without opening Preferences). Routed through SequenceLoadBridge so this
-    // TU stays glad-free (gfcStructures.h drags glad, which can't share a TU
-    // with QOpenGLWidget on macOS — see developer_notes.md §1).
-    {
-        QSettings settings;
-        jefe::qt::setDefaultTextureFormat(
-            settings.value("Engine/defaultTextureFormat", GFC_16HALF).toInt());
-        jefe::qt::setDefaultDecodeFilter(
-            settings.value("Engine/defaultDecodeFilter",
-                           FILTERLANCZOS_ID).toInt());
-    }
+    // (without opening Preferences). Centralized in qt_prefs_persist.cpp,
+    // which stays the only TU responsible for the sett <-> QSettings mapping;
+    // this call itself is glad-free (gfcStructures.h drags glad, which can't
+    // share a TU with QOpenGLWidget on macOS — see developer_notes.md §1).
+    jefe::qt::loadPreferences();
 
     // Permanent right-aligned label that always reflects the current
     // framing mode. Status-bar text exposes via NSAccessibility (the
@@ -199,6 +194,10 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // so tests prefer Cmd+, — real users get either.
     auto openPrefs = [this]() {
         PreferencesWindow_Qt dlg(this);
+        // Live preview: repaint the viewport as viewport-affecting settings
+        // (text style, background, aspect bars) change while the dialog is open.
+        connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
+                this, [this]() { if (viewport_) viewport_->update(); });
         dlg.exec();
     };
     auto bindPrefsShortcut = [this, openPrefs](QKeySequence seq) {
@@ -286,6 +285,18 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // Session recovery runs after the GL context is alive (loadSession uploads
     // preview textures) — deferred past the autoload kick.
     QTimer::singleShot(400, this, [this]() { maybeRestoreSessionAtStartup(); });
+
+    // General prefs (JEF-16 Task 1): apply "start in fullscreen" / "open
+    // Load window at startup" now that loadPreferences() (above) has
+    // populated `sett`. Deferred via singleShot(0) like the other startup
+    // hooks above, so this runs once the event loop is pumping — main_qt.cpp
+    // has already called show() by the time this fires — rather than
+    // fighting the window manager mid-construction. Bridged through
+    // SequenceLoadBridge_qt so this TU stays glad-free (see developer_notes.md §1).
+    QTimer::singleShot(0, this, [this]() {
+        if (jefe::qt::getStartFullscreen()) showFullScreen();
+        if (jefe::qt::getOpenLoadWindowAtStartup()) openLoadWindow();
+    });
 
     // Fast playback tick (~250Hz) for tight FPS pacing. The frame-advance
     // logic in gfcPlaybackManager accumulates real wall-clock time and only
@@ -472,10 +483,16 @@ void MainWindow_Qt::buildMenuBar() {
                         QKeySequence(Qt::CTRL | Qt::Key_O),
                         this, [this]() {
         QSettings settings;
-        const QString lastDir = settings.value(
-            "MainWindow/lastLoadDir",
-            QStandardPaths::writableLocation(
-                QStandardPaths::PicturesLocation)).toString();
+        // Prefer the most-recently-used load directory; fall back to the
+        // General-prefs default browse path (JEF-16 Task 1), then to the
+        // platform Pictures folder if neither is set.
+        QString lastDir = settings.value("MainWindow/lastLoadDir", QString()).toString();
+        if (lastDir.isEmpty()) {
+            lastDir = QString::fromStdString(jefe::qt::getDefaultBrowsePath());
+        }
+        if (lastDir.isEmpty()) {
+            lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+        }
         const QString filter = tr(
             "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff "
             "*.tga *.bmp);;All files (*)");
@@ -536,8 +553,10 @@ void MainWindow_Qt::buildMenuBar() {
                         QKeySequence(Qt::CTRL | Qt::Key_P),
                         this, [this]() {
                             // Modal — settings persist on Done via
-                            // saveSettings(&sett) inside the dialog.
+                            // jefe::qt::writePreferences() inside the dialog.
                             PreferencesWindow_Qt dlg(this);
+                            connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
+                                    this, [this]() { if (viewport_) viewport_->update(); });
                             dlg.exec();
                         });
     prefsAction->setObjectName("menu.file.preferences");
