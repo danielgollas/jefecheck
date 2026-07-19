@@ -3,7 +3,6 @@
 #include "../gfcStructures.h"
 #include "../gfcTextRenderer.h"
 #include "../UIConstants.h"
-#include "CollapsibleSection_qt.h"
 #include "qt_prefs_persist.h"
 
 #include <QCheckBox>
@@ -122,13 +121,6 @@ void PreferencesWindow_Qt::addPage(const QString& title, QWidget* page) {
     pages_->addWidget(page);
 }
 
-QWidget* PreferencesWindow_Qt::section(const QString& title, QWidget* content) {
-    auto* sec = new CollapsibleSection(title, this);
-    sec->setContentWidget(content);
-    sec->setExpanded(true);
-    return sec;
-}
-
 namespace {
 // The viewport background is a full RGB color (sett.bgColorR/G/B). bgColor is
 // kept as its luminance for legacy readers.
@@ -168,11 +160,24 @@ QColor liveColorDialog(QWidget* parent, const QColor& start, const QString& titl
     apply(start);
     return start;
 }
+
+// Uniform look for every Preferences page's form: left-aligned labels, compact
+// top-left layout, consistent margins/spacing.
+void configureForm(QFormLayout* form) {
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    form->setContentsMargins(14, 12, 14, 12);
+    form->setHorizontalSpacing(14);
+    form->setVerticalSpacing(8);
+    form->setRowWrapPolicy(QFormLayout::DontWrapRows);
+    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+}
 }  // namespace
 
 void PreferencesWindow_Qt::buildGeneralPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
+    configureForm(form);
 
     // Background color — a pure color swatch that opens a live RGB picker
     // (the viewport repaint timer previews each intermediate color).
@@ -195,7 +200,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     checker->setToolTip(QStringLiteral("Draw a checkerboard (two shades derived from the background color) instead of a flat fill — useful for judging image edges and alpha."));
     checker->setAccessibleName("Checkerboard background");
     connect(checker, &QCheckBox::toggled, page, [](bool on){ sett.bgCheckerboard = on ? 1 : 0; });
-    form->addRow(QString(), checker);
+    form->addRow(checker);
 
     auto* browseRow = new QWidget(page);
     auto* browseLay = new QHBoxLayout(browseRow);
@@ -234,7 +239,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     fullscreen->setAccessibleName("Start in fullscreen");
     connect(fullscreen, &QCheckBox::toggled, page,
             [](bool on) { sett.startFullscreen = on ? 1 : 0; });
-    form->addRow(QString(), fullscreen);
+    form->addRow(fullscreen);
 
     auto* showLoad = new QCheckBox("Open Load window at startup", page);
     showLoad->setChecked(sett.openLoadWindowAtStartup != 0);
@@ -243,7 +248,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     showLoad->setAccessibleName("Open Load window at startup");
     connect(showLoad, &QCheckBox::toggled, page,
             [](bool on) { sett.openLoadWindowAtStartup = on ? 1 : 0; });
-    form->addRow(QString(), showLoad);
+    form->addRow(showLoad);
 
     auto* recovery = new QCheckBox("Enable crash recovery session", page);
     recovery->setChecked(sett.enableCrashRecoverySession != 0);
@@ -252,7 +257,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     recovery->setAccessibleName("Enable crash recovery session");
     connect(recovery, &QCheckBox::toggled, page,
             [](bool on) { sett.enableCrashRecoverySession = on ? 1 : 0; });
-    form->addRow(QString(), recovery);
+    form->addRow(recovery);
 
     // On launch: what to do with the previous session. Persisted under
     // Session/startupBehavior; the MainWindow constructor seeds sett from it.
@@ -287,7 +292,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     thumbs->setToolTip(QStringLiteral("Show filmstrip thumbnails in the timeline."));
     thumbs->setAccessibleName("Timeline thumbnails");
     connect(thumbs, &QCheckBox::toggled, page, [](bool on){ sett.showThumbnails = on; });
-    form->addRow(QString(), thumbs);
+    form->addRow(thumbs);
 
     auto* fbSize = new QSpinBox(page);
     fbSize->setRange(6, 72);
@@ -421,6 +426,7 @@ QColor floatsToQColor(float r, float g, float b, float a) {
 void PreferencesWindow_Qt::buildTextPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
+    configureForm(form);
 
     // Seed every control from persisted Text/* QSettings, falling back to the
     // shared GfcTextDefaults (gfcTextRenderer.h) so a first run (no keys yet)
@@ -531,7 +537,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     textShadowEnabledCheck_->setAccessibleName("Text shadow enabled");
     connect(textShadowEnabledCheck_, &QCheckBox::toggled, page,
             [](bool on) { textRenderer().setShadowEnabled(on); });
-    form->addRow(QString(), textShadowEnabledCheck_);
+    form->addRow(textShadowEnabledCheck_);
 
     textShadowOffXSpin_ = new QDoubleSpinBox(page);
     textShadowOffXSpin_->setRange(-20.0, 20.0);
@@ -620,6 +626,7 @@ void PreferencesWindow_Qt::writeTextPrefs() {
 void PreferencesWindow_Qt::buildFormatsPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
+    configureForm(form);
 
     auto* exrIgnoreDisplay = new QCheckBox("EXR: ignore display window", page);
     exrIgnoreDisplay->setChecked(sett.exrIgnoreDisplayWindow != 0);
@@ -628,7 +635,7 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     exrIgnoreDisplay->setAccessibleName("EXR: ignore display window");
     connect(exrIgnoreDisplay, &QCheckBox::toggled, page,
             [](bool on) { sett.exrIgnoreDisplayWindow = on ? 1 : 0; });
-    form->addRow(QString(), exrIgnoreDisplay);
+    form->addRow(exrIgnoreDisplay);
 
     auto* exrIgnoreAspect = new QCheckBox("EXR: ignore header aspect ratio", page);
     exrIgnoreAspect->setChecked(sett.exrIgnoreHeadersAspectRatio != 0);
@@ -637,7 +644,7 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     exrIgnoreAspect->setAccessibleName("EXR: ignore header aspect ratio");
     connect(exrIgnoreAspect, &QCheckBox::toggled, page,
             [](bool on) { sett.exrIgnoreHeadersAspectRatio = on ? 1 : 0; });
-    form->addRow(QString(), exrIgnoreAspect);
+    form->addRow(exrIgnoreAspect);
 
     auto* straightAlpha = new QCheckBox("Read straight (unassociated) alpha", page);
     straightAlpha->setChecked(sett.oiioUnassociatedAlpha != 0);
@@ -646,7 +653,7 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     straightAlpha->setAccessibleName("Read straight (unassociated) alpha");
     connect(straightAlpha, &QCheckBox::toggled, page,
             [](bool on) { sett.oiioUnassociatedAlpha = on ? 1 : 0; });
-    form->addRow(QString(), straightAlpha);
+    form->addRow(straightAlpha);
 
     auto* applyOrient = new QCheckBox("Apply embedded orientation", page);
     applyOrient->setChecked(sett.applyExifOrientation != 0);
@@ -655,7 +662,7 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     applyOrient->setAccessibleName("Apply embedded orientation");
     connect(applyOrient, &QCheckBox::toggled, page,
             [](bool on) { sett.applyExifOrientation = on ? 1 : 0; });
-    form->addRow(QString(), applyOrient);
+    form->addRow(applyOrient);
 
     addPage("Formats", page);
 }
@@ -667,27 +674,28 @@ void PreferencesWindow_Qt::buildFormatsPage() {
 // and persist; no consumer changes needed.
 void PreferencesWindow_Qt::buildSearchPathsPage() {
     auto* page = new QWidget(this);
-    auto* v = new QVBoxLayout(page);
+    auto* form = new QFormLayout(page);
+    configureForm(form);
 
     auto* enable = new QCheckBox("Use search paths", page);
     enable->setChecked(sett.useSearchPaths);
     enable->setObjectName("preferences.search.enable.check");
     enable->setToolTip(QStringLiteral("When a sequence file is not found at its original path, look for it in the search paths below."));
     connect(enable, &QCheckBox::toggled, page, [](bool on){ sett.useSearchPaths = on; });
-    v->addWidget(enable);
+    form->addRow(enable);
 
     auto* recursive = new QCheckBox("Search recursively", page);
     recursive->setChecked(sett.searchPathsRecursive);
     recursive->setObjectName("preferences.search.recursive.check");
     recursive->setToolTip(QStringLiteral("Search inside subfolders of each search path as well."));
     connect(recursive, &QCheckBox::toggled, page, [](bool on){ sett.searchPathsRecursive = on; });
-    v->addWidget(recursive);
+    form->addRow(recursive);
 
     auto* list = new QListWidget(page);
     list->setObjectName("preferences.search.paths.list");
     list->setToolTip(QStringLiteral("Folders searched (in order) to relocate missing sequence files."));
     for (const auto& p : sett.searchPaths) list->addItem(QString::fromStdString(p));
-    v->addWidget(list, 1);
+    form->addRow(list);
 
     auto* row = new QHBoxLayout();
     auto* add = new QPushButton("Add…", page);
@@ -697,7 +705,10 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     rem->setObjectName("preferences.search.remove.button");
     rem->setToolTip(QStringLiteral("Remove the selected folder(s) from the search paths."));
     row->addWidget(add); row->addWidget(rem); row->addStretch(1);
-    v->addLayout(row);
+    auto* buttonRow = new QWidget(page);
+    buttonRow->setLayout(row);
+    row->setContentsMargins(0, 0, 0, 0);
+    form->addRow(buttonRow);
 
     auto syncToSett = [list]() {
         sett.searchPaths.clear();
@@ -747,10 +758,8 @@ void qToPointerColor(const QColor& c) {
 // `sett` and persist; no consumer changes needed (see task-5-brief.md).
 void PreferencesWindow_Qt::buildRemotePage() {
     auto* page = new QWidget(this);
-    auto* outer = new QVBoxLayout(page);
-
-    auto* topForm = new QFormLayout();
-    outer->addLayout(topForm);
+    auto* form = new QFormLayout(page);
+    configureForm(form);
 
     auto* nickname = new QLineEdit(QString::fromStdString(sett.nickName), page);
     nickname->setObjectName("preferences.remote.nickname.edit");
@@ -759,16 +768,17 @@ void PreferencesWindow_Qt::buildRemotePage() {
     connect(nickname, &QLineEdit::editingFinished, page, [nickname]() {
         sett.nickName = nickname->text().toStdString();
     });
-    topForm->addRow("Nickname", nickname);
+    form->addRow("Nickname", nickname);
 
     // Send / auto-accept remote-load-request toggles removed — loads come only
     // through playlists, so these are not user-configurable.
 
     // Chat group.
-    auto* chatPage = new QWidget(page);
-    auto* chatForm = new QFormLayout(chatPage);
+    auto* chatHeader = new QLabel("Chat", page);
+    chatHeader->setProperty("role", "section");
+    form->addRow(chatHeader);
 
-    auto* chatFade = new QDoubleSpinBox(chatPage);
+    auto* chatFade = new QDoubleSpinBox(page);
     chatFade->setRange(0.0, 60.0);
     chatFade->setSingleStep(0.5);
     chatFade->setValue(sett.chatFadeDelay);
@@ -776,38 +786,38 @@ void PreferencesWindow_Qt::buildRemotePage() {
     chatFade->setToolTip(QStringLiteral("How long chat messages stay before fading out, in seconds."));
     chatFade->setAccessibleName("Chat fade delay");
     connect(chatFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            chatPage, [](double v) { sett.chatFadeDelay = float(v); });
-    chatForm->addRow("Fade delay (s)", chatFade);
+            page, [](double v) { sett.chatFadeDelay = float(v); });
+    form->addRow("Fade delay (s)", chatFade);
 
-    auto* chatAutoFade = new QCheckBox("Auto-fade chat", chatPage);
+    auto* chatAutoFade = new QCheckBox("Auto-fade chat", page);
     chatAutoFade->setChecked(sett.chatAutoFade != 0);
     chatAutoFade->setObjectName("preferences.remote.chatautofade.check");
     chatAutoFade->setToolTip(QStringLiteral("Automatically fade chat messages after the fade delay (off = keep them visible)."));
     chatAutoFade->setAccessibleName("Auto-fade chat");
-    connect(chatAutoFade, &QCheckBox::toggled, chatPage,
+    connect(chatAutoFade, &QCheckBox::toggled, page,
             [](bool on) { sett.chatAutoFade = on ? 1 : 0; });
-    chatForm->addRow(QString(), chatAutoFade);
+    form->addRow(chatAutoFade);
 
-    auto* chatTextBG = new QCheckBox("Chat text background", chatPage);
+    auto* chatTextBG = new QCheckBox("Chat text background", page);
     chatTextBG->setChecked(sett.chatTextBG != 0);
     chatTextBG->setObjectName("preferences.remote.chattextbg.check");
     chatTextBG->setToolTip(QStringLiteral("Draw a semi-opaque background behind chat text for legibility."));
     chatTextBG->setAccessibleName("Chat text background");
-    connect(chatTextBG, &QCheckBox::toggled, chatPage,
+    connect(chatTextBG, &QCheckBox::toggled, page,
             [](bool on) { sett.chatTextBG = on ? 1 : 0; });
-    chatForm->addRow(QString(), chatTextBG);
+    form->addRow(chatTextBG);
 
-    auto* chatFontSize = new QSpinBox(chatPage);
+    auto* chatFontSize = new QSpinBox(page);
     chatFontSize->setRange(6, 72);
     chatFontSize->setValue(sett.chatFontSize);
     chatFontSize->setObjectName("preferences.remote.chatfontsize.spin");
     chatFontSize->setToolTip(QStringLiteral("Font size of on-screen chat messages."));
     chatFontSize->setAccessibleName("Chat font size");
     connect(chatFontSize, QOverload<int>::of(&QSpinBox::valueChanged),
-            chatPage, [](int v) { sett.chatFontSize = v; });
-    chatForm->addRow("Font size", chatFontSize);
+            page, [](int v) { sett.chatFontSize = v; });
+    form->addRow("Font size", chatFontSize);
 
-    auto* chatOpacity = new QDoubleSpinBox(chatPage);
+    auto* chatOpacity = new QDoubleSpinBox(page);
     chatOpacity->setRange(0.0, 1.0);
     chatOpacity->setSingleStep(0.05);
     chatOpacity->setValue(sett.chatOpacity);
@@ -815,26 +825,25 @@ void PreferencesWindow_Qt::buildRemotePage() {
     chatOpacity->setToolTip(QStringLiteral("Opacity of the on-screen chat overlay (0–1)."));
     chatOpacity->setAccessibleName("Chat opacity");
     connect(chatOpacity, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            chatPage, [](double v) { sett.chatOpacity = float(v); });
-    chatForm->addRow("Opacity", chatOpacity);
+            page, [](double v) { sett.chatOpacity = float(v); });
+    form->addRow("Opacity", chatOpacity);
 
-    auto* chatLines = new QSpinBox(chatPage);
+    auto* chatLines = new QSpinBox(page);
     chatLines->setRange(1, 50);
     chatLines->setValue(sett.chatDisplayLines);
     chatLines->setObjectName("preferences.remote.chatlines.spin");
     chatLines->setToolTip(QStringLiteral("Maximum number of chat lines shown on screen at once."));
     chatLines->setAccessibleName("Chat display lines");
     connect(chatLines, QOverload<int>::of(&QSpinBox::valueChanged),
-            chatPage, [](int v) { sett.chatDisplayLines = v; });
-    chatForm->addRow("Display lines", chatLines);
-
-    outer->addWidget(section("Chat", chatPage));
+            page, [](int v) { sett.chatDisplayLines = v; });
+    form->addRow("Display lines", chatLines);
 
     // Remote pointer group.
-    auto* pointerPage = new QWidget(page);
-    auto* pointerForm = new QFormLayout(pointerPage);
+    auto* pointerHeader = new QLabel("Remote pointer", page);
+    pointerHeader->setProperty("role", "section");
+    form->addRow(pointerHeader);
 
-    auto* pointerFade = new QDoubleSpinBox(pointerPage);
+    auto* pointerFade = new QDoubleSpinBox(page);
     pointerFade->setRange(0.0, 60.0);
     pointerFade->setSingleStep(0.5);
     pointerFade->setValue(sett.remotePointerFadeDelay);
@@ -842,29 +851,26 @@ void PreferencesWindow_Qt::buildRemotePage() {
     pointerFade->setToolTip(QStringLiteral("How long a remote participant's pointer stays visible after they stop moving it, in seconds."));
     pointerFade->setAccessibleName("Remote pointer fade delay");
     connect(pointerFade, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            pointerPage, [](double v) { sett.remotePointerFadeDelay = float(v); });
-    pointerForm->addRow("Fade delay (s)", pointerFade);
+            page, [](double v) { sett.remotePointerFadeDelay = float(v); });
+    form->addRow("Fade delay (s)", pointerFade);
 
-    auto* pointerColorBtn = new QPushButton(pointerPage);
+    auto* pointerColorBtn = new QPushButton(page);
     pointerColorBtn->setFixedSize(60, 22);
     pointerColorBtn->setObjectName("preferences.remote.pointercolor.button");
     pointerColorBtn->setToolTip(QStringLiteral("The color of your pointer as seen by other participants. Live preview."));
     pointerColorBtn->setAccessibleName("Remote pointer color");
     auto applyPointerColor = [pointerColorBtn]() { styleSwatch(pointerColorBtn, pointerColorToQ()); };
     applyPointerColor();
-    connect(pointerColorBtn, &QPushButton::clicked, pointerPage,
-            [pointerPage, applyPointerColor]() {
-        liveColorDialog(pointerPage, pointerColorToQ(), "Remote pointer color",
+    connect(pointerColorBtn, &QPushButton::clicked, page,
+            [page, applyPointerColor]() {
+        liveColorDialog(page, pointerColorToQ(), "Remote pointer color",
                         /*withAlpha*/ false,
                         [applyPointerColor](const QColor& c) {
             qToPointerColor(c);
             applyPointerColor();
         });
     });
-    pointerForm->addRow("Color", pointerColorBtn);
-
-    outer->addWidget(section("Remote pointer", pointerPage));
-    outer->addStretch(1);
+    form->addRow("Color", pointerColorBtn);
 
     addPage("Remote", page);
 }

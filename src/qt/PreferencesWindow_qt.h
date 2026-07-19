@@ -56,11 +56,6 @@ private:
     void buildSearchPathsPage();
     void buildRemotePage();
 
-    // Wraps `content` in a CollapsibleSection and returns it for adding to a
-    // page layout. Scaffolding for later tasks — the three current pages
-    // don't use it yet.
-    QWidget* section(const QString& title, QWidget* content);
-
     // Text prefs use deferred (Done-writes) persistence rather than the
     // per-change QSettings writes other pages use, matching the Engine
     // combos' pattern (see developer_notes / task-6 brief). Reads the
