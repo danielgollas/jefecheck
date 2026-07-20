@@ -1413,6 +1413,69 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
         }
 
         if ( forRender ) {
+            // The FX loop leaves the composited FX result in
+            // fboTexturev[activeFBO], but the super-shader (gamma/exposure/BCS
+            // + the plate's LUT) is only applied by startSuperShader() in the
+            // on-screen LAST pass below — which runs AFTER the read-back. So
+            // apply it here into the other FBO buffer, then read that back;
+            // otherwise rendered frames drop colour correction and the LUT.
+            // (Single-buffered-FX GPUs can't ping-pong; they keep old behaviour.)
+            if (!forceSingleBufferedFX) {
+                glPushAttrib(GL_ALL_ATTRIB_BITS);
+                const int fxResultTex = fboTexturev[activeFBO];
+                activeFBO = !activeFBO;
+                glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT + activeFBO);
+                glDisable(GL_BLEND);
+                glDisable(GL_DEPTH_TEST);
+                glClearColor(0, 0, 0, 1);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                glMatrixMode(GL_MODELVIEW);
+                glLoadIdentity();
+
+                textureTypeForSuperShader =
+                    theFrame.compressed != GFC_S3TCDX1 ? theFrame.compressed : GFC_8BPC;
+                textureIDforSuperShader = fxResultTex;
+                startSuperShader();
+                glActiveTexture(GL_TEXTURE0_ARB);
+                glEnable(GL_TEXTURE_RECTANGLE_ARB);
+                glBindTexture(GL_TEXTURE_RECTANGLE_ARB, fxResultTex);
+                glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, sett.filterMin);
+                glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, sett.filterMax);
+                glColor4f(0, 0, 0, 1);
+                glBegin(GL_QUADS);
+                    glTexCoord2f(0,       0);        glVertex3f(-fboVP.w/2.0, -fboVP.h/2.0, 1);
+                    glTexCoord2f(fboVP.w, 0);        glVertex3f( fboVP.w/2.0, -fboVP.h/2.0, 1);
+                    glTexCoord2f(fboVP.w, fboVP.h);  glVertex3f( fboVP.w/2.0,  fboVP.h/2.0, 1);
+                    glTexCoord2f(0,       fboVP.h);  glVertex3f(-fboVP.w/2.0,  fboVP.h/2.0, 1);
+                glEnd();
+                glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
+                glDisable(GL_TEXTURE_RECTANGLE_ARB);
+                stopSuperShader();
+
+                // Optional: bake the aspect/crop letterbox into the render.
+                // The crop bars are computed in poly space; scale them to the
+                // FBO. Opaque black (a letterbox is solid, unlike the on-screen
+                // semi-transparent preview).
+                if (renderParams.bakeCropBars && cropOn && polySizeX && polySizeY) {
+                    const double sx = (double)fboVP.w / (double)polySizeX;
+                    const double sy = (double)fboVP.h / (double)polySizeY;
+                    glColor4f(0, 0, 0, 1);
+                    glBegin(GL_QUADS);
+                        glVertex3f(cropBarTop.x*sx, cropBarTop.y*sy, 1);
+                        glVertex3f(cropBarTop.x*sx, cropBarTop.h*sy, 1);
+                        glVertex3f(cropBarTop.w*sx, cropBarTop.h*sy, 1);
+                        glVertex3f(cropBarTop.w*sx, cropBarTop.y*sy, 1);
+                    glEnd();
+                    glBegin(GL_QUADS);
+                        glVertex3f(cropBarBottom.x*sx, cropBarBottom.y*sy, 1);
+                        glVertex3f(cropBarBottom.x*sx, cropBarBottom.h*sy, 1);
+                        glVertex3f(cropBarBottom.w*sx, cropBarBottom.h*sy, 1);
+                        glVertex3f(cropBarBottom.w*sx, cropBarBottom.y*sy, 1);
+                    glEnd();
+                }
+                glPopAttrib();
+            }
+
             //instance an imageSaver according to format
             renderParams.sizeX=fboVP.w;
             renderParams.sizeY=fboVP.h;

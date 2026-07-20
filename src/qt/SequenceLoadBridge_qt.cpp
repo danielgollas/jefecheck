@@ -869,6 +869,7 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     p.exrCompression  = src.exrCompression;
     p.exrFormat       = src.exrFormat;
     p.bitsPerChannel  = src.bitsPerChannel;
+    p.bakeCropBars    = src.bakeCropBars;
     return p;
 }
 }  // namespace
@@ -1309,6 +1310,16 @@ void adjustPlateExposure(int plateIdx, float delta) {
     if (plateIdx < 0) return;
     plateManager.setExposure(plateIdx, delta, 1);
     plateManager.setChanged();
+}
+
+void setPlateAspect(int plateIdx, float aspect) {
+    if (plateIdx < 0) return;
+    plateManager.setAspect(plateIdx, aspect);
+}
+
+void setPlateCrop(int plateIdx, bool on) {
+    if (plateIdx < 0) return;
+    plateManager.setCrop(plateIdx, on ? 1 : 0);
 }
 
 void adjustPlateBrightness(int plateIdx, float delta) {

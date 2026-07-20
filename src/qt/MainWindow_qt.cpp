@@ -1402,6 +1402,123 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
     return pass ? 0 : 1;
 }
 
+int MainWindow_Qt::runHeadlessCCTest(const QString& imagePath) {
+    // Proves that rendered frames carry the super-shader colour pipeline
+    // (gamma/exposure/BCS + LUT). This would FAIL before the fix that applies
+    // the super-shader before the forRender read-back — the FX-stack test
+    // can't catch it because FX are baked into the FBO earlier.
+    if (!viewport_) { printf("CC-TEST FAIL: no viewport\n"); fflush(stdout); return 2; }
+
+    loadFileIntoPlate(0, imagePath);
+    jefe::qt::setActivePlate(0);
+    jefe::qt::setAllPlatesShowPreview(true);
+
+    const QString outDir = QDir::tempPath() + "/jefecheck_cctest";
+    QDir().mkpath(outDir);
+
+    auto renderOne = [&](const char* prefix, bool bakeCropBars = false) -> QString {
+        jefe::qt::RenderParams p;
+        p.quadrant = 0;
+        p.format = 5;               // PNG (8-bit FBO)
+        p.formatString = "png";
+        const int frame = jefe::qt::getCurrentFrame();
+        p.from = frame; p.to = frame;
+        p.padding = 4; p.scale = 1.0f;
+        p.path = outDir.toStdString();
+        p.prefix = prefix;
+        p.bakeCropBars = bakeCropBars;
+        const QString fname =
+            QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        viewport_->makeCurrent();
+        jefe::qt::triggerSyncRender(p);
+        viewport_->doneCurrent();
+        return fname;
+    };
+    auto loadRGBA = [](const QString& path) {
+        return QImage(path).convertToFormat(QImage::Format_RGBA8888);
+    };
+    // Mean abs per-channel diff between two images over rows [y0,y1).
+    auto bandDiff = [](const QImage& a, const QImage& b, double f0, double f1) {
+        const int h = std::min(a.height(), b.height());
+        const int w = std::min(a.width(),  b.width());
+        const int y0 = int(f0 * h), y1 = int(f1 * h);
+        double sum = 0; long long n = 0;
+        for (int y = y0; y < y1; ++y) {
+            const uchar* ra = a.constScanLine(y);
+            const uchar* rb = b.constScanLine(y);
+            for (int x = 0; x < w * 4; ++x) { sum += std::abs(int(ra[x]) - int(rb[x])); ++n; }
+        }
+        return n ? sum / double(n) : 0.0;
+    };
+
+    // Baseline render (no colour correction).
+    const QString beforePath = renderOne("cctest_before_");
+
+    // Apply a strong, unmistakable colour correction through the super-shader
+    // path — exactly what was dropped from renders before the fix.
+    jefe::qt::adjustPlateExposure(0, 3.0f);
+    jefe::qt::adjustPlateGamma(0, 1.5f);
+    if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+
+    const QString afterPath = renderOne("cctest_after_");
+
+    QImage before(beforePath), after(afterPath);
+    if (before.isNull() || after.isNull()) {
+        printf("CC-TEST FAIL: could not read rendered PNGs\n  before=%s (%s)\n  after=%s (%s)\n",
+               beforePath.toLocal8Bit().constData(), before.isNull() ? "null" : "ok",
+               afterPath.toLocal8Bit().constData(),  after.isNull()  ? "null" : "ok");
+        fflush(stdout);
+        return 4;
+    }
+    before = before.convertToFormat(QImage::Format_RGBA8888);
+    after  = after.convertToFormat(QImage::Format_RGBA8888);
+    const int w = std::min(before.width(),  after.width());
+    const int h = std::min(before.height(), after.height());
+    double sum = 0.0; long long count = 0;
+    for (int y = 0; y < h; ++y) {
+        const uchar* ra = before.constScanLine(y);
+        const uchar* rb = after.constScanLine(y);
+        for (int x = 0; x < w * 4; ++x) { sum += std::abs(int(ra[x]) - int(rb[x])); ++count; }
+    }
+    const double meanAbsDiff = count ? (sum / double(count)) : 0.0;
+    const bool ccPass = meanAbsDiff > 1.0;
+    printf("CC-TEST %s: meanAbsPixelDiff=%.4f (0-255) over %dx%d — render %s colour correction\n",
+           ccPass ? "PASS" : "FAIL", meanAbsDiff, w, h, ccPass ? "reflects" : "IGNORES");
+    printf("  before=%s\n  after =%s\n",
+           beforePath.toLocal8Bit().constData(), afterPath.toLocal8Bit().constData());
+    fflush(stdout);
+
+    // --- Crop-bar bake verification ---------------------------------------
+    // Set a wide aspect + crop, then render the same frame with the "Bake
+    // aspect/crop bars" option OFF and ON. The letterbox should change the
+    // top/bottom bands (black bars) while leaving the centre content alone.
+    // aspect = 0.5 → content height = 0.5·width, i.e. a 2:1 letterbox on the
+    // square source, giving ~25%-tall black bars top and bottom.
+    jefe::qt::setPlateAspect(0, 0.5f);
+    jefe::qt::setPlateCrop(0, true);
+    if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+    const QString cropOffPath = renderOne("cctest_cropoff_", /*bake*/ false);
+    const QString cropOnPath  = renderOne("cctest_cropon_",  /*bake*/ true);
+    const QImage cOff = loadRGBA(cropOffPath), cOn = loadRGBA(cropOnPath);
+    bool cropPass = false;
+    if (!cOff.isNull() && !cOn.isNull()) {
+        const double borderDiff = 0.5 * (bandDiff(cOff, cOn, 0.00, 0.12) +
+                                         bandDiff(cOff, cOn, 0.88, 1.00));
+        const double centreDiff = bandDiff(cOff, cOn, 0.35, 0.65);
+        // Bars must land in the top/bottom letterbox, not the centre.
+        cropPass = borderDiff > 5.0 && borderDiff > centreDiff * 3.0;
+        printf("CROP-TEST %s: borderDiff=%.4f centreDiff=%.4f (bake-off vs bake-on)\n",
+               cropPass ? "PASS" : "FAIL", borderDiff, centreDiff);
+        printf("  cropOff=%s\n  cropOn =%s\n",
+               cropOffPath.toLocal8Bit().constData(), cropOnPath.toLocal8Bit().constData());
+    } else {
+        printf("CROP-TEST FAIL: could not read crop PNGs\n");
+    }
+    fflush(stdout);
+
+    return (ccPass && cropPass) ? 0 : 1;
+}
+
 int MainWindow_Qt::runHeadlessFXMultiTest(const QString& imagePath) {
     if (!viewport_) { printf("FX-MULTI FAIL: no viewport\n"); fflush(stdout); return 2; }
 

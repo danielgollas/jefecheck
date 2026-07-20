@@ -66,6 +66,13 @@ public:
     // mean absolute pixel difference.
     int runHeadlessFXTest(const QString& imagePath);
 
+    // Headless colour-correction render proof (--cc-test <image>). Loads the
+    // image into plate 0, renders a baseline PNG, applies a strong exposure +
+    // gamma correction (the super-shader path), renders again, and compares.
+    // Returns 0 if the images differ (CC applied to render — PASS). Catches the
+    // regression where renders dropped the super-shader (CC + LUT).
+    int runHeadlessCCTest(const QString& imagePath);
+
     // Headless multiplate FX state-leak probe (--fx-multitest <image>). Loads
     // the image into plates 0 and 1, side-by-side (FRAMINGDOUBLE), grabs the
     // on-screen framebuffer, then adds an FX to plate 0 ONLY and grabs again.

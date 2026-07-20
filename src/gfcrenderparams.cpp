@@ -28,6 +28,7 @@ gfcRenderParams::gfcRenderParams()
     , exrCompression(0)         // 0 = zip (see gfcImageSaverOIIO)
     , exrFormat(GFC_HALF)
     , bitsPerChannel(8)
+    , bakeCropBars(false)
 {
 }
 

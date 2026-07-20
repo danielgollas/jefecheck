@@ -542,6 +542,22 @@ The app ships **no icon asset files** and uses no `.qrc` resources or `QStyle::s
 
 New `.cpp` files are picked up by CMake's `file(GLOB src/qt/*.cpp)` — re-run `cmake -B build` after adding one so the glob re-evaluates.
 
+## 30. Render output was missing colour correction + LUT (super-shader before read-back)
+
+**Bug:** rendered stills/video dropped the plate's colour correction (gamma/exposure/BCS) and its LUT — the output looked like the raw source. FX-stack effects *did* appear.
+
+**Root cause** (`gfcPlate::draw3DrectWithFX`): the FX stack is baked into `fboTexturev[activeFBO]` by the FX loop, but the **super-shader** (`startSuperShader()`/`stopSuperShader()`, which is where gamma/exposure/BCS **and the LUT** live) is only applied in the **on-screen LAST pass** (~line 1531), which draws to the screen. The `forRender` read-back (`glGetTexImage` on `fboTexturev[activeFBO]`, ~line 1437) happens **before** that pass, so it captures the FX result *without* the super-shader. FX survive because they're baked earlier.
+
+**Fix:** at the top of the `if (forRender)` block, before the read-back, do a dedicated super-shader pass — ping-pong to the other FBO attachment, `startSuperShader()`, draw a full-`fboVP` quad sampling the FX result, `stopSuperShader()` — then the existing read-back reads that buffer (now FX + CC + LUT). Wrapped in `glPushAttrib(GL_ALL_ATTRIB_BITS)`; depth-test/blend off; float FBO preserved for 16-bit/EXR. `forceSingleBufferedFX` GPUs can't ping-pong (read==write), so they keep the old behaviour (a non-default fallback).
+
+**Crop bars (JEF render setting):** a Render-dialog checkbox → `gfcRenderParams.bakeCropBars` (default off). When on + `cropOn`, the same block draws the aspect letterbox into the render by scaling the poly-space `cropBarTop/Bottom` rects by `fboVP/polySize` (opaque black — a letterbox is solid, unlike the semi-transparent on-screen preview). Pan/zoom and text/histogram overlays are deliberately NOT baked.
+
+**Regression test:** `--cc-test <image>` (`runHeadlessCCTest`, wired in `main_qt.cpp`) has two stages:
+1. **CC/LUT:** render a baseline PNG, apply `adjustPlateExposure`+`adjustPlateGamma`, render again, assert `meanAbsPixelDiff > 1`. Verified **FAIL (diff 0.0000)** with the fix disabled, **PASS (diff ~37.7)** with it.
+2. **Crop bars:** `setPlateAspect(0, 0.5f)` + `setPlateCrop(0, true)` (new bridge → `gfcPlateManager::setAspect`/`setCrop`, which push straight to the plate members — the render doesn't re-read aspect/crop from the GUI mid-draw), then render with `bakeCropBars` off vs on and assert the top/bottom bands changed (`borderDiff ~70`) while the centre did not (`centreDiff 0`).
+
+`--fx-test` still passes (no FX regression). `--cc-test` complements it — the FX test can't catch the super-shader bug because FX bake into the FBO earlier. **Note on aspect units:** the crop math treats `aspect` as *content-height ÷ width* (`polySizeX*aspect` = content height), so a value `< 1` letterboxes a square/landscape source; the "2.39:1"→2.39 preset strings are the *inverse* convention, so preset aspects produce off-frame bars on non-portrait sources — a pre-existing crop-feature quirk, orthogonal to this render fix.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.
