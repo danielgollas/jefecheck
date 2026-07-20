@@ -560,6 +560,14 @@ void setLayerOnPlate(int plateIdx, const std::string& layerName);
 // next to its "original" entry so the user sees the file's true ratio.
 std::string getPlateNativeAspect(int plateIdx);
 
+// Headless self-test for JEF-21: drives every aspect-ratio preset string
+// through the real GUI conversion (gfcPlateGUI_Qt::setAspectChoice ->
+// aspectFromString) and asserts the resulting renderer aspect uses the
+// height/width convention gfcPlate::calculatePolySizesCropEtc expects
+// (every landscape "W:H" preset must map to a value in (0,1), not W/H).
+// Prints ASPECT-TEST PASS/FAIL and returns true on pass. Needs no GL.
+bool runAspectSelfTest();
+
 // Loads the file into sequence `whichSequence` as a preview frame and
 // flips the matching plate's GUI into showPreview mode so the rendering
 // chain picks up the new frame on the next draw call. Caller is

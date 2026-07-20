@@ -150,6 +150,15 @@ static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// --aspect-test : headless JEF-21 regression. Pure conversion check (no GL),
+// asserts every aspect preset string maps to the renderer's height/width
+// convention. Takes no argument.
+static bool hasAspectTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--aspect-test") == 0) return true;
+    return false;
+}
+
 // --remote-test : orchestrator/server role (spawns a peer child).
 static bool hasRemoteTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
@@ -259,6 +268,13 @@ int main(int argc, char* argv[]) {
                added, afterClear, afterLoad, detailOk ? 1 : 0, jpl.c_str());
         fflush(stdout);
         const bool ok = (added == 2 && afterClear == 0 && afterLoad == 2 && detailOk);
+        std::_Exit(ok ? 0 : 2);
+    }
+
+    // Headless aspect-conversion regression (--aspect-test, JEF-21): pure
+    // string->float check, no window or GL needed. Runs and exits.
+    if (hasAspectTest(argc, argv)) {
+        const bool ok = jefe::qt::runAspectSelfTest();
         std::_Exit(ok ? 0 : 2);
     }
 
