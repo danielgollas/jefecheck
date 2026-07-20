@@ -98,12 +98,12 @@ OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so 
 ### Render & export (`RenderDialog_Qt`, `gfcImageSaverOIIO`, `VideoEncoder_Qt`)
 
 The Render dialog (File → Render…, F6) renders the active plate's frame range and writes:
-- **Stills** — JPEG / PNG / TIFF / TGA / BMP / EXR via OIIO (`gfcImageSaverOIIO`). The render path is `gfcPlateManager::renderPlate` → `gfcPlate::draw3DrectWithFX(forRender)` → FBO readback → OIIO write. The caller (`onRenderClicked`) **must** make the viewport GL context current first (resolve the MainWindow via `parentWidget()`, not `window()`).
+- **Stills** — JPEG / PNG / TIFF / TGA / BMP / EXR via OIIO (`gfcImageSaverOIIO`). The render path is `gfcPlateManager::renderPlate` → `gfcPlate::draw3DrectWithFX(forRender)` → **super-shader pass** → FBO readback → OIIO write. The caller (`onRenderClicked`) **must** make the viewport GL context current first (resolve the MainWindow via `parentWidget()`, not `window()`). The FX stack is baked into the FBO, then a dedicated pass applies the **super-shader (gamma/exposure/BCS + the plate's LUT)** into the other FBO buffer *before* read-back — otherwise renders drop colour correction and the LUT (they were previously only applied in the on-screen last pass). Render dialog has a **"Bake aspect / crop bars"** toggle (`gfcRenderParams.bakeCropBars`, default off) that burns the letterbox into the output. See `developer_notes.md` §30.
 - **Video** — H.264 / H.265 (mp4) / ProRes (mov) by rendering a temp PNG sequence then encoding with the **FFmpeg CLI** (`VideoEncoder_Qt`, `QProcess` — not libav*).
 
 Controls: output **resolution** (`gfcRenderParams.outWidth/outHeight` size the FBO; 0 = source), per-format quality (JPEG quality/progressive/subsampling, PNG level, TIFF/EXR compression, EXR depth, **8/16-bit** PNG/TIFF, video CRF-vs-bitrate + preset). **16-bit / EXR renders use a float (`RGBA16F`) FBO** for real precision (8-bit renders keep the 8-bit FBO). The render is incremental (`QTimer::singleShot(0)` per frame — responsive + cancellable) with a progress bar and a "Show in folder" status link.
 
-FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a GPL static build into the bundle); resolved at runtime via `$JEFECHECK_FFMPEG` → QSettings → bundled → PATH. Headless verification: `--render-test` / `--video-test` / `--playlist-test`. See `developer_notes.md` §18–21.
+FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a GPL static build into the bundle); resolved at runtime via `$JEFECHECK_FFMPEG` → QSettings → bundled → PATH. Headless verification: `--render-test` / `--video-test` / `--playlist-test` / `--fx-test` / `--cc-test` (renders a frame, applies exposure+gamma, re-renders, asserts the output changed — proves the super-shader reaches renders). See `developer_notes.md` §18–21, §30.
 
 ## Key Dependencies
 

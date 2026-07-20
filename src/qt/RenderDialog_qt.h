@@ -99,6 +99,7 @@ private:
     QStackedWidget* qualityStack_ = nullptr;
     QSpinBox* jpegQualitySpin_ = nullptr;
     class QCheckBox* jpegProgressiveCheck_ = nullptr;
+    class QCheckBox* bakeCropBarsCheck_ = nullptr;
     QComboBox* jpegSubsamplingCombo_ = nullptr;
     QSpinBox* pngLevelSpin_ = nullptr;
     QComboBox* pngBitDepthCombo_ = nullptr;   // 8 / 16-bit

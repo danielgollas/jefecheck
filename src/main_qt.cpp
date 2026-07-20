@@ -127,6 +127,17 @@ static QString resolveFXTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// Resolve --cc-test <image>. Headless colour-correction render proof: render a
+// baseline, apply exposure+gamma to the plate, render again, and compare.
+static QString resolveCCTestFile(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--cc-test") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
 // Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe:
 // load the image into plates 0 and 1 side-by-side, grab the framebuffer, add
 // an FX to plate 0 only, grab again, and report left/right half brightness.
@@ -328,6 +339,18 @@ int main(int argc, char* argv[]) {
             // Skip Qt's global teardown (pre-existing trace trap in a
             // destructor on macOS) so the harness gets a deterministic
             // exit code — same workaround as --render-test.
+            std::_Exit(code);
+        });
+    }
+
+    // Headless colour-correction render proof (--cc-test <image>): render a
+    // baseline, apply exposure+gamma, render again, and report whether the
+    // rendered output changed (i.e. the super-shader CC/LUT reaches renders).
+    const QString ccTestFile = resolveCCTestFile(argc, argv);
+    if (!ccTestFile.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, ccTestFile]() {
+            const int code = window.runHeadlessCCTest(ccTestFile);
+            fflush(stdout);
             std::_Exit(code);
         });
     }

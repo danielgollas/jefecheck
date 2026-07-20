@@ -306,6 +306,15 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     resRow->addStretch(1);
     form->addRow("Resolution:", resRow);
 
+    // Framing: optionally burn the active plate's aspect/crop letterbox bars
+    // into the output (off by default → render the full frame).
+    bakeCropBarsCheck_ = new QCheckBox("Bake aspect / crop bars into output", this);
+    bakeCropBarsCheck_->setObjectName("dialog.render.cropbars.check");
+    bakeCropBarsCheck_->setToolTip(
+        "Burn the active plate's aspect-ratio letterbox bars into the rendered "
+        "frames. Off renders the full frame without bars.");
+    form->addRow("Framing:", bakeCropBarsCheck_);
+
     // Output path + browse.
     pathEdit_ = new QLineEdit(this);
     pathEdit_->setObjectName("dialog.render.path.edit");
@@ -622,6 +631,7 @@ void RenderDialog_Qt::startRender() {
     renderParams_.scale   = 1.0f;
     renderParams_.outWidth  = widthSpin_->value();
     renderParams_.outHeight = heightSpin_->value();
+    renderParams_.bakeCropBars = bakeCropBarsCheck_->isChecked();
     renderParams_.jpegQuality     = jpegQualitySpin_->value();
     renderParams_.jpegProgressive = jpegProgressiveCheck_->isChecked();
     renderParams_.jpegSubsampling = jpegSubsamplingCombo_->currentIndex();

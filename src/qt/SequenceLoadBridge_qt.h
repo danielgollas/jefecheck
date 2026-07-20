@@ -327,6 +327,7 @@ struct RenderParams {
     int exrCompression  = 3;    // index into the EXR compression list (zip)
     int exrFormat       = 0;    // GFC_HALF=0, GFC_FLOAT=1
     int bitsPerChannel  = 8;    // 8 or 16 (PNG/TIFF)
+    bool bakeCropBars   = false; // burn aspect/crop letterbox bars into output
 };
 
 // Returns a sample filename built from `params` using the existing
@@ -613,6 +614,11 @@ void zoomAllPlates(float zoomDelta);
 void adjustPlateGamma(int plateIdx, float delta);
 void adjustPlateExposure(int plateIdx, float delta);
 void adjustPlateBrightness(int plateIdx, float delta);
+// Aspect / crop on a plate (aspect = content-height/width factor the crop math
+// uses; e.g. 0.5 letterboxes a square source). Used by the headless --cc-test
+// to exercise the render's crop-bar baking.
+void setPlateAspect(int plateIdx, float aspect);
+void setPlateCrop(int plateIdx, bool on);
 void adjustPlateContrast(int plateIdx, float delta);
 void adjustPlateSaturation(int plateIdx, float delta);
 

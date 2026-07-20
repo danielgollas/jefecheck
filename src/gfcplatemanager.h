@@ -175,6 +175,9 @@ public:
 
 	 void setGamma(int whichOne, float value, int relative=0);
 	 void setExposure(int whichOne, float value, int relative=0);
+	 // Aspect / crop (per plate). Used by the UI card and the headless --cc-test.
+	 void setAspect(int whichOne, float aspect);
+	 void setCrop(int whichOne, int on);
 	 void setBrightness(int whichOne, float value, int relative=0);
 	 void setContrast(int whichOne, float value, int relative=0);
 	 void setSaturation(int whichOne, float value, int relative=0);

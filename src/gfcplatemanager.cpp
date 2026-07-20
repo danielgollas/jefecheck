@@ -565,6 +565,23 @@ void gfcPlateManager::setExposureAll( float value, int relative)
 
 	networkManager.notifyEvent(GFCNETEVENT_COLOR);
 }
+
+void gfcPlateManager::setAspect(int whichOne, float aspect)
+{
+	setChanged();
+	if (whichOne < 0 || whichOne >= (int)plates.size()) return;
+	// Set the plate member directly (calculatePolySizesCropEtc reads it) — the
+	// render path doesn't re-read from the GUI, so this doesn't disturb CC.
+	plates[whichOne].aspect = aspect;
+}
+
+void gfcPlateManager::setCrop(int whichOne, int on)
+{
+	setChanged();
+	if (whichOne < 0 || whichOne >= (int)plates.size()) return;
+	if (plates[whichOne].myGUI) plates[whichOne].myGUI->setCrop(on);
+	plates[whichOne].cropOn = on;
+}
 void gfcPlateManager::setBrightnessAll( float value, int relative)
 {
 	setChanged();

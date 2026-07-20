@@ -55,6 +55,10 @@ public:
     // to be float so the readback carries real >8-bit precision.
     int bitsPerChannel;
 
+    // When true, bake the plate's aspect/crop letterbox bars into the rendered
+    // frame. Off by default (render the full frame without the bars).
+    bool bakeCropBars;
+
 };
 
 #endif
