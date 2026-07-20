@@ -52,6 +52,24 @@ MENU_VIEW_CCFAVORITES = "menu.view.ccfavorites"
 MENU_VIEW_HISTOGRAM = "menu.view.histogram"            # Ctrl+H (active quad)
 MENU_VIEW_HISTOGRAM_ALL = "menu.view.histogramall"     # Ctrl+Alt+H (all plates)
 MENU_VIEW_STATUSBAR = "menu.view.statusbar"            # checkable: show/hide status bar
+# JEF-17: active-plate transforms folded into the View menu (were keyboard-only).
+MENU_VIEW_FIT = "menu.view.fit"                        # F  (Shift+F = all plates)
+MENU_VIEW_FLIP = "menu.view.flip"                      # V  (vertical mirror)
+MENU_VIEW_FLOP = "menu.view.flop"                      # M  (horizontal mirror; was H)
+MENU_VIEW_TEXTMODE = "menu.view.textmode"              # T  (Alt+T = all plates)
+MENU_VIEW_RESETPLATE = "menu.view.resetplate"          # Ctrl+R
+MENU_VIEW_RESETCC = "menu.view.resetcc"                # Shift+R
+# JEF-17: the "Panels" menu (renamed from the legacy "Dialogs" menu) is the
+# single home for every dock toggle + the Remote/Render launchers.
+MENU_PANELS = "menu.panels"
+MENU_PANELS_PLATEMANAGER = "menu.panels.platemanager"  # F2 (dock toggleViewAction)
+MENU_PANELS_TIMELINE = "menu.panels.timeline"          # dock toggleViewAction
+MENU_PANELS_FXPARAMS = "menu.panels.fxparams"          # F3 (dock toggleViewAction)
+MENU_PANELS_LUT = "menu.panels.lut"                    # F4 (dock toggleViewAction)
+MENU_PANELS_PLAYLIST = "menu.panels.playlist"          # dock toggleViewAction
+MENU_PANELS_REMOTE = "menu.panels.remote"              # F5
+MENU_PANELS_RENDER = "menu.panels.render"              # F6
+MENU_PANELS_HIDECONTROLS = "menu.panels.hidecontrols"  # Ctrl+Alt+F
 MENU_HELP = "menu.help"
 # NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's
 # objectName — every menu item appears with `identifier='qt_itemFired:'`
@@ -64,7 +82,7 @@ MENU_HELP_SPECS = "menu.help.specs"
 MENU_HELP_MANUAL = "menu.help.manual"            # F1
 MENU_HELP_QUICKSTART = "menu.help.quickstart"
 MENU_HELP_ISSUES = "menu.help.issues"            # GitHub issue tracker
-MENU_HELP_ONSCREEN = "menu.help.onscreen"        # on-screen help overlay toggle
+MENU_HELP_ONSCREEN = "menu.help.onscreen"        # H — on-screen help overlay toggle (JEF-17)
 
 # Min Specs dialog (Help → System Specs). The dialog itself is a real
 # QDialog so its child widgets DO surface objectNames as identifiers.

@@ -100,6 +100,13 @@ private:
     bool controlsHidden_ = false;
     QString currentSessionPath_;
     QMenu*  recentMenu_ = nullptr;
+    // The consolidated "Panels" menu (replaces the legacy "Dialogs" menu,
+    // JEF-17). Named "Panels" rather than "Window" so it doesn't claim the
+    // macOS-standard Window-menu semantics (Minimize/Zoom/window-list) that we
+    // don't provide. Created empty in buildMenuBar() and populated in
+    // buildDocks() once the docks exist, so a stored pointer replaces the old
+    // fragile find-View-menu-by-title-string lookup.
+    QMenu*  panelsMenu_ = nullptr;
     bool    lastExitWasClean_ = true;
 
     void startAutoload();
