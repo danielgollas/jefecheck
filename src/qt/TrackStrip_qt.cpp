@@ -1,4 +1,5 @@
 #include "TrackStrip_qt.h"
+#include "qticons.h"
 
 #include "PathHighlightLineEdit_qt.h"
 #include "SequenceLoadBridge_qt.h"
@@ -66,12 +67,19 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     // gives it the available row stretch via row1->addWidget(..., 1).
     filename_->setMinimumWidth(80);
     filename_->installEventFilter(this);
-    browse_ = new QPushButton("Browse…", this);
+    browse_ = new QPushButton(jefe::qticons::folder(), "Browse…", this);  // JEF-19
     browse_->setObjectName(QString("dialog.loadwindow.strip.%1.browse").arg(trackIdx_));
+    browse_->setToolTip("Browse for a file or sequence for this track");
     recent_ = new QToolButton(this);
     recent_->setObjectName(QString("dialog.loadwindow.strip.%1.recent").arg(trackIdx_));
-    recent_->setText("Recent ▾");
+    recent_->setIcon(jefe::qticons::recent());
+    recent_->setIconSize(QSize(16, 16));
+    recent_->setToolButtonStyle(Qt::ToolButtonIconOnly);   // icon-only (JEF-19)
+    recent_->setToolTip("Pick from recently used files");
     recent_->setPopupMode(QToolButton::InstantPopup);
+    // Hide the built-in menu-indicator caret — the history-clock icon is the
+    // affordance. Same treatment as the FX "Add FX" button.
+    recent_->setStyleSheet("QToolButton::menu-indicator { image: none; }");
     recent_->setMenu(new QMenu(this));
     row1->addWidget(filename_, /*stretch=*/1);
     row1->addWidget(browse_);

@@ -1,4 +1,5 @@
 #include "FXParamPanel_qt.h"
+#include "qticons.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QCheckBox>
@@ -113,9 +114,14 @@ FXParamPanel_Qt::FXParamPanel_Qt(QWidget* parent) : QWidget(parent) {
     addButton_ = new QToolButton(this);
     addButton_->setObjectName("fxparams.addfx.button");
     addButton_->setAccessibleName("Add FX");
-    addButton_->setText("+ Add FX");
-    addButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    addButton_->setIcon(jefe::qticons::add());          // JEF-19
+    addButton_->setIconSize(QSize(14, 14));
+    addButton_->setText("Add FX");
+    addButton_->setToolTip("Add an effect to the active plate");
+    addButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     addButton_->setPopupMode(QToolButton::InstantPopup);
+    // Hide the built-in menu-indicator caret — the + icon is the affordance.
+    addButton_->setStyleSheet("QToolButton::menu-indicator { image: none; }");
 
     addMenu_ = new QMenu(this);
     addMenu_->setObjectName("fxparams.addfx.menu");
@@ -318,7 +324,8 @@ void FXParamPanel_Qt::refresh() {
         auto* removeBtn = new QToolButton(headerRow);
         removeBtn->setObjectName(QString("fxparams.fx%1.remove.button").arg(fxIdx));
         removeBtn->setAccessibleName(QString("Remove FX %1").arg(fxIdx));
-        removeBtn->setText("⌫");  // ⌫
+        removeBtn->setIcon(jefe::qticons::remove());  // JEF-19 (was ⌫)
+        removeBtn->setIconSize(QSize(14, 14));
         removeBtn->setToolTip("Remove this effect");
         removeBtn->setStyleSheet("border: none;");
         connect(removeBtn, &QToolButton::clicked, this,

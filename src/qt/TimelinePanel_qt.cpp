@@ -1,5 +1,6 @@
 #include "TimelinePanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
+#include "qticons.h"
 
 #include <QComboBox>
 #include <QContextMenuEvent>
@@ -455,12 +456,14 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     transport->setContentsMargins(4, 2, 4, 2);
     transport->setSpacing(2);
 
-    auto makeButton = [this](const QString& text, const QString& tip,
+    auto makeButton = [this](const QIcon& icon, const QString& tip,
                               const QString& objectName,
                               const QString& accessibleName) {
-        auto* b = new QPushButton(text, this);
+        auto* b = new QPushButton(this);   // JEF-19: icon transport buttons
+        b->setIcon(icon);
+        b->setIconSize(QSize(16, 16));
         b->setToolTip(tip);
-        b->setFixedSize(26, 22);
+        b->setFixedWidth(26);              // height unified with the row below
         b->setObjectName(objectName);
         b->setAccessibleName(accessibleName);
         return b;
@@ -485,15 +488,15 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         return s;
     };
 
-    rewBtn_      = makeButton("⏮", "Rewind to start",
+    rewBtn_      = makeButton(jefe::qticons::rewind(), "Rewind to start",
                               "transport.rewind.button", "Rewind to start");
-    stepBackBtn_ = makeButton("|◀", "Step back one frame",
+    stepBackBtn_ = makeButton(jefe::qticons::stepBack(), "Step back one frame",
                               "transport.stepback.button", "Step back");
-    playBtn_     = makeButton("▶", "Play / Pause",
+    playBtn_     = makeButton(jefe::qticons::play(), "Play / Pause",
                               "transport.play.button", "Play / Pause");
-    stepFwdBtn_  = makeButton("▶|", "Step forward one frame",
+    stepFwdBtn_  = makeButton(jefe::qticons::stepForward(), "Step forward one frame",
                               "transport.stepforward.button", "Step forward");
-    ffwdBtn_     = makeButton("⏭", "Fast forward to end",
+    ffwdBtn_     = makeButton(jefe::qticons::fastForward(), "Fast forward to end",
                               "transport.fastforward.button", "Fast forward");
 
     transport->addWidget(rewBtn_);
@@ -541,7 +544,9 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     fpsSpin_->setAccessibleName("Target FPS");
     transport->addWidget(fpsSpin_);
 
-    thumbsBtn_ = new QPushButton("🎞", this);
+    thumbsBtn_ = new QPushButton(this);   // JEF-19: filmstrip icon
+    thumbsBtn_->setIcon(jefe::qticons::filmstrip());
+    thumbsBtn_->setIconSize(QSize(16, 16));
     thumbsBtn_->setCheckable(true);
     thumbsBtn_->setChecked(jefe::qt::getThumbnailsEnabled());
     thumbsBtn_->setToolTip("Show frame thumbnails on the timeline");
@@ -553,6 +558,22 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         jefe::qt::setThumbnailsEnabled(on);
         if (tracks_) tracks_->refresh();
     });
+
+    // JEF-19: give every control in the transport row the same height so the
+    // whole line reads as one band. Match the TALLEST control — the number
+    // spinboxes are taller than the combo/buttons because of the dark theme's
+    // spinbox padding — and poll after polishing so the QSS-applied heights
+    // are reflected in sizeHint().
+    loopMode_->ensurePolished();
+    frameSpin_->ensurePolished();
+    fpsSpin_->ensurePolished();
+    const int rowH = std::max({loopMode_->sizeHint().height(),
+                               frameSpin_->sizeHint().height(),
+                               fpsSpin_->sizeHint().height()});
+    const QList<QWidget*> rowWidgets = {
+        rewBtn_, stepBackBtn_, playBtn_, stepFwdBtn_, ffwdBtn_,
+        loopMode_, frameSpin_, inSpin_, outSpin_, fpsSpin_, thumbsBtn_};
+    for (QWidget* w : rowWidgets) w->setFixedHeight(rowH);
 
     scrubber_ = new TimelineScrubber_Qt(this);
     tracks_   = new TimelineTracks_Qt(this);
@@ -673,7 +694,8 @@ void TimelinePanel_Qt::refreshFromPlayback() {
         scrubber_->setRange(in, out);
     }
     if (cur != lastCur_) scrubber_->setCurrentFrame(cur);
-    if (playing != lastPlaying_) playBtn_->setText(playing ? "⏸" : "▶");
+    if (playing != lastPlaying_)
+        playBtn_->setIcon(playing ? jefe::qticons::pause() : jefe::qticons::play());
 
     lastFrom_ = from; lastTo_ = to; lastCur_ = cur;
     lastIn_ = in; lastOut_ = out; lastLoop_ = loop;

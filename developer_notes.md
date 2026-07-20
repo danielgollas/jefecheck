@@ -530,6 +530,18 @@ The FLTK→Qt port left docks reachable from two menus (the newer View toggles *
 - **The help overlay text** (`helpMessage`, `gfcplatemanager.cpp` ctor) was rewritten to match the real Qt bindings and must be kept in sync with `bindPlateAction`/`bindLayout` (MainWindow ctor), `GlViewport_Qt::keyPressEvent` (playback/in-out/track), and the viewport mouse handlers (pan/zoom/CC-drag/remote-pointer). The dead empty `gfcPlateManager::drawHelp()` stub is unused.
 - **Locators**: `tests/ui/jefecheck/locators.py` gained `MENU_VIEW_FIT/FLIP/FLOP/TEXTMODE/RESETPLATE/RESETCC` and `MENU_PANELS_*`. On macOS these objectNames don't reach the AX tree (menu items show as `qt_itemFired:`), so tests drive menus by their **keyboard shortcut** — which is why accurate, non-colliding shortcuts matter.
 
+## 29. Shared icon factory (`qticons`) — JEF-19
+
+The app ships **no icon asset files** and uses no `.qrc` resources or `QStyle::standardIcon`; every icon is drawn with `QPainter`. JEF-19 promoted the pattern that lived privately in `PlateCard_qt.cpp` (`makeMirrorPixmap`/`makeMirrorIcon`/`makeIconToggle`) into a shared module, `src/qt/qticons.{h,cpp}` (`namespace jefe::qticons`):
+
+- **`make(PaintFn, side=16)`** renders a glyph painter onto a **2×-DPR** transparent pixmap and returns a **dual-state** `QIcon`: light glyph `0xE0E0E0` for `QIcon::Off` (normal dark-theme button) and dark glyph `0x1A1A1A` for `QIcon::On` (the orange `:checked` background). Non-checkable buttons just use Off; checkable ones (play/pause, filmstrip) get the correct contrast when checked. This is the same fixed-dark-theme + orange-accent model as the original — **not** a system light/dark query.
+- **`makeIconButton(parent, icon, tooltip, accessibleName, checkable, text)`** builds a compact `QPushButton`; a tooltip is mandatory (icon-only buttons are unusable without one). Icon-only → fixed 24×24; with `text` → icon+label with padding.
+- **~21 named glyph getters** (`add`, `addFiles`, `remove`, `trash`, `up`, `down`, `chevron(bool)`, `dragHandle`, `rewind`, `stepBack`, `play`, `pause`, `stepForward`, `fastForward`, `filmstrip`, `refresh`, `folder`, `save`, `check`, `send`, `recent`), each a small painter routine in the `.cpp` anonymous namespace.
+
+**Applied across (full sweep):** Playlist toolbar + per-card buttons (icon-only, the garbled-glyph fix), Timeline transport (`⏮|◀▶▶|⏭` + two-state play/pause + filmstrip toggle), FX `+ Add FX` / per-FX remove, LUT Apply/Refresh, and dialog `Browse…` / Prefs Add-Remove / Remote Send / TrackStrip Recent. **Left as text:** the plate `RGB/R/G/B` channel button (it's a *state label*), color swatches, combos, checkboxes, and `Done`/`Cancel`/`Render` primary buttons. Every touched button carries a tooltip. **All existing `objectName`s were preserved** (tests depend on them); the icon is set on the same widget.
+
+New `.cpp` files are picked up by CMake's `file(GLOB src/qt/*.cpp)` — re-run `cmake -B build` after adding one so the glob re-evaluates.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.

@@ -1,4 +1,5 @@
 #include "PreferencesWindow_qt.h"
+#include "qticons.h"
 
 #include "../gfcStructures.h"
 #include "../gfcTextRenderer.h"
@@ -214,7 +215,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     connect(browsePath, &QLineEdit::editingFinished, page, [browsePath]() {
         sett.defaultBrowsePath = browsePath->text().toStdString();
     });
-    auto* browseBtn = new QPushButton("Browse…", browseRow);
+    auto* browseBtn = new QPushButton(jefe::qticons::folder(), "Browse…", browseRow);  // JEF-19
     browseBtn->setObjectName("preferences.general.browsepath.button");
     browseBtn->setToolTip(QStringLiteral("Browse for the default folder that file dialogs open to."));
     browseBtn->setAccessibleName("Choose default browse path");
@@ -698,10 +699,10 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     form->addRow(list);
 
     auto* row = new QHBoxLayout();
-    auto* add = new QPushButton("Add…", page);
+    auto* add = new QPushButton(jefe::qticons::add(), "Add…", page);  // JEF-19
     add->setObjectName("preferences.search.add.button");
     add->setToolTip(QStringLiteral("Add a folder to the search paths."));
-    auto* rem = new QPushButton("Remove", page);
+    auto* rem = new QPushButton(jefe::qticons::remove(), "Remove", page);
     rem->setObjectName("preferences.search.remove.button");
     rem->setToolTip(QStringLiteral("Remove the selected folder(s) from the search paths."));
     row->addWidget(add); row->addWidget(rem); row->addStretch(1);
