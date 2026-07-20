@@ -1,4 +1,5 @@
 #include "RemotePanel_qt.h"
+#include "qticons.h"
 #include "CollapsibleSection_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
@@ -253,8 +254,9 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     chatInput_->setClearButtonEnabled(true);
     // Dedicated Send button next to the input — the native chat pattern, and it
     // makes the send affordance obvious (Enter also sends).
-    auto* sendBtn = new QPushButton("Send", this);
+    auto* sendBtn = new QPushButton(jefe::qticons::send(), "Send", this);  // JEF-19
     sendBtn->setObjectName("remote.chat.send");
+    sendBtn->setToolTip("Send the message (Enter also sends)");
     sendBtn->setProperty("accent", true);
     auto* chatInputRow = new QHBoxLayout();
     chatInputRow->setContentsMargins(0, 0, 0, 0);

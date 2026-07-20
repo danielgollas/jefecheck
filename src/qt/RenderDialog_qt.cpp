@@ -1,4 +1,5 @@
 #include "RenderDialog_qt.h"
+#include "qticons.h"
 #include "GlViewport_qt.h"
 #include "MainWindow_qt.h"
 #include "SequenceLoadBridge_qt.h"
@@ -312,8 +313,9 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     QSettings s;
     pathEdit_->setText(s.value(kRenderDirSettingKey).toString());
 
-    browseBtn_ = new QPushButton("Browse…", this);
+    browseBtn_ = new QPushButton(jefe::qticons::folder(), "Browse…", this);  // JEF-19
     browseBtn_->setObjectName("dialog.render.browse.button");
+    browseBtn_->setToolTip("Choose the output folder");
 
     auto* pathRow = new QHBoxLayout();
     pathRow->setContentsMargins(0, 0, 0, 0);

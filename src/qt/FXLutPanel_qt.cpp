@@ -1,4 +1,5 @@
 #include "FXLutPanel_qt.h"
+#include "qticons.h"
 #include "SequenceLoadBridge_qt.h"
 #include "LUTPreview_qt.h"
 
@@ -58,14 +59,17 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     connect(table_, &QTreeWidget::itemDoubleClicked,
             this, [this](QTreeWidgetItem*, int) { applySelected(); });
 
-    auto* applyBtn = new QPushButton("Apply to active plate", this);
+    auto* applyBtn = new QPushButton(jefe::qticons::check(),  // JEF-19
+                                     "Apply to active plate", this);
     applyBtn->setObjectName("lut.apply.button");
     applyBtn->setAccessibleName("Apply LUT to active plate");
+    applyBtn->setToolTip("Apply the selected LUT to the active plate");
     connect(applyBtn, &QPushButton::clicked, this, [this]() { applySelected(); });
 
-    auto* refreshBtn = new QPushButton("Refresh", this);
+    auto* refreshBtn = new QPushButton(jefe::qticons::refresh(), "Refresh", this);
     refreshBtn->setObjectName("lut.refresh.button");
     refreshBtn->setAccessibleName("Refresh LUT list");
+    refreshBtn->setToolTip("Rescan the LUT folders and rebuild the list");
     connect(refreshBtn, &QPushButton::clicked, this, &LUTPanel_Qt::refreshList);
 
     status_ = new QLabel("Drop .lut / .cube / .cub files here to load.", this);

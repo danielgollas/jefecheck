@@ -1,5 +1,6 @@
 #include "PlaylistPanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
+#include "qticons.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -47,9 +48,9 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     header->setContentsMargins(0, 0, 0, 0);
     header->setSpacing(6);
 
-    auto* handle = new QLabel("\xe2\x98\xb0", this);  // ☰ drag affordance
+    auto* handle = new QLabel(this);  // drag affordance (JEF-19 icon)
+    handle->setPixmap(jefe::qticons::dragHandle().pixmap(QSize(14, 14)));
     handle->setToolTip("Drag to reorder");
-    handle->setStyleSheet("color:#888;");
     header->addWidget(handle);
 
     auto* idx = new QLabel(QString::number(index + 1), this);
@@ -65,14 +66,17 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     chevron_ = new QToolButton(this);
     chevron_->setObjectName(QString("playlist.card.%1.chevron").arg(index));
     chevron_->setAutoRaise(true);
-    chevron_->setText(expanded_ ? "\xe2\x96\xbe" : "\xe2\x96\xb8");  // ▾ / ▸
+    chevron_->setIcon(jefe::qticons::chevron(expanded_));  // ▾ / ▸
+    chevron_->setIconSize(QSize(14, 14));
+    chevron_->setToolTip(expanded_ ? "Collapse" : "Expand");
     connect(chevron_, &QToolButton::clicked, this,
             [this]() { emit toggleExpandRequested(index_); });
     header->addWidget(chevron_);
 
     auto* removeBtn = new QToolButton(this);
     removeBtn->setObjectName(QString("playlist.card.%1.remove").arg(index));
-    removeBtn->setText("\xe2\x9c\x95");  // ✕
+    removeBtn->setIcon(jefe::qticons::remove());  // ✕
+    removeBtn->setIconSize(QSize(14, 14));
     removeBtn->setAutoRaise(true);
     removeBtn->setToolTip("Remove from playlist");
     connect(removeBtn, &QToolButton::clicked, this,
@@ -117,7 +121,10 @@ void PlaylistItemCard::rebuildDetail() {
 
 void PlaylistItemCard::setExpanded(bool on) {
     expanded_ = on;
-    if (chevron_) chevron_->setText(on ? "\xe2\x96\xbe" : "\xe2\x96\xb8");
+    if (chevron_) {
+        chevron_->setIcon(jefe::qticons::chevron(on));
+        chevron_->setToolTip(on ? "Collapse" : "Expand");
+    }
     if (detail_) detail_->setVisible(on);
     updateGeometry();
 }
@@ -152,30 +159,36 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     connect(list_, &QListWidget::customContextMenuRequested,
             this, &PlaylistPanel_Qt::showContextMenu);
 
-    auto mkBtn = [this](const char* text, const char* obj, const char* tip,
-                        void (PlaylistPanel_Qt::*slot)()) {
-        auto* b = new QPushButton(text, this);
+    // JEF-19: icon buttons. Hybrid — the wordy "Add" actions keep icon+text;
+    // the compact ops are icon-only with a mandatory tooltip.
+    auto mkIcon = [this](const QIcon& icon, const char* obj, const QString& tip,
+                         void (PlaylistPanel_Qt::*slot)(),
+                         const QString& text = QString()) {
+        auto* b = jefe::qticons::makeIconButton(this, icon, tip, QString(),
+                                                /*checkable*/false, text);
         b->setObjectName(obj);
-        if (tip) b->setToolTip(tip);
         connect(b, &QPushButton::clicked, this, slot);
         return b;
     };
-    auto* addCurBtn = mkBtn("Add Current", "playlist.button.addcurrent",
-        "Snapshot the current setup as a playlist item",
+    // Icon-only across the board: the dock is too narrow for icon+text without
+    // truncating. Tooltips carry the meaning (add-current = +, add-files = doc+).
+    auto* addCurBtn = mkIcon(jefe::qticons::add(), "playlist.button.addcurrent",
+        "Add Current — snapshot the current setup as a playlist item",
         &PlaylistPanel_Qt::onAddCurrent);
-    auto* addFilesBtn = mkBtn("Add Files…", "playlist.button.addfiles",
-        "Build an item from one or more files", &PlaylistPanel_Qt::onAddFiles);
-    auto* removeBtn = mkBtn("Remove", "playlist.button.remove", nullptr,
-        &PlaylistPanel_Qt::onRemoveClicked);
-    auto* upBtn = mkBtn("↑", "playlist.button.up", "Move selected up",
-        &PlaylistPanel_Qt::onUpClicked);
-    auto* downBtn = mkBtn("↓", "playlist.button.down", "Move selected down",
-        &PlaylistPanel_Qt::onDownClicked);
-    auto* clearBtn = mkBtn("Clear", "playlist.button.clear", nullptr,
-        &PlaylistPanel_Qt::onClearClicked);
-    auto* loadBtn = mkBtn("Load…", "playlist.button.load",
+    auto* addFilesBtn = mkIcon(jefe::qticons::addFiles(), "playlist.button.addfiles",
+        "Add Files — build an item from one or more files",
+        &PlaylistPanel_Qt::onAddFiles);
+    auto* removeBtn = mkIcon(jefe::qticons::remove(), "playlist.button.remove",
+        "Remove the selected item", &PlaylistPanel_Qt::onRemoveClicked);
+    auto* upBtn = mkIcon(jefe::qticons::up(), "playlist.button.up",
+        "Move selected up", &PlaylistPanel_Qt::onUpClicked);
+    auto* downBtn = mkIcon(jefe::qticons::down(), "playlist.button.down",
+        "Move selected down", &PlaylistPanel_Qt::onDownClicked);
+    auto* clearBtn = mkIcon(jefe::qticons::trash(), "playlist.button.clear",
+        "Clear the whole playlist", &PlaylistPanel_Qt::onClearClicked);
+    auto* loadBtn = mkIcon(jefe::qticons::folder(), "playlist.button.load",
         "Load a .jpl playlist", &PlaylistPanel_Qt::onLoadClicked);
-    auto* saveBtn = mkBtn("Save…", "playlist.button.save",
+    auto* saveBtn = mkIcon(jefe::qticons::save(), "playlist.button.save",
         "Save the playlist to a .jpl", &PlaylistPanel_Qt::onSaveClicked);
 
     compactCheck_ = new QCheckBox("Compact", this);
