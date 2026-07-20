@@ -94,12 +94,17 @@ private:
     void openSessionPath(const QString& path);   // GL-current load + bookkeeping
     void refreshAfterSessionLoad();               // cards/LUT/timeline/viewport
     void rebuildRecentSessionsMenu();
+    // Playlist open + recent list (JEF-18).
+    void doOpenPlaylist();
+    void openPlaylistPath(const QString& path);   // load .jpl + refresh/raise dock
+    void rebuildRecentPlaylistsMenu();
     void updateSessionTitle();
     void maybeRestoreSessionAtStartup();
     void toggleHideControls();
     bool controlsHidden_ = false;
     QString currentSessionPath_;
     QMenu*  recentMenu_ = nullptr;
+    QMenu*  recentPlaylistMenu_ = nullptr;   // File → Recent Playlists (JEF-18)
     // The consolidated "Panels" menu (replaces the legacy "Dialogs" menu,
     // JEF-17). Named "Panels" rather than "Window" so it doesn't claim the
     // macOS-standard Window-menu semantics (Minimize/Zoom/window-list) that we

@@ -866,6 +866,11 @@ void removeRecoverySession();
 // Recent sessions (manager keeps sett.recentSessions, cap 5).
 std::vector<std::string> getRecentSessions();
 void setRecentSessions(const std::vector<std::string>& paths);
+// Recent playlists (JEF-18: sett.recentPlaylists, cap 5). loadPlaylistFile /
+// savePlaylistFile push onto this automatically; these are for QSettings
+// seed/read-back at startup/close.
+std::vector<std::string> getRecentPlaylists();
+void setRecentPlaylists(const std::vector<std::string>& paths);
 // Startup-session preference (0 Empty / 1 Reopen / 2 Ask).
 int  getStartupSessionBehavior();
 void setStartupSessionBehavior(int mode);

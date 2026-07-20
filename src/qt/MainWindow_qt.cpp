@@ -142,6 +142,10 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         for (const QString& p : s.value("Session/recent").toStringList())
             recents.push_back(p.toStdString());
         jefe::qt::setRecentSessions(recents);
+        std::vector<std::string> recentPlaylists;   // JEF-18
+        for (const QString& p : s.value("Playlist/recent").toStringList())
+            recentPlaylists.push_back(p.toStdString());
+        jefe::qt::setRecentPlaylists(recentPlaylists);
         jefe::qt::setStartupSessionBehavior(
             s.value("Session/startupBehavior", 2).toInt());
         lastExitWasClean_ = s.value("Session/cleanExit", true).toBool();
@@ -511,7 +515,19 @@ void MainWindow_Qt::buildMenuBar() {
     openSessAction->setObjectName("menu.file.opensession");
     recentMenu_ = fileMenu->addMenu(tr("Recent Sessions"));
     recentMenu_->setObjectName("menu.file.recent");
-    connect(fileMenu, &QMenu::aboutToShow, this, [this]() { rebuildRecentSessionsMenu(); });
+
+    // JEF-18: playlist open + recent list, parallel to the Session pair above.
+    fileMenu->addSeparator();
+    fileMenu->addAction(tr("Open &Playlist…"), this, [this]() { doOpenPlaylist(); })
+        ->setObjectName("menu.file.openplaylist");
+    recentPlaylistMenu_ = fileMenu->addMenu(tr("Recent Playlists"));
+    recentPlaylistMenu_->setObjectName("menu.file.recentplaylists");
+
+    // Rebuild both recent submenus each time the File menu opens.
+    connect(fileMenu, &QMenu::aboutToShow, this, [this]() {
+        rebuildRecentSessionsMenu();
+        rebuildRecentPlaylistsMenu();
+    });
 
     // JEF-17: Render… and Remote Session… used to be duplicated here and in
     // the old "Dialogs" menu. They now live only in the Window menu (dialog
@@ -1086,6 +1102,44 @@ void MainWindow_Qt::rebuildRecentSessionsMenu() {
     if (!any) recentMenu_->addAction(tr("(none)"))->setEnabled(false);
 }
 
+void MainWindow_Qt::rebuildRecentPlaylistsMenu() {
+    if (!recentPlaylistMenu_) return;
+    recentPlaylistMenu_->clear();
+    const auto recents = jefe::qt::getRecentPlaylists();
+    bool any = false;
+    for (auto it = recents.rbegin(); it != recents.rend(); ++it) {  // newest first
+        const QString p = QString::fromStdString(*it);
+        if (!QFileInfo::exists(p)) continue;                        // prune missing
+        any = true;
+        QAction* a = recentPlaylistMenu_->addAction(QFileInfo(p).fileName());
+        a->setToolTip(p);
+        connect(a, &QAction::triggered, this, [this, p]() { openPlaylistPath(p); });
+    }
+    if (!any) recentPlaylistMenu_->addAction(tr("(none)"))->setEnabled(false);
+}
+
+void MainWindow_Qt::openPlaylistPath(const QString& path) {
+    // loadPlaylistFile clears + reloads the playlist and pushes the path onto
+    // the recent-playlists list (bridge). Refresh the panel and surface it.
+    jefe::qt::loadPlaylistFile(path.toStdString());
+    if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
+    if (playlistDock_) { playlistDock_->show(); playlistDock_->raise(); }
+    statusBar()->showMessage(
+        tr("Opened playlist: %1").arg(QFileInfo(path).fileName()), 4000);
+}
+
+void MainWindow_Qt::doOpenPlaylist() {
+    QSettings s;
+    // Reuse the Playlist panel's last-directory key so menu + panel agree.
+    const QString seed = s.value("Playlist/lastAddDir").toString();
+    const QString chosen = QFileDialog::getOpenFileName(
+        this, tr("Open Playlist"), seed,
+        tr("JefeCheck playlist (*.jpl);;All files (*)"));
+    if (chosen.isEmpty()) return;
+    s.setValue("Playlist/lastAddDir", QFileInfo(chosen).absolutePath());
+    openPlaylistPath(chosen);
+}
+
 int MainWindow_Qt::runHeadlessVideoTest(const QString& dir) {
     if (!viewport_) return 0;
     const int from = jefe::qt::getFromFrame();
@@ -1441,6 +1495,10 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
         for (const auto& p : jefe::qt::getRecentSessions())
             rs << QString::fromStdString(p);
         s.setValue("Session/recent", rs);
+        QStringList rp;                              // JEF-18: recent playlists
+        for (const auto& p : jefe::qt::getRecentPlaylists())
+            rp << QString::fromStdString(p);
+        s.setValue("Playlist/recent", rp);
     }
     QMainWindow::closeEvent(e);
 }

@@ -964,15 +964,45 @@ int getSelectedPlaylistItem() {
 
 bool currentContentIsPlaylistItem() { return gCurrentContentFromPlaylist; }
 
+// JEF-18: push a .jpl path onto the recent-playlists list (dedup → newest at
+// the back → cap). Mirrors the session recent-list logic (gfcsessionmanager),
+// but lives here because playlists have no shared-core load/save hook — every
+// playlist open/save funnels through loadPlaylistFile/savePlaylistFile below,
+// so this is the single place that keeps sett.recentPlaylists current.
+static void noteRecentPlaylist(const std::string& path) {
+    if (path.empty()) return;
+    auto& rp = sett.recentPlaylists;
+    for (size_t i = 0; i < rp.size(); ++i) {          // drop an existing copy
+        if (rp[i] == path) { rp.erase(rp.begin() + i); break; }
+    }
+    rp.push_back(path);                               // newest at the back
+    while ((int)rp.size() > sett.maxRecentPlaylists && !rp.empty())
+        rp.erase(rp.begin());                         // trim oldest from the front
+}
+
 void savePlaylistFile(const std::string& path) {
     if (path.empty()) return;
-    playlistManager.savePlaylist(path);   // appends .jpl if missing
+    // Match the on-disk name savePlaylist will write (it appends .jpl if
+    // missing) so the recent entry points at the real file.
+    std::string p = path;
+    if (p.size() < 4 || p.substr(p.size() - 4) != ".jpl") p += ".jpl";
+    playlistManager.savePlaylist(p);
+    noteRecentPlaylist(p);
 }
 
 void loadPlaylistFile(const std::string& path) {
     if (path.empty()) return;
     clearPlaylist();   // bridge wrapper — also clears the from-playlist flag
     playlistManager.loadPlaylist(path);
+    noteRecentPlaylist(path);
+}
+
+std::vector<std::string> getRecentPlaylists() { return sett.recentPlaylists; }
+
+void setRecentPlaylists(const std::vector<std::string>& paths) {
+    sett.recentPlaylists = paths;
+    if ((int)sett.recentPlaylists.size() > sett.maxRecentPlaylists)
+        sett.recentPlaylists.resize(sett.maxRecentPlaylists);
 }
 
 void addCurrentAsPlaylistItem() {
