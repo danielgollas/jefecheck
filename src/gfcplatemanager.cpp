@@ -34,7 +34,46 @@ gfcPlateManager::gfcPlateManager() : myGUI(nullptr) {
     activeQuad=0;
     framingMode=FRAMINGSINGLE_ID;
     showHelp=false;
-    helpMessage="\n\n\nQuickHelp\n(toggle on/off with 'h')\n-------------\n\nVIEWPORT LAYOUTS\nSingle - ctrl+1\nSide by Side - ctrl+2\nTop and Bottom - ctrl+3\n2x2 - ctrl+4\n\nGUI\nToggle Fullscreen Modes - Ctrl+F\nHide Control Bar and Menu - Ctrl+Alt+F\n\nPLAYBACK\nPlay/Pause - Space\nPlay Direction - < or >\nBack/Forward one frame - x/c\nFirst/Last Frame - z/v\nSet Timeline IN Point - i (+Shift to reset, +Alt to start loading there)\nSet Timeline OUT Point - o (+Shift to reset)\nLoad from this point on- Alt+LMB ( on the track or the timeline to load all tracks from this point on)\n\nTRANSFORMS\nFit to screen - f (+Alt Fit all to screen)\nPan - LMB drag (+Alt for gang zoom)\nZoom - Mouse Wheel or Ctrl+LMB drag (+Alt for gang zoom)\n\nOTHERS\nColor Picker: Ctrl+RMB\n\n\nREMOTE SESSIONS\nRemote Pointer - RMB drag\nEnter/Exit Chat Mode - y/Escape\nShow Chat - Ctrl+y";
+    // Keep this in sync with the actual Qt key bindings (JEF-17):
+    //  - plate shortcuts: MainWindow_Qt ctor bindPlateAction / bindLayout
+    //  - raw keys (playback, in/out, track cycle): GlViewport_Qt::keyPressEvent
+    //  - mouse (pan/zoom/CC drag/remote pointer): GlViewport_Qt mouse handlers
+    helpMessage =
+        "\n\n\nJefeCheck - Quick Help\n(toggle on/off with 'h')\n-------------\n\n"
+        "VIEWPORT LAYOUTS\n"
+        "Single - Ctrl+1\nSide by Side - Ctrl+2\n"
+        "Top and Bottom - Ctrl+3\n2x2 - Ctrl+4\n\n"
+        "WINDOW / GUI\n"
+        "Toggle Fullscreen - F11 or Cmd+Ctrl+F\n"
+        "Hide Controls (bars, menu, docks) - Ctrl+Alt+F\n"
+        "Toggle this Help - H\n"
+        "Show Histogram (active / all plates) - Ctrl+H / Ctrl+Alt+H\n"
+        "Preferences - Ctrl+P\n\n"
+        "PLAYBACK\n"
+        "Play / Pause - Space\n"
+        "Play Direction (reverse / forward) - < / >\n"
+        "Step one frame (back / forward) - X / C  (or Left / Right)\n"
+        "First / Last Frame - Home / End\n"
+        "Loop Mode (once / loop / bounce) - 8 / 9 / 0\n"
+        "Cycle Track on Active Plate - Up / Down\n"
+        "Set IN Point - I  (+Shift = timeline start, +Alt = load from here)\n"
+        "Set OUT Point - O  (+Shift = timeline end)\n"
+        "Load from this point on - Alt+LMB (on a track or the timeline; loads all tracks)\n\n"
+        "TRANSFORMS  (active plate)\n"
+        "Fit to Screen - F  (+Shift = all plates)\n"
+        "Flip Vertical - V  (+Shift = all plates)\n"
+        "Flop Horizontal - M  (+Shift = all plates)\n"
+        "Text Overlay Mode - T  (+Alt = all plates)\n"
+        "Reset Plate - Ctrl+R  (+Alt = all plates)\n"
+        "Reset Color Correction - Shift+R  (+Alt = all plates)\n"
+        "Pan - LMB drag  (+Alt = all plates)\n"
+        "Zoom - Mouse Wheel\n\n"
+        "COLOR CORRECTION  (hold key + LMB drag)\n"
+        "Gamma / Exposure - W / E\n"
+        "Brightness / Contrast / Saturation - Q / D / S\n\n"
+        "REMOTE SESSIONS\n"
+        "Remote Pointer - Shift + LMB drag\n"
+        "Enter Chat - Return    Cancel - Escape";
     stopRendering=true;
     prevW=1024;
     prevH=768;

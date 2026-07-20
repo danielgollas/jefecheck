@@ -256,6 +256,7 @@ public:
         chatDisplayLines=8;
         remotePointerFadeDelay=2;
         maxRecentSessions=5;
+        maxRecentPlaylists=5;
         startupSessionBehavior=2;  // 0=Empty, 1=Reopen last, 2=Ask
         maxRecentBrowsed=10;
         maxRecentIPs=5;
@@ -332,6 +333,7 @@ public:
 	int exrEnableExposureTransformOnLoad;
 
     int maxRecentSessions;
+    int maxRecentPlaylists;      // JEF-18: cap for the File → Recent Playlists list
     int startupSessionBehavior;  // 0=Empty, 1=Reopen last, 2=Ask
     int maxRecentBrowsed;
     int maxRecentIPs;
@@ -339,6 +341,7 @@ public:
     std::vector<std::string> recentFXStacks;
     std::vector<std::string> recentFXs;
     std::vector<std::string> recentSessions;
+    std::vector<std::string> recentPlaylists;   // JEF-18: recently opened/saved .jpl paths
     std::vector<std::string> recentBrowsed;
     std::vector<std::string> recentIPs;
 

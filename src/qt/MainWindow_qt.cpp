@@ -142,6 +142,10 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         for (const QString& p : s.value("Session/recent").toStringList())
             recents.push_back(p.toStdString());
         jefe::qt::setRecentSessions(recents);
+        std::vector<std::string> recentPlaylists;   // JEF-18
+        for (const QString& p : s.value("Playlist/recent").toStringList())
+            recentPlaylists.push_back(p.toStdString());
+        jefe::qt::setRecentPlaylists(recentPlaylists);
         jefe::qt::setStartupSessionBehavior(
             s.value("Session/startupBehavior", 2).toInt());
         lastExitWasClean_ = s.value("Session/cleanExit", true).toBool();
@@ -234,39 +238,24 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
         });
     };
-    // Fit-to-viewport: F = active plate, Shift+F = all plates.
-    bindPlateAction(QKeySequence(Qt::Key_F),
-                    []() { jefe::qt::fitActivePlate(); });
+    // JEF-17: the ACTIVE-plate transforms (Fit F, Flip V, Flop M, Text T,
+    // Reset Ctrl+R, Reset-CC Shift+R) now live as View-menu QActions that own
+    // their shortcut (see buildMenuBar) — a single source of truth, and the
+    // menu makes them discoverable. Only the "all-plates" variants remain as
+    // standalone ApplicationShortcut QShortcuts here (no menu entry). Flop is
+    // on M/Shift+M (moved off H so bare H toggles the on-screen help overlay).
+    // The bare `r` key FLTK uses for "toggle red channel" is intentionally NOT
+    // promoted — a printable letter at app scope would block typing 'r'.
     bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_F),
                     []() { jefe::qt::fitAllPlates(); });
-    // Mirror flips: H = horizontal (flop), V = vertical (flip).
-    bindPlateAction(QKeySequence(Qt::Key_H),
-                    []() { jefe::qt::toggleFlopActive(); });
-    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_H),
-                    []() { jefe::qt::toggleFlopAll(); });
-    bindPlateAction(QKeySequence(Qt::Key_V),
-                    []() { jefe::qt::toggleFlipActive(); });
     bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_V),
                     []() { jefe::qt::toggleFlipAll(); });
-    // Text overlay cycle: T = active plate, Alt+T = all plates.
-    bindPlateAction(QKeySequence(Qt::Key_T),
-                    []() { jefe::qt::toggleTextModeActive(); });
+    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_M),
+                    []() { jefe::qt::toggleFlopAll(); });
     bindPlateAction(QKeySequence(Qt::ALT | Qt::Key_T),
                     []() { jefe::qt::toggleTextModeAll(); });
-    // Plate reset: Ctrl+R clears every per-plate override on the active
-    // plate (zoom, pan, rotation, flip/flop, channel masks, color
-    // correction); Ctrl+Alt+R does the same across all plates. Shift+R /
-    // Shift+Alt+R reset only color correction (gamma, exposure, BCS),
-    // mirroring FLTK's MenuCallbacks.cpp shortcuts. The bare `r` key
-    // FLTK uses for "toggle red channel" is intentionally NOT promoted
-    // — a printable letter at app scope would block typing 'r' into
-    // any text input.
-    bindPlateAction(QKeySequence(Qt::CTRL | Qt::Key_R),
-                    []() { jefe::qt::resetActivePlate(); });
     bindPlateAction(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_R),
                     []() { jefe::qt::resetAllPlates(); });
-    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_R),
-                    []() { jefe::qt::resetActiveColorCorrection(); });
     bindPlateAction(QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_R),
                     []() { jefe::qt::resetAllColorCorrections(); });
 
@@ -526,28 +515,23 @@ void MainWindow_Qt::buildMenuBar() {
     openSessAction->setObjectName("menu.file.opensession");
     recentMenu_ = fileMenu->addMenu(tr("Recent Sessions"));
     recentMenu_->setObjectName("menu.file.recent");
-    connect(fileMenu, &QMenu::aboutToShow, this, [this]() { rebuildRecentSessionsMenu(); });
 
-    // File → Render… opens RenderDialog_Qt (PR-39a). Modal exec();
-    // synchronous renderPlate freezes the dialog until done — async
-    // + a worker thread come in PR-39b. No shortcut wired yet
-    // because the FLTK F4 binding would shadow plate-reset / fit on
-    // some keyboards.
-    fileMenu->addAction("&Render…", this, [this]() {
-        RenderDialog_Qt dlg(this);
-        dlg.exec();
-    })->setObjectName("menu.file.render");
+    // JEF-18: playlist open + recent list, parallel to the Session pair above.
+    fileMenu->addSeparator();
+    fileMenu->addAction(tr("Open &Playlist…"), this, [this]() { doOpenPlaylist(); })
+        ->setObjectName("menu.file.openplaylist");
+    recentPlaylistMenu_ = fileMenu->addMenu(tr("Recent Playlists"));
+    recentPlaylistMenu_->setObjectName("menu.file.recentplaylists");
 
-    // File → Remote Session… and Dialogs → Remote Session… share one
-    // modeless persistent dialog (Task 6 / JEF-4). Lazy-created on
-    // first open; show()/raise() on subsequent opens so the window
-    // comes to the front without creating a new instance.
-    auto showRemote = [this]() {
-        if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
-        if (remoteDialog_) remoteDialog_->refreshConnectionState();
-    };
-    fileMenu->addAction("Remote &Session…", this, showRemote)
-        ->setObjectName("menu.file.remote");
+    // Rebuild both recent submenus each time the File menu opens.
+    connect(fileMenu, &QMenu::aboutToShow, this, [this]() {
+        rebuildRecentSessionsMenu();
+        rebuildRecentPlaylistsMenu();
+    });
+
+    // JEF-17: Render… and Remote Session… used to be duplicated here and in
+    // the old "Dialogs" menu. They now live only in the Window menu (dialog
+    // launchers alongside the panel toggles), so File no longer carries them.
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
@@ -670,30 +654,57 @@ void MainWindow_Qt::buildMenuBar() {
         });
     }
 
-    // Dialogs menu — F-key access to the panels/dialogs (FLTK F2..F6). The
-    // docks are built after buildMenuBar(), so the lambdas reach them at
-    // trigger time (by which point buildDocks() has run). "Opening" a dock =
-    // show + raise (brings its tab forward in a tab group).
-    auto* dialogsMenu = mb->addMenu(tr("&Dialogs"));
-    dialogsMenu->setObjectName("menu.dialogs");
-    auto raiseDock = [](QDockWidget* d) { if (d) { d->show(); d->raise(); } };
-    dialogsMenu->addAction(tr("FX"), QKeySequence(Qt::Key_F3),
-                           this, [this, raiseDock]() { raiseDock(fxParamsDock_); })
-        ->setObjectName("menu.dialogs.fxparams");
-    dialogsMenu->addAction(tr("LUT Manager"), QKeySequence(Qt::Key_F4),
-                           this, [this, raiseDock]() { raiseDock(lutDock_); })
-        ->setObjectName("menu.dialogs.lut");
-    dialogsMenu->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
-                           this, showRemote)
-        ->setObjectName("menu.dialogs.remote");
-    dialogsMenu->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
-                           this, [this]() { RenderDialog_Qt dlg(this); dlg.exec(); })
-        ->setObjectName("menu.dialogs.render");
-    dialogsMenu->addSeparator();
-    dialogsMenu->addAction(tr("Hide Controls"),
-                           QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
-                           this, [this]() { toggleHideControls(); })
-        ->setObjectName("menu.dialogs.hidecontrols");
+    // JEF-17: the active-plate transforms, folded into the View menu so they
+    // are discoverable (previously keyboard-only). Each QAction owns its
+    // shortcut at ApplicationShortcut context (fires regardless of focus,
+    // including a floating dock) — the single source of truth for these keys.
+    // The "all-plates" variants stay as bare QShortcuts (ctor) and are listed
+    // in the on-screen help overlay. Flip/Flop also have per-Plate-Manager-
+    // card toggle buttons.
+    auto addPlateMenuAction = [this](QMenu* menu, const QString& text,
+                                     const QKeySequence& seq,
+                                     std::function<void()> fn,
+                                     const QString& objName) {
+        QAction* a = menu->addAction(text, this, [this, fn]() {
+            fn();
+            if (viewport_) viewport_->update();
+            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        });
+        if (!seq.isEmpty()) {
+            a->setShortcut(seq);
+            a->setShortcutContext(Qt::ApplicationShortcut);
+        }
+        a->setObjectName(objName);
+        return a;
+    };
+    viewMenu->addSeparator();
+    addPlateMenuAction(viewMenu, tr("Fit to Screen"), QKeySequence(Qt::Key_F),
+                       []() { jefe::qt::fitActivePlate(); }, "menu.view.fit");
+    addPlateMenuAction(viewMenu, tr("Flip Vertical"), QKeySequence(Qt::Key_V),
+                       []() { jefe::qt::toggleFlipActive(); }, "menu.view.flip");
+    addPlateMenuAction(viewMenu, tr("Flop Horizontal"), QKeySequence(Qt::Key_M),
+                       []() { jefe::qt::toggleFlopActive(); }, "menu.view.flop");
+    addPlateMenuAction(viewMenu, tr("Text Overlay Mode"), QKeySequence(Qt::Key_T),
+                       []() { jefe::qt::toggleTextModeActive(); },
+                       "menu.view.textmode");
+    viewMenu->addSeparator();
+    addPlateMenuAction(viewMenu, tr("Reset Plate"),
+                       QKeySequence(Qt::CTRL | Qt::Key_R),
+                       []() { jefe::qt::resetActivePlate(); },
+                       "menu.view.resetplate");
+    addPlateMenuAction(viewMenu, tr("Reset Color Correction"),
+                       QKeySequence(Qt::SHIFT | Qt::Key_R),
+                       []() { jefe::qt::resetActiveColorCorrection(); },
+                       "menu.view.resetcc");
+
+    // JEF-17: the consolidated "Panels" menu replaces the legacy "Dialogs"
+    // menu. Named "Panels" (not "Window") so it doesn't imply the macOS-
+    // standard Window-menu commands (Minimize/Zoom/window-list) we don't ship.
+    // Created empty here (so it sits between View and Help in the menu bar) and
+    // fully populated in buildDocks() once the docks exist — every panel toggle
+    // plus the Remote/Render launchers and Hide Controls.
+    panelsMenu_ = mb->addMenu(tr("&Panels"));
+    panelsMenu_->setObjectName("menu.panels");
 
     auto* helpMenu = mb->addMenu("&Help");
     helpMenu->setObjectName("menu.help");
@@ -713,11 +724,16 @@ void MainWindow_Qt::buildMenuBar() {
             "https://github.com/danielgollas/jefecheck/issues"));
     })->setObjectName("menu.help.issues");
     helpMenu->addSeparator();
-    // On-screen help overlay (FLTK's bare 'h' toggleHelp). Menu item only —
-    // bare H is flop in the Qt build.
-    helpMenu->addAction(tr("Toggle On-Screen &Help"), this, []() {
-        jefe::qt::toggleOnScreenHelp();
-    })->setObjectName("menu.help.onscreen");
+    // On-screen help overlay (FLTK's bare 'h' toggleHelp). Bare H is bound
+    // here (JEF-17): ApplicationShortcut context so it fires regardless of
+    // which widget/floating dock has focus, matching Fit/Flip/Flop/Text.
+    // Flop moved to M to free this key.
+    auto* onScreenHelpAction = helpMenu->addAction(
+        tr("Toggle On-Screen &Help"), QKeySequence(Qt::Key_H), this, []() {
+            jefe::qt::toggleOnScreenHelp();
+        });
+    onScreenHelpAction->setShortcutContext(Qt::ApplicationShortcut);
+    onScreenHelpAction->setObjectName("menu.help.onscreen");
     helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
         this, [this]() {
@@ -935,24 +951,51 @@ void MainWindow_Qt::buildDocks() {
     connect(fxParamPanelWidget_, &FXParamPanel_Qt::viewportRepaintRequested,
             this, [this]() { if (viewport_) viewport_->update(); });
 
-    // Hook each dock's toggle into the View menu now that they exist.
-    auto* viewMenu = menuBar()->findChild<QMenu*>(QString(), Qt::FindDirectChildrenOnly);
-    // Find the View menu by title (findChild by name doesn't work — menus
-    // don't have meaningful object names by default).
-    QMenu* found = nullptr;
-    for (QAction* a : menuBar()->actions()) {
-        if (a->menu() && a->text().contains("View")) {
-            found = a->menu();
-            break;
-        }
-    }
-    (void)viewMenu;
-    if (found) {
-        found->addAction(plateDock_->toggleViewAction());
-        found->addAction(timelineDock_->toggleViewAction());
-        found->addAction(fxParamsDock_->toggleViewAction());
-        found->addAction(playlistDock_->toggleViewAction());
-        found->addAction(lutDock_->toggleViewAction());
+    // JEF-17: populate the consolidated Panels menu now that the docks exist.
+    // Each dock contributes its own checkable toggleViewAction() (the checkmark
+    // tracks visibility); the FLTK F-keys are assigned here, and "show" also
+    // raises the dock to the front of its tab group. This replaces the old
+    // find-View-menu-by-title-string hack — panelsMenu_ is a stored pointer.
+    if (panelsMenu_) {
+        auto addDockToggle = [this](QDockWidget* dock, const QKeySequence& seq,
+                                    const QString& objName) {
+            if (!dock) return;
+            QAction* a = dock->toggleViewAction();
+            if (!seq.isEmpty()) {
+                a->setShortcut(seq);
+                a->setShortcutContext(Qt::ApplicationShortcut);
+            }
+            a->setObjectName(objName);
+            // Bringing a hidden/tabbed dock back should also raise it forward.
+            connect(a, &QAction::toggled, this,
+                    [dock](bool on) { if (on) dock->raise(); });
+            panelsMenu_->addAction(a);
+        };
+        addDockToggle(plateDock_,    QKeySequence(Qt::Key_F2), "menu.panels.platemanager");
+        addDockToggle(timelineDock_, QKeySequence(),           "menu.panels.timeline");
+        addDockToggle(fxParamsDock_, QKeySequence(Qt::Key_F3), "menu.panels.fxparams");
+        addDockToggle(lutDock_,      QKeySequence(Qt::Key_F4), "menu.panels.lut");
+        addDockToggle(playlistDock_, QKeySequence(),           "menu.panels.playlist");
+
+        panelsMenu_->addSeparator();
+        // Remote Session… (F5): the modeless persistent dock (JEF-4). Lazy-
+        // created; show()/raise() brings it forward without a new instance.
+        panelsMenu_->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
+                               this, [this]() {
+            if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
+            if (remoteDialog_) remoteDialog_->refreshConnectionState();
+        })->setObjectName("menu.panels.remote");
+        // Render… (F6): modal RenderDialog_Qt.
+        panelsMenu_->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
+                               this, [this]() {
+            RenderDialog_Qt dlg(this);
+            dlg.exec();
+        })->setObjectName("menu.panels.render");
+        panelsMenu_->addSeparator();
+        panelsMenu_->addAction(tr("Hide Controls"),
+                               QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
+                               this, [this]() { toggleHideControls(); })
+            ->setObjectName("menu.panels.hidecontrols");
     }
 }
 
@@ -1057,6 +1100,44 @@ void MainWindow_Qt::rebuildRecentSessionsMenu() {
         connect(a, &QAction::triggered, this, [this, p]() { openSessionPath(p); });
     }
     if (!any) recentMenu_->addAction(tr("(none)"))->setEnabled(false);
+}
+
+void MainWindow_Qt::rebuildRecentPlaylistsMenu() {
+    if (!recentPlaylistMenu_) return;
+    recentPlaylistMenu_->clear();
+    const auto recents = jefe::qt::getRecentPlaylists();
+    bool any = false;
+    for (auto it = recents.rbegin(); it != recents.rend(); ++it) {  // newest first
+        const QString p = QString::fromStdString(*it);
+        if (!QFileInfo::exists(p)) continue;                        // prune missing
+        any = true;
+        QAction* a = recentPlaylistMenu_->addAction(QFileInfo(p).fileName());
+        a->setToolTip(p);
+        connect(a, &QAction::triggered, this, [this, p]() { openPlaylistPath(p); });
+    }
+    if (!any) recentPlaylistMenu_->addAction(tr("(none)"))->setEnabled(false);
+}
+
+void MainWindow_Qt::openPlaylistPath(const QString& path) {
+    // loadPlaylistFile clears + reloads the playlist and pushes the path onto
+    // the recent-playlists list (bridge). Refresh the panel and surface it.
+    jefe::qt::loadPlaylistFile(path.toStdString());
+    if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
+    if (playlistDock_) { playlistDock_->show(); playlistDock_->raise(); }
+    statusBar()->showMessage(
+        tr("Opened playlist: %1").arg(QFileInfo(path).fileName()), 4000);
+}
+
+void MainWindow_Qt::doOpenPlaylist() {
+    QSettings s;
+    // Reuse the Playlist panel's last-directory key so menu + panel agree.
+    const QString seed = s.value("Playlist/lastAddDir").toString();
+    const QString chosen = QFileDialog::getOpenFileName(
+        this, tr("Open Playlist"), seed,
+        tr("JefeCheck playlist (*.jpl);;All files (*)"));
+    if (chosen.isEmpty()) return;
+    s.setValue("Playlist/lastAddDir", QFileInfo(chosen).absolutePath());
+    openPlaylistPath(chosen);
 }
 
 int MainWindow_Qt::runHeadlessVideoTest(const QString& dir) {
@@ -1414,6 +1495,10 @@ void MainWindow_Qt::closeEvent(QCloseEvent* e) {
         for (const auto& p : jefe::qt::getRecentSessions())
             rs << QString::fromStdString(p);
         s.setValue("Session/recent", rs);
+        QStringList rp;                              // JEF-18: recent playlists
+        for (const auto& p : jefe::qt::getRecentPlaylists())
+            rp << QString::fromStdString(p);
+        s.setValue("Playlist/recent", rp);
     }
     QMainWindow::closeEvent(e);
 }
