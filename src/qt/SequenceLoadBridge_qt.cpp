@@ -1565,6 +1565,48 @@ std::string getPlateNativeAspect(int plateIdx) {
     return std::string(buf);
 }
 
+bool runAspectSelfTest() {
+    // Exercise the exact path the plate card uses: the aspect control emits a
+    // preset string, PlateCard forwards it to gfcPlateGUI_Qt::setAspectChoice,
+    // which converts via aspectFromString and stores the renderer float read
+    // back by getAspect(). gfcPlate::calculatePolySizesCropEtc treats that
+    // float as content HEIGHT/WIDTH, so a landscape "W:H" preset (W > H) MUST
+    // map to a value in (0,1) — the JEF-21 bug returned W/H (> 1), producing
+    // off-frame (invisible) crop bars and an inverted anamorphic reshape.
+    struct Case { const char* str; double expected; };
+    const Case cases[] = {
+        {"16:9",   9.0 / 16.0},
+        {"4:3",    3.0 / 4.0},
+        {"2.39:1", 1.0 / 2.39},
+        {"2.35:1", 1.0 / 2.35},
+        {"1.85:1", 1.0 / 1.85},
+        {"1.37:1", 1.0 / 1.37},
+    };
+    gfcPlateGUI_Qt gui;
+    bool pass = true;
+    for (const auto& c : cases) {
+        gui.setAspectChoice(c.str);
+        const double got = gui.getAspect();
+        // Direction check (the actual bug): landscape presets are wider than
+        // tall, so height/width must be strictly < 1.
+        const bool inRange = got > 0.0 && got < 1.0;
+        // Value check: must equal the reciprocal of the displayed W:H ratio.
+        const bool exact = std::fabs(got - c.expected) < 1e-4;
+        if (!inRange || !exact) pass = false;
+        std::printf("  aspect \"%s\": got=%.5f expected=%.5f range(0,1)=%d exact=%d\n",
+                    c.str, got, c.expected, inRange ? 1 : 0, exact ? 1 : 0);
+    }
+    // "original" and unparseable text must yield gfcPlate's native sentinel.
+    gui.setAspectChoice("original");
+    const bool origOk = gui.getAspect() == -1.0f;
+    if (!origOk) pass = false;
+    std::printf("  aspect \"original\": got=%.5f sentinel(-1)=%d\n",
+                gui.getAspect(), origOk ? 1 : 0);
+    std::printf("ASPECT-TEST %s\n", pass ? "PASS" : "FAIL");
+    std::fflush(stdout);
+    return pass;
+}
+
 void setLayerOnPlate(int plateIdx, const std::string& layerName) {
     if (plateIdx < 0) return;
     const int trackIdx = plateManager.getTrackOnPlate(plateIdx);

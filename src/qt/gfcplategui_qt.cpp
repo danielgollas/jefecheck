@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 namespace {
 // Toggleable noisy log so you can verify in a smoke test that PlateCard
@@ -28,16 +29,35 @@ void plog(int idx, const char* fmt, ...) {
 }
 
 float aspectFromString(const std::string& s) {
-    if (s == "16:9")    return 16.0f / 9.0f;
-    if (s == "4:3")     return 4.0f / 3.0f;
-    if (s == "2.39:1")  return 2.39f;
-    if (s == "2.35:1")  return 2.35f;
-    if (s == "1.85:1")  return 1.85f;
-    if (s == "1.37:1")  return 1.37f;
-    // "original" / unknown: -1 is gfcPlate's sentinel for "use the frame's
-    // native size" (calculatePolySizesCropEtc). Returning 1.0 here forced a
-    // square (960x960) poly that squashed the image; -1 keeps native aspect.
-    return -1.0f;
+    // "original" / empty / unparseable → -1 is gfcPlate's sentinel for "use the
+    // frame's native size" (calculatePolySizesCropEtc). Returning 1.0 here
+    // forced a square (960x960) poly that squashed the image; -1 keeps native.
+    if (s.empty() || s == "original") return -1.0f;
+
+    // The UI shows the cinematographic width:height convention ("2.39:1",
+    // "16:9"), but gfcPlate::calculatePolySizesCropEtc treats `aspect` as
+    // content HEIGHT/WIDTH: polySizeX*aspect is the target content height, so a
+    // value < 1 letterboxes a landscape source and a value > 1 reshapes it to
+    // portrait. So parse the displayed W:H and return its reciprocal H/W. A
+    // bare number ("2.39") is read as W:1. This also makes arbitrary custom
+    // ratios work, not just the presets.
+    //
+    // JEF-21: this previously returned W/H (e.g. 2.39), which the renderer read
+    // as height/width — so every landscape preset produced content TALLER than
+    // the frame, i.e. off-frame (invisible) crop bars and an inverted
+    // anamorphic squeeze instead of a letterbox.
+    const char* p = s.c_str();
+    char* end = nullptr;
+    const double w = std::strtod(p, &end);
+    if (end == p || w <= 0.0) return -1.0f;         // no leading number → native
+    double h = 1.0;                                 // bare "2.39" means 2.39:1
+    const char* colon = std::strchr(end, ':');
+    if (colon) {
+        char* end2 = nullptr;
+        h = std::strtod(colon + 1, &end2);
+        if (end2 == colon + 1 || h <= 0.0) return -1.0f;
+    }
+    return static_cast<float>(h / w);               // height / width
 }
 }  // namespace
 
