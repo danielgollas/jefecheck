@@ -50,6 +50,7 @@ void RakNetTransport::stopHost() {
 bool RakNetTransport::connect(const std::string& ip, unsigned short port,
                               const std::string& password) {
     peer_->Shutdown(30);
+    hosting_ = false;
     SocketDescriptor socketDescriptor;
     socketDescriptor.port = 0;
     peer_->Startup(1, 15, &socketDescriptor, 1);
