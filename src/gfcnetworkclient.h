@@ -2,22 +2,15 @@
 #define GFCNETWORKCLIENT_H
 
 #include <stdio.h>
-#include "RakPeerInterface.h"
 #include <string>
 #include <vector>
 #include <map>
 #include <set>
 #include <stdlib.h> // For atoi
 #include <cstring> // For strlen
-#include "Rand.h"
-#include "RakNetStatistics.h"
-#include "RakNetworkFactory.h"
-#include "MessageIdentifiers.h"
-#include <stdio.h>
-#include "GetTime.h"
-#include "RakAssert.h"
-#include "RakSleep.h"
-#include "BitStream.h"
+#include <memory>
+
+#include "gfcTransport.h"
 
 #include "gfcNetworkStructures.h"
 #include "gfcpointerstorage.h"
@@ -32,18 +25,18 @@ public:
     gfcNetworkClient();
 
     ~gfcNetworkClient();
-    
+
     void initializeWidgets();
-    
+
     void disableGUI();
     void enableGUI();
-    
+
     void Startup();
     bool Connect(gfcConnectionParams *params=0);
     void Disconnect();
 
     void Update();
-	
+
 
 	void saveCurrentToRecentIPs();
 	void setRecent(std::vector<std::string> recents);
@@ -57,7 +50,7 @@ public:
 	void SendColorCorrections(std::vector<gfcNetPlateColorCorrectionInfo> corrections);
 	void SendOtherStatesMessage ( gfcNetOtherStatesInfo message );
     void SendPlayPauseMessage(gfcNetPlayPauseInfo info);
-    
+
 	void SendRemotePointerColor(int color);
 
     void SendFXAddMessage ( gfcNetFXAddInfo info );
@@ -76,7 +69,7 @@ public:
     void setIsServerClient(bool value);
     bool getIsServerClient();
     bool getGotNewChatMessage();
-    SystemAddress getServerSystemAddress();
+    jefe::net::PeerId getServerPeerId();
     std::vector<gfcChatLogEntry> getChatLog();
     std::string getStatus();
     int getStatusColor();
@@ -90,25 +83,23 @@ private:
     bool gotMessages;
     bool isConnected;
     bool attemptingConnection;
-    RakPeerInterface *peer;
-    RakNetTime nextSendTime;
-    RakNetTime flipConnectionTime;
+    std::unique_ptr<jefe::net::ITransport> transport_;
     int port;
     std::string serverIP;
     std::string password;
     std::string status;
     int statusColor;
-    
+
 	bool haveSentMyPlaylist;
 
     std::map<std::string,gfcNetRemotePointerInfo> nickNamePointerMap;
-    
+
     bool gotNewChatMessage;
-    
+
     bool isServerClient; //tells if this client is the internal client on a server system.
-    
+
     std::string nickName;
-    SystemAddress serverSystemAddress;
+    jefe::net::PeerId serverPeerId_ = jefe::net::kInvalidPeerId;
 
     std::vector<std::string> peersInSession;
     std::vector<gfcChatLogEntry> chatLog;

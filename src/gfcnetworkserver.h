@@ -20,6 +20,7 @@
 #include "BitStream.h"
 #include "gfcnetworklog.h"
 #include "gfcNetworkStructures.h"
+#include "gfcTransport.h"
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>
@@ -38,10 +39,10 @@ public:
     void start(gfcServerParams * params=0);
     void stop();
     unsigned int connectionCount();
-    void startFXSinc(SystemAddress sysaddress, bool broadcast=false);
-    void startLUTSinc ( SystemAddress sysaddress, bool broadcast=false );
-	void startStackSinc ( SystemAddress sysaddress, bool broadcast=false );
-	void startPlaylistMerge ( SystemAddress sysaddress, bool broadcast=false );
+    void startFXSinc(jefe::net::PeerId peerId, bool broadcast=false);
+    void startLUTSinc ( jefe::net::PeerId peerId, bool broadcast=false );
+	void startStackSinc ( jefe::net::PeerId peerId, bool broadcast=false );
+	void startPlaylistMerge ( jefe::net::PeerId peerId, bool broadcast=false );
     void startFXSinc();
     void startLUTSinc ();
 	void startStackSinc();

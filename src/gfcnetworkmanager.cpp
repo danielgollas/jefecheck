@@ -368,7 +368,7 @@ void gfcNetworkManager::startFXSinc()
 	if(this->connected){
 		if(this->isServer)
 		{
-			server.startFXSinc(client.getServerSystemAddress(),true); //broadcaste the event	
+			server.startFXSinc(client.getServerPeerId(),true); //broadcaste the event
 		}
 		else{//...if we are a client, we send a Loaded FX hashes.
 			client.SendLoadedFXsHashes();
@@ -382,7 +382,7 @@ void gfcNetworkManager::startLUTSinc()
 	if(this->connected){
 		if(this->isServer)
 		{
-			server.startLUTSinc(client.getServerSystemAddress(),true);	//broadcaste the event
+			server.startLUTSinc(client.getServerPeerId(),true);	//broadcaste the event
 		}
 		else{//...if we are a client, we send a Loaded LUT hashes.
 			client.SendLoadedLUTsHashes();
@@ -396,7 +396,7 @@ void gfcNetworkManager::startStackSinc()
 	if(this->connected){
 		if(this->isServer)
 		{
-			server.startFXSinc(client.getServerSystemAddress(),true); //broadcaste the event	
+			server.startFXSinc(client.getServerPeerId(),true); //broadcaste the event
 		}
 		else{//...if we are a client, we send a Loaded FX hashes.
 			client.SendLoadedFXsHashes();

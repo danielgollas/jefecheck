@@ -449,7 +449,7 @@ void gfcNetworkServer::Update() {
 
             //if we received at least one FX, then start the FXsic process again with everybody else.
             if ( howMany )
-                startFXSinc ( p->systemAddress,false );
+                startFXSinc ( jefe::net::packPeerId(p->systemAddress.binaryAddress,p->systemAddress.port),false );
 			else
 			{
 				networkLog.addToLog("Server: FX Sinc Complete");
@@ -458,7 +458,7 @@ void gfcNetworkServer::Update() {
 				peer->Send ( &outBS2,HIGH_PRIORITY,RELIABLE_ORDERED,0,p->systemAddress,0 );
 
 				//here we should start the LUT sinc
-				startLUTSinc ( p->systemAddress,false );
+				startLUTSinc ( jefe::net::packPeerId(p->systemAddress.binaryAddress,p->systemAddress.port),false );
 			}
 
         }
@@ -501,7 +501,7 @@ void gfcNetworkServer::Update() {
 
             //if we received at least one LUT, then start the LUTsinc process again with everybody else.
             if ( howMany )
-                startLUTSinc ( p->systemAddress,true );
+                startLUTSinc ( jefe::net::packPeerId(p->systemAddress.binaryAddress,p->systemAddress.port),true );
 			else
 			{
 				RakNet::BitStream outBS2;
@@ -511,7 +511,7 @@ void gfcNetworkServer::Update() {
 				networkLog.addToLog("Server: LUT Sinc Complete");
 				
 				//here we should start the Stack sinc
-				startStackSinc(p->systemAddress,false );				
+				startStackSinc(jefe::net::packPeerId(p->systemAddress.binaryAddress,p->systemAddress.port),false );
 			}
 
         }
@@ -527,7 +527,7 @@ void gfcNetworkServer::Update() {
 			peer->Send ( &outBS2,HIGH_PRIORITY,RELIABLE_ORDERED,0,p->systemAddress,false );
 
 			//now we start the playlist merge, send just to this guy.
-			startPlaylistMerge(p->systemAddress,false);
+			startPlaylistMerge(jefe::net::packPeerId(p->systemAddress.binaryAddress,p->systemAddress.port),false);
 		}
 		break;
 
@@ -687,7 +687,7 @@ void gfcNetworkServer::Update() {
 				peer->Send ( &outBSNewPlayer,HIGH_PRIORITY,RELIABLE_ORDERED,0,p->systemAddress,true );
 			}
 
-            startFXSinc ( p->systemAddress,false );
+            startFXSinc ( jefe::net::packPeerId(p->systemAddress.binaryAddress,p->systemAddress.port),false );
             //startLUTSinc ( p->systemAddress,false );
 
 
@@ -841,7 +841,8 @@ void gfcNetworkServer::enableGUI() {
     // GUI enable/disable is managed by Qt — no-op
 }
 
-void gfcNetworkServer::startFXSinc(SystemAddress sysaddress, bool broadcast) {
+void gfcNetworkServer::startFXSinc(jefe::net::PeerId peerId, bool broadcast) {
+    SystemAddress sysaddress; sysaddress.binaryAddress=(unsigned int)(peerId>>16); sysaddress.port=(unsigned short)(peerId&0xFFFF); // JEF-22 bridge; Task 4 removes
     networkLog.addToLog("Server: Starting FXSinc");
     RakNet::BitStream outBS;
     outBS.Write ( ( unsigned char ) GFCNETID_REQUESTFXHASHES );
@@ -860,10 +861,12 @@ void gfcNetworkServer::startFXSinc(SystemAddress sysaddress, bool broadcast) {
  * Starts a broadcast FXSinc
  */
 void gfcNetworkServer::startFXSinc() {
-    startFXSinc(peer->GetSystemAddressFromIndex(0),true);
+    SystemAddress a0 = peer->GetSystemAddressFromIndex(0);
+    startFXSinc(jefe::net::packPeerId(a0.binaryAddress,a0.port),true);
 }
 
-void gfcNetworkServer::startLUTSinc(SystemAddress sysaddress, bool broadcast) {
+void gfcNetworkServer::startLUTSinc(jefe::net::PeerId peerId, bool broadcast) {
+    SystemAddress sysaddress; sysaddress.binaryAddress=(unsigned int)(peerId>>16); sysaddress.port=(unsigned short)(peerId&0xFFFF); // JEF-22 bridge; Task 4 removes
     networkLog.addToLog("Server: Starting LUTSinc");
     RakNet::BitStream outBS;
     outBS.Write ( ( unsigned char ) GFCNETID_REQUESTLUTSHASHES );
@@ -874,11 +877,13 @@ void gfcNetworkServer::startLUTSinc(SystemAddress sysaddress, bool broadcast) {
  * Starts a broadcast LUTSinc
  */
 void gfcNetworkServer::startLUTSinc() {
-    startLUTSinc(peer->GetSystemAddressFromIndex(0),true);
+    SystemAddress a0 = peer->GetSystemAddressFromIndex(0);
+    startLUTSinc(jefe::net::packPeerId(a0.binaryAddress,a0.port),true);
 }
 
 
-void gfcNetworkServer::startStackSinc(SystemAddress sysaddress, bool broadcast) {
+void gfcNetworkServer::startStackSinc(jefe::net::PeerId peerId, bool broadcast) {
+	SystemAddress sysaddress; sysaddress.binaryAddress=(unsigned int)(peerId>>16); sysaddress.port=(unsigned short)(peerId&0xFFFF); // JEF-22 bridge; Task 4 removes
 	networkLog.addToLog("Server: Starting Stack Sinc");
 	RakNet::BitStream outBS;
 	outBS.Write ( ( unsigned char ) GFCNETID_SENDFXTACKS);
@@ -897,10 +902,12 @@ void gfcNetworkServer::startStackSinc(SystemAddress sysaddress, bool broadcast) 
 * Starts a broadcast startStackinc
 */
 void gfcNetworkServer::startStackSinc() {
-	startStackSinc(peer->GetSystemAddressFromIndex(0),true);
+	SystemAddress a0 = peer->GetSystemAddressFromIndex(0);
+	startStackSinc(jefe::net::packPeerId(a0.binaryAddress,a0.port),true);
 }
 
-void gfcNetworkServer::startPlaylistMerge(SystemAddress sysaddress, bool broadcast) {
+void gfcNetworkServer::startPlaylistMerge(jefe::net::PeerId peerId, bool broadcast) {
+	SystemAddress sysaddress; sysaddress.binaryAddress=(unsigned int)(peerId>>16); sysaddress.port=(unsigned short)(peerId&0xFFFF); // JEF-22 bridge; Task 4 removes
 	networkLog.addToLog("Server: Starting Playlist Merge");
 	
 	//we need to clear the playerReady map, as of now, nobody is ready.
@@ -916,7 +923,8 @@ void gfcNetworkServer::startPlaylistMerge(SystemAddress sysaddress, bool broadca
 * Starts a broadcast PlaylistMerge
 */
 void gfcNetworkServer::startPlaylistMerge() {
-	startPlaylistMerge(peer->GetSystemAddressFromIndex(0),true);
+	SystemAddress a0 = peer->GetSystemAddressFromIndex(0);
+	startPlaylistMerge(jefe::net::packPeerId(a0.binaryAddress,a0.port),true);
 }
 
 void gfcNetworkServer::sendChatMessage(unsigned char type, std::string sender, std::string message, int color) {
