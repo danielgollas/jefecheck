@@ -3,21 +3,13 @@
 
 //#include "network.h"
 #include <stdio.h>
-#include "RakPeerInterface.h"
 #include <string>
 #include <vector>
 #include <map>
 #include <set>
 #include <stdlib.h> // For atoi
 #include <cstring> // For strlen
-#include "Rand.h"
-#include "RakNetStatistics.h"
-#include "MessageIdentifiers.h"
-#include <stdio.h>
-#include "GetTime.h"
-#include "RakAssert.h"
-#include "RakSleep.h"
-#include "BitStream.h"
+#include <memory>
 #include "gfcnetworklog.h"
 #include "gfcNetworkStructures.h"
 #include "gfcTransport.h"
@@ -34,7 +26,7 @@ public:
     gfcNetworkServer();
 
     ~gfcNetworkServer();
-    
+
     void initializeWidgets();
     void start(gfcServerParams * params=0);
     void stop();
@@ -48,7 +40,7 @@ public:
 	void startStackSinc();
 	void startPlaylistMerge();
     void Update();
-    
+
     std::string getName();
     void setName(std::string pname);
     int getPort();
@@ -58,22 +50,22 @@ public:
     std::vector<std::string> getParticipantNames();
 
     void sendChatMessage(unsigned char type, std::string sender, std::string message, int color = 0);
-    
+
     void disableGUI();
     void enableGUI();
-    
+
     private:
     int port;
     std::string name;
-    RakPeerInterface *peer;
+    std::unique_ptr<jefe::net::ITransport> transport_;
     std::string password;
     unsigned int ConnectionCount();
     gfcNetworkLog* log;
-    
+
 	bool middleOfSync;
 
-    std::map<SystemAddress,std::string> nickNameAddressMap;
-	std::map<SystemAddress,int> colorAddressMap; //color map for pointers
+    std::map<jefe::net::PeerId,std::string> nickNameAddressMap;
+	std::map<jefe::net::PeerId,int> colorAddressMap; //color map for pointers
 
 	// Picks a color for a joining/recoloring participant: the preferred color
 	// when it's non-default and not already in use, otherwise the first unused
@@ -81,12 +73,11 @@ public:
 	// (duplicate allowed when the palette is exhausted).
 	int assignColor(int preferred);
 
-    std::map<SystemAddress, std::set<std::string> > clientsMissingFXsMap; /*when we sinc fxs, we analize what fxs we are missing and what fxs the client is missing, 
-    first we request the ones we are missing, and once we get them (even if they are none) we get send the ones the client is missing. 
+    std::map<jefe::net::PeerId, std::set<std::string> > clientsMissingFXsMap; /*when we sinc fxs, we analize what fxs we are missing and what fxs the client is missing,
+    first we request the ones we are missing, and once we get them (even if they are none) we get send the ones the client is missing.
     Therefore we need to store the ones that the client is missing for a later time, this is what this map of sets of md5 hash strings holds, a set for each connected client*/
-    std::map<SystemAddress, std::set<std::string> > clientsMissingLUTsMap; //the same but for luts.
-	std::map<SystemAddress, std::string > clientsSentPlaylistMap; //keeps a record of what clients already sent their playlist
-	std::map<SystemAddress, int > clientsReadyMap; //keeps a record of what clients are ready after all the syncs that go on when a new client connects. When all are ready then we can start the session;
+    std::map<jefe::net::PeerId, std::set<std::string> > clientsMissingLUTsMap; //the same but for luts.
+	std::map<jefe::net::PeerId, int > clientsReadyMap; //keeps a record of what clients are ready after all the syncs that go on when a new client connects. When all are ready then we can start the session;
 };
 
 #endif
