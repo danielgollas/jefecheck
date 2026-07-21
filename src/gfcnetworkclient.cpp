@@ -9,10 +9,10 @@
 #include <cstring> // For strlen
 #include <sstream> //for stingstream
 #include <stdio.h>
-#include "BitStream.h"
-#include "StringCompressor.h"
 #include "gfcRakNetTransport.h"
 #include "gfcNetworkStructures.h"
+#include "gfcWire.h"
+#include "gfcWireMessages.h"
 
 
 #include "gfcnetworklog.h"
@@ -225,13 +225,13 @@ void gfcNetworkClient::Update() {
             setStatusInternal("Connected!... getting acquainted with everyone", GFCCOLOR_YELLOW);
 			networkManager.handleSincStart();
             serverPeerId_=ev.peer;
-            RakNet::BitStream bs;
             attemptingConnection=false;
-            bs.Write ( ( unsigned char ) GFCNETID_NICKNAMESEND );
-            StringCompressor::Instance()->EncodeString ( nickName.c_str(),GFCNET_MAX_NICKNAME_LENGHT,&bs );
+            jefe::wire::Writer w;
+            jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_NICKNAMESEND );
+            w.writeString ( nickName );
 			//also send our pointer color
-			bs.WriteCompressed(sett.remotePointerColor);
-            transport_->send ( bs.GetData(), ( int ) bs.GetNumberOfBytesUsed(), serverPeerId_, false );
+			w.writeI32 ( sett.remotePointerColor );
+            if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
             networkLog.addToLog("Client: Connection Request Accepted!");
         }
         break;
@@ -285,7 +285,13 @@ void gfcNetworkClient::Update() {
         // ID_MODIFIED_PACKET is swallowed by the transport (JEF-22 decision, revisit JEF-23)
 
         case jefe::net::TransportEventType::Data: {
-        switch ( ev.bytes[0] ) {
+        // JEF-23: ev.bytes is a jefe::wire frame (the transport already
+        // stripped the RakNet envelope byte). Parse the frame header; a
+        // truncated buffer or version mismatch is a silent drop.
+        jefe::wire::Reader r ( ev.bytes.data(), ev.bytes.size() );
+        uint16_t msgType = 0;
+        if ( !jefe::wire::readFrameHeader ( r, msgType ) ) break;
+        switch ( msgType ) {
 
         case GFCNETID_NICKALREADYINUSE: {
             networkLog.addToLog("Client: Could not connect to server, nickname already taken!",GFCNETLOGTYPE_ALERT);
@@ -295,23 +301,17 @@ void gfcNetworkClient::Update() {
 
         case GFCNETID_PEERSINSESSION: {
             //printf ( "Got a GFCNETID_PEERSINSESSION!\n" );
-            int numOfPeers;
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
-            bs.Read ( numOfPeers );
-            char tmpNickname[GFCNET_MAX_NICKNAME_LENGHT];
-
-            // printf ( "Size of int: %i\n",sizeof ( int ) );
-
+            uint32_t numOfPeers=0;
+            if ( !r.readU32 ( numOfPeers ) ) break; // malformed: skip silently
 
             std::vector<std::string> tmpPeersInSession;
-            for ( int i=0;i<numOfPeers;i++ ) {
-
-                StringCompressor::Instance()->DecodeString ( tmpNickname,GFCNET_MAX_NICKNAME_LENGHT,&bs );
+            bool readOk=true;
+            for ( uint32_t i=0;i<numOfPeers;i++ ) {
+                std::string tmpNickname;
+                if ( !r.readString ( tmpNickname ) ) { readOk=false; break; }
                 tmpPeersInSession.push_back(tmpNickname);
-
-                //rmw.peersInSession->add ( tmpNickname );
             }
+            if ( !readOk ) break; // malformed: skip silently
 
             peersInSession = tmpPeersInSession; statusChange = true;
             networkLog.addToLog("Client: Updated peers in session");
@@ -337,31 +337,28 @@ void gfcNetworkClient::Update() {
 
         case GFCNETID_REQUESTLUTS: {
             printf ( "Client: Got GFCNETID_REQUESTLUTS\n" );
-            int howMany=0;
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            RakNet::BitStream outBS;
-            outBS.Write ( ( unsigned char ) GFCNETID_REQUESTEDLUTS ); //send back the requested LUTs
+            uint32_t howMany=0;
+            if ( !r.readU32 ( howMany ) ) break; // malformed: skip silently
 
-            bs.IgnoreBits ( 8 );
-            bs.Read ( howMany );
-            outBS.Write ( ( int ) howMany ); //how many we are sending out
+            jefe::wire::Writer outW;
+            jefe::wire::beginFrame ( outW, ( uint16_t ) GFCNETID_REQUESTEDLUTS ); //send back the requested LUTs
+            outW.writeU32 ( howMany ); //how many we are sending out (legacy semantics: requested count, loaded ones follow)
 
-            char theText[40];
-            printf ( " %i LUTs Requested\n", howMany );
+            printf ( " %i LUTs Requested\n", (int)howMany );
 
-
-            for ( int i=0; i<howMany;i++ ) {
-                StringCompressor::Instance()->DecodeString ( theText,40,&bs );
-                CubeLUT tmpLUT=lutManager.getLUTbyHash(theText);
+            bool readOk=true;
+            for ( uint32_t i=0; i<howMany;i++ ) {
+                std::string theText;
+                if ( !r.readString ( theText ) ) { readOk=false; break; }
+                CubeLUT tmpLUT=lutManager.getLUTbyHash(theText.c_str());
                 if ( strcmp(tmpLUT.name,"")!=0 ) {//the LUT is indeed loaded, serialize it
-
-                    serializeLUT ( & tmpLUT,&outBS );
-
+                    serializeLUT ( & tmpLUT,outW );
                 }
             }
+            if ( !readOk ) break; // malformed request: send nothing
 
             //send the serialized LUTs to the server.
-            transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false );
 
         }
         break;
@@ -369,19 +366,14 @@ void gfcNetworkClient::Update() {
         case GFCNETID_MISSINGLUTS: {
             //printf ( "Client: Got a GFCNETID_MISSINGLUTS\n" );
 
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
+            uint32_t howMany=0;
+            if ( !r.readU32 ( howMany ) ) break; // malformed: skip silently
 
-            int howMany;
-            bs.IgnoreBits ( 8 );
+            printf ( " parsing and loading %i LUTs\n",(int)howMany );
 
-            bs.Read ( howMany );
-
-            printf ( " parsing and loading %i LUTs\n",howMany );
-
-            for ( int i=0;i<howMany;i++ ) {
+            for ( uint32_t i=0;i<howMany;i++ ) {
                 //TODO: Check for errors loading LUTS
-                unserializeLUT ( &bs );
-
+                if ( !unserializeLUT ( r ) ) break; // truncated mid-list: stop (already-loaded LUTs stay)
             }
         }
         break;
@@ -405,29 +397,20 @@ void gfcNetworkClient::Update() {
 				networkLog.addToLog(ss.str());
 				
 				//unserialize the stack and load into plate manager
-				RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-				
-				bs.IgnoreBits ( 8 );
-				
-				int howLong;
-				bs.ReadCompressed( howLong );
-				
-				char *theText=new char[howLong];
-				StringCompressor::Instance()->DecodeString ( theText,howLong,&bs );
-				std::string stackString=theText;
-				delete [] theText;
+				std::string stackString;
+				if ( !r.readString ( stackString ) ) break; // malformed: skip silently (no apply, no reply)
 
 				//std::cout << "Client Received FX stack: \n" << stackString;
-				
+
 				//setting takeNotifications to false prevents loops
 				networkManager.setTakeNotifications(false);
 				plateManager.setPlateFXStacksFromString(stackString);
 				networkManager.setTakeNotifications(true);
 
 				//send stack received.
-				RakNet::BitStream outBS;
-				outBS.Write ( ( unsigned char ) GFCNETID_RECEIVEDFXSTACKS ); //send back the requested FXs
-				transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+				jefe::wire::Writer outW;
+				jefe::wire::beginFrame ( outW, ( uint16_t ) GFCNETID_RECEIVEDFXSTACKS ); //send back the requested FXs
+				if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false );
 
 			}
 			break;
@@ -453,18 +436,14 @@ void gfcNetworkClient::Update() {
 			
 			networkManager.sincStatus_Playlist=0;
 			plateManager.setChanged();
-			
-			RakNet::BitStream outBS;
-			outBS.Write ( ( unsigned char ) GFCNETID_SENDPLAYLISTFORMERGE );
-			
+
+			jefe::wire::Writer outW;
+			jefe::wire::beginFrame ( outW, ( uint16_t ) GFCNETID_SENDPLAYLISTFORMERGE );
+
 			std::string pl=playlistManager.getPlaylistAsString();
 			//printf("Client: sending my pl: %s\n",pl.c_str());
-			int plLength=pl.length();
-			plLength+=5;
-			outBS.WriteCompressed(plLength);
-			
-			StringCompressor::Instance()->EncodeString ( pl.c_str(),plLength,&outBS );
-			transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+			outW.writeString ( pl ); //legacy explicit length(+5) field dropped: writeString carries the length
+			if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false );
 			haveSentMyPlaylist=true;
 		}
 		break;
@@ -475,21 +454,10 @@ void gfcNetworkClient::Update() {
 				
 				
 				
-				//read the playlist and load it (making sure it is replaced) 
-				RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
+				//read the playlist and load it (making sure it is replaced)
+				std::string thePl;
+				if ( !r.readString ( thePl ) ) break; // malformed: skip silently
 
-				bs.IgnoreBits ( 8 );
-
-				int howLong;
-				bs.ReadCompressed(howLong);
-
-				char *tmpPl=new char[howLong];
-				StringCompressor::Instance()->DecodeString ( tmpPl,howLong,&bs );
-				std::string thePl=tmpPl;
-				delete [] tmpPl;
-				
-				
-				
 				if (haveSentMyPlaylist==true)
 				{
 				//we only overwrite ours if we already sent it before, otherwise, we might get a merged playlist and ours will be left in oblivion.
@@ -499,9 +467,7 @@ void gfcNetworkClient::Update() {
 				networkManager.setTakeNotifications(true);
 				
 				//we should send a reply to notify the server so that it can tell that we are ready.
-				/*RakNet::BitStream outBS;
-				outBS.Write ( ( unsigned char ) GFCNETID_MERGEDPLAYLISTSRESPONSE );
-				peer->Send( &outBS,HIGH_PRIORITY,RELIABLE_ORDERED,0,serverSystemAddress,false);*/
+				//(legacy had a commented-out GFCNETID_MERGEDPLAYLISTSRESPONSE send here; still not sent)
 				}
 
 			}
@@ -552,34 +518,33 @@ void gfcNetworkClient::Update() {
 
         case GFCNETID_REQUESTFXS: {
 
-            int howMany=0;
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            RakNet::BitStream outBS;
-            outBS.Write ( ( unsigned char ) GFCNETID_REQUESTEDFXS ); //send back the requested FXs
+            uint32_t howMany=0;
+            if ( !r.readU32 ( howMany ) ) break; // malformed: skip silently
 
-            bs.IgnoreBits ( 8 );
-            bs.Read ( howMany );
+            jefe::wire::Writer outW;
+            jefe::wire::beginFrame ( outW, ( uint16_t ) GFCNETID_REQUESTEDFXS ); //send back the requested FXs
 
             ss.str("");
-            ss<<"Client: Server requested we send "<<howMany << "FXs";
+            ss<<"Client: Server requested we send "<<(int)howMany << "FXs";
             networkLog.addToLog(ss.str());
 
-            outBS.Write ( ( int ) howMany ); //how many we are sending out
+            outW.writeU32 ( howMany ); //how many we are sending out (legacy semantics: requested count, loaded ones follow)
 
-            char theText[40];
-            printf ( "Client: Server requested we send %i FXs...", howMany );
+            printf ( "Client: Server requested we send %i FXs...", (int)howMany );
 
-
-            for ( int i=0; i<howMany;i++ ) {
-                StringCompressor::Instance()->DecodeString ( theText,40,&bs );
-                gfcFX tmpFX=fxManager.getFXbyHash(theText);
+            bool readOk=true;
+            for ( uint32_t i=0; i<howMany;i++ ) {
+                std::string theText;
+                if ( !r.readString ( theText ) ) { readOk=false; break; }
+                gfcFX tmpFX=fxManager.getFXbyHash(theText.c_str());
                 if ( tmpFX.loadedAndCompiled) {//the FX is indeed loaded, serialize it
-                    serializeFX ( & tmpFX,&outBS );
+                    serializeFX ( & tmpFX,outW );
                 }
             }
+            if ( !readOk ) break; // malformed request: send nothing
 
             //send the serialized FXs to the server.
-            transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false );
             printf("FXs sent\n");
         }
         break;
@@ -597,19 +562,15 @@ void gfcNetworkClient::Update() {
         case GFCNETID_MISSINGFXS: {
             //printf ( "Client: Got a GFCNETID_MISSINGFXS\n" );
 
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
+            uint32_t howMany=0;
+            if ( !r.readU32 ( howMany ) ) break; // malformed: skip silently
 
-            int howMany;
-            bs.IgnoreBits ( 8 );
+            printf ( " parsing and loading %i FXs\n",(int)howMany );
 
-            bs.Read ( howMany );
-
-            printf ( " parsing and loading %i FXs\n",howMany );
-
-            for ( int i=0;i<howMany;i++ ) {
+            for ( uint32_t i=0;i<howMany;i++ ) {
 
 
-                unserializeFX ( &bs );
+                if ( !unserializeFX ( r ) ) break; // truncated mid-list: stop (already-loaded FXs stay)
 
 //                 else { //TODO:the unserializeFX method should return a value to indicate if the unserlization 			 //went well, the error can be gathered from the fxManager afterwards.
 //                     char tmpMsg[32000];
@@ -621,28 +582,8 @@ void gfcNetworkClient::Update() {
         break;
 
         case GFCNETID_CHATBROADCASTMESSAGE: {
-            //printf ( "Recieved chat message: %s\n", ( ( gfcNetChatBroadcastMessage* ) p->data )->text );
-            char message[GFCNET_MAX_TEXT_LENGHT];
-            unsigned char messageType;
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
             gfcChatLogEntry tmpEntry;
-
-            bs.Read(messageType);
-            tmpEntry.type=messageType;
-
-            StringCompressor::Instance()->DecodeString ( message,GFCNET_MAX_TEXT_LENGHT,&bs ); //time
-            tmpEntry.time=message;
-
-            StringCompressor::Instance()->DecodeString ( message,GFCNET_MAX_TEXT_LENGHT,&bs ); //sender
-            tmpEntry.sender=message;
-
-            StringCompressor::Instance()->DecodeString ( message,GFCNET_MAX_TEXT_LENGHT,&bs ); //message
-            tmpEntry.message=message;
-
-            int chatColor = 0;
-            bs.ReadCompressed ( chatColor );
-            tmpEntry.color = chatColor;
+            if ( !jefe::wire::decodeChatEntry ( r, tmpEntry ) ) break; // malformed: skip silently
 
             chatLog.push_back ( tmpEntry );
             statusChange=true;
@@ -654,28 +595,10 @@ void gfcNetworkClient::Update() {
         break;
 
         case GFCNETID_POINTERINFOBROADCASTMESSAGE: {
-            //printf("Client: Got a pointerInfoMessage from %s: %f %f\n",((gfcNetPointerInfoBroadcastMessage*)p->data)->nickname,((gfcNetPointerInfoBroadcastMessage*)p->data)->info.x,((gfcNetPointerInfoBroadcastMessage*)p->data)->info.y);
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
-
-
-
             gfcNetRemotePointerInfo ptrInfo;
-            ptrInfo.fadeCounter=sett.remotePointerFadeDelay;
-            bs.ReadCompressed ( ptrInfo.quadID );
-            bs.ReadCompressed ( ptrInfo.x );
-            //printf("ptrInfo.x for quad %i: %i\n",ptrInfo.quadID,ptrInfo.x);
-            bs.ReadCompressed ( ptrInfo.y );
-            bs.Read(ptrInfo.scale);
-            char ptrnickname[GFCNET_MAX_TEXT_LENGHT];
-            StringCompressor::Instance()->DecodeString ( ptrnickname,GFCNET_MAX_TEXT_LENGHT,&bs );
-            ptrInfo.name = ptrnickname;
-
-			//also get the color
-			int theColor;
-			bs.ReadCompressed(ptrInfo.color);
-			
-
+            ptrInfo.fadeCounter=sett.remotePointerFadeDelay; //receiver-local, not on the wire
+            //reads quadID, x, y, scale, name, color (legacy order)
+            if ( !jefe::wire::decodeRemotePointerInfo ( r, ptrInfo ) ) break; // malformed: skip silently
 
             //printf("got a GFCNETID_POINTERINFOBROADCASTMESSAGE\n");
             //each plate has their own pointer map, they store it and draw however they want, trails is up to the plate, not the networkmanager
@@ -686,21 +609,8 @@ void gfcNetworkClient::Update() {
         break;
 
         case GFCNETID_TRANSFORMATIONMESSAGE: {
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
             std::vector< gfcNetTransformationInfo > transformations;
-            gfcNetTransformationInfo tmp;
-            int howMany=0;
-            bs.ReadCompressed(howMany);
-            //read all the transformations
-            //printf("Reading %i transformations\n",howMany);
-            for ( int i=0;i<howMany ;i++ ) {
-                bs.Read(tmp.tX);
-                bs.Read(tmp.tY);
-                bs.Read(tmp.scale);
-				bs.Read(tmp.rZ);
-                transformations.push_back(tmp);
-            }
+            if ( !jefe::wire::decodeTransformations ( r, transformations ) ) break; // malformed: skip silently
 
             //use the transformations
             networkManager.setTakeNotifications(false);
@@ -710,27 +620,8 @@ void gfcNetworkClient::Update() {
         break;
 		
 		case GFCNETID_COLORCORRECTIONMESSAGE:{
-			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-			bs.IgnoreBits ( 8 );
 			std::vector< gfcNetPlateColorCorrectionInfo > corrections;
-			gfcNetPlateColorCorrectionInfo tmp;
-			int howMany=0;
-			bs.ReadCompressed(howMany);
-			//read all the transformations
-			//printf("Reading %i transformations\n",howMany);
-			for ( int i=0;i<howMany ;i++ ) {
-				//read the lut and other color correction info
-				char tmpCharlut[GFCNET_MAX_TEXT_LENGHT];
-				bs.ReadCompressed(tmp.quadID);
-				StringCompressor::Instance()->DecodeString ( tmpCharlut,GFCNET_MAX_TEXT_LENGHT,&bs );
-				tmp.lutName=tmpCharlut;
-				bs.Read(tmp.gamma);
-				bs.Read(tmp.exposure);
-				bs.Read(tmp.brightness);
-				bs.Read(tmp.contrast);
-				bs.Read(tmp.saturation);
-				corrections.push_back(tmp);
-			}
+			if ( !jefe::wire::decodeColorCorrections ( r, corrections ) ) break; // malformed: skip silently
 
 			//use the corrections
 			networkManager.setTakeNotifications(false);
@@ -742,62 +633,21 @@ void gfcNetworkClient::Update() {
         case GFCNETID_OTHERSTATESMESSAGE: {
             //printf("Client: got a OTHERSTATES message\n");
 
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
             gfcNetOtherStatesInfo info;
-
+            // Decode the whole message first (legacy interleaved reads with
+            // manager applies; a garbage packet would have applied partial
+            // state — we skip silently instead). Apply order below is
+            // byte-identical to legacy: playbackInfo, layout, plateStateInfo,
+            // trackStateInfo, all inside the takeNotifications(false) window.
+            if ( !jefe::wire::decodeOtherStates ( r, info ) ) break; // malformed: skip silently
 
             networkManager.setTakeNotifications(false);
-            //playback info stuff
-            bs.ReadCompressed (  info.playbackInfo.from );
-            bs.ReadCompressed (  info.playbackInfo.to );
-            bs.Read (  info.playbackInfo.targetFPS );
-            bs.ReadCompressed (  info.playbackInfo.playbackMode );
-            bs.ReadCompressed (  info.playbackInfo.loopPriority );
-			
-			bs.ReadCompressed(info.playbackInfo.inPoint);
-			bs.ReadCompressed(info.playbackInfo.outPoint);
 
             playbackManager.setPlaybackInfo(info.playbackInfo);
-
-            //plate stuff and layout
-            bs.ReadCompressed ( info.layout );
-            int plateStateInfoSize;
-            bs.ReadCompressed(plateStateInfoSize);
-            gfcNetPlateStateInfo plateTmp;
-            for ( int i=0;i<plateStateInfoSize;i++) {
-
-                bs.Read( plateTmp.track);
-                bs.ReadCompressed(plateTmp.quadID);
-                bs.Read( plateTmp.flip);
-                bs.Read( plateTmp.flop);
-                bs.Read( plateTmp.a);
-                bs.Read( plateTmp.r);
-                bs.Read( plateTmp.g);
-                bs.Read( plateTmp.b);
-                char tmpChar[20];
-                StringCompressor::Instance()->DecodeString ( tmpChar,20,&bs );
-                plateTmp.aspect=tmpChar;
-                //std::cout << "aspect received: " << plateTmp.aspect <<std::endl;
-                bs.Read(plateTmp.crop);
-                info.plateStateInfo.push_back(plateTmp);
-            }
 
             plateManager.setFramingMode(info.layout);
 
             plateManager.setPlateStateInfo(info.plateStateInfo);
-
-            //track stuff
-            int trackStateInfoSize;
-            bs.ReadCompressed(trackStateInfoSize);
-
-            gfcNetTrackStateInfo trackTmp;
-            for (  int i=0;i<trackStateInfoSize;i++) {
-                bs.ReadCompressed(  trackTmp.frameOffset);
-                bs.ReadCompressed(  trackTmp.holdMode);
-                bs.ReadCompressed(  trackTmp.holdFrame);
-                info.trackStateInfo.push_back(trackTmp);
-            }
 
             trackManager.setTrackStateInfo(info.trackStateInfo);
 
@@ -807,12 +657,8 @@ void gfcNetworkClient::Update() {
 
         case GFCNETID_PLAYPAUSEMESSAGE: {
 
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
             gfcNetPlayPauseInfo tmp;
-            bs.Read ( tmp.play);
-            bs.ReadCompressed ( tmp.frame );
-            bs.ReadCompressed ( tmp.direction);
+            if ( !jefe::wire::decodePlayPause ( r, tmp ) ) break; // malformed: skip silently
 
             networkManager.setTakeNotifications(false);
             playbackManager.setPlayPauseInfo(tmp);
@@ -825,13 +671,8 @@ void gfcNetworkClient::Update() {
         case GFCNETID_FXADDMESSAGE: {
 
             //printf ( "Client: Got add FX message\n" );
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
             gfcNetFXAddInfo info;
-            bs.ReadCompressed ( info.id.quadID );
-            char tmpHash[40];
-            StringCompressor::Instance()->DecodeString ( tmpHash,GFCNET_MAX_TEXT_LENGHT,&bs );
-            info.id.hash=tmpHash;
+            if ( !jefe::wire::decodeFXAdd ( r, info ) ) break; // malformed: skip silently
 
             networkManager.setTakeNotifications(false);
             plateManager.addFXToPlate(info.id.quadID, fxManager.getFXbyHash(info.id.hash) );
@@ -843,16 +684,7 @@ void gfcNetworkClient::Update() {
         case GFCNETID_FXCOMMONMESSAGE: {
             //printf("Client: Got an FX common message\n");
             gfcNetFXCommonInfo message;
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
-	    
-            bs.ReadCompressed ( message.id.index );
-            bs.ReadCompressed ( message.id.quadID );
-
-            bs.ReadCompressed ( message.onOff );
-            bs.ReadCompressed ( message.upDown );
-            bs.Read ( message.reset );
-            bs.Read ( message.remove );
+            if ( !jefe::wire::decodeFXCommon ( r, message ) ) break; // malformed: skip silently
 
             networkManager.setTakeNotifications(false);
             plateManager.processNetFXCommonInfo(message);
@@ -864,24 +696,8 @@ void gfcNetworkClient::Update() {
         case GFCNETID_FXATTRIBMESSAGE: {
             //printf("Client: Got an FX attrib\n");
             gfcNetFXAttribInfo message;
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
-            
-            char tmpChar[120];
-            
-            bs.ReadCompressed ( message.id.index );
-            bs.ReadCompressed ( message.id.quadID );
+            if ( !jefe::wire::decodeFXAttrib ( r, message ) ) break; // malformed: skip silently
 
-            bs.Read ( message.attribType );
-            bs.ReadCompressed ( message.theInt );
-            bs.Read ( message.theFloat );
-            StringCompressor::Instance()->DecodeString ( tmpChar,GFCNET_MAX_TEXT_LENGHT,&bs );
-            message.lutOrCube=tmpChar;
-            StringCompressor::Instance()->DecodeString ( tmpChar,GFCNET_MAX_TEXT_LENGHT,&bs );
-            message.groupName=tmpChar;
-            StringCompressor::Instance()->DecodeString ( tmpChar,GFCNET_MAX_TEXT_LENGHT,&bs );
-            message.variableName=tmpChar;
-                        
             networkManager.setTakeNotifications(false);
             plateManager.processNetFXAttribInfo(message);
             networkManager.setTakeNotifications(true);
@@ -896,17 +712,14 @@ void gfcNetworkClient::Update() {
             // path decodes on the loader thread into rawFrames; the receiver's
             // per-tick generateTextures() (which does makeCurrent) uploads them.
             int quadID = 0;
-            char layerChar[GFCNET_MAX_TEXT_LENGHT];
-            RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-            bs.IgnoreBits ( 8 );
-            bs.ReadCompressed ( quadID );
-            StringCompressor::Instance()->DecodeString ( layerChar,GFCNET_MAX_TEXT_LENGHT,&bs );
+            std::string layerName;
+            if ( !jefe::wire::decodeLayerChange ( r, quadID, layerName ) ) break; // malformed: skip silently
 
             networkManager.setTakeNotifications(false);
             int track = plateManager.getTrackOnPlate(quadID);
             gfcSequence* seq = (track >= 0) ? trackManager.getSequence(track) : nullptr;
             if (seq && seq->myGUI) {
-                seq->myGUI->setChannel(layerChar);
+                seq->myGUI->setChannel(layerName.c_str());
                 trackManager.startLoadingSequence(track);
             }
             networkManager.setTakeNotifications(true);
@@ -916,19 +729,8 @@ void gfcNetworkClient::Update() {
 		case GFCNETID_FXSTACKMESSAGE:
 		{
 			gfcNetFXStackMessage message;
-			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-			bs.IgnoreBits ( 8 );
+			if ( !jefe::wire::decodeFXStack ( r, message ) ) break; // malformed: skip silently
 
-			
-			bs.ReadCompressed ( message.quadID);
-
-			int stackLenght=0;
-			bs.ReadCompressed(stackLenght);
-			char *theStack=new char[stackLenght];
-			StringCompressor::Instance()->DecodeString ( theStack,stackLenght,&bs );
-			message.theStack=theStack;
-			delete [] theStack;
-						
 			networkManager.setTakeNotifications(false);
 			plateManager.processNetFXStackMessage(message);
 			networkManager.setTakeNotifications(true);
@@ -939,18 +741,11 @@ void gfcNetworkClient::Update() {
 		{
 			//we got a new playlist
 			printf("Got GFCNETID_SENDPLAYLIST\n");
-			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-			bs.IgnoreBits ( 8 );
-			
-			int plLenght=0;
-			bs.ReadCompressed(plLenght);
-			char *thePL=new char[plLenght];
-			StringCompressor::Instance()->DecodeString ( thePL,plLenght,&bs );
-			std::string plString=thePL;
-			delete [] thePL;
+			gfcNetPlaylistMessage plMessage;
+			if ( !jefe::wire::decodePlaylistMessage ( r, plMessage ) ) break; // malformed: skip silently
 
 			networkManager.setTakeNotifications(false);
-			playlistManager.setPlaylistFromString(plString,1);
+			playlistManager.setPlaylistFromString(plMessage.thePlaylist,1);
 			networkManager.setTakeNotifications(true);
 		}
 		break;
@@ -958,16 +753,13 @@ void gfcNetworkClient::Update() {
 		case GFCNETID_PLAYLISTITEMLOADMESSAGE:
 			{
 				//READ THE PLAYLIST ITEM XML TEXT
-				char message[GFCNET_MAX_TEXT_LENGHT];
-				
-				RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-				bs.IgnoreBits ( 8 );
-				StringCompressor::Instance()->DecodeString ( message,GFCNET_MAX_TEXT_LENGHT,&bs );
-				//printf("PLAYLIST ITEM:\n\n%s\n\n",message);
+				std::string itemXml;
+				if ( !jefe::wire::decodePlaylistItem ( r, itemXml ) ) break; // malformed: skip silently
+				//printf("PLAYLIST ITEM:\n\n%s\n\n",itemXml.c_str());
 
 				gfcPlaylistItem tmpItem;
 				XMLNode tmpNode;
-				tmpNode= XMLNode::parseString(message);
+				tmpNode= XMLNode::parseString(itemXml.c_str());
 				//printf("NODE STRING: \n%s\n",tmpNode.createXMLString());
 				
 				tmpItem.loadPlaylistItemParameters(tmpNode);
@@ -979,11 +771,9 @@ void gfcNetworkClient::Update() {
 
 		case GFCNETID_PLAYLISTEVENTOTHER:
 			{
-				RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
-				bs.IgnoreBits ( 8 );
 				gfcNetPlaylistEvent tmpEvent;
-				bs.ReadCompressed(tmpEvent.selectedItem);
-				
+				if ( !jefe::wire::decodePlaylistEvent ( r, tmpEvent ) ) break; // malformed: skip silently
+
 				networkManager.setTakeNotifications(false);
 				playlistManager.handlePlaylistEventOther(tmpEvent);
 				networkManager.setTakeNotifications(true);
@@ -1012,17 +802,17 @@ bool gfcNetworkClient::getAttemptingConnection() {
 
 void gfcNetworkClient::SendLoadedFXsHashes(void ) {
 
-    RakNet::BitStream bs;
+    jefe::wire::Writer w;
 
     //printf("GFCNETID_LOADEDFXSHASHES: %i\n",GFCNETID_LOADEDFXSHASHES);
-    bs.Write ( ( unsigned char ) GFCNETID_LOADEDFXSHASHES );
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_LOADEDFXSHASHES );
 
 
     //get hashes from the fxManager
     std::vector<std::string> hashes=fxManager.getHashes();
     int numOfHashes= ( int ) hashes.size();
     //Write how many FXs we are sending.
-    bs.Write ( ( int ) numOfHashes );
+    w.writeU32 ( ( uint32_t ) numOfHashes );
     std::stringstream ss (std::stringstream::in | std::stringstream::out);
 
     ss<< "Client: Sending FX Hashes (" <<numOfHashes << ")";
@@ -1030,26 +820,25 @@ void gfcNetworkClient::SendLoadedFXsHashes(void ) {
     //Write each FXs hash
     std::vector<std::string>::iterator iter=hashes.begin(),end=hashes.end();
     for ( iter; iter!=end ;iter++ ) {
-        StringCompressor::Instance()->EncodeString ( ( *iter ).c_str(),40,&bs );
+        w.writeString ( *iter );
     }
 
     //send!
 
-    transport_->send ( bs.GetData(), ( int ) bs.GetNumberOfBytesUsed(), serverPeerId_, false );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendLoadedLUTsHashes(void ) {
-    RakNet::BitStream bs;
+    jefe::wire::Writer w;
 
     //printf("GFCNETID_LOADEDFXSHASHES: %i\n",GFCNETID_LOADEDFXSHASHES);
-    bs.Write ( ( unsigned char ) GFCNETID_LOADEDLUTSHASHES );
-    //bs.Write(5);
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_LOADEDLUTSHASHES );
 
     //get hashes from the fxManager
     std::vector<std::string> hashes=lutManager.getHashes();
     int numOfHashes= ( int ) hashes.size();
     //Write how many FXs we are sending.
-    bs.Write ( ( int ) numOfHashes );
+    w.writeU32 ( ( uint32_t ) numOfHashes );
     std::stringstream ss (std::stringstream::in | std::stringstream::out);
 
     ss<< "Client: Sending LUT Hashes (" <<numOfHashes << ")";
@@ -1057,12 +846,12 @@ void gfcNetworkClient::SendLoadedLUTsHashes(void ) {
     //Write each LUT hash
     std::vector<std::string>::iterator iter=hashes.begin(),end=hashes.end();
     for ( iter; iter!=end ;iter++ ) {
-        StringCompressor::Instance()->EncodeString ( ( *iter ).c_str(),40,&bs );
+        w.writeString ( *iter );
     }
 
     //send!
 
-    transport_->send ( bs.GetData(), ( int ) bs.GetNumberOfBytesUsed(), serverPeerId_, false );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 
 }
 
@@ -1080,23 +869,23 @@ jefe::net::PeerId gfcNetworkClient::getServerPeerId() {
 
 
 void gfcNetworkClient::SendChatMessage(std::string message, unsigned char type) {
-    RakNet::BitStream outBS;
-    outBS.Write ( ( unsigned char ) GFCNETID_CHATMESSAGE );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_CHATMESSAGE );
     //write stuff here
-    outBS.Write(type);
-    StringCompressor::Instance()->EncodeString ( message.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
+    w.writeU8 ( type );
+    w.writeString ( message );
 
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 
 void gfcNetworkClient::SendRemotePointerColor(int color)
 {
-	RakNet::BitStream outBS;
-	outBS.Write ( ( unsigned char ) GFCNETID_SENDREMOTEPOINTERCOLOR );
+	jefe::wire::Writer w;
+	jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_SENDREMOTEPOINTERCOLOR );
 	//write stuff here
-	outBS.WriteCompressed(color);
-	transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+	w.writeI32 ( color );
+	if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 std::vector< gfcChatLogEntry > gfcNetworkClient::getChatLog() {
@@ -1110,198 +899,104 @@ bool gfcNetworkClient::getGotNewChatMessage() {
 }
 
 void gfcNetworkClient::SendPointerInfoMessage(gfcNetPointerInfo info) {
-    RakNet::BitStream outBS;
-    outBS.Write ( ( unsigned char ) GFCNETID_POINTERINFOMESSAGE );
-    outBS.WriteCompressed ( ( int ) info.quadID );
-    outBS.WriteCompressed ( ( int ) info.x );
-    outBS.WriteCompressed ( ( int ) info.y );
-    outBS.Write((float) info.scale);
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_POINTERINFOMESSAGE );
+    jefe::wire::encodePointerInfo ( w, info );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 
 void gfcNetworkClient::SendTransformations(std::vector< gfcNetTransformationInfo > transformations) {
-    RakNet::BitStream outBS;
-    std::vector< gfcNetTransformationInfo >::iterator iter=transformations.begin(), end=transformations.end();
-    outBS.Write ( ( unsigned char ) GFCNETID_TRANSFORMATIONMESSAGE );
-    outBS.WriteCompressed( ( int ) transformations.size()  );
-    for ( iter;iter!=end;iter++) {
-        outBS.Write( ( float ) iter->tX );
-        outBS.Write ( ( float ) iter->tY );
-        outBS.Write ( ( float ) iter->scale );
-		outBS.Write((float)iter->rZ);
-    }
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_TRANSFORMATIONMESSAGE );
+    jefe::wire::encodeTransformations ( w, transformations );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendColorCorrections(std::vector<gfcNetPlateColorCorrectionInfo> corrections)
 {
-	RakNet::BitStream outBS;
-	std::vector< gfcNetPlateColorCorrectionInfo >::iterator iter=corrections.begin(), end=corrections.end();
-	outBS.Write ( ( unsigned char ) GFCNETID_COLORCORRECTIONMESSAGE );
-	outBS.WriteCompressed( ( int ) corrections.size()  );
-	for ( iter;iter!=end;iter++) {
-		outBS.WriteCompressed((int)iter->quadID);
-		StringCompressor::Instance()->EncodeString ( iter->lutName.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
-		outBS.Write((float)iter->gamma);
-		outBS.Write((float)iter->exposure);
-		outBS.Write((float)iter->brightness);
-		outBS.Write((float)iter->contrast);
-		outBS.Write((float)iter->saturation);
-	}
-	transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+	jefe::wire::Writer w;
+	jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_COLORCORRECTIONMESSAGE );
+	jefe::wire::encodeColorCorrections ( w, corrections );
+	if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendOtherStatesMessage ( gfcNetOtherStatesInfo info) {
     //printf ( "SendOtherSTatesMessage message:\n" );
     //printOtherStatesMessage(&message);
-    RakNet::BitStream outBS;
-    outBS.Write ( ( unsigned char ) GFCNETID_OTHERSTATESMESSAGE );
-
-
-    //playback info stuff
-    outBS.WriteCompressed ( ( int ) info.playbackInfo.from );
-    outBS.WriteCompressed ( ( int ) info.playbackInfo.to );
-    outBS.Write ( ( float ) info.playbackInfo.targetFPS );
-    outBS.WriteCompressed ( ( int ) info.playbackInfo.playbackMode );
-    outBS.WriteCompressed ( ( int ) info.playbackInfo.loopPriority );
-
-	outBS.WriteCompressed ( ( int ) info.playbackInfo.inPoint );
-	outBS.WriteCompressed ( ( int ) info.playbackInfo.outPoint );
-
-    //plate stuff and layout
-    outBS.WriteCompressed ( ( int ) info.layout );
-    int plateStateInfoSize=info.plateStateInfo.size();
-    outBS.WriteCompressed((int) plateStateInfoSize);
-    std::vector<gfcNetPlateStateInfo>::iterator plateIter=info.plateStateInfo.begin(), plateEnd=info.plateStateInfo.end();
-    for ( plateIter;plateIter!=plateEnd;plateIter++) {
-        outBS.Write((unsigned char) plateIter->track);
-        outBS.WriteCompressed((int) plateIter->quadID);
-        outBS.Write((bool) plateIter->flip);
-        outBS.Write((bool) plateIter->flop);
-        outBS.Write((bool) plateIter->a);
-        outBS.Write((bool) plateIter->r);
-        outBS.Write((bool) plateIter->g);
-        outBS.Write((bool) plateIter->b);
-        // std::cout << "aspect sent: " << plateIter->aspect <<std::endl;
-        StringCompressor::Instance()->EncodeString ( plateIter->aspect.c_str(),20,&outBS );
-        outBS.Write((bool) plateIter->crop);
-		
-    }
-
-    //track stuff
-    int trackStateInfoSize=info.trackStateInfo.size();
-    //printf("trackStateInfoSize sent: %i\n", trackStateInfoSize);
-    outBS.WriteCompressed( (int) trackStateInfoSize);
-    std::vector<gfcNetTrackStateInfo>::iterator trackIter=info.trackStateInfo.begin(), trackEnd=info.trackStateInfo.end();
-    for ( trackIter;trackIter!=trackEnd;trackIter++) {
-        outBS.WriteCompressed((int)  trackIter->frameOffset);
-        outBS.WriteCompressed((int)  trackIter->holdMode);
-        outBS.WriteCompressed((int)  trackIter->holdFrame);
-    }
-
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_OTHERSTATESMESSAGE );
+    jefe::wire::encodeOtherStates ( w, info );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendPlayPauseMessage(gfcNetPlayPauseInfo info) {
 
-    RakNet::BitStream outBS;
-    outBS.Write ( ( unsigned char ) GFCNETID_PLAYPAUSEMESSAGE );
-    outBS.Write ( ( bool ) info.play );
-    outBS.WriteCompressed ( ( int ) info.frame );
-    outBS.WriteCompressed(info.direction);
-
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_PLAYPAUSEMESSAGE );
+    jefe::wire::encodePlayPause ( w, info );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 
 }
 
 void gfcNetworkClient::SendFXAddMessage(gfcNetFXAddInfo info) {
-    RakNet::BitStream outBS;
-    outBS.Write ( ( unsigned char ) GFCNETID_FXADDMESSAGE );
-    outBS.WriteCompressed ( ( int ) info.id.quadID );
-    StringCompressor::Instance()->EncodeString ( info.id.hash.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_FXADDMESSAGE );
+    jefe::wire::encodeFXAdd ( w, info );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendFXCommonMessage(gfcNetFXCommonInfo info) {
-    RakNet::BitStream outBS;
-    outBS.Write ( ( unsigned char ) GFCNETID_FXCOMMONMESSAGE );
-    outBS.WriteCompressed ( ( int ) info.id.index );
-    outBS.WriteCompressed ( ( int ) info.id.quadID );
-
-    outBS.WriteCompressed ( ( int ) info.onOff );
-    outBS.WriteCompressed ( ( int ) info.upDown );
-    outBS.Write ( ( bool ) info.reset );
-    outBS.Write ( ( bool ) info.remove );
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_FXCOMMONMESSAGE );
+    jefe::wire::encodeFXCommon ( w, info );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendFXAttribMessage(gfcNetFXAttribInfo info) {
-    RakNet::BitStream outBS;
-    outBS.Write ( ( unsigned char ) GFCNETID_FXATTRIBMESSAGE );
-    outBS.WriteCompressed ( ( int ) info.id.index );
-    outBS.WriteCompressed ( ( int ) info.id.quadID );
-
-    outBS.Write ( ( unsigned char ) info.attribType );
-    outBS.WriteCompressed ( ( int ) info.theInt );
-    outBS.Write ( ( float ) info.theFloat );
-    StringCompressor::Instance()->EncodeString ( info.lutOrCube.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
-    StringCompressor::Instance()->EncodeString ( info.groupName.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
-    StringCompressor::Instance()->EncodeString ( info.variableName.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
-
-    transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+    jefe::wire::Writer w;
+    jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_FXATTRIBMESSAGE );
+    jefe::wire::encodeFXAttrib ( w, info );
+    if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendFXStackMessage(gfcNetFXStackMessage message)
 {
-	RakNet::BitStream outBS;
-	outBS.Write ( ( unsigned char ) GFCNETID_FXSTACKMESSAGE );
-	outBS.WriteCompressed ( ( int ) message.quadID );
-	
-	int stackLenght = message.theStack.length()+5;
-	outBS.WriteCompressed ( ( int ) stackLenght );
-
-	StringCompressor::Instance()->EncodeString ( message.theStack.c_str(),stackLenght,&outBS );
-
-	transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+	jefe::wire::Writer w;
+	jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_FXSTACKMESSAGE );
+	jefe::wire::encodeFXStack ( w, message ); //legacy explicit length(+5) field dropped: writeString carries the length
+	if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendLayerChangeMessage(int quadID, std::string layerName)
 {
-	RakNet::BitStream outBS;
-	outBS.Write ( ( unsigned char ) GFCNETID_LAYERCHANGEMESSAGE );
-	outBS.WriteCompressed ( ( int ) quadID );
-	StringCompressor::Instance()->EncodeString ( layerName.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
-	transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+	jefe::wire::Writer w;
+	jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_LAYERCHANGEMESSAGE );
+	jefe::wire::encodeLayerChange ( w, quadID, layerName );
+	if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendPlaylistMessage(gfcNetPlaylistMessage message){
-	RakNet::BitStream outBS;
-	outBS.Write ( ( unsigned char ) GFCNETID_SENDPLAYLIST );
-	int plLenght = message.thePlaylist.length()+5; //send up to 5 more chars just in case we miss the null or linebreak in the end.
-	outBS.WriteCompressed ( ( int ) plLenght );
-
-	StringCompressor::Instance()->EncodeString ( message.thePlaylist.c_str(),plLenght,&outBS );
-
-	transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+	jefe::wire::Writer w;
+	jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_SENDPLAYLIST );
+	jefe::wire::encodePlaylistMessage ( w, message ); //legacy explicit length(+5) field dropped: writeString carries the length
+	if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::sendPlaylistEvent(gfcNetPlaylistEvent theEvent)
 {
-	RakNet::BitStream outBS;
-	outBS.Write ( ( unsigned char ) GFCNETID_PLAYLISTEVENTOTHER);
-	outBS.WriteCompressed(theEvent.selectedItem);
-	
-	transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+	jefe::wire::Writer w;
+	jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_PLAYLISTEVENTOTHER );
+	jefe::wire::encodePlaylistEvent ( w, theEvent );
+	if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 
 void gfcNetworkClient::SendPlaylistItem(gfcPlaylistItem item)
 {
-	//make this take work as other string messages, sending the length first and the string after.
 	std::string theString = item.asString();
-	RakNet::BitStream outBS;
-	outBS.Write ( ( unsigned char ) GFCNETID_PLAYLISTITEMLOADMESSAGE );
-	StringCompressor::Instance()->EncodeString ( theString.c_str(),GFCNET_MAX_TEXT_LENGHT,&outBS );
-	transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), serverPeerId_, false );
+	jefe::wire::Writer w;
+	jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_PLAYLISTITEMLOADMESSAGE );
+	jefe::wire::encodePlaylistItem ( w, theString );
+	if ( w.ok() ) transport_->send ( w.data(), ( int ) w.size(), serverPeerId_, false );
 }
 

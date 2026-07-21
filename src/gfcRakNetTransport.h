@@ -8,6 +8,12 @@ class RakPeerInterface; // fwd-declared; RakNet headers only in the .cpp
 namespace jefe {
 namespace net {
 
+// RakNet-backed ITransport (JEF-22). Since JEF-23, ITransport carries
+// jefe::wire FRAMES ([u8 version][u16 msgType LE][payload]): send() prepends
+// the single RakNet envelope byte (GFCNET_USER_PACKET_BASE) so RakNet routes
+// the packet as user data, and poll() strips it before emitting Data events.
+// The RakNet envelope byte is this TU's concern; other transports (e.g.
+// JEF-24's WebRtcTransport) must NOT add one.
 class RakNetTransport : public ITransport {
 public:
     RakNetTransport();
