@@ -854,8 +854,8 @@ void gfcNetworkServer::startFXSinc(jefe::net::PeerId peerId, bool broadcast) {
  * Starts a broadcast FXSinc
  */
 void gfcNetworkServer::startFXSinc() {
-    // Legacy seeded from peer->GetSystemAddressFromIndex(0); no call sites
-    // exist (verified), so seed from the first known peer for equivalence.
+    // Legacy seeded from the RakNet peer's index-0 address accessor; no call
+    // sites exist (verified), so seed from the first known peer for equivalence.
     jefe::net::PeerId a0 = nickNameAddressMap.empty() ? jefe::net::kInvalidPeerId
                                                       : nickNameAddressMap.begin()->first;
     startFXSinc(a0,true);
