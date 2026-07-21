@@ -10,7 +10,6 @@
 #include <map>
 #include <set>
 #include <stdio.h>
-#include "BitStream.h"
 
 #include "gfcWire.h"
 
@@ -74,17 +73,10 @@ GFCNETMESSAGETYPE_SYSTEM,
 GFCNETMESSAGETYPE_LOAD
 };
 
-// legacy BitStream overloads — removed in Task 4 (JEF-23); live client/server
-// handlers still call them until Tasks 3/4 port those TUs to jefe::wire.
-void serializeFX ( const gfcFX* theFX, RakNet::BitStream* bs );
-void unserializeFX ( RakNet::BitStream* bs );
-
-void serializeLUT ( CubeLUT* theLUT, RakNet::BitStream* bs );
-void unserializeLUT ( RakNet::BitStream* bs );
-
-// jefe::wire overloads (JEF-23). Field sequences are identical to the legacy
-// BitStream versions above, modulo the sanctioned wire changes: strings are
-// u32-length-prefixed (StringCompressor dropped), the legacy explicit
+// jefe::wire FX/LUT serialize helpers (JEF-23; the legacy RakNet-serializer
+// overloads were deleted in Task 4). Field sequences are identical to the
+// legacy versions, modulo the sanctioned wire changes: strings are
+// u32-length-prefixed (compressed-string coding dropped), the legacy explicit
 // "length" fields preceding each compressed string are dropped (writeString
 // carries the length), and the LUT file body travels as length-prefixed raw
 // bytes. The unserialize overloads read ALL fields before performing any
