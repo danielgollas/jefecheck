@@ -3,7 +3,6 @@
 #include "gfcWire.h"
 #include "gfcWireMessages.h"
 
-#include <iostream>
 #include <sstream> //for stingstream
 #include <string>
 

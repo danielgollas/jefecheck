@@ -1,7 +1,6 @@
 #include "gfcNetworkStructures.h"
 
 #include <stdio.h>
-#include "RakPeerInterface.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -9,13 +8,6 @@
 #include <stdlib.h> // For atoi
 #include <cstring> // For strlen
 #include <cctype>
-#include "Rand.h"
-#include "RakNetStatistics.h"
-#include "MessageIdentifiers.h"
-#include <stdio.h>
-#include "GetTime.h"
-#include "RakAssert.h"
-#include "RakSleep.h"
 #include "gfcStructures.h"
 #include "gfcfx.h"
 #include "xmlParser.h"
