@@ -20,6 +20,7 @@
 #include <QProcess>
 
 #include "gfcStructures.h"
+#include "gfcWireTest.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
@@ -159,6 +160,16 @@ static bool hasAspectTest(int argc, char* argv[]) {
     return false;
 }
 
+// --wire-test : headless jefe::wire round-trip/bounds-safety self-test
+// (JEF-23). Pure data, no Qt/GL/rendering-chain dependency at all — takes
+// no argument. Dispatched at the very top of main(), before QApplication
+// is even constructed, since the test needs nothing that setup provides.
+static bool hasWireTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--wire-test") == 0) return true;
+    return false;
+}
+
 // --remote-test : orchestrator/server role (spawns a peer child).
 static bool hasRemoteTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
@@ -176,6 +187,15 @@ static bool resolveRemotePeer(int argc, char* argv[], std::string& ip, int& port
 }
 
 int main(int argc, char* argv[]) {
+    // Headless jefe::wire self-test (--wire-test, JEF-23): pure data, no
+    // GUI/GL/Qt-application dependency, so it runs and exits before
+    // QApplication is even constructed — same "as early as possible"
+    // treatment as the other --*-test flags, just earlier since this one
+    // truly needs nothing else set up first.
+    if (hasWireTest(argc, argv)) {
+        return jefe::wire::selfTest();
+    }
+
     // Make Qt's accessibility bridge live before QApplication touches
     // anything. On macOS this routes QAccessible → NSAccessibility,
     // which is what Appium's mac2 driver introspects.
