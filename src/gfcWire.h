@@ -45,6 +45,12 @@ class Writer {
 public:
     Writer() = default;
 
+    // True unless a writeString/writeBytes was refused because its length
+    // exceeded the u32 length-prefix range (>= 4GB). Integer/float/bool
+    // writes cannot fail. Callers building outgoing frames should check
+    // this before handing data()/size() to a transport.
+    bool ok() const { return ok_; }
+
     void writeU8(uint8_t v) {
         buf_.push_back(v);
     }
@@ -89,12 +95,22 @@ public:
 
     // u32 length prefix + raw bytes (UTF-8 or otherwise — this layer is
     // encoding-agnostic, it just moves bytes).
+    //
+    // Contract: payloads must fit the u32 length prefix (< 4GB). A longer
+    // payload is REFUSED atomically — neither the prefix nor any data is
+    // appended, and ok() goes (and stays) false — so the stream can never
+    // desync via a truncated prefix with full data appended. Message
+    // payloads in this app are nowhere near 4GB; the guard exists so the
+    // failure mode is a clean refusal rather than silent corruption.
     void writeString(const std::string& s) {
-        writeU32(static_cast<uint32_t>(s.size()));
-        buf_.insert(buf_.end(), s.begin(), s.end());
+        writeBytes(reinterpret_cast<const unsigned char*>(s.data()), s.size());
     }
 
     void writeBytes(const unsigned char* data, size_t len) {
+        if (len > 0xFFFFFFFFull) {
+            ok_ = false;
+            return;
+        }
         writeU32(static_cast<uint32_t>(len));
         if (len > 0) {
             buf_.insert(buf_.end(), data, data + len);
@@ -109,6 +125,7 @@ public:
 
 private:
     std::vector<unsigned char> buf_;
+    bool ok_ = true;
 };
 
 // ---------------------------------------------------------------------
@@ -121,6 +138,13 @@ public:
 
     bool ok() const { return ok_; }
     size_t remaining() const { return ok_ ? (len_ - pos_) : 0; }
+
+    // Sticky-fails the reader from the outside — used by frame-level
+    // validation (e.g. a version-byte mismatch in readFrameHeader) so a
+    // caller that only checks ok() can never go on to misparse the rest
+    // of the buffer. Same effect as an out-of-bounds read: all further
+    // reads return false, remaining() reports 0.
+    void markBad() { ok_ = false; }
 
     bool readU8(uint8_t& out) {
         if (!ok_ || remaining() < 1) return fail();
@@ -232,11 +256,16 @@ inline void beginFrame(Writer& w, uint16_t msgType) {
 
 // Reads and validates the frame header, yielding msgType. Returns false
 // (without touching msgType) if the buffer is truncated or the version
-// byte doesn't match kWireVersion.
+// byte doesn't match kWireVersion. A version mismatch sticky-fails the
+// reader (ok() goes false, same as a truncation) so callers that only
+// check ok() cannot go on to misparse the remaining bytes.
 inline bool readFrameHeader(Reader& r, uint16_t& msgType) {
     uint8_t version = 0;
     if (!r.readU8(version)) return false;
-    if (version != kWireVersion) return false;
+    if (version != kWireVersion) {
+        r.markBad();
+        return false;
+    }
     uint16_t type = 0;
     if (!r.readU16(type)) return false;
     msgType = type;

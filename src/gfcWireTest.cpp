@@ -6,8 +6,8 @@
 
 #include "gfcWire.h"
 
-#include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <limits>
 #include <string>
@@ -170,6 +170,50 @@ void testBytes() {
     check(r2.readBytes(out2) && out2.empty(), "empty bytes round-trip");
 }
 
+// ---- golden bytes (endianness pinned, not just symmetric) --------------
+
+bool bytesEqual(const Writer& w, const std::vector<unsigned char>& expect) {
+    return w.size() == expect.size() &&
+           (expect.empty() ||
+            std::memcmp(w.data(), expect.data(), expect.size()) == 0);
+}
+
+void testGoldenEncodings() {
+    // Exact-byte assertions: a symmetric big-endian implementation would
+    // pass every round-trip test, so pin little-endian on the wire here.
+    {
+        Writer w;
+        w.writeU16(0x1234);
+        check(bytesEqual(w, {0x34, 0x12}), "golden u16 LE bytes");
+    }
+    {
+        Writer w;
+        w.writeU32(0x11223344u);
+        check(bytesEqual(w, {0x44, 0x33, 0x22, 0x11}), "golden u32 LE bytes");
+    }
+    {
+        Writer w;
+        w.writeU64(0x1122334455667788ULL);
+        check(bytesEqual(w, {0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11}),
+              "golden u64 LE bytes");
+    }
+    {
+        Writer w;
+        w.writeF32(1.0f);  // IEEE-754 bits 0x3F800000
+        check(bytesEqual(w, {0x00, 0x00, 0x80, 0x3F}), "golden f32 1.0f LE bytes");
+    }
+}
+
+void testGoldenFrameDecode() {
+    // Positive decode of a hand-crafted frame: version=1, msgType=0x1234 LE.
+    const unsigned char raw[] = {0x01, 0x34, 0x12};
+    Reader r(raw, sizeof(raw));
+    uint16_t msgType = 0;
+    check(readFrameHeader(r, msgType) && msgType == 0x1234,
+          "golden frame decode: version=1 msgType=0x1234");
+    check(r.ok() && r.remaining() == 0, "golden frame decode consumed exactly");
+}
+
 // ---- frame helpers -----------------------------------------------------
 
 void testFrameRoundTrip() {
@@ -189,6 +233,12 @@ void testFrameVersionMismatch() {
     Reader r(raw.data(), raw.size());
     uint16_t msgType = 0xFFFF;
     check(!readFrameHeader(r, msgType), "version mismatch rejected");
+    // Mismatch must sticky-fail the reader, same as truncation, so an
+    // ok()-checking caller can't go on to misparse the remaining bytes.
+    check(!r.ok(), "version mismatch sticky-fails reader (ok() false)");
+    uint8_t after = 0;
+    check(!r.readU8(after) && r.remaining() == 0,
+          "no reads succeed after version mismatch");
 }
 
 // ---- truncation / bounds-safety ----------------------------------------
@@ -299,6 +349,8 @@ int selfTest() {
     testBool();
     testString();
     testBytes();
+    testGoldenEncodings();
+    testGoldenFrameDecode();
     testFrameRoundTrip();
     testFrameVersionMismatch();
     testTruncatedPrimitives();
