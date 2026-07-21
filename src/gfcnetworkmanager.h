@@ -6,12 +6,8 @@
 #include "gfcnetworkserver.h"
 #include "gfcnetworkeventnotification.h"
 
-#include "RakPeerInterface.h"
-#include "MessageIdentifiers.h"
-#include "RakNetworkFactory.h"
 #include <stdio.h>
 #include "gfcNetworkStructures.h"
-#include "StringCompressor.h"
 
 
 #include <map>

@@ -558,6 +558,30 @@ New `.cpp` files are picked up by CMake's `file(GLOB src/qt/*.cpp)` — re-run `
 
 `--fx-test` still passes (no FX regression). `--cc-test` complements it — the FX test can't catch the super-shader bug because FX bake into the FBO earlier. **Note on aspect units:** the crop math treats `aspect` as *content-height ÷ width* (`polySizeX*aspect` = content height), so a value `< 1` letterboxes a square/landscape source; the "2.39:1"→2.39 preset strings are the *inverse* convention, so preset aspects produce off-frame bars on non-portrait sources — a pre-existing crop-feature quirk, orthogonal to this render fix.
 
+## 31. Transport seam (JEF-22)
+
+**Files:** `src/gfcTransport.h` (interface), `src/gfcRakNetTransport.{h,cpp}` (the only RakNet TU), `src/gfcnetworkclient.{h,cpp}`, `src/gfcnetworkserver.{h,cpp}`, `src/gfcNetworkManager.{h,cpp}`.
+
+**Goal:** confine RakNet to one translation unit so a future transport (e.g. WebRTC/websocket for the web port, see `project_future_directions.md`) is a second implementation of `jefe::net::ITransport`, not a rewrite of client/server/manager.
+
+**`ITransport` contract** (`gfcTransport.h`): host (`startHost`/`stopHost`) and client (`connect`/`disconnect`) roles, a poll-based `poll(TransportEvent&)` returning `false` when nothing's pending, `send(data,len,target,broadcastExcluding)`, `closePeer`, `connectionCount`. `PeerId` is `uint64_t` — `packPeerId(binaryAddress, port)` packs a RakNet `SystemAddress` as `binaryAddress<<16 | port`; `kInvalidPeerId = 0`. No RakNet type crosses the interface.
+
+**Poll-based pump preserved.** `MainWindow_Qt::playbackTimer_`'s 4 ms tick (§26) still drives `Update()`/`poll()` on both client and server — the seam didn't touch pacing, only what sits behind `Packet* p = peer->Receive()` (now `transport_->poll(ev)`).
+
+**RakNet confined to `gfcRakNetTransport.{h,cpp}`.** Every other network TU (`gfcnetworkclient.cpp`, `gfcnetworkserver.cpp`, `gfcNetworkManager.cpp`) holds only a `std::unique_ptr<jefe::net::ITransport> transport_` and is RakNet-symbol-free. Audit grep (RakPeerInterface/SystemAddress/RakNetworkFactory/MessageIdentifiers/etc.) comes back clean except literal debug-log strings (`printf("ID_CONNECTION_LOST\n")` etc. — preserved verbatim for output fidelity) and one commented-out dead `peer->Send(...)` block in `gfcnetworkclient.cpp` (kept, per Task 3, since it was already dead in legacy).
+
+**`BitStream`/`StringCompressor` stay app-side until JEF-23.** The seam is Phase 1 (transport only); the wire format itself is still RakNet's `BitStream`, constructed directly in `gfcnetworkclient.cpp`/`gfcnetworkserver.cpp` from `ev.bytes`. A versioned, transport-agnostic serialization format is JEF-23 scope — don't conflate "no RakNet types in the client/server" with "no RakNet wire format" yet.
+
+**`GFCNET_USER_PACKET_BASE = 91` tripwire** (`gfcNetworkStructures.h:44`): the app's `GFCNETID_*` enum starts at this value, which must equal RakNet's `ID_USER_PACKET_ENUM` for the transport to correctly distinguish system events from app packets in `poll()`. `gfcRakNetTransport.cpp:9` has a `static_assert(ID_USER_PACKET_ENUM == GFCNET_USER_PACKET_BASE, ...)` — if a future RakNet upgrade ever renumbers that enum, the build fails loudly instead of silently misrouting packets.
+
+**The `GFCNETID_NEWPEERINSESSION` broadcast-except-target subtlety (`gfcnetworkserver.cpp:677`)**: it sends `(ev.peer, true)` — `broadcastExcluding=true` with a *real* target, not `kInvalidPeerId`. Per the `ITransport::send` contract this means "everyone except `ev.peer`" (the new client doesn't need its own nickname echoed back), not "everyone." Don't "simplify" this to a plain broadcast — it changes who gets a redundant packet, not just the addressing mechanism.
+
+**`startFXSinc`-vs-others broadcast asymmetry (load-bearing).** `startFXSinc(peer, broadcast)` branches explicitly: `broadcast==true` sends with `kInvalidPeerId` (true "everyone"). `startLUTSinc`/`startStackSinc`/`startPlaylistMerge` do **not** branch — they pass `(peerId, broadcast)` straight through even when `broadcast==true`, which under the contract above means "broadcast except `peerId`." This asymmetry is preserved exactly from legacy (verified line-by-line in Task 4); it is not a bug to "fix" for consistency — each call site's `peerId` argument was already chosen assuming its specific semantics.
+
+**Recorded losses.** `ID_MODIFIED_PACKET` (tampered-packet detection) is swallowed by `RakNetTransport::poll()` rather than surfaced as a distinct event — the client-side log line and the `gotMessages` flag it used to set are gone. Revisit in JEF-23 if tamper-detection logging is needed again; today a modified packet is silently dropped rather than logged.
+
+**One-instance-per-role contract.** Both `gfcNetworkClient` and `gfcNetworkServer` assume a single `ITransport` instance for the process's lifetime in that role (mirrors legacy's single `RakPeerInterface*`); `gfcNetworkManager`'s `isServer` flag (`gfcNetworkManager.h:136`) is the one place that decides which role (if either) is active, and nothing constructs a second client or server concurrently. Don't add a second concurrent host/client without revisiting that invariant.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.

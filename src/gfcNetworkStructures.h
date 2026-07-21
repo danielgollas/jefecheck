@@ -1,16 +1,14 @@
 #ifndef GFCNETWORKSTRUCTURES_H
 #define GFCNETWORKSTRUCTURES_H
 
-#include "MessageIdentifiers.h"
 #include <string>
 
-#include <stdio.h> 
+#include <stdio.h>
 
 #include <string>
 #include <vector>
 #include <map>
-#include <set> 
-#include "MessageIdentifiers.h"  
+#include <set>
 #include <stdio.h>
 #include "BitStream.h"
 
@@ -43,8 +41,9 @@ class gfcFX;
 enum gfcNetStatusColors{GFCCOLOR_GREEN, GFCCOLOR_YELLOW, GFCCOLOR_RED,GFCCOLOR_GRAY};
 
 //broadcast message id's are only used when the message is transformed by the server.
+constexpr unsigned char GFCNET_USER_PACKET_BASE = 91; // == RakNet ID_USER_PACKET_ENUM (verified by probe); static_assert in gfcRakNetTransport.cpp
 enum gfcNetPacketEnums{
-GFCNETID_NICKNAMESEND=ID_USER_PACKET_ENUM,GFCNETID_NICKALREADYINUSE,GFCNETID_PEERSINSESSION, GFCNETID_NEWPEERINSESSION,
+GFCNETID_NICKNAMESEND=GFCNET_USER_PACKET_BASE,GFCNETID_NICKALREADYINUSE,GFCNETID_PEERSINSESSION, GFCNETID_NEWPEERINSESSION,
 GFCNETID_CHATMESSAGE,GFCNETID_CHATBROADCASTMESSAGE,
 GFCNETID_POINTERINFOMESSAGE,GFCNETID_POINTERINFOBROADCASTMESSAGE,
 GFCNETID_TRANSFORMATIONMESSAGE, GFCNETID_TRANSFORMATIONBROADCASTMESSAGE,
