@@ -241,6 +241,146 @@ void unserializeFX ( RakNet::BitStream* bs ) {
     fxManager.loadFX(jfxFileName);
 }
 
+// =====================================================================
+// jefe::wire overloads (JEF-23). Same field sequences as the BitStream
+// versions above; see gfcNetworkStructures.h for the sanctioned wire
+// deltas (u32-prefixed strings, dropped redundant length fields, LUT
+// body as raw length-prefixed bytes).
+// =====================================================================
+
+void serializeLUT ( CubeLUT* theLUT, jefe::wire::Writer& w ) {
+    //read the lut file (whatever format it is) and send the filename w/o path, and then send the binary file.
+    FILE *fp;
+    long len;
+    char *buf;
+    fp=fopen ( theLUT->filename,"rb" );
+    if ( !fp ) {
+        // Legacy crashed here (unchecked fopen). Emit an empty-but-well-
+        // formed payload instead so the stream cannot desync.
+        printf ( "serializeLUT: could not open %s\n",theLUT->filename );
+        w.writeString ( GetFilenameNoPath ( theLUT->filename ) );
+        w.writeBytes ( nullptr, 0 );
+        return;
+    }
+    fseek ( fp,0,SEEK_END ); //go to end
+    len=ftell ( fp ); //get position at end (length)
+    fseek ( fp,0,SEEK_SET ); //go to beg.
+    buf=new char[len]; //malloc buffer
+    fread ( buf,len,1,fp ); //read into buffer
+    fclose ( fp );
+
+    std::string filenameNoPath=GetFilenameNoPath ( theLUT->filename );
+
+    //write the filename (w/o path), then the file body as raw bytes
+    w.writeString ( filenameNoPath );
+    w.writeBytes ( ( const unsigned char* ) buf, ( size_t ) len );
+    delete [] buf;
+}
+
+bool unserializeLUT ( jefe::wire::Reader& r ) {
+
+    std::string filenameNoPath;
+    std::vector<unsigned char> fileBytes;
+
+    //READ FROM WIRE — all fields before any side effect
+    if ( !r.readString ( filenameNoPath ) ) return false;
+    if ( !r.readBytes ( fileBytes ) ) return false;
+
+    std::ofstream outFile;
+
+    std::string lutFilename=sett.receivedPath+filenameNoPath;
+
+    //write lut file
+    outFile.open ( lutFilename.c_str(),std::ostream::binary );
+    outFile.write ( ( const char* ) fileBytes.data(), ( std::streamsize ) fileBytes.size() );
+    outFile.close();
+
+    lutManager.loadLUT(lutFilename);
+    return true;
+}
+
+void serializeFX ( const gfcFX* theFX, jefe::wire::Writer& w ) {
+
+    //1. read the whole jfx
+    std::string theJfx=ReadTextFileIntoString(theFX->filename);
+    //2. write the jfx filename, then the jfx body (writeString carries the length)
+    w.writeString ( GetFilenameNoPath ( theFX->filename ) );
+    w.writeString ( theJfx );
+
+    //3. get the shaders filenames from the jfx file so we can read them and send them
+    XMLResults xmlResults;
+    XMLNode xMainNode=XMLNode::parseString ( theJfx.c_str(), NULL, &xmlResults );
+    if (xmlResults.error!=eXMLErrorNone) {
+        printf("Error parsing XML file: %s\nFile:\n%s\n",XMLNode::getError(xmlResults.error),theJfx.c_str());
+    }
+    XMLNode xNode=xMainNode.getChildNode ( "root" ).getChildNode ( "shaders" );
+    std::string vertFilename;
+    std::string fragFilename;
+    std::string shaderPath=GetPathFromFilenameRegular ( theFX->filename );
+
+    vertFilename=shaderPath;
+    vertFilename+="/";
+    vertFilename+=xNode.getAttribute ( "vertex" );
+
+    fragFilename=shaderPath;
+    fragFilename+="/";
+    fragFilename+=xNode.getAttribute ( "fragment" );
+
+    //4. Read the shaders
+    std::string theVertexShader=ReadTextFileIntoString(vertFilename);
+    std::string theFragmentShader=ReadTextFileIntoString(fragFilename);
+
+    //5. Send the shaders (filename then shader body, same order as legacy)
+    w.writeString ( GetFilenameNoPath ( vertFilename ) );
+    w.writeString ( theVertexShader );
+
+    w.writeString ( GetFilenameNoPath ( fragFilename ) );
+    w.writeString ( theFragmentShader );
+}
+
+bool unserializeFX ( jefe::wire::Reader& r ) {
+    std::string jfxFilenameNoPath, theJfx;
+    std::string vertexFilenameNoPath, theVertexShader;
+    std::string fragmentFilenameNoPath, theFragmentShader;
+
+    //READ FROM WIRE — all fields before any side effect
+    if ( !r.readString ( jfxFilenameNoPath ) ) return false;
+    if ( !r.readString ( theJfx ) ) return false;
+    if ( !r.readString ( vertexFilenameNoPath ) ) return false;
+    if ( !r.readString ( theVertexShader ) ) return false;
+    if ( !r.readString ( fragmentFilenameNoPath ) ) return false;
+    if ( !r.readString ( theFragmentShader ) ) return false;
+
+    printf("\nUnserializer : Vertex Shader: %i bytes %s\n",(int)theVertexShader.length(),vertexFilenameNoPath.c_str());
+    printf("\nUnserializer : Fragment Shader: %i bytes %s\n",(int)theFragmentShader.length(),fragmentFilenameNoPath.c_str());
+
+    //SAVE TO FILES
+    std::ofstream outFile;
+
+    std::string jfxFileName=sett.receivedPath+jfxFilenameNoPath;
+    std::string vertexFileName=sett.receivedPath+vertexFilenameNoPath;
+    std::string fragmentFileName=sett.receivedPath+fragmentFilenameNoPath;
+
+    //write jfxFile
+    outFile.open ( jfxFileName.c_str(),std::ostream::out );
+    outFile<<theJfx;
+    outFile.close();
+
+    //write fragmentFile
+    outFile.open ( fragmentFileName.c_str(),std::ostream::out );
+    outFile<<theFragmentShader;
+    outFile.close();
+
+    //write vertexFile
+    outFile.open ( vertexFileName.c_str(),std::ostream::out );
+    outFile<<theVertexShader;
+    outFile.close();
+
+    //LOAD THE FX FROM THE FILES
+    fxManager.loadFX(jfxFileName);
+    return true;
+}
+
 std::string gfcChatLogEntry::getFormattedString() {
 
     std::string tmp="( ";

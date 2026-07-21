@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include "BitStream.h"
 
+#include "gfcWire.h"
+
 #include "trilerp.h"
 
 #include "gfcStructures.h"
@@ -72,11 +74,27 @@ GFCNETMESSAGETYPE_SYSTEM,
 GFCNETMESSAGETYPE_LOAD
 };
 
+// legacy BitStream overloads — removed in Task 4 (JEF-23); live client/server
+// handlers still call them until Tasks 3/4 port those TUs to jefe::wire.
 void serializeFX ( const gfcFX* theFX, RakNet::BitStream* bs );
 void unserializeFX ( RakNet::BitStream* bs );
 
 void serializeLUT ( CubeLUT* theLUT, RakNet::BitStream* bs );
 void unserializeLUT ( RakNet::BitStream* bs );
+
+// jefe::wire overloads (JEF-23). Field sequences are identical to the legacy
+// BitStream versions above, modulo the sanctioned wire changes: strings are
+// u32-length-prefixed (StringCompressor dropped), the legacy explicit
+// "length" fields preceding each compressed string are dropped (writeString
+// carries the length), and the LUT file body travels as length-prefixed raw
+// bytes. The unserialize overloads read ALL fields before performing any
+// side effects (file writes / manager loads) and return false — with no
+// side effects — on a truncated/malformed buffer.
+void serializeFX ( const gfcFX* theFX, jefe::wire::Writer& w );
+bool unserializeFX ( jefe::wire::Reader& r );
+
+void serializeLUT ( CubeLUT* theLUT, jefe::wire::Writer& w );
+bool unserializeLUT ( jefe::wire::Reader& r );
 
 // Extracts the HH:MM token from an asctime-style string
 // ("Jul  4 14:32:56 2026" -> "14:32"). Returns the input unchanged
