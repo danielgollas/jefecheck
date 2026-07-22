@@ -405,6 +405,16 @@ void connectAsCloudClient(const RemoteCloudJoinParams& params);
 // the code has been assigned). Reads gfcNetworkManager::getAssignedSessionCode.
 std::string remoteSessionCode();
 
+// True while a cloud connect (connectAsCloudHost/Client) is running on a worker
+// thread and owns the networkManager. GUI-thread manager readers (the remote
+// getters, drawNetworkOverlay) honor this and no-op; GlViewport_qt checks it so
+// its paintGL overlay call can skip too. See gCloudConnectInFlight in the .cpp.
+bool cloudConnectInFlight();
+
+// Latches an app-shutdown flag (wire to QCoreApplication::aboutToQuit) so a
+// detached cloud-connect worker won't touch networkManager as globals tear down.
+void beginBridgeShutdown();
+
 void disconnectRemote();
 
 // Headless two-process connection smoke-test helpers (--remote-test).

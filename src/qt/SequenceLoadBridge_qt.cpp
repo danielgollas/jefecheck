@@ -54,7 +54,27 @@ namespace jefe::qt {
 // pumpNetwork() checks this and skips the tick while it is set. The window is
 // short and the dialog refreshes itself when the worker finishes, so skipping a
 // few pump ticks costs nothing.
+//
+// The worker is the SOLE thread allowed to touch networkManager while this is
+// set, so EVERY GUI-thread manager reader must honor it too: the remote getters
+// below (isRemoteConnected/isRemoteServer/remoteParticipants/remoteStatusText/
+// remoteSessionCode/remoteErrors/…) return empty/false, and drawNetworkOverlay
+// draws nothing, while a cloud connect is in flight. GlViewport_qt checks the
+// exported cloudConnectInFlight() so its paintGL overlay call can no-op too.
 static std::atomic<bool> gCloudConnectInFlight{false};
+
+// Set once the app is tearing down (QCoreApplication::aboutToQuit). A detached
+// cloud-connect worker checks this before touching networkManager so it can't
+// mutate a global that static destruction may be racing on quit.
+static std::atomic<bool> gBridgeShuttingDown{false};
+
+bool cloudConnectInFlight() {
+    return gCloudConnectInFlight.load(std::memory_order_acquire);
+}
+
+void beginBridgeShutdown() {
+    gBridgeShuttingDown.store(true, std::memory_order_release);
+}
 
 int getDefaultTextureFormat() {
     return sett.defaultTextureFormat;
@@ -1123,6 +1143,7 @@ void connectAsClient(const RemoteClientParams& params) {
 }
 
 void connectAsCloudHost(const RemoteCloudHostParams& params) {
+    if (gBridgeShuttingDown.load(std::memory_order_acquire)) return;
     if (networkManager.getConnected()) return;
     gfcServerParams sp;
     std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", "jefe-cloud-host");
@@ -1140,6 +1161,7 @@ void connectAsCloudHost(const RemoteCloudHostParams& params) {
 }
 
 void connectAsCloudClient(const RemoteCloudJoinParams& params) {
+    if (gBridgeShuttingDown.load(std::memory_order_acquire)) return;
     if (networkManager.getConnected()) return;
     gfcConnectionParams cp;
     cp.nickname        = params.clientName;
@@ -1155,6 +1177,8 @@ void connectAsCloudClient(const RemoteCloudJoinParams& params) {
 }
 
 std::string remoteSessionCode() {
+    // A cloud connect worker owns the manager — don't read mid-mutation.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     return networkManager.getAssignedSessionCode();
 }
 
@@ -1165,10 +1189,12 @@ void disconnectRemote() {
 }
 
 bool isRemoteConnected() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return false;
     return networkManager.getConnected();
 }
 
 bool isRemoteServer() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return false;
     return networkManager.getIsServer();
 }
 
@@ -2057,13 +2083,32 @@ std::string getFavoritesFilePath() {
     return ::getApplicationDataPath() + "favorites.jcs";
 }
 
-std::vector<std::string> remoteParticipants() { return networkManager.participantNames(); }
-std::string              remoteStatusText()   { return networkManager.connectionStatusText(); }
-std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLines(); }
-std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
-std::vector<std::string> remoteNetworkLog()   { return networkManager.networkLogLines(); }
+// All of these read gfcNetworkManager state. While a cloud connect worker owns
+// the manager (gCloudConnectInFlight), a direct refreshConnectionState() (e.g.
+// the F5 handler) must NOT read mid-mutation — return empty/cached instead.
+std::vector<std::string> remoteParticipants() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.participantNames();
+}
+std::string remoteStatusText() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.connectionStatusText();
+}
+std::vector<std::string> remoteChatLog() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.chatLogLines();
+}
+std::vector<std::string> remoteErrors() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.drainErrors();
+}
+std::vector<std::string> remoteNetworkLog() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.networkLogLines();
+}
 
 std::vector<ChatEntry> remoteChatEntries() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     std::vector<ChatEntry> out;
     for (auto& d : networkManager.chatEntries()) {
         ChatEntry e;
@@ -2262,7 +2307,13 @@ bool coordTestSettleForPlay(int settleMs) {
 
 // --- Chat overlay + keyboard chat entry (Task 7) ----------------------------
 
-void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }
+void drawNetworkOverlay(int w, int h) {
+    // networkManager.draw() reads connected/allReady/client — skip it while a
+    // cloud connect worker owns the manager. The overlay vanishing for the ≤5s
+    // connect window is harmless.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return;
+    networkManager.draw(w, h);
+}
 
 // --- Remote pointer broadcast (Task 8) --------------------------------------
 

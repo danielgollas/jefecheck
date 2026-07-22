@@ -475,6 +475,11 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     connect(chatInput_, &QLineEdit::returnPressed,
             this, &RemoteDialog_Qt::onChatSubmit);
 
+    // Latch the bridge shutdown flag on app quit so a detached cloud-connect
+    // worker still in flight won't touch networkManager as globals tear down.
+    connect(qApp, &QCoreApplication::aboutToQuit, this,
+            []() { jefe::qt::beginBridgeShutdown(); });
+
     refreshConnectionState();
 }
 
