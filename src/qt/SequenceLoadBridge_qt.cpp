@@ -59,8 +59,10 @@ namespace jefe::qt {
 // set, so EVERY GUI-thread manager reader must honor it too: the remote getters
 // below (isRemoteConnected/isRemoteServer/remoteParticipants/remoteStatusText/
 // remoteSessionCode/remoteErrors/…) return empty/false, and drawNetworkOverlay
-// draws nothing, while a cloud connect is in flight. GlViewport_qt checks the
-// exported cloudConnectInFlight() so its paintGL overlay call can no-op too.
+// draws nothing, while a cloud connect is in flight. drawNetworkOverlay
+// self-gates inside this TU, so GlViewport_qt's paintGL call already no-ops
+// without a GlViewport edit; cloudConnectInFlight() is exported for any future
+// GUI-thread caller that needs the same gate.
 static std::atomic<bool> gCloudConnectInFlight{false};
 
 // Set once the app is tearing down (QCoreApplication::aboutToQuit). A detached
