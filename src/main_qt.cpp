@@ -235,6 +235,17 @@ static bool resolveRemoteWebrtcPeer(int argc, char* argv[], std::string& ip, int
     return false;
 }
 
+// --stats-test : orchestrator/server role (JEF-30 Task 1). Same two-process
+// WebRTC harness as --remote-test-webrtc, but after the session establishes +
+// traffic flows, it asserts the per-peer stats getter returns REAL WebRTC stats
+// (≥1 connected peer, bytes>0, a resolved Direct/Relay path). Forces
+// JEFECHECK_TRANSPORT=webrtc via the same top-of-main re-exec.
+static bool hasStatsTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--stats-test") == 0) return true;
+    return false;
+}
+
 // --asset-test : orchestrator role (JEF-28 Task 2). Loads a fixture LUT (and an
 // FX when a GL context exists) into the host, brings up the RakNet server,
 // spawns a peer child, and asserts the peer received + hot-loaded the asset via
@@ -364,7 +375,8 @@ int main(int argc, char* argv[]) {
                 std::strcmp(argv[i], "--asset-test-webrtc") == 0 ||
                 std::strcmp(argv[i], "--asset-test-webrtc-peer") == 0 ||
                 std::strcmp(argv[i], "--coord-test") == 0 ||
-                std::strcmp(argv[i], "--coord-test-peer") == 0) {
+                std::strcmp(argv[i], "--coord-test-peer") == 0 ||
+                std::strcmp(argv[i], "--stats-test") == 0) {
                 webrtcHarness = true;
                 break;
             }
@@ -747,6 +759,78 @@ int main(int argc, char* argv[]) {
         printf("REMOTE-TEST-WEBRTC: participants=%d mirrored_play=%d\n", peak, sawPlay ? 1 : 0);
         fflush(stdout);
         std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
+    }
+
+    // --stats-test (JEF-30 Task 1): reuse the --remote-test-webrtc two-process
+    // WebRTC harness (host + loopback + a spawned peer child) to establish a real
+    // libdatachannel session with traffic, then assert the per-peer stats getter
+    // returns REAL stats. Success requires ≥1 connected peer with bytes>0 and a
+    // resolved Direct/Relay path. rtt is NOT required (localhost rtt is often
+    // 0/nullopt → -1). WebRTC forced by the top-of-main re-exec.
+    if (hasStatsTest(argc, argv)) {
+        jefe::qt::initializeRenderingChain();
+        const int port = 60127;   // distinct from the other harness ports
+
+        // Phase 1: host + its loopback client fully up (a real WebRTC peer with
+        // handshake/sync traffic — enough for stats on its own).
+        if (!jefe::qt::remoteTestServerStart(port, /*loopbackTimeoutMs=*/10000)) {
+            printf("STATS-TEST: loopback client failed to come up\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+
+        // Phase 2: spawn a second WebRTC peer (reuses the remote-test child role)
+        // so there is cross-process traffic + a second selected candidate pair.
+        QProcess peer;
+        peer.setProgram(QCoreApplication::applicationFilePath());
+        peer.setArguments({"--remote-test-webrtc-peer", "127.0.0.1", QString::number(port)});
+        QProcessEnvironment childEnv = QProcessEnvironment::systemEnvironment();
+        childEnv.insert("JEFECHECK_TRANSPORT", "webrtc");
+        peer.setProcessEnvironment(childEnv);
+        if (qEnvironmentVariableIsSet("JEFECHECK_REMOTE_TEST_DEBUG"))
+            peer.setProcessChannelMode(QProcess::ForwardedChannels);
+        peer.start();
+        if (!peer.waitForStarted(2000)) {
+            printf("STATS-TEST: child failed to start: %s\n",
+                   peer.errorString().toUtf8().constData());
+            fflush(stdout);
+            std::_Exit(3);
+        }
+
+        // Let the peer's session + play toggle generate traffic on the host.
+        jefe::qt::remoteTestServerSettleForPlay(/*settleMs=*/10000);
+
+        // Poll the stats getter with a bounded retry so bytes counters + the
+        // selected candidate pair have settled (both populate slightly after the
+        // channel opens). Accept the first peer with real stats.
+        bool ok = false;
+        int  peersReport = 0;
+        long rttReport = -1;
+        unsigned long long bytesReport = 0;
+        std::string pathReport = "unknown";
+        for (int t = 0; t < 4000 && !ok; t += 50) {
+            jefe::qt::pumpNetwork();
+            auto stats = jefe::qt::remotePeerStats();
+            peersReport = (int)stats.size();
+            for (const auto& s : stats) {
+                if (s.connected && s.bytes > 0 &&
+                    (s.path == "direct" || s.path == "relay")) {
+                    ok = true;
+                    rttReport = s.rttMs;
+                    bytesReport = s.bytes;
+                    pathReport = s.path;
+                    break;
+                }
+            }
+            if (!ok) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        peer.waitForFinished(6000);
+        if (peer.state() != QProcess::NotRunning) peer.kill();
+        printf("STATS-TEST: peers=%d rtt=%ld bytes=%llu path=%s\n",
+               peersReport, rttReport, bytesReport, pathReport.c_str());
+        fflush(stdout);
+        std::_Exit(ok ? 0 : 2);
     }
 
     // --asset-test-webrtc-peer <ip> <port> <lutHash>: WebRTC joiner child role

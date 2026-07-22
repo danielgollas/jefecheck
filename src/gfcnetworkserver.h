@@ -49,6 +49,17 @@ public:
     int getConnectionCount();
     std::vector<std::string> getParticipantNames();
 
+    // JEF-30: per-peer connection health from the underlying transport (WebRTC
+    // real stats / RakNet basic presence). Empty when not hosting.
+    std::vector<jefe::net::PeerStats> peerStats() {
+        return transport_ ? transport_->peerStats() : std::vector<jefe::net::PeerStats>();
+    }
+    // Resolve a peer's registered nickname (empty if unknown).
+    std::string nicknameForPeer(jefe::net::PeerId peer) {
+        auto it = nickNameAddressMap.find(peer);
+        return it == nickNameAddressMap.end() ? std::string() : it->second;
+    }
+
     // JEF-27 cloud-coordinator hosting accessors.
     bool getCoordinatorMode() const { return coordinatorMode; }
     std::string getCoordinatorUrl() const { return coordinatorUrl; }

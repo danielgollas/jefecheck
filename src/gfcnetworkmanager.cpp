@@ -192,6 +192,18 @@ std::string gfcNetworkManager::getAssignedSessionCode() {
     return server.getAssignedSessionCode();
 }
 
+// JEF-30: forward to the active transport. A host's stats come from the SERVER
+// transport (its view of every joined peer); a joiner's from the CLIENT
+// transport (its single peer, the host). Solo → empty.
+std::vector<jefe::net::PeerStats> gfcNetworkManager::peerStats() {
+    if (!connected) return {};
+    return isServer ? server.peerStats() : client.peerStats();
+}
+
+std::string gfcNetworkManager::peerNickname(jefe::net::PeerId peer) {
+    return isServer ? server.nicknameForPeer(peer) : std::string();
+}
+
 std::string gfcNetworkManager::connectionStatusText() {
     if (isServer) return connected ? "Hosting (server)" : "Not hosting";
     return client.getStatus();   // e.g. "Online!", "Attempting Connection...", "Offline"

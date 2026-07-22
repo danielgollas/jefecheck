@@ -455,6 +455,24 @@ bool remoteHasFXHash(const std::string& hash);
 int  remoteFXCount();
 bool isRemoteConnected();
 bool isRemoteServer();
+
+// JEF-30: per-peer session-health snapshot for the Remote dialog indicator.
+// `name` resolves the peer's nickname when possible, else its PeerId as a
+// string. `rttMs` is -1 when unknown (RakNet always, WebRTC on localhost).
+// `bytes` is the running total (sent+received); T2 derives kbps from deltas
+// between refreshes (so `kbps` is left 0 here — carried for the T2 struct
+// shape). `path` is "direct" / "relay" / "n/a". Honors gCloudConnectInFlight
+// (returns empty during a cloud connect, like the other getters).
+struct RemotePeerStat {
+    std::string name;
+    long rttMs = -1;
+    double kbps = 0.0;
+    unsigned long long bytes = 0;   // running total (sent + received)
+    std::string path;               // "direct" / "relay" / "n/a"
+    bool connected = false;
+};
+std::vector<RemotePeerStat> remotePeerStats();
+
 std::vector<std::string> remoteParticipants();
 std::string              remoteStatusText();
 std::vector<std::string> remoteChatLog();

@@ -74,6 +74,13 @@ public:
     std::string getStatus();
     int getStatusColor();
     std::vector<std::string> getPeersInSession();
+
+    // JEF-30: per-peer connection health from the underlying transport (the
+    // client's single peer is the host). Empty when not connected.
+    std::vector<jefe::net::PeerStats> peerStats() {
+        return transport_ ? transport_->peerStats() : std::vector<jefe::net::PeerStats>();
+    }
+
     std::string getNickName() { return nickName; }
     gfcPointerStorage pointers;
 
