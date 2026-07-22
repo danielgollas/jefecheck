@@ -5,6 +5,9 @@
 #include <cstring>
 
 #include "gfcRakNetTransport.h"
+#ifdef JEFECHECK_WEBRTC
+#include "gfcWebRtcTransport.h"
+#endif
 
 namespace jefe {
 namespace net {
@@ -18,10 +21,14 @@ TransportKind transportKindFromEnv() {
 
 std::unique_ptr<ITransport> makeTransport(TransportKind kind) {
     if (kind == TransportKind::WebRtc) {
-        // JEF-24 Task 3 provides WebRtcTransport; falling back to RakNet.
-        std::printf("[net] JEFECHECK_TRANSPORT=webrtc requested, but "
-                    "WebRtcTransport is not available yet (JEF-24 Task 3); "
-                    "falling back to RakNet\n");
+#ifdef JEFECHECK_WEBRTC
+        return std::make_unique<WebRtcTransport>();
+#else
+        // Built without WebRTC support: fall back to RakNet.
+        std::printf("[net] JEFECHECK_TRANSPORT=webrtc requested, but this build "
+                    "has no WebRTC support (JEFECHECK_WEBRTC=OFF); falling back "
+                    "to RakNet\n");
+#endif
     }
     return std::make_unique<RakNetTransport>();
 }

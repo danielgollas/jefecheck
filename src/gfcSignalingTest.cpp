@@ -37,6 +37,16 @@ int signalingSelfTest() {
     SignalMessage serverRx;
     SignalMessage clientRx;
 
+    // The exact SDP the host pushes — asserted byte-for-byte on the client,
+    // incl. embedded CRLFs (Task 3 pushes real SDP through this path).
+    const std::string sentOfferSdp =
+        "v=0\r\n"
+        "o=- 42 2 IN IP4 127.0.0.1\r\n"
+        "s=-\r\n"
+        "t=0 0\r\n"
+        "a=group:BUNDLE 0\r\n"
+        "m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n";
+
     {
         SignalingServer server;
         SignalingClient client;
@@ -59,7 +69,7 @@ int signalingSelfTest() {
                 // Reply with an offer carrying a synthetic peer id.
                 SignalMessage offer;
                 offer.type = "offer";
-                offer.sdp = "v=0\r\no=- 42 2 IN IP4 127.0.0.1\r\n";  // stub SDP
+                offer.sdp = sentOfferSdp;  // multi-line SDP with embedded CRLFs
                 offer.peer = 7;
                 server.sendTo(clientId, encodeSignal(offer));
             }
@@ -112,6 +122,8 @@ int signalingSelfTest() {
         check(clientRx.type == "offer", "client rx type == offer");
         check(clientRx.peer == 7, "client rx peer == 7");
         check(!clientRx.sdp.empty(), "client rx sdp non-empty");
+        // Exact SDP round-trip (embedded \r\n preserved byte-for-byte).
+        check(clientRx.sdp == sentOfferSdp, "client rx sdp exact match");
 
         // Encoder/parser round-trip sanity (candidate + escaping).
         SignalMessage c;
