@@ -19,6 +19,7 @@
 
 #include <QProcess>
 
+#include "gfcSignaling.h"
 #include "gfcStructures.h"
 #include "gfcWireTest.h"
 #include "qt/iapplication_qt.h"
@@ -170,6 +171,15 @@ static bool hasWireTest(int argc, char* argv[]) {
     return false;
 }
 
+// --signal-test : headless WebSocket signaling-stub loopback self-test
+// (JEF-24 Task 2). Like --wire-test, needs nothing setup provides, so it
+// runs and exits before QApplication is constructed.
+static bool hasSignalTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--signal-test") == 0) return true;
+    return false;
+}
+
 // --remote-test : orchestrator/server role (spawns a peer child).
 static bool hasRemoteTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
@@ -194,6 +204,14 @@ int main(int argc, char* argv[]) {
     // truly needs nothing else set up first.
     if (hasWireTest(argc, argv)) {
         return jefe::wire::selfTest();
+    }
+
+    // Headless signaling-stub self-test (--signal-test, JEF-24): brings up a
+    // local WebSocket SignalingServer + SignalingClient and round-trips
+    // hello/offer JSON. Constructs rtc objects, so it brackets itself with
+    // rtc::Preload()/Cleanup() internally. Runs before QApplication.
+    if (hasSignalTest(argc, argv)) {
+        return jefe::net::signalingSelfTest();
     }
 
     // Make Qt's accessibility bridge live before QApplication touches
