@@ -37,6 +37,13 @@ public:
     std::vector<std::string> participantNames();
     std::string connectionStatusText();
 
+    // JEF-30: per-peer connection health, forwarded to whichever transport is
+    // active (server side when hosting, client side when joined). Empty when
+    // solo. `peerNickname` resolves a peer's display name (server role only;
+    // empty otherwise).
+    std::vector<jefe::net::PeerStats> peerStats();
+    std::string peerNickname(jefe::net::PeerId peer);
+
     // JEF-27: the coordinator-assigned cloud session code (host role, coordinator
     // mode only; empty otherwise). Surfaced for the Remote dialog + --coord-test.
     std::string getAssignedSessionCode();

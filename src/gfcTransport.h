@@ -51,6 +51,20 @@ struct TransportEvent {
     Channel channel = Channel::State;
 };
 
+// JEF-30: read-only per-peer connection health, surfaced for the Remote-session
+// health indicator. Best-effort observability: a transport that can't produce
+// real WebRTC stats (RakNet) fills what it can (connected/presence) and leaves
+// the rest at the defaults. `rttMs` is -1 when unknown; `path` classifies the
+// selected ICE candidate pair (Direct = host/srflx/prflx, Relay = TURN).
+struct PeerStats {
+    PeerId peer = kInvalidPeerId;
+    long rttMs = -1;                 // round-trip time in ms; -1 = unknown
+    uint64_t bytesSent = 0;
+    uint64_t bytesReceived = 0;
+    enum class Path { Unknown, Direct, Relay } path = Path::Unknown;
+    bool connected = false;
+};
+
 class ITransport {
 public:
     virtual ~ITransport() = default;
@@ -84,6 +98,12 @@ public:
     // create-session (empty for RakNet / LAN-WebRTC / joiners). Thread-safe.
     // Non-pure so only the coordinator-capable transport overrides it.
     virtual std::string assignedSessionCode() { return std::string(); }
+
+    // JEF-30: per-peer connection health. Defaulted empty so only the
+    // WebRTC/RakNet transports override. READ-ONLY + best-effort: never holds a
+    // lock across a blocking stats call, tolerates the underlying API returning
+    // nullopt/false. WebRTC returns real stats; RakNet returns basic presence.
+    virtual std::vector<PeerStats> peerStats() { return {}; }
 };
 
 } // namespace net

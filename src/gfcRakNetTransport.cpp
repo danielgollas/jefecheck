@@ -146,5 +146,35 @@ int RakNetTransport::connectionCount() {
     return (int)peer_->NumberOfConnections();
 }
 
+// JEF-30: RakNet has no WebRTC stats API (no per-peer rtt/bytes/candidate pair
+// we surface here). Degrade gracefully: enumerate the connected systems and emit
+// one basic PeerStats each — connected=true, path=Unknown, rttMs=-1, bytes=0.
+// The per-peer PeerId is available (GetConnectionList), so we key each entry to
+// its real peer rather than a single aggregate.
+std::vector<PeerStats> RakNetTransport::peerStats() {
+    std::vector<PeerStats> out;
+    unsigned short count = 0;
+    // First query the count with a null buffer, then fetch into a sized vector.
+    if (!peer_->GetConnectionList(nullptr, &count) || count == 0) return out;
+    std::vector<SystemAddress> systems(count);
+    const unsigned short cap = count;   // buffer capacity for the fetch
+    unsigned short filled = cap;
+    if (!peer_->GetConnectionList(systems.data(), &filled)) return out;
+    // GetConnectionList only writes up to `cap` entries but reports the true
+    // active count in `filled`; clamp so a peer that connected between the two
+    // calls can't push us past the buffer.
+    const unsigned short n = filled < cap ? filled : cap;
+    out.reserve(n);
+    for (unsigned short i = 0; i < n; ++i) {
+        PeerStats ps;
+        ps.peer = toPeerId(systems[i]);
+        ps.connected = true;   // present in the connection list == connected
+        ps.path = PeerStats::Path::Unknown;
+        ps.rttMs = -1;
+        out.push_back(ps);
+    }
+    return out;
+}
+
 } // namespace net
 } // namespace jefe

@@ -2092,6 +2092,32 @@ std::vector<std::string> remoteParticipants() {
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     return networkManager.participantNames();
 }
+
+// JEF-30: UI-friendly per-peer health view. Reads networkManager's active
+// transport stats (server side when hosting, client side when joined) and maps
+// each to a RemotePeerStat: resolves the nickname when known (server role), maps
+// the Path enum to a string, and carries the running byte total (T2 derives kbps
+// from deltas). Honors gCloudConnectInFlight like the other manager readers.
+std::vector<RemotePeerStat> remotePeerStats() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    std::vector<RemotePeerStat> out;
+    for (const auto& ps : networkManager.peerStats()) {
+        RemotePeerStat r;
+        std::string nick = networkManager.peerNickname(ps.peer);
+        r.name = !nick.empty() ? nick : ("peer " + std::to_string(ps.peer));
+        r.rttMs = ps.rttMs;
+        r.bytes = static_cast<unsigned long long>(ps.bytesSent) +
+                  static_cast<unsigned long long>(ps.bytesReceived);
+        switch (ps.path) {
+            case jefe::net::PeerStats::Path::Direct: r.path = "direct"; break;
+            case jefe::net::PeerStats::Path::Relay:  r.path = "relay";  break;
+            default:                                 r.path = "n/a";    break;
+        }
+        r.connected = ps.connected;
+        out.push_back(std::move(r));
+    }
+    return out;
+}
 std::string remoteStatusText() {
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     return networkManager.connectionStatusText();

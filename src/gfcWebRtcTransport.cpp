@@ -1471,6 +1471,71 @@ int WebRtcTransport::connectionCount() {
     return n;
 }
 
+// JEF-30: per-peer WebRTC stats. Lock discipline mirrors send()/drainAssetQueue:
+// hold Impl::mtx ONLY long enough to copy each peer's id + pc shared_ptr + open
+// flag out; then query libdatachannel (rtt/bytes/getSelectedCandidatePair) with
+// the lock RELEASED — those calls touch the rtc worker/SCTP state and may block,
+// and holding mtx across them would stall the poll/send path. Every read is
+// best-effort: a throwing/absent value degrades to the field's default.
+std::vector<PeerStats> WebRtcTransport::peerStats() {
+    struct Snapshot {
+        PeerId id;
+        std::shared_ptr<rtc::PeerConnection> pc;
+        bool open;
+    };
+    std::vector<Snapshot> snap;
+    {
+        std::lock_guard<std::mutex> lk(d_->mtx);
+        snap.reserve(d_->peers.size());
+        for (auto& kv : d_->peers)
+            snap.push_back({kv.first, kv.second.pc, kv.second.open});
+    }
+
+    std::vector<PeerStats> out;
+    out.reserve(snap.size());
+    for (auto& s : snap) {
+        PeerStats ps;
+        ps.peer = s.id;
+        // connected == the STATE ("jefe") channel is open (single source of
+        // truth for peer liveness, matching connectionCount()/PeerConnected).
+        ps.connected = s.open;
+        if (!s.pc) { out.push_back(ps); continue; }
+
+        try {
+            auto r = s.pc->rtt();
+            if (r.has_value()) ps.rttMs = static_cast<long>(r->count());
+        } catch (...) {}
+        try { ps.bytesSent = static_cast<uint64_t>(s.pc->bytesSent()); } catch (...) {}
+        try { ps.bytesReceived = static_cast<uint64_t>(s.pc->bytesReceived()); }
+        catch (...) {}
+
+        try {
+            rtc::Candidate local, remote;
+            if (s.pc->getSelectedCandidatePair(&local, &remote)) {
+                // Classify by the REMOTE candidate: a Relayed remote means the
+                // media flows through a TURN server; anything else is a direct
+                // (host / server-reflexive / peer-reflexive) path.
+                switch (remote.type()) {
+                    case rtc::Candidate::Type::Relayed:
+                        ps.path = PeerStats::Path::Relay;
+                        break;
+                    case rtc::Candidate::Type::Host:
+                    case rtc::Candidate::Type::ServerReflexive:
+                    case rtc::Candidate::Type::PeerReflexive:
+                        ps.path = PeerStats::Path::Direct;
+                        break;
+                    default:
+                        ps.path = PeerStats::Path::Unknown;
+                        break;
+                }
+            }
+        } catch (...) {}
+
+        out.push_back(ps);
+    }
+    return out;
+}
+
 } // namespace net
 } // namespace jefe
 

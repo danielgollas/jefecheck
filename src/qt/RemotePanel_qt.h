@@ -8,8 +8,10 @@
 
 #include <QWidget>
 
+#include <chrono>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class QGroupBox;
@@ -66,6 +68,17 @@ private:
     // Appends one chat message as a bubble row (alternating alignment,
     // per-user color, HH:MM). System/LOAD types render centered without a bubble.
     void appendChatBubble(const jefe::qt::ChatEntry& e);
+
+    // JEF-30: builds one participant row widget (dot + name + rtt + kbps +
+    // path) used as the participantsList_ item widget. Object names follow
+    // the dotted-leaf scheme (reused across rows, like the chat_* widgets).
+    QWidget* buildParticipantHealthRow(const QString& name);
+    // Updates an existing row's dot/rtt/kbps/path labels in place (no relayout
+    // churn) from a resolved health sample. `hasStats` false -> blank/gray
+    // (participant with no matching peer-stats entry: self, or a name that
+    // doesn't resolve on the client side — see developer_notes JEF-30).
+    void updateParticipantHealthRow(QWidget* row, bool hasStats, bool connected,
+                                    long rttMs, double kbps, const QString& path);
 
     // Server tab.
     QLineEdit* serverNameEdit_ = nullptr;
@@ -129,6 +142,17 @@ private:
     int          shownNetLogLines_ = 0;
     int          shownParticipants_ = -1;  // -1 forces the first rebuild
     QString      shownStatusText_;
+
+    // JEF-30: per-peer byte-delta sample for kbps derivation, keyed by peer
+    // display name (RemotePeerStat carries no PeerId). Cleared on disconnect
+    // so a later session starts with a clean first-sample state.
+    struct PeerHealthSample {
+        unsigned long long bytes = 0;
+        std::chrono::steady_clock::time_point ts;
+        double lastKbps = -1.0;   // -1 = unknown (no stable interval sampled yet)
+        bool hasSample = false;
+    };
+    std::unordered_map<std::string, PeerHealthSample> peerHealthSamples_;
 };
 
 #endif

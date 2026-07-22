@@ -70,6 +70,11 @@ public:
     // JEF-27: coordinator-assigned session code (host only; empty otherwise).
     std::string assignedSessionCode() override;
 
+    // JEF-30: per-peer WebRTC connection health (rtt / bytes / direct-vs-relay).
+    // Copies the pc shared_ptrs out under the peer-map lock, then queries
+    // libdatachannel OUTSIDE the lock (the stats calls may block).
+    std::vector<PeerStats> peerStats() override;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> d_;

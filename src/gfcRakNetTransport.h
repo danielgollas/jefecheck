@@ -32,6 +32,10 @@ public:
     void closePeer(PeerId peer, bool sendNotification) override;
     int connectionCount() override;
 
+    // JEF-30: RakNet exposes no WebRTC-style stats. Returns one basic entry per
+    // connected peer (connected=true, path=Unknown, rtt=-1, bytes=0).
+    std::vector<PeerStats> peerStats() override;
+
 private:
     RakPeerInterface* peer_;
     bool hosting_ = false;
