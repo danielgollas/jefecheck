@@ -93,6 +93,23 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
     // Store for saveCurrentToRecentIPs()
     this->serverIP = theServerIP;
     this->port     = thePort;
+
+    // JEF-27: (re)build the transport from the connection params. Default
+    // (coordinatorMode=false, empty url) reproduces the JEF-24 RakNet / LAN
+    // path exactly; coordinator mode selects the WebRTC transport dialing the
+    // cloud coordinator. Rebuilt here (not in the ctor) because the config is
+    // only known once params arrive.
+    {
+        jefe::net::TransportConfig tcfg;
+        if (params) {
+            tcfg.coordinatorMode = params->coordinatorMode;
+            tcfg.coordinatorUrl  = params->coordinatorUrl;
+            tcfg.sessionCode     = params->sessionCode;
+        }
+        tcfg.password = thePassword;
+        transport_ = jefe::net::makeTransport(tcfg);
+    }
+
 	std::string conectingMessage="Client: Starting Connection to:";
 	conectingMessage+=theServerIP;
 	conectingMessage+=":";

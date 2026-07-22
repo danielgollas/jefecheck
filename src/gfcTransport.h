@@ -64,6 +64,11 @@ public:
 
     virtual void closePeer(PeerId peer, bool sendNotification) = 0;
     virtual int connectionCount() = 0;
+
+    // JEF-27: cloud-coordinator session code assigned to the HOST after
+    // create-session (empty for RakNet / LAN-WebRTC / joiners). Thread-safe.
+    // Non-pure so only the coordinator-capable transport overrides it.
+    virtual std::string assignedSessionCode() { return std::string(); }
 };
 
 } // namespace net

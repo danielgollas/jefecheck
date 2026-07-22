@@ -126,6 +126,14 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
         clientParams.serverIP="127.0.0.1";
         clientParams.port=server.getPort();
         clientParams.password=server.getPassowrd();
+        // JEF-27: in coordinator mode the loopback client joins the host's own
+        // cloud session by its assigned code instead of dialing 127.0.0.1. The
+        // code is assigned asynchronously by the coordinator after
+        // create-session; the precise wait/retry is Task 3 (the E2E harness) —
+        // here we just thread the coordinator fields through.
+        clientParams.coordinatorMode=server.getCoordinatorMode();
+        clientParams.coordinatorUrl=server.getCoordinatorUrl();
+        clientParams.sessionCode=server.getAssignedSessionCode();
         client.setIsServerClient(true);
         client.Connect(&clientParams);
         networkLog.addToLog("Loopback Client Started");

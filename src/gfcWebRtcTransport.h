@@ -33,6 +33,15 @@ public:
     WebRtcTransport(const WebRtcTransport&) = delete;
     WebRtcTransport& operator=(const WebRtcTransport&) = delete;
 
+    // JEF-27: switch this instance into cloud-coordinator mode. MUST be called
+    // before startHost()/connect(). In coordinator mode the transport dials a
+    // CoordinatorSignaling to `url` (ws://|wss://) instead of a LAN
+    // SignalingServer/Client: the host create-session's; a joiner joins by
+    // `sessionCode`. `password` is carried for future coordinator auth.
+    void configureCoordinator(const std::string& url,
+                              const std::string& sessionCode,
+                              const std::string& password);
+
     // Host role (fully implemented this task).
     bool startHost(unsigned short port, const std::string& password,
                    int maxClients) override;
@@ -49,6 +58,9 @@ public:
               bool broadcastExcluding) override;
     void closePeer(PeerId peer, bool sendNotification) override;
     int connectionCount() override;
+
+    // JEF-27: coordinator-assigned session code (host only; empty otherwise).
+    std::string assignedSessionCode() override;
 
 private:
     struct Impl;

@@ -90,12 +90,28 @@ void gfcNetworkServer::start(gfcServerParams * params) {
         thePort=params->port;
         thePassword=params->password;
         this->name=params->serverName;
+        this->coordinatorMode=params->coordinatorMode;
+        this->coordinatorUrl=params->coordinatorUrl;
     }
 
     this->port=thePort;
     this->password=thePassword;
 
     stop();
+
+    // JEF-27: (re)build the transport from the server params. Default
+    // (coordinatorMode=false) reproduces the JEF-24 LAN-host path exactly;
+    // coordinator mode selects the WebRTC transport, which creates a cloud
+    // session (the coordinator assigns the code, read via
+    // getAssignedSessionCode()). Rebuilt here (not in the ctor) because the
+    // config is only known once params arrive.
+    {
+        jefe::net::TransportConfig tcfg;
+        tcfg.coordinatorMode=this->coordinatorMode;
+        tcfg.coordinatorUrl=this->coordinatorUrl;
+        tcfg.password=thePassword;
+        transport_ = jefe::net::makeTransport(tcfg);
+    }
 
     transport_->startHost ( ( unsigned short ) thePort, thePassword, GFCNET_MAX_CLIENTS );
 
