@@ -28,6 +28,12 @@ void initLoggerOnce() {
     std::call_once(g_loggerOnce, [] { rtc::InitLogger(rtc::LogLevel::Error); });
 }
 
+// Client role: the host is a single opaque peer. The app treats PeerIds as
+// opaque tokens (JEF-22), so a fixed synthetic id is fine. We key the client's
+// single Peer under this id in the same `peers` map the host uses, so send() /
+// poll() / connectionCount() work uniformly for both roles.
+constexpr PeerId kHostPeerId = 1;
+
 } // namespace
 
 struct WebRtcTransport::Impl {
@@ -40,7 +46,8 @@ struct WebRtcTransport::Impl {
         bool open = false;
     };
 
-    SignalingServer signaling;
+    SignalingServer signaling;        // host role
+    SignalingClient clientSignaling;  // client role
 
     // Single mutex guards the peer maps AND the event queue. All libdatachannel
     // / signaling callbacks fire on background threads and mutate under it; the
@@ -56,6 +63,7 @@ struct WebRtcTransport::Impl {
 
     int maxClients = 0;
     bool hosting = false;
+    bool client = false;  // set once connect() starts the client signaling
 
     void pushEvent(TransportEventType type, PeerId peer,
                    std::vector<unsigned char> bytes = {}) {
@@ -112,11 +120,12 @@ struct WebRtcTransport::Impl {
     // Create the answerer PeerConnection for a freshly connected signaling
     // client and wire its signaling forwarders. Called from onClientConnected.
     void onSignalingClientConnected(int clientId) {
+        // Early bail if already visibly at capacity (cheap; the authoritative
+        // check is re-done under the lock at insert time to close the TOCTOU).
         if (maxClients > 0) {
             std::lock_guard<std::mutex> lk(mtx);
             if (static_cast<int>(peers.size()) >= maxClients) {
-                // At capacity: ignore. (Client sees no answer / times out.)
-                return;
+                return;  // At capacity: ignore. (Client gets no answer.)
             }
         }
 
@@ -154,13 +163,26 @@ struct WebRtcTransport::Impl {
             setupChannel(pid, dc);
         });
 
+        bool inserted = false;
         {
             std::lock_guard<std::mutex> lk(mtx);
-            Peer p;
-            p.clientId = clientId;
-            p.pc = pc;
-            peers[pid] = std::move(p);
-            clientToPeer[clientId] = pid;
+            // Authoritative capacity re-check under the lock (closes the
+            // check-then-insert TOCTOU: two clients racing here can't both pass
+            // a released-lock check and overshoot maxClients).
+            if (maxClients == 0 ||
+                static_cast<int>(peers.size()) < maxClients) {
+                Peer p;
+                p.clientId = clientId;
+                p.pc = pc;
+                peers[pid] = std::move(p);
+                clientToPeer[clientId] = pid;
+                inserted = true;
+            }
+        }
+        if (!inserted) {
+            // Lost the capacity race: drop this PeerConnection (reset callbacks
+            // first so its forwarders can't fire into a peer we never stored).
+            try { pc->resetCallbacks(); pc->close(); } catch (...) {}
         }
     }
 
@@ -212,6 +234,163 @@ struct WebRtcTransport::Impl {
         (void)pid;
     }
 
+    // ── Client role ─────────────────────────────────────────────────────
+    // Wire the reliable channel WE opened to the host (offerer side). Mirrors
+    // setupChannel but emits client-flavoured events (ConnectAccepted /
+    // ConnectionLost) against the fixed synthetic kHostPeerId.
+    void setupClientChannel(std::shared_ptr<rtc::DataChannel> dc) {
+        dc->onOpen([this]() {
+            {
+                std::lock_guard<std::mutex> lk(mtx);
+                auto it = peers.find(kHostPeerId);
+                if (it != peers.end()) it->second.open = true;
+            }
+            pushEvent(TransportEventType::ConnectAccepted, kHostPeerId);
+        });
+
+        dc->onMessage(
+            [this](rtc::binary msg) {
+                std::vector<unsigned char> bytes(msg.size());
+                for (size_t i = 0; i < msg.size(); ++i)
+                    bytes[i] = static_cast<unsigned char>(msg[i]);
+                pushEvent(TransportEventType::Data, kHostPeerId,
+                          std::move(bytes));
+            },
+            [](rtc::string) { /* text unused */ });
+
+        dc->onClosed([this]() {
+            bool wasOpen = false;
+            {
+                std::lock_guard<std::mutex> lk(mtx);
+                auto it = peers.find(kHostPeerId);
+                if (it != peers.end()) {
+                    wasOpen = it->second.open;
+                    it->second.open = false;
+                }
+            }
+            // A drop after the channel was open is a lost connection; a close
+            // before it ever opened is a failed/graceful teardown. (disconnect()
+            // resets callbacks first, so this fires only for spontaneous drops.)
+            pushEvent(wasOpen ? TransportEventType::ConnectionLost
+                              : TransportEventType::Disconnected,
+                      kHostPeerId);
+        });
+    }
+
+    // Signaling socket to the host is up: build the offerer PeerConnection and
+    // open the reliable/ordered "jefe" channel (which triggers the offer).
+    void onClientSignalingOpen() {
+        rtc::Configuration config;  // empty iceServers — LAN host candidates.
+        std::shared_ptr<rtc::PeerConnection> pc;
+        try {
+            pc = std::make_shared<rtc::PeerConnection>(config);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: client PeerConnection failed: %s\n",
+                         e.what());
+            pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
+            return;
+        }
+
+        pc->onLocalDescription([this](rtc::Description desc) {
+            SignalMessage m;
+            m.type = desc.typeString();  // "offer" for the client (offerer)
+            m.sdp = std::string(desc);
+            m.peer = static_cast<int>(kHostPeerId);
+            clientSignaling.send(encodeSignal(m));
+        });
+
+        pc->onLocalCandidate([this](rtc::Candidate cand) {
+            SignalMessage m;
+            m.type = "candidate";
+            m.candidate = std::string(cand);
+            m.mid = cand.mid();
+            m.peer = static_cast<int>(kHostPeerId);
+            clientSignaling.send(encodeSignal(m));
+        });
+
+        // Reliable + ordered (RakNet RELIABLE_ORDERED parity). The default
+        // Reliability is already reliable (no maxPacketLifeTime/maxRetransmits)
+        // and ordered (unordered=false); set explicitly for intent.
+        rtc::DataChannelInit init;
+        init.reliability.unordered = false;
+        init.reliability.maxPacketLifeTime.reset();
+        init.reliability.maxRetransmits.reset();
+
+        std::shared_ptr<rtc::DataChannel> dc;
+        try {
+            dc = pc->createDataChannel("jefe", init);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: createDataChannel failed: %s\n",
+                         e.what());
+            try { pc->resetCallbacks(); pc->close(); } catch (...) {}
+            pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
+            return;
+        }
+
+        setupClientChannel(dc);
+
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            Peer p;
+            p.clientId = 0;  // no signaling-client id on the client side
+            p.pc = pc;
+            p.dc = dc;
+            peers[kHostPeerId] = std::move(p);
+        }
+    }
+
+    // Inbound signaling from the host: apply the answer / ICE candidates.
+    void onClientSignalingMessage(const std::string& json) {
+        SignalMessage m;
+        if (!parseSignal(json, m)) return;
+
+        std::shared_ptr<rtc::PeerConnection> pc;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            auto it = peers.find(kHostPeerId);
+            if (it != peers.end()) pc = it->second.pc;
+        }
+        if (!pc) return;
+
+        try {
+            if (m.type == "answer") {
+                pc->setRemoteDescription(rtc::Description(m.sdp, m.type));
+            } else if (m.type == "candidate") {
+                pc->addRemoteCandidate(rtc::Candidate(m.candidate, m.mid));
+            }
+            // "offer"/"hello"/unknown: ignored on the client (offerer).
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: client signaling apply failed: %s\n",
+                         e.what());
+        }
+    }
+
+    void onClientSignalingClosed() {
+        // Like the host: once the media channel is up it survives signaling
+        // loss on a LAN; ConnectionLost comes from dc->onClosed. Nothing to do.
+    }
+
+    // Tear down the client's single PeerConnection + signaling socket. Safe to
+    // call when not connected (nothing stored).
+    void teardownClient() {
+        std::shared_ptr<rtc::PeerConnection> pc;
+        std::shared_ptr<rtc::DataChannel> dc;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            auto it = peers.find(kHostPeerId);
+            if (it != peers.end()) {
+                pc = it->second.pc;
+                dc = it->second.dc;
+                peers.erase(it);
+            }
+        }
+        // Reset callbacks before close so onClosed can't push a spurious event.
+        if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
+        if (pc) { try { pc->resetCallbacks(); pc->close(); } catch (...) {} }
+        clientSignaling.close();
+        client = false;
+    }
+
     // Close + erase a peer. Returns true if it existed.
     bool closePeerInternal(PeerId peer) {
         std::shared_ptr<rtc::PeerConnection> pc;
@@ -226,8 +405,10 @@ struct WebRtcTransport::Impl {
             peers.erase(it);
         }
         // Reset callbacks + close outside the lock so no callback re-enters.
+        // resetCallbacks() on BOTH the channel and the PeerConnection (teardown
+        // symmetry) so neither's forwarders fire into a half-dead peer.
         if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
-        if (pc) { try { pc->close(); } catch (...) {} }
+        if (pc) { try { pc->resetCallbacks(); pc->close(); } catch (...) {} }
         return true;
     }
 
@@ -244,12 +425,18 @@ struct WebRtcTransport::Impl {
                 catch (...) {}
             }
             if (kv.second.pc) {
-                try { kv.second.pc->close(); } catch (...) {}
+                // resetCallbacks() on the PeerConnection too (teardown symmetry).
+                try { kv.second.pc->resetCallbacks(); kv.second.pc->close(); }
+                catch (...) {}
             }
         }
         toClose.clear();
+        // Tear down both roles' signaling — a transport instance is one or the
+        // other, and stop()/close() are no-ops when the other was never used.
         signaling.stop();
+        clientSignaling.close();
         hosting = false;
+        client = false;
     }
 };
 
@@ -291,14 +478,34 @@ void WebRtcTransport::stopHost() {
     d_->teardownAll();
 }
 
-// ── Client role — Task 4 ────────────────────────────────────────────────
-bool WebRtcTransport::connect(const std::string& /*ip*/, unsigned short /*port*/,
+// ── Client role ─────────────────────────────────────────────────────────
+// connect() mirrors RakNet's semantics: it returns as soon as the async attempt
+// has STARTED (the signaling socket began dialing). The actual WebRTC session
+// completes later and is reported via events (ConnectAccepted on channel open,
+// ConnectFailed/ConnectionLost on failure). InitLogger/Preload were already run
+// in the ctor (idempotent, refcounted, balanced by Cleanup in the dtor).
+bool WebRtcTransport::connect(const std::string& ip, unsigned short port,
                               const std::string& /*password*/) {
-    return false;  // Task 4
+    if (d_->hosting || d_->client) return false;  // one role per instance
+    initLoggerOnce();
+
+    // Register signaling callbacks BEFORE connect() (SignalingClient contract).
+    Impl* d = d_.get();
+    d_->clientSignaling.onOpen([d]() { d->onClientSignalingOpen(); });
+    d_->clientSignaling.onMessage(
+        [d](const std::string& json) { d->onClientSignalingMessage(json); });
+    d_->clientSignaling.onClosed([d]() { d->onClientSignalingClosed(); });
+
+    if (!d_->clientSignaling.connect(ip, port)) {
+        std::fprintf(stderr, "WebRtcTransport: client signaling connect failed\n");
+        return false;
+    }
+    d_->client = true;
+    return true;  // async — completion arrives via poll() events
 }
 
 void WebRtcTransport::disconnect() {
-    // Task 4
+    d_->teardownClient();  // safe when not connected
 }
 
 bool WebRtcTransport::poll(TransportEvent& ev) {
@@ -314,18 +521,26 @@ void WebRtcTransport::send(const unsigned char* data, int len, PeerId target,
     if (len <= 0 || data == nullptr) return;
 
     // Collect target channels under the lock, then send after unlocking.
+    // RakNet parity (gfcTransport.h):
+    //   broadcastExcluding=false → `target` ONLY; target==kInvalidPeerId → NOBODY.
+    //   broadcastExcluding=true  → everyone EXCEPT `target`
+    //                              (target==kInvalidPeerId → everyone).
     std::vector<std::shared_ptr<rtc::DataChannel>> targets;
     {
         std::lock_guard<std::mutex> lk(d_->mtx);
-        if (!broadcastExcluding && target != kInvalidPeerId) {
-            auto it = d_->peers.find(target);
-            if (it != d_->peers.end() && it->second.open && it->second.dc)
-                targets.push_back(it->second.dc);
+        if (!broadcastExcluding) {
+            // Unicast. kInvalidPeerId addresses no one — send to nobody
+            // (matches RakNet, and never a broadcast).
+            if (target != kInvalidPeerId) {
+                auto it = d_->peers.find(target);
+                if (it != d_->peers.end() && it->second.open && it->second.dc)
+                    targets.push_back(it->second.dc);
+            }
         } else {
-            // broadcastExcluding: everyone except `target`
-            // (target==kInvalidPeerId → everyone).
+            // Broadcast to everyone except `target`
+            // (target==kInvalidPeerId → nothing to exclude → everyone).
             for (auto& kv : d_->peers) {
-                if (broadcastExcluding && kv.first == target) continue;
+                if (kv.first == target) continue;
                 if (kv.second.open && kv.second.dc)
                     targets.push_back(kv.second.dc);
             }

@@ -1,7 +1,7 @@
 #ifndef GFCWEBRTCTRANSPORT_H
 #define GFCWEBRTCTRANSPORT_H
 
-// JEF-24 Task 3: WebRTC-backed ITransport over libdatachannel.
+// JEF-24: WebRTC-backed ITransport over libdatachannel (host + client roles).
 //
 // Topology / SDP convention (host and client MUST agree — see Task 4):
 //   The JOINING CLIENT is the OFFERER: it createDataChannel() + creates the
@@ -38,7 +38,8 @@ public:
                    int maxClients) override;
     void stopHost() override;
 
-    // Client role — Task 4 completes these; stubbed for now.
+    // Client role (offerer). connect() returns once the async signaling dial
+    // has started (RakNet parity); completion arrives via poll() events.
     bool connect(const std::string& ip, unsigned short port,
                  const std::string& password) override;
     void disconnect() override;
