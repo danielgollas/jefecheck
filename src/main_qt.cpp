@@ -260,6 +260,56 @@ static bool resolveAssetPeer(int argc, char* argv[], std::string& ip, int& port,
     return false;
 }
 
+// --asset-test-webrtc : orchestrator role (JEF-28 Task 4). WebRTC variant of
+// --asset-test that drives a LARGE LUT (multi-MB .cube) over the WebRTC assets
+// channel so the transport-level chunking + bufferedAmount backpressure are
+// actually exercised, then asserts the joiner's received LUT content hash
+// matches the host's (byte-integrity through chunk/reassembly). Forces
+// JEFECHECK_TRANSPORT=webrtc via the re-exec above.
+static bool hasAssetTestWebrtc(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--asset-test-webrtc") == 0) return true;
+    return false;
+}
+// --asset-test-webrtc-peer <ip> <port> <lutHash> : joiner child role. Joins over
+// WebRTC, lets the sync + chunked transfer run, asserts the LUT hash arrived.
+static bool resolveAssetWebrtcPeer(int argc, char* argv[], std::string& ip,
+                                   int& port, std::string& lutHash) {
+    for (int i = 1; i + 3 < argc; ++i) {
+        if (std::strcmp(argv[i], "--asset-test-webrtc-peer") == 0) {
+            ip = argv[i + 1]; port = std::atoi(argv[i + 2]);
+            lutHash = argv[i + 3];
+            return true;
+        }
+    }
+    return false;
+}
+// Generate a multi-MB Truelight-Cube v2.0 .cube fixture at `path` with a
+// `cubeSize`^3 identity ramp. cubeSize=45 → 91125 triads ≈ 2.4 MB, comfortably
+// past the 60 KB chunk payload AND the ~256 KB single-SCTP-message limit (≈42
+// chunks) and past the 1 MB backpressure high-water mark. Returns the file size
+// in bytes, or 0 on failure. Deterministic bytes (the peer receives them
+// verbatim, so cross-platform float formatting is irrelevant to hashmatch).
+static long generateLargeCube(const std::string& path, int cubeSize) {
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) return 0;
+    std::fprintf(f, "# Truelight Cube v2.0\n");
+    std::fprintf(f, "# iDims 3\n");
+    std::fprintf(f, "# oDims 3\n");
+    std::fprintf(f, "# width %d height %d depth %d\n", cubeSize, cubeSize, cubeSize);
+    std::fprintf(f, "# InputLUT\n");
+    std::fprintf(f, "# Cube\n");
+    const double d = (cubeSize > 1) ? (cubeSize - 1) : 1;
+    for (int i = 0; i < cubeSize; ++i)
+        for (int j = 0; j < cubeSize; ++j)
+            for (int k = 0; k < cubeSize; ++k)
+                std::fprintf(f, "%f %f %f\n", i / d, j / d, k / d);
+    std::fflush(f);
+    const long sz = std::ftell(f);
+    std::fclose(f);
+    return sz;
+}
+
 // --coord-test : orchestrator role, WebRTC transport through a self-contained
 // test-double coordinator (JEF-27 Task 3). Starts the coordinator on an
 // ephemeral ws port, brings up the host in coordinator mode (create-session),
@@ -311,6 +361,8 @@ int main(int argc, char* argv[]) {
         for (int i = 1; i < argc; ++i) {
             if (std::strcmp(argv[i], "--remote-test-webrtc") == 0 ||
                 std::strcmp(argv[i], "--remote-test-webrtc-peer") == 0 ||
+                std::strcmp(argv[i], "--asset-test-webrtc") == 0 ||
+                std::strcmp(argv[i], "--asset-test-webrtc-peer") == 0 ||
                 std::strcmp(argv[i], "--coord-test") == 0 ||
                 std::strcmp(argv[i], "--coord-test-peer") == 0) {
                 webrtcHarness = true;
@@ -695,6 +747,113 @@ int main(int argc, char* argv[]) {
         printf("REMOTE-TEST-WEBRTC: participants=%d mirrored_play=%d\n", peak, sawPlay ? 1 : 0);
         fflush(stdout);
         std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
+    }
+
+    // --asset-test-webrtc-peer <ip> <port> <lutHash>: WebRTC joiner child role
+    // (JEF-28 Task 4). Joins the host over WebRTC, holds while the late-join sync
+    // pushes the LARGE LUT over the assets channel (chunked + reassembled by the
+    // transport), then asserts the host's LUT content hash now lives in this
+    // process's lutManager (byte-integrity proof). WebRTC needs the long hold to
+    // absorb signaling + ICE + DTLS + the multi-MB chunked transfer.
+    {
+        std::string peerIp, lutHash; int peerPort = 0;
+        if (resolveAssetWebrtcPeer(argc, argv, peerIp, peerPort, lutHash)) {
+            jefe::qt::initializeRenderingChain();
+            if (!jefe::qt::setupOffscreenTestGL()) {
+                printf("ASSET-PEER-WEBRTC: gl setup failed\n");
+                fflush(stdout);
+                std::_Exit(3);
+            }
+            jefe::qt::remoteTestPeerConnect(peerIp, peerPort, /*holdMs=*/12000,
+                                            /*play=*/false, /*connectTimeoutMs=*/12000);
+            const bool gotLut = jefe::qt::remoteHasLUTHash(lutHash);
+            printf("ASSET-PEER-WEBRTC: lut=%d hashmatch=%d lutCount=%d\n",
+                   jefe::qt::remoteLUTCount() > 0 ? 1 : 0, gotLut ? 1 : 0,
+                   jefe::qt::remoteLUTCount());
+            fflush(stdout);
+            std::_Exit(gotLut ? 0 : 2);
+        }
+    }
+    if (hasAssetTestWebrtc(argc, argv)) {
+        // WebRTC is already forced by the re-exec at the top of main().
+        jefe::qt::initializeRenderingChain();
+        // The host hot-loads the fixture LUT (glTexImage3D) so it needs GL.
+        if (!jefe::qt::setupOffscreenTestGL()) {
+            printf("ASSET-TEST-WEBRTC: gl setup failed\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        // Generate + load the LARGE LUT into the HOST before the peer joins.
+        const std::string lutFixture =
+            (QDir::tempPath() + "/jefecheck_large_lut.cube").toStdString();
+        const long lutBytes = generateLargeCube(lutFixture, /*cubeSize=*/45);
+        if (lutBytes <= 0) {
+            printf("ASSET-TEST-WEBRTC: failed to generate fixture\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        const std::string lutHash = jefe::qt::assetTestLoadLUT(lutFixture);
+        printf("ASSET-TEST-WEBRTC: host lut hash=%s bytes=%ld (lutCount=%d)\n",
+               lutHash.empty() ? "<none>" : lutHash.c_str(), lutBytes,
+               jefe::qt::remoteLUTCount());
+        fflush(stdout);
+        if (lutHash.empty()) {
+            printf("ASSET-TEST-WEBRTC: host failed to load fixture LUT\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+
+        const int port = 60126;  // distinct from the other harness ports
+        // Phase 1: bring the host + its loopback client fully up over WebRTC
+        // (the loopback shares this process's managers, so it already has the LUT
+        // and is never pushed to — it just gates that the host is live).
+        if (!jefe::qt::remoteTestServerStart(port, /*loopbackTimeoutMs=*/12000)) {
+            printf("ASSET-TEST-WEBRTC: loopback client failed to come up\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+
+        // Phase 2: spawn the joiner; it establishes its own WebRTC session and
+        // receives the large LUT over the assets channel.
+        QProcess peer;
+        peer.setProgram(QCoreApplication::applicationFilePath());
+        peer.setArguments({"--asset-test-webrtc-peer", "127.0.0.1",
+                           QString::number(port), QString::fromStdString(lutHash)});
+        QProcessEnvironment childEnv = QProcessEnvironment::systemEnvironment();
+        childEnv.insert("JEFECHECK_TRANSPORT", "webrtc");
+        peer.setProcessEnvironment(childEnv);
+        peer.start();
+        if (!peer.waitForStarted(3000)) {
+            printf("ASSET-TEST-WEBRTC: child failed to start: %s\n",
+                   peer.errorString().toUtf8().constData());
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        // Pump the host while the peer connects + the chunked transfer runs.
+        // Bounded (20 s) so the harness always terminates; the peer holds ~12 s
+        // plus its own signaling/ICE/DTLS.
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(20000);
+        while (peer.state() != QProcess::NotRunning &&
+               std::chrono::steady_clock::now() < deadline) {
+            jefe::qt::remoteTestServerSettleForPlay(/*settleMs=*/200);
+        }
+        peer.waitForFinished(2000);
+        if (peer.state() != QProcess::NotRunning) peer.kill();
+
+        int peerLut = 0, peerHash = 0;
+        const QString out = QString::fromUtf8(peer.readAllStandardOutput());
+        for (const QString& line : out.split('\n')) {
+            if (line.startsWith("ASSET-PEER-WEBRTC:")) {
+                printf("%s\n", line.toUtf8().constData());
+                if (line.contains("lut=1"))       peerLut = 1;
+                if (line.contains("hashmatch=1")) peerHash = 1;
+            }
+        }
+        printf("ASSET-TEST-WEBRTC: lut=%d bytes=%ld hashmatch=%d\n",
+               peerLut, lutBytes, peerHash);
+        fflush(stdout);
+        std::_Exit((peerLut == 1 && peerHash == 1) ? 0 : 2);
     }
 
     // --coord-test-peer <coordUrl> <code>: WebRTC joiner child role for the

@@ -8,10 +8,13 @@
 
 #include <rtc/rtc.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -199,6 +202,57 @@ void attachStateTrace(const std::shared_ptr<rtc::PeerConnection>& pc,
     });
 }
 
+// ── JEF-28 Task 4: transport-level chunking on the "assets" channel ──────────
+//
+// The sync layer (gfcnetworkserver/client) hands the transport whole serialized
+// LUT/FX bodies in ONE send() call. libdatachannel's SCTP data channel has a
+// per-message size limit (256 KB local default, but only 64 KB is guaranteed
+// when the peer doesn't advertise a larger max-message-size in its SDP), and a
+// single over-limit send() fails. So Channel::Assets sends are split at the
+// TRANSPORT level into ordered chunks; the sync layer stays oblivious and the
+// receive side reassembles them into ONE Data event. The State ("jefe") channel
+// carries small messages and is never chunked.
+//
+// This framing exists ONLY on the "assets" channel and NEVER carries the RakNet
+// envelope byte — the reassembled payload is the app's jefe::wire frame verbatim
+// (leading GFCNETID byte intact). Chunk wire format (little-endian), prepended
+// to every "assets" frame (single/complete messages use chunkCount==1 so the
+// receive path is uniform):
+//
+//   byte  0      magic 'A' (0x41)
+//   byte  1      magic 'C' (0x43)
+//   byte  2      version  (currently 1)
+//   byte  3      flags    (reserved, 0)
+//   bytes 4..7   messageId   uint32  — per-peer monotonic, from 1
+//   bytes 8..11  chunkIndex  uint32  — 0-based
+//   bytes 12..15 chunkCount  uint32  — total chunks (1 = unchunked/complete)
+//   bytes 16..19 offset      uint32  — this chunk's byte offset in the message
+//   bytes 20..23 totalLen    uint32  — full reassembled payload length
+//   bytes 24..N  payload slice
+//
+// `offset` makes reassembly independent of the sender's chunk size (the receiver
+// never has to know it), so the sender may clamp the chunk size to the
+// negotiated max-message-size without a wire renegotiation.
+constexpr size_t   kAssetHeaderSize    = 24;
+constexpr size_t   kAssetChunkPayload  = 60 * 1024;      // 61440: frame < 64 KB
+constexpr size_t   kAssetHighWater     = 1 * 1024 * 1024; // pause sending at 1 MB
+constexpr size_t   kAssetLowThreshold  = 256 * 1024;     // resume-drain threshold
+constexpr size_t   kAssetMaxMessage    = 128 * 1024 * 1024; // reject bigger (rx guard)
+constexpr uint8_t  kAssetMagic0        = 'A';
+constexpr uint8_t  kAssetMagic1        = 'C';
+constexpr uint8_t  kAssetVersion       = 1;
+
+inline void wr32le(unsigned char* p, uint32_t v) {
+    p[0] = static_cast<unsigned char>(v & 0xFF);
+    p[1] = static_cast<unsigned char>((v >> 8) & 0xFF);
+    p[2] = static_cast<unsigned char>((v >> 16) & 0xFF);
+    p[3] = static_cast<unsigned char>((v >> 24) & 0xFF);
+}
+inline uint32_t rd32le(const unsigned char* p) {
+    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+           (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+}
+
 // Client role: the host is a single opaque peer. The app treats PeerIds as
 // opaque tokens (JEF-22), so a fixed synthetic id is fine. We key the client's
 // single Peer under this id in the same `peers` map the host uses, so send() /
@@ -218,6 +272,29 @@ struct WebRtcTransport::Impl {
         std::shared_ptr<rtc::DataChannel> assetsDc;  // "assets" — Channel::Assets
         bool open = false;        // state ("jefe") channel open
         bool assetsOpen = false;  // assets channel open (JEF-28)
+
+        // ── JEF-28 Task 4: assets-channel chunking state (guarded by Impl::mtx) ─
+        // TX: pending, ready-to-send chunk frames + a monotonic per-peer message
+        // id. Draining is serialized by assetTxDraining (only one drainer at a
+        // time; the other caller — send() on the app thread or onBufferedAmountLow
+        // on the rtc thread — returns and lets the active drainer continue).
+        std::deque<rtc::binary> assetTxQueue;
+        uint32_t assetTxMsgId   = 0;
+        bool     assetTxDraining = false;
+        // RX: reassembly buffer for the message currently in flight (SCTP is
+        // reliable+ordered, so at most one message reassembles at a time; the
+        // per-chunk `got` flags dedup and the fields are cross-checked defensively).
+        uint32_t assetRxMsgId        = 0;   // 0 = nothing in progress
+        uint32_t assetRxChunkCount   = 0;
+        uint32_t assetRxTotalLen     = 0;
+        uint32_t assetRxReceived     = 0;
+        uint32_t assetRxLastComplete = 0;   // highest fully-reassembled msg id
+        std::vector<unsigned char> assetRxBuf;
+        std::vector<char>          assetRxGot;
+        // Diagnostics (JEFECHECK_REMOTE_TEST_DEBUG): totals + peak buffered.
+        uint64_t assetTxChunks   = 0;
+        uint64_t assetRxChunks   = 0;
+        size_t   assetTxMaxBuffered = 0;
     };
 
     SignalingServer signaling;        // host role (LAN)
@@ -275,6 +352,167 @@ struct WebRtcTransport::Impl {
         events.push_back(std::move(ev));
     }
 
+    // ── JEF-28 Task 4: assets-channel chunk TX ───────────────────────────────
+    // Split a whole asset payload into ordered chunk frames and append them to
+    // `pid`'s TX queue (caller then calls drainAssetQueue). Runs under mtx.
+    void enqueueAssetMessage(PeerId pid, const unsigned char* data, size_t len) {
+        std::lock_guard<std::mutex> lk(mtx);
+        auto it = peers.find(pid);
+        if (it == peers.end()) return;
+        Peer& p = it->second;
+        const uint32_t msgId = ++p.assetTxMsgId;   // monotonic from 1
+
+        size_t chunkPayload = kAssetChunkPayload;
+        // Clamp to the negotiated max-message-size when known, so we never hand
+        // SCTP an over-limit frame (offset in the header keeps rx independent).
+        if (p.assetsDc) {
+            size_t mx = 0;
+            try { mx = p.assetsDc->maxMessageSize(); } catch (...) {}
+            if (mx > kAssetHeaderSize + 1024 && mx - kAssetHeaderSize < chunkPayload)
+                chunkPayload = mx - kAssetHeaderSize;
+        }
+        size_t count = (len == 0) ? 1 : (len + chunkPayload - 1) / chunkPayload;
+        for (size_t i = 0; i < count; ++i) {
+            const size_t off     = i * chunkPayload;
+            const size_t thisLen = (len > off) ? std::min(chunkPayload, len - off) : 0;
+            rtc::binary frame(kAssetHeaderSize + thisLen);
+            unsigned char* h = reinterpret_cast<unsigned char*>(frame.data());
+            h[0] = kAssetMagic0; h[1] = kAssetMagic1; h[2] = kAssetVersion; h[3] = 0;
+            wr32le(h + 4,  msgId);
+            wr32le(h + 8,  static_cast<uint32_t>(i));
+            wr32le(h + 12, static_cast<uint32_t>(count));
+            wr32le(h + 16, static_cast<uint32_t>(off));
+            wr32le(h + 20, static_cast<uint32_t>(len));
+            if (thisLen) std::memcpy(h + kAssetHeaderSize, data + off, thisLen);
+            p.assetTxQueue.push_back(std::move(frame));
+        }
+        if (traceEnabled())
+            std::fprintf(stderr, "[webrtc] assets TX msg=%u split into %zu chunk(s) "
+                         "(%zu bytes)\n", msgId, count, len);
+    }
+
+    // Drain `pid`'s asset TX queue, honoring bufferedAmount backpressure. Sends
+    // chunks while buffered < kAssetHighWater; when it hits the high-water mark
+    // it stops and leaves the remainder queued — onBufferedAmountLow resumes the
+    // drain once SCTP flushes below kAssetLowThreshold. Callable concurrently
+    // from the app thread (send) and the rtc callback thread (onBufferedAmountLow);
+    // assetTxDraining serializes to keep ordered chunks strictly in order. The
+    // dc->send() calls happen OUTSIDE mtx (shared_ptr copied out), so the poll
+    // path is never blocked and mtx is never held across a network send.
+    void drainAssetQueue(PeerId pid) {
+        std::shared_ptr<rtc::DataChannel> dc;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            auto it = peers.find(pid);
+            if (it == peers.end()) return;
+            Peer& p = it->second;
+            if (p.assetTxDraining) return;             // another drainer is active
+            if (p.assetTxQueue.empty()) return;
+            if (!p.assetsOpen || !p.assetsDc) return;  // channel not ready
+            dc = p.assetsDc;
+            p.assetTxDraining = true;
+        }
+        for (;;) {
+            rtc::binary frame;
+            {
+                std::lock_guard<std::mutex> lk(mtx);
+                auto it = peers.find(pid);
+                if (it == peers.end()) return;         // peer gone; drop remainder
+                Peer& p = it->second;
+                size_t buffered = 0;
+                try { buffered = dc->bufferedAmount(); } catch (...) {}
+                if (buffered > p.assetTxMaxBuffered) p.assetTxMaxBuffered = buffered;
+                if (p.assetTxQueue.empty()) { p.assetTxDraining = false; return; }
+                if (buffered >= kAssetHighWater) {
+                    // Backpressure: stop. onBufferedAmountLow will resume us when
+                    // SCTP drains below kAssetLowThreshold (a fresh downward
+                    // crossing, so no lost wakeup).
+                    p.assetTxDraining = false;
+                    if (traceEnabled())
+                        std::fprintf(stderr, "[webrtc] assets TX paused: buffered=%zu "
+                                     "queued=%zu\n", buffered, p.assetTxQueue.size());
+                    return;
+                }
+                frame = std::move(p.assetTxQueue.front());
+                p.assetTxQueue.pop_front();
+                p.assetTxChunks++;
+            }
+            try { dc->send(frame.data(), frame.size()); } catch (...) { /* drop */ }
+        }
+    }
+
+    // ── JEF-28 Task 4: assets-channel chunk RX / reassembly ──────────────────
+    // Feed one inbound "assets" frame through header validation + reassembly.
+    // Pushes ONE Data(Channel::Assets) event when the last chunk of a message
+    // arrives. Never crashes on malformed/hostile input — every field is bounds
+    // checked and an unreasonable total is rejected to bound memory.
+    void handleAssetMessage(PeerId pid, const unsigned char* data, size_t n) {
+        if (n < kAssetHeaderSize) return;                       // too short
+        if (data[0] != kAssetMagic0 || data[1] != kAssetMagic1 ||
+            data[2] != kAssetVersion) return;                   // bad magic/version
+        const uint32_t msgId  = rd32le(data + 4);
+        const uint32_t idx    = rd32le(data + 8);
+        const uint32_t count  = rd32le(data + 12);
+        const uint32_t offset = rd32le(data + 16);
+        const uint32_t total  = rd32le(data + 20);
+        const size_t   payLen = n - kAssetHeaderSize;
+        // Structural + anti-abuse guards.
+        if (count == 0) return;
+        if (total == 0 && payLen == 0 && count == 1) { /* legit empty message */ }
+        else if (total == 0) return;
+        if (total > kAssetMaxMessage) return;                   // bound memory
+        if (idx >= count) return;                               // index OOR
+        if (static_cast<uint64_t>(count) > static_cast<uint64_t>(total) + 1)
+            return;                                             // absurd chunkCount
+        if (static_cast<uint64_t>(offset) + payLen > total) return;  // slice OOR
+
+        std::vector<unsigned char> completed;
+        bool haveCompleted = false;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            auto it = peers.find(pid);
+            if (it == peers.end()) return;
+            Peer& p = it->second;
+            p.assetRxChunks++;
+            if (msgId <= p.assetRxLastComplete) return;         // stale / duplicate
+            if (p.assetRxMsgId != msgId) {
+                // Begin a new message (abandoning any incomplete prior — should
+                // not happen on an ordered channel, but stay defensive).
+                p.assetRxMsgId      = msgId;
+                p.assetRxChunkCount = count;
+                p.assetRxTotalLen   = total;
+                p.assetRxReceived   = 0;
+                p.assetRxBuf.assign(total, 0);
+                p.assetRxGot.assign(count, 0);
+            } else if (p.assetRxChunkCount != count || p.assetRxTotalLen != total) {
+                return;                                         // inconsistent header
+            }
+            if (idx < p.assetRxGot.size() && !p.assetRxGot[idx]) {
+                if (payLen) std::memcpy(p.assetRxBuf.data() + offset,
+                                        data + kAssetHeaderSize, payLen);
+                p.assetRxGot[idx] = 1;
+                p.assetRxReceived++;
+            }
+            if (p.assetRxReceived == p.assetRxChunkCount) {
+                completed = std::move(p.assetRxBuf);
+                haveCompleted = true;
+                p.assetRxLastComplete = msgId;
+                p.assetRxMsgId    = 0;
+                p.assetRxChunkCount = 0;
+                p.assetRxReceived = 0;
+                p.assetRxBuf.clear();
+                p.assetRxGot.clear();
+                if (traceEnabled())
+                    std::fprintf(stderr, "[webrtc] assets RX msg=%u complete: "
+                                 "%u chunk(s), %zu bytes\n", msgId, count,
+                                 completed.size());
+            }
+        }
+        if (haveCompleted)
+            pushEvent(TransportEventType::Data, pid, std::move(completed),
+                      Channel::Assets);
+    }
+
     // Build the rtc::Configuration for a PeerConnection. In coordinator mode
     // this folds in the coordinator-supplied iceServers (STUN/TURN, JEF-26); in
     // LAN mode coordIceServersJson is empty, so this is an empty config (the
@@ -306,6 +544,13 @@ struct WebRtcTransport::Impl {
             else          it->second.dc = dc;
         }
 
+        // JEF-28 Task 4: on the assets channel, resume the paced chunk drain
+        // whenever SCTP flushes below the low-water threshold (backpressure).
+        if (isAssets) {
+            dc->setBufferedAmountLowThreshold(kAssetLowThreshold);
+            dc->onBufferedAmountLow([this, pid]() { drainAssetQueue(pid); });
+        }
+
         dc->onOpen([this, pid, isAssets]() {
             {
                 std::lock_guard<std::mutex> lk(mtx);
@@ -317,6 +562,7 @@ struct WebRtcTransport::Impl {
             }
             if (isAssets) {
                 trace("host", "peer ASSETS channel OPEN");  // silent
+                drainAssetQueue(pid);  // flush anything queued before open
             } else {
                 trace("host", "peer channel OPEN");
                 pushEvent(TransportEventType::PeerConnected, pid);
@@ -324,13 +570,16 @@ struct WebRtcTransport::Impl {
         });
 
         // Binary frames only (jefe::wire frames). Text is unused on the wire.
+        // Assets frames carry the chunk header (reassembled before dispatch);
+        // state frames are the app payload verbatim.
         dc->onMessage(
             [this, pid, isAssets](rtc::binary msg) {
-                std::vector<unsigned char> bytes(msg.size());
-                for (size_t i = 0; i < msg.size(); ++i)
-                    bytes[i] = static_cast<unsigned char>(msg[i]);
+                const unsigned char* p =
+                    reinterpret_cast<const unsigned char*>(msg.data());
+                if (isAssets) { handleAssetMessage(pid, p, msg.size()); return; }
+                std::vector<unsigned char> bytes(p, p + msg.size());
                 pushEvent(TransportEventType::Data, pid, std::move(bytes),
-                          isAssets ? Channel::Assets : Channel::State);
+                          Channel::State);
             },
             [](rtc::string) { /* text unused */ });
 
@@ -484,6 +733,12 @@ struct WebRtcTransport::Impl {
     void setupClientChannel(std::shared_ptr<rtc::DataChannel> dc) {
         const bool isAssets = (dc->label() == "assets");  // JEF-28
 
+        // JEF-28 Task 4: backpressure resume on the client's assets channel.
+        if (isAssets) {
+            dc->setBufferedAmountLowThreshold(kAssetLowThreshold);
+            dc->onBufferedAmountLow([this]() { drainAssetQueue(kHostPeerId); });
+        }
+
         dc->onOpen([this, isAssets]() {
             {
                 std::lock_guard<std::mutex> lk(mtx);
@@ -495,6 +750,7 @@ struct WebRtcTransport::Impl {
             }
             if (isAssets) {
                 trace("client", "assets datachannel OPEN");  // silent
+                drainAssetQueue(kHostPeerId);  // flush anything queued pre-open
             } else {
                 trace("client", "datachannel OPEN");
                 pushEvent(TransportEventType::ConnectAccepted, kHostPeerId);
@@ -503,12 +759,12 @@ struct WebRtcTransport::Impl {
 
         dc->onMessage(
             [this, isAssets](rtc::binary msg) {
-                std::vector<unsigned char> bytes(msg.size());
-                for (size_t i = 0; i < msg.size(); ++i)
-                    bytes[i] = static_cast<unsigned char>(msg[i]);
-                pushEvent(TransportEventType::Data, kHostPeerId,
-                          std::move(bytes),
-                          isAssets ? Channel::Assets : Channel::State);
+                const unsigned char* p =
+                    reinterpret_cast<const unsigned char*>(msg.data());
+                if (isAssets) { handleAssetMessage(kHostPeerId, p, msg.size()); return; }
+                std::vector<unsigned char> bytes(p, p + msg.size());
+                pushEvent(TransportEventType::Data, kHostPeerId, std::move(bytes),
+                          Channel::State);
             },
             [](rtc::string) { /* text unused */ });
 
@@ -1151,47 +1407,56 @@ void WebRtcTransport::send(const unsigned char* data, int len, PeerId target,
                            bool broadcastExcluding, Channel channel) {
     if (len <= 0 || data == nullptr) return;
 
-    // JEF-28: pick the state ("jefe") or assets channel per peer based on the
-    // requested lane. If the chosen channel isn't open yet, the peer is skipped
-    // (same drop-if-not-open behavior as the state channel had before).
     const bool assets = (channel == Channel::Assets);
-    auto pick = [assets](const Impl::Peer& p) -> std::shared_ptr<rtc::DataChannel> {
-        if (assets) return (p.assetsOpen && p.assetsDc) ? p.assetsDc : nullptr;
-        return (p.open && p.dc) ? p.dc : nullptr;
-    };
+    const size_t n = static_cast<size_t>(len);
 
-    // Collect target channels under the lock, then send after unlocking.
-    // RakNet parity (gfcTransport.h):
+    // Resolve target PeerIds under the lock (RakNet parity, gfcTransport.h):
     //   broadcastExcluding=false → `target` ONLY; target==kInvalidPeerId → NOBODY.
     //   broadcastExcluding=true  → everyone EXCEPT `target`
     //                              (target==kInvalidPeerId → everyone).
-    std::vector<std::shared_ptr<rtc::DataChannel>> targets;
+    // We collect PeerIds (not raw channels) so the assets path can address each
+    // peer's per-peer chunk queue; a peer whose target channel isn't open yet is
+    // skipped (same drop-if-not-open behavior the state channel always had).
+    std::vector<PeerId>                              statePeers;   // state fast path
+    std::vector<std::shared_ptr<rtc::DataChannel>>   stateChans;
+    std::vector<PeerId>                              assetPeers;   // chunked path
     {
         std::lock_guard<std::mutex> lk(d_->mtx);
+        auto consider = [&](PeerId pid, const Impl::Peer& p) {
+            if (assets) {
+                if (p.assetsOpen && p.assetsDc) assetPeers.push_back(pid);
+            } else if (p.open && p.dc) {
+                statePeers.push_back(pid);
+                stateChans.push_back(p.dc);
+            }
+        };
         if (!broadcastExcluding) {
-            // Unicast. kInvalidPeerId addresses no one — send to nobody
-            // (matches RakNet, and never a broadcast).
             if (target != kInvalidPeerId) {
                 auto it = d_->peers.find(target);
-                if (it != d_->peers.end()) {
-                    if (auto dc = pick(it->second)) targets.push_back(dc);
-                }
+                if (it != d_->peers.end()) consider(it->first, it->second);
             }
         } else {
-            // Broadcast to everyone except `target`
-            // (target==kInvalidPeerId → nothing to exclude → everyone).
             for (auto& kv : d_->peers) {
                 if (kv.first == target) continue;
-                if (auto dc = pick(kv.second)) targets.push_back(dc);
+                consider(kv.first, kv.second);
             }
         }
     }
 
-    const std::byte* bytes = reinterpret_cast<const std::byte*>(data);
-    const size_t n = static_cast<size_t>(len);
-    for (auto& dc : targets) {
-        try { dc->send(bytes, n); } catch (...) { /* drop silently */ }
+    if (!assets) {
+        // State channel: small messages, one frame each, no chunk header.
+        const std::byte* bytes = reinterpret_cast<const std::byte*>(data);
+        for (auto& dc : stateChans) {
+            try { dc->send(bytes, n); } catch (...) { /* drop silently */ }
+        }
+        return;
     }
+
+    // Assets channel (JEF-28 Task 4): split into ordered chunks per peer, then
+    // drain with bufferedAmount backpressure. Enqueue for every target first,
+    // then drain — draining one peer must not delay queueing the others.
+    for (PeerId pid : assetPeers) d_->enqueueAssetMessage(pid, data, n);
+    for (PeerId pid : assetPeers) d_->drainAssetQueue(pid);
 }
 
 void WebRtcTransport::closePeer(PeerId peer, bool /*sendNotification*/) {
