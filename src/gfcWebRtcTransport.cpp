@@ -280,6 +280,9 @@ struct WebRtcTransport::Impl {
         { std::lock_guard<std::mutex> lk(mtx); js = coordIceServersJson; }
         rtc::Configuration cfg;
         for (auto& s : parseIceServers(js)) cfg.iceServers.push_back(s);
+        if (traceEnabled() && !cfg.iceServers.empty())
+            std::fprintf(stderr, "[webrtc] applied %zu coordinator iceServer(s)\n",
+                         cfg.iceServers.size());
         return cfg;
     }
 

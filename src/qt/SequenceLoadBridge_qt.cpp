@@ -2129,6 +2129,86 @@ bool remoteTestServerSettleForPlay(int settleMs) {
     return false;
 }
 
+// ── JEF-27 Task 3: --coord-test cloud-coordinator E2E harness ───────────────
+// Same split-phase topology as the WebRTC LAN harness (host + its loopback
+// client live in the orchestrator process; the peer is a spawned child), but
+// both the host and the peer reach each other through a cloud coordinator by
+// session code instead of a LAN SignalingServer at ip:port.
+//
+// The trickiest part is the host's OWN loopback client: gfcNetworkManager::
+// startServer connects it to the host's session immediately after start(), but
+// in coordinator mode the session code is assigned asynchronously. startServer
+// now waits (bounded) for getAssignedSessionCode() to be non-empty BEFORE the
+// loopback connects, so the loopback joins by the real code. See the manager.
+
+// Start the host in coordinator mode (create-session) and bring its loopback
+// client fully up. Returns true once the loopback has registered as a live
+// participant (its P2P channel is open both ways) — mirroring
+// remoteTestServerStart but over the coordinator. `coordUrl` is a ws:// URL.
+bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs) {
+    if (networkManager.getConnected()) return false;
+    gfcServerParams sp;
+    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", "jefe-coord-host");
+    sp.password[0] = '\0';
+    sp.port = 0;                       // ignored in coordinator mode
+    sp.coordinatorMode = true;
+    sp.coordinatorUrl  = coordUrl;
+    // startServer create-session's, waits for the coordinator-assigned code,
+    // then connects the loopback client by that code (all inside startServer).
+    networkManager.startServer(&sp);
+    if (networkManager.getAssignedSessionCode().empty()) return false;
+    // Pump until the loopback client has registered its nickname on the server
+    // (== its WebRTC channel is open both directions and ready to receive
+    // forwards). Same live-participant gate as the LAN WebRTC harness.
+    for (int t = 0; t < loopbackTimeoutMs; t += 10) {
+        pumpNetwork();
+        if (!networkManager.participantNames().empty()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+}
+
+// The coordinator-assigned session code (empty until the host session is up).
+std::string coordTestGetCode() {
+    return networkManager.getAssignedSessionCode();
+}
+
+// Peer/child role: join the coordinator by code in coordinator mode, wait until
+// connected, optionally toggle play (mirrored to the host over P2P), then hold.
+void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
+                       int holdMs, bool play, int connectTimeoutMs) {
+    if (networkManager.getConnected()) return;
+    gfcConnectionParams cp;
+    cp.nickname        = "coord-peer";
+    cp.serverIP        = "";           // ignored in coordinator mode
+    cp.port            = 0;
+    cp.password        = "";
+    cp.coordinatorMode = true;
+    cp.coordinatorUrl  = coordUrl;
+    cp.sessionCode     = code;
+    networkManager.startConnection(&cp);
+    // Wait until the P2P session is actually connected before toggling play —
+    // the play/pause message is sent ONCE and a toggle issued before the channel
+    // opens would be dropped. Coordinator + ICE + DTLS + datachannel needs the
+    // larger timeout the caller threads through.
+    for (int t = 0; t < connectTimeoutMs && !isRemoteConnected(); t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (play) togglePlayFwd();          // sends a play/pause message to the host
+    for (int t = 0; t < holdMs; t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+// Orchestrator: pump for up to settleMs, reporting whether the peer's mirrored
+// play reached this (host) side via the loopback client. Assumes coordTestHostStart
+// already brought the host + loopback up.
+bool coordTestSettleForPlay(int settleMs) {
+    return remoteTestServerSettleForPlay(settleMs);
+}
+
 // --- Chat overlay + keyboard chat entry (Task 7) ----------------------------
 
 void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }

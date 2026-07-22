@@ -388,6 +388,14 @@ bool remoteTestServerSawPlay(int port, int settleMs);
 // rationale): start + await the loopback client, then settle for the peer's play.
 bool remoteTestServerStart(int port, int loopbackTimeoutMs);
 bool remoteTestServerSettleForPlay(int settleMs);
+// JEF-27 Task 3: --coord-test cloud-coordinator E2E helpers. Host role: start in
+// coordinator mode (create-session), wait for the assigned code + loopback client
+// to come up. Peer role: join by code, hold, toggle play. See the .cpp.
+bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs);
+std::string coordTestGetCode();
+void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
+                       int holdMs, bool play, int connectTimeoutMs = 12000);
+bool coordTestSettleForPlay(int settleMs);
 bool isRemoteConnected();
 bool isRemoteServer();
 std::vector<std::string> remoteParticipants();

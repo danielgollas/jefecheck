@@ -16,6 +16,8 @@ extern gfcPlateManager plateManager;
 extern gfcTrackManager trackManager;
 
 #include <sstream>
+#include <chrono>
+#include <thread>
 
 namespace {
 std::vector<std::string> wrapToWidth(const std::string& text, int maxW) {
@@ -128,11 +130,23 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
         clientParams.password=server.getPassowrd();
         // JEF-27: in coordinator mode the loopback client joins the host's own
         // cloud session by its assigned code instead of dialing 127.0.0.1. The
-        // code is assigned asynchronously by the coordinator after
-        // create-session; the precise wait/retry is Task 3 (the E2E harness) —
-        // here we just thread the coordinator fields through.
+        // code is assigned ASYNCHRONOUSLY by the coordinator (a background
+        // rtc::WebSocket thread sets it once the create-session round-trip
+        // completes), so at this point it is very likely still empty. Wait for
+        // it here — bounded — before connecting the loopback client with a valid
+        // code. The wait needs no app-side pumping: the coordinator socket runs
+        // on libdatachannel's own threads, so getAssignedSessionCode() flips
+        // non-empty on its own. LAN/RakNet hosting (coordinatorMode=false) skips
+        // the wait entirely, so that path is unchanged.
         clientParams.coordinatorMode=server.getCoordinatorMode();
         clientParams.coordinatorUrl=server.getCoordinatorUrl();
+        if (server.getCoordinatorMode()) {
+            const int kCodeTimeoutMs = 5000;
+            for (int t = 0; t < kCodeTimeoutMs; t += 20) {
+                if (!server.getAssignedSessionCode().empty()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+        }
         clientParams.sessionCode=server.getAssignedSessionCode();
         client.setIsServerClient(true);
         client.Connect(&clientParams);
@@ -172,6 +186,10 @@ void gfcNetworkManager::stopConnection()
 std::vector<std::string> gfcNetworkManager::participantNames() {
     if (isServer) return server.getParticipantNames();
     return client.getPeersInSession();
+}
+
+std::string gfcNetworkManager::getAssignedSessionCode() {
+    return server.getAssignedSessionCode();
 }
 
 std::string gfcNetworkManager::connectionStatusText() {

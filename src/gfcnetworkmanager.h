@@ -36,6 +36,10 @@ public:
     
     std::vector<std::string> participantNames();
     std::string connectionStatusText();
+
+    // JEF-27: the coordinator-assigned cloud session code (host role, coordinator
+    // mode only; empty otherwise). Surfaced for the Remote dialog + --coord-test.
+    std::string getAssignedSessionCode();
     std::vector<std::string> chatLogLines();
     std::vector<std::string> drainErrors();
 
