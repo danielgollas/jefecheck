@@ -8,6 +8,7 @@
 #include <stdlib.h> // For atoi
 #include <cstring> // For strlen
 #include <cctype>
+#include <filesystem>
 #include "gfcStructures.h"
 #include "gfcfx.h"
 #include "xmlParser.h"
@@ -74,7 +75,18 @@ bool unserializeLUT ( jefe::wire::Reader& r ) {
 
     std::ofstream outFile;
 
-    std::string lutFilename=sett.receivedPath+filenameNoPath;
+    // SECURITY (JEF-28): the filename is peer-supplied. Reduce it to its bare
+    // basename so a hostile peer can't escape receivedPath via "../.." or an
+    // absolute path. filename() strips all directory + ".." components:
+    // "../../evil" -> "evil", "/etc/passwd" -> "passwd". Skip empty results
+    // (e.g. a name that was only a directory) — never write.
+    std::string safeName=std::filesystem::path(filenameNoPath).filename().string();
+    if ( safeName.empty() ) {
+        printf ( "unserializeLUT: rejected empty/invalid filename '%s'\n",filenameNoPath.c_str() );
+        return false;
+    }
+
+    std::string lutFilename=sett.receivedPath+safeName;
 
     //write lut file
     outFile.open ( lutFilename.c_str(),std::ostream::binary );
@@ -143,9 +155,22 @@ bool unserializeFX ( jefe::wire::Reader& r ) {
     //SAVE TO FILES
     std::ofstream outFile;
 
-    std::string jfxFileName=sett.receivedPath+jfxFilenameNoPath;
-    std::string vertexFileName=sett.receivedPath+vertexFilenameNoPath;
-    std::string fragmentFileName=sett.receivedPath+fragmentFilenameNoPath;
+    // SECURITY (JEF-28): every filename here is peer-supplied. Reduce each to
+    // its bare basename (filename() strips directories + ".." components) so a
+    // hostile peer can't write outside receivedPath. Skip the whole FX if any
+    // component sanitizes to empty — a partial write can't be loaded anyway.
+    std::string jfxSafe=std::filesystem::path(jfxFilenameNoPath).filename().string();
+    std::string vertexSafe=std::filesystem::path(vertexFilenameNoPath).filename().string();
+    std::string fragmentSafe=std::filesystem::path(fragmentFilenameNoPath).filename().string();
+    if ( jfxSafe.empty() || vertexSafe.empty() || fragmentSafe.empty() ) {
+        printf ( "unserializeFX: rejected empty/invalid filename (jfx='%s' vert='%s' frag='%s')\n",
+                 jfxFilenameNoPath.c_str(), vertexFilenameNoPath.c_str(), fragmentFilenameNoPath.c_str() );
+        return false;
+    }
+
+    std::string jfxFileName=sett.receivedPath+jfxSafe;
+    std::string vertexFileName=sett.receivedPath+vertexSafe;
+    std::string fragmentFileName=sett.receivedPath+fragmentSafe;
 
     //write jfxFile
     outFile.open ( jfxFileName.c_str(),std::ostream::out );

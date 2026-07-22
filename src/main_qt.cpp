@@ -18,6 +18,7 @@
 #include <string>
 #include <chrono>
 #include <thread>
+#include <filesystem>
 
 #ifndef _WIN32
 #include <unistd.h>   // execv, for the WebRTC-harness transport re-exec
@@ -355,6 +356,19 @@ int main(int argc, char* argv[]) {
     // the install path works in the Qt build.)
     if (argc > 0 && argv[0]) {
         setMacExecutablePath(argv[0]);
+    }
+
+    // JEF-28: assign a real, writable per-user directory for P2P-received
+    // assets. `sett.receivedPath` was declared but never assigned, so received
+    // LUT/FX files (unserializeLUT/unserializeFX) landed in the process CWD.
+    // Point it at getApplicationDataPath()/received/ and create it. Runs here
+    // (after setMacExecutablePath primes getApplicationDataPath on macOS, and
+    // before any --remote-test/--coord-test networking dispatch below).
+    {
+        std::string received = getApplicationDataPath() + "received/";
+        std::error_code ec;
+        std::filesystem::create_directories(received, ec);
+        sett.receivedPath = received;   // gfcSettings global (extern above)
     }
     // glPipeline notes:
     // glBegin/glEnd quads, GL_TEXTURE_RECTANGLE_ARB, glColor4f, ARB
