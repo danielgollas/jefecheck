@@ -25,6 +25,7 @@
 #include "gfcsequencegui_qt.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <climits>
 #include <cmath>
@@ -44,6 +45,38 @@ extern gfcPickManager pickManager;
 extern gfcSettings sett;
 
 namespace jefe::qt {
+
+// JEF-27: set true while a cloud connect (connectAsCloudHost/Client) owns the
+// networkManager on a worker thread. connectAsCloudHost blocks up to ~5s in the
+// coordinator's code-assignment wait; the GUI thread's pumpNetwork() must NOT
+// call networkManager.update() concurrently with the worker's startServer /
+// startConnection (server/client Update() would race the transport bring-up).
+// pumpNetwork() checks this and skips the tick while it is set. The window is
+// short and the dialog refreshes itself when the worker finishes, so skipping a
+// few pump ticks costs nothing.
+//
+// The worker is the SOLE thread allowed to touch networkManager while this is
+// set, so EVERY GUI-thread manager reader must honor it too: the remote getters
+// below (isRemoteConnected/isRemoteServer/remoteParticipants/remoteStatusText/
+// remoteSessionCode/remoteErrors/…) return empty/false, and drawNetworkOverlay
+// draws nothing, while a cloud connect is in flight. drawNetworkOverlay
+// self-gates inside this TU, so GlViewport_qt's paintGL call already no-ops
+// without a GlViewport edit; cloudConnectInFlight() is exported for any future
+// GUI-thread caller that needs the same gate.
+static std::atomic<bool> gCloudConnectInFlight{false};
+
+// Set once the app is tearing down (QCoreApplication::aboutToQuit). A detached
+// cloud-connect worker checks this before touching networkManager so it can't
+// mutate a global that static destruction may be racing on quit.
+static std::atomic<bool> gBridgeShuttingDown{false};
+
+bool cloudConnectInFlight() {
+    return gCloudConnectInFlight.load(std::memory_order_acquire);
+}
+
+void beginBridgeShutdown() {
+    gBridgeShuttingDown.store(true, std::memory_order_release);
+}
 
 int getDefaultTextureFormat() {
     return sett.defaultTextureFormat;
@@ -1111,6 +1144,46 @@ void connectAsClient(const RemoteClientParams& params) {
     networkManager.startConnection(&cp);
 }
 
+void connectAsCloudHost(const RemoteCloudHostParams& params) {
+    if (gBridgeShuttingDown.load(std::memory_order_acquire)) return;
+    if (networkManager.getConnected()) return;
+    gfcServerParams sp;
+    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", "jefe-cloud-host");
+    std::snprintf(sp.password,   sizeof(sp.password),   "%s",
+                  params.password.c_str());
+    sp.port            = 0;              // ignored in coordinator mode
+    sp.coordinatorMode = true;
+    sp.coordinatorUrl  = params.coordinatorUrl;
+    // BLOCKS up to ~5s for the coordinator-assigned code — callers run this off
+    // the GUI thread. Hold the in-flight guard so the GUI-thread pump doesn't
+    // race the transport bring-up.
+    gCloudConnectInFlight.store(true, std::memory_order_release);
+    networkManager.startServer(&sp);
+    gCloudConnectInFlight.store(false, std::memory_order_release);
+}
+
+void connectAsCloudClient(const RemoteCloudJoinParams& params) {
+    if (gBridgeShuttingDown.load(std::memory_order_acquire)) return;
+    if (networkManager.getConnected()) return;
+    gfcConnectionParams cp;
+    cp.nickname        = params.clientName;
+    cp.serverIP        = "";            // ignored in coordinator mode
+    cp.port            = 0;
+    cp.password        = params.password;
+    cp.coordinatorMode = true;
+    cp.coordinatorUrl  = params.coordinatorUrl;
+    cp.sessionCode     = params.sessionCode;
+    gCloudConnectInFlight.store(true, std::memory_order_release);
+    networkManager.startConnection(&cp);
+    gCloudConnectInFlight.store(false, std::memory_order_release);
+}
+
+std::string remoteSessionCode() {
+    // A cloud connect worker owns the manager — don't read mid-mutation.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.getAssignedSessionCode();
+}
+
 void disconnectRemote() {
     if (!networkManager.getConnected()) return;
     if (networkManager.getIsServer()) networkManager.stopServer();
@@ -1118,10 +1191,12 @@ void disconnectRemote() {
 }
 
 bool isRemoteConnected() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return false;
     return networkManager.getConnected();
 }
 
 bool isRemoteServer() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return false;
     return networkManager.getIsServer();
 }
 
@@ -2010,13 +2085,32 @@ std::string getFavoritesFilePath() {
     return ::getApplicationDataPath() + "favorites.jcs";
 }
 
-std::vector<std::string> remoteParticipants() { return networkManager.participantNames(); }
-std::string              remoteStatusText()   { return networkManager.connectionStatusText(); }
-std::vector<std::string> remoteChatLog()      { return networkManager.chatLogLines(); }
-std::vector<std::string> remoteErrors()       { return networkManager.drainErrors(); }
-std::vector<std::string> remoteNetworkLog()   { return networkManager.networkLogLines(); }
+// All of these read gfcNetworkManager state. While a cloud connect worker owns
+// the manager (gCloudConnectInFlight), a direct refreshConnectionState() (e.g.
+// the F5 handler) must NOT read mid-mutation — return empty/cached instead.
+std::vector<std::string> remoteParticipants() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.participantNames();
+}
+std::string remoteStatusText() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.connectionStatusText();
+}
+std::vector<std::string> remoteChatLog() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.chatLogLines();
+}
+std::vector<std::string> remoteErrors() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.drainErrors();
+}
+std::vector<std::string> remoteNetworkLog() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    return networkManager.networkLogLines();
+}
 
 std::vector<ChatEntry> remoteChatEntries() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     std::vector<ChatEntry> out;
     for (auto& d : networkManager.chatEntries()) {
         ChatEntry e;
@@ -2036,6 +2130,10 @@ bool pumpNetwork() {
     static size_t      prevPeers     = 0;
     static size_t      prevChat      = 0;
     static std::string prevStatus;
+    // A worker thread is inside startServer/startConnection (cloud connect):
+    // skip this tick so we don't call server/client Update() concurrently with
+    // the transport bring-up. See gCloudConnectInFlight.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return false;
     networkManager.update();
     const bool        nowConnected = networkManager.getConnected();
     const size_t      nowPeers     = networkManager.participantNames().size();
@@ -2129,9 +2227,95 @@ bool remoteTestServerSettleForPlay(int settleMs) {
     return false;
 }
 
+// ── JEF-27 Task 3: --coord-test cloud-coordinator E2E harness ───────────────
+// Same split-phase topology as the WebRTC LAN harness (host + its loopback
+// client live in the orchestrator process; the peer is a spawned child), but
+// both the host and the peer reach each other through a cloud coordinator by
+// session code instead of a LAN SignalingServer at ip:port.
+//
+// The trickiest part is the host's OWN loopback client: gfcNetworkManager::
+// startServer connects it to the host's session immediately after start(), but
+// in coordinator mode the session code is assigned asynchronously. startServer
+// now waits (bounded) for getAssignedSessionCode() to be non-empty BEFORE the
+// loopback connects, so the loopback joins by the real code. See the manager.
+
+// Start the host in coordinator mode (create-session) and bring its loopback
+// client fully up. Returns true once the loopback has registered as a live
+// participant (its P2P channel is open both ways) — mirroring
+// remoteTestServerStart but over the coordinator. `coordUrl` is a ws:// URL.
+bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs) {
+    if (networkManager.getConnected()) return false;
+    gfcServerParams sp;
+    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", "jefe-coord-host");
+    sp.password[0] = '\0';
+    sp.port = 0;                       // ignored in coordinator mode
+    sp.coordinatorMode = true;
+    sp.coordinatorUrl  = coordUrl;
+    // startServer create-session's, waits for the coordinator-assigned code,
+    // then connects the loopback client by that code (all inside startServer).
+    networkManager.startServer(&sp);
+    if (networkManager.getAssignedSessionCode().empty()) return false;
+    // Pump until the loopback client has registered its nickname on the server
+    // (== its WebRTC channel is open both directions and ready to receive
+    // forwards). Same live-participant gate as the LAN WebRTC harness.
+    for (int t = 0; t < loopbackTimeoutMs; t += 10) {
+        pumpNetwork();
+        if (!networkManager.participantNames().empty()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+}
+
+// The coordinator-assigned session code (empty until the host session is up).
+std::string coordTestGetCode() {
+    return networkManager.getAssignedSessionCode();
+}
+
+// Peer/child role: join the coordinator by code in coordinator mode, wait until
+// connected, optionally toggle play (mirrored to the host over P2P), then hold.
+void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
+                       int holdMs, bool play, int connectTimeoutMs) {
+    if (networkManager.getConnected()) return;
+    gfcConnectionParams cp;
+    cp.nickname        = "coord-peer";
+    cp.serverIP        = "";           // ignored in coordinator mode
+    cp.port            = 0;
+    cp.password        = "";
+    cp.coordinatorMode = true;
+    cp.coordinatorUrl  = coordUrl;
+    cp.sessionCode     = code;
+    networkManager.startConnection(&cp);
+    // Wait until the P2P session is actually connected before toggling play —
+    // the play/pause message is sent ONCE and a toggle issued before the channel
+    // opens would be dropped. Coordinator + ICE + DTLS + datachannel needs the
+    // larger timeout the caller threads through.
+    for (int t = 0; t < connectTimeoutMs && !isRemoteConnected(); t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (play) togglePlayFwd();          // sends a play/pause message to the host
+    for (int t = 0; t < holdMs; t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+// Orchestrator: pump for up to settleMs, reporting whether the peer's mirrored
+// play reached this (host) side via the loopback client. Assumes coordTestHostStart
+// already brought the host + loopback up.
+bool coordTestSettleForPlay(int settleMs) {
+    return remoteTestServerSettleForPlay(settleMs);
+}
+
 // --- Chat overlay + keyboard chat entry (Task 7) ----------------------------
 
-void drawNetworkOverlay(int w, int h) { networkManager.draw(w, h); }
+void drawNetworkOverlay(int w, int h) {
+    // networkManager.draw() reads connected/allReady/client — skip it while a
+    // cloud connect worker owns the manager. The overlay vanishing for the ≤5s
+    // connect window is harmless.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return;
+    networkManager.draw(w, h);
+}
 
 // --- Remote pointer broadcast (Task 8) --------------------------------------
 

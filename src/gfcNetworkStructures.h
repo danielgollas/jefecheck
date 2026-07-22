@@ -110,6 +110,12 @@ public:
 char serverName[60];
 char password[60];
 int port;
+// JEF-27 cloud-coordinator hosting. When coordinatorMode is set, the host
+// dials coordinatorUrl and creates a session (port is ignored); sessionCode
+// stays empty (the coordinator assigns it).
+bool coordinatorMode = false;
+std::string coordinatorUrl;
+std::string sessionCode;
 };
 
 
@@ -119,7 +125,11 @@ std::string serverIP;
 int port;
 std::string password;
 std::string nickname;
-
+// JEF-27 cloud-coordinator join. When coordinatorMode is set, the client
+// dials coordinatorUrl and joins sessionCode (serverIP/port are ignored).
+bool coordinatorMode = false;
+std::string coordinatorUrl;
+std::string sessionCode;
 };
 
 //#pragma pack(push,1)

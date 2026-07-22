@@ -15,13 +15,158 @@
 #include <deque>
 #include <map>
 #include <mutex>
+#include <vector>
 
 #include "gfcSignaling.h"
+#include "gfcCoordinatorSignaling.h"  // JEF-27 coordinator-mode signaling
 
 namespace jefe {
 namespace net {
 
 namespace {
+
+// ── iceServers JSON → rtc::IceServer (JEF-27 / JEF-26) ───────────────────────
+// The coordinator hands us the iceServers as an opaque raw-JSON array substring
+// (see gfcCoordinatorSignaling.h): [{"urls":<string|string[]>,"username?":...,
+// "credential?":...}, ...]. We parse it here — where rtc types live — into
+// rtc::Configuration.iceServers. Defensive: malformed input yields an empty
+// list and never throws (LAN behavior, no ICE servers).
+
+void jsonSkipWs(const std::string& s, size_t& i) {
+    while (i < s.size() &&
+           (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r'))
+        ++i;
+}
+
+// Parse a JSON string literal at s[i]=='"' into `val`; advance past the close
+// quote. Handles the common escapes. Returns false on malformation.
+bool jsonParseString(const std::string& s, size_t& i, std::string& val) {
+    if (i >= s.size() || s[i] != '"') return false;
+    ++i;
+    val.clear();
+    while (i < s.size()) {
+        char c = s[i++];
+        if (c == '"') return true;
+        if (c == '\\') {
+            if (i >= s.size()) return false;
+            char e = s[i++];
+            switch (e) {
+                case 'n':  val += '\n'; break;
+                case 'r':  val += '\r'; break;
+                case 't':  val += '\t'; break;
+                case 'b':  val += '\b'; break;
+                case 'f':  val += '\f'; break;
+                case '"':  val += '"';  break;
+                case '\\': val += '\\'; break;
+                case '/':  val += '/';  break;
+                case 'u': {
+                    if (i + 4 > s.size()) return false;
+                    unsigned code = 0;
+                    for (int k = 0; k < 4; ++k) {
+                        char h = s[i++];
+                        code <<= 4;
+                        if (h >= '0' && h <= '9') code |= unsigned(h - '0');
+                        else if (h >= 'a' && h <= 'f') code |= unsigned(h - 'a' + 10);
+                        else if (h >= 'A' && h <= 'F') code |= unsigned(h - 'A' + 10);
+                        else return false;
+                    }
+                    if (code < 0x80) {
+                        val += char(code);
+                    } else if (code < 0x800) {
+                        val += char(0xC0 | (code >> 6));
+                        val += char(0x80 | (code & 0x3F));
+                    } else {
+                        val += char(0xE0 | (code >> 12));
+                        val += char(0x80 | ((code >> 6) & 0x3F));
+                        val += char(0x80 | (code & 0x3F));
+                    }
+                    break;
+                }
+                default: val += e; break;
+            }
+        } else {
+            val += c;
+        }
+    }
+    return false;  // unterminated
+}
+
+std::vector<rtc::IceServer> parseIceServers(const std::string& json) {
+    std::vector<rtc::IceServer> out;
+    if (json.empty()) return out;
+    size_t i = 0;
+    jsonSkipWs(json, i);
+    if (i >= json.size() || json[i] != '[') return {};
+    ++i;
+    while (i < json.size()) {
+        jsonSkipWs(json, i);
+        if (i >= json.size()) return {};
+        if (json[i] == ']') { ++i; break; }
+        if (json[i] != '{') return {};  // expected an object
+        ++i;
+
+        std::vector<std::string> urls;
+        std::string username, credential;
+
+        while (i < json.size()) {
+            jsonSkipWs(json, i);
+            if (i >= json.size()) return {};
+            if (json[i] == '}') { ++i; break; }
+            std::string key;
+            if (!jsonParseString(json, i, key)) return {};
+            jsonSkipWs(json, i);
+            if (i >= json.size() || json[i] != ':') return {};
+            ++i;
+            jsonSkipWs(json, i);
+            if (i >= json.size()) return {};
+            if (json[i] == '"') {
+                std::string val;
+                if (!jsonParseString(json, i, val)) return {};
+                if (key == "urls" || key == "url") urls.push_back(val);
+                else if (key == "username") username = val;
+                else if (key == "credential") credential = val;
+            } else if (json[i] == '[') {
+                ++i;  // urls array
+                while (i < json.size()) {
+                    jsonSkipWs(json, i);
+                    if (i >= json.size()) return {};
+                    if (json[i] == ']') { ++i; break; }
+                    if (json[i] == '"') {
+                        std::string val;
+                        if (!jsonParseString(json, i, val)) return {};
+                        if (key == "urls" || key == "url") urls.push_back(val);
+                    } else {
+                        return {};  // non-string url element: malformed
+                    }
+                    jsonSkipWs(json, i);
+                    if (i < json.size() && json[i] == ',') { ++i; continue; }
+                }
+            } else {
+                // Scalar (number/bool/null): skip to the next , or }.
+                while (i < json.size() && json[i] != ',' && json[i] != '}') ++i;
+            }
+            jsonSkipWs(json, i);
+            if (i < json.size() && json[i] == ',') { ++i; continue; }
+        }
+
+        for (auto& u : urls) {
+            try {
+                rtc::IceServer s(u);  // scheme (stun:/turn:) sets the type
+                if (!username.empty()) s.username = username;
+                if (!credential.empty()) s.password = credential;
+                out.push_back(std::move(s));
+            } catch (...) {
+                // Bad URL: skip this entry, keep the rest.
+            }
+        }
+
+        jsonSkipWs(json, i);
+        if (i < json.size() && json[i] == ',') { ++i; continue; }
+        if (i < json.size() && json[i] == ']') { ++i; break; }
+    }
+    return out;
+}
+
 
 // InitLogger must run exactly once per process (guard against double-init).
 std::once_flag g_loggerOnce;
@@ -67,13 +212,30 @@ struct WebRtcTransport::Impl {
     // opened on it. `open` flips true on the channel's onOpen.
     struct Peer {
         int clientId = 0;
+        std::string coordPeerId;  // JEF-27: coordinator connId (coordinator mode)
         std::shared_ptr<rtc::PeerConnection> pc;
         std::shared_ptr<rtc::DataChannel> dc;
         bool open = false;
     };
 
-    SignalingServer signaling;        // host role
-    SignalingClient clientSignaling;  // client role
+    SignalingServer signaling;        // host role (LAN)
+    SignalingClient clientSignaling;  // client role (LAN)
+
+    // ── JEF-27 coordinator mode ──────────────────────────────────────────
+    // When coordinatorMode is set (via configureCoordinator, before
+    // startHost/connect), the transport dials a CoordinatorSignaling to the
+    // cloud coordinator instead of the LAN SignalingServer/Client. The P2P
+    // PeerConnection/DataChannel/event-queue machinery below is reused verbatim.
+    bool coordinatorMode = false;
+    std::string coordinatorUrl;
+    std::string coordSessionCode;   // join-only (host: empty)
+    std::string coordPassword;
+    std::string assignedCode;       // host: code the coordinator handed us
+    std::string coordIceServersJson;  // opaque raw-JSON array, "" if none
+    std::unique_ptr<CoordinatorSignaling> coord;
+    std::map<std::string, PeerId> coordToPeer;  // coordinator connId -> PeerId
+    std::string clientHostCoordId;  // joiner: the host's coordinator connId
+    bool clientPcBuilt = false;     // joiner: guard against double-build
 
     // Single mutex guards the peer maps AND the event queue. All libdatachannel
     // / signaling callbacks fire on background threads and mutate under it; the
@@ -107,6 +269,21 @@ struct WebRtcTransport::Impl {
         ev.peer = peer;
         ev.bytes = std::move(bytes);
         events.push_back(std::move(ev));
+    }
+
+    // Build the rtc::Configuration for a PeerConnection. In coordinator mode
+    // this folds in the coordinator-supplied iceServers (STUN/TURN, JEF-26); in
+    // LAN mode coordIceServersJson is empty, so this is an empty config (the
+    // JEF-24 host-candidates-only behavior — unchanged).
+    rtc::Configuration makeConfig() {
+        std::string js;
+        { std::lock_guard<std::mutex> lk(mtx); js = coordIceServersJson; }
+        rtc::Configuration cfg;
+        for (auto& s : parseIceServers(js)) cfg.iceServers.push_back(s);
+        if (traceEnabled() && !cfg.iceServers.empty())
+            std::fprintf(stderr, "[webrtc] applied %zu coordinator iceServer(s)\n",
+                         cfg.iceServers.size());
+        return cfg;
     }
 
     // Attach handlers to the reliable channel the client opened (host side).
@@ -167,7 +344,7 @@ struct WebRtcTransport::Impl {
 
         PeerId pid = nextPeerId.fetch_add(1);
 
-        rtc::Configuration config;  // empty iceServers — LAN host candidates.
+        rtc::Configuration config = makeConfig();  // LAN: empty; coord: iceServers
         std::shared_ptr<rtc::PeerConnection> pc;
         try {
             pc = std::make_shared<rtc::PeerConnection>(config);
@@ -328,7 +505,7 @@ struct WebRtcTransport::Impl {
             if (!clientActive) return;
         }
 
-        rtc::Configuration config;  // empty iceServers — LAN host candidates.
+        rtc::Configuration config = makeConfig();  // LAN: empty; coord: iceServers
         std::shared_ptr<rtc::PeerConnection> pc;
         try {
             pc = std::make_shared<rtc::PeerConnection>(config);
@@ -446,10 +623,13 @@ struct WebRtcTransport::Impl {
             // its orphan instead of publishing it after we return. Idempotent:
             // a second disconnect() finds no peer and no active session.
             clientActive = false;
+            clientPcBuilt = false;
+            clientHostCoordId.clear();
             auto it = peers.find(kHostPeerId);
             if (it != peers.end()) {
                 pc = it->second.pc;
                 dc = it->second.dc;
+                coordToPeer.erase(it->second.coordPeerId);
                 peers.erase(it);
             }
         }
@@ -457,6 +637,7 @@ struct WebRtcTransport::Impl {
         if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
         if (pc) { try { pc->resetCallbacks(); pc->close(); } catch (...) {} }
         clientSignaling.close();
+        if (coord) coord->close();  // JEF-27: also drop the coordinator socket
         client = false;
     }
 
@@ -471,6 +652,8 @@ struct WebRtcTransport::Impl {
             pc = it->second.pc;
             dc = it->second.dc;
             clientToPeer.erase(it->second.clientId);
+            if (!it->second.coordPeerId.empty())
+                coordToPeer.erase(it->second.coordPeerId);
             peers.erase(it);
         }
         // Reset callbacks + close outside the lock so no callback re-enters.
@@ -488,6 +671,9 @@ struct WebRtcTransport::Impl {
             clientActive = false;  // stop any in-flight client callback
             toClose.swap(peers);
             clientToPeer.clear();
+            coordToPeer.clear();
+            clientPcBuilt = false;
+            clientHostCoordId.clear();
         }
         for (auto& kv : toClose) {
             if (kv.second.dc) {
@@ -505,8 +691,285 @@ struct WebRtcTransport::Impl {
         // other, and stop()/close() are no-ops when the other was never used.
         signaling.stop();
         clientSignaling.close();
+        if (coord) coord->close();  // JEF-27: drop the coordinator socket too
         hosting = false;
         client = false;
+    }
+
+    // ── JEF-27 coordinator mode: HOST ────────────────────────────────────
+    // The host create-session's; each coordinator `peer-joined` spins up an
+    // ANSWERER PeerConnection (host never creates the channel) whose SDP/ICE is
+    // relayed back to that joiner via coord->sendSignal(coordPeerId, ...).
+
+    void onCoordSessionCreated(const std::string& code, const std::string& /*token*/,
+                               const std::string& iceServersJson) {
+        std::lock_guard<std::mutex> lk(mtx);
+        assignedCode = code;
+        coordIceServersJson = iceServersJson;
+        trace("host", "coordinator session created");
+    }
+
+    void onCoordHostPeerJoined(const std::string& coordPeerId) {
+        trace("host", "coordinator peer joined");
+        if (maxClients > 0) {
+            std::lock_guard<std::mutex> lk(mtx);
+            if (static_cast<int>(peers.size()) >= maxClients) return;  // at capacity
+        }
+
+        PeerId pid = nextPeerId.fetch_add(1);
+
+        rtc::Configuration config = makeConfig();  // coordinator iceServers
+        std::shared_ptr<rtc::PeerConnection> pc;
+        try {
+            pc = std::make_shared<rtc::PeerConnection>(config);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: coord PeerConnection failed: %s\n",
+                         e.what());
+            return;
+        }
+
+        pc->onLocalDescription([this, coordPeerId, pid](rtc::Description desc) {
+            SignalMessage m;
+            m.type = desc.typeString();  // "answer" for the host
+            m.sdp = std::string(desc);
+            m.peer = static_cast<int>(pid);
+            if (coord) coord->sendSignal(coordPeerId, m);
+        });
+        pc->onLocalCandidate([this, coordPeerId, pid](rtc::Candidate cand) {
+            SignalMessage m;
+            m.type = "candidate";
+            m.candidate = std::string(cand);
+            m.mid = cand.mid();
+            m.peer = static_cast<int>(pid);
+            if (coord) coord->sendSignal(coordPeerId, m);
+        });
+        attachStateTrace(pc, "host");
+        pc->onDataChannel([this, pid](std::shared_ptr<rtc::DataChannel> dc) {
+            trace("host", "coord onDataChannel");
+            setupChannel(pid, dc);
+        });
+
+        bool inserted = false;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            if (maxClients == 0 || static_cast<int>(peers.size()) < maxClients) {
+                Peer p;
+                p.coordPeerId = coordPeerId;
+                p.pc = pc;
+                peers[pid] = std::move(p);
+                coordToPeer[coordPeerId] = pid;
+                inserted = true;
+            }
+        }
+        if (!inserted) {
+            try { pc->resetCallbacks(); pc->close(); } catch (...) {}
+        }
+    }
+
+    void onCoordHostSignal(const std::string& fromCoordId, const SignalMessage& m) {
+        std::shared_ptr<rtc::PeerConnection> pc;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            auto cit = coordToPeer.find(fromCoordId);
+            if (cit == coordToPeer.end()) return;
+            auto pit = peers.find(cit->second);
+            if (pit == peers.end()) return;
+            pc = pit->second.pc;
+        }
+        if (!pc) return;
+        try {
+            if (m.type == "offer" || m.type == "answer") {
+                pc->setRemoteDescription(rtc::Description(m.sdp, m.type));
+            } else if (m.type == "candidate") {
+                pc->addRemoteCandidate(rtc::Candidate(m.candidate, m.mid));
+            }
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: coord host apply failed: %s\n",
+                         e.what());
+        }
+    }
+
+    void onCoordHostPeerLeft(const std::string& coordPeerId) {
+        PeerId pid = kInvalidPeerId;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            auto it = coordToPeer.find(coordPeerId);
+            if (it != coordToPeer.end()) pid = it->second;
+        }
+        if (pid == kInvalidPeerId) return;
+        // Peer left the session: notify then tear the PeerConnection down.
+        pushEvent(TransportEventType::PeerLost, pid);
+        closePeerInternal(pid);
+    }
+
+    // ── JEF-27 coordinator mode: JOINER ──────────────────────────────────
+    // The joiner is the OFFERER. It joins by code; the roster (or a fallback
+    // peer-joined) tells it the host's coordinator connId, then it builds the
+    // offerer PeerConnection + "jefe" channel and relays SDP/ICE to the host.
+
+    void buildClientOfferer(const std::string& hostCoordId) {
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            if (!clientActive || clientPcBuilt) return;  // once only
+            clientPcBuilt = true;
+            clientHostCoordId = hostCoordId;
+        }
+
+        rtc::Configuration config = makeConfig();  // coordinator iceServers
+        std::shared_ptr<rtc::PeerConnection> pc;
+        try {
+            pc = std::make_shared<rtc::PeerConnection>(config);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: coord client PC failed: %s\n",
+                         e.what());
+            pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
+            return;
+        }
+        attachStateTrace(pc, "client");
+
+        pc->onLocalDescription([this, hostCoordId](rtc::Description desc) {
+            trace("client", "coord -> local offer/desc");
+            SignalMessage m;
+            m.type = desc.typeString();  // "offer" for the joiner (offerer)
+            m.sdp = std::string(desc);
+            m.peer = static_cast<int>(kHostPeerId);
+            if (coord) coord->sendSignal(hostCoordId, m);
+        });
+        pc->onLocalCandidate([this, hostCoordId](rtc::Candidate cand) {
+            SignalMessage m;
+            m.type = "candidate";
+            m.candidate = std::string(cand);
+            m.mid = cand.mid();
+            m.peer = static_cast<int>(kHostPeerId);
+            if (coord) coord->sendSignal(hostCoordId, m);
+        });
+
+        rtc::DataChannelInit init;
+        init.reliability.unordered = false;
+        init.reliability.maxPacketLifeTime.reset();
+        init.reliability.maxRetransmits.reset();
+
+        std::shared_ptr<rtc::DataChannel> dc;
+        try {
+            dc = pc->createDataChannel("jefe", init);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: coord createDataChannel failed: %s\n",
+                         e.what());
+            try { pc->resetCallbacks(); pc->close(); } catch (...) {}
+            pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
+            return;
+        }
+        setupClientChannel(dc);
+
+        bool inserted = false;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            if (clientActive) {
+                Peer p;
+                p.coordPeerId = hostCoordId;
+                p.pc = pc;
+                p.dc = dc;
+                peers[kHostPeerId] = std::move(p);
+                coordToPeer[hostCoordId] = kHostPeerId;
+                inserted = true;
+            }
+        }
+        if (!inserted) {
+            try { dc->resetCallbacks(); dc->close(); } catch (...) {}
+            try { pc->resetCallbacks(); pc->close(); } catch (...) {}
+        }
+    }
+
+    void onCoordClientRoster(const std::vector<std::string>& peersList,
+                             const std::string& iceServersJson) {
+        { std::lock_guard<std::mutex> lk(mtx); coordIceServersJson = iceServersJson; }
+        // The roster EXCLUDES the joiner; the host is the (first) existing peer.
+        if (!peersList.empty()) buildClientOfferer(peersList.front());
+        // Empty roster (host not present yet): wait for peer-joined.
+    }
+
+    void onCoordClientPeerJoined(const std::string& coordPeerId) {
+        // Fallback path when we joined before the host's roster entry existed.
+        buildClientOfferer(coordPeerId);
+    }
+
+    void onCoordClientSignal(const std::string& /*fromCoordId*/, const SignalMessage& m) {
+        std::shared_ptr<rtc::PeerConnection> pc;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            auto it = peers.find(kHostPeerId);
+            if (it != peers.end()) pc = it->second.pc;
+        }
+        if (!pc) return;
+        try {
+            if (m.type == "answer") {
+                trace("client", "coord <- remote answer");
+                pc->setRemoteDescription(rtc::Description(m.sdp, m.type));
+            } else if (m.type == "candidate") {
+                pc->addRemoteCandidate(rtc::Candidate(m.candidate, m.mid));
+            }
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "WebRtcTransport: coord client apply failed: %s\n",
+                         e.what());
+        }
+    }
+
+    void onCoordClientError(const std::string& code, const std::string& msg) {
+        std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
+                     code.c_str(), msg.c_str());
+        pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
+    }
+
+    // Bring up the coordinator socket for the HOST (create-session on open).
+    bool startHostCoordinator() {
+        coord = std::make_unique<CoordinatorSignaling>();
+        Impl* d = this;
+        coord->onSessionCreated([d](std::string c, std::string t, std::string ice) {
+            d->onCoordSessionCreated(c, t, ice);
+        });
+        coord->onPeerJoined([d](std::string p) { d->onCoordHostPeerJoined(p); });
+        coord->onPeerLeft([d](std::string p) { d->onCoordHostPeerLeft(p); });
+        coord->onSignal([d](std::string from, SignalMessage m) {
+            d->onCoordHostSignal(from, m);
+        });
+        coord->onError([d](std::string c, std::string m) {
+            std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
+                         c.c_str(), m.c_str());
+        });
+        coord->onOpen([d]() { if (d->coord) d->coord->createSession(); });
+        if (!coord->connect(coordinatorUrl)) {
+            std::fprintf(stderr, "WebRtcTransport: coordinator connect failed (host)\n");
+            return false;
+        }
+        hosting = true;
+        return true;
+    }
+
+    // Bring up the coordinator socket for the JOINER (join-session on open).
+    bool connectCoordinator() {
+        { std::lock_guard<std::mutex> lk(mtx); clientActive = true; }
+        coord = std::make_unique<CoordinatorSignaling>();
+        Impl* d = this;
+        coord->onRoster([d](std::vector<std::string> p, std::string ice) {
+            d->onCoordClientRoster(p, ice);
+        });
+        coord->onPeerJoined([d](std::string p) { d->onCoordClientPeerJoined(p); });
+        coord->onSignal([d](std::string from, SignalMessage m) {
+            d->onCoordClientSignal(from, m);
+        });
+        coord->onError([d](std::string c, std::string m) {
+            d->onCoordClientError(c, m);
+        });
+        std::string code = coordSessionCode;
+        coord->onOpen([d, code]() { if (d->coord) d->coord->joinSession(code); });
+        if (!coord->connect(coordinatorUrl)) {
+            std::fprintf(stderr, "WebRtcTransport: coordinator connect failed (join)\n");
+            std::lock_guard<std::mutex> lk(mtx);
+            clientActive = false;
+            return false;
+        }
+        client = true;
+        return true;
     }
 };
 
@@ -521,10 +984,29 @@ WebRtcTransport::~WebRtcTransport() {
     rtc::Cleanup();  // MUST come after all rtc objects are destroyed.
 }
 
+void WebRtcTransport::configureCoordinator(const std::string& url,
+                                           const std::string& sessionCode,
+                                           const std::string& password) {
+    d_->coordinatorMode = true;
+    d_->coordinatorUrl = url;
+    d_->coordSessionCode = sessionCode;
+    d_->coordPassword = password;
+}
+
+std::string WebRtcTransport::assignedSessionCode() {
+    std::lock_guard<std::mutex> lk(d_->mtx);
+    return d_->assignedCode;
+}
+
 bool WebRtcTransport::startHost(unsigned short port, const std::string& /*password*/,
                                 int maxClients) {
     if (d_->hosting) return false;
     d_->maxClients = maxClients;
+
+    // JEF-27: coordinator mode dials the cloud coordinator instead of a LAN
+    // SignalingServer. Everything downstream (PeerConnection/DataChannel/event
+    // queue) is shared.
+    if (d_->coordinatorMode) return d_->startHostCoordinator();
 
     // Register callbacks BEFORE start() (documented SignalingServer contract).
     Impl* d = d_.get();
@@ -558,6 +1040,10 @@ bool WebRtcTransport::connect(const std::string& ip, unsigned short port,
                               const std::string& /*password*/) {
     if (d_->hosting || d_->client) return false;  // one role per instance
     initLoggerOnce();
+
+    // JEF-27: coordinator mode joins the cloud session by code instead of
+    // dialing a LAN SignalingServer at ip:port.
+    if (d_->coordinatorMode) return d_->connectCoordinator();
 
     // Mark the session active BEFORE the async dial so the WS-thread callbacks
     // (which may fire immediately) see a live session. A racing disconnect()

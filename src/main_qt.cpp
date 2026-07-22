@@ -16,6 +16,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <chrono>
+#include <thread>
 
 #ifndef _WIN32
 #include <unistd.h>   // execv, for the WebRTC-harness transport re-exec
@@ -24,6 +26,8 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 
+#include "gfcCoordinatorSignaling.h"
+#include "gfcTestCoordinator.h"
 #include "gfcSignaling.h"
 #include "gfcStructures.h"
 #include "gfcWireTest.h"
@@ -185,6 +189,15 @@ static bool hasSignalTest(int argc, char* argv[]) {
     return false;
 }
 
+// --coord-signal-test : headless cloud-coordinator codec + loopback self-test
+// (JEF-27 Task 1). Pure codec assertions plus a bounded rtc::WebSocketServer
+// loopback; needs nothing setup provides, so it runs before QApplication.
+static bool hasCoordSignalTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--coord-signal-test") == 0) return true;
+    return false;
+}
+
 // --remote-test : orchestrator/server role (spawns a peer child).
 static bool hasRemoteTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
@@ -221,6 +234,40 @@ static bool resolveRemoteWebrtcPeer(int argc, char* argv[], std::string& ip, int
     return false;
 }
 
+// --coord-test : orchestrator role, WebRTC transport through a self-contained
+// test-double coordinator (JEF-27 Task 3). Starts the coordinator on an
+// ephemeral ws port, brings up the host in coordinator mode (create-session),
+// spawns a peer child that joins by code, and asserts the P2P session mirrors
+// play. Forces JEFECHECK_TRANSPORT=webrtc via the same re-exec as the LAN
+// WebRTC harness so the host + loopback transports pick WebRtcTransport.
+static bool hasCoordTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--coord-test") == 0) return true;
+    return false;
+}
+// --coord-test-server : runs ONLY the test-double coordinator (a
+// rtc::WebSocketServer) on an ephemeral port, in its OWN process. It prints
+// "COORD-URL=ws://127.0.0.1:<port>/" on stdout and then serves until killed.
+// The coordinator MUST be its own process: libdatachannel misroutes/drops
+// inbound messages when a WebSocketServer and multiple client rtc::WebSockets
+// (the host's coordinator socket + its loopback client's socket) share one
+// process — matching real-world usage where the coordinator is remote.
+static bool hasCoordTestServer(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--coord-test-server") == 0) return true;
+    return false;
+}
+// --coord-test-peer <coordUrl> <code> : child/joiner role for the coord harness.
+static bool resolveCoordTestPeer(int argc, char* argv[], std::string& url,
+                                 std::string& code) {
+    for (int i = 1; i + 2 < argc; ++i) {
+        if (std::strcmp(argv[i], "--coord-test-peer") == 0 && i + 2 < argc) {
+            url = argv[i + 1]; code = argv[i + 2]; return true;
+        }
+    }
+    return false;
+}
+
 int main(int argc, char* argv[]) {
     // WebRTC-harness transport re-exec (JEF-24 Task 5). The transport factory
     // reads JEFECHECK_TRANSPORT, but `networkManager` is a global whose client
@@ -237,7 +284,9 @@ int main(int argc, char* argv[]) {
         bool webrtcHarness = false;
         for (int i = 1; i < argc; ++i) {
             if (std::strcmp(argv[i], "--remote-test-webrtc") == 0 ||
-                std::strcmp(argv[i], "--remote-test-webrtc-peer") == 0) {
+                std::strcmp(argv[i], "--remote-test-webrtc-peer") == 0 ||
+                std::strcmp(argv[i], "--coord-test") == 0 ||
+                std::strcmp(argv[i], "--coord-test-peer") == 0) {
                 webrtcHarness = true;
                 break;
             }
@@ -269,6 +318,29 @@ int main(int argc, char* argv[]) {
     // rtc::Preload()/Cleanup() internally. Runs before QApplication.
     if (hasSignalTest(argc, argv)) {
         return jefe::net::signalingSelfTest();
+    }
+
+    // Headless cloud-coordinator self-test (--coord-signal-test, JEF-27): pure
+    // codec round-trip for the JEF-25 envelopes plus a bounded loopback against
+    // a scripted rtc::WebSocketServer. Brackets rtc::Preload()/Cleanup()
+    // internally. Runs before QApplication, same as --signal-test.
+    if (hasCoordSignalTest(argc, argv)) {
+        return jefe::net::coordinatorSignalingSelfTest();
+    }
+
+    // Test-double coordinator process (--coord-test-server, JEF-27 Task 3). Runs
+    // ONLY the rtc::WebSocketServer coordinator on an ephemeral port; prints its
+    // URL and serves until killed by the --coord-test orchestrator. Its own
+    // process so it never shares libdatachannel state with the client sockets.
+    if (hasCoordTestServer(argc, argv)) {
+        jefe::net::TestCoordinator coordinator;
+        if (!coordinator.start()) {
+            std::fprintf(stderr, "COORD-URL=ERROR\n");
+            return 3;
+        }
+        std::printf("COORD-URL=%s\n", coordinator.url().c_str());
+        std::fflush(stdout);
+        for (;;) std::this_thread::sleep_for(std::chrono::seconds(3600));
     }
 
     // Make Qt's accessibility bridge live before QApplication touches
@@ -460,6 +532,107 @@ int main(int argc, char* argv[]) {
         peer.waitForFinished(6000);
         if (peer.state() != QProcess::NotRunning) peer.kill();
         printf("REMOTE-TEST-WEBRTC: participants=%d mirrored_play=%d\n", peak, sawPlay ? 1 : 0);
+        fflush(stdout);
+        std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
+    }
+
+    // --coord-test-peer <coordUrl> <code>: WebRTC joiner child role for the
+    // cloud-coordinator harness. WebRTC is already forced by the re-exec at the
+    // top of main(); this joins the coordinator by code and toggles play. holdMs
+    // + connectTimeoutMs mirror the LAN WebRTC peer (coordinator + ICE + DTLS +
+    // datachannel must all complete before the one-shot play toggle can ship).
+    {
+        std::string coordUrl, code;
+        if (resolveCoordTestPeer(argc, argv, coordUrl, code)) {
+            jefe::qt::initializeRenderingChain();
+            jefe::qt::coordTestPeerJoin(coordUrl, code, /*holdMs=*/6000,
+                                        /*play=*/true, /*connectTimeoutMs=*/12000);
+            std::_Exit(0);
+        }
+    }
+    if (hasCoordTest(argc, argv)) {
+        // WebRTC is already forced by the re-exec at the top of main().
+        jefe::qt::initializeRenderingChain();
+
+        // 1. Spawn the test-double coordinator as its OWN process (see
+        //    --coord-test-server) and read the ephemeral ws URL it prints. It
+        //    MUST be a separate process: a co-located WebSocketServer + the two
+        //    client rtc::WebSockets the host opens (its coordinator socket + the
+        //    loopback client's) trip a libdatachannel message-routing bug. A
+        //    remote coordinator is also what real usage looks like.
+        QProcess coord;
+        coord.setProgram(QCoreApplication::applicationFilePath());
+        coord.setArguments({"--coord-test-server"});
+        coord.start();
+        if (!coord.waitForStarted(3000)) {
+            printf("COORD-TEST: coordinator failed to start: %s\n",
+                   coord.errorString().toUtf8().constData());
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        std::string coordUrl;
+        {
+            QByteArray acc;
+            const auto deadline = std::chrono::steady_clock::now() +
+                                  std::chrono::seconds(5);
+            // The child emits unrelated stdout ("No timer") before COORD-URL=,
+            // so scan every complete line for the marker until found or timeout.
+            while (coordUrl.empty() &&
+                   std::chrono::steady_clock::now() < deadline) {
+                if (coord.waitForReadyRead(200)) acc += coord.readAllStandardOutput();
+                int nl;
+                while ((nl = acc.indexOf('\n')) >= 0) {
+                    const QByteArray line = acc.left(nl);
+                    acc = acc.mid(nl + 1);
+                    if (line.startsWith("COORD-URL=")) {
+                        coordUrl = line.mid(int(std::strlen("COORD-URL=")))
+                                       .trimmed().toStdString();
+                        break;
+                    }
+                }
+            }
+        }
+        if (coordUrl.empty() || coordUrl == "ERROR") {
+            printf("COORD-TEST: coordinator URL not received\n");
+            fflush(stdout);
+            if (coord.state() != QProcess::NotRunning) coord.kill();
+            std::_Exit(3);
+        }
+
+        // 2. Bring the host up in coordinator mode (create-session → assigned
+        //    code) and wait for its loopback client to fully register (its P2P
+        //    channel open both ways) BEFORE the peer exists — same one-shot-play
+        //    race fix as the LAN WebRTC harness.
+        if (!jefe::qt::coordTestHostStart(coordUrl, /*loopbackTimeoutMs=*/12000)) {
+            printf("COORD-TEST: host/loopback failed to come up (code=%s)\n",
+                   jefe::qt::coordTestGetCode().c_str());
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        const std::string code = jefe::qt::coordTestGetCode();
+
+        // 3. Spawn the peer child. It joins the SAME coordinator by the assigned
+        //    code and, once its P2P session is up, toggles play (mirrored to the
+        //    host over the P2P channel → forwarded to the loopback → isPlaying()).
+        QProcess peer;
+        peer.setProgram(QCoreApplication::applicationFilePath());
+        peer.setArguments({"--coord-test-peer",
+                           QString::fromStdString(coordUrl),
+                           QString::fromStdString(code)});
+        QProcessEnvironment childEnv = QProcessEnvironment::systemEnvironment();
+        childEnv.insert("JEFECHECK_TRANSPORT", "webrtc");
+        peer.setProcessEnvironment(childEnv);
+        if (qEnvironmentVariableIsSet("JEFECHECK_REMOTE_TEST_DEBUG"))
+            peer.setProcessChannelMode(QProcess::ForwardedChannels);
+        peer.start();
+        if (!peer.waitForStarted(2000)) { printf("COORD-TEST: child failed to start: %s\n", peer.errorString().toUtf8().constData()); fflush(stdout); std::_Exit(3); }
+
+        const bool sawPlay = jefe::qt::coordTestSettleForPlay(/*settleMs=*/12000);
+        const int  peak    = (int)jefe::qt::remoteParticipants().size();
+        peer.waitForFinished(8000);
+        if (peer.state() != QProcess::NotRunning) peer.kill();
+        if (coord.state() != QProcess::NotRunning) coord.kill();
+        printf("COORD-TEST: participants=%d mirrored_play=%d\n", peak, sawPlay ? 1 : 0);
         fflush(stdout);
         std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
     }

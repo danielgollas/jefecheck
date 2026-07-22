@@ -49,6 +49,15 @@ public:
     int getConnectionCount();
     std::vector<std::string> getParticipantNames();
 
+    // JEF-27 cloud-coordinator hosting accessors.
+    bool getCoordinatorMode() const { return coordinatorMode; }
+    std::string getCoordinatorUrl() const { return coordinatorUrl; }
+    // The session code the coordinator assigned this host (empty until the
+    // create-session round-trip completes, or when not in coordinator mode).
+    std::string getAssignedSessionCode() {
+        return transport_ ? transport_->assignedSessionCode() : std::string();
+    }
+
     void sendChatMessage(unsigned char type, std::string sender, std::string message, int color = 0);
 
     void disableGUI();
@@ -59,6 +68,8 @@ public:
     std::string name;
     std::unique_ptr<jefe::net::ITransport> transport_;
     std::string password;
+    bool coordinatorMode = false;
+    std::string coordinatorUrl;
     unsigned int ConnectionCount();
     gfcNetworkLog* log;
 

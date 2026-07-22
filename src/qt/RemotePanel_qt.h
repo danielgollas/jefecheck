@@ -8,6 +8,7 @@
 
 #include <QWidget>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,19 @@ private:
     void onDisconnectClicked();
     void onChatSubmit();   // send the chat input field's text
 
+    // JEF-27 Cloud mode. Create/Join both run the (potentially 5s-blocking)
+    // coordinator connect on a detached worker thread and marshal the result
+    // back to onCloudConnectFinished on the GUI thread via a queued invoke
+    // (guarded by a QPointer so a mid-connect dialog close can't crash).
+    void onCreateCloudClicked();
+    void onJoinCloudClicked();
+    void onCloudConnectFinished(bool wasHost);
+    void copySessionCodeToClipboard();   // copies remoteSessionCode() to clipboard
+    // Runs `work` (a blocking coordinator connect) on a detached worker thread
+    // and queues onCloudConnectFinished(wasHost) back on the GUI thread, guarded
+    // by a QPointer so a mid-connect close can't dangle.
+    void launchCloudConnect(bool wasHost, std::function<void()> work);
+
     // Appends only the log lines past `shownCount` to `view` (append-only
     // fast path that preserves scroll/selection); rebuilds if the source
     // shrank. Updates `shownCount` in place.
@@ -73,13 +87,27 @@ private:
 
     // Contextual sections: connect forms show when disconnected, the session
     // (participants + chat) shows when connected. Toggled in refreshConnectionState.
-    QWidget*     connectPanel_ = nullptr;  // segmented Host/Join toggle + forms
+    QWidget*     connectPanel_ = nullptr;  // segmented Host/Cloud/Join toggle + forms
     QPushButton* hostToggle_ = nullptr;    // segmented control (Host)
+    QPushButton* cloudToggle_ = nullptr;   // segmented control (Cloud) — JEF-27
     QPushButton* joinToggle_ = nullptr;    // segmented control (Join)
     QWidget*     hostForm_ = nullptr;
+    QWidget*     cloudForm_ = nullptr;
     QWidget*     joinForm_ = nullptr;
     QWidget*     sessionBox_ = nullptr;    // participants + chat + disconnect
     QLabel*      participantsHeader_ = nullptr;
+
+    // Cloud (coordinator) form widgets — JEF-27.
+    QLineEdit*   cloudCoordUrlEdit_ = nullptr;    // coordinator URL (create + join)
+    QPushButton* cloudCreateBtn_ = nullptr;       // "Create session"
+    QLineEdit*   cloudSessionCodeEdit_ = nullptr; // read-only assigned code
+    QPushButton* cloudCopyBtn_ = nullptr;         // copy code to clipboard
+    QLineEdit*   cloudJoinCodeEdit_ = nullptr;    // session code to join
+    QLineEdit*   cloudJoinNameEdit_ = nullptr;    // nickname
+    QPushButton* cloudJoinBtn_ = nullptr;         // "Join by code"
+    // Session-view banner keeping the code visible to a connected cloud host.
+    QWidget*     cloudCodeBanner_ = nullptr;
+    QLabel*      cloudCodeBannerLabel_ = nullptr;
 
     // Live state widgets (refreshed by refreshConnectionState).
     QListWidget* participantsList_ = nullptr;

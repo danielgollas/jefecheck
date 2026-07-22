@@ -3,6 +3,8 @@
 #include "CollapsibleSection_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGroupBox>
@@ -10,9 +12,12 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPointer>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSettings>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QSysInfo>
@@ -20,6 +25,8 @@
 #include <QTextEdit>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <thread>
 
 namespace {
 
@@ -64,6 +71,9 @@ const char* kRemoteStyle = R"(
 }
 #panel_remote QPushButton[segment="true"][segpos="left"] {
     border-top-left-radius: 6px; border-bottom-left-radius: 6px;
+}
+#panel_remote QPushButton[segment="true"][segpos="mid"] {
+    border-radius: 0; border-left: none;
 }
 #panel_remote QPushButton[segment="true"][segpos="right"] {
     border-top-right-radius: 6px; border-bottom-right-radius: 6px; border-left: none;
@@ -156,6 +166,85 @@ QLabel* sectionLabel(const QString& text, QWidget* parent) {
     return l;
 }
 
+// Default coordinator URL: env JEFECHECK_COORDINATOR_URL wins, else the
+// QSettings "Remote/coordinatorUrl" the last successful connect saved, else "".
+QString defaultCoordinatorUrl() {
+    const QString env = QProcessEnvironment::systemEnvironment().value(
+        "JEFECHECK_COORDINATOR_URL");
+    if (!env.isEmpty()) return env;
+    return QSettings().value("Remote/coordinatorUrl").toString();
+}
+
+// Build the Cloud (coordinator) form: a shared coordinator URL, a "Create
+// session" area (button + read-only assigned code + Copy), and a "Join by code"
+// area (code + nickname + Join). Exposes its fields via the out-params.
+QWidget* makeCloudPage(QLineEdit*& coordUrlOut, QPushButton*& createBtnOut,
+                       QLineEdit*& codeOut, QPushButton*& copyBtnOut,
+                       QLineEdit*& joinCodeOut, QLineEdit*& joinNameOut,
+                       QPushButton*& joinBtnOut) {
+    auto* page = new QWidget();
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(12, 14, 12, 12);
+    v->setSpacing(9);
+
+    coordUrlOut = new QLineEdit(page);
+    coordUrlOut->setObjectName("remote.cloud.coordinatorUrl");
+    coordUrlOut->setPlaceholderText("wss://coordinator.example/…");
+    coordUrlOut->setText(defaultCoordinatorUrl());
+    auto* urlForm = new QFormLayout();
+    urlForm->setContentsMargins(0, 0, 0, 0);
+    urlForm->setSpacing(9);
+    urlForm->addRow("Coordinator", coordUrlOut);
+    v->addLayout(urlForm);
+
+    // --- Create -----------------------------------------------------------
+    v->addWidget(sectionLabel("Create a session", page));
+    createBtnOut = new QPushButton("Create session", page);
+    createBtnOut->setObjectName("remote.cloud.createBtn");
+    createBtnOut->setProperty("accent", true);
+    v->addWidget(createBtnOut);
+
+    codeOut = new QLineEdit(page);
+    codeOut->setObjectName("remote.cloud.sessionCode");
+    codeOut->setReadOnly(true);
+    codeOut->setPlaceholderText("Session code appears here");
+    copyBtnOut = new QPushButton("Copy", page);
+    copyBtnOut->setObjectName("remote.cloud.copyBtn");
+    copyBtnOut->setEnabled(false);
+    auto* codeRow = new QHBoxLayout();
+    codeRow->setContentsMargins(0, 0, 0, 0);
+    codeRow->setSpacing(6);
+    codeRow->addWidget(codeOut, /*stretch*/ 1);
+    codeRow->addWidget(copyBtnOut);
+    v->addLayout(codeRow);
+
+    // --- Divider ----------------------------------------------------------
+    auto* divider = new QFrame(page);
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet("color:#3a3a40;");
+    v->addWidget(divider);
+
+    // --- Join -------------------------------------------------------------
+    v->addWidget(sectionLabel("Join by code", page));
+    joinCodeOut = new QLineEdit(page);
+    joinCodeOut->setObjectName("remote.cloud.joinCodeEdit");
+    joinCodeOut->setPlaceholderText("Session code");
+    joinNameOut = new QLineEdit(page);
+    joinNameOut->setObjectName("remote.cloud.joinName");
+    joinNameOut->setPlaceholderText("Your nickname");
+    joinBtnOut = new QPushButton("Join by code", page);
+    joinBtnOut->setObjectName("remote.cloud.joinBtn");
+    joinBtnOut->setProperty("accent", true);
+    auto* joinForm = new QFormLayout();
+    joinForm->setContentsMargins(0, 0, 0, 0);
+    joinForm->setSpacing(9);
+    joinForm->addRow("Code", joinCodeOut);
+    joinForm->addRow("Nickname", joinNameOut);
+    joinForm->addRow(QString(), joinBtnOut);
+    v->addLayout(joinForm);
+    return page;
+}
+
 }  // namespace
 
 RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
@@ -178,31 +267,41 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     // sizes to the visible form (no dead space; avoids QTabWidget's stacked
     // layout always sizing to the tallest page).
     hostToggle_ = new QPushButton("Host", this);
+    cloudToggle_ = new QPushButton("Cloud", this);
     joinToggle_ = new QPushButton("Join", this);
-    for (auto* b : {hostToggle_, joinToggle_}) {
+    for (auto* b : {hostToggle_, cloudToggle_, joinToggle_}) {
         b->setCheckable(true);
         b->setProperty("segment", true);
         b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     }
     hostToggle_->setObjectName("remote.toggle.host");
+    cloudToggle_->setObjectName("remote.toggle.cloud");
     joinToggle_->setObjectName("remote.toggle.join");
     hostToggle_->setProperty("segpos", "left");
+    cloudToggle_->setProperty("segpos", "mid");
     joinToggle_->setProperty("segpos", "right");
     hostToggle_->setChecked(true);
     auto* segRow = new QHBoxLayout();
     segRow->setContentsMargins(0, 0, 0, 0);
     segRow->setSpacing(0);
     segRow->addWidget(hostToggle_);
+    segRow->addWidget(cloudToggle_);
     segRow->addWidget(joinToggle_);
 
     hostForm_ = makeHostPage(serverNameEdit_, serverPortSpin_,
                              serverPasswordEdit_, startServerBtn_);
+    cloudForm_ = makeCloudPage(cloudCoordUrlEdit_, cloudCreateBtn_,
+                               cloudSessionCodeEdit_, cloudCopyBtn_,
+                               cloudJoinCodeEdit_, cloudJoinNameEdit_,
+                               cloudJoinBtn_);
     joinForm_ = makeJoinPage(clientNameEdit_, clientIPEdit_, clientPortSpin_,
                              clientPasswordEdit_, connectClientBtn_);
-    hostForm_->setProperty("card", true);
-    joinForm_->setProperty("card", true);
-    hostForm_->setAttribute(Qt::WA_StyledBackground, true);  // paint QSS bg on plain QWidget
-    joinForm_->setAttribute(Qt::WA_StyledBackground, true);
+    cloudJoinNameEdit_->setText(QSysInfo::machineHostName());
+    for (auto* f : {hostForm_, cloudForm_, joinForm_}) {
+        f->setProperty("card", true);
+        f->setAttribute(Qt::WA_StyledBackground, true);  // paint QSS bg on plain QWidget
+    }
+    cloudForm_->setVisible(false);
     joinForm_->setVisible(false);
 
     connectPanel_ = new QWidget(this);
@@ -212,16 +311,21 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     connectLayout->setSpacing(0);
     connectLayout->addLayout(segRow);
     connectLayout->addWidget(hostForm_);
+    connectLayout->addWidget(cloudForm_);
     connectLayout->addWidget(joinForm_);
 
-    auto selectHost = [this](bool host) {
-        hostToggle_->setChecked(host);
-        joinToggle_->setChecked(!host);
-        hostForm_->setVisible(host);
-        joinForm_->setVisible(!host);
+    // 0 = Host, 1 = Cloud, 2 = Join.
+    auto selectMode = [this](int mode) {
+        hostToggle_->setChecked(mode == 0);
+        cloudToggle_->setChecked(mode == 1);
+        joinToggle_->setChecked(mode == 2);
+        hostForm_->setVisible(mode == 0);
+        cloudForm_->setVisible(mode == 1);
+        joinForm_->setVisible(mode == 2);
     };
-    connect(hostToggle_, &QPushButton::clicked, this, [selectHost]() { selectHost(true); });
-    connect(joinToggle_, &QPushButton::clicked, this, [selectHost]() { selectHost(false); });
+    connect(hostToggle_,  &QPushButton::clicked, this, [selectMode]() { selectMode(0); });
+    connect(cloudToggle_, &QPushButton::clicked, this, [selectMode]() { selectMode(1); });
+    connect(joinToggle_,  &QPushButton::clicked, this, [selectMode]() { selectMode(2); });
 
     // ---- Session section (shown when connected) --------------------------
     participantsHeader_ = sectionLabel("Participants", this);
@@ -280,11 +384,33 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     errorLabel_->setStyleSheet("color:#e0836c;");
     errorLabel_->setWordWrap(true);
 
+    // Cloud-host code banner: keeps the assigned session code visible (with a
+    // Copy button) while connected, so the host can keep inviting peers. Shown
+    // only when connected as a cloud host (remoteSessionCode() non-empty).
+    cloudCodeBanner_ = new QWidget(this);
+    cloudCodeBanner_->setObjectName("remote.cloud.codeBanner");
+    cloudCodeBanner_->setProperty("card", true);
+    cloudCodeBanner_->setAttribute(Qt::WA_StyledBackground, true);
+    cloudCodeBannerLabel_ = new QLabel(QString(), cloudCodeBanner_);
+    cloudCodeBannerLabel_->setObjectName("remote.cloud.codeBanner.label");
+    cloudCodeBannerLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    auto* bannerCopyBtn = new QPushButton("Copy", cloudCodeBanner_);
+    bannerCopyBtn->setObjectName("remote.cloud.codeBanner.copyBtn");
+    auto* bannerLay = new QHBoxLayout(cloudCodeBanner_);
+    bannerLay->setContentsMargins(10, 6, 8, 6);
+    bannerLay->setSpacing(6);
+    bannerLay->addWidget(cloudCodeBannerLabel_, /*stretch*/ 1);
+    bannerLay->addWidget(bannerCopyBtn);
+    cloudCodeBanner_->setVisible(false);
+    connect(bannerCopyBtn, &QPushButton::clicked,
+            this, &RemoteDialog_Qt::copySessionCodeToClipboard);
+
     sessionBox_ = new QWidget(this);
     auto* sessionLayout = new QVBoxLayout(sessionBox_);
     sessionLayout->setContentsMargins(0, 0, 0, 0);
     sessionLayout->setSpacing(6);
     sessionLayout->addLayout(sessionHeader);
+    sessionLayout->addWidget(cloudCodeBanner_);
     sessionLayout->addWidget(participantsList_);
     sessionLayout->addWidget(chatHeader);
     sessionLayout->addWidget(chatScroll_, /*stretch*/ 1);
@@ -338,10 +464,21 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
             this, &RemoteDialog_Qt::onStartServerClicked);
     connect(connectClientBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::onConnectClientClicked);
+    connect(cloudCreateBtn_, &QPushButton::clicked,
+            this, &RemoteDialog_Qt::onCreateCloudClicked);
+    connect(cloudJoinBtn_, &QPushButton::clicked,
+            this, &RemoteDialog_Qt::onJoinCloudClicked);
+    connect(cloudCopyBtn_, &QPushButton::clicked,
+            this, &RemoteDialog_Qt::copySessionCodeToClipboard);
     connect(disconnectBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::onDisconnectClicked);
     connect(chatInput_, &QLineEdit::returnPressed,
             this, &RemoteDialog_Qt::onChatSubmit);
+
+    // Latch the bridge shutdown flag on app quit so a detached cloud-connect
+    // worker still in flight won't touch networkManager as globals tear down.
+    connect(qApp, &QCoreApplication::aboutToQuit, this,
+            []() { jefe::qt::beginBridgeShutdown(); });
 
     refreshConnectionState();
 }
@@ -375,7 +512,109 @@ void RemoteDialog_Qt::onConnectClientClicked() {
 
 void RemoteDialog_Qt::onDisconnectClicked() {
     jefe::qt::disconnectRemote();
+    // Clear the last cloud code so a fresh Create shows a fresh code.
+    cloudSessionCodeEdit_->clear();
+    cloudCopyBtn_->setEnabled(false);
     refreshConnectionState();
+}
+
+// --- Cloud (coordinator) mode — JEF-27 --------------------------------------
+
+// Runs the (potentially 5s-blocking) coordinator connect `work` on a detached
+// worker thread so the Qt event loop keeps running, then marshals a call to
+// onCloudConnectFinished(wasHost) back onto the GUI thread. A QPointer guards
+// against the dialog being destroyed mid-connect (no use-after-free): if the
+// dialog is gone when the worker finishes, the queued lambda is a no-op.
+void RemoteDialog_Qt::launchCloudConnect(bool wasHost, std::function<void()> work) {
+    QPointer<RemoteDialog_Qt> guard(this);
+    std::thread([guard, wasHost, work = std::move(work)]() {
+        work();   // blocks off the GUI thread
+        // Marshal back onto the GUI thread. qApp is the context object (it
+        // lives on the main thread), so the lambda runs there; the QPointer
+        // tells us whether the dialog is still alive.
+        QMetaObject::invokeMethod(qApp, [guard, wasHost]() {
+            if (guard) guard->onCloudConnectFinished(wasHost);
+        }, Qt::QueuedConnection);
+    }).detach();
+}
+
+void RemoteDialog_Qt::onCreateCloudClicked() {
+    const QString url = cloudCoordUrlEdit_->text().trimmed();
+    if (url.isEmpty()) {
+        errorLabel_->setText("Enter a coordinator URL to create a session.");
+        return;
+    }
+    QSettings().setValue("Remote/coordinatorUrl", url);
+
+    // Disable both actions + show progress; the worker re-enables on finish.
+    cloudCreateBtn_->setEnabled(false);
+    cloudJoinBtn_->setEnabled(false);
+    cloudCreateBtn_->setText("Creating session…");
+    errorLabel_->clear();
+    shownStatusText_.clear();   // force the status label to repaint
+    statusLabel_->setText("Creating session…");
+
+    jefe::qt::RemoteCloudHostParams p;
+    p.coordinatorUrl = url.toStdString();
+    launchCloudConnect(/*wasHost*/ true, [p]() { jefe::qt::connectAsCloudHost(p); });
+}
+
+void RemoteDialog_Qt::onJoinCloudClicked() {
+    const QString url  = cloudCoordUrlEdit_->text().trimmed();
+    const QString code = cloudJoinCodeEdit_->text().trimmed();
+    if (url.isEmpty()) {
+        errorLabel_->setText("Enter a coordinator URL to join.");
+        return;
+    }
+    if (code.isEmpty()) {
+        errorLabel_->setText("Enter a session code to join.");
+        return;
+    }
+    QSettings().setValue("Remote/coordinatorUrl", url);
+
+    cloudCreateBtn_->setEnabled(false);
+    cloudJoinBtn_->setEnabled(false);
+    cloudJoinBtn_->setText("Joining…");
+    errorLabel_->clear();
+    shownStatusText_.clear();
+    statusLabel_->setText("Joining session…");
+
+    jefe::qt::RemoteCloudJoinParams p;
+    p.clientName     = cloudJoinNameEdit_->text().toStdString();
+    p.coordinatorUrl = url.toStdString();
+    p.sessionCode    = code.toStdString();
+    launchCloudConnect(/*wasHost*/ false, [p]() { jefe::qt::connectAsCloudClient(p); });
+}
+
+void RemoteDialog_Qt::onCloudConnectFinished(bool wasHost) {
+    // Restore the buttons regardless of outcome.
+    cloudCreateBtn_->setEnabled(true);
+    cloudJoinBtn_->setEnabled(true);
+    cloudCreateBtn_->setText("Create session");
+    cloudJoinBtn_->setText("Join by code");
+
+    QString failMsg;
+    if (wasHost) {
+        const QString code = QString::fromStdString(jefe::qt::remoteSessionCode());
+        if (!code.isEmpty()) {
+            cloudSessionCodeEdit_->setText(code);
+            cloudCopyBtn_->setEnabled(true);
+        } else {
+            failMsg = "The coordinator did not assign a session code (timed out). "
+                      "Check the coordinator URL and try again.";
+        }
+    }
+    shownStatusText_.clear();   // status text may not have changed string-wise
+    // refreshConnectionState() rewrites errorLabel_ from remoteErrors(), so set
+    // our own failure message AFTER it (only when the backend surfaced none).
+    refreshConnectionState();
+    if (!failMsg.isEmpty() && errorLabel_->text().isEmpty())
+        errorLabel_->setText(failMsg);
+}
+
+void RemoteDialog_Qt::copySessionCodeToClipboard() {
+    const QString code = QString::fromStdString(jefe::qt::remoteSessionCode());
+    if (!code.isEmpty()) QApplication::clipboard()->setText(code);
 }
 
 void RemoteDialog_Qt::refreshConnectionState() {
@@ -403,6 +642,17 @@ void RemoteDialog_Qt::refreshConnectionState() {
     sessionBox_->setVisible(connected);
     // Host ends the session for everyone; a client just leaves it.
     disconnectBtn_->setText(isServer ? "End Session" : "Leave");
+
+    // Cloud-host code banner: visible only when we're a connected cloud host
+    // (remoteSessionCode() is non-empty only in coordinator hosting mode).
+    const QString cloudCode = connected && isServer
+        ? QString::fromStdString(jefe::qt::remoteSessionCode())
+        : QString();
+    const bool showBanner = !cloudCode.isEmpty();
+    cloudCodeBanner_->setVisible(showBanner);
+    if (showBanner)
+        cloudCodeBannerLabel_->setText(
+            QStringLiteral("Session code: <b>%1</b>").arg(cloudCode.toHtmlEscaped()));
 
     // Participants change only on join/leave (which changes the count), so
     // rebuild the list only when the count moved — not on every packet.

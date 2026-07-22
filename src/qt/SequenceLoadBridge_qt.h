@@ -375,6 +375,46 @@ struct RemoteClientParams {
 
 void connectAsServer(const RemoteServerParams& params);
 void connectAsClient(const RemoteClientParams& params);
+
+// JEF-27 cloud coordinator mode. Cloud host: dials the coordinator URL and
+// asks it to create a session (the port is ignored); the assigned short code
+// is surfaced via remoteSessionCode() once it arrives. Cloud client: dials the
+// coordinator and joins by that code. Both funnel into
+// gfcNetworkManager::startServer / startConnection with coordinatorMode set.
+//
+// WARNING: connectAsCloudHost BLOCKS for up to ~5s waiting for the coordinator
+// to assign the session code (gfcNetworkManager::startServer's bounded wait).
+// Callers MUST invoke it OFF the GUI thread (QtConcurrent / a worker) so the Qt
+// event loop keeps running, then marshal the result back to the UI thread.
+struct RemoteCloudHostParams {
+    std::string coordinatorUrl;
+    std::string password;
+};
+
+struct RemoteCloudJoinParams {
+    std::string clientName;
+    std::string coordinatorUrl;
+    std::string sessionCode;
+    std::string password;
+};
+
+void connectAsCloudHost(const RemoteCloudHostParams& params);
+void connectAsCloudClient(const RemoteCloudJoinParams& params);
+
+// The coordinator-assigned session code (empty when not a cloud host or before
+// the code has been assigned). Reads gfcNetworkManager::getAssignedSessionCode.
+std::string remoteSessionCode();
+
+// True while a cloud connect (connectAsCloudHost/Client) is running on a worker
+// thread and owns the networkManager. GUI-thread manager readers (the remote
+// getters, drawNetworkOverlay) honor this and no-op; GlViewport_qt checks it so
+// its paintGL overlay call can skip too. See gCloudConnectInFlight in the .cpp.
+bool cloudConnectInFlight();
+
+// Latches an app-shutdown flag (wire to QCoreApplication::aboutToQuit) so a
+// detached cloud-connect worker won't touch networkManager as globals tear down.
+void beginBridgeShutdown();
+
 void disconnectRemote();
 
 // Headless two-process connection smoke-test helpers (--remote-test).
@@ -388,6 +428,14 @@ bool remoteTestServerSawPlay(int port, int settleMs);
 // rationale): start + await the loopback client, then settle for the peer's play.
 bool remoteTestServerStart(int port, int loopbackTimeoutMs);
 bool remoteTestServerSettleForPlay(int settleMs);
+// JEF-27 Task 3: --coord-test cloud-coordinator E2E helpers. Host role: start in
+// coordinator mode (create-session), wait for the assigned code + loopback client
+// to come up. Peer role: join by code, hold, toggle play. See the .cpp.
+bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs);
+std::string coordTestGetCode();
+void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
+                       int holdMs, bool play, int connectTimeoutMs = 12000);
+bool coordTestSettleForPlay(int settleMs);
 bool isRemoteConnected();
 bool isRemoteServer();
 std::vector<std::string> remoteParticipants();
