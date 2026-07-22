@@ -50,6 +50,25 @@
 // callbacks BEFORE connect(). rtc objects require rtc::Preload()/Cleanup()
 // bracketing at the process level or libdatachannel segfaults at exit.
 //
+// ── Reconnect / backoff (JEF-27 Task 5) ──────────────────────────────────────
+// If the coordinator socket closes UNEXPECTEDLY (onClosed without a deliberate
+// close()/leave()), a bounded exponential-backoff reconnect loop re-dials the
+// same URL on a dedicated background thread (1s, 2s, 4s … capped at 30s, up to
+// kMaxReconnectAttempts, then gives up with onError("reconnect-failed",…)). A
+// deliberate close()/leave() sets an intentional-close flag that cancels/skips
+// reconnect and wakes a sleeping loop. reconnectStatus() exposes the state
+// ("idle"/"connecting"/"connected"/"reconnecting"/"failed"/"closed").
+//
+// DESIGN PRINCIPLE (design spec §5): the coordinator is a rendezvous needed for
+// JOIN and RECONNECT only. Once peers hold a P2P DataChannel, a coordinator drop
+// must NOT kill the established session — this class owns ONLY the coordinator
+// WebSocket; it never touches the P2P PeerConnections (those live in
+// WebRtcTransport and continue independently). Phase-1 limitation: on reconnect
+// success the signaling channel is restored but session MEMBERSHIP is NOT
+// resumed (the protocol has no resume/re-announce). So reconnect does NOT re-fire
+// onOpen (which would create a NEW session with a fresh code / re-join) — it just
+// restores the socket and logs. See developer_notes §34.
+//
 // This TU must NOT include Qt/GL headers (developer_notes §1).
 #pragma once
 
@@ -149,6 +168,10 @@ public:
     bool joinSession(const std::string& code);
     bool sendSignal(const std::string& toPeerId, const SignalMessage& msg);
     bool leave();
+
+    // Current reconnect/backoff state (thread-safe). One of "idle",
+    // "connecting", "connected", "reconnecting", "failed", "closed".
+    std::string reconnectStatus();
 
 private:
     struct Impl;

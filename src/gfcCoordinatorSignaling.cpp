@@ -260,7 +260,7 @@ bool parseServerMsg(const std::string& json, CoordServerMessage& out) {
 // ── CoordinatorSignaling ─────────────────────────────────────────────────────
 
 struct CoordinatorSignaling::Impl {
-    std::mutex mtx;  // guards ws
+    std::mutex mtx;  // guards ws + reconnect bookkeeping (url/attempt/state/thread)
     std::shared_ptr<rtc::WebSocket> ws;
 
     std::function<void()> onOpenFn;
@@ -271,6 +271,174 @@ struct CoordinatorSignaling::Impl {
     std::function<void(std::string)> onPeerLeftFn;
     std::function<void(std::vector<std::string>, std::string)> onRosterFn;
     std::function<void(std::string, SignalMessage)> onSignalFn;
+
+    // ── JEF-27 Task 5: bounded reconnect / backoff ──────────────────────────
+    // The reconnect loop runs on its OWN thread and only ever re-dials THIS
+    // coordinator WebSocket. It never touches the P2P PeerConnections (those
+    // live in WebRtcTransport and survive a coordinator drop — design spec §5).
+    std::string url;                          // guarded by mtx: the dialled URL
+    std::atomic<bool> intentionalClose{false};  // close()/leave() => no reconnect
+    std::atomic<bool> connected{false};       // socket currently open
+    bool reconnecting = false;                // guarded by mtx: a loop is live
+    std::string reconnectState = "idle";      // guarded by mtx
+    int reconnectAttempt = 0;                  // guarded by mtx
+    std::thread reconnectThread;              // guarded by mtx
+    std::mutex reconnectMtx;                  // pairs with reconnectCv (sleep only)
+    std::condition_variable reconnectCv;      // wakes the loop on close()/success
+
+    static constexpr int kMaxReconnectAttempts = 6;
+    static constexpr long kBaseDelayMs = 1000;   // 1s, 2s, 4s, …
+    static constexpr long kCapDelayMs = 30000;   // capped at 30s
+    static constexpr long kConnectWaitMs = 5000; // window to confirm a re-dial
+
+    // Create + wire a fresh rtc::WebSocket and open(url). isReconnect gates
+    // whether onOpenFn fires (see handleOpen).
+    bool openSocket(const std::string& u, bool isReconnect) {
+        std::shared_ptr<rtc::WebSocket> sock;
+        try {
+            sock = std::make_shared<rtc::WebSocket>();
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "CoordinatorSignaling: create failed: %s\n", e.what());
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            ws = sock;
+        }
+        Impl* d = this;
+        sock->onOpen([d, isReconnect]() { d->handleOpen(isReconnect); });
+        sock->onMessage(
+            [](rtc::binary) { /* coordinator is text-only */ },
+            [d](rtc::string msg) { d->dispatch(msg); });
+        sock->onClosed([d]() { d->handleClosed(); });
+        sock->onError([d](std::string e) { d->handleError(e); });
+        try {
+            sock->open(u);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "CoordinatorSignaling: open failed: %s\n", e.what());
+            return false;
+        }
+        return true;
+    }
+
+    void handleOpen(bool isReconnect) {
+        connected.store(true);
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            reconnectAttempt = 0;
+            reconnectState = "connected";
+        }
+        reconnectCv.notify_all();  // let a waiting reconnect loop confirm success
+        if (isReconnect) {
+            std::fprintf(stderr,
+                "CoordinatorSignaling: reconnected to coordinator (signaling "
+                "channel restored; phase-1 does NOT resume session membership — "
+                "see developer_notes §34)\n");
+            // Deliberately DO NOT fire onOpenFn on a reconnect: the host's onOpen
+            // create-session's (fresh code) and the joiner's re-joins — neither
+            // is correct on a transient drop. The established P2P DataChannel is
+            // what carries the session and it lives independently of this socket.
+            return;
+        }
+        if (onOpenFn) onOpenFn();
+    }
+
+    void handleClosed() {
+        connected.store(false);
+        if (onClosedFn) onClosedFn();  // informational (transport doesn't wire it)
+        scheduleReconnect();
+    }
+
+    void handleError(const std::string& e) {
+        if (onErrorFn) onErrorFn("transport", e);
+        // onClosed typically follows a transport error and drives the reconnect.
+    }
+
+    // Fired from a libdatachannel thread (handleClosed). Starts the reconnect
+    // loop unless a deliberate close()/leave() is in progress or the attempt
+    // budget is spent. Thread-safe against a concurrent close() (which sets
+    // intentionalClose BEFORE moving the thread under mtx; we re-check it here
+    // under the same lock so a thread is never orphaned).
+    void scheduleReconnect() {
+        if (intentionalClose.load()) return;
+        std::thread stale;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            if (intentionalClose.load()) return;  // re-check under lock
+            if (reconnecting) return;             // a loop is already running
+            if (url.empty()) return;
+            if (reconnectAttempt >= kMaxReconnectAttempts) {
+                reconnectState = "failed";
+                return;
+            }
+            // Reap a previously-finished loop's thread before starting a new one.
+            if (reconnectThread.joinable()) stale = std::move(reconnectThread);
+            reconnecting = true;
+            reconnectState = "reconnecting";
+            reconnectThread = std::thread([this]() { reconnectLoop(); });
+        }
+        if (stale.joinable()) stale.join();
+    }
+
+    void reconnectLoop() {
+        for (;;) {
+            if (intentionalClose.load()) break;
+            int attempt;
+            std::string u;
+            {
+                std::lock_guard<std::mutex> lk(mtx);
+                attempt = ++reconnectAttempt;
+                u = url;
+                if (attempt > kMaxReconnectAttempts) break;
+            }
+            long delay = kBaseDelayMs << (attempt - 1);
+            if (delay > kCapDelayMs || delay <= 0) delay = kCapDelayMs;
+            {
+                std::unique_lock<std::mutex> lk(reconnectMtx);
+                reconnectCv.wait_for(lk, std::chrono::milliseconds(delay),
+                                     [this]() { return intentionalClose.load(); });
+            }
+            if (intentionalClose.load()) break;
+
+            std::fprintf(stderr,
+                "CoordinatorSignaling: reconnect attempt %d/%d to %s\n",
+                attempt, kMaxReconnectAttempts, u.c_str());
+
+            // Drop the dead socket, then dial a fresh one to the same URL.
+            {
+                std::shared_ptr<rtc::WebSocket> old;
+                { std::lock_guard<std::mutex> lk(mtx); old.swap(ws); }
+                if (old) { try { old->resetCallbacks(); old->close(); } catch (...) {} }
+            }
+            connected.store(false);
+            openSocket(u, /*isReconnect=*/true);
+
+            // Bounded wait for the re-dial to confirm (handleOpen sets connected
+            // + notifies; a failed dial leaves connected false via handleClosed).
+            {
+                std::unique_lock<std::mutex> lk(reconnectMtx);
+                reconnectCv.wait_for(
+                    lk, std::chrono::milliseconds(kConnectWaitMs),
+                    [this]() { return connected.load() || intentionalClose.load(); });
+            }
+            if (connected.load()) break;       // success (attempt reset in handleOpen)
+            if (intentionalClose.load()) break;
+            // still down: loop for the next backoff step.
+        }
+
+        bool notifyFailed = false;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            reconnecting = false;
+            if (!connected.load() && !intentionalClose.load() &&
+                reconnectAttempt >= kMaxReconnectAttempts) {
+                reconnectState = "failed";
+                notifyFailed = true;
+            }
+        }
+        if (notifyFailed && onErrorFn)
+            onErrorFn("reconnect-failed", "coordinator reconnect gave up");
+    }
 
     void dispatch(const std::string& raw) {
         CoordServerMessage m;
@@ -336,47 +504,40 @@ void CoordinatorSignaling::onSignal(
 }
 
 bool CoordinatorSignaling::connect(const std::string& url) {
-    std::shared_ptr<rtc::WebSocket> sock;
-    try {
-        sock = std::make_shared<rtc::WebSocket>();
-    } catch (const std::exception& e) {
-        std::fprintf(stderr, "CoordinatorSignaling: create failed: %s\n", e.what());
-        return false;
-    }
+    d_->intentionalClose.store(false);
     {
         std::lock_guard<std::mutex> lk(d_->mtx);
-        d_->ws = sock;
+        d_->url = url;             // remembered so the reconnect loop can re-dial
+        d_->reconnectAttempt = 0;
+        d_->reconnectState = "connecting";
     }
-
-    Impl* d = d_.get();
-    sock->onOpen([d]() { if (d->onOpenFn) d->onOpenFn(); });
-    sock->onMessage(
-        [](rtc::binary) { /* coordinator is text-only */ },
-        [d](rtc::string msg) { d->dispatch(msg); });
-    sock->onClosed([d]() { if (d->onClosedFn) d->onClosedFn(); });
-    sock->onError([d](std::string e) {
-        if (d->onErrorFn) d->onErrorFn("transport", e);
-    });
-
-    try {
-        sock->open(url);
-    } catch (const std::exception& e) {
-        std::fprintf(stderr, "CoordinatorSignaling: open failed: %s\n", e.what());
-        return false;
-    }
-    return true;
+    return d_->openSocket(url, /*isReconnect=*/false);
 }
 
 void CoordinatorSignaling::close() {
     if (!d_) return;
+    // Mark the close deliberate BEFORE touching the thread, so a concurrent
+    // handleClosed()/scheduleReconnect() (on an rtc thread) skips reconnect and
+    // no loop is orphaned. Then wake + join any in-flight reconnect loop.
+    d_->intentionalClose.store(true);
+    d_->reconnectCv.notify_all();
+    std::thread t;
+    {
+        std::lock_guard<std::mutex> lk(d_->mtx);
+        t = std::move(d_->reconnectThread);
+    }
+    if (t.joinable()) t.join();
+
     std::shared_ptr<rtc::WebSocket> sock;
     {
         std::lock_guard<std::mutex> lk(d_->mtx);
         sock.swap(d_->ws);
+        d_->reconnectState = "closed";
     }
     if (sock) {
         try { sock->resetCallbacks(); sock->close(); } catch (...) {}
     }
+    d_->connected.store(false);
 }
 
 bool CoordinatorSignaling::createSession() {
@@ -390,7 +551,16 @@ bool CoordinatorSignaling::sendSignal(const std::string& toPeerId,
     return d_->sendRaw(encodeSignalEnvelope(toPeerId, msg));
 }
 bool CoordinatorSignaling::leave() {
+    // A deliberate leave ends the session; suppress any auto-reconnect the
+    // coordinator's subsequent socket close would otherwise trigger.
+    d_->intentionalClose.store(true);
+    d_->reconnectCv.notify_all();
     return d_->sendRaw(encodeLeave());
+}
+
+std::string CoordinatorSignaling::reconnectStatus() {
+    std::lock_guard<std::mutex> lk(d_->mtx);
+    return d_->reconnectState;
 }
 
 // ── Self-test (--coord-signal-test) ──────────────────────────────────────────
