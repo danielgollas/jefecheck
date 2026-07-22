@@ -101,6 +101,30 @@ target_link_libraries(jefecheck PRIVATE
 )
 target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
 
+# --- WebRTC transport (libdatachannel) --------------------------------------
+# JEF-24: second ITransport backend over DTLS-encrypted data channels.
+# RakNet stays the runtime default (env JEFECHECK_TRANSPORT selects).
+option(JEFECHECK_WEBRTC "Build WebRTC transport (libdatachannel)" ON)
+if(JEFECHECK_WEBRTC)
+    # libdatachannel v0.22.0 vendors an old plog whose CMake predates 3.5;
+    # CMake 4.x refuses to configure it without this floor.
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+    if(APPLE)
+        set(OPENSSL_ROOT_DIR /opt/homebrew/opt/openssl@3)
+    endif()
+    include(FetchContent)
+    set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
+    set(NO_TESTS ON CACHE BOOL "" FORCE)
+    set(NO_MEDIA ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(libdatachannel
+        GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
+        GIT_TAG v0.22.0
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(libdatachannel)
+    target_link_libraries(jefecheck PRIVATE LibDataChannel::LibDataChannel)
+    target_compile_definitions(jefecheck PRIVATE JEFECHECK_WEBRTC=1)
+endif()
+
 # --- Static FFmpeg for video export ----------------------------------------
 # Fetch the same GPL static ffmpeg the release packaging uses, once, into the
 # build tree, so a dev/.app build resolves it from the bundle. GUI launches
