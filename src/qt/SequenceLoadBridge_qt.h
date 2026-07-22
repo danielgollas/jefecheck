@@ -381,8 +381,13 @@ void disconnectRemote();
 // Server role: host on `port`, pump for `settleMs` ms, return peak
 // participant count. Client role: connect to `ip:port`, hold for `holdMs` ms
 // (optionally sending a play message), then return.
-void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play);
+void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play,
+                           int connectTimeoutMs = 3000);
 bool remoteTestServerSawPlay(int port, int settleMs);
+// Split-phase host for the WebRTC harness (see .cpp for the one-shot-play
+// rationale): start + await the loopback client, then settle for the peer's play.
+bool remoteTestServerStart(int port, int loopbackTimeoutMs);
+bool remoteTestServerSettleForPlay(int settleMs);
 bool isRemoteConnected();
 bool isRemoteServer();
 std::vector<std::string> remoteParticipants();

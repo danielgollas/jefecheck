@@ -2056,10 +2056,17 @@ bool pumpNetwork() {
 
 // Child/client role: connect, pump until connected (or timeout), optionally
 // start playback (mirrors a play message — used by Task 5), then hold.
-void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play) {
+void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play,
+                           int connectTimeoutMs) {
     RemoteClientParams cp; cp.clientName = "peer"; cp.serverIP = ip; cp.port = port; cp.password = "";
     connectAsClient(cp);
-    for (int t = 0; t < 3000 && !isRemoteConnected(); t += 10) {
+    // Wait until the session is actually connected before toggling play — the
+    // play/pause message is sent ONCE (synchronously inside togglePlayFwd), so a
+    // toggle issued before the channel is open would be dropped and never
+    // re-sent. RakNet connects instantly (3000 ms is plenty); WebRTC needs the
+    // full signaling+ICE+DTLS+datachannel handshake, hence the larger timeout
+    // the caller threads through.
+    for (int t = 0; t < connectTimeoutMs && !isRemoteConnected(); t += 10) {
         pumpNetwork();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -2082,6 +2089,44 @@ bool remoteTestServerSawPlay(int port, int settleMs) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     return sawPlay;
+}
+
+// Split-phase orchestrator for the WebRTC harness. Rationale: the play/pause
+// message the peer sends is ONE-SHOT and the host mirrors it via its own
+// loopback client (startServer connects a 127.0.0.1 client to the host's own
+// server; the peer's play is forwarded to that loopback, which applies it, and
+// isPlaying() then reads the shared playbackManager). RakNet's loopback connects
+// instantly, so remoteTestServerSawPlay's connect-then-settle is fine. WebRTC's
+// loopback needs a full signaling+ICE+DTLS handshake and can open its server-
+// side channel LATER than a fast remote peer — so if the peer plays before the
+// loopback channel is open, the forward reaches 0 channels and is lost forever.
+// The fix is to bring the loopback fully up (its nickname registered on the
+// server == its channel open both ways) BEFORE the peer is even spawned.
+
+// Start the host and pump until the loopback client has registered (its channel
+// is open both ways). Returns true once the loopback is a live participant.
+bool remoteTestServerStart(int port, int loopbackTimeoutMs) {
+    RemoteServerParams sp; sp.serverName = "jefe-remote-test"; sp.port = port; sp.password = "";
+    connectAsServer(sp);
+    for (int t = 0; t < loopbackTimeoutMs; t += 10) {
+        pumpNetwork();
+        // The loopback client registering its own nickname means its WebRTC
+        // channel is open both directions and it is ready to receive forwards.
+        if (!networkManager.participantNames().empty()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+}
+
+// Pump for up to settleMs, reporting whether a mirrored play arrived. Assumes
+// the server was already started via remoteTestServerStart.
+bool remoteTestServerSettleForPlay(int settleMs) {
+    for (int t = 0; t < settleMs; t += 10) {
+        pumpNetwork();
+        if (isPlaying()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
 }
 
 // --- Chat overlay + keyboard chat entry (Task 7) ----------------------------

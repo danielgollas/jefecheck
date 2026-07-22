@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -26,6 +27,31 @@ namespace {
 std::once_flag g_loggerOnce;
 void initLoggerOnce() {
     std::call_once(g_loggerOnce, [] { rtc::InitLogger(rtc::LogLevel::Error); });
+}
+
+// Opt-in state-transition tracing for the two-process --remote-test-webrtc
+// harness (set JEFECHECK_REMOTE_TEST_DEBUG=1). Off by default so production
+// sessions stay quiet.
+bool traceEnabled() {
+    static const bool on = std::getenv("JEFECHECK_REMOTE_TEST_DEBUG") != nullptr;
+    return on;
+}
+void trace(const char* role, const char* what) {
+    if (traceEnabled())
+        std::fprintf(stderr, "[webrtc:%s] %s\n", role, what);
+}
+// Attach pc/gathering-state loggers (no-op unless tracing is on).
+void attachStateTrace(const std::shared_ptr<rtc::PeerConnection>& pc,
+                      const char* role) {
+    if (!traceEnabled()) return;
+    pc->onStateChange([role](rtc::PeerConnection::State s) {
+        std::fprintf(stderr, "[webrtc:%s] pc state=%d\n", role,
+                     static_cast<int>(s));
+    });
+    pc->onGatheringStateChange([role](rtc::PeerConnection::GatheringState g) {
+        std::fprintf(stderr, "[webrtc:%s] gathering state=%d\n", role,
+                     static_cast<int>(g));
+    });
 }
 
 // Client role: the host is a single opaque peer. The app treats PeerIds as
@@ -98,6 +124,7 @@ struct WebRtcTransport::Impl {
                 auto it = peers.find(pid);
                 if (it != peers.end()) it->second.open = true;
             }
+            trace("host", "peer channel OPEN");
             pushEvent(TransportEventType::PeerConnected, pid);
         });
 
@@ -128,6 +155,7 @@ struct WebRtcTransport::Impl {
     // Create the answerer PeerConnection for a freshly connected signaling
     // client and wire its signaling forwarders. Called from onClientConnected.
     void onSignalingClientConnected(int clientId) {
+        trace("host", "signaling client connected");
         // Early bail if already visibly at capacity (cheap; the authoritative
         // check is re-done under the lock at insert time to close the TOCTOU).
         if (maxClients > 0) {
@@ -166,8 +194,11 @@ struct WebRtcTransport::Impl {
             signaling.sendTo(clientId, encodeSignal(m));
         });
 
+        attachStateTrace(pc, "host");
+
         // Host is the answerer: it RECEIVES the channel, never creates one.
         pc->onDataChannel([this, pid](std::shared_ptr<rtc::DataChannel> dc) {
+            trace("host", "onDataChannel");
             setupChannel(pid, dc);
         });
 
@@ -248,6 +279,7 @@ struct WebRtcTransport::Impl {
     // ConnectionLost) against the fixed synthetic kHostPeerId.
     void setupClientChannel(std::shared_ptr<rtc::DataChannel> dc) {
         dc->onOpen([this]() {
+            trace("client", "datachannel OPEN");
             {
                 std::lock_guard<std::mutex> lk(mtx);
                 auto it = peers.find(kHostPeerId);
@@ -288,6 +320,7 @@ struct WebRtcTransport::Impl {
     // Signaling socket to the host is up: build the offerer PeerConnection and
     // open the reliable/ordered "jefe" channel (which triggers the offer).
     void onClientSignalingOpen() {
+        trace("client", "signaling open");
         // Bail if the caller already tore the session down (connect() then an
         // immediate disconnect() racing this WS-thread callback).
         {
@@ -306,7 +339,10 @@ struct WebRtcTransport::Impl {
             return;
         }
 
+        attachStateTrace(pc, "client");
+
         pc->onLocalDescription([this](rtc::Description desc) {
+            trace("client", "-> local offer/desc");
             SignalMessage m;
             m.type = desc.typeString();  // "offer" for the client (offerer)
             m.sdp = std::string(desc);
@@ -381,6 +417,7 @@ struct WebRtcTransport::Impl {
 
         try {
             if (m.type == "answer") {
+                trace("client", "<- remote answer");
                 pc->setRemoteDescription(rtc::Description(m.sdp, m.type));
             } else if (m.type == "candidate") {
                 pc->addRemoteCandidate(rtc::Candidate(m.candidate, m.mid));

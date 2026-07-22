@@ -17,7 +17,12 @@
 #include <cstring>
 #include <string>
 
+#ifndef _WIN32
+#include <unistd.h>   // execv, for the WebRTC-harness transport re-exec
+#endif
+
 #include <QProcess>
+#include <QProcessEnvironment>
 
 #include "gfcSignaling.h"
 #include "gfcStructures.h"
@@ -196,7 +201,59 @@ static bool resolveRemotePeer(int argc, char* argv[], std::string& ip, int& port
     return false;
 }
 
+// --remote-test-webrtc : orchestrator/server role, WebRTC transport (JEF-24
+// Task 5). Identical to --remote-test but forces JEFECHECK_TRANSPORT=webrtc so
+// host + peer establish a real DTLS-encrypted libdatachannel data channel over
+// the localhost signaling stub instead of a RakNet connection.
+static bool hasRemoteTestWebrtc(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--remote-test-webrtc") == 0) return true;
+    return false;
+}
+// --remote-test-webrtc-peer <ip> <port> : child/client role for the WebRTC
+// harness.
+static bool resolveRemoteWebrtcPeer(int argc, char* argv[], std::string& ip, int& port) {
+    for (int i = 1; i + 2 < argc; ++i) {
+        if (std::strcmp(argv[i], "--remote-test-webrtc-peer") == 0 && i + 2 < argc) {
+            ip = argv[i + 1]; port = std::atoi(argv[i + 2]); return true;
+        }
+    }
+    return false;
+}
+
 int main(int argc, char* argv[]) {
+    // WebRTC-harness transport re-exec (JEF-24 Task 5). The transport factory
+    // reads JEFECHECK_TRANSPORT, but `networkManager` is a global whose client
+    // and server construct their transports during STATIC initialization —
+    // before main() runs. So a qputenv() here would be too late for THIS
+    // process: its transports are already RakNet. To force WebRTC for the
+    // --remote-test-webrtc host (and a manually-launched peer), set the env and
+    // re-exec: the fresh process image re-runs static init with the var already
+    // in the environment, so both client and server pick WebRtcTransport. The
+    // spawned peer child already inherits the var at spawn time, so this only
+    // ever fires once per process (guarded on the var already being "webrtc").
+#ifndef _WIN32
+    {
+        bool webrtcHarness = false;
+        for (int i = 1; i < argc; ++i) {
+            if (std::strcmp(argv[i], "--remote-test-webrtc") == 0 ||
+                std::strcmp(argv[i], "--remote-test-webrtc-peer") == 0) {
+                webrtcHarness = true;
+                break;
+            }
+        }
+        if (webrtcHarness) {
+            const char* cur = std::getenv("JEFECHECK_TRANSPORT");
+            if (!cur || std::strcmp(cur, "webrtc") != 0) {
+                setenv("JEFECHECK_TRANSPORT", "webrtc", 1);
+                execv(argv[0], argv);         // fresh static init, env now set
+                perror("execv (webrtc re-exec)");  // only reached on failure
+                return 3;
+            }
+        }
+    }
+#endif
+
     // Headless jefe::wire self-test (--wire-test, JEF-23): pure data, no
     // GUI/GL/Qt-application dependency, so it runs and exits before
     // QApplication is even constructed — same "as early as possible"
@@ -339,6 +396,70 @@ int main(int argc, char* argv[]) {
         peer.waitForFinished(3000);
         if (peer.state() != QProcess::NotRunning) peer.kill();
         printf("REMOTE-TEST: participants=%d mirrored_play=%d\n", peak, sawPlay ? 1 : 0);
+        fflush(stdout);
+        std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
+    }
+
+    // --remote-test-webrtc-peer <ip> <port>: WebRTC child client role. The
+    // WebRTC transport is already forced by the re-exec at the top of main()
+    // (JEFECHECK_TRANSPORT=webrtc was in the environment before static init, so
+    // the client's transport is a WebRtcTransport). holdMs is much larger than
+    // the RakNet peer's (2000 ms): WebRTC needs signaling + ICE + DTLS +
+    // datachannel-open before it is connected enough to send the play toggle,
+    // and the peer only sends play once (on the toggle), so it must stay
+    // connected first — connectTimeoutMs is bumped so the toggle fires AFTER the
+    // channel opens (a pre-open send would be silently dropped).
+    {
+        std::string peerIp; int peerPort = 0;
+        if (resolveRemoteWebrtcPeer(argc, argv, peerIp, peerPort)) {
+            jefe::qt::initializeRenderingChain();
+            jefe::qt::remoteTestPeerConnect(peerIp, peerPort, /*holdMs=*/6000,
+                                            /*play=*/true, /*connectTimeoutMs=*/9000);
+            std::_Exit(0);
+        }
+    }
+    if (hasRemoteTestWebrtc(argc, argv)) {
+        // WebRTC is already forced by the re-exec at the top of main().
+        jefe::qt::initializeRenderingChain();
+        // Distinct port from the RakNet harness (60123) to avoid collisions if
+        // both run back-to-back and a socket lingers in TIME_WAIT.
+        const int port = 60124;
+
+        // Phase 1: bring the host's own loopback client fully up BEFORE the peer
+        // exists. The peer's play is one-shot and the host mirrors it through the
+        // loopback; a WebRTC loopback can open its channel later than a fast peer,
+        // so if the peer played first the forward would reach 0 channels and be
+        // lost. Waiting for the loopback here closes that race. (See the bridge.)
+        if (!jefe::qt::remoteTestServerStart(port, /*loopbackTimeoutMs=*/10000)) {
+            printf("REMOTE-TEST-WEBRTC: loopback client failed to come up\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+
+        // Phase 2: now spawn the peer. It will establish its own WebRTC session,
+        // and its single play toggle is guaranteed a live loopback to mirror to.
+        QProcess peer;
+        peer.setProgram(QCoreApplication::applicationFilePath());
+        peer.setArguments({"--remote-test-webrtc-peer", "127.0.0.1", QString::number(port)});
+        // QProcess inherits the parent env (which already has the var set), but
+        // spell it out explicitly so the child's transport selection can never
+        // depend on inheritance semantics.
+        QProcessEnvironment childEnv = QProcessEnvironment::systemEnvironment();
+        childEnv.insert("JEFECHECK_TRANSPORT", "webrtc");
+        peer.setProcessEnvironment(childEnv);
+        if (qEnvironmentVariableIsSet("JEFECHECK_REMOTE_TEST_DEBUG"))
+            peer.setProcessChannelMode(QProcess::ForwardedChannels);
+        peer.start();
+        if (!peer.waitForStarted(2000)) { printf("REMOTE-TEST-WEBRTC: child failed to start: %s\n", peer.errorString().toUtf8().constData()); fflush(stdout); std::_Exit(3); }
+        // WebRTC session establishment (signaling handshake → ICE → DTLS →
+        // SCTP datachannel open) takes far longer than RakNet's instant connect,
+        // so the settle budget is generous (10 s) to absorb the peer's own
+        // handshake plus ICE/DTLS on a loaded machine before its play arrives.
+        const bool sawPlay = jefe::qt::remoteTestServerSettleForPlay(/*settleMs=*/10000);
+        const int  peak    = (int)jefe::qt::remoteParticipants().size();
+        peer.waitForFinished(6000);
+        if (peer.state() != QProcess::NotRunning) peer.kill();
+        printf("REMOTE-TEST-WEBRTC: participants=%d mirrored_play=%d\n", peak, sawPlay ? 1 : 0);
         fflush(stdout);
         std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
     }
