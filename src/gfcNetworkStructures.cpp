@@ -1,7 +1,6 @@
 #include "gfcNetworkStructures.h"
 
 #include <stdio.h>
-#include "RakPeerInterface.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -9,15 +8,6 @@
 #include <stdlib.h> // For atoi
 #include <cstring> // For strlen
 #include <cctype>
-#include "Rand.h"
-#include "RakNetStatistics.h"
-#include "MessageIdentifiers.h"
-#include <stdio.h>
-#include "GetTime.h"
-#include "RakAssert.h"
-#include "RakSleep.h"
-#include "BitStream.h"
-#include "StringCompressor.h"
 #include "gfcStructures.h"
 #include "gfcfx.h"
 #include "xmlParser.h"
@@ -37,13 +27,27 @@ extern gfcLUTManager lutManager;
 
 extern gfcSettings sett;
 
+// =====================================================================
+// jefe::wire overloads (JEF-23). Same field sequences as the legacy
+// RakNet-serializer versions (deleted in Task 4); see gfcNetworkStructures.h for the sanctioned wire
+// deltas (u32-prefixed strings, dropped redundant length fields, LUT
+// body as raw length-prefixed bytes).
+// =====================================================================
 
-void serializeLUT ( CubeLUT* theLUT, RakNet::BitStream* bs ) {
+void serializeLUT ( CubeLUT* theLUT, jefe::wire::Writer& w ) {
     //read the lut file (whatever format it is) and send the filename w/o path, and then send the binary file.
     FILE *fp;
     long len;
     char *buf;
     fp=fopen ( theLUT->filename,"rb" );
+    if ( !fp ) {
+        // Legacy crashed here (unchecked fopen). Emit an empty-but-well-
+        // formed payload instead so the stream cannot desync.
+        printf ( "serializeLUT: could not open %s\n",theLUT->filename );
+        w.writeString ( GetFilenameNoPath ( theLUT->filename ) );
+        w.writeBytes ( nullptr, 0 );
+        return;
+    }
     fseek ( fp,0,SEEK_END ); //go to end
     len=ftell ( fp ); //get position at end (length)
     fseek ( fp,0,SEEK_SET ); //go to beg.
@@ -52,193 +56,115 @@ void serializeLUT ( CubeLUT* theLUT, RakNet::BitStream* bs ) {
     fclose ( fp );
 
     std::string filenameNoPath=GetFilenameNoPath ( theLUT->filename );
-    //printf ( "Filename is %s (%i bytes)\n",filenameNoPath.c_str(), filenameNoPath.size() );
 
-    //write the size of the name and then the filename (w/o path)
-    bs->Write ( ( int ) filenameNoPath.size() +1 );
-    StringCompressor::Instance()->EncodeString ( filenameNoPath.c_str(),filenameNoPath.size() +1,bs );
-
-    //write the size of the file and then write the file
-    bs->Write ( ( int ) len );
-    bs->Write ( ( char* ) buf,len );
+    //write the filename (w/o path), then the file body as raw bytes
+    w.writeString ( filenameNoPath );
+    w.writeBytes ( ( const unsigned char* ) buf, ( size_t ) len );
+    delete [] buf;
 }
 
-void unserializeLUT ( RakNet::BitStream* bs ) {
+bool unserializeLUT ( jefe::wire::Reader& r ) {
 
-    int fileNameLen=0;
-    char *filenameNoPathBuff;
-    int fileLen=0;
-    char *fileBuff;
+    std::string filenameNoPath;
+    std::vector<unsigned char> fileBytes;
 
-    //READ FROM BITSTREAM
-    /************/
-    {
-        bs->Read ( fileNameLen );
-        filenameNoPathBuff=new char[fileNameLen];
-        StringCompressor::Instance()->DecodeString ( filenameNoPathBuff,fileNameLen,bs );
-
-        bs->Read ( fileLen );
-        printf ( "Got %i bytes from fileLen\n",fileLen );
-        fileBuff=new char[fileLen];
-        bs->Read ( ( char* ) fileBuff,fileLen );
-    }
-    /*************/
+    //READ FROM WIRE — all fields before any side effect
+    if ( !r.readString ( filenameNoPath ) ) return false;
+    if ( !r.readBytes ( fileBytes ) ) return false;
 
     std::ofstream outFile;
 
-    std::string lutFilename=sett.receivedPath+filenameNoPathBuff;
+    std::string lutFilename=sett.receivedPath+filenameNoPath;
 
     //write lut file
     outFile.open ( lutFilename.c_str(),std::ostream::binary );
-    //outFile<<fileBuff;
-    outFile.write ( fileBuff, fileLen );
+    outFile.write ( ( const char* ) fileBytes.data(), ( std::streamsize ) fileBytes.size() );
     outFile.close();
 
-
     lutManager.loadLUT(lutFilename);
-    //theLUT->load ( lutFilename.c_str() );
+    return true;
 }
 
-void serializeFX ( const gfcFX* theFX, RakNet::BitStream* bs ) {
+void serializeFX ( const gfcFX* theFX, jefe::wire::Writer& w ) {
 
+    //1. read the whole jfx
+    std::string theJfx=ReadTextFileIntoString(theFX->filename);
+    //2. write the jfx filename, then the jfx body (writeString carries the length)
+    w.writeString ( GetFilenameNoPath ( theFX->filename ) );
+    w.writeString ( theJfx );
 
-	
-	//TODO: FUCK IT SEND THE WHOLE FILE IN A STRING AND LET THE RECEIVER PARSE IT, this way we can also save the received fxs to a predetermined folder.
-    
-	//WE NEED TO CONVERT THE READ STUFF TO C-STRINGS SO WE CAN TRANSMIT THEM CORRECTLY!... this is so that line breaks
-	//are correctly translated by c on each side... mac, windows or linux.... http://www.editpadpro.com/tricklinebreak.html
-    
-	//todo: maybe we can read as binary and just send like we do with luts
+    //3. get the shaders filenames from the jfx file so we can read them and send them
+    XMLResults xmlResults;
+    XMLNode xMainNode=XMLNode::parseString ( theJfx.c_str(), NULL, &xmlResults );
+    if (xmlResults.error!=eXMLErrorNone) {
+        printf("Error parsing XML file: %s\nFile:\n%s\n",XMLNode::getError(xmlResults.error),theJfx.c_str());
+    }
+    XMLNode xNode=xMainNode.getChildNode ( "root" ).getChildNode ( "shaders" );
+    std::string vertFilename;
+    std::string fragFilename;
+    std::string shaderPath=GetPathFromFilenameRegular ( theFX->filename );
 
-	
-	
+    vertFilename=shaderPath;
+    vertFilename+="/";
+    vertFilename+=xNode.getAttribute ( "vertex" );
 
-	//1. read the whole jfx
-	std::string theJfx=ReadTextFileIntoString(theFX->filename);
-	printf("theJfx size: %i\n theJfx:\n %s\n",theJfx.length(),theJfx.c_str());
-	//2. write the jfx filename
-    StringCompressor::Instance()->EncodeString ( GetFilenameNoPath ( theFX->filename ).c_str(),GFCNET_MAX_TEXT_LENGHT,bs );
-    //3. write the size of the file and then write the file
-    bs->Write ( ( int ) theJfx.length()+1 );
-    StringCompressor::Instance()->EncodeString ( theJfx.c_str(),theJfx.length()+1,bs );
-    
-	//4. get the shaders filenames from the jfx file so we can read them and send them
-	XMLResults xmlResults;
-	XMLNode xMainNode=XMLNode::parseString ( theJfx.c_str(), NULL, &xmlResults );
-	if (xmlResults.error==eXMLErrorNone)
-		//printf ( "****Parsed String\n" );
-	{} else {
-		printf("Error parsing XML file: %s\nFile:\n%s\n",XMLNode::getError(xmlResults.error),theJfx.c_str());
-	}
-	XMLNode xNode=xMainNode.getChildNode ( "root" ).getChildNode ( "shaders" );
-	std::string vertFilename;
-	std::string fragFilename;
-	std::string shaderPath=GetPathFromFilenameRegular ( theFX->filename );
-	
-	vertFilename=shaderPath;
-	vertFilename+="/";
-	vertFilename+=xNode.getAttribute ( "vertex" );
+    fragFilename=shaderPath;
+    fragFilename+="/";
+    fragFilename+=xNode.getAttribute ( "fragment" );
 
-	fragFilename=shaderPath;
-	fragFilename+="/";
-	fragFilename+=xNode.getAttribute ( "fragment" );
+    //4. Read the shaders
+    std::string theVertexShader=ReadTextFileIntoString(vertFilename);
+    std::string theFragmentShader=ReadTextFileIntoString(fragFilename);
 
-	printf ( "****Got shader paths:\n%s\n%s\n",vertFilename.c_str(),fragFilename.c_str());
-    
-	//5. Read the shaders
-	std::string theVertexShader=ReadTextFileIntoString(vertFilename);
-	std::string theFragmentShader=ReadTextFileIntoString(fragFilename);
-    
-	printf("theVertexShader:\n %s\n",theVertexShader.c_str());
-	printf("theFragmentShader:\n %s\n",theFragmentShader.c_str());
+    //5. Send the shaders (filename then shader body, same order as legacy)
+    w.writeString ( GetFilenameNoPath ( vertFilename ) );
+    w.writeString ( theVertexShader );
 
-	//6. Send the shaders (filename... shader lenght... shader)
-	StringCompressor::Instance()->EncodeString ( GetFilenameNoPath ( vertFilename ).c_str(), GFCNET_MAX_TEXT_LENGHT,bs );
-    bs->Write ( ( int ) theVertexShader.length()+1 );
-    StringCompressor::Instance()->EncodeString ( theVertexShader.c_str(),theVertexShader.length()+1,bs );
-    
-	StringCompressor::Instance()->EncodeString ( GetFilenameNoPath ( fragFilename ).c_str(), GFCNET_MAX_TEXT_LENGHT,bs );
-	bs->Write ( ( int ) theFragmentShader.length()+1 );
-	StringCompressor::Instance()->EncodeString ( theFragmentShader.c_str(),theFragmentShader.length()+1,bs );
+    w.writeString ( GetFilenameNoPath ( fragFilename ) );
+    w.writeString ( theFragmentShader );
 }
 
-void unserializeFX ( RakNet::BitStream* bs ) {
-    int jfxLen=0, fragmentLen=0, vertexLen=0;
-    int jfxFilenameLen=0,fragmentFilenameLen=0,vertexFilenameLen=0;
-    std::string filenameComplete;
-    char *filenameNoPathBuff, *fragmentFilenameNoPathBuff, *vertexFilenameNoPathBuff;
-    //char jfxBuff[GFCNET_MAX_TEXT_LENGHT], fragmentBuff[GFCNET_MAX_TEXT_LENGHT], vertexBuff[GFCNET_MAX_TEXT_LENGHT];
-    char *jfxBuff, *fragmentBuff, *vertexBuff;
-    //printf ( "Stream bytes: %i\n",bs->GetNumberOfBytesUsed() );
+bool unserializeFX ( jefe::wire::Reader& r ) {
+    std::string jfxFilenameNoPath, theJfx;
+    std::string vertexFilenameNoPath, theVertexShader;
+    std::string fragmentFilenameNoPath, theFragmentShader;
 
-    //READ FROM BITSTREAM
-    /************/
-    {	//bs->Read ( jfxFilenameLen );
-        filenameNoPathBuff=new char[GFCNET_MAX_TEXT_LENGHT];
-        StringCompressor::Instance()->DecodeString ( filenameNoPathBuff,GFCNET_MAX_TEXT_LENGHT,bs );
+    //READ FROM WIRE — all fields before any side effect
+    if ( !r.readString ( jfxFilenameNoPath ) ) return false;
+    if ( !r.readString ( theJfx ) ) return false;
+    if ( !r.readString ( vertexFilenameNoPath ) ) return false;
+    if ( !r.readString ( theVertexShader ) ) return false;
+    if ( !r.readString ( fragmentFilenameNoPath ) ) return false;
+    if ( !r.readString ( theFragmentShader ) ) return false;
 
-        bs->Read ( jfxLen );
-        jfxBuff=new char[jfxLen+1];
-        StringCompressor::Instance()->DecodeString ( jfxBuff,jfxLen,bs );
-    }
-    /*************/
-    /************/
-    { 	//bs->Read ( vertexFilenameLen );
-        vertexFilenameNoPathBuff=new char[GFCNET_MAX_TEXT_LENGHT];
-        StringCompressor::Instance()->DecodeString ( vertexFilenameNoPathBuff,GFCNET_MAX_TEXT_LENGHT,bs );
-
-        bs->Read ( vertexLen );
-
-        vertexBuff=new char[vertexLen+1];
-        StringCompressor::Instance()->DecodeString ( vertexBuff,vertexLen,bs );
-        printf("\nUnserializer : Vertex Shader: %i bytes %s\n",vertexLen,vertexFilenameNoPathBuff/*,vertexBuff*/);
-    }
-    /*************/
-
-    /************/
-    {	//bs->Read ( fragmentFilenameLen );
-        fragmentFilenameNoPathBuff=new char[GFCNET_MAX_TEXT_LENGHT];
-        StringCompressor::Instance()->DecodeString ( fragmentFilenameNoPathBuff,GFCNET_MAX_TEXT_LENGHT,bs );
-
-
-        bs->Read ( fragmentLen );
-        fragmentBuff=new char[fragmentLen+1];
-        StringCompressor::Instance()->DecodeString ( fragmentBuff,fragmentLen,bs );
-
-        printf("\nUnserializer : Fragment Shader: %i bytes %s\n",fragmentLen, fragmentFilenameNoPathBuff/*,fragmentBuff*/);
-    }
-    /*************/
-
-    //printf("\nDeserialized/Stream %i/%i\n\n",jfxLen+vertexLen+fragmentLen+jfxFilenameLen+vertexFilenameLen+fragmentFilenameLen, bs->GetNumberOfBytesUsed());
+    printf("\nUnserializer : Vertex Shader: %i bytes %s\n",(int)theVertexShader.length(),vertexFilenameNoPath.c_str());
+    printf("\nUnserializer : Fragment Shader: %i bytes %s\n",(int)theFragmentShader.length(),fragmentFilenameNoPath.c_str());
 
     //SAVE TO FILES
     std::ofstream outFile;
 
-    std::string jfxFileName=sett.receivedPath+filenameNoPathBuff;
-    std::string vertexFileName=sett.receivedPath+vertexFilenameNoPathBuff;
-    std::string fragmentFileName=sett.receivedPath+fragmentFilenameNoPathBuff;
+    std::string jfxFileName=sett.receivedPath+jfxFilenameNoPath;
+    std::string vertexFileName=sett.receivedPath+vertexFilenameNoPath;
+    std::string fragmentFileName=sett.receivedPath+fragmentFilenameNoPath;
 
     //write jfxFile
     outFile.open ( jfxFileName.c_str(),std::ostream::out );
-    outFile<<jfxBuff;
+    outFile<<theJfx;
     outFile.close();
 
     //write fragmentFile
     outFile.open ( fragmentFileName.c_str(),std::ostream::out );
-    outFile<<fragmentBuff;
+    outFile<<theFragmentShader;
     outFile.close();
 
     //write vertexFile
     outFile.open ( vertexFileName.c_str(),std::ostream::out );
-    outFile<<vertexBuff;
+    outFile<<theVertexShader;
     outFile.close();
-
-    delete [] fragmentBuff;
-    delete [] vertexBuff;
-    delete [] jfxBuff;
 
     //LOAD THE FX FROM THE FILES
     fxManager.loadFX(jfxFileName);
+    return true;
 }
 
 std::string gfcChatLogEntry::getFormattedString() {

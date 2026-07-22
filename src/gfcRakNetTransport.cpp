@@ -92,11 +92,19 @@ bool RakNetTransport::poll(TransportEvent& ev) {
                                : TransportEventType::ConnectionLost;
             break;
         default:
-            // App packet (>= GFCNET_USER_PACKET_BASE) or unknown system id.
-            // Deliver raw bytes; unknown ids fall through app switches' default
-            // cases exactly as before.
+            // App packet or unknown system id. Since JEF-23, ITransport
+            // carries FRAMES ([u8 version][u16 msgType LE][payload]); the
+            // leading RakNet envelope byte (GFCNET_USER_PACKET_BASE, added
+            // by send() below) is stripped here before the frame is emitted.
+            // A packet shorter than 2 bytes is a bare envelope byte with no
+            // frame — malformed; drop it and keep draining the queue.
+            if (p->length < 2) {
+                peer_->DeallocatePacket(p);
+                p = peer_->Receive();
+                continue;
+            }
             ev.type = TransportEventType::Data;
-            ev.bytes.assign(p->data, p->data + p->length);
+            ev.bytes.assign(p->data + 1, p->data + p->length);
             break;
         }
         peer_->DeallocatePacket(p);
@@ -110,8 +118,17 @@ void RakNetTransport::send(const unsigned char* data, int len, PeerId target,
     SystemAddress addr = (target == kInvalidPeerId)
                              ? UNASSIGNED_SYSTEM_ADDRESS
                              : toSystemAddress(target);
-    peer_->Send((const char*)data, len, HIGH_PRIORITY, RELIABLE_ORDERED, 0,
-                addr, broadcastExcluding);
+    // JEF-23: `data` is a jefe::wire frame. Prepend the single RakNet
+    // envelope byte so RakNet routes the packet as user data (every app
+    // packet arrives with first byte GFCNET_USER_PACKET_BASE == 91 — RakNet
+    // only needs one user id; the real msgType lives in the frame header).
+    // One copy per send is fine at our message rates.
+    std::vector<unsigned char> packet;
+    packet.reserve((size_t)len + 1);
+    packet.push_back(GFCNET_USER_PACKET_BASE);
+    packet.insert(packet.end(), data, data + len);
+    peer_->Send((const char*)packet.data(), (int)packet.size(), HIGH_PRIORITY,
+                RELIABLE_ORDERED, 0, addr, broadcastExcluding);
 }
 
 void RakNetTransport::closePeer(PeerId peer, bool sendNotification) {
