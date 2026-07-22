@@ -214,8 +214,10 @@ struct WebRtcTransport::Impl {
         int clientId = 0;
         std::string coordPeerId;  // JEF-27: coordinator connId (coordinator mode)
         std::shared_ptr<rtc::PeerConnection> pc;
-        std::shared_ptr<rtc::DataChannel> dc;
-        bool open = false;
+        std::shared_ptr<rtc::DataChannel> dc;        // "jefe" — Channel::State
+        std::shared_ptr<rtc::DataChannel> assetsDc;  // "assets" — Channel::Assets
+        bool open = false;        // state ("jefe") channel open
+        bool assetsOpen = false;  // assets channel open (JEF-28)
     };
 
     SignalingServer signaling;        // host role (LAN)
@@ -262,12 +264,14 @@ struct WebRtcTransport::Impl {
     bool clientActive = false;
 
     void pushEvent(TransportEventType type, PeerId peer,
-                   std::vector<unsigned char> bytes = {}) {
+                   std::vector<unsigned char> bytes = {},
+                   Channel channel = Channel::State) {
         std::lock_guard<std::mutex> lk(mtx);
         TransportEvent ev;
         ev.type = type;
         ev.peer = peer;
         ev.bytes = std::move(bytes);
+        ev.channel = channel;
         events.push_back(std::move(ev));
     }
 
@@ -286,36 +290,59 @@ struct WebRtcTransport::Impl {
         return cfg;
     }
 
-    // Attach handlers to the reliable channel the client opened (host side).
+    // Attach handlers to a reliable channel the client opened (host side).
+    // JEF-28: onDataChannel fires once per channel; branch on the label so the
+    // "jefe" channel drives State + peer lifecycle (PeerConnected/PeerLost) and
+    // the "assets" channel is a silent Channel::Assets lane (its open/close does
+    // NOT emit peer events — the state channel is the single source of truth for
+    // whether a peer is connected).
     void setupChannel(PeerId pid, std::shared_ptr<rtc::DataChannel> dc) {
+        const bool isAssets = (dc->label() == "assets");
         {
             std::lock_guard<std::mutex> lk(mtx);
             auto it = peers.find(pid);
             if (it == peers.end()) return;  // peer already gone
-            it->second.dc = dc;
+            if (isAssets) it->second.assetsDc = dc;
+            else          it->second.dc = dc;
         }
 
-        dc->onOpen([this, pid]() {
+        dc->onOpen([this, pid, isAssets]() {
             {
                 std::lock_guard<std::mutex> lk(mtx);
                 auto it = peers.find(pid);
-                if (it != peers.end()) it->second.open = true;
+                if (it != peers.end()) {
+                    if (isAssets) it->second.assetsOpen = true;
+                    else          it->second.open = true;
+                }
             }
-            trace("host", "peer channel OPEN");
-            pushEvent(TransportEventType::PeerConnected, pid);
+            if (isAssets) {
+                trace("host", "peer ASSETS channel OPEN");  // silent
+            } else {
+                trace("host", "peer channel OPEN");
+                pushEvent(TransportEventType::PeerConnected, pid);
+            }
         });
 
         // Binary frames only (jefe::wire frames). Text is unused on the wire.
         dc->onMessage(
-            [this, pid](rtc::binary msg) {
+            [this, pid, isAssets](rtc::binary msg) {
                 std::vector<unsigned char> bytes(msg.size());
                 for (size_t i = 0; i < msg.size(); ++i)
                     bytes[i] = static_cast<unsigned char>(msg[i]);
-                pushEvent(TransportEventType::Data, pid, std::move(bytes));
+                pushEvent(TransportEventType::Data, pid, std::move(bytes),
+                          isAssets ? Channel::Assets : Channel::State);
             },
             [](rtc::string) { /* text unused */ });
 
-        dc->onClosed([this, pid]() {
+        dc->onClosed([this, pid, isAssets]() {
+            if (isAssets) {
+                // Assets channel closing is silent; the state channel drives
+                // PeerLost. Just clear the readiness flag.
+                std::lock_guard<std::mutex> lk(mtx);
+                auto it = peers.find(pid);
+                if (it != peers.end()) it->second.assetsOpen = false;
+                return;
+            }
             bool wasOpen = false;
             {
                 std::lock_guard<std::mutex> lk(mtx);
@@ -455,27 +482,45 @@ struct WebRtcTransport::Impl {
     // setupChannel but emits client-flavoured events (ConnectAccepted /
     // ConnectionLost) against the fixed synthetic kHostPeerId.
     void setupClientChannel(std::shared_ptr<rtc::DataChannel> dc) {
-        dc->onOpen([this]() {
-            trace("client", "datachannel OPEN");
+        const bool isAssets = (dc->label() == "assets");  // JEF-28
+
+        dc->onOpen([this, isAssets]() {
             {
                 std::lock_guard<std::mutex> lk(mtx);
                 auto it = peers.find(kHostPeerId);
-                if (it != peers.end()) it->second.open = true;
+                if (it != peers.end()) {
+                    if (isAssets) it->second.assetsOpen = true;
+                    else          it->second.open = true;
+                }
             }
-            pushEvent(TransportEventType::ConnectAccepted, kHostPeerId);
+            if (isAssets) {
+                trace("client", "assets datachannel OPEN");  // silent
+            } else {
+                trace("client", "datachannel OPEN");
+                pushEvent(TransportEventType::ConnectAccepted, kHostPeerId);
+            }
         });
 
         dc->onMessage(
-            [this](rtc::binary msg) {
+            [this, isAssets](rtc::binary msg) {
                 std::vector<unsigned char> bytes(msg.size());
                 for (size_t i = 0; i < msg.size(); ++i)
                     bytes[i] = static_cast<unsigned char>(msg[i]);
                 pushEvent(TransportEventType::Data, kHostPeerId,
-                          std::move(bytes));
+                          std::move(bytes),
+                          isAssets ? Channel::Assets : Channel::State);
             },
             [](rtc::string) { /* text unused */ });
 
-        dc->onClosed([this]() {
+        dc->onClosed([this, isAssets]() {
+            if (isAssets) {
+                // Assets channel closing is silent; the state channel drives the
+                // ConnectionLost/Disconnected lifecycle. Just clear readiness.
+                std::lock_guard<std::mutex> lk(mtx);
+                auto it = peers.find(kHostPeerId);
+                if (it != peers.end()) it->second.assetsOpen = false;
+                return;
+            }
             bool wasOpen = false;
             {
                 std::lock_guard<std::mutex> lk(mtx);
@@ -544,18 +589,22 @@ struct WebRtcTransport::Impl {
         init.reliability.maxPacketLifeTime.reset();
         init.reliability.maxRetransmits.reset();
 
-        std::shared_ptr<rtc::DataChannel> dc;
+        // JEF-28: open BOTH the "jefe" (State) and "assets" (Assets) channels.
+        std::shared_ptr<rtc::DataChannel> dc, assetsDc;
         try {
             dc = pc->createDataChannel("jefe", init);
+            assetsDc = pc->createDataChannel("assets", init);
         } catch (const std::exception& e) {
             std::fprintf(stderr, "WebRtcTransport: createDataChannel failed: %s\n",
                          e.what());
+            if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
             try { pc->resetCallbacks(); pc->close(); } catch (...) {}
             pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
             return;
         }
 
         setupClientChannel(dc);
+        setupClientChannel(assetsDc);
 
         bool inserted = false;
         {
@@ -567,6 +616,7 @@ struct WebRtcTransport::Impl {
                 p.clientId = 0;  // no signaling-client id on the client side
                 p.pc = pc;
                 p.dc = dc;
+                p.assetsDc = assetsDc;
                 peers[kHostPeerId] = std::move(p);
                 inserted = true;
             }
@@ -575,6 +625,7 @@ struct WebRtcTransport::Impl {
             // Session was torn down mid-construction: drop the orphan quietly
             // (reset callbacks first so it can't push a stale event).
             try { dc->resetCallbacks(); dc->close(); } catch (...) {}
+            try { assetsDc->resetCallbacks(); assetsDc->close(); } catch (...) {}
             try { pc->resetCallbacks(); pc->close(); } catch (...) {}
         }
     }
@@ -615,7 +666,7 @@ struct WebRtcTransport::Impl {
     // call when not connected (nothing stored).
     void teardownClient() {
         std::shared_ptr<rtc::PeerConnection> pc;
-        std::shared_ptr<rtc::DataChannel> dc;
+        std::shared_ptr<rtc::DataChannel> dc, assetsDc;
         {
             std::lock_guard<std::mutex> lk(mtx);
             // Flip the session guard first so any in-flight WS-thread callback
@@ -629,12 +680,14 @@ struct WebRtcTransport::Impl {
             if (it != peers.end()) {
                 pc = it->second.pc;
                 dc = it->second.dc;
+                assetsDc = it->second.assetsDc;
                 coordToPeer.erase(it->second.coordPeerId);
                 peers.erase(it);
             }
         }
         // Reset callbacks before close so onClosed can't push a spurious event.
         if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
+        if (assetsDc) { try { assetsDc->resetCallbacks(); assetsDc->close(); } catch (...) {} }
         if (pc) { try { pc->resetCallbacks(); pc->close(); } catch (...) {} }
         clientSignaling.close();
         if (coord) coord->close();  // JEF-27: also drop the coordinator socket
@@ -644,22 +697,24 @@ struct WebRtcTransport::Impl {
     // Close + erase a peer. Returns true if it existed.
     bool closePeerInternal(PeerId peer) {
         std::shared_ptr<rtc::PeerConnection> pc;
-        std::shared_ptr<rtc::DataChannel> dc;
+        std::shared_ptr<rtc::DataChannel> dc, assetsDc;
         {
             std::lock_guard<std::mutex> lk(mtx);
             auto it = peers.find(peer);
             if (it == peers.end()) return false;
             pc = it->second.pc;
             dc = it->second.dc;
+            assetsDc = it->second.assetsDc;
             clientToPeer.erase(it->second.clientId);
             if (!it->second.coordPeerId.empty())
                 coordToPeer.erase(it->second.coordPeerId);
             peers.erase(it);
         }
         // Reset callbacks + close outside the lock so no callback re-enters.
-        // resetCallbacks() on BOTH the channel and the PeerConnection (teardown
-        // symmetry) so neither's forwarders fire into a half-dead peer.
+        // resetCallbacks() on BOTH channels and the PeerConnection (teardown
+        // symmetry) so no forwarder fires into a half-dead peer.
         if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
+        if (assetsDc) { try { assetsDc->resetCallbacks(); assetsDc->close(); } catch (...) {} }
         if (pc) { try { pc->resetCallbacks(); pc->close(); } catch (...) {} }
         return true;
     }
@@ -678,6 +733,10 @@ struct WebRtcTransport::Impl {
         for (auto& kv : toClose) {
             if (kv.second.dc) {
                 try { kv.second.dc->resetCallbacks(); kv.second.dc->close(); }
+                catch (...) {}
+            }
+            if (kv.second.assetsDc) {
+                try { kv.second.assetsDc->resetCallbacks(); kv.second.assetsDc->close(); }
                 catch (...) {}
             }
             if (kv.second.pc) {
@@ -849,17 +908,21 @@ struct WebRtcTransport::Impl {
         init.reliability.maxPacketLifeTime.reset();
         init.reliability.maxRetransmits.reset();
 
-        std::shared_ptr<rtc::DataChannel> dc;
+        // JEF-28: open BOTH the "jefe" (State) and "assets" (Assets) channels.
+        std::shared_ptr<rtc::DataChannel> dc, assetsDc;
         try {
             dc = pc->createDataChannel("jefe", init);
+            assetsDc = pc->createDataChannel("assets", init);
         } catch (const std::exception& e) {
             std::fprintf(stderr, "WebRtcTransport: coord createDataChannel failed: %s\n",
                          e.what());
+            if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
             try { pc->resetCallbacks(); pc->close(); } catch (...) {}
             pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
             return;
         }
         setupClientChannel(dc);
+        setupClientChannel(assetsDc);
 
         bool inserted = false;
         {
@@ -869,6 +932,7 @@ struct WebRtcTransport::Impl {
                 p.coordPeerId = hostCoordId;
                 p.pc = pc;
                 p.dc = dc;
+                p.assetsDc = assetsDc;
                 peers[kHostPeerId] = std::move(p);
                 coordToPeer[hostCoordId] = kHostPeerId;
                 inserted = true;
@@ -876,6 +940,7 @@ struct WebRtcTransport::Impl {
         }
         if (!inserted) {
             try { dc->resetCallbacks(); dc->close(); } catch (...) {}
+            try { assetsDc->resetCallbacks(); assetsDc->close(); } catch (...) {}
             try { pc->resetCallbacks(); pc->close(); } catch (...) {}
         }
     }
@@ -1083,8 +1148,17 @@ bool WebRtcTransport::poll(TransportEvent& ev) {
 }
 
 void WebRtcTransport::send(const unsigned char* data, int len, PeerId target,
-                           bool broadcastExcluding) {
+                           bool broadcastExcluding, Channel channel) {
     if (len <= 0 || data == nullptr) return;
+
+    // JEF-28: pick the state ("jefe") or assets channel per peer based on the
+    // requested lane. If the chosen channel isn't open yet, the peer is skipped
+    // (same drop-if-not-open behavior as the state channel had before).
+    const bool assets = (channel == Channel::Assets);
+    auto pick = [assets](const Impl::Peer& p) -> std::shared_ptr<rtc::DataChannel> {
+        if (assets) return (p.assetsOpen && p.assetsDc) ? p.assetsDc : nullptr;
+        return (p.open && p.dc) ? p.dc : nullptr;
+    };
 
     // Collect target channels under the lock, then send after unlocking.
     // RakNet parity (gfcTransport.h):
@@ -1099,16 +1173,16 @@ void WebRtcTransport::send(const unsigned char* data, int len, PeerId target,
             // (matches RakNet, and never a broadcast).
             if (target != kInvalidPeerId) {
                 auto it = d_->peers.find(target);
-                if (it != d_->peers.end() && it->second.open && it->second.dc)
-                    targets.push_back(it->second.dc);
+                if (it != d_->peers.end()) {
+                    if (auto dc = pick(it->second)) targets.push_back(dc);
+                }
             }
         } else {
             // Broadcast to everyone except `target`
             // (target==kInvalidPeerId → nothing to exclude → everyone).
             for (auto& kv : d_->peers) {
                 if (kv.first == target) continue;
-                if (kv.second.open && kv.second.dc)
-                    targets.push_back(kv.second.dc);
+                if (auto dc = pick(kv.second)) targets.push_back(dc);
             }
         }
     }
