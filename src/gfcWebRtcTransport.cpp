@@ -65,6 +65,14 @@ struct WebRtcTransport::Impl {
     bool hosting = false;
     bool client = false;  // set once connect() starts the client signaling
 
+    // Client-session guard (mtx-protected). connect() sets it true; disconnect()/
+    // teardownClient() set it false. The async client signaling callbacks
+    // (onClientSignalingOpen etc.) fire on a WebSocket thread and may race a
+    // connect()-then-immediate-disconnect(): they check this under the lock and
+    // bail (constructing/pushing nothing) if the session was already torn down,
+    // so a live pc/dc can't be orphaned into a session the caller abandoned.
+    bool clientActive = false;
+
     void pushEvent(TransportEventType type, PeerId peer,
                    std::vector<unsigned char> bytes = {}) {
         std::lock_guard<std::mutex> lk(mtx);
@@ -280,6 +288,13 @@ struct WebRtcTransport::Impl {
     // Signaling socket to the host is up: build the offerer PeerConnection and
     // open the reliable/ordered "jefe" channel (which triggers the offer).
     void onClientSignalingOpen() {
+        // Bail if the caller already tore the session down (connect() then an
+        // immediate disconnect() racing this WS-thread callback).
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            if (!clientActive) return;
+        }
+
         rtc::Configuration config;  // empty iceServers — LAN host candidates.
         std::shared_ptr<rtc::PeerConnection> pc;
         try {
@@ -329,13 +344,25 @@ struct WebRtcTransport::Impl {
 
         setupClientChannel(dc);
 
+        bool inserted = false;
         {
             std::lock_guard<std::mutex> lk(mtx);
-            Peer p;
-            p.clientId = 0;  // no signaling-client id on the client side
-            p.pc = pc;
-            p.dc = dc;
-            peers[kHostPeerId] = std::move(p);
+            // Re-check under the lock: disconnect() may have run while we built
+            // the pc/dc above. Only publish the peer into a still-active session.
+            if (clientActive) {
+                Peer p;
+                p.clientId = 0;  // no signaling-client id on the client side
+                p.pc = pc;
+                p.dc = dc;
+                peers[kHostPeerId] = std::move(p);
+                inserted = true;
+            }
+        }
+        if (!inserted) {
+            // Session was torn down mid-construction: drop the orphan quietly
+            // (reset callbacks first so it can't push a stale event).
+            try { dc->resetCallbacks(); dc->close(); } catch (...) {}
+            try { pc->resetCallbacks(); pc->close(); } catch (...) {}
         }
     }
 
@@ -377,6 +404,11 @@ struct WebRtcTransport::Impl {
         std::shared_ptr<rtc::DataChannel> dc;
         {
             std::lock_guard<std::mutex> lk(mtx);
+            // Flip the session guard first so any in-flight WS-thread callback
+            // (onClientSignalingOpen still constructing a pc/dc) bails / drops
+            // its orphan instead of publishing it after we return. Idempotent:
+            // a second disconnect() finds no peer and no active session.
+            clientActive = false;
             auto it = peers.find(kHostPeerId);
             if (it != peers.end()) {
                 pc = it->second.pc;
@@ -416,6 +448,7 @@ struct WebRtcTransport::Impl {
         std::map<PeerId, Peer> toClose;
         {
             std::lock_guard<std::mutex> lk(mtx);
+            clientActive = false;  // stop any in-flight client callback
             toClose.swap(peers);
             clientToPeer.clear();
         }
@@ -489,6 +522,14 @@ bool WebRtcTransport::connect(const std::string& ip, unsigned short port,
     if (d_->hosting || d_->client) return false;  // one role per instance
     initLoggerOnce();
 
+    // Mark the session active BEFORE the async dial so the WS-thread callbacks
+    // (which may fire immediately) see a live session. A racing disconnect()
+    // flips this false and the callbacks bail.
+    {
+        std::lock_guard<std::mutex> lk(d_->mtx);
+        d_->clientActive = true;
+    }
+
     // Register signaling callbacks BEFORE connect() (SignalingClient contract).
     Impl* d = d_.get();
     d_->clientSignaling.onOpen([d]() { d->onClientSignalingOpen(); });
@@ -498,6 +539,8 @@ bool WebRtcTransport::connect(const std::string& ip, unsigned short port,
 
     if (!d_->clientSignaling.connect(ip, port)) {
         std::fprintf(stderr, "WebRtcTransport: client signaling connect failed\n");
+        std::lock_guard<std::mutex> lk(d_->mtx);
+        d_->clientActive = false;
         return false;
     }
     d_->client = true;
