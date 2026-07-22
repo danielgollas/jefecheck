@@ -436,6 +436,23 @@ std::string coordTestGetCode();
 void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
                        int holdMs, bool play, int connectTimeoutMs = 12000);
 bool coordTestSettleForPlay(int settleMs);
+// JEF-28 Task 2: --asset-test late-join LUT/FX transfer helpers. Host role:
+// load a fixture into the host managers (returns its content hash, "" on
+// failure / no-GL FX), start the RakNet server, pump it while the peer syncs.
+// Peer role reuses remoteTestPeerConnect; these getters read the peer's
+// post-sync manager state (TU-safe wrappers over lutManager/fxManager).
+// Offscreen GL bring-up (offscreen_gl_qt.cpp, its own TU to keep Qt's GL
+// headers away from glad). loadLUT/loadFX create GL objects, so the headless
+// harness needs a current context first. Returns false if GL can't come up.
+bool setupOffscreenTestGL();
+std::string assetTestLoadLUT(const std::string& path);
+std::string assetTestLoadFX(const std::string& path);
+bool assetTestServerStart(int port);
+void assetTestServerPump(int ms);
+bool remoteHasLUTHash(const std::string& hash);
+int  remoteLUTCount();
+bool remoteHasFXHash(const std::string& hash);
+int  remoteFXCount();
 bool isRemoteConnected();
 bool isRemoteServer();
 std::vector<std::string> remoteParticipants();
