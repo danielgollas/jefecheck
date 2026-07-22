@@ -24,6 +24,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 
+#include "gfcCoordinatorSignaling.h"
 #include "gfcSignaling.h"
 #include "gfcStructures.h"
 #include "gfcWireTest.h"
@@ -185,6 +186,15 @@ static bool hasSignalTest(int argc, char* argv[]) {
     return false;
 }
 
+// --coord-signal-test : headless cloud-coordinator codec + loopback self-test
+// (JEF-27 Task 1). Pure codec assertions plus a bounded rtc::WebSocketServer
+// loopback; needs nothing setup provides, so it runs before QApplication.
+static bool hasCoordSignalTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--coord-signal-test") == 0) return true;
+    return false;
+}
+
 // --remote-test : orchestrator/server role (spawns a peer child).
 static bool hasRemoteTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
@@ -269,6 +279,14 @@ int main(int argc, char* argv[]) {
     // rtc::Preload()/Cleanup() internally. Runs before QApplication.
     if (hasSignalTest(argc, argv)) {
         return jefe::net::signalingSelfTest();
+    }
+
+    // Headless cloud-coordinator self-test (--coord-signal-test, JEF-27): pure
+    // codec round-trip for the JEF-25 envelopes plus a bounded loopback against
+    // a scripted rtc::WebSocketServer. Brackets rtc::Preload()/Cleanup()
+    // internally. Runs before QApplication, same as --signal-test.
+    if (hasCoordSignalTest(argc, argv)) {
+        return jefe::net::coordinatorSignalingSelfTest();
     }
 
     // Make Qt's accessibility bridge live before QApplication touches
