@@ -27,8 +27,15 @@
 #include <QVBoxLayout>
 
 #include <thread>
+#include <unordered_map>
 
 namespace {
+
+// JEF-30: session-health colors, matching the existing statusDot_ palette
+// (green connected/good, amber warn/relay, gray unknown/no-stats).
+const char* kHealthGood = "#5bb07a";
+const char* kHealthWarn = "#d6a15b";
+const char* kHealthGray = "#6a6a70";
 
 // Scoped stylesheet — a clean dark surface with a muted slate accent for the
 // primary (Host/Join) actions. Applied to the panel; children inherit.
@@ -655,15 +662,81 @@ void RemoteDialog_Qt::refreshConnectionState() {
             QStringLiteral("Session code: <b>%1</b>").arg(cloudCode.toHtmlEscaped()));
 
     // Participants change only on join/leave (which changes the count), so
-    // rebuild the list only when the count moved — not on every packet.
+    // rebuild the ROW WIDGETS only when the count moved — not on every packet.
+    // The health fields inside each row (rtt/kbps/path/dot) are refreshed
+    // every tick below via updateParticipantHealthRow (cheap setText, no
+    // relayout).
     const auto participants = jefe::qt::remoteParticipants();
     if ((int)participants.size() != shownParticipants_) {
         shownParticipants_ = (int)participants.size();
         participantsList_->clear();
-        for (const auto& name : participants)
-            participantsList_->addItem(QString::fromStdString(name));
+        for (const auto& name : participants) {
+            const QString qname = QString::fromStdString(name);
+            auto* item = new QListWidgetItem(participantsList_);
+            auto* row = buildParticipantHealthRow(qname);
+            item->setSizeHint(row->sizeHint());
+            participantsList_->setItemWidget(item, row);
+        }
         participantsHeader_->setText(
             QString("Participants (%1)").arg(participantsList_->count()));
+    }
+
+    // JEF-30: per-peer session health. Drop stale samples on disconnect (a
+    // later reconnect starts clean, so kbps doesn't spike from a huge gap or
+    // a peer-name reused across sessions with a stale byte total).
+    if (!connected) {
+        peerHealthSamples_.clear();
+    } else if (!participants.empty()) {
+        // Build a name -> stat lookup once, then update each visible row.
+        // remotePeerStats() honors gCloudConnectInFlight itself (empty
+        // during a cloud connect) — that degrades gracefully to hasStats=false
+        // below, same as any other name that doesn't resolve to a peer stat.
+        const auto stats = jefe::qt::remotePeerStats();
+        std::unordered_map<std::string, const jefe::qt::RemotePeerStat*> byName;
+        byName.reserve(stats.size());
+        for (const auto& s : stats) byName[s.name] = &s;
+
+        const auto now = std::chrono::steady_clock::now();
+        for (int i = 0; i < participantsList_->count(); ++i) {
+            auto* item = participantsList_->item(i);
+            auto* row = participantsList_->itemWidget(item);
+            if (!row) continue;
+            const std::string name = participants[static_cast<size_t>(i)];
+            auto it = byName.find(name);
+            if (it == byName.end()) {
+                updateParticipantHealthRow(row, /*hasStats=*/false, false, -1, -1.0, {});
+                continue;
+            }
+            const jefe::qt::RemotePeerStat& s = *it->second;
+
+            // kbps from a byte-delta sample, keyed by name. Guard div-by-zero
+            // and a too-short interval (noisy at up to ~60Hz refresh) by only
+            // recomputing once at least 150ms have elapsed since the last
+            // sample; otherwise keep showing the last stable value so the
+            // row doesn't flicker to "—" between recomputes.
+            auto& sample = peerHealthSamples_[name];
+            double kbps = sample.lastKbps;
+            if (!sample.hasSample) {
+                sample.bytes = s.bytes;
+                sample.ts = now;
+                sample.hasSample = true;
+                kbps = -1.0;   // first sample: no interval to derive a rate from yet
+            } else {
+                const double dtSec = std::chrono::duration<double>(now - sample.ts).count();
+                if (dtSec >= 0.15) {
+                    long long deltaBytes =
+                        static_cast<long long>(s.bytes) - static_cast<long long>(sample.bytes);
+                    if (deltaBytes < 0) deltaBytes = 0;   // counter reset guard (reconnect)
+                    kbps = (static_cast<double>(deltaBytes) * 8.0) / 1000.0 / dtSec;
+                    sample.bytes = s.bytes;
+                    sample.ts = now;
+                    sample.lastKbps = kbps;
+                }
+            }
+
+            updateParticipantHealthRow(row, /*hasStats=*/true, s.connected, s.rttMs, kbps,
+                                       QString::fromStdString(s.path));
+        }
     }
 
     const auto errs = jefe::qt::remoteErrors();
@@ -772,4 +845,99 @@ void RemoteDialog_Qt::appendChatBubble(const jefe::qt::ChatEntry& e) {
     else          { rowLay->addWidget(bubble); rowLay->addStretch(1); }
 
     chatLayout_->insertWidget(chatLayout_->count() - 1, row);  // before stretch
+}
+
+// JEF-30: builds one participantsList_ row widget: a colored health dot,
+// the participant name, and rtt/kbps/path fields (updated in place every
+// refresh by updateParticipantHealthRow — the row itself is only rebuilt
+// when the participant COUNT changes, matching the existing incremental-
+// refresh discipline for this dialog). Object names use the dotted-leaf
+// scheme; reused across rows like the chat_* widgets above (this dialog has
+// no per-row automated locator today — see tests/ui/jefecheck/locators.py).
+QWidget* RemoteDialog_Qt::buildParticipantHealthRow(const QString& name) {
+    auto* row = new QWidget();
+    row->setObjectName("remote.health.participantRow");
+    auto* lay = new QHBoxLayout(row);
+    lay->setContentsMargins(4, 2, 4, 2);
+    lay->setSpacing(6);
+
+    auto* dot = new QLabel(row);
+    dot->setObjectName("remote.health.dot");
+    dot->setFixedSize(9, 9);
+    dot->setStyleSheet(QString("border-radius:4px; background:%1;").arg(kHealthGray));
+
+    auto* nameLbl = new QLabel(name, row);
+    nameLbl->setObjectName("remote.health.name");
+
+    auto* rttLbl = new QLabel(row);
+    rttLbl->setObjectName("remote.health.rtt");
+    rttLbl->setMinimumWidth(46);
+
+    auto* kbpsLbl = new QLabel(row);
+    kbpsLbl->setObjectName("remote.health.kbps");
+    kbpsLbl->setMinimumWidth(72);
+
+    auto* pathLbl = new QLabel(row);
+    pathLbl->setObjectName("remote.health.path");
+
+    lay->addWidget(dot);
+    lay->addWidget(nameLbl);
+    lay->addStretch(1);
+    lay->addWidget(rttLbl);
+    lay->addWidget(kbpsLbl);
+    lay->addWidget(pathLbl);
+    return row;
+}
+
+// JEF-30: refreshes one row's dot/rtt/kbps/path text+color in place (cheap
+// QLabel::setText/setStyleSheet — no layout rebuild). `hasStats` false means
+// this participant has no matching remotePeerStats() entry (self, or a name
+// that doesn't resolve — client-role nickname resolution is a known gap,
+// see JEF-30 Task 1 report); render as a plain gray "connected"/blank row,
+// never fabricate numbers.
+void RemoteDialog_Qt::updateParticipantHealthRow(QWidget* row, bool hasStats,
+                                                  bool connected, long rttMs,
+                                                  double kbps, const QString& path) {
+    auto* dot    = row->findChild<QLabel*>("remote.health.dot");
+    auto* rttLbl = row->findChild<QLabel*>("remote.health.rtt");
+    auto* kbpsLbl= row->findChild<QLabel*>("remote.health.kbps");
+    auto* pathLbl= row->findChild<QLabel*>("remote.health.path");
+    if (!dot || !rttLbl || !kbpsLbl || !pathLbl) return;
+
+    if (!hasStats) {
+        dot->setStyleSheet(QString("border-radius:4px; background:%1;").arg(kHealthGray));
+        rttLbl->clear();
+        kbpsLbl->clear();
+        pathLbl->clear();
+        return;
+    }
+
+    // Path badge + dot color (§3): direct=green, relay=amber, n/a/unknown=gray.
+    // RakNet ("n/a") and any not-yet-connected peer show "connected"/"—"
+    // without fabricated WebRTC numbers.
+    const bool isDirect = (path == "direct");
+    const bool isRelay  = (path == "relay" || path == "relay (TURN)");
+    const QString dotColor = isDirect ? kHealthGood : isRelay ? kHealthWarn : kHealthGray;
+    dot->setStyleSheet(QString("border-radius:4px; background:%1;").arg(dotColor));
+
+    if (!isDirect && !isRelay) {
+        // "n/a" (RakNet) or an unresolved path: no WebRTC stats to show.
+        rttLbl->clear();
+        kbpsLbl->clear();
+        pathLbl->setText(connected ? "connected" : "—");
+        pathLbl->setStyleSheet(QString("color:%1;").arg(kHealthGray));
+        return;
+    }
+
+    // RTT color (§3): green <100ms, amber >=100ms, gray if unknown (<0).
+    QString rttColor = kHealthGray;
+    if (rttMs >= 0) rttColor = (rttMs < 100) ? kHealthGood : kHealthWarn;
+    rttLbl->setText(rttMs >= 0 ? QString("%1ms").arg(rttMs) : QStringLiteral("—"));
+    rttLbl->setStyleSheet(QString("color:%1;").arg(rttColor));
+
+    kbpsLbl->setText(kbps >= 0.0 ? QString("%1 kbps").arg(kbps, 0, 'f', 0)
+                                 : QStringLiteral("—"));
+
+    pathLbl->setText(isRelay ? "relay (TURN)" : "direct");
+    pathLbl->setStyleSheet(QString("color:%1;").arg(dotColor));
 }
