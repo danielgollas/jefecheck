@@ -448,7 +448,9 @@ void gfcNetworkServer::Update() {
 
             clientsMissingFXsMap[ev.peer].clear();
 
-            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), ev.peer, false );
+            // JEF-28: bulk FX bodies go on the dedicated assets QoS lane so a
+            // large transfer can't head-of-line-block live state traffic.
+            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), ev.peer, false, jefe::net::Channel::Assets );
 
             //if we received at least one FX, then start the FXsic process again with everybody else.
             if ( howMany )
@@ -498,7 +500,8 @@ void gfcNetworkServer::Update() {
 
             clientsMissingLUTsMap[ev.peer].clear();
 
-            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), ev.peer, false );
+            // JEF-28: bulk LUT bodies go on the dedicated assets QoS lane.
+            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), ev.peer, false, jefe::net::Channel::Assets );
 
             //if we received at least one LUT, then start the LUTsinc process again with everybody else.
             if ( howMany )

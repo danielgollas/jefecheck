@@ -694,8 +694,16 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 		{
 			loadedAndCompiled=true;
 
-			//calculate the FXs md5 hash
-			md5Hash=GetMD5Hash ( inputForHash );
+			//calculate the FXs content hash.
+			// JEF-28: hash the RAW BYTES of the .jfx + .vert + .frag files
+			// (portable — same digest on any build/platform, and it now
+			// COVERS THE SHADER SOURCE, which the old metadata-only hash
+			// ignored — two FX with identical metadata but different GLSL
+			// used to collide). shaderPath/vertex/fragment are the same paths
+			// the shader load above used. Falls back to the metadata hash only
+			// if none of the files can be re-read here.
+			md5Hash=jefe::contentHashFiles ( { pfilename, shaderPath+vertex, shaderPath+fragment } );
+			if ( md5Hash.empty() ) md5Hash=GetMD5Hash ( inputForHash );
 			//printf ( "\nFX Hash:lenght=%s:%i\n",md5Hash.c_str(),md5Hash.size() );
 
 			if ( pprogress!=NULL )

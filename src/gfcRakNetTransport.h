@@ -27,7 +27,8 @@ public:
     void disconnect() override;
     bool poll(TransportEvent& ev) override;
     void send(const unsigned char* data, int len, PeerId target,
-              bool broadcastExcluding) override;
+              bool broadcastExcluding,
+              Channel channel = Channel::State) override;
     void closePeer(PeerId peer, bool sendNotification) override;
     int connectionCount() override;
 

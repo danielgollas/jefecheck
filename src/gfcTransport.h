@@ -20,6 +20,13 @@ inline PeerId packPeerId(uint32_t binaryAddress, uint16_t port) {
     return (static_cast<uint64_t>(binaryAddress) << 16) | port;
 }
 
+// JEF-28: QoS lane selector. Orthogonal to the GFCNETID message type — the
+// receive dispatch is by GFCNETID regardless of channel. `Assets` carries the
+// bulk LUT/FX serialize bodies on a SEPARATE reliable-ordered stream so a big
+// transfer can't head-of-line-block live state/chat/pointer/play/CC traffic.
+// Defaulted to State everywhere so every existing call site is unchanged.
+enum class Channel { State = 0, Assets = 1 };
+
 enum class TransportEventType {
     ConnectAccepted,   // client: server accepted us (peer = server)
     ConnectFailed,     // client: attempt failed
@@ -37,6 +44,11 @@ struct TransportEvent {
     TransportEventType type;
     PeerId peer = kInvalidPeerId;
     std::vector<unsigned char> bytes; // only for Data
+    // JEF-28: which QoS lane a Data event arrived on. Not needed for dispatch
+    // (GFCNETID drives that) but cheap + useful. WebRTC sets it accurately from
+    // the channel label; RakNet leaves it State (its receive side can't cheaply
+    // recover the ordering channel — see gfcRakNetTransport.cpp).
+    Channel channel = Channel::State;
 };
 
 class ITransport {
@@ -59,8 +71,11 @@ public:
     // broadcastExcluding=false -> send to target only;
     // broadcastExcluding=true  -> send to everyone EXCEPT target
     //   (target==kInvalidPeerId -> everyone).
+    // JEF-28: `channel` selects the QoS lane (default State = unchanged
+    // behavior). Assets routes onto a second reliable-ordered stream.
     virtual void send(const unsigned char* data, int len, PeerId target,
-                      bool broadcastExcluding) = 0;
+                      bool broadcastExcluding,
+                      Channel channel = Channel::State) = 0;
 
     virtual void closePeer(PeerId peer, bool sendNotification) = 0;
     virtual int connectionCount() = 0;

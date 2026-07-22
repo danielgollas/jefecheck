@@ -126,6 +126,25 @@ std::string GetExtension(const std::string& filename);
 
 std::string GetMD5Hash(std::string theString);
 
+// ---------------------------------------------------------------------------
+// Portable content digest (JEF-28 Task 1). Unlike GetMD5Hash (std::hash over a
+// string — build/platform-dependent, NOT over file bytes), these are a fixed
+// FNV-1a 64-bit hash over RAW BYTES, so two peers on different builds/platforms
+// compute the SAME 16-hex-char digest for the same bytes. Used for the LUT/FX
+// content hashes that drive the P2P asset-sync dedup (must agree across peers).
+namespace jefe {
+    // Digest of an arbitrary byte range.
+    std::string contentHash(const unsigned char* data, size_t len);
+    // Digest of a string's bytes (convenience; identical to contentHash over
+    // the string's data). Golden: contentHashString("foobar") == "85944171f73967e8".
+    std::string contentHashString(const std::string& s);
+    // Digest of a file's raw bytes. Returns "" if the file can't be opened.
+    std::string contentHashFile(const std::string& path);
+    // Digest of several files' bytes concatenated in order (missing/unreadable
+    // files contribute nothing). Used for FX = .jfx + .vert + .frag bytes.
+    std::string contentHashFiles(const std::vector<std::string>& paths);
+}
+
 void ReplaceWindowsBackslash(std::string &filename);
 void ReplaceWindowsSlash(std::string &filename);
 

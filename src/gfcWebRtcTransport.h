@@ -9,6 +9,13 @@
 //   the channel via PeerConnection::onDataChannel and produces the answer by
 //   feeding the client's offer into setRemoteDescription (auto-negotiation).
 //
+// JEF-28: the offerer opens TWO reliable/ordered channels per peer — "jefe"
+// (state/chat/pointer/play/CC = Channel::State) and "assets" (bulk LUT/FX
+// bodies = Channel::Assets). The answerer receives both via onDataChannel and
+// branches on dc->label(). PeerConnected/ConnectAccepted fire on the STATE
+// channel opening only; the assets channel opens silently. send() routes by
+// the Channel argument.
+//
 // This class carries jefe::wire FRAMES verbatim over a reliable/ordered data
 // channel — NO envelope byte (unlike RakNetTransport, whose byte is a RakNet
 // routing detail). Signaling (SDP offer/answer + ICE candidates) is exchanged
@@ -55,7 +62,8 @@ public:
 
     bool poll(TransportEvent& ev) override;
     void send(const unsigned char* data, int len, PeerId target,
-              bool broadcastExcluding) override;
+              bool broadcastExcluding,
+              Channel channel = Channel::State) override;
     void closePeer(PeerId peer, bool sendNotification) override;
     int connectionCount() override;
 

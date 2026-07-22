@@ -375,7 +375,8 @@ void gfcNetworkClient::Update() {
             if ( !readOk ) break; // malformed request: send nothing
 
             //send the serialized LUTs to the server.
-            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false );
+            // JEF-28: bulk LUT bodies go on the dedicated assets QoS lane.
+            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false, jefe::net::Channel::Assets );
 
         }
         break;
@@ -561,7 +562,8 @@ void gfcNetworkClient::Update() {
             if ( !readOk ) break; // malformed request: send nothing
 
             //send the serialized FXs to the server.
-            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false );
+            // JEF-28: bulk FX bodies go on the dedicated assets QoS lane.
+            if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false, jefe::net::Channel::Assets );
             printf("FXs sent\n");
         }
         break;

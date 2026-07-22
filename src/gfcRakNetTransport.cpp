@@ -114,7 +114,7 @@ bool RakNetTransport::poll(TransportEvent& ev) {
 }
 
 void RakNetTransport::send(const unsigned char* data, int len, PeerId target,
-                           bool broadcastExcluding) {
+                           bool broadcastExcluding, Channel channel) {
     SystemAddress addr = (target == kInvalidPeerId)
                              ? UNASSIGNED_SYSTEM_ADDRESS
                              : toSystemAddress(target);
@@ -127,8 +127,15 @@ void RakNetTransport::send(const unsigned char* data, int len, PeerId target,
     packet.reserve((size_t)len + 1);
     packet.push_back(GFCNET_USER_PACKET_BASE);
     packet.insert(packet.end(), data, data + len);
+    // JEF-28: map Channel::Assets → RakNet ordering channel 1 (a second
+    // reliable-ordered stream) so bulk asset bodies don't head-of-line-block
+    // state traffic on channel 0. On the RECEIVE side RakNet doesn't cheaply
+    // hand back the ordering channel, so poll() leaves TransportEvent.channel
+    // at State for RakNet — the QoS separation is best-effort here (legacy
+    // transport); dispatch is by GFCNETID regardless, so this is harmless.
+    const char orderingChannel = (channel == Channel::Assets) ? 1 : 0;
     peer_->Send((const char*)packet.data(), (int)packet.size(), HIGH_PRIORITY,
-                RELIABLE_ORDERED, 0, addr, broadcastExcluding);
+                RELIABLE_ORDERED, orderingChannel, addr, broadcastExcluding);
 }
 
 void RakNetTransport::closePeer(PeerId peer, bool sendNotification) {

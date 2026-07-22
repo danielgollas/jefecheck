@@ -2227,6 +2227,76 @@ bool remoteTestServerSettleForPlay(int settleMs) {
     return false;
 }
 
+// ── JEF-28 Task 2: --asset-test late-join LUT/FX transfer harness ────────────
+// Proves a peer that joins AFTER the host already loaded a LUT (and, when a GL
+// context is available, an FX) receives the asset body over the wire and
+// hot-loads it. Runs over RakNet (the --remote-test transport): simplest,
+// instant connect, and the FX/LUT sync is transport-agnostic so proving it here
+// proves the mechanism for every transport.
+
+// Return the first hash present in `after` but not in `before` (the hash of the
+// asset that loadLUT/loadFX just added). "" if nothing new appeared (load
+// failed, or produced no valid content hash — e.g. an FX whose shaders could
+// not compile because there is no GL context).
+static std::string firstNewHash(const std::vector<std::string>& before,
+                                const std::vector<std::string>& after) {
+    for (const auto& h : after) {
+        bool seen = false;
+        for (const auto& b : before) if (b == h) { seen = true; break; }
+        if (!seen && !h.empty()) return h;
+    }
+    return "";
+}
+
+// Host role: load a fixture LUT into the host's lutManager and return its
+// content hash (so the orchestrator can tell the peer what to expect and the
+// server has a non-empty asset to push). "" on failure.
+std::string assetTestLoadLUT(const std::string& path) {
+    auto before = lutManager.getHashes();
+    lutManager.loadLUT(path);
+    return firstNewHash(before, lutManager.getHashes());
+}
+
+// Host role: load a fixture FX. Headless (no GL context) this produces no valid
+// hash because gfcFX only sets its content hash after a successful shader
+// compile+link, so the returned hash is typically "" in the --asset-test
+// harness — the orchestrator treats an empty FX hash as "FX not applicable".
+std::string assetTestLoadFX(const std::string& path) {
+    auto before = fxManager.getHashes();
+    fxManager.loadFX(path);
+    return firstNewHash(before, fxManager.getHashes());
+}
+
+// Host role: bring up the RakNet server (instant connect). The FX/LUT sync
+// fires automatically when the peer joins (server-side GFCNETID_ enters
+// startFXSinc → … → the LUT push).
+bool assetTestServerStart(int port) {
+    RemoteServerParams sp; sp.serverName = "jefe-asset-test"; sp.port = port; sp.password = "";
+    connectAsServer(sp);
+    return true;
+}
+
+// Host role: pump the server for `ms` while the peer connects + runs the sync
+// handshake (the server must Update() to process each handshake round-trip).
+void assetTestServerPump(int ms) {
+    for (int t = 0; t < ms; t += 10) {
+        pumpNetwork();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+// TU-safe getters for the peer's post-sync manager state.
+bool remoteHasLUTHash(const std::string& hash) {
+    if (hash.empty()) return false;
+    return lutManager.getHashMap().count(hash) > 0;
+}
+int remoteLUTCount() { return (int)lutManager.getHashMap().size(); }
+bool remoteHasFXHash(const std::string& hash) {
+    if (hash.empty()) return false;
+    return fxManager.getHashMap().count(hash) > 0;
+}
+int remoteFXCount() { return (int)fxManager.getHashMap().size(); }
+
 // ── JEF-27 Task 3: --coord-test cloud-coordinator E2E harness ───────────────
 // Same split-phase topology as the WebRTC LAN harness (host + its loopback
 // client live in the orchestrator process; the peer is a spawned child), but

@@ -10,6 +10,7 @@
 #include "gfcWire.h"
 #include "gfcWireMessages.h"
 #include "gfcNetworkStructures.h"
+#include "gfcStructures.h"   // jefe::contentHash* (JEF-28 Task 1)
 
 #include <cstdint>
 #include <cstring>
@@ -916,6 +917,97 @@ void testSerializeFX() {
     std::filesystem::remove(fragPath, ec);
 }
 
+// ---- content digest (JEF-28 Task 1) ------------------------------------
+//
+// The P2P LUT/FX sync dedup depends on every peer computing the SAME digest
+// for the same bytes, on any build/platform. These pin the algorithm (FNV-1a
+// 64-bit over bytes), prove same-bytes→same / diff-bytes→diff, prove the FX
+// digest now COVERS THE SHADER SOURCE (the old metadata-only hash didn't), and
+// exercise the filename sanitization that closes the path-traversal gap.
+
+void testContentDigestGolden() {
+    // Pinned FNV-1a 64-bit vector (standard published test vector). If this
+    // ever changes, the wire dedup silently breaks across peer versions.
+    check(jefe::contentHashString("foobar") == "85944171f73967e8",
+          "content digest golden: FNV-1a-64(\"foobar\") == 85944171f73967e8");
+    // Empty input is the FNV offset basis.
+    check(jefe::contentHashString("") == "cbf29ce484222325",
+          "content digest golden: FNV-1a-64(\"\") == cbf29ce484222325");
+    // Byte-range API must agree with the string API.
+    const unsigned char foobar[] = {'f','o','o','b','a','r'};
+    check(jefe::contentHash(foobar, sizeof(foobar)) == "85944171f73967e8",
+          "content digest byte-range API matches string API");
+}
+
+void testContentDigestSameVsDifferent() {
+    const std::string a = "LUT_3D_SIZE 2\nidentity data";
+    const std::string b = a;                 // identical bytes
+    std::string c = a; c.back() = '!';       // one byte different
+    check(jefe::contentHashString(a) == jefe::contentHashString(b),
+          "content digest: same bytes -> same hash");
+    check(jefe::contentHashString(a) != jefe::contentHashString(c),
+          "content digest: different bytes -> different hash");
+}
+
+void testContentDigestFXShaderSource() {
+    // Prove the FX content hash (contentHashFiles over .jfx+.vert+.frag) now
+    // covers the shader body: two FX with IDENTICAL metadata (.jfx) and vertex
+    // shader but a DIFFERENT fragment shader must hash DIFFERENTLY. Under the
+    // old metadata-only hash these collided.
+    const std::filesystem::path dir = wireTestDir();
+    const std::filesystem::path jfx  = dir / "cd_fx.jfx";
+    const std::filesystem::path vert = dir / "cd_fx.vert";
+    const std::filesystem::path fragA = dir / "cd_fxA.frag";
+    const std::filesystem::path fragB = dir / "cd_fxB.frag";
+    writeFileBytes(jfx,  "<root><info name=\"Same\" author=\"x\"/></root>");
+    writeFileBytes(vert, "void main(){ gl_Position = ftransform(); }");
+    writeFileBytes(fragA, "void main(){ gl_FragColor = vec4(1.0); }");
+    writeFileBytes(fragB, "void main(){ gl_FragColor = vec4(0.0); }"); // 1.0 -> 0.0
+
+    const std::string hashA =
+        jefe::contentHashFiles({jfx.string(), vert.string(), fragA.string()});
+    const std::string hashB =
+        jefe::contentHashFiles({jfx.string(), vert.string(), fragB.string()});
+    check(!hashA.empty() && !hashB.empty(),
+          "FX content hash: files hashed (non-empty)");
+    check(hashA != hashB,
+          "FX content hash: same metadata, different fragment shader -> different hash");
+
+    // Same three files hashed again must reproduce the same digest.
+    const std::string hashA2 =
+        jefe::contentHashFiles({jfx.string(), vert.string(), fragA.string()});
+    check(hashA == hashA2, "FX content hash: deterministic for same files");
+
+    // Unreadable-only set yields empty (caller-detectable failure).
+    check(jefe::contentHashFiles({(dir / "does_not_exist.frag").string()}).empty(),
+          "FX content hash: all-missing files -> empty digest");
+
+    std::error_code ec;
+    std::filesystem::remove(jfx, ec);   std::filesystem::remove(vert, ec);
+    std::filesystem::remove(fragA, ec); std::filesystem::remove(fragB, ec);
+}
+
+void testFilenameSanitization() {
+    // The sanitization unserializeFX/unserializeLUT apply before writing under
+    // receivedPath is exactly std::filesystem::path(name).filename(). Verify it
+    // defuses traversal + absolute paths and flags empty basenames.
+    using std::filesystem::path;
+    check(path("../../evil").filename().string() == "evil",
+          "sanitize: '../../evil' -> 'evil'");
+    check(path("/etc/passwd").filename().string() == "passwd",
+          "sanitize: '/etc/passwd' -> 'passwd'");
+    check(path("..\\..\\evil.cube").filename().string() == "..\\..\\evil.cube" ||
+          path("..\\..\\evil.cube").filename().string() == "evil.cube",
+          "sanitize: backslash form (platform-dependent, never escapes on POSIX write)");
+    check(path("plain.cube").filename().string() == "plain.cube",
+          "sanitize: bare name passes through unchanged");
+    // Empty-basename cases the unserializers must skip (return false, no write).
+    check(path("/tmp/somedir/").filename().string().empty(),
+          "sanitize: trailing-separator path -> empty basename (skipped)");
+    check(path("").filename().string().empty(),
+          "sanitize: empty name -> empty basename (skipped)");
+}
+
 }  // namespace
 
 int selfTest() {
@@ -957,6 +1049,12 @@ int selfTest() {
     testFramedCodec();
     testSerializeLUT();
     testSerializeFX();
+
+    // Content digest (JEF-28 Task 1).
+    testContentDigestGolden();
+    testContentDigestSameVsDifferent();
+    testContentDigestFXShaderSource();
+    testFilenameSanitization();
 
     std::printf("WIRE-TEST: pass=%d fail=%d\n", g_pass, g_fail);
     std::fflush(stdout);
