@@ -9,7 +9,7 @@
 #include <cstring> // For strlen
 #include <sstream> //for stingstream
 #include <stdio.h>
-#include "gfcRakNetTransport.h"
+#include "gfcTransportFactory.h"
 #include "gfcNetworkStructures.h"
 #include "gfcWire.h"
 #include "gfcWireMessages.h"
@@ -40,7 +40,7 @@ extern gfcPlaybackManager playbackManager;
 extern gfcNetworkManager networkManager;
 
 gfcNetworkClient::gfcNetworkClient() {
-    transport_ = std::make_unique<jefe::net::RakNetTransport>();
+    transport_ = jefe::net::makeTransport(); // kind from JEFECHECK_TRANSPORT (JEF-24)
 	haveSentMyPlaylist=false;
 	// Explicit init: pumpNetwork() reads these from the very first tick.
 	// Safe today only because networkManager is a global (static zero-init),

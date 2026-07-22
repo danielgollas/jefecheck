@@ -1,5 +1,5 @@
 #include "gfcnetworkserver.h"
-#include "gfcRakNetTransport.h"
+#include "gfcTransportFactory.h"
 #include "gfcWire.h"
 #include "gfcWireMessages.h"
 
@@ -63,7 +63,7 @@ int gfcNetworkServer::assignColor(int preferred) {
 }
 
 gfcNetworkServer::gfcNetworkServer() {
-    transport_ = std::make_unique<jefe::net::RakNetTransport>();
+    transport_ = jefe::net::makeTransport(); // kind from JEFECHECK_TRANSPORT (JEF-24)
 	middleOfSync=false;
 }
 
