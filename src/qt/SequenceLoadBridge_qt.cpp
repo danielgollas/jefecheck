@@ -25,6 +25,7 @@
 #include "gfcsequencegui_qt.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <climits>
 #include <cmath>
@@ -44,6 +45,16 @@ extern gfcPickManager pickManager;
 extern gfcSettings sett;
 
 namespace jefe::qt {
+
+// JEF-27: set true while a cloud connect (connectAsCloudHost/Client) owns the
+// networkManager on a worker thread. connectAsCloudHost blocks up to ~5s in the
+// coordinator's code-assignment wait; the GUI thread's pumpNetwork() must NOT
+// call networkManager.update() concurrently with the worker's startServer /
+// startConnection (server/client Update() would race the transport bring-up).
+// pumpNetwork() checks this and skips the tick while it is set. The window is
+// short and the dialog refreshes itself when the worker finishes, so skipping a
+// few pump ticks costs nothing.
+static std::atomic<bool> gCloudConnectInFlight{false};
 
 int getDefaultTextureFormat() {
     return sett.defaultTextureFormat;
@@ -1111,6 +1122,42 @@ void connectAsClient(const RemoteClientParams& params) {
     networkManager.startConnection(&cp);
 }
 
+void connectAsCloudHost(const RemoteCloudHostParams& params) {
+    if (networkManager.getConnected()) return;
+    gfcServerParams sp;
+    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", "jefe-cloud-host");
+    std::snprintf(sp.password,   sizeof(sp.password),   "%s",
+                  params.password.c_str());
+    sp.port            = 0;              // ignored in coordinator mode
+    sp.coordinatorMode = true;
+    sp.coordinatorUrl  = params.coordinatorUrl;
+    // BLOCKS up to ~5s for the coordinator-assigned code — callers run this off
+    // the GUI thread. Hold the in-flight guard so the GUI-thread pump doesn't
+    // race the transport bring-up.
+    gCloudConnectInFlight.store(true, std::memory_order_release);
+    networkManager.startServer(&sp);
+    gCloudConnectInFlight.store(false, std::memory_order_release);
+}
+
+void connectAsCloudClient(const RemoteCloudJoinParams& params) {
+    if (networkManager.getConnected()) return;
+    gfcConnectionParams cp;
+    cp.nickname        = params.clientName;
+    cp.serverIP        = "";            // ignored in coordinator mode
+    cp.port            = 0;
+    cp.password        = params.password;
+    cp.coordinatorMode = true;
+    cp.coordinatorUrl  = params.coordinatorUrl;
+    cp.sessionCode     = params.sessionCode;
+    gCloudConnectInFlight.store(true, std::memory_order_release);
+    networkManager.startConnection(&cp);
+    gCloudConnectInFlight.store(false, std::memory_order_release);
+}
+
+std::string remoteSessionCode() {
+    return networkManager.getAssignedSessionCode();
+}
+
 void disconnectRemote() {
     if (!networkManager.getConnected()) return;
     if (networkManager.getIsServer()) networkManager.stopServer();
@@ -2036,6 +2083,10 @@ bool pumpNetwork() {
     static size_t      prevPeers     = 0;
     static size_t      prevChat      = 0;
     static std::string prevStatus;
+    // A worker thread is inside startServer/startConnection (cloud connect):
+    // skip this tick so we don't call server/client Update() concurrently with
+    // the transport bring-up. See gCloudConnectInFlight.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return false;
     networkManager.update();
     const bool        nowConnected = networkManager.getConnected();
     const size_t      nowPeers     = networkManager.participantNames().size();

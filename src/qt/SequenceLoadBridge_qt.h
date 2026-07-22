@@ -375,6 +375,36 @@ struct RemoteClientParams {
 
 void connectAsServer(const RemoteServerParams& params);
 void connectAsClient(const RemoteClientParams& params);
+
+// JEF-27 cloud coordinator mode. Cloud host: dials the coordinator URL and
+// asks it to create a session (the port is ignored); the assigned short code
+// is surfaced via remoteSessionCode() once it arrives. Cloud client: dials the
+// coordinator and joins by that code. Both funnel into
+// gfcNetworkManager::startServer / startConnection with coordinatorMode set.
+//
+// WARNING: connectAsCloudHost BLOCKS for up to ~5s waiting for the coordinator
+// to assign the session code (gfcNetworkManager::startServer's bounded wait).
+// Callers MUST invoke it OFF the GUI thread (QtConcurrent / a worker) so the Qt
+// event loop keeps running, then marshal the result back to the UI thread.
+struct RemoteCloudHostParams {
+    std::string coordinatorUrl;
+    std::string password;
+};
+
+struct RemoteCloudJoinParams {
+    std::string clientName;
+    std::string coordinatorUrl;
+    std::string sessionCode;
+    std::string password;
+};
+
+void connectAsCloudHost(const RemoteCloudHostParams& params);
+void connectAsCloudClient(const RemoteCloudJoinParams& params);
+
+// The coordinator-assigned session code (empty when not a cloud host or before
+// the code has been assigned). Reads gfcNetworkManager::getAssignedSessionCode.
+std::string remoteSessionCode();
+
 void disconnectRemote();
 
 // Headless two-process connection smoke-test helpers (--remote-test).
