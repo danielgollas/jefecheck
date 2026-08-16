@@ -127,6 +127,13 @@ public:
     // no-op rather than an error -- two clicks on a stale row must not tear
     // anything down.
     virtual void decideJoiner(const std::string& /*joinerId*/, bool /*admit*/) {}
+
+    // JEF-37, joiner side: true between "the coordinator parked me in the
+    // lobby" and the host's decision. Without it a knocking joiner is
+    // indistinguishable from a failed connect -- nothing is connected, so the
+    // panel falls back to the connect forms while the person is, in fact,
+    // waiting on a human.
+    virtual bool awaitingAdmission() { return false; }
 };
 
 } // namespace net

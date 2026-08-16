@@ -53,6 +53,10 @@ public:
     // these return empty / no-op for everyone else.
     std::vector<jefe::net::PendingJoiner> pendingJoiners();
     void decideJoiner(const std::string& joinerId, bool admit);
+    /** JEF-37, joiner side: knocked, and still waiting on the host. */
+    bool isAwaitingAdmission();
+    /** A join is in flight: dialling, knocking, or mid-handshake. */
+    bool isAttemptingConnection();
     std::vector<std::string> chatLogLines();
     std::vector<std::string> drainErrors();
 

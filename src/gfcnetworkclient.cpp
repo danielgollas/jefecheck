@@ -48,6 +48,7 @@ gfcNetworkClient::gfcNetworkClient() {
 	gotMessages=false;
 	isConnected=false;
 	attemptingConnection=false;
+	joinHandshakePending_=false;
 	statusChange=false;
 	statusColor=0;
 	gotNewChatMessage=false;
@@ -220,6 +221,7 @@ void gfcNetworkClient::Disconnect() {
 
     isConnected=false;
     attemptingConnection=false;
+    joinHandshakePending_=false;
 
     statusChange=true;
 
@@ -251,6 +253,7 @@ void gfcNetworkClient::Update() {
 			networkManager.handleSincStart();
             serverPeerId_=ev.peer;
             attemptingConnection=false;
+            joinHandshakePending_=true;   // until the peer list arrives
             jefe::wire::Writer w;
             jefe::wire::beginFrame ( w, ( uint16_t ) GFCNETID_NICKNAMESEND );
             w.writeString ( nickName );
@@ -268,6 +271,7 @@ void gfcNetworkClient::Update() {
 
                 setStatusInternal("Offline, Connection Attempt Failed", GFCCOLOR_RED);
                 attemptingConnection=false;
+                joinHandshakePending_=false;
                 Disconnect();
             }
             networkLog.addToLog("Client: Connection Attempt Failed",GFCNETLOGTYPE_ALERT);
@@ -342,6 +346,7 @@ void gfcNetworkClient::Update() {
             networkLog.addToLog("Client: Updated peers in session");
             statusChange=true;
             isConnected=true;
+            joinHandshakePending_=false;
         }
         break;
 

@@ -958,6 +958,7 @@ struct WebRtcTransport::Impl {
             clientActive = false;
             clientPcBuilt = false;
             clientHostCoordId.clear();
+            awaitingAdmission = false;   // gave up: no longer waiting on anyone
             auto it = peers.find(kHostPeerId);
             if (it != peers.end()) {
                 pc = it->second.pc;
@@ -1280,7 +1281,13 @@ struct WebRtcTransport::Impl {
 
     void onCoordClientRoster(const std::vector<std::string>& peersList,
                              const std::string& iceServersJson) {
-        { std::lock_guard<std::mutex> lk(mtx); coordIceServersJson = iceServersJson; }
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            coordIceServersJson = iceServersJson;
+            // A roster IS the admission: whether we knocked or walked straight
+            // in, the lobby is behind us the moment we can see the session.
+            awaitingAdmission = false;
+        }
         // The roster EXCLUDES the joiner; the host is the (first) existing peer.
         if (!peersList.empty()) buildClientOfferer(peersList.front());
         // Empty roster (host not present yet): wait for peer-joined.
@@ -1330,6 +1337,10 @@ struct WebRtcTransport::Impl {
     void onCoordClientError(const std::string& code, const std::string& msg) {
         std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                      code.c_str(), msg.c_str());
+        // Refused (join-denied) or failed while waiting: either way we are no
+        // longer in the lobby, and leaving the flag set would leave the panel
+        // saying "waiting for the host" forever after a refusal.
+        { std::lock_guard<std::mutex> lk(mtx); awaitingAdmission = false; }
         pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
     }
 
@@ -1432,6 +1443,11 @@ void WebRtcTransport::configureCoordinator(const std::string& url,
 std::string WebRtcTransport::assignedSessionCode() {
     std::lock_guard<std::mutex> lk(d_->mtx);
     return d_->assignedCode;
+}
+
+bool WebRtcTransport::awaitingAdmission() {
+    std::lock_guard<std::mutex> lk(d_->mtx);
+    return d_->awaitingAdmission;
 }
 
 std::vector<PendingJoiner> WebRtcTransport::pendingJoiners() {

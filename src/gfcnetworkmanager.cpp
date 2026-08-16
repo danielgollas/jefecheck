@@ -248,6 +248,24 @@ std::vector<jefe::net::PendingJoiner> gfcNetworkManager::pendingJoiners() {
     return server.getPendingJoiners();
 }
 
+bool gfcNetworkManager::isAttemptingConnection() {
+    if (isServer) return false;
+    // getIsConnected() flips on the transport's thread, but `connected` only
+    // flips when update() next consumes the status change. Callers reach here
+    // precisely when `connected` is still false, so counting that one-tick gap
+    // as "attempting" is what keeps it from reading as a disconnect.
+    return client.getAttemptingConnection() || client.getIsConnected() ||
+           client.getJoinHandshakePending();
+}
+
+bool gfcNetworkManager::isAwaitingAdmission() {
+    // A host's own loopback client is admitted by nonce and never lingers in a
+    // lobby, so this is a joiner-only condition -- and reporting it for a host
+    // would put a "waiting to be let in" banner on the person doing the letting.
+    if (isServer) return false;
+    return client.getAwaitingAdmission();
+}
+
 void gfcNetworkManager::decideJoiner(const std::string& joinerId, bool admit) {
     // Guarded by isServer, not merely by "the UI only shows this to a host":
     // admit/deny is a host-only action at the coordinator too, and a joiner

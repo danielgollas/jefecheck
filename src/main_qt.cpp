@@ -400,6 +400,11 @@ int main(int argc, char* argv[]) {
                 std::strcmp(argv[i], "--asset-test-webrtc-peer") == 0 ||
                 std::strcmp(argv[i], "--coord-test") == 0 ||
                 std::strcmp(argv[i], "--coord-test-peer") == 0 ||
+                // JEF-37 live-coordinator harness: coordinator mode is WebRTC,
+                // so it needs the same re-exec (the transports are built during
+                // static init, before main can set the env var).
+                std::strcmp(argv[i], "--coord-live-test") == 0 ||
+                std::strcmp(argv[i], "--coord-live-peer") == 0 ||
                 std::strcmp(argv[i], "--stats-test") == 0) {
                 webrtcHarness = true;
                 break;
@@ -1000,6 +1005,21 @@ int main(int argc, char* argv[]) {
             jefe::qt::initializeRenderingChain();
             jefe::qt::coordTestPeerJoin(coordUrl, code, /*holdMs=*/6000,
                                         /*play=*/true, /*connectTimeoutMs=*/12000);
+            std::_Exit(0);
+        }
+    }
+    {
+        // --coord-live-peer <coordUrl> <code>: the joiner half.
+        std::string url, code;
+        for (int i = 1; i + 2 < argc; ++i) {
+            if (std::strcmp(argv[i], "--coord-live-peer") == 0) {
+                url = argv[i + 1]; code = argv[i + 2];
+                break;
+            }
+        }
+        if (!url.empty()) {
+            jefe::qt::initializeRenderingChain();
+            jefe::qt::coordLivePeerJoin(url, code, /*timeoutMs=*/25000);
             std::_Exit(0);
         }
     }

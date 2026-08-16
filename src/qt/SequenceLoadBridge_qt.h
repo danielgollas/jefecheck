@@ -469,6 +469,11 @@ bool coordLiveHostStart(const std::string& coordUrl, const std::string& authToke
 // says it is, admit it, and report whether it became a participant. Returns the
 // number of knocks admitted (0 = nobody knocked within the window).
 int coordLiveAwaitAndAdmit(int timeoutMs);
+// Joiner half of --coord-live-test: knock at `code` and print each phase the
+// panel would render, so the Knocking state is verified end to end rather than
+// inferred from the transport flag.
+void coordLivePeerJoin(const std::string& coordUrl, const std::string& code,
+                       int timeoutMs);
 std::string coordTestGetCode();
 void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
                        int holdMs, bool play, int connectTimeoutMs = 12000);
@@ -525,6 +530,7 @@ void remoteDecideJoiner(const std::string& joinerId, bool admit);
 enum class RemotePhase {
     Offline,      // no session; show the connect forms
     Connecting,   // a connect attempt is in flight
+    Knocking,     // joined a knock-protected session; waiting on the host
     HostingLan,   // hosting over RakNet/LAN — nothing metered
     HostingCloud, // hosting through the coordinator — metered, has a code
     Joined,       // in someone else's session

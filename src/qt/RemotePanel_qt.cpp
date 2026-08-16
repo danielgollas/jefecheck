@@ -916,6 +916,15 @@ void RemoteDialog_Qt::hostWithToken() {
 
 void RemoteDialog_Qt::onJoinCloudClicked() {
     clearUiPreview();   // a real action always wins over --ui-preview
+
+    // JEF-37: while knocking this button reads "Cancel" (see
+    // refreshConnectionState) and means "stop waiting", not "join again".
+    if (currentUiState().phase == jefe::qt::RemotePhase::Knocking) {
+        jefe::qt::disconnectRemote();
+        refreshConnectionState();
+        return;
+    }
+
     // The unified Join tab: session code (cloud) or IP address (LAN).
     if (joinModeIpRadio_ != nullptr && joinModeIpRadio_->isChecked()) {
         onConnectClientClicked();
@@ -938,7 +947,11 @@ void RemoteDialog_Qt::onJoinCloudClicked() {
     connectClientBtn_->setText("Joining…");
     errorLabel_->clear();
     shownStatusText_.clear();
-    statusLabel_->setText("Waiting for the host to admit you…");
+    // NOT "waiting for the host" — nobody has been asked yet. The code may be
+    // wrong, the session full, or knocking off entirely; claiming the lobby
+    // here is the same optimism that produced phantom sessions before. The
+    // real Knocking state comes from the coordinator, via remoteUiState().
+    statusLabel_->setText("Joining…");
 
     jefe::qt::RemoteCloudJoinParams p;
     p.clientName     = clientNameEdit_->text().toStdString();
@@ -999,7 +1012,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
         statusLabel_->setText(statusText);
         QString dotColor = "#6a6a70";                       // offline
         if (st.inSession)                    dotColor = "#5bb07a";  // green
-        else if (st.phase == Phase::Connecting) dotColor = "#d6a15b"; // amber
+        else if (st.phase == Phase::Connecting ||
+                 st.phase == Phase::Knocking)   dotColor = "#d6a15b"; // amber
         statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
     }
 
@@ -1009,6 +1023,18 @@ void RemoteDialog_Qt::refreshConnectionState() {
     sessionBox_->setVisible(st.inSession);
     // Host ends the session for everyone; a joiner just leaves it.
     disconnectBtn_->setText(st.isHost ? "End Session" : "Leave");
+
+    // JEF-37: while knocking, the Join button becomes the way OUT. Without it
+    // someone waiting on a host who never answers has no control at all — and
+    // a still-live "Join" invites them to queue a second time.
+    if (st.phase == Phase::Knocking) {
+        connectClientBtn_->setEnabled(true);
+        connectClientBtn_->setText("Cancel");
+        cloudHostBtn_->setEnabled(false);   // can't host while queued elsewhere
+    } else if (st.phase == Phase::Offline) {
+        connectClientBtn_->setText("Join");
+        cloudHostBtn_->setEnabled(true);
+    }
 
     const bool cloudHosting = st.phase == Phase::HostingCloud;
     cloudCodeBanner_->setVisible(cloudHosting);

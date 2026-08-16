@@ -77,6 +77,12 @@ public:
 
     // JEF-30: per-peer connection health from the underlying transport (the
     // client's single peer is the host). Empty when not connected.
+    // JEF-37: true while parked in a session's lobby awaiting the host.
+    bool getAwaitingAdmission() {
+        return transport_ ? transport_->awaitingAdmission() : false;
+    }
+    /** True between transport-connected and the peer list arriving. */
+    bool getJoinHandshakePending() const { return joinHandshakePending_; }
     std::vector<jefe::net::PeerStats> peerStats() {
         return transport_ ? transport_->peerStats() : std::vector<jefe::net::PeerStats>();
     }
@@ -90,6 +96,12 @@ private:
     bool gotMessages;
     bool isConnected;
     bool attemptingConnection;
+    // JEF-37: the gap between "the transport is up" and "the peer list has
+    // arrived", i.e. the app-level handshake. `attemptingConnection` is already
+    // false here and `isConnected` is not yet true, so without this the client
+    // looks briefly offline right after being admitted — a rejection, to anyone
+    // watching for an answer. Cleared alongside both of those.
+    bool joinHandshakePending_ = false;
     std::unique_ptr<jefe::net::ITransport> transport_;
     int port;
     std::string serverIP;

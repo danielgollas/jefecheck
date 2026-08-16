@@ -30,6 +30,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <thread>
 
@@ -1225,6 +1226,24 @@ RemoteUiState remoteUiState() {
     }
 
     if (!networkManager.getConnected()) {
+        // JEF-37: knocking is NOT offline. Nothing is connected yet, but a
+        // human is deciding — showing the connect forms again here read as a
+        // failed join, so people re-entered the code while already in the queue.
+        if (networkManager.isAwaitingAdmission()) {
+            s.phase = RemotePhase::Knocking;
+            s.statusText = "Waiting for the host to let you in…";
+            return s;
+        }
+        // Admitted but still completing the P2P handshake. Reporting Offline
+        // here flashed the connect forms back up for a beat right after the
+        // host said yes — which reads as a rejection at exactly the moment the
+        // person is watching for an answer.
+        if (networkManager.isAttemptingConnection()) {
+            s.phase = RemotePhase::Connecting;
+            s.statusText = networkManager.connectionStatusText();
+            if (s.statusText.empty()) s.statusText = "Connecting…";
+            return s;
+        }
         s.phase = RemotePhase::Offline;
         s.statusText = networkManager.connectionStatusText();
         if (s.statusText.empty()) s.statusText = "Not connected";
@@ -2474,7 +2493,14 @@ int coordLiveAwaitAndAdmit(int timeoutMs) {
     // branch: a denied joiner must be told no and never join the roster.
     const char* denyEnv = std::getenv("JEFE_LIVE_DENY");
     const bool admitThem = !(denyEnv && denyEnv[0] == '1');
-    int admitted = 0;
+    // JEFE_LIVE_ADMIT_DELAY_MS holds a knock before deciding, standing in for
+    // the seconds a real host takes to look. Without it the round trip is
+    // faster than the joiner polls, so its "waiting to be let in" state is
+    // real but never observed — the delay is what makes it testable.
+    int holdMs = 0;
+    if (const char* d = std::getenv("JEFE_LIVE_ADMIT_DELAY_MS")) holdMs = std::atoi(d);
+
+    int decided = 0;
     for (int t = 0; t < timeoutMs; t += 10) {
         pumpNetwork();
         // Read through remoteUiState(), not the manager, so this exercises the
@@ -2484,13 +2510,58 @@ int coordLiveAwaitAndAdmit(int timeoutMs) {
         for (const auto& p : st.pending) {
             std::printf("COORD-LIVE-TEST: knock name=[%s] email=[%s] verified=%d\n",
                         p.displayName.c_str(), p.email.c_str(), p.verified ? 1 : 0);
+            std::fflush(stdout);
+            for (int h = 0; h < holdMs; h += 10) {
+                pumpNetwork();
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
             remoteDecideJoiner(p.joinerId, admitThem);
-            ++admitted;
+            ++decided;
         }
-        if (admitted > 0 && st.pending.empty()) break;
+        // Keep pumping after the decision: an admitted joiner still has a
+        // WebRTC handshake to finish, and quitting the moment we clicked would
+        // end the session out from under it — which looks exactly like a
+        // failed admit.
+        if (decided > 0 && st.pending.empty() && !admitThem) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    return admitted;
+    return decided;
+}
+
+void coordLivePeerJoin(const std::string& coordUrl, const std::string& code,
+                       int timeoutMs) {
+    RemoteCloudJoinParams p;
+    p.clientName     = "live-peer";
+    p.coordinatorUrl = coordUrl;
+    p.sessionCode    = code;
+    connectAsCloudClient(p);
+
+    auto phaseName = [](RemotePhase ph) {
+        switch (ph) {
+            case RemotePhase::Offline:      return "Offline";
+            case RemotePhase::Connecting:   return "Connecting";
+            case RemotePhase::Knocking:     return "Knocking";
+            case RemotePhase::HostingLan:   return "HostingLan";
+            case RemotePhase::HostingCloud: return "HostingCloud";
+            case RemotePhase::Joined:       return "Joined";
+        }
+        return "?";
+    };
+
+    std::string last;
+    for (int t = 0; t < timeoutMs; t += 20) {
+        pumpNetwork();
+        const RemoteUiState st = remoteUiState();
+        const std::string now = phaseName(st.phase);
+        if (now != last) {
+            last = now;
+            std::printf("COORD-LIVE-PEER: phase=%s status=[%s]\n", now.c_str(),
+                        st.statusText.c_str());
+            std::fflush(stdout);
+        }
+        if (st.phase == RemotePhase::Joined) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
 }
 
 // The coordinator-assigned session code (empty until the host session is up).

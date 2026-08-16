@@ -97,6 +97,7 @@ public:
     // and drops the row locally so a second click cannot re-send.
     std::vector<PendingJoiner> pendingJoiners() override;
     void decideJoiner(const std::string& joinerId, bool admit) override;
+    bool awaitingAdmission() override;
 
 private:
     struct Impl;
