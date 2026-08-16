@@ -99,7 +99,20 @@ namespace net {
 // optional field when empty, so an anonymous client's bytes are identical to
 // the pre-auth protocol -- which is what keeps a self-hosted coordinator and
 // the --coord-test harness working untouched.
+// Host-side session policy sent with create-session. The coordinator enforces
+// these for everyone; a joiner cannot set or override them. Defaults reproduce
+// the pre-policy behaviour, and every field is omitted from the wire when it
+// matches its default, so an un-updated coordinator sees exactly what it saw.
+struct SessionPolicy {
+    bool requireKnock = true;
+    std::string password;      // empty = none
+    int idleTimeoutMinutes = 0;  // 0 = never
+    int maxParticipants = 0;     // 0 = unlimited
+};
+
 std::string encodeCreateSession(const std::string& authToken = "");
+std::string encodeCreateSession(const std::string& authToken,
+                                const SessionPolicy& policy);
 std::string encodeJoinSession(const std::string& code,
                               const std::string& displayName = "",
                               const std::string& authToken = "");
@@ -173,6 +186,7 @@ public:
     // JEF-31/37: optional access JWT and knock nickname. Empty values are
     // omitted from the wire entirely (see the encoder declarations above).
     bool createSession(const std::string& authToken = "");
+    bool createSession(const std::string& authToken, const SessionPolicy& policy);
     bool joinSession(const std::string& code,
                      const std::string& displayName = "",
                      const std::string& authToken = "");

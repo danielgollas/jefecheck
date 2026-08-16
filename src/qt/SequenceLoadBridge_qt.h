@@ -394,8 +394,26 @@ struct RemoteCloudHostParams {
     // JEF-31 coordinator access JWT. Empty = anonymous; the coordinator
     // answers auth-required if it gates create-session.
     std::string authToken;
-    // NOTE: no `password`. The coordinator protocol has no password concept,
-    // the dialog never set one, and the transport discarded it.
+
+    // --- Host-side session policy, from the selected session group ---------
+    // These are HOST-only by construction: the coordinator takes them at
+    // create-session and enforces them for everyone. A joiner cannot set,
+    // see, or override any of them.
+    /** Each joiner waits for Admit/Deny (JEF-37). */
+    bool requireKnock = true;
+    /** Optional shared password, checked before a joiner reaches the lobby. */
+    std::string sessionPassword;
+    /**
+     * Minutes of inactivity after which the coordinator closes the session and
+     * STOPS BILLING. 0 = never. Host departure and an explicit close already
+     * end a session; this covers the third case — a host that stops
+     * participating without disconnecting (a sleeping laptop holding the
+     * socket open), where the meter would otherwise run against wall-clock
+     * time nobody was using.
+     */
+    int idleTimeoutMinutes = 30;
+    /** 0 = unlimited. Counts admitted participants, not pending knocks. */
+    int maxParticipants = 8;
 };
 
 struct RemoteCloudJoinParams {

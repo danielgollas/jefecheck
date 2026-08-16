@@ -83,6 +83,8 @@ public:
     std::string coordinatorUrl;
     // JEF-31 access JWT forwarded to the coordinator on create-session.
     std::string coordinatorAuthToken;
+    // JEF-37 host-side session policy forwarded with create-session.
+    jefe::net::SessionPolicy coordinatorPolicy;
     unsigned int ConnectionCount();
     gfcNetworkLog* log;
 

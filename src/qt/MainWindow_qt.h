@@ -34,6 +34,9 @@ namespace jefe::qt { class RenderBridge_Qt; }
 class MainWindow_Qt : public QMainWindow {
     Q_OBJECT
 public:
+    // --ui-preview: open the Remote dock with the Cloud/admission layouts
+    // populated by sample data, for design review without a live session.
+    void showRemoteUiPreview();
     explicit MainWindow_Qt(QWidget* parent = nullptr);
     ~MainWindow_Qt() override;
 

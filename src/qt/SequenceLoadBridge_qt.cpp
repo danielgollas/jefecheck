@@ -1161,6 +1161,10 @@ void connectAsCloudHost(const RemoteCloudHostParams& params) {
     sp.coordinatorMode = true;
     sp.coordinatorUrl  = params.coordinatorUrl;
     sp.authToken       = params.authToken;
+    sp.policy.requireKnock       = params.requireKnock;
+    sp.policy.password           = params.sessionPassword;
+    sp.policy.idleTimeoutMinutes = params.idleTimeoutMinutes;
+    sp.policy.maxParticipants    = params.maxParticipants;
     // BLOCKS up to ~5s for the coordinator-assigned code — callers run this off
     // the GUI thread. Hold the in-flight guard so the GUI-thread pump doesn't
     // race the transport bring-up.

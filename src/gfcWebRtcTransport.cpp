@@ -310,6 +310,9 @@ struct WebRtcTransport::Impl {
     std::string coordSessionCode;   // join-only (host: empty)
     std::string coordPassword;   // inert: the coordinator has no password
     std::string coordAuthToken;  // JEF-31 access JWT ("" = anonymous)
+    // Host-side session policy from the selected session group (JEF-37).
+    // Sent with create-session; the coordinator enforces it for everyone.
+    SessionPolicy coordPolicy;
     std::string coordDisplayName;
     std::string assignedCode;       // host: code the coordinator handed us
     std::string coordIceServersJson;  // opaque raw-JSON array, "" if none
@@ -1259,7 +1262,9 @@ struct WebRtcTransport::Impl {
             std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                          c.c_str(), m.c_str());
         });
-        coord->onOpen([d]() { if (d->coord) d->coord->createSession(d->coordAuthToken); });
+        coord->onOpen([d]() {
+            if (d->coord) d->coord->createSession(d->coordAuthToken, d->coordPolicy);
+        });
         if (!coord->connect(coordinatorUrl)) {
             std::fprintf(stderr, "WebRtcTransport: coordinator connect failed (host)\n");
             return false;
@@ -1315,11 +1320,13 @@ void WebRtcTransport::configureCoordinator(const std::string& url,
                                            const std::string& sessionCode,
                                            const std::string& password,
                                            const std::string& authToken,
-                                           const std::string& displayName) {
+                                           const std::string& displayName,
+                                           const SessionPolicy& policy) {
     d_->coordinatorUrl = url;
     d_->coordSessionCode = sessionCode;
     d_->coordPassword = password;
     d_->coordAuthToken = authToken;
+    d_->coordPolicy = policy;
     d_->coordDisplayName = displayName;
     d_->coordinatorMode = true;
 }

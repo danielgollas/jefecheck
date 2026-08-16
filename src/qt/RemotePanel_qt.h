@@ -21,6 +21,9 @@ class QListWidget;
 class QPushButton;
 class QScrollArea;
 class QSpinBox;
+class QRadioButton;
+class QComboBox;
+class QCheckBox;
 class QTabWidget;
 class QTextEdit;
 class QVBoxLayout;
@@ -49,6 +52,20 @@ private:
     // coordinator connect on a detached worker thread and marshal the result
     // back to onCloudConnectFinished on the GUI thread via a queued invoke
     // (guarded by a QPointer so a mid-connect dialog close can't crash).
+    // --ui-preview: populate every Cloud/Join/admission state with sample data
+    // so the layout can be reviewed without a live coordinator or a session.
+    // Purely presentational; wires nothing.
+public:
+    void applyUiPreview();
+    // Session groups: the "parent" a session is hosted under. Settings persist
+    // per group (see RemoteSessionGroups_qt.h).
+    void loadGroupIntoForm(const QString& name);
+    void saveFormIntoGroup();
+    void onNewGroupClicked();
+    // Credits are host-only and hosting-only.
+    void refreshCreditsVisibility(bool hosting);
+private:
+    QString coordinatorUrlSetting() const;
     void onCreateCloudClicked();
     void onJoinCloudClicked();
     void onCloudConnectFinished(bool wasHost);
@@ -110,14 +127,31 @@ private:
     QWidget*     sessionBox_ = nullptr;    // participants + chat + disconnect
     QLabel*      participantsHeader_ = nullptr;
 
-    // Cloud (coordinator) form widgets — JEF-27.
-    QLineEdit*   cloudCoordUrlEdit_ = nullptr;    // coordinator URL (create + join)
-    QPushButton* cloudCreateBtn_ = nullptr;       // "Create session"
+    // JefeCheck Cloud form widgets — JEF-27 / JEF-31. Hosting only; joining a
+    // cloud session lives on the Join tab (it needs no account).
+    QComboBox*   cloudGroupCombo_ = nullptr;      // parent session group
+    QPushButton* cloudNewGroupBtn_ = nullptr;
+    QLineEdit*   cloudHostNameEdit_ = nullptr;    // session name -> host nickname
+    QCheckBox*   cloudKnockCheck_ = nullptr;      // per-group: require knock
+    QLineEdit*   cloudPasswordEdit_ = nullptr;    // per-group: session password
+    QSpinBox*    cloudTimeoutSpin_ = nullptr;     // per-group: idle cutoff (min)
+    QSpinBox*    cloudMaxPeersSpin_ = nullptr;    // per-group: participant cap
+    QPushButton* cloudHostBtn_ = nullptr;         // "Host on JefeCheck Cloud"
+    QWidget*     cloudResultBox_ = nullptr;       // hidden until hosting
     QLineEdit*   cloudSessionCodeEdit_ = nullptr; // read-only assigned code
     QPushButton* cloudCopyBtn_ = nullptr;         // copy code to clipboard
-    QLineEdit*   cloudJoinCodeEdit_ = nullptr;    // session code to join
-    QLineEdit*   cloudJoinNameEdit_ = nullptr;    // nickname
-    QPushButton* cloudJoinBtn_ = nullptr;         // "Join by code"
+    QLabel*      cloudAccountLabel_ = nullptr;    // signed-in email
+    // Credits live in the STATUS HEADER, not the Cloud form: shown only while
+    // HOSTING, and never to a joiner — joining is free, so a balance would be
+    // meaningless to them. See refreshCreditsVisibility().
+    QLabel*      creditsLabel_ = nullptr;
+    QPushButton* cloudSignOutBtn_ = nullptr;
+
+    // Unified Join tab (JEF-31): session code OR IP address.
+    QRadioButton* joinModeCodeRadio_ = nullptr;
+    QRadioButton* joinModeIpRadio_ = nullptr;
+    QLineEdit*    joinCodeEdit_ = nullptr;
+    QWidget*      joinIpRows_ = nullptr;          // Server/Port/Password group
     // Session-view banner keeping the code visible to a connected cloud host.
     QWidget*     cloudCodeBanner_ = nullptr;
     QLabel*      cloudCodeBannerLabel_ = nullptr;

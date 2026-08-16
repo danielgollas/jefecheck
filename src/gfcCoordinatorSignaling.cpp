@@ -183,6 +183,42 @@ std::string encodeCreateSession(const std::string& authToken) {
     return out;
 }
 
+std::string encodeCreateSession(const std::string& authToken,
+                                const SessionPolicy& policy) {
+    // Every policy field is omitted when it equals its default, so a host that
+    // changed nothing produces byte-identical output to the no-policy form.
+    // That keeps the anonymous/no-policy wire contract intact and means an
+    // older coordinator only ever sees fields it can ignore.
+    const bool anyPolicy = !policy.requireKnock || !policy.password.empty() ||
+                           policy.idleTimeoutMinutes != 0 ||
+                           policy.maxParticipants != 0;
+    if (!anyPolicy) return encodeCreateSession(authToken);
+
+    std::string out = "{\"action\":\"create-session\"";
+    if (!authToken.empty()) {
+        out += ",\"authToken\":\"";
+        appendEscaped(out, authToken);
+        out += "\"";
+    }
+    // requireKnock defaults TRUE, so it is emitted only when turned off.
+    if (!policy.requireKnock) out += ",\"requireKnock\":false";
+    if (!policy.password.empty()) {
+        out += ",\"password\":\"";
+        appendEscaped(out, policy.password);
+        out += "\"";
+    }
+    if (policy.idleTimeoutMinutes > 0) {
+        out += ",\"idleTimeoutMinutes\":";
+        out += std::to_string(policy.idleTimeoutMinutes);
+    }
+    if (policy.maxParticipants > 0) {
+        out += ",\"maxParticipants\":";
+        out += std::to_string(policy.maxParticipants);
+    }
+    out += "}";
+    return out;
+}
+
 std::string encodeJoinSession(const std::string& code,
                               const std::string& displayName,
                               const std::string& authToken) {
@@ -561,6 +597,10 @@ void CoordinatorSignaling::close() {
 bool CoordinatorSignaling::createSession(const std::string& authToken) {
     return d_->sendRaw(encodeCreateSession(authToken));
 }
+bool CoordinatorSignaling::createSession(const std::string& authToken,
+                                         const SessionPolicy& policy) {
+    return d_->sendRaw(encodeCreateSession(authToken, policy));
+}
 bool CoordinatorSignaling::joinSession(const std::string& code,
                                        const std::string& displayName,
                                        const std::string& authToken) {
@@ -646,6 +686,45 @@ int coordinatorSignalingSelfTest() {
               "{\"action\":\"join-session\",\"code\":\"JEFE-7K2M\","
               "\"displayName\":\"A\\\"B\"}",
           "join-session escapes displayName");
+
+    // ---- JEF-37: host-side session policy ----
+    // Defaults must be invisible on the wire, so a host who changed nothing
+    // produces exactly the no-policy bytes and an older coordinator sees only
+    // fields it already knows.
+    {
+        SessionPolicy dflt;   // requireKnock=true, no password, no caps
+        check(encodeCreateSession("", dflt) == "{\"action\":\"create-session\"}",
+              "default policy is invisible on the wire");
+        check(encodeCreateSession("tok", dflt) ==
+                  "{\"action\":\"create-session\",\"authToken\":\"tok\"}",
+              "default policy + token identical to token-only form");
+    }
+    {
+        SessionPolicy p;
+        p.requireKnock = false;     // emitted only when turned OFF
+        check(encodeCreateSession("", p) ==
+                  "{\"action\":\"create-session\",\"requireKnock\":false}",
+              "requireKnock emitted only when disabled");
+    }
+    {
+        SessionPolicy p;
+        p.password = "hunter2";
+        p.idleTimeoutMinutes = 30;
+        p.maxParticipants = 8;
+        check(encodeCreateSession("tok", p) ==
+                  "{\"action\":\"create-session\",\"authToken\":\"tok\","
+                  "\"password\":\"hunter2\",\"idleTimeoutMinutes\":30,"
+                  "\"maxParticipants\":8}",
+              "full policy field order and types");
+    }
+    {
+        // A password is user input reaching JSON, exactly like displayName.
+        SessionPolicy p;
+        p.password = "a\"b";
+        check(encodeCreateSession("", p) ==
+                  "{\"action\":\"create-session\",\"password\":\"a\\\"b\"}",
+              "policy escapes password");
+    }
 
 
     {

@@ -1045,6 +1045,18 @@ int main(int argc, char* argv[]) {
     window.setObjectName("MainWindow");
     window.show();
 
+    // --ui-preview (JEF-31/37): open the Remote dock with the Cloud and
+    // admission layouts filled with sample data, for design review before the
+    // sign-in and lobby wiring exists. Deferred so docks are laid out first.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--ui-preview") == 0) {
+            QTimer::singleShot(0, &window, [&window]() {
+                window.showRemoteUiPreview();
+            });
+            break;
+        }
+    }
+
     // Load each --open-file into the matching plate after the event
     // loop has spun up the GL context. Deferred via QTimer::singleShot
     // so paintGL has fired (initializing GLAD) before the bridge tries

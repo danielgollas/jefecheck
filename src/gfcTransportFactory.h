@@ -13,6 +13,10 @@
 #include <string>
 
 #include "gfcTransport.h"
+// SessionPolicy is a plain aggregate declared with the coordinator wire
+// encoders; including the header here keeps one definition rather than a
+// parallel struct that could drift from the wire format.
+#include "gfcCoordinatorSignaling.h"
 
 namespace jefe {
 namespace net {
@@ -40,6 +44,9 @@ struct TransportConfig {
     std::string authToken;
     // JEF-37: nickname shown to the host in the admit prompt when knocking.
     std::string displayName;
+    // Host-side session policy (knock/password/timeout/cap) from the selected
+    // session group. Ignored for joiners — only a host sends it.
+    SessionPolicy policy;
 };
 
 // Legacy overloads (kept working; delegate to the config form).

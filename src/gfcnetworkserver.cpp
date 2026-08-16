@@ -93,6 +93,7 @@ void gfcNetworkServer::start(gfcServerParams * params) {
         this->coordinatorMode=params->coordinatorMode;
         this->coordinatorUrl=params->coordinatorUrl;
         this->coordinatorAuthToken=params->authToken;
+        this->coordinatorPolicy=params->policy;
     }
 
     this->port=thePort;
@@ -111,6 +112,7 @@ void gfcNetworkServer::start(gfcServerParams * params) {
         tcfg.coordinatorMode=this->coordinatorMode;
         tcfg.coordinatorUrl=this->coordinatorUrl;
         tcfg.authToken=this->coordinatorAuthToken;
+        tcfg.policy=this->coordinatorPolicy;
         tcfg.password=thePassword;
         transport_ = jefe::net::makeTransport(tcfg);
     }

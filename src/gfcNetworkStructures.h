@@ -9,6 +9,10 @@
 #include <vector>
 #include <map>
 #include <set>
+
+// SessionPolicy (host-side create-session policy). Defined with the wire
+// encoders so this struct and the JSON it produces cannot drift apart.
+#include "gfcCoordinatorSignaling.h"
 #include <stdio.h>
 
 #include "gfcWire.h"
@@ -118,6 +122,10 @@ std::string coordinatorUrl;
 std::string sessionCode;
 // JEF-31: coordinator access JWT (empty = anonymous).
 std::string authToken;
+// JEF-37: host-side session policy (knock / password / idle timeout /
+// capacity) from the selected session group. Sent with create-session; the
+// coordinator enforces it for everyone. Host-only by construction.
+jefe::net::SessionPolicy policy;
 };
 
 

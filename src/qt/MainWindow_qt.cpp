@@ -999,6 +999,11 @@ void MainWindow_Qt::buildDocks() {
     }
 }
 
+void MainWindow_Qt::showRemoteUiPreview() {
+    if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
+    if (remoteDialog_) remoteDialog_->applyUiPreview();
+}
+
 void MainWindow_Qt::restoreLayout() {
     QSettings s;
     bool restored = false;

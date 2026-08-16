@@ -28,6 +28,10 @@
 #include <string>
 
 #include "gfcTransport.h"
+// SessionPolicy: the host-side create-session policy, defined alongside the
+// wire encoders so there is one definition rather than a parallel struct here
+// that could drift from the JSON it produces.
+#include "gfcCoordinatorSignaling.h"
 
 namespace jefe {
 namespace net {
@@ -54,7 +58,8 @@ public:
                               const std::string& sessionCode,
                               const std::string& password,
                               const std::string& authToken = "",
-                              const std::string& displayName = "");
+                              const std::string& displayName = "",
+                              const SessionPolicy& policy = SessionPolicy{});
 
     // Host role (fully implemented this task).
     bool startHost(unsigned short port, const std::string& password,
