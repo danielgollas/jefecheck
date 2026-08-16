@@ -31,6 +31,7 @@
 #include "auth/gfcOAuthPkce.h"
 #include "auth/gfcLoopbackServer.h"
 #include "auth/gfcTokenStore.h"
+#include "auth/gfcAuthSession.h"
 #include "gfcTestCoordinator.h"
 #include "gfcSignaling.h"
 #include "gfcStructures.h"
@@ -422,6 +423,9 @@ int main(int argc, char* argv[]) {
         // compiled on every platform. The native Keychain/Credential Manager
         // backends are verified by hand on their own platforms — a CI runner
         // has no unlocked keychain to write to.
+        if (std::strcmp(argv[i], "--auth-test") == 0) {
+            return jefe::auth::authSelfTest(argc, argv);
+        }
         if (std::strcmp(argv[i], "--tokenstore-test") == 0) {
             return jefe::auth::tokenStoreSelfTest();
         }
