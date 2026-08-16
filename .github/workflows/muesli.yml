@@ -1,0 +1,35 @@
+name: Muesli
+
+on:
+  push:
+    paths:
+      - "muesli/**"
+      - ".github/workflows/muesli.yml"
+  pull_request:
+    paths:
+      - "muesli/**"
+      - ".github/workflows/muesli.yml"
+
+jobs:
+  format-ts:
+    name: muesli-format (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run format tests against golden fixtures
+        working-directory: muesli/packages/muesli-format
+        run: npm test
+      - name: Syntax-check eval runner
+        working-directory: muesli/eval
+        run: node --experimental-strip-types --check run-eval.ts
+
+  core-swift:
+    name: MuesliCore (Swift)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run MuesliCore tests against golden fixtures
+        run: swift test --package-path muesli/packages/MuesliCore

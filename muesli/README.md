@@ -44,6 +44,25 @@ No bot joins your call. No audio leaves your device by default.
 | [`docs/storage-format.md`](docs/storage-format.md) | The on-disk format — the interoperability contract |
 | [`docs/roadmap.md`](docs/roadmap.md) | Milestones M0–M5 |
 
+## Repository layout
+
+```
+muesli/
+├── docs/                     Founding spec (product, architecture, format, roadmap)
+├── fixtures/                 Golden meeting folders — the cross-platform contract
+├── packages/
+│   ├── muesli-format/        TypeScript reference implementation of the format (tested)
+│   └── MuesliCore/           Swift package: format + (eventually) capture/ASR/enhancement
+├── prompts/                  Enhancement prompt (versioned data, shared by all platforms)
+├── templates/                Built-in note templates
+└── eval/                     Accuracy eval harness — gates all model/prompt changes
+```
+
+CI (`.github/workflows/muesli.yml`) runs both format implementations against the
+same golden fixtures on every change under `muesli/`.
+
 ## Status
 
-Pre-implementation. These documents are the founding spec.
+M0 (foundations) in progress: storage format v1 implemented and tested in
+TypeScript and Swift; enhancement prompt v1 and eval harness in place. Eval
+cases and the iPhone app (M1) are next.

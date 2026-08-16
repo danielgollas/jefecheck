@@ -1,0 +1,26 @@
+{
+  "muesliVersion": 1,
+  "id": "mtg_01J8Z0K3D9",
+  "title": "Weekly Standup",
+  "startedAt": "2026-08-12T10:00:03-07:00",
+  "endedAt": "2026-08-12T10:31:40-07:00",
+  "pauses": [],
+  "attendees": [
+    {"name": "Dana Kim", "email": "dana@example.com", "source": "calendar"},
+    {"name": "Luis Ortega", "email": "luis@example.com", "source": "calendar"}
+  ],
+  "calendarEventId": "cal_evt_48291",
+  "capture": {"platform": "ios", "source": "mic", "sampleRate": 16000},
+  "asr": {"engine": "apple-speechanalyzer", "locale": "en-US", "meanConfidence": 0.93},
+  "speakers": {"S1": "Luis Ortega", "S2": "Dana Kim"},
+  "enhancement": {
+    "model": "claude-haiku-4-5",
+    "template": "default",
+    "promptVersion": "2026-08-16",
+    "inputTokens": 13400,
+    "outputTokens": 1520,
+    "costUSD": 0.021
+  },
+  "audioRetention": "30d",
+  "tags": ["standup"]
+}

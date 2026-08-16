@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "id": "mtg_01HXQ9M2P0",
+    "title": "Quick Sync",
+    "muesliVersion": 1
+  },
+  "transcript": {
+    "count": 2,
+    "firstText": "Just confirming the packaging script change went out this morning.",
+    "lastText": "Yep, all good, installers built clean."
+  },
+  "notes": null,
+  "rawNotesTimestamps": [10.0]
+}

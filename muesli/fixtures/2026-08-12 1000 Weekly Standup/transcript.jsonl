@@ -1,0 +1,10 @@
+{"i": 0, "t0": 0.4, "t1": 6.1, "speaker": "S1", "text": "Okay, let's get started. Quick round of updates and then the release.", "conf": 0.95}
+{"i": 1, "t0": 6.8, "t1": 19.5, "speaker": "S2", "text": "The FreeType regression is still biting us. Text metrics come back wrong on Linux after the atlas change.", "conf": 0.91}
+{"i": 2, "t0": 20.1, "t1": 31.0, "speaker": "S1", "text": "Is that the invalidation bug you mentioned yesterday?", "conf": 0.94}
+{"i": 3, "t0": 31.4, "t1": 52.2, "speaker": "S2", "text": "Yes. The atlas cache isn't invalidated when the font size changes mid-frame, so glyphs render from the stale texture.", "conf": 0.9}
+{"i": 4, "t0": 53.0, "t1": 70.3, "speaker": "S2", "text": "I have a fix sketched, but it needs a day of testing on all three platforms.", "conf": 0.92}
+{"i": 5, "t0": 71.0, "t1": 95.8, "speaker": "S1", "text": "Then let's not rush it. I'd rather slip the release than ship broken text rendering.", "conf": 0.95}
+{"i": 6, "t0": 96.2, "t1": 110.9, "speaker": "S1", "text": "Decision: we move one point seven from Wednesday to Friday.", "conf": 0.88}
+{"i": 7, "t0": 111.5, "t1": 118.0, "speaker": "S1", "text": "Dana, you own the atlas fix.", "conf": 0.96}
+{"i": 8, "t0": 118.6, "t1": 131.2, "speaker": "S2", "text": "I'll have a build for QA by Thursday morning.", "conf": 0.93}
+{"i": 9, "t0": 1875.0, "t1": 1890.4, "speaker": "S1", "text": "Alright, that's everything. Thanks all.", "conf": 0.97}

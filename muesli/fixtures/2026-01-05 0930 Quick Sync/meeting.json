@@ -1,0 +1,14 @@
+{
+  "muesliVersion": 1,
+  "id": "mtg_01HXQ9M2P0",
+  "title": "Quick Sync",
+  "startedAt": "2026-01-05T09:30:00+01:00",
+  "endedAt": "2026-01-05T09:34:12+01:00",
+  "pauses": [],
+  "attendees": [],
+  "capture": {"platform": "android", "source": "mic", "sampleRate": 16000},
+  "asr": {"engine": "whisper.cpp", "model": "small", "locale": "en-US", "meanConfidence": 0.81},
+  "audioRetention": "delete",
+  "tags": [],
+  "x-custom": {"importedFrom": "voice-memo", "revision": 3}
+}

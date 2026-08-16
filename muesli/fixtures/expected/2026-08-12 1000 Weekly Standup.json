@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "id": "mtg_01J8Z0K3D9",
+    "title": "Weekly Standup",
+    "muesliVersion": 1
+  },
+  "transcript": {
+    "count": 10,
+    "firstText": "Okay, let's get started. Quick round of updates and then the release.",
+    "lastText": "Alright, that's everything. Thanks all."
+  },
+  "notes": {
+    "title": "Weekly Standup",
+    "attendees": ["Dana Kim", "Luis Ortega"],
+    "tags": ["standup"],
+    "spanAnnotations": [[[1, 5]], [[6, 6]], [[3, 4], [7, 7]], [[8, 8]]]
+  },
+  "rawNotesTimestamps": [2.1, 41.7, 93.0, 115.2]
+}

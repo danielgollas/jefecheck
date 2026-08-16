@@ -1,0 +1,13 @@
+{
+  "name": "muesli-format",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference TypeScript implementation of the Muesli storage format (see ../../docs/storage-format.md). Zero runtime dependencies; tests run against the shared golden fixtures.",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/format.test.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
