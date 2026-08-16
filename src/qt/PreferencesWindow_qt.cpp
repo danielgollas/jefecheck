@@ -22,6 +22,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSettings>
+#include <QProcessEnvironment>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStandardPaths>
@@ -770,6 +771,43 @@ void PreferencesWindow_Qt::buildRemotePage() {
         sett.nickName = nickname->text().toStdString();
     });
     form->addRow("Nickname", nickname);
+
+    // --- JefeCheck Cloud --------------------------------------------------
+    // The coordinator URL lives HERE, not on the Cloud tab: it is configured
+    // once per machine, while the Cloud tab is about running a session. It is
+    // written straight to QSettings rather than to `sett`, because the
+    // rendering-chain settings struct has no business knowing about it and the
+    // Remote dialog reads the same key (see RemoteDialog_Qt::coordinatorUrlSetting).
+    auto* cloudHeader = new QLabel("JefeCheck Cloud", page);
+    cloudHeader->setProperty("role", "section");
+    form->addRow(cloudHeader);
+
+    auto* coordUrl = new QLineEdit(
+        QSettings().value("Remote/coordinatorUrl").toString(), page);
+    coordUrl->setObjectName("preferences.remote.coordinatorurl.edit");
+    coordUrl->setPlaceholderText("wss://coordinator.example/…");
+    coordUrl->setAccessibleName("Coordinator URL");
+    coordUrl->setToolTip(QStringLiteral(
+        "WebSocket URL of the session coordinator used by the Cloud tab.\n"
+        "The JEFECHECK_COORDINATOR_URL environment variable overrides this."));
+    connect(coordUrl, &QLineEdit::editingFinished, page, [coordUrl]() {
+        QSettings().setValue("Remote/coordinatorUrl", coordUrl->text().trimmed());
+    });
+    form->addRow("Coordinator", coordUrl);
+
+    // Surface the override rather than letting it silently win: an operator who
+    // exported the variable would otherwise edit this field and see no effect.
+    const QString envUrl = QProcessEnvironment::systemEnvironment().value(
+        "JEFECHECK_COORDINATOR_URL");
+    if (!envUrl.isEmpty()) {
+        auto* envNote = new QLabel(
+            QStringLiteral("Overridden by JEFECHECK_COORDINATOR_URL (%1)")
+                .arg(envUrl.toHtmlEscaped()), page);
+        envNote->setObjectName("preferences.remote.coordinatorurl.envnote");
+        envNote->setWordWrap(true);
+        envNote->setStyleSheet("color:#d4a13c;");
+        form->addRow(QString(), envNote);
+    }
 
     // Send / auto-accept remote-load-request toggles removed — loads come only
     // through playlists, so these are not user-configurable.

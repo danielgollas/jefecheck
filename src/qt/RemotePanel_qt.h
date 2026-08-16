@@ -64,6 +64,18 @@ public:
     void onNewGroupClicked();
     // Credits are host-only and hosting-only.
     void refreshCreditsVisibility(bool hosting);
+    // True while --ui-preview is showing sample data. refreshConnectionState()
+    // runs on a timer and would otherwise hide the session view (and with it
+    // the admission rows and credits) on the very next tick, because nothing
+    // is actually connected.
+    //
+    // CLEARED by any real connect action (see clearUiPreview). It must not
+    // survive one: leaving it latched freezes the whole panel — no
+    // participants, no status changes, a dead End Session button — while the
+    // session underneath runs perfectly well and invisibly.
+    bool uiPreviewActive_ = false;
+    /** Drop preview state and let the panel track reality again. */
+    void clearUiPreview();
 private:
     QString coordinatorUrlSetting() const;
     void onCreateCloudClicked();

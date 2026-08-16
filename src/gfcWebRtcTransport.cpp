@@ -1240,6 +1240,21 @@ struct WebRtcTransport::Impl {
         }
     }
 
+    /**
+     * Host-side coordinator error (create-session refused, or the socket gave
+     * up reconnecting).
+     *
+     * Surfaces as ConnectFailed so the dialog stops showing a session that
+     * does not exist. The most common cases are auth-required (no token — the
+     * desktop sign-in is not built yet) and insufficient-credits, both of
+     * which are the user's problem to see, not stderr's.
+     */
+    void onCoordHostError(const std::string& code, const std::string& msg) {
+        std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
+                     code.c_str(), msg.c_str());
+        pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
+    }
+
     void onCoordClientError(const std::string& code, const std::string& msg) {
         std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                      code.c_str(), msg.c_str());
@@ -1258,9 +1273,13 @@ struct WebRtcTransport::Impl {
         coord->onSignal([d](std::string from, SignalMessage m) {
             d->onCoordHostSignal(from, m);
         });
+        // Route host-side coordinator errors into the SAME sink the joiner
+        // path uses. Printing to stderr alone made a refused create-session
+        // (auth-required, insufficient-credits) invisible in the app: the
+        // dialog sat there as though it had worked, and nothing reached the
+        // remote log the user actually reads.
         coord->onError([d](std::string c, std::string m) {
-            std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
-                         c.c_str(), m.c_str());
+            d->onCoordHostError(c, m);
         });
         coord->onOpen([d]() {
             if (d->coord) d->coord->createSession(d->coordAuthToken, d->coordPolicy);

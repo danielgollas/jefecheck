@@ -678,6 +678,7 @@ void RemoteDialog_Qt::onChatSubmit() {
 }
 
 void RemoteDialog_Qt::onStartServerClicked() {
+    clearUiPreview();   // a real action always wins over --ui-preview
     jefe::qt::RemoteServerParams p;
     p.serverName = serverNameEdit_->text().toStdString();
     p.port       = serverPortSpin_->value();
@@ -687,6 +688,7 @@ void RemoteDialog_Qt::onStartServerClicked() {
 }
 
 void RemoteDialog_Qt::onConnectClientClicked() {
+    clearUiPreview();   // a real action always wins over --ui-preview
     jefe::qt::RemoteClientParams p;
     p.clientName = clientNameEdit_->text().toStdString();
     p.serverIP   = clientIPEdit_->text().toStdString();
@@ -697,6 +699,7 @@ void RemoteDialog_Qt::onConnectClientClicked() {
 }
 
 void RemoteDialog_Qt::onDisconnectClicked() {
+    clearUiPreview();   // a real action always wins over --ui-preview
     jefe::qt::disconnectRemote();
     // Clear the last cloud code so a fresh Create shows a fresh code.
     cloudSessionCodeEdit_->clear();
@@ -734,6 +737,7 @@ QString RemoteDialog_Qt::coordinatorUrlSetting() const {
 }
 
 void RemoteDialog_Qt::onCreateCloudClicked() {
+    clearUiPreview();   // a real action always wins over --ui-preview
     const QString url = coordinatorUrlSetting().trimmed();
     if (url.isEmpty()) {
         errorLabel_->setText(
@@ -767,6 +771,7 @@ void RemoteDialog_Qt::onCreateCloudClicked() {
 }
 
 void RemoteDialog_Qt::onJoinCloudClicked() {
+    clearUiPreview();   // a real action always wins over --ui-preview
     // The unified Join tab: session code (cloud) or IP address (LAN).
     if (joinModeIpRadio_ != nullptr && joinModeIpRadio_->isChecked()) {
         onConnectClientClicked();
@@ -831,6 +836,12 @@ void RemoteDialog_Qt::copySessionCodeToClipboard() {
 }
 
 void RemoteDialog_Qt::refreshConnectionState() {
+    // --ui-preview paints a state nothing is actually in. This runs on a timer,
+    // so without this guard it would hide the session view — and with it the
+    // pending-admission rows and the credits — on the next tick, leaving only
+    // the Cloud form visible.
+    if (uiPreviewActive_) return;
+
     const bool connected = jefe::qt::isRemoteConnected();
     const bool isServer  = jefe::qt::isRemoteServer();
 
@@ -1218,6 +1229,15 @@ void RemoteDialog_Qt::onNewGroupClicked() {
     cloudGroupCombo_->setCurrentText(name);
 }
 
+void RemoteDialog_Qt::clearUiPreview() {
+    if (!uiPreviewActive_) return;
+    uiPreviewActive_ = false;
+    // Drop the sample pending rows; the real ones come from the coordinator.
+    if (participantsList_ != nullptr) participantsList_->clear();
+    shownParticipants_ = -1;    // -1 forces a full rebuild from real state
+    shownStatusText_.clear();   // force the status label to repaint
+}
+
 void RemoteDialog_Qt::refreshCreditsVisibility(bool hosting) {
     if (creditsLabel_ == nullptr) return;
     // Host-only AND hosting-only. A remote participant never sees a balance.
@@ -1232,6 +1252,10 @@ void RemoteDialog_Qt::refreshCreditsVisibility(bool hosting) {
 // Nothing here is wired: the buttons do exactly what they do today.
 // ---------------------------------------------------------------------------
 void RemoteDialog_Qt::applyUiPreview() {
+    // Latch FIRST: refreshConnectionState() is on a timer and would undo
+    // everything below on the next tick.
+    uiPreviewActive_ = true;
+
     // Cloud tab, hosting state.
     cloudToggle_->setChecked(true);
     hostToggle_->setChecked(false);
