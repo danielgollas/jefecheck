@@ -47,6 +47,26 @@ struct TransportConfig {
     // Host-side session policy (knock/password/timeout/cap) from the selected
     // session group. Ignored for joiners — only a host sends it.
     SessionPolicy policy;
+    /**
+     * JEF-37: shared secret that lets the host's OWN loopback client skip the
+     * lobby.
+     *
+     * A cloud host also connects to its own session as a client (that loopback
+     * is how the host mirrors state). With knocking on, that client is just
+     * another joiner — so the host ends up waiting to admit itself, and until
+     * it does the session has no participants at all.
+     *
+     * The host generates a random nonce, hosts with it, and hands the same
+     * value to its loopback as that client's COORDINATOR-level display name
+     * (the app-level nickname, and so the participant list, is untouched). A
+     * knock whose display name matches is admitted without ever reaching the
+     * UI. Everyone else still knocks.
+     *
+     * Deliberately not a coordinator-side rule: this works against a
+     * coordinator already deployed, and against an anonymous self-hosted one
+     * where there is no identity to match on.
+     */
+    std::string selfJoinNonce;
 };
 
 // Legacy overloads (kept working; delegate to the config form).

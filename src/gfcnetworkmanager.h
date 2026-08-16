@@ -47,6 +47,12 @@ public:
     // JEF-27: the coordinator-assigned cloud session code (host role, coordinator
     // mode only; empty otherwise). Surfaced for the Remote dialog + --coord-test.
     std::string getAssignedSessionCode();
+
+    // JEF-37: joiners waiting for admission, and the host's decision on one.
+    // Host role only -- a joiner is never told who else is in the lobby, so
+    // these return empty / no-op for everyone else.
+    std::vector<jefe::net::PendingJoiner> pendingJoiners();
+    void decideJoiner(const std::string& joinerId, bool admit);
     std::vector<std::string> chatLogLines();
     std::vector<std::string> drainErrors();
 

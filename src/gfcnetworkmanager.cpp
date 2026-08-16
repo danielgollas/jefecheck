@@ -17,9 +17,29 @@ extern gfcTrackManager trackManager;
 
 #include <sstream>
 #include <chrono>
+#include <random>
 #include <thread>
 
 namespace {
+/**
+ * JEF-37: a fresh per-session secret for the host's own loopback client.
+ *
+ * 32 hex characters (128 bits) from std::random_device — enough that guessing
+ * it is not a strategy even for someone who already knows the session code,
+ * and short enough to survive the coordinator's display-name length cap.
+ * Regenerated per session, so a leaked one is worthless the moment the session
+ * ends. random_device is used directly rather than seeding a PRNG: this runs
+ * once per session, so its cost is irrelevant and its unpredictability is not.
+ */
+std::string makeSelfJoinNonce() {
+    static const char* kHex = "0123456789abcdef";
+    std::random_device rd;
+    std::string out;
+    out.reserve(32);
+    for (int i = 0; i < 32; ++i) out.push_back(kHex[rd() & 0xf]);
+    return out;
+}
+
 std::vector<std::string> wrapToWidth(const std::string& text, int maxW) {
     std::vector<std::string> lines;
     std::istringstream iss(text);
@@ -117,6 +137,13 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
 		
 		resetSincStatus();
         
+        // JEF-37: mint this session's self-join nonce BEFORE the server starts,
+        // so it is already in place when the loopback client knocks. Without
+        // one, a host with knocking on (the default) waits to admit its own
+        // client and the session never gains a single participant.
+        if (params && params->coordinatorMode && params->selfJoinNonce.empty())
+            params->selfJoinNonce = makeSelfJoinNonce();
+
 		server.start(params);
         
         
@@ -140,6 +167,10 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
         // the wait entirely, so that path is unchanged.
         clientParams.coordinatorMode=server.getCoordinatorMode();
         clientParams.coordinatorUrl=server.getCoordinatorUrl();
+        // Present the nonce to the COORDINATOR only. `nickname` above is what
+        // participants see, and it is untouched — the two names are separate
+        // precisely so this one can be a secret.
+        if (params) clientParams.coordDisplayName=params->selfJoinNonce;
         if (server.getCoordinatorMode()) {
             const int kCodeTimeoutMs = 5000;
             for (int t = 0; t < kCodeTimeoutMs; t += 20) {
@@ -210,6 +241,20 @@ std::vector<std::string> gfcNetworkManager::participantNames() {
 
 std::string gfcNetworkManager::getAssignedSessionCode() {
     return server.getAssignedSessionCode();
+}
+
+std::vector<jefe::net::PendingJoiner> gfcNetworkManager::pendingJoiners() {
+    if (!isServer) return {};
+    return server.getPendingJoiners();
+}
+
+void gfcNetworkManager::decideJoiner(const std::string& joinerId, bool admit) {
+    // Guarded by isServer, not merely by "the UI only shows this to a host":
+    // admit/deny is a host-only action at the coordinator too, and a joiner
+    // sending one would earn a protocol error for a button it should never
+    // have had.
+    if (!isServer) return;
+    server.decideJoiner(joinerId, admit);
 }
 
 // JEF-30: forward to the active transport. A host's stats come from the SERVER

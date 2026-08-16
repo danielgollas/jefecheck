@@ -106,8 +106,13 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
             tcfg.coordinatorUrl  = params->coordinatorUrl;
             tcfg.sessionCode     = params->sessionCode;
             tcfg.authToken       = params->authToken;
-            // The nickname the host sees in the admit prompt (JEF-37).
-            tcfg.displayName     = params->nickname;
+            // The name the host sees in the admit prompt (JEF-37). Normally
+            // the nickname; a host's own loopback client overrides it with the
+            // session's self-join nonce so it is admitted without prompting,
+            // while `nickName` (the participant list) stays the real name.
+            tcfg.displayName     = params->coordDisplayName.empty()
+                                       ? params->nickname
+                                       : params->coordDisplayName;
         }
         tcfg.password = thePassword;
         transport_ = jefe::net::makeTransport(tcfg);

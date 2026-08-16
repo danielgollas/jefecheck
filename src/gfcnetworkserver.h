@@ -69,6 +69,15 @@ public:
         return transport_ ? transport_->assignedSessionCode() : std::string();
     }
 
+    // JEF-37 lobby: joiners knocking, and the host's decision on one of them.
+    std::vector<jefe::net::PendingJoiner> getPendingJoiners() {
+        return transport_ ? transport_->pendingJoiners()
+                          : std::vector<jefe::net::PendingJoiner>();
+    }
+    void decideJoiner(const std::string& joinerId, bool admit) {
+        if (transport_) transport_->decideJoiner(joinerId, admit);
+    }
+
     void sendChatMessage(unsigned char type, std::string sender, std::string message, int color = 0);
 
     void disableGUI();
@@ -85,6 +94,8 @@ public:
     std::string coordinatorAuthToken;
     // JEF-37 host-side session policy forwarded with create-session.
     jefe::net::SessionPolicy coordinatorPolicy;
+    // JEF-37: this session's self-join nonce (see TransportConfig).
+    std::string selfJoinNonce;
     unsigned int ConnectionCount();
     gfcNetworkLog* log;
 

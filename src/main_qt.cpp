@@ -359,6 +359,26 @@ static bool resolveCoordTestPeer(int argc, char* argv[], std::string& url,
     return false;
 }
 
+// --coord-live-test <coordUrl> [authToken] : bring a cloud host up against a
+// REAL coordinator (local `npm run start:local`, or the deployed dev stage) and
+// assert its own loopback client reaches the participant list.
+//
+// --coord-test uses a test-double coordinator that implements only the
+// rendezvous, so it cannot see host POLICY at all. This one can: the host's
+// loopback client is itself a joiner, so if the coordinator enforces knocking
+// the host waits on a decision about itself and never has a participant.
+static bool resolveCoordLiveTest(int argc, char* argv[], std::string& url,
+                                 std::string& token) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--coord-live-test") == 0) {
+            url = argv[i + 1];
+            token = (i + 2 < argc && argv[i + 2][0] != '-') ? argv[i + 2] : "";
+            return true;
+        }
+    }
+    return false;
+}
+
 int main(int argc, char* argv[]) {
     // WebRTC-harness transport re-exec (JEF-24 Task 5). The transport factory
     // reads JEFECHECK_TRANSPORT, but `networkManager` is a global whose client
@@ -980,6 +1000,29 @@ int main(int argc, char* argv[]) {
             jefe::qt::initializeRenderingChain();
             jefe::qt::coordTestPeerJoin(coordUrl, code, /*holdMs=*/6000,
                                         /*play=*/true, /*connectTimeoutMs=*/12000);
+            std::_Exit(0);
+        }
+    }
+    {
+        std::string liveUrl, liveToken;
+        if (resolveCoordLiveTest(argc, argv, liveUrl, liveToken)) {
+            jefe::qt::initializeRenderingChain();
+            const bool up = jefe::qt::coordLiveHostStart(liveUrl, liveToken,
+                                                         /*loopbackTimeoutMs=*/15000);
+            printf("COORD-LIVE-TEST: code=%s loopback=%d\n",
+                   jefe::qt::coordTestGetCode().c_str(), up ? 1 : 0);
+            fflush(stdout);
+            if (!up) std::_Exit(2);
+            // Hold open so a joiner can knock, then admit it. Prints 0 knocks
+            // when run alone, which is a valid outcome — the loopback assertion
+            // above is the part that runs unattended.
+            // "decided", not "admitted": with JEFE_LIVE_DENY=1 the same count
+            // is refusals, and a label that said admitted would read as a pass
+            // in exactly the run meant to prove the opposite.
+            const int decided = jefe::qt::coordLiveAwaitAndAdmit(15000);
+            printf("COORD-LIVE-TEST: decided=%d participants=%d\n", decided,
+                   (int)jefe::qt::remoteParticipants().size());
+            fflush(stdout);
             std::_Exit(0);
         }
     }

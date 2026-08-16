@@ -59,7 +59,12 @@ public:
                               const std::string& password,
                               const std::string& authToken = "",
                               const std::string& displayName = "",
-                              const SessionPolicy& policy = SessionPolicy{});
+                              const SessionPolicy& policy = SessionPolicy{},
+                              // JEF-37: see TransportConfig::selfJoinNonce. On
+                              // a HOST this is the value that auto-admits;
+                              // empty means every joiner knocks, including the
+                              // host's own client.
+                              const std::string& selfJoinNonce = "");
 
     // Host role (fully implemented this task).
     bool startHost(unsigned short port, const std::string& password,
@@ -86,6 +91,12 @@ public:
     // Copies the pc shared_ptrs out under the peer-map lock, then queries
     // libdatachannel OUTSIDE the lock (the stats calls may block).
     std::vector<PeerStats> peerStats() override;
+
+    // JEF-37: lobby. pendingJoiners() is a snapshot taken under the same lock
+    // the coordinator callback writes it on; decideJoiner() sends admit/deny
+    // and drops the row locally so a second click cannot re-send.
+    std::vector<PendingJoiner> pendingJoiners() override;
+    void decideJoiner(const std::string& joinerId, bool admit) override;
 
 private:
     struct Impl;

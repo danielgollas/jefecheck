@@ -459,6 +459,16 @@ bool remoteTestServerSettleForPlay(int settleMs);
 // coordinator mode (create-session), wait for the assigned code + loopback client
 // to come up. Peer role: join by code, hold, toggle play. See the .cpp.
 bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs);
+// JEF-37 --coord-live-test: same bring-up against a REAL coordinator, with the
+// default host policy (knock on). Returns true only once the host's own
+// loopback client appears as a participant — which is exactly what host policy
+// can block, and what the test-double coordinator cannot exercise.
+bool coordLiveHostStart(const std::string& coordUrl, const std::string& authToken,
+                        int loopbackTimeoutMs);
+// Second phase of --coord-live-test: pump until a knock arrives, print who it
+// says it is, admit it, and report whether it became a participant. Returns the
+// number of knocks admitted (0 = nobody knocked within the window).
+int coordLiveAwaitAndAdmit(int timeoutMs);
 std::string coordTestGetCode();
 void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
                        int holdMs, bool play, int connectTimeoutMs = 12000);
@@ -497,6 +507,21 @@ bool isRemoteServer();
 // consistent answer, so the invariants live HERE rather than being re-derived
 // at each call site. The panel's job is then a pure render of this struct.
 // ---------------------------------------------------------------------------
+// JEF-37 lobby, host side. Mirrors jefe::net::PendingJoiner without dragging
+// the transport headers into Qt TUs (developer_notes §1). `displayName` is
+// peer-supplied — render it as Qt::PlainText, never rich text. `email` is
+// non-empty only when `verified`, which is the only part of a knock the host
+// can trust: an unverified joiner can call itself anything.
+struct RemotePendingJoiner {
+    std::string joinerId;
+    std::string displayName;
+    std::string email;
+    bool verified = false;
+};
+
+/** Admit (or, with false, refuse) one pending joiner. Host-only; else a no-op. */
+void remoteDecideJoiner(const std::string& joinerId, bool admit);
+
 enum class RemotePhase {
     Offline,      // no session; show the connect forms
     Connecting,   // a connect attempt is in flight
@@ -521,6 +546,13 @@ struct RemoteUiState {
      * showing them a balance would imply a cost that does not exist.
      */
     bool showCredits = false;
+    /**
+     * JEF-37: joiners knocking, waiting on this host's decision. Non-empty only
+     * while hosting a cloud session. Part of the state struct rather than a
+     * separate getter so the panel has ONE place it reads state from, and
+     * --ui-preview can populate a lobby without a second override path.
+     */
+    std::vector<RemotePendingJoiner> pending;
 };
 
 /** Resolve the current remote state. Safe to call from the GUI thread. */
@@ -542,6 +574,14 @@ struct RemotePeerStat {
     bool connected = false;
 };
 std::vector<RemotePeerStat> remotePeerStats();
+
+/**
+ * Raise the viewport's on-screen feedback message — the same one plate
+ * operations already use, honoring the Preferences size/fade settings. Exposed
+ * so a knock arriving with the Remote panel closed is visible without a second
+ * notification mechanism.
+ */
+void showViewportMessage(const std::string& text);
 
 std::vector<std::string> remoteParticipants();
 std::string              remoteStatusText();

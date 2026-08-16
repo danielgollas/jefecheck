@@ -1243,6 +1243,18 @@ RemoteUiState remoteUiState() {
         s.phase = code.empty() ? RemotePhase::HostingLan : RemotePhase::HostingCloud;
         s.sessionCode = code;
         s.showCredits = !code.empty();
+        // JEF-37: the lobby exists only where the coordinator does. A LAN host
+        // has no admission step, so it must not render one.
+        if (!code.empty()) {
+            for (const auto& p : networkManager.pendingJoiners()) {
+                RemotePendingJoiner r;
+                r.joinerId = p.joinerId;
+                r.displayName = p.displayName;
+                r.email = p.email;
+                r.verified = p.verified;
+                s.pending.push_back(std::move(r));
+            }
+        }
     } else {
         s.phase = RemotePhase::Joined;
     }
@@ -2172,6 +2184,17 @@ std::vector<RemotePeerStat> remotePeerStats() {
     }
     return out;
 }
+void remoteDecideJoiner(const std::string& joinerId, bool admit) {
+    // A decision during a cloud connect would reach a manager a worker thread
+    // owns; the other manager writers honor the same flag.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return;
+    networkManager.decideJoiner(joinerId, admit);
+}
+
+void showViewportMessage(const std::string& text) {
+    plateManager.setFeedbackMessage(text);
+}
+
 std::string remoteStatusText() {
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     return networkManager.connectionStatusText();
@@ -2209,6 +2232,7 @@ bool pumpNetwork() {
     static bool        prevConnected = false;
     static size_t      prevPeers     = 0;
     static size_t      prevChat      = 0;
+    static size_t      prevPending   = 0;
     static std::string prevStatus;
     // A worker thread is inside startServer/startConnection (cloud connect):
     // skip this tick so we don't call server/client Update() concurrently with
@@ -2219,6 +2243,11 @@ bool pumpNetwork() {
     const size_t      nowPeers     = networkManager.participantNames().size();
     const size_t      nowChat      = networkManager.chatLogLines().size();
     const std::string nowStatus    = networkManager.connectionStatusText();
+    // JEF-37: a knock arrives on the coordinator's own socket. It builds no
+    // peer and queues no transport event -- deliberately, since a joiner that
+    // may yet be denied must have nothing to receive on -- so none of the
+    // signals above move and the panel would never learn about it.
+    const size_t      nowPending   = networkManager.pendingJoiners().size();
     // Repaint whenever any inbound packet was processed this tick: client.Update()
     // applies mirrored plate/playback/FX state to the managers, but QOpenGLWidget
     // only repaints on local input — without this the receiver wouldn't redraw
@@ -2226,9 +2255,10 @@ bool pumpNetwork() {
     const bool gotInbound = networkManager.consumeGotMessages();
     const bool changed = (nowConnected != prevConnected) ||
                          (nowPeers != prevPeers) || (nowChat != prevChat) ||
-                         (nowStatus != prevStatus) || gotInbound;
+                         (nowStatus != prevStatus) ||
+                         (nowPending != prevPending) || gotInbound;
     prevConnected = nowConnected; prevPeers = nowPeers; prevChat = nowChat;
-    prevStatus = nowStatus;
+    prevPending = nowPending; prevStatus = nowStatus;
     return changed;
 }
 
@@ -2414,6 +2444,53 @@ bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     return false;
+}
+
+bool coordLiveHostStart(const std::string& coordUrl, const std::string& authToken,
+                        int loopbackTimeoutMs) {
+    if (networkManager.getConnected()) return false;
+    gfcServerParams sp;
+    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", "jefe-live-host");
+    sp.password[0] = '\0';
+    sp.port = 0;
+    sp.coordinatorMode = true;
+    sp.coordinatorUrl  = coordUrl;
+    sp.authToken       = authToken;
+    // DEFAULT policy on purpose. Overriding requireKnock here would test a
+    // configuration no real host starts in, and hide the very interaction this
+    // harness exists to catch.
+    networkManager.startServer(&sp);
+    if (networkManager.getAssignedSessionCode().empty()) return false;
+    for (int t = 0; t < loopbackTimeoutMs; t += 10) {
+        pumpNetwork();
+        if (!networkManager.participantNames().empty()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+}
+
+int coordLiveAwaitAndAdmit(int timeoutMs) {
+    // JEFE_LIVE_DENY=1 refuses instead, so the harness can check the other
+    // branch: a denied joiner must be told no and never join the roster.
+    const char* denyEnv = std::getenv("JEFE_LIVE_DENY");
+    const bool admitThem = !(denyEnv && denyEnv[0] == '1');
+    int admitted = 0;
+    for (int t = 0; t < timeoutMs; t += 10) {
+        pumpNetwork();
+        // Read through remoteUiState(), not the manager, so this exercises the
+        // exact path the panel renders from -- a harness that bypassed it
+        // could pass while the UI still showed nothing.
+        const RemoteUiState st = remoteUiState();
+        for (const auto& p : st.pending) {
+            std::printf("COORD-LIVE-TEST: knock name=[%s] email=[%s] verified=%d\n",
+                        p.displayName.c_str(), p.email.c_str(), p.verified ? 1 : 0);
+            remoteDecideJoiner(p.joinerId, admitThem);
+            ++admitted;
+        }
+        if (admitted > 0 && st.pending.empty()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return admitted;
 }
 
 // The coordinator-assigned session code (empty until the host session is up).

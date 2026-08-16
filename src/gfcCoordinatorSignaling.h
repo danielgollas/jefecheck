@@ -121,6 +121,24 @@ std::string encodeSignalEnvelope(const std::string& toPeerId,
                                  const SignalMessage& msg);
 std::string encodeLeave();
 
+// JEF-37 admission. Host-only: the coordinator rejects an admit/deny from
+// anyone who is not the session's host, so a joiner cannot let itself in.
+std::string encodeAdmit(const std::string& joinerId);
+std::string encodeDeny(const std::string& joinerId);
+
+// A knock, as delivered to the host. `displayName` is peer-supplied: the
+// coordinator sanitizes it (control characters stripped, length capped), but
+// it still reaches the UI as untrusted text and must be rendered as plain
+// text, never rich text. `email` is present ONLY when `verified` — an
+// unverified joiner can call itself anything, including someone else's name,
+// so the email is the only part of a knock the host can actually trust.
+struct JoinRequest {
+    std::string joinerId;
+    std::string displayName;
+    std::string email;
+    bool verified = false;
+};
+
 // Decoded coord→client message. Only the fields relevant to `type` are filled.
 struct CoordServerMessage {
     std::string type;  // session-created|roster|peer-joined|peer-left|signal|error
@@ -142,6 +160,12 @@ struct CoordServerMessage {
     SignalMessage payload;   // parsed nested payload (best-effort)
     bool hasPayload = false;
 
+    // join-request (host-only):
+    std::string joinerId;
+    std::string displayName;
+    std::string email;
+    bool verified = false;
+
     // error:
     std::string errorCode;   // the coordinator's `code` field
     std::string message;
@@ -150,6 +174,12 @@ struct CoordServerMessage {
 // Parse a coord→client envelope. Returns true if it looked like a JSON object
 // with a string `type`; false on gross malformation. Never throws.
 bool parseServerMsg(const std::string& json, CoordServerMessage& out);
+
+// Convenience view over parseServerMsg for a {"type":"join-request",...}
+// envelope. Returns false for any other type, so callers cannot mistake an
+// unrelated message for a knock. There is deliberately only ONE parser
+// underneath: a second hand-written one would drift from it.
+bool parseJoinRequest(const std::string& json, JoinRequest& out);
 
 // ── CoordinatorSignaling ────────────────────────────────────────────────────
 class CoordinatorSignaling {
@@ -176,6 +206,13 @@ public:
     void onRoster(std::function<void(std::vector<std::string> peers,
                                      std::string iceServersJson)> fn);
     void onSignal(std::function<void(std::string fromPeerId, SignalMessage msg)> fn);
+    // JEF-37. onJoinRequest fires on the HOST when someone knocks;
+    // onJoinPending fires on the JOINER once it is parked in the lobby, which
+    // is the only signal distinguishing "waiting for a human" from "the
+    // coordinator is slow" — without it the joiner shows a generic connecting
+    // spinner for as long as the host takes to notice.
+    void onJoinRequest(std::function<void(JoinRequest req)> fn);
+    void onJoinPending(std::function<void()> fn);
 
     // Dial the coordinator. url is a full ws:// or wss:// URL. Async: onOpen
     // fires once the socket is up. Returns false only on immediate failure.
@@ -192,6 +229,9 @@ public:
                      const std::string& authToken = "");
     bool sendSignal(const std::string& toPeerId, const SignalMessage& msg);
     bool leave();
+    // JEF-37 host decision on a pending joiner.
+    bool admit(const std::string& joinerId);
+    bool deny(const std::string& joinerId);
 
     // Current reconnect/backoff state (thread-safe). One of "idle",
     // "connecting", "connected", "reconnecting", "failed", "closed".

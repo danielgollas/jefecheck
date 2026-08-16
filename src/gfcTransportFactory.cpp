@@ -50,7 +50,8 @@ std::unique_ptr<ITransport> makeTransport(const TransportConfig& configIn) {
         if (cfg.coordinatorMode) {
             t->configureCoordinator(cfg.coordinatorUrl, cfg.sessionCode,
                                     cfg.password, cfg.authToken,
-                                    cfg.displayName, cfg.policy);
+                                    cfg.displayName, cfg.policy,
+                                    cfg.selfJoinNonce);
         }
         return t;
 #else

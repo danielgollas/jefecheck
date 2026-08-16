@@ -1030,9 +1030,29 @@ void RemoteDialog_Qt::refreshConnectionState() {
     // every tick below via updateParticipantHealthRow (cheap setText, no
     // relayout).
     const auto participants = jefe::qt::remoteParticipants();
-    if ((int)participants.size() != shownParticipants_) {
-        shownParticipants_ = (int)participants.size();
+    // JEF-37 lobby, straight off the resolved state — empty for a joiner, for
+    // a LAN host, and offline, so no call site here re-derives who may see it.
+    const std::vector<jefe::qt::RemotePendingJoiner>& pending = st.pending;
+
+    QString rosterSig;
+    for (const auto& name : participants)
+        rosterSig += QString::fromStdString(name) + QLatin1Char('\n');
+    rosterSig += QLatin1Char('|');
+    for (const auto& p : pending)
+        rosterSig += QString::fromStdString(p.joinerId) + QLatin1Char('\n');
+
+    if (!rosterEverBuilt_ || rosterSig != shownRosterSig_) {
+        rosterEverBuilt_ = true;
+        shownRosterSig_ = rosterSig;
+        pendingRowCount_ = (int)pending.size();
         participantsList_->clear();
+        // Knocks first: they are the only rows asking the host for something.
+        for (const auto& p : pending) {
+            auto* item = new QListWidgetItem(participantsList_);
+            auto* row = buildPendingJoinerRow(p);
+            item->setSizeHint(row->sizeHint());
+            participantsList_->setItemWidget(item, row);
+        }
         for (const auto& name : participants) {
             const QString qname = QString::fromStdString(name);
             auto* item = new QListWidgetItem(participantsList_);
@@ -1040,8 +1060,38 @@ void RemoteDialog_Qt::refreshConnectionState() {
             item->setSizeHint(row->sizeHint());
             participantsList_->setItemWidget(item, row);
         }
+        // The count names PARTICIPANTS; the knocks are called out separately so
+        // "Participants (3)" never quietly includes someone not yet admitted.
         participantsHeader_->setText(
-            QString("Participants (%1)").arg(participantsList_->count()));
+            pending.empty()
+                ? QString("Participants (%1)").arg((int)participants.size())
+                : QString("Participants (%1) · %2 waiting")
+                      .arg((int)participants.size())
+                      .arg((int)pending.size()));
+    }
+
+    // Announce a new knock on the viewport when the panel is not on screen —
+    // reusing the existing feedback message (Preferences size/fade) rather
+    // than adding a second notification path.
+    if (!pending.empty() && !isVisible()) {
+        for (const auto& p : pending) {
+            if (std::find(announcedKnocks_.begin(), announcedKnocks_.end(),
+                          p.joinerId) != announcedKnocks_.end())
+                continue;
+            announcedKnocks_.push_back(p.joinerId);
+            const std::string who =
+                p.displayName.empty() ? std::string("Someone") : p.displayName;
+            jefe::qt::showViewportMessage(who + " wants to join · press F5");
+        }
+    }
+    // Forget knocks that are gone, so the same person re-knocking later is
+    // announced again (an unanswered knock the host missed is worth repeating).
+    if (announcedKnocks_.size() > pending.size()) {
+        std::vector<std::string> still;
+        for (const auto& id : announcedKnocks_)
+            for (const auto& p : pending)
+                if (p.joinerId == id) { still.push_back(id); break; }
+        announcedKnocks_.swap(still);
     }
 
     // JEF-30: per-peer session health. Drop stale samples on disconnect (a
@@ -1060,9 +1110,14 @@ void RemoteDialog_Qt::refreshConnectionState() {
         for (const auto& s : stats) byName[s.name] = &s;
 
         const auto now = std::chrono::steady_clock::now();
-        for (int i = 0; i < participantsList_->count(); ++i) {
-            auto* item = participantsList_->item(i);
-            auto* row = participantsList_->itemWidget(item);
+        // Participant i lives at row pendingRowCount_ + i: the lobby rows are
+        // above them and are not peers, so they have no health to update.
+        const int shown =
+            std::min((int)participants.size(),
+                     participantsList_->count() - pendingRowCount_);
+        for (int i = 0; i < shown; ++i) {
+            auto* item = participantsList_->item(pendingRowCount_ + i);
+            auto* row = item ? participantsList_->itemWidget(item) : nullptr;
             if (!row) continue;
             const std::string name = participants[static_cast<size_t>(i)];
             auto it = byName.find(name);
@@ -1252,6 +1307,73 @@ QWidget* RemoteDialog_Qt::buildParticipantHealthRow(const QString& name) {
     return row;
 }
 
+// JEF-37: one lobby row. Nobody has connected yet — there is no PeerConnection
+// and no PeerId behind this — so it carries identity and a decision, not health.
+QWidget* RemoteDialog_Qt::buildPendingJoinerRow(
+    const jefe::qt::RemotePendingJoiner& p) {
+    const QString joinerId = QString::fromStdString(p.joinerId);
+
+    auto* row = new QWidget();
+    row->setObjectName("remote.pending.row");
+    auto* lay = new QHBoxLayout(row);
+    lay->setContentsMargins(4, 2, 4, 2);
+    lay->setSpacing(6);
+
+    auto* dot = new QLabel(row);
+    dot->setObjectName("remote.pending.dot");
+    dot->setFixedSize(9, 9);
+    dot->setStyleSheet("border-radius:4px; background:#e0a33e;");  // amber: waiting
+
+    auto* nameLbl = new QLabel(row);
+    nameLbl->setObjectName("remote.pending.name");
+    // PLAIN TEXT, always. The coordinator sanitizes displayName, but this is a
+    // string a stranger chose; the client must not depend on someone else's
+    // validation to keep markup out of its own UI.
+    nameLbl->setTextFormat(Qt::PlainText);
+    nameLbl->setText(p.displayName.empty() ? QStringLiteral("(no name)")
+                                           : QString::fromStdString(p.displayName));
+
+    // The email is the only trustworthy part of a knock. Saying "(not signed
+    // in)" for the rest is the point: an unverified joiner can type any name,
+    // including one the host recognizes.
+    auto* whoLbl = new QLabel(row);
+    whoLbl->setObjectName("remote.pending.identity");
+    whoLbl->setTextFormat(Qt::PlainText);
+    if (p.verified && !p.email.empty()) {
+        whoLbl->setText(QString::fromStdString(p.email) + QStringLiteral(" ✓"));
+        whoLbl->setStyleSheet("color:#7fb069;");
+    } else {
+        whoLbl->setText(QStringLiteral("(not signed in)"));
+        whoLbl->setStyleSheet("color:#8a8a90;");
+    }
+
+    auto* admit = new QPushButton(QStringLiteral("Admit"), row);
+    admit->setObjectName("remote.pending." + joinerId + ".admit");
+    admit->setProperty("accent", true);
+    auto* deny = new QPushButton(QStringLiteral("Deny"), row);
+    deny->setObjectName("remote.pending." + joinerId + ".deny");
+
+    const std::string id = p.joinerId;
+    // Disable BOTH buttons on the first click. The row survives until the next
+    // refresh tick, and a second click on a decided joiner would be a decision
+    // about someone the coordinator no longer has pending.
+    auto decide = [this, id, admit, deny](bool yes) {
+        admit->setEnabled(false);
+        deny->setEnabled(false);
+        jefe::qt::remoteDecideJoiner(id, yes);
+        refreshConnectionState();
+    };
+    connect(admit, &QPushButton::clicked, this, [decide]{ decide(true); });
+    connect(deny,  &QPushButton::clicked, this, [decide]{ decide(false); });
+
+    lay->addWidget(dot);
+    lay->addWidget(nameLbl);
+    lay->addWidget(whoLbl, /*stretch*/ 1);
+    lay->addWidget(admit);
+    lay->addWidget(deny);
+    return row;
+}
+
 // JEF-30: refreshes one row's dot/rtt/kbps/path text+color in place (cheap
 // QLabel::setText/setStyleSheet — no layout rebuild). `hasStats` false means
 // this participant has no matching remotePeerStats() entry (self, or a name
@@ -1380,7 +1502,10 @@ void RemoteDialog_Qt::clearUiPreview() {
     uiPreviewActive_ = false;
     // Drop the sample pending rows; the real ones come from the coordinator.
     if (participantsList_ != nullptr) participantsList_->clear();
-    shownParticipants_ = -1;    // -1 forces a full rebuild from real state
+    rosterEverBuilt_ = false;   // forces a full rebuild from real state
+    shownRosterSig_.clear();
+    pendingRowCount_ = 0;
+    announcedKnocks_.clear();
     shownStatusText_.clear();   // force the status label to repaint
 }
 
@@ -1403,11 +1528,26 @@ void RemoteDialog_Qt::applyUiPreview() {
     // managers, so preview and reality cannot drift apart.
     previewState_ = jefe::qt::RemoteUiState{};
     previewState_.phase = jefe::qt::RemotePhase::HostingCloud;
-    previewState_.statusText = "PREVIEW — sample data (not a real session)";
+    previewState_.statusText =
+        "PREVIEW — sample data (not a real session) · 2 waiting to join";
     previewState_.sessionCode = "JEFE-6ZDN";
     previewState_.inSession = true;
     previewState_.isHost = true;
     previewState_.showCredits = true;
+    // Sample knocks (JEF-37): one verified, one not — the distinction the row
+    // exists to show. These go through the SAME builder the live path uses, so
+    // reviewing the preview reviews the real widget.
+    {
+        jefe::qt::RemotePendingJoiner a;
+        a.joinerId = "preview-1";
+        a.displayName = "Alice Rivera";
+        a.email = "alice@studio.com";
+        a.verified = true;
+        jefe::qt::RemotePendingJoiner b;
+        b.joinerId = "preview-2";
+        b.displayName = "someone";
+        previewState_.pending = { std::move(a), std::move(b) };
+    }
     uiPreviewActive_ = true;
 
     // Cloud tab, hosting state.
@@ -1440,49 +1580,8 @@ void RemoteDialog_Qt::applyUiPreview() {
     refreshCreditsVisibility(/*hosting*/ true);
     creditsLabel_->setText("00:59:57 credits");
 
-    // Pending-admission rows (JEF-37). A verified joiner presented a valid
-    // token; an unverified one only chose a nickname. displayName is rendered
-    // as PlainText because it is peer-supplied.
-    struct Knock { const char* name; const char* email; bool verified; };
-    const Knock knocks[] = {
-        { "Alice Rivera", "alice@studio.com", true },
-        { "someone",      nullptr,            false },
-    };
-    for (const Knock& k : knocks) {
-        auto* row = new QWidget();
-        auto* h = new QHBoxLayout(row);
-        h->setContentsMargins(6, 4, 6, 4);
-        h->setSpacing(8);
-
-        auto* dot = new QLabel(QStringLiteral("●"), row);
-        dot->setStyleSheet("color:#e0a33e;");   // amber: awaiting a decision
-        auto* name = new QLabel(QString::fromUtf8(k.name), row);
-        name->setTextFormat(Qt::PlainText);
-        auto* who = new QLabel(
-            k.verified ? QString::fromUtf8(k.email) + QStringLiteral(" ✓")
-                       : QStringLiteral("(not signed in)"),
-            row);
-        who->setTextFormat(Qt::PlainText);
-        who->setStyleSheet(k.verified ? "color:#7fb069;" : "color:#8a8a90;");
-        auto* admit = new QPushButton("Admit", row);
-        admit->setProperty("accent", true);
-        auto* deny = new QPushButton("Deny", row);
-
-        h->addWidget(dot);
-        h->addWidget(name);
-        h->addWidget(who, /*stretch*/ 1);
-        h->addWidget(admit);
-        h->addWidget(deny);
-
-        auto* item = new QListWidgetItem(participantsList_);
-        item->setSizeHint(row->sizeHint());
-        participantsList_->setItemWidget(item, row);
-    }
-
     // Show the session view so the participants list is visible at all.
     if (sessionBox_) sessionBox_->setVisible(true);
     if (connectPanel_) connectPanel_->setVisible(true);
-    statusLabel_->setText("Hosting on JefeCheck Cloud — 2 waiting to join");
     statusDot_->setStyleSheet("color:#7fb069;");
-    participantsHeader_->setText("Participants");
 }

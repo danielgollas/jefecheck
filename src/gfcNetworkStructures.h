@@ -126,6 +126,10 @@ std::string authToken;
 // capacity) from the selected session group. Sent with create-session; the
 // coordinator enforces it for everyone. Host-only by construction.
 jefe::net::SessionPolicy policy;
+// JEF-37: secret that lets this host's own loopback client skip its own
+// lobby. gfcNetworkManager::startServer generates one when empty and hands
+// the same value to the loopback as its coordinator display name.
+std::string selfJoinNonce;
 };
 
 
@@ -144,6 +148,11 @@ std::string sessionCode;
 // only hosting is gated -- but a valid one earns a verified badge in the
 // host's admit prompt.
 std::string authToken;
+// JEF-37: name presented to the COORDINATOR when knocking, which is separate
+// from `nickname` (the app-level name in the participant list). A host's
+// loopback client puts its self-join nonce here so it is admitted silently,
+// while still showing up under the session's real name. Empty = use nickname.
+std::string coordDisplayName;
 };
 
 //#pragma pack(push,1)

@@ -123,6 +123,11 @@ private:
     // path) used as the participantsList_ item widget. Object names follow
     // the dotted-leaf scheme (reused across rows, like the chat_* widgets).
     QWidget* buildParticipantHealthRow(const QString& name);
+
+    // JEF-37: one lobby row — who is knocking, whether their identity is
+    // verified, and the two buttons that decide it. `displayName` is
+    // peer-supplied and is rendered as Qt::PlainText.
+    QWidget* buildPendingJoinerRow(const jefe::qt::RemotePendingJoiner& p);
     // Updates an existing row's dot/rtt/kbps/path labels in place (no relayout
     // churn) from a resolved health sample. `hasStats` false -> blank/gray
     // (participant with no matching peer-stats entry: self, or a name that
@@ -212,8 +217,19 @@ private:
     // how many lines/participants were last shown and only apply the delta.
     int          shownChatLines_ = 0;
     int          shownNetLogLines_ = 0;
-    int          shownParticipants_ = -1;  // -1 forces the first rebuild
+    // Roster signature: participant names plus the ids of everyone knocking.
+    // A plain count missed the case that matters most — an admit promotes a
+    // lobby row to a participant row in the same tick, leaving the total
+    // unchanged while both rows are now wrong.
+    QString      shownRosterSig_;
+    bool         rosterEverBuilt_ = false;   // forces the first rebuild
+    // Lobby rows sit at the TOP of participantsList_, so the health loop below
+    // has to skip past them to line participant i up with its row.
+    int          pendingRowCount_ = 0;
     QString      shownStatusText_;
+    // Knocks already announced on the viewport, so a joiner waiting several
+    // minutes is announced once rather than on every refresh tick.
+    std::vector<std::string> announcedKnocks_;
 
     // JEF-30: per-peer byte-delta sample for kbps derivation, keyed by peer
     // display name (RemotePeerStat carries no PeerId). Cleared on disconnect

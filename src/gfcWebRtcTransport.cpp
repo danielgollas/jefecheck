@@ -35,6 +35,17 @@ namespace {
 // rtc::Configuration.iceServers. Defensive: malformed input yields an empty
 // list and never throws (LAN behavior, no ICE servers).
 
+// JEF-37: compare a secret without an early exit on the first differing byte.
+// The nonce arrives over the network from an untrusted party, and a plain ==
+// leaks a match prefix through timing. Length is not secret (it is fixed).
+bool constantTimeEquals(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    unsigned char diff = 0;
+    for (size_t i = 0; i < a.size(); ++i)
+        diff |= static_cast<unsigned char>(a[i] ^ b[i]);
+    return diff == 0;
+}
+
 void jsonSkipWs(const std::string& s, size_t& i) {
     while (i < s.size() &&
            (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r'))
@@ -314,12 +325,22 @@ struct WebRtcTransport::Impl {
     // Sent with create-session; the coordinator enforces it for everyone.
     SessionPolicy coordPolicy;
     std::string coordDisplayName;
+    // JEF-37: host-side secret that identifies its own loopback client's knock.
+    std::string selfJoinNonce;
     std::string assignedCode;       // host: code the coordinator handed us
     std::string coordIceServersJson;  // opaque raw-JSON array, "" if none
     std::unique_ptr<CoordinatorSignaling> coord;
     std::map<std::string, PeerId> coordToPeer;  // coordinator connId -> PeerId
     std::string clientHostCoordId;  // joiner: the host's coordinator connId
     bool clientPcBuilt = false;     // joiner: guard against double-build
+    // JEF-37 lobby (host only), guarded by mtx. Written from the coordinator's
+    // WebSocket thread, read from the GUI thread. A vector rather than a map:
+    // it holds a handful of entries at most and the UI renders them in arrival
+    // order, which is the order a host expects to answer them in.
+    std::vector<PendingJoiner> pendingJoiners;
+    // JEF-37 (joiner side), guarded by mtx: the coordinator parked us in a
+    // lobby and a human has to act before anything else happens.
+    bool awaitingAdmission = false;
 
     // Single mutex guards the peer maps AND the event queue. All libdatachannel
     // / signaling callbacks fire on background threads and mutate under it; the
@@ -1029,8 +1050,55 @@ struct WebRtcTransport::Impl {
         trace("host", "coordinator session created");
     }
 
+    // JEF-37: someone knocked. Park them until the host decides. Nothing is
+    // built for them here -- no PeerConnection, no PeerId -- because a denied
+    // joiner must never have had anything to receive traffic on.
+    void onCoordHostJoinRequest(const JoinRequest& req) {
+        trace("host", "coordinator join request");
+
+        // The host's OWN loopback client, recognised by the nonce it carries as
+        // its coordinator display name. Admit it without ever surfacing a row:
+        // asking a host to admit itself is not a decision, and until it did the
+        // session would have no participants at all.
+        {
+            std::string nonce;
+            { std::lock_guard<std::mutex> lk(mtx); nonce = selfJoinNonce; }
+            if (!nonce.empty() && constantTimeEquals(nonce, req.displayName)) {
+                trace("host", "auto-admitting own loopback client");
+                if (coord) coord->admit(req.joinerId);
+                return;
+            }
+        }
+
+        std::lock_guard<std::mutex> lk(mtx);
+        for (const PendingJoiner& p : pendingJoiners) {
+            // A re-knock from the same connection replaces nothing: the row is
+            // already showing and re-adding it would give the host two buttons
+            // for one person.
+            if (p.joinerId == req.joinerId) return;
+        }
+        PendingJoiner p;
+        p.joinerId = req.joinerId;
+        p.displayName = req.displayName;
+        p.email = req.email;
+        p.verified = req.verified;
+        pendingJoiners.push_back(std::move(p));
+    }
+
+    /** Drop a lobby row. Called on admit, deny, and when the joiner gives up. */
+    void dropPending(const std::string& joinerId) {
+        std::lock_guard<std::mutex> lk(mtx);
+        for (auto it = pendingJoiners.begin(); it != pendingJoiners.end(); ++it) {
+            if (it->joinerId == joinerId) { pendingJoiners.erase(it); return; }
+        }
+    }
+
     void onCoordHostPeerJoined(const std::string& coordPeerId) {
         trace("host", "coordinator peer joined");
+        // An admitted joiner arrives here as a normal peer; its lobby row has
+        // served its purpose. Removing it on peer-joined (not only on the
+        // admit click) also covers auto-admit, where no click ever happens.
+        dropPending(coordPeerId);
         if (maxClients > 0) {
             std::lock_guard<std::mutex> lk(mtx);
             if (static_cast<int>(peers.size()) >= maxClients) return;  // at capacity
@@ -1110,6 +1178,10 @@ struct WebRtcTransport::Impl {
     }
 
     void onCoordHostPeerLeft(const std::string& coordPeerId) {
+        // Covers the joiner that closed its window while still knocking: its
+        // row must go, or the host is left offering to admit someone who has
+        // already gone.
+        dropPending(coordPeerId);
         PeerId pid = kInvalidPeerId;
         {
             std::lock_guard<std::mutex> lk(mtx);
@@ -1270,6 +1342,7 @@ struct WebRtcTransport::Impl {
         });
         coord->onPeerJoined([d](std::string p) { d->onCoordHostPeerJoined(p); });
         coord->onPeerLeft([d](std::string p) { d->onCoordHostPeerLeft(p); });
+        coord->onJoinRequest([d](JoinRequest r) { d->onCoordHostJoinRequest(r); });
         coord->onSignal([d](std::string from, SignalMessage m) {
             d->onCoordHostSignal(from, m);
         });
@@ -1307,6 +1380,10 @@ struct WebRtcTransport::Impl {
         coord->onError([d](std::string c, std::string m) {
             d->onCoordClientError(c, m);
         });
+        coord->onJoinPending([d]() {
+            std::lock_guard<std::mutex> lk(d->mtx);
+            d->awaitingAdmission = true;
+        });
         std::string code = coordSessionCode;
         std::string name = coordDisplayName;
         std::string tok = coordAuthToken;
@@ -1340,19 +1417,48 @@ void WebRtcTransport::configureCoordinator(const std::string& url,
                                            const std::string& password,
                                            const std::string& authToken,
                                            const std::string& displayName,
-                                           const SessionPolicy& policy) {
+                                           const SessionPolicy& policy,
+                                           const std::string& selfJoinNonce) {
     d_->coordinatorUrl = url;
     d_->coordSessionCode = sessionCode;
     d_->coordPassword = password;
     d_->coordAuthToken = authToken;
     d_->coordPolicy = policy;
     d_->coordDisplayName = displayName;
+    d_->selfJoinNonce = selfJoinNonce;
     d_->coordinatorMode = true;
 }
 
 std::string WebRtcTransport::assignedSessionCode() {
     std::lock_guard<std::mutex> lk(d_->mtx);
     return d_->assignedCode;
+}
+
+std::vector<PendingJoiner> WebRtcTransport::pendingJoiners() {
+    std::lock_guard<std::mutex> lk(d_->mtx);
+    return d_->pendingJoiners;
+}
+
+void WebRtcTransport::decideJoiner(const std::string& joinerId, bool admit) {
+    // Drop the row FIRST, and only send if it was actually still pending. Two
+    // clicks (or a click landing just after the joiner gave up) then send one
+    // decision at most -- the coordinator would reject the second anyway, but
+    // it would surface as an error the host did nothing to deserve.
+    bool wasPending = false;
+    {
+        std::lock_guard<std::mutex> lk(d_->mtx);
+        for (auto it = d_->pendingJoiners.begin(); it != d_->pendingJoiners.end();
+             ++it) {
+            if (it->joinerId == joinerId) {
+                d_->pendingJoiners.erase(it);
+                wasPending = true;
+                break;
+            }
+        }
+    }
+    if (!wasPending || !d_->coord) return;
+    if (admit) d_->coord->admit(joinerId);
+    else       d_->coord->deny(joinerId);
 }
 
 bool WebRtcTransport::startHost(unsigned short port, const std::string& /*password*/,

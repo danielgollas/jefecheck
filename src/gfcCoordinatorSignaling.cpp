@@ -254,6 +254,28 @@ std::string encodeLeave() {
     return "{\"action\":\"leave\"}";
 }
 
+namespace {
+// admit and deny differ only in the verb; one builder keeps them from drifting.
+std::string encodeDecision(const char* action, const std::string& joinerId) {
+    std::string out = "{\"action\":\"";
+    out += action;
+    out += "\",\"joinerId\":\"";
+    // joinerId comes from the coordinator, but it round-trips through our own
+    // data structures and the UI before landing here -- escape it anyway.
+    appendEscaped(out, joinerId);
+    out += "\"}";
+    return out;
+}
+}  // namespace
+
+std::string encodeAdmit(const std::string& joinerId) {
+    return encodeDecision("admit", joinerId);
+}
+
+std::string encodeDeny(const std::string& joinerId) {
+    return encodeDecision("deny", joinerId);
+}
+
 // ── Coord→client parser ──────────────────────────────────────────────────────
 
 bool parseServerMsg(const std::string& json, CoordServerMessage& out) {
@@ -284,11 +306,16 @@ bool parseServerMsg(const std::string& json, CoordServerMessage& out) {
             else if (key == "peerId") out.peerId = val;
             else if (key == "from") out.from = val;
             else if (key == "message") out.message = val;
+            else if (key == "joinerId") out.joinerId = val;
+            else if (key == "displayName") out.displayName = val;
+            else if (key == "email") out.email = val;
             // unknown string key: ignore
         } else {
             std::string raw;
             if (!captureRawValue(json, i, raw)) return false;
-            if (key == "peers") {
+            if (key == "verified") {
+                out.verified = (raw == "true");
+            } else if (key == "peers") {
                 parseStringArray(raw, out.peers);
             } else if (key == "iceServers") {
                 out.iceServersJson = raw;  // opaque pass-through
@@ -311,6 +338,23 @@ bool parseServerMsg(const std::string& json, CoordServerMessage& out) {
     return true;
 }
 
+bool parseJoinRequest(const std::string& json, JoinRequest& out) {
+    out = JoinRequest{};
+    CoordServerMessage m;
+    if (!parseServerMsg(json, m)) return false;
+    if (m.type != "join-request") return false;
+    // A knock without a joinerId cannot be admitted or denied -- there is
+    // nothing to address the decision to -- so it is not a usable request.
+    if (m.joinerId.empty()) return false;
+    out.joinerId = m.joinerId;
+    out.displayName = m.displayName;
+    out.verified = m.verified;
+    // The coordinator sends `email` only alongside verified:true, but an
+    // unverified knock carrying one anyway must not be shown as an identity.
+    if (m.verified) out.email = m.email;
+    return true;
+}
+
 // ── CoordinatorSignaling ─────────────────────────────────────────────────────
 
 struct CoordinatorSignaling::Impl {
@@ -325,6 +369,8 @@ struct CoordinatorSignaling::Impl {
     std::function<void(std::string)> onPeerLeftFn;
     std::function<void(std::vector<std::string>, std::string)> onRosterFn;
     std::function<void(std::string, SignalMessage)> onSignalFn;
+    std::function<void(JoinRequest)> onJoinRequestFn;
+    std::function<void()> onJoinPendingFn;
 
     // ── JEF-27 Task 5: bounded reconnect / backoff ──────────────────────────
     // The reconnect loop runs on its OWN thread and only ever re-dials THIS
@@ -507,6 +553,14 @@ struct CoordinatorSignaling::Impl {
             if (onPeerLeftFn) onPeerLeftFn(m.peerId);
         } else if (m.type == "signal") {
             if (onSignalFn) onSignalFn(m.from, m.payload);
+        } else if (m.type == "join-request") {
+            // Re-derive through parseJoinRequest so the same guards (a knock
+            // needs a joinerId; an email is only an identity when verified)
+            // apply here as at every other entry point.
+            JoinRequest req;
+            if (parseJoinRequest(raw, req) && onJoinRequestFn) onJoinRequestFn(req);
+        } else if (m.type == "join-pending") {
+            if (onJoinPendingFn) onJoinPendingFn();
         } else if (m.type == "error") {
             if (onErrorFn) onErrorFn(m.errorCode, m.message);
         }
@@ -555,6 +609,12 @@ void CoordinatorSignaling::onRoster(
 void CoordinatorSignaling::onSignal(
     std::function<void(std::string, SignalMessage)> fn) {
     d_->onSignalFn = std::move(fn);
+}
+void CoordinatorSignaling::onJoinRequest(std::function<void(JoinRequest)> fn) {
+    d_->onJoinRequestFn = std::move(fn);
+}
+void CoordinatorSignaling::onJoinPending(std::function<void()> fn) {
+    d_->onJoinPendingFn = std::move(fn);
 }
 
 bool CoordinatorSignaling::connect(const std::string& url) {
@@ -609,6 +669,12 @@ bool CoordinatorSignaling::joinSession(const std::string& code,
 bool CoordinatorSignaling::sendSignal(const std::string& toPeerId,
                                       const SignalMessage& msg) {
     return d_->sendRaw(encodeSignalEnvelope(toPeerId, msg));
+}
+bool CoordinatorSignaling::admit(const std::string& joinerId) {
+    return d_->sendRaw(encodeAdmit(joinerId));
+}
+bool CoordinatorSignaling::deny(const std::string& joinerId) {
+    return d_->sendRaw(encodeDeny(joinerId));
 }
 bool CoordinatorSignaling::leave() {
     // A deliberate leave ends the session; suppress any auto-reconnect the
@@ -846,6 +912,76 @@ int coordinatorSignalingSelfTest() {
         check(m.type == "error", "error type");
         check(m.errorCode == "no-session", "error code routed to errorCode");
         check(m.message == "unknown or expired code", "error message");
+    }
+
+    // ---- JEF-37 admission ----
+    {
+        check(encodeAdmit("conn-7") == "{\"action\":\"admit\",\"joinerId\":\"conn-7\"}",
+              "admit exact");
+        check(encodeDeny("conn-7") == "{\"action\":\"deny\",\"joinerId\":\"conn-7\"}",
+              "deny exact");
+        check(encodeAdmit("a\"b") == "{\"action\":\"admit\",\"joinerId\":\"a\\\"b\"}",
+              "admit escapes joinerId");
+    }
+
+    {
+        JoinRequest r;
+        std::string j = "{\"type\":\"join-request\",\"joinerId\":\"conn-7\","
+                        "\"displayName\":\"Alice Rivera\","
+                        "\"email\":\"alice@studio.com\",\"verified\":true}";
+        check(parseJoinRequest(j, r), "verified join-request parse ok");
+        check(r.joinerId == "conn-7", "join-request joinerId");
+        check(r.displayName == "Alice Rivera", "join-request displayName");
+        check(r.email == "alice@studio.com", "join-request email");
+        check(r.verified, "join-request verified");
+    }
+
+    {
+        JoinRequest r;
+        std::string j = "{\"type\":\"join-request\",\"joinerId\":\"conn-9\","
+                        "\"displayName\":\"someone\",\"verified\":false}";
+        check(parseJoinRequest(j, r), "unverified join-request parse ok");
+        check(r.displayName == "someone" && !r.verified, "unverified fields");
+        check(r.email.empty(), "unverified knock carries no email");
+    }
+
+    {
+        // An unverified knock that supplies an email anyway must NOT surface it
+        // as an identity -- otherwise anyone could knock as alice@studio.com.
+        JoinRequest r;
+        std::string j = "{\"type\":\"join-request\",\"joinerId\":\"conn-9\","
+                        "\"displayName\":\"not alice\","
+                        "\"email\":\"alice@studio.com\",\"verified\":false}";
+        check(parseJoinRequest(j, r), "spoofed-email knock parses");
+        check(r.email.empty(), "unverified email is dropped, not displayed");
+    }
+
+    {
+        // A display name carrying quotes/backslashes round-trips unchanged --
+        // it reaches a QLabel, so a parser that mangled it would corrupt the
+        // one field the host reads to decide who is knocking.
+        JoinRequest r;
+        std::string j = "{\"type\":\"join-request\",\"joinerId\":\"c\","
+                        "\"displayName\":\"a\\\"b\\\\c\",\"verified\":false}";
+        check(parseJoinRequest(j, r), "quoted display name parses");
+        check(r.displayName == "a\"b\\c", "quoted display name decoded");
+    }
+
+    {
+        JoinRequest r;
+        check(!parseJoinRequest("{\"type\":\"roster\",\"peers\":[]}", r),
+              "roster is not a join-request");
+        check(!parseJoinRequest(
+                  "{\"type\":\"join-request\",\"displayName\":\"x\"}", r),
+              "join-request without joinerId rejected");
+        check(!parseJoinRequest("not json", r), "garbage is not a join-request");
+    }
+
+    {
+        CoordServerMessage m;
+        check(parseServerMsg("{\"type\":\"join-pending\"}", m),
+              "join-pending parse ok");
+        check(m.type == "join-pending", "join-pending type");
     }
 
     // ---- Defensive parsing: malformed input never crashes ----

@@ -65,6 +65,18 @@ struct PeerStats {
     bool connected = false;
 };
 
+// JEF-37: one joiner waiting in a cloud session's lobby. Mirrors the
+// coordinator's join-request, kept here so gfcnetworkmanager and the Qt panel
+// can carry it without including the signaling header (developer_notes §1).
+// `displayName` is peer-supplied and reaches the UI as untrusted text; `email`
+// is set only when `verified`.
+struct PendingJoiner {
+    std::string joinerId;
+    std::string displayName;
+    std::string email;
+    bool verified = false;
+};
+
 class ITransport {
 public:
     virtual ~ITransport() = default;
@@ -104,6 +116,17 @@ public:
     // lock across a blocking stats call, tolerates the underlying API returning
     // nullopt/false. WebRTC returns real stats; RakNet returns basic presence.
     virtual std::vector<PeerStats> peerStats() { return {}; }
+
+    // JEF-37: joiners knocking at a cloud session, waiting for the host's
+    // decision. Non-empty only on a coordinator-mode HOST; a joiner never
+    // learns who else is in the lobby. Defaulted so LAN transports, which have
+    // no lobby, need no stub.
+    virtual std::vector<PendingJoiner> pendingJoiners() { return {}; }
+    // Decide one pending joiner. `admit` false denies. A joinerId that is no
+    // longer pending (it gave up, or the other decision already landed) is a
+    // no-op rather than an error -- two clicks on a stale row must not tear
+    // anything down.
+    virtual void decideJoiner(const std::string& /*joinerId*/, bool /*admit*/) {}
 };
 
 } // namespace net
