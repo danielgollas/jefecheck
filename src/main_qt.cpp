@@ -30,6 +30,7 @@
 #include "gfcCoordinatorSignaling.h"
 #include "auth/gfcOAuthPkce.h"
 #include "auth/gfcLoopbackServer.h"
+#include "auth/gfcTokenStore.h"
 #include "gfcTestCoordinator.h"
 #include "gfcSignaling.h"
 #include "gfcStructures.h"
@@ -416,6 +417,13 @@ int main(int argc, char* argv[]) {
         // still runs before QApplication/GL exist.
         if (std::strcmp(argv[i], "--loopback-test") == 0) {
             return jefe::auth::loopbackSelfTest(argc, argv);
+        }
+        // --tokenstore-test (JEF-31): exercises the FILE backend, which is
+        // compiled on every platform. The native Keychain/Credential Manager
+        // backends are verified by hand on their own platforms — a CI runner
+        // has no unlocked keychain to write to.
+        if (std::strcmp(argv[i], "--tokenstore-test") == 0) {
+            return jefe::auth::tokenStoreSelfTest();
         }
     }
 

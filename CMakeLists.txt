@@ -52,7 +52,23 @@ list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
 # depend on Qt but not on the viewport or the rendering chain, so they stay
 # includable from headless self-tests without dragging GL in.
 file(GLOB JEFECHECK_AUTH_SOURCES src/auth/*.cpp)
+# Token-store backends are platform-exclusive: each defines makeTokenStore(),
+# so linking two would be a duplicate symbol. The glob above picks up the
+# Windows one everywhere, so drop it off-Windows and add the macOS .mm (which
+# the *.cpp glob never sees) on Apple. Linux keeps the file backend, which is
+# compiled everywhere anyway because the self-test uses it on every platform.
+list(FILTER JEFECHECK_AUTH_SOURCES EXCLUDE REGEX "gfcTokenStore_win")
+if(APPLE)
+    list(APPEND JEFECHECK_AUTH_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/auth/gfcTokenStore_mac.mm)
+elseif(WIN32)
+    list(APPEND JEFECHECK_AUTH_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/auth/gfcTokenStore_win.cpp)
+endif()
 list(APPEND JEFECHECK_SOURCES ${JEFECHECK_AUTH_SOURCES})
+
+if(APPLE)
+    find_library(JEFECHECK_SECURITY_FRAMEWORK Security REQUIRED)
+    find_library(JEFECHECK_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+endif()
 
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
@@ -108,6 +124,15 @@ target_link_libraries(jefecheck PRIVATE
     Qt6::Widgets
     Qt6::OpenGLWidgets
     Qt6::Network
+    # Token store (JEF-31): Keychain on macOS, Credential Manager on Windows.
+    # Both ship with their platform SDK — no third-party dependency.
+    #
+    # Resolved via find_library rather than a bare "-framework Security" in a
+    # generator expression: CMake splits that on the space and then looks for a
+    # library literally named "Security", which fails to link.
+    ${JEFECHECK_SECURITY_FRAMEWORK}
+    ${JEFECHECK_COREFOUNDATION_FRAMEWORK}
+    $<$<BOOL:${WIN32}>:Advapi32>
 )
 target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
 
