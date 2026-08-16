@@ -840,49 +840,45 @@ void RemoteDialog_Qt::refreshConnectionState() {
     // so without this guard it would hide the session view — and with it the
     // pending-admission rows and the credits — on the next tick, leaving only
     // the Cloud form visible.
-    if (uiPreviewActive_) return;
+    // ONE state, sampled once. Every widget below is a function of `st` and
+    // nothing else — no second look at getConnected/getIsServer/the code,
+    // which is how the panel previously ended up rendering a session that did
+    // not exist.
+    const jefe::qt::RemoteUiState st = currentUiState();
+    using Phase = jefe::qt::RemotePhase;
 
-    const bool connected = jefe::qt::isRemoteConnected();
-    const bool isServer  = jefe::qt::isRemoteServer();
-
-    QString statusText = QString::fromStdString(jefe::qt::remoteStatusText());
-    if (statusText.trimmed().isEmpty())
-        statusText = connected ? (isServer ? "Hosting" : "Connected") : "Not connected";
+    const QString statusText = QString::fromStdString(st.statusText);
     // Only touch the status label / dot when the text actually changed —
     // setStyleSheet forces a re-polish, and this runs at up to tick rate.
     if (statusText != shownStatusText_) {
         shownStatusText_ = statusText;
         statusLabel_->setText(statusText);
-        // Dot color: green connected/hosting, amber connecting, gray offline.
-        QString dotColor = "#6a6a70";
-        if (connected) dotColor = "#5bb07a";
-        else if (statusText.contains("Attempt", Qt::CaseInsensitive)) dotColor = "#d6a15b";
+        QString dotColor = "#6a6a70";                       // offline
+        if (st.inSession)                    dotColor = "#5bb07a";  // green
+        else if (st.phase == Phase::Connecting) dotColor = "#d6a15b"; // amber
         statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
     }
 
-    // Contextual sections: forms when offline, session when connected.
-    // setVisible / setText are no-ops when unchanged, so these are cheap.
-    connectPanel_->setVisible(!connected);
-    sessionBox_->setVisible(connected);
-    // Host ends the session for everyone; a client just leaves it.
-    disconnectBtn_->setText(isServer ? "End Session" : "Leave");
+    // Contextual sections: forms when there is no session, the session view
+    // when there is. setVisible / setText are no-ops when unchanged.
+    connectPanel_->setVisible(!st.inSession);
+    sessionBox_->setVisible(st.inSession);
+    // Host ends the session for everyone; a joiner just leaves it.
+    disconnectBtn_->setText(st.isHost ? "End Session" : "Leave");
 
-    // Cloud-host code banner: visible only when we're a connected cloud host
-    // (remoteSessionCode() is non-empty only in coordinator hosting mode).
-    const QString cloudCode = connected && isServer
-        ? QString::fromStdString(jefe::qt::remoteSessionCode())
-        : QString();
-    const bool showBanner = !cloudCode.isEmpty();
-    cloudCodeBanner_->setVisible(showBanner);
-
-    // Credits: shown only while HOSTING a cloud session. Not when offline (no
-    // session to charge), not when hosting a LAN session (nothing is metered),
-    // and never to a joiner — joining is free, so a balance is meaningless to
-    // them and implying otherwise would be worse than showing nothing.
-    refreshCreditsVisibility(showBanner);
-    if (showBanner)
+    const bool cloudHosting = st.phase == Phase::HostingCloud;
+    cloudCodeBanner_->setVisible(cloudHosting);
+    if (cloudHosting) {
         cloudCodeBannerLabel_->setText(
-            QStringLiteral("Session code: <b>%1</b>").arg(cloudCode.toHtmlEscaped()));
+            QStringLiteral("Session code: <b>%1</b>")
+                .arg(QString::fromStdString(st.sessionCode).toHtmlEscaped()));
+        cloudSessionCodeEdit_->setText(QString::fromStdString(st.sessionCode));
+        cloudResultBox_->setVisible(true);
+        cloudCopyBtn_->setEnabled(true);
+    }
+
+    // Credits are one field of the state now, not a separately-derived guess.
+    refreshCreditsVisibility(st.showCredits);
 
     // Participants change only on join/leave (which changes the count), so
     // rebuild the ROW WIDGETS only when the count moved — not on every packet.
@@ -907,7 +903,7 @@ void RemoteDialog_Qt::refreshConnectionState() {
     // JEF-30: per-peer session health. Drop stale samples on disconnect (a
     // later reconnect starts clean, so kbps doesn't spike from a huge gap or
     // a peer-name reused across sessions with a stale byte total).
-    if (!connected) {
+    if (!st.inSession) {
         peerHealthSamples_.clear();
     } else if (!participants.empty()) {
         // Build a name -> stat lookup once, then update each visible row.
@@ -1229,6 +1225,12 @@ void RemoteDialog_Qt::onNewGroupClicked() {
     cloudGroupCombo_->setCurrentText(name);
 }
 
+jefe::qt::RemoteUiState RemoteDialog_Qt::currentUiState() const {
+    // The override exists so --ui-preview can paint a state nothing is in,
+    // WITHOUT stopping the render loop. There is exactly one painting path.
+    return uiPreviewActive_ ? previewState_ : jefe::qt::remoteUiState();
+}
+
 void RemoteDialog_Qt::clearUiPreview() {
     if (!uiPreviewActive_) return;
     uiPreviewActive_ = false;
@@ -1252,8 +1254,16 @@ void RemoteDialog_Qt::refreshCreditsVisibility(bool hosting) {
 // Nothing here is wired: the buttons do exactly what they do today.
 // ---------------------------------------------------------------------------
 void RemoteDialog_Qt::applyUiPreview() {
-    // Latch FIRST: refreshConnectionState() is on a timer and would undo
-    // everything below on the next tick.
+    // Describe the state ONCE, then let the normal render path paint it. The
+    // refresh timer keeps running: it simply reads this instead of the live
+    // managers, so preview and reality cannot drift apart.
+    previewState_ = jefe::qt::RemoteUiState{};
+    previewState_.phase = jefe::qt::RemotePhase::HostingCloud;
+    previewState_.statusText = "PREVIEW — sample data (not a real session)";
+    previewState_.sessionCode = "JEFE-6ZDN";
+    previewState_.inSession = true;
+    previewState_.isHost = true;
+    previewState_.showCredits = true;
     uiPreviewActive_ = true;
 
     // Cloud tab, hosting state.

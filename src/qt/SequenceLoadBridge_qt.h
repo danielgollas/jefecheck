@@ -483,6 +483,49 @@ int  remoteFXCount();
 bool isRemoteConnected();
 bool isRemoteServer();
 
+// ---------------------------------------------------------------------------
+// Remote panel state — ONE source of truth.
+//
+// The panel used to derive its appearance from four independently-updated
+// values (getConnected, getIsServer, the assigned session code, and an
+// in-flight flag), each set at a different moment by a different thread. When
+// they disagreed the UI rendered a state the system was not in: a phantom
+// session with an empty participant list, chat that went nowhere, and an End
+// Session button with nothing to end.
+//
+// remoteUiState() samples all of them together and resolves them into one
+// consistent answer, so the invariants live HERE rather than being re-derived
+// at each call site. The panel's job is then a pure render of this struct.
+// ---------------------------------------------------------------------------
+enum class RemotePhase {
+    Offline,      // no session; show the connect forms
+    Connecting,   // a connect attempt is in flight
+    HostingLan,   // hosting over RakNet/LAN — nothing metered
+    HostingCloud, // hosting through the coordinator — metered, has a code
+    Joined,       // in someone else's session
+};
+
+struct RemoteUiState {
+    RemotePhase phase = RemotePhase::Offline;
+    /** Human-readable status line. Never empty. */
+    std::string statusText;
+    /** Coordinator-assigned code. Non-empty ONLY in HostingCloud. */
+    std::string sessionCode;
+    /** True when a session exists to leave or end. */
+    bool inSession = false;
+    /** True when this peer is the host (End Session vs Leave). */
+    bool isHost = false;
+    /**
+     * Credits are shown only while hosting a CLOUD session: offline there is
+     * nothing to charge, a LAN session is not metered, and a joiner is free —
+     * showing them a balance would imply a cost that does not exist.
+     */
+    bool showCredits = false;
+};
+
+/** Resolve the current remote state. Safe to call from the GUI thread. */
+RemoteUiState remoteUiState();
+
 // JEF-30: per-peer session-health snapshot for the Remote dialog indicator.
 // `name` resolves the peer's nickname when possible, else its PeerId as a
 // string. `rttMs` is -1 when unknown (RakNet always, WebRTC on localhost).

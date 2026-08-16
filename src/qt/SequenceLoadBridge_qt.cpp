@@ -1212,6 +1212,48 @@ bool isRemoteServer() {
     return networkManager.getIsServer();
 }
 
+RemoteUiState remoteUiState() {
+    RemoteUiState s;
+
+    // A connect worker owns the manager while this is set — every field it
+    // would read is mid-mutation, so report Connecting rather than a torn mix
+    // of old and new values.
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) {
+        s.phase = RemotePhase::Connecting;
+        s.statusText = "Connecting…";
+        return s;
+    }
+
+    if (!networkManager.getConnected()) {
+        s.phase = RemotePhase::Offline;
+        s.statusText = networkManager.connectionStatusText();
+        if (s.statusText.empty()) s.statusText = "Not connected";
+        return s;
+    }
+
+    s.inSession = true;
+    s.isHost = networkManager.getIsServer();
+
+    // A cloud host is exactly a host WITH a coordinator-assigned code. This is
+    // the invariant that used to be re-derived (inconsistently) at each call
+    // site; resolving it once here is the point of this function.
+    const std::string code = s.isHost ? networkManager.getAssignedSessionCode()
+                                      : std::string();
+    if (s.isHost) {
+        s.phase = code.empty() ? RemotePhase::HostingLan : RemotePhase::HostingCloud;
+        s.sessionCode = code;
+        s.showCredits = !code.empty();
+    } else {
+        s.phase = RemotePhase::Joined;
+    }
+
+    s.statusText = networkManager.connectionStatusText();
+    if (s.statusText.empty()) {
+        s.statusText = s.isHost ? "Hosting" : "Connected";
+    }
+    return s;
+}
+
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
     auto* stack = plateManager.getFXStack(plateIdx);
     if (!stack) return {};

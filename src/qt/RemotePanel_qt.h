@@ -10,6 +10,9 @@
 
 #include <chrono>
 #include <functional>
+
+// RemoteUiState: the single resolved description of the panel's state.
+#include "SequenceLoadBridge_qt.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -69,13 +72,19 @@ public:
     // the admission rows and credits) on the very next tick, because nothing
     // is actually connected.
     //
-    // CLEARED by any real connect action (see clearUiPreview). It must not
-    // survive one: leaving it latched freezes the whole panel — no
-    // participants, no status changes, a dead End Session button — while the
-    // session underneath runs perfectly well and invisibly.
+    // CLEARED by any real connect action (see clearUiPreview).
+    //
+    // This is a state OVERRIDE, not a refresh freeze. An earlier version made
+    // refreshConnectionState() return early, which stopped the panel tracking
+    // reality for the life of the process. Overriding the state instead means
+    // the normal render path still runs — there is exactly one way the panel
+    // gets painted, whether the state is real or sampled.
     bool uiPreviewActive_ = false;
+    jefe::qt::RemoteUiState previewState_;
     /** Drop preview state and let the panel track reality again. */
     void clearUiPreview();
+    /** The state to render: the preview override when set, else the real one. */
+    jefe::qt::RemoteUiState currentUiState() const;
 private:
     QString coordinatorUrlSetting() const;
     void onCreateCloudClicked();
