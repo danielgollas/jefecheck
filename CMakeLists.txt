@@ -7,7 +7,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find system packages
 find_package(OpenGL REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
+# Network: the OAuth loopback listener and the token exchange (JEF-31). Ships
+# in qt6-base, which every platform already installs (brew qt, qt6-base-dev,
+# mingw-w64-x86_64-qt6-base), so this adds no package to any CI image.
+find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets Network)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -104,6 +107,7 @@ target_link_libraries(jefecheck PRIVATE
     ZLIB::ZLIB
     Qt6::Widgets
     Qt6::OpenGLWidgets
+    Qt6::Network
 )
 target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
 

@@ -29,6 +29,7 @@
 
 #include "gfcCoordinatorSignaling.h"
 #include "auth/gfcOAuthPkce.h"
+#include "auth/gfcLoopbackServer.h"
 #include "gfcTestCoordinator.h"
 #include "gfcSignaling.h"
 #include "gfcStructures.h"
@@ -409,6 +410,12 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--pkce-test") == 0) {
             return jefe::auth::pkceSelfTest();
+        }
+        // --loopback-test (JEF-31): binds a real socket, so unlike --pkce-test
+        // it needs an event loop — it constructs its own QCoreApplication and
+        // still runs before QApplication/GL exist.
+        if (std::strcmp(argv[i], "--loopback-test") == 0) {
+            return jefe::auth::loopbackSelfTest(argc, argv);
         }
     }
 
