@@ -141,6 +141,31 @@ QWidget* makeHostPage(QLineEdit*& nameOut, QSpinBox*& portOut,
     return page;
 }
 
+// Google Desktop-app OAuth client (JEF-31).
+//
+// The "secret" is not a secret: RFC 8252 installed apps are PUBLIC clients
+// that cannot keep one, and Google issues this value expecting it to ship in
+// the binary. PKCE is what actually protects the exchange. Stated plainly here
+// so nobody later mistakes it for a credential worth protecting — or worse,
+// tries to "fix" it by hiding it somewhere that gives false comfort.
+constexpr const char* kGoogleDesktopClientId =
+    "424897654904-s5i61ngt4gm2ir8kihqt4d7qcro5g0db.apps.googleusercontent.com";
+constexpr const char* kGoogleDesktopClientSecret = "";
+
+/** Seconds as HH:MM:SS — the same unit and format the admin console uses. */
+QString formatDurationHMS(long long seconds) {
+    const bool negative = seconds < 0;
+    long long total = negative ? -seconds : seconds;
+    const long long h = total / 3600;
+    const long long m = (total % 3600) / 60;
+    const long long s = total % 60;
+    return QStringLiteral("%1%2:%3:%4")
+        .arg(negative ? "-" : "")
+        .arg(h, 2, 10, QLatin1Char('0'))
+        .arg(m, 2, 10, QLatin1Char('0'))
+        .arg(s, 2, 10, QLatin1Char('0'));
+}
+
 QLabel* sectionLabel(const QString& text, QWidget* parent) {
     auto* l = new QLabel(text, parent);
     l->setProperty("role", "section");
@@ -654,6 +679,15 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     // radio so the LAN path stays exactly as it was.
     connect(connectClientBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::onJoinCloudClicked);
+    // Sign out is per-coordinator, matching how tokens are stored: signing out
+    // of JefeCheck Cloud leaves a self-hosted coordinator's session alone.
+    cloudSignOutBtn_->setEnabled(false);
+    connect(cloudSignOutBtn_, &QPushButton::clicked, this, [this]() {
+        if (authSession_ != nullptr) authSession_->signOut();
+        cloudAccountLabel_->setText(QStringLiteral("—"));
+        cloudSignOutBtn_->setEnabled(false);
+    });
+
     connect(cloudCopyBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::copySessionCodeToClipboard);
     connect(disconnectBtn_, &QPushButton::clicked,
@@ -736,6 +770,78 @@ QString RemoteDialog_Qt::coordinatorUrlSetting() const {
     return QSettings().value("Remote/coordinatorUrl").toString();
 }
 
+jefe::auth::AuthSession* RemoteDialog_Qt::authSession() {
+    if (authSession_ != nullptr) return authSession_;
+
+    if (!tokenStore_) tokenStore_ = jefe::auth::makeTokenStore();
+
+    jefe::auth::AuthConfig cfg;
+    const QString ws = coordinatorUrlSetting().trimmed();
+    // The HTTP API sits alongside the WebSocket coordinator. Derived rather
+    // than configured separately so there is one thing to set, and one thing
+    // that can be wrong.
+    // The HTTP API sits at the same host as the WebSocket coordinator, minus
+    // the API Gateway stage suffix: wss://<id>.execute-api…/dev has its REST
+    // twin at https://<id2>.execute-api…. Allow an explicit override for
+    // deployments where they are not siblings.
+    {
+        const QString override =
+            QSettings().value("Remote/httpApiBase").toString().trimmed();
+        if (!override.isEmpty()) {
+            cfg.httpBase = override.toStdString();
+        } else {
+            QString http = ws;
+            http.replace(QStringLiteral("wss://"), QStringLiteral("https://"));
+            http.replace(QStringLiteral("ws://"), QStringLiteral("http://"));
+            const int lastSlash = http.lastIndexOf(QLatin1Char('/'));
+            if (lastSlash > http.indexOf(QStringLiteral("//")) + 1) {
+                http = http.left(lastSlash);
+            }
+            cfg.httpBase = http.toStdString();
+        }
+    }
+    cfg.account = ws.toStdString();
+    cfg.googleClientId = kGoogleDesktopClientId;
+    cfg.googleClientSecret = kGoogleDesktopClientSecret;
+
+    authSession_ = new jefe::auth::AuthSession(cfg, tokenStore_.get(), this);
+
+    connect(authSession_, &jefe::auth::AuthSession::signedIn, this, [this]() {
+        refreshAccountRow();
+        if (hostRetryPending_) {
+            hostRetryPending_ = false;
+            hostWithToken();       // the retry the sign-in was for
+        }
+    });
+    connect(authSession_, &jefe::auth::AuthSession::signInFailed, this,
+            [this](QString reason) {
+                // ONE attempt. A second automatic try would open another
+                // browser window at someone who just declined one.
+                hostRetryPending_ = false;
+                cloudHostBtn_->setEnabled(true);
+                cloudHostBtn_->setText("Host on JefeCheck Cloud");
+                errorLabel_->setText("Sign-in failed — " + reason);
+                statusLabel_->setText("Not connected");
+                shownStatusText_.clear();
+            });
+    connect(authSession_, &jefe::auth::AuthSession::signedOut, this,
+            [this]() { refreshAccountRow(); });
+
+    return authSession_;
+}
+
+void RemoteDialog_Qt::refreshAccountRow() {
+    if (authSession_ == nullptr) return;
+    const QString email = authSession_->email();
+    cloudAccountLabel_->setText(email.isEmpty() ? QStringLiteral("—") : email);
+    cloudSignOutBtn_->setEnabled(!email.isEmpty());
+
+    const long long secs = authSession_->creditBalanceSeconds();
+    if (secs >= 0 && creditsLabel_ != nullptr) {
+        creditsLabel_->setText(formatDurationHMS(secs) + " credits");
+    }
+}
+
 void RemoteDialog_Qt::onCreateCloudClicked() {
     clearUiPreview();   // a real action always wins over --ui-preview
     const QString url = coordinatorUrlSetting().trimmed();
@@ -744,6 +850,38 @@ void RemoteDialog_Qt::onCreateCloudClicked() {
             "No coordinator configured — set one in Preferences → Remote.");
         return;
     }
+
+    auto* auth = authSession();
+
+    // Already holding a live access token: host straight away.
+    if (!auth->accessToken().empty()) {
+        hostWithToken();
+        return;
+    }
+
+    errorLabel_->clear();
+    cloudHostBtn_->setEnabled(false);
+    hostRetryPending_ = true;
+
+    if (auth->haveStoredToken()) {
+        // Silent path: the usual case on every launch after the first. No
+        // browser unless the stored token has been rotated away or revoked.
+        cloudHostBtn_->setText("Signing in…");
+        statusLabel_->setText("Signing in…");
+        shownStatusText_.clear();
+        auth->refresh();
+        return;
+    }
+
+    // First run on this machine: the browser opens once.
+    cloudHostBtn_->setText("Waiting for browser…");
+    statusLabel_->setText("Complete sign-in in your browser…");
+    shownStatusText_.clear();
+    auth->signIn();
+}
+
+void RemoteDialog_Qt::hostWithToken() {
+    const QString url = coordinatorUrlSetting().trimmed();
 
     cloudHostBtn_->setEnabled(false);
     cloudHostBtn_->setText("Creating session…");
@@ -764,7 +902,13 @@ void RemoteDialog_Qt::onCreateCloudClicked() {
     p.sessionPassword    = cloudPasswordEdit_->text().toStdString();
     p.idleTimeoutMinutes = cloudTimeoutSpin_->value();
     p.maxParticipants    = cloudMaxPeersSpin_->value();
-    // authToken stays empty until sign-in lands (client plan T6/T7). The
+    // The access token from the signed-in session. Falls back to the env var
+    // when empty, which keeps the pre-sign-in workflow (and the two-window
+    // test script) working unchanged.
+    if (authSession_ != nullptr) {
+        p.authToken = authSession_->accessToken();
+    }
+    // Legacy note kept for the env fallback in makeTransport: the
     // JEFECHECK_COORDINATOR_TOKEN env fallback in makeTransport fills it for
     // now, so a hand-supplied token already works end to end.
     launchCloudConnect(/*wasHost*/ true, [p]() { jefe::qt::connectAsCloudHost(p); });

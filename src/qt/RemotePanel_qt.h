@@ -13,6 +13,8 @@
 
 // RemoteUiState: the single resolved description of the panel's state.
 #include "SequenceLoadBridge_qt.h"
+#include "../auth/gfcAuthSession.h"
+#include "../auth/gfcTokenStore.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -88,6 +90,16 @@ public:
 private:
     QString coordinatorUrlSetting() const;
     void onCreateCloudClicked();
+    /**
+     * Host once we hold an access token. Split out of onCreateCloudClicked so
+     * the "sign in, then host" path and the "already signed in" path run the
+     * exact same code — the only difference is whether a browser opened first.
+     */
+    void hostWithToken();
+    /** Rebuild the account row (email / Sign out) from the session. */
+    void refreshAccountRow();
+    /** Lazily built so an app that never opens the Cloud tab never touches it. */
+    jefe::auth::AuthSession* authSession();
     void onJoinCloudClicked();
     void onCloudConnectFinished(bool wasHost);
     void copySessionCodeToClipboard();   // copies remoteSessionCode() to clipboard
@@ -167,6 +179,11 @@ private:
     // meaningless to them. See refreshCreditsVisibility().
     QLabel*      creditsLabel_ = nullptr;
     QPushButton* cloudSignOutBtn_ = nullptr;
+    // Desktop sign-in (JEF-31). Lazily created on first Cloud use.
+    jefe::auth::AuthSession* authSession_ = nullptr;
+    std::unique_ptr<jefe::auth::TokenStore> tokenStore_;
+    /** Guards the single sign-in-then-retry, so a failure cannot loop. */
+    bool hostRetryPending_ = false;
 
     // Unified Join tab (JEF-31): session code OR IP address.
     QRadioButton* joinModeCodeRadio_ = nullptr;
