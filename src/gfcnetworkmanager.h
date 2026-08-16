@@ -57,6 +57,13 @@ public:
     bool isAwaitingAdmission();
     /** A join is in flight: dialling, knocking, or mid-handshake. */
     bool isAttemptingConnection();
+    /**
+     * The coordinator's last refusal, e.g. code "auth-required". False when
+     * there has been none. Checked on BOTH transports because a failed host
+     * attempt leaves its error on the server side and a failed join on the
+     * client side.
+     */
+    bool lastCoordinatorError(std::string& code, std::string& message);
     std::vector<std::string> chatLogLines();
     std::vector<std::string> drainErrors();
 

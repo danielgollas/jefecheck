@@ -98,6 +98,7 @@ public:
     std::vector<PendingJoiner> pendingJoiners() override;
     void decideJoiner(const std::string& joinerId, bool admit) override;
     bool awaitingAdmission() override;
+    bool lastCoordinatorError(std::string& code, std::string& message) override;
 
 private:
     struct Impl;

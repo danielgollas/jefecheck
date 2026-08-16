@@ -134,6 +134,14 @@ public:
     // panel falls back to the connect forms while the person is, in fact,
     // waiting on a human.
     virtual bool awaitingAdmission() { return false; }
+
+    // JEF-31/37: the last {"type":"error"} the coordinator sent, if any.
+    // Returns false when there has been none. The CODE matters, not just the
+    // text: "sign in to host" and "you are out of credits" are different
+    // problems with different fixes, and collapsing them into one "session
+    // refused" leaves the user with nothing to act on.
+    virtual bool lastCoordinatorError(std::string& /*code*/,
+                                      std::string& /*message*/) { return false; }
 };
 
 } // namespace net

@@ -37,6 +37,29 @@ public:
     // --ui-preview: open the Remote dock with the Cloud/admission layouts
     // populated by sample data, for design review without a live session.
     void showRemoteUiPreview();
+
+    // --auto-cloud-host / --auto-cloud-join <code>: open the Remote dock and
+    // click Host / Join for real, through the same slots a person's mouse
+    // reaches. For screenshots and hands-off two-instance runs — deliberately
+    // NOT a separate code path, or the picture would not be of the product.
+    void autoCloudHost();
+    void autoCloudJoin(const QString& code);
+    /** The code the coordinator assigned, once hosting ("" until then). */
+    QString cloudSessionCode() const;
+    /**
+     * The Remote panel widget, for --screenshot-remote. Grabbing it directly
+     * beats grabbing the window: the dock is usually tabbed behind another,
+     * so a full-window shot shows everything except the thing being reviewed.
+     */
+    QWidget* remotePanelWidget() const;
+    /**
+     * --auto-admit: press every visible Admit button. Finds them by object
+     * name and click()s them, so this is the same event a mouse produces —
+     * calling the decision API directly would prove the API works while
+     * saying nothing about whether the button is wired to it.
+     * Returns how many were pressed.
+     */
+    int autoAdmitPending();
     explicit MainWindow_Qt(QWidget* parent = nullptr);
     ~MainWindow_Qt() override;
 

@@ -527,6 +527,16 @@ struct RemotePendingJoiner {
 /** Admit (or, with false, refuse) one pending joiner. Host-only; else a no-op. */
 void remoteDecideJoiner(const std::string& joinerId, bool admit);
 
+/**
+ * The coordinator's last refusal code (e.g. "auth-required",
+ * "insufficient-credits", "no-session"), or "" when there has been none.
+ * The panel keys its message — and its decision to sign in and retry — on
+ * this, rather than telling everyone "the session was refused".
+ */
+std::string remoteCoordinatorErrorCode();
+/** Human-readable text that came with it. */
+std::string remoteCoordinatorErrorMessage();
+
 enum class RemotePhase {
     Offline,      // no session; show the connect forms
     Connecting,   // a connect attempt is in flight

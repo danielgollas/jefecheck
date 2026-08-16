@@ -62,6 +62,10 @@ private:
     // Purely presentational; wires nothing.
 public:
     void applyUiPreview();
+    // Screenshot / hands-off harness entry points. These press the SAME
+    // buttons a person does — no shortcut around the panel's own logic.
+    void clickHostOnCloud();
+    void clickJoinWithCode(const QString& code);
     // Session groups: the "parent" a session is hosted under. Settings persist
     // per group (see RemoteSessionGroups_qt.h).
     void loadGroupIntoForm(const QString& name);

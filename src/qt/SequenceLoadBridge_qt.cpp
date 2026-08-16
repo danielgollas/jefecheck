@@ -2203,6 +2203,20 @@ std::vector<RemotePeerStat> remotePeerStats() {
     }
     return out;
 }
+std::string remoteCoordinatorErrorCode() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    std::string code, msg;
+    if (!networkManager.lastCoordinatorError(code, msg)) return {};
+    return code;
+}
+
+std::string remoteCoordinatorErrorMessage() {
+    if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
+    std::string code, msg;
+    if (!networkManager.lastCoordinatorError(code, msg)) return {};
+    return msg;
+}
+
 void remoteDecideJoiner(const std::string& joinerId, bool admit) {
     // A decision during a cloud connect would reach a manager a worker thread
     // owns; the other manager writers honor the same flag.

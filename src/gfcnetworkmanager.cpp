@@ -248,6 +248,15 @@ std::vector<jefe::net::PendingJoiner> gfcNetworkManager::pendingJoiners() {
     return server.getPendingJoiners();
 }
 
+bool gfcNetworkManager::lastCoordinatorError(std::string& code,
+                                             std::string& message) {
+    // Server first: a refused create-session is the case a caller most needs
+    // to distinguish, and a host that never got a session has nothing on the
+    // client side to report.
+    if (server.lastCoordinatorError(code, message)) return true;
+    return client.lastCoordinatorError(code, message);
+}
+
 bool gfcNetworkManager::isAttemptingConnection() {
     if (isServer) return false;
     // getIsConnected() flips on the transport's thread, but `connected` only

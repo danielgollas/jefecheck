@@ -327,6 +327,9 @@ struct WebRtcTransport::Impl {
     std::string coordDisplayName;
     // JEF-37: host-side secret that identifies its own loopback client's knock.
     std::string selfJoinNonce;
+    // Last coordinator {"type":"error"}, guarded by mtx. Empty code = none.
+    std::string lastErrCode;
+    std::string lastErrMsg;
     std::string assignedCode;       // host: code the coordinator handed us
     std::string coordIceServersJson;  // opaque raw-JSON array, "" if none
     std::unique_ptr<CoordinatorSignaling> coord;
@@ -1331,12 +1334,21 @@ struct WebRtcTransport::Impl {
     void onCoordHostError(const std::string& code, const std::string& msg) {
         std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                      code.c_str(), msg.c_str());
+        recordCoordError(code, msg);
         pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
+    }
+
+    /** Remember the coordinator's refusal so the UI can name the actual cause. */
+    void recordCoordError(const std::string& code, const std::string& msg) {
+        std::lock_guard<std::mutex> lk(mtx);
+        lastErrCode = code;
+        lastErrMsg = msg;
     }
 
     void onCoordClientError(const std::string& code, const std::string& msg) {
         std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                      code.c_str(), msg.c_str());
+        recordCoordError(code, msg);
         // Refused (join-denied) or failed while waiting: either way we are no
         // longer in the lobby, and leaving the flag set would leave the panel
         // saying "waiting for the host" forever after a refusal.
@@ -1443,6 +1455,14 @@ void WebRtcTransport::configureCoordinator(const std::string& url,
 std::string WebRtcTransport::assignedSessionCode() {
     std::lock_guard<std::mutex> lk(d_->mtx);
     return d_->assignedCode;
+}
+
+bool WebRtcTransport::lastCoordinatorError(std::string& code, std::string& message) {
+    std::lock_guard<std::mutex> lk(d_->mtx);
+    if (d_->lastErrCode.empty()) return false;
+    code = d_->lastErrCode;
+    message = d_->lastErrMsg;
+    return true;
 }
 
 bool WebRtcTransport::awaitingAdmission() {

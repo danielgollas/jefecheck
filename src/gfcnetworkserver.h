@@ -77,6 +77,9 @@ public:
     void decideJoiner(const std::string& joinerId, bool admit) {
         if (transport_) transport_->decideJoiner(joinerId, admit);
     }
+    bool lastCoordinatorError(std::string& code, std::string& message) {
+        return transport_ ? transport_->lastCoordinatorError(code, message) : false;
+    }
 
     void sendChatMessage(unsigned char type, std::string sender, std::string message, int color = 0);
 

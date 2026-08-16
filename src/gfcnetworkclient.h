@@ -83,6 +83,9 @@ public:
     }
     /** True between transport-connected and the peer list arriving. */
     bool getJoinHandshakePending() const { return joinHandshakePending_; }
+    bool lastCoordinatorError(std::string& code, std::string& message) {
+        return transport_ ? transport_->lastCoordinatorError(code, message) : false;
+    }
     std::vector<jefe::net::PeerStats> peerStats() {
         return transport_ ? transport_->peerStats() : std::vector<jefe::net::PeerStats>();
     }

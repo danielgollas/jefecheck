@@ -33,6 +33,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QLabel>
+#include <QPushButton>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -1002,6 +1003,37 @@ void MainWindow_Qt::buildDocks() {
 void MainWindow_Qt::showRemoteUiPreview() {
     if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
     if (remoteDialog_) remoteDialog_->applyUiPreview();
+}
+
+void MainWindow_Qt::autoCloudHost() {
+    if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
+    if (remoteDialog_) remoteDialog_->clickHostOnCloud();
+}
+
+void MainWindow_Qt::autoCloudJoin(const QString& code) {
+    if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
+    if (remoteDialog_) remoteDialog_->clickJoinWithCode(code);
+}
+
+QWidget* MainWindow_Qt::remotePanelWidget() const {
+    return remoteDialog_;
+}
+
+int MainWindow_Qt::autoAdmitPending() {
+    if (remoteDialog_ == nullptr) return 0;
+    int pressed = 0;
+    const auto buttons = remoteDialog_->findChildren<QPushButton*>();
+    for (QPushButton* b : buttons) {
+        if (b->objectName().endsWith(QStringLiteral(".admit"))) {
+            b->click();
+            ++pressed;
+        }
+    }
+    return pressed;
+}
+
+QString MainWindow_Qt::cloudSessionCode() const {
+    return QString::fromStdString(jefe::qt::remoteSessionCode());
 }
 
 void MainWindow_Qt::restoreLayout() {

@@ -11,6 +11,7 @@
 #include <QSettings>
 #include <QStringList>
 #include <QSurfaceFormat>
+#include <QPixmap>
 #include <QTimer>
 
 #include <cstdlib>
@@ -1147,6 +1148,73 @@ int main(int argc, char* argv[]) {
             });
             break;
         }
+    }
+
+    // --auto-cloud-host / --auto-cloud-join <code> (JEF-37): drive the Remote
+    // panel from the command line so a host + joiner pair can be brought up
+    // hands-off, for screenshots and manual review. The host prints
+    // "CLOUD-CODE=<code>" once the coordinator answers, which is what the
+    // joiner process needs. Delayed 1200ms so the window and docks have
+    // actually laid out before anything is clicked.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--auto-cloud-host") == 0) {
+            QTimer::singleShot(1200, &window, [&window]() {
+                window.autoCloudHost();
+                // Poll for the assigned code: hosting round-trips through the
+                // coordinator on a worker thread, so it is not ready on return.
+                auto* t = new QTimer(&window);
+                t->setInterval(200);
+                QObject::connect(t, &QTimer::timeout, &window, [&window, t]() {
+                    const QString code = window.cloudSessionCode();
+                    if (code.isEmpty()) return;
+                    printf("CLOUD-CODE=%s\n", code.toUtf8().constData());
+                    fflush(stdout);
+                    t->stop();
+                });
+                t->start();
+            });
+            break;
+        }
+        if (std::strcmp(argv[i], "--auto-cloud-join") == 0 && i + 1 < argc) {
+            const QString code = QString::fromUtf8(argv[i + 1]);
+            QTimer::singleShot(1200, &window,
+                               [&window, code]() { window.autoCloudJoin(code); });
+            break;
+        }
+    }
+
+    // --auto-admit <delayMs>: press Admit on everyone waiting, once.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--auto-admit") == 0) {
+            const int delayMs = std::atoi(argv[i + 1]);
+            QTimer::singleShot(delayMs, &window, [&window]() {
+                printf("AUTO-ADMIT=%d\n", window.autoAdmitPending());
+                fflush(stdout);
+            });
+            break;
+        }
+    }
+
+    // --screenshot <path> [delayMs]: save a PNG of the main window and keep
+    // running. The app photographs itself rather than the screen being grabbed
+    // around it, so the result is the window and nothing else — no overlap
+    // from a second instance, no dependence on which window is in front.
+    for (int i = 1; i + 1 < argc; ++i) {
+        const bool whole  = std::strcmp(argv[i], "--screenshot") == 0;
+        const bool remote = std::strcmp(argv[i], "--screenshot-remote") == 0;
+        if (!whole && !remote) continue;
+        const QString path = QString::fromUtf8(argv[i + 1]);
+        int delayMs = 4000;
+        if (i + 2 < argc && argv[i + 2][0] != '-') delayMs = std::atoi(argv[i + 2]);
+        QTimer::singleShot(delayMs, &window, [&window, path, remote]() {
+            QWidget* target = remote ? window.remotePanelWidget() : &window;
+            if (target == nullptr) target = &window;
+            const QPixmap shot = target->grab();
+            printf("SCREENSHOT=%s ok=%d\n", path.toUtf8().constData(),
+                   shot.save(path) ? 1 : 0);
+            fflush(stdout);
+        });
+        break;
     }
 
     // Load each --open-file into the matching plate after the event

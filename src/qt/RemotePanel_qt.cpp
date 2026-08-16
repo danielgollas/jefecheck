@@ -859,13 +859,12 @@ void RemoteDialog_Qt::onCreateCloudClicked() {
         return;
     }
 
-    errorLabel_->clear();
-    cloudHostBtn_->setEnabled(false);
-    hostRetryPending_ = true;
-
     if (auth->haveStoredToken()) {
         // Silent path: the usual case on every launch after the first. No
         // browser unless the stored token has been rotated away or revoked.
+        errorLabel_->clear();
+        cloudHostBtn_->setEnabled(false);
+        hostRetryPending_ = true;
         cloudHostBtn_->setText("Signing in…");
         statusLabel_->setText("Signing in…");
         shownStatusText_.clear();
@@ -873,11 +872,14 @@ void RemoteDialog_Qt::onCreateCloudClicked() {
         return;
     }
 
-    // First run on this machine: the browser opens once.
-    cloudHostBtn_->setText("Waiting for browser…");
-    statusLabel_->setText("Complete sign-in in your browser…");
-    shownStatusText_.clear();
-    auth->signIn();
+    // No token at all: HOST ANONYMOUSLY and see what the coordinator says.
+    //
+    // Not every coordinator demands an account — a self-hosted one usually
+    // does not — and opening a browser before anyone has asked for credentials
+    // makes signing in feel mandatory when it is not. The hosted service
+    // answers "auth-required", and onCloudConnectFinished signs in and retries
+    // then. Sign-in is a response to a refusal, not a toll on the front door.
+    hostWithToken();
 }
 
 void RemoteDialog_Qt::hostWithToken() {
@@ -975,8 +977,39 @@ void RemoteDialog_Qt::onCloudConnectFinished(bool wasHost) {
             cloudCopyBtn_->setEnabled(true);
             cloudResultBox_->setVisible(true);
         } else {
-            failMsg = "The coordinator did not assign a session code (timed out). "
-                      "Check the coordinator URL in Preferences → Remote and try again.";
+            // Name the actual cause. "The session was refused" told the user
+            // nothing they could act on, and the three causes below need three
+            // different responses.
+            const std::string ec = jefe::qt::remoteCoordinatorErrorCode();
+            if (ec == "auth-required" && !hostRetryPending_ &&
+                authSession() != nullptr) {
+                // The coordinator wants an account after all. THIS is the
+                // moment sign-in is warranted — the user asked to host and the
+                // service said no. One attempt: hostRetryPending_ guards the
+                // retry so a failure cannot loop a browser open.
+                hostRetryPending_ = true;
+                cloudHostBtn_->setEnabled(false);
+                cloudHostBtn_->setText("Waiting for browser…");
+                statusLabel_->setText("Complete sign-in in your browser…");
+                shownStatusText_.clear();
+                authSession()->signIn();
+                return;
+            }
+            if (ec == "insufficient-credits") {
+                failMsg = "You're out of session credits, so the coordinator "
+                          "refused to start this session.";
+            } else if (ec == "auth-required") {
+                failMsg = "This coordinator requires an account, and sign-in "
+                          "did not complete.";
+            } else if (!ec.empty()) {
+                failMsg = QStringLiteral("The coordinator refused the session (%1): %2")
+                              .arg(QString::fromStdString(ec),
+                                   QString::fromStdString(
+                                       jefe::qt::remoteCoordinatorErrorMessage()));
+            } else {
+                failMsg = "The coordinator did not assign a session code (timed out). "
+                          "Check the coordinator URL in Preferences → Remote and try again.";
+            }
         }
     }
     shownStatusText_.clear();   // status text may not have changed string-wise
@@ -1548,6 +1581,18 @@ void RemoteDialog_Qt::refreshCreditsVisibility(bool hosting) {
 // the layouts can be judged without a coordinator, an account, or a session.
 // Nothing here is wired: the buttons do exactly what they do today.
 // ---------------------------------------------------------------------------
+void RemoteDialog_Qt::clickHostOnCloud() {
+    if (cloudToggle_ != nullptr) cloudToggle_->click();   // select the Cloud tab
+    if (cloudHostBtn_ != nullptr) cloudHostBtn_->click();
+}
+
+void RemoteDialog_Qt::clickJoinWithCode(const QString& code) {
+    if (joinToggle_ != nullptr) joinToggle_->click();
+    if (joinModeCodeRadio_ != nullptr) joinModeCodeRadio_->setChecked(true);
+    if (joinCodeEdit_ != nullptr) joinCodeEdit_->setText(code);
+    if (connectClientBtn_ != nullptr) connectClientBtn_->click();
+}
+
 void RemoteDialog_Qt::applyUiPreview() {
     // Describe the state ONCE, then let the normal render path paint it. The
     // refresh timer keeps running: it simply reads this instead of the live
