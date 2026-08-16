@@ -105,6 +105,9 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
             tcfg.coordinatorMode = params->coordinatorMode;
             tcfg.coordinatorUrl  = params->coordinatorUrl;
             tcfg.sessionCode     = params->sessionCode;
+            tcfg.authToken       = params->authToken;
+            // The nickname the host sees in the admit prompt (JEF-37).
+            tcfg.displayName     = params->nickname;
         }
         tcfg.password = thePassword;
         transport_ = jefe::net::makeTransport(tcfg);

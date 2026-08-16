@@ -44,10 +44,17 @@ public:
     // before startHost()/connect(). In coordinator mode the transport dials a
     // CoordinatorSignaling to `url` (ws://|wss://) instead of a LAN
     // SignalingServer/Client: the host create-session's; a joiner joins by
-    // `sessionCode`. `password` is carried for future coordinator auth.
+    // `sessionCode`.
+    //
+    // `password` is INERT on this path and kept only for signature stability
+    // with the LAN transport -- the coordinator protocol has no password
+    // concept. Session access is the join code plus, for hosting, `authToken`.
+    // `displayName` is the nickname the host sees when a joiner knocks.
     void configureCoordinator(const std::string& url,
                               const std::string& sessionCode,
-                              const std::string& password);
+                              const std::string& password,
+                              const std::string& authToken = "",
+                              const std::string& displayName = "");
 
     // Host role (fully implemented this task).
     bool startHost(unsigned short port, const std::string& password,

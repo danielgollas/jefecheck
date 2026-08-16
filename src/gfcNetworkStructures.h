@@ -116,6 +116,8 @@ int port;
 bool coordinatorMode = false;
 std::string coordinatorUrl;
 std::string sessionCode;
+// JEF-31: coordinator access JWT (empty = anonymous).
+std::string authToken;
 };
 
 
@@ -130,6 +132,10 @@ std::string nickname;
 bool coordinatorMode = false;
 std::string coordinatorUrl;
 std::string sessionCode;
+// JEF-31: coordinator access JWT (empty = anonymous). Joiners need none --
+// only hosting is gated -- but a valid one earns a verified badge in the
+// host's admit prompt.
+std::string authToken;
 };
 
 //#pragma pack(push,1)

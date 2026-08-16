@@ -308,7 +308,9 @@ struct WebRtcTransport::Impl {
     bool coordinatorMode = false;
     std::string coordinatorUrl;
     std::string coordSessionCode;   // join-only (host: empty)
-    std::string coordPassword;
+    std::string coordPassword;   // inert: the coordinator has no password
+    std::string coordAuthToken;  // JEF-31 access JWT ("" = anonymous)
+    std::string coordDisplayName;
     std::string assignedCode;       // host: code the coordinator handed us
     std::string coordIceServersJson;  // opaque raw-JSON array, "" if none
     std::unique_ptr<CoordinatorSignaling> coord;
@@ -1257,7 +1259,7 @@ struct WebRtcTransport::Impl {
             std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                          c.c_str(), m.c_str());
         });
-        coord->onOpen([d]() { if (d->coord) d->coord->createSession(); });
+        coord->onOpen([d]() { if (d->coord) d->coord->createSession(d->coordAuthToken); });
         if (!coord->connect(coordinatorUrl)) {
             std::fprintf(stderr, "WebRtcTransport: coordinator connect failed (host)\n");
             return false;
@@ -1282,7 +1284,11 @@ struct WebRtcTransport::Impl {
             d->onCoordClientError(c, m);
         });
         std::string code = coordSessionCode;
-        coord->onOpen([d, code]() { if (d->coord) d->coord->joinSession(code); });
+        std::string name = coordDisplayName;
+        std::string tok = coordAuthToken;
+        coord->onOpen([d, code, name, tok]() {
+            if (d->coord) d->coord->joinSession(code, name, tok);
+        });
         if (!coord->connect(coordinatorUrl)) {
             std::fprintf(stderr, "WebRtcTransport: coordinator connect failed (join)\n");
             std::lock_guard<std::mutex> lk(mtx);
@@ -1307,11 +1313,15 @@ WebRtcTransport::~WebRtcTransport() {
 
 void WebRtcTransport::configureCoordinator(const std::string& url,
                                            const std::string& sessionCode,
-                                           const std::string& password) {
-    d_->coordinatorMode = true;
+                                           const std::string& password,
+                                           const std::string& authToken,
+                                           const std::string& displayName) {
     d_->coordinatorUrl = url;
     d_->coordSessionCode = sessionCode;
     d_->coordPassword = password;
+    d_->coordAuthToken = authToken;
+    d_->coordDisplayName = displayName;
+    d_->coordinatorMode = true;
 }
 
 std::string WebRtcTransport::assignedSessionCode() {

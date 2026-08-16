@@ -95,8 +95,14 @@ namespace net {
 // best-effort struct and never throws.
 
 // Client→coord encoders.
-std::string encodeCreateSession();
-std::string encodeJoinSession(const std::string& code);
+// JEF-31: `authToken` is the coordinator access JWT. Both encoders OMIT every
+// optional field when empty, so an anonymous client's bytes are identical to
+// the pre-auth protocol -- which is what keeps a self-hosted coordinator and
+// the --coord-test harness working untouched.
+std::string encodeCreateSession(const std::string& authToken = "");
+std::string encodeJoinSession(const std::string& code,
+                              const std::string& displayName = "",
+                              const std::string& authToken = "");
 // Nests encodeSignal(msg) as the `payload` object.
 std::string encodeSignalEnvelope(const std::string& toPeerId,
                                  const SignalMessage& msg);
@@ -164,8 +170,12 @@ public:
     void close();
 
     // Senders. Return false if the socket is not open yet.
-    bool createSession();
-    bool joinSession(const std::string& code);
+    // JEF-31/37: optional access JWT and knock nickname. Empty values are
+    // omitted from the wire entirely (see the encoder declarations above).
+    bool createSession(const std::string& authToken = "");
+    bool joinSession(const std::string& code,
+                     const std::string& displayName = "",
+                     const std::string& authToken = "");
     bool sendSignal(const std::string& toPeerId, const SignalMessage& msg);
     bool leave();
 

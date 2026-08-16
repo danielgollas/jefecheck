@@ -175,14 +175,32 @@ void parseStringArray(const std::string& arr, std::vector<std::string>& out) {
 
 // ── Client→coord encoders ────────────────────────────────────────────────────
 
-std::string encodeCreateSession() {
-    return "{\"action\":\"create-session\"}";
+std::string encodeCreateSession(const std::string& authToken) {
+    if (authToken.empty()) return "{\"action\":\"create-session\"}";
+    std::string out = "{\"action\":\"create-session\",\"authToken\":\"";
+    appendEscaped(out, authToken);
+    out += "\"}";
+    return out;
 }
 
-std::string encodeJoinSession(const std::string& code) {
+std::string encodeJoinSession(const std::string& code,
+                              const std::string& displayName,
+                              const std::string& authToken) {
     std::string out = "{\"action\":\"join-session\",\"code\":\"";
     appendEscaped(out, code);
-    out += "\"}";
+    out += "\"";
+    // displayName is user input reaching JSON -- escaped, never concatenated.
+    if (!displayName.empty()) {
+        out += ",\"displayName\":\"";
+        appendEscaped(out, displayName);
+        out += "\"";
+    }
+    if (!authToken.empty()) {
+        out += ",\"authToken\":\"";
+        appendEscaped(out, authToken);
+        out += "\"";
+    }
+    out += "}";
     return out;
 }
 
@@ -540,11 +558,13 @@ void CoordinatorSignaling::close() {
     d_->connected.store(false);
 }
 
-bool CoordinatorSignaling::createSession() {
-    return d_->sendRaw(encodeCreateSession());
+bool CoordinatorSignaling::createSession(const std::string& authToken) {
+    return d_->sendRaw(encodeCreateSession(authToken));
 }
-bool CoordinatorSignaling::joinSession(const std::string& code) {
-    return d_->sendRaw(encodeJoinSession(code));
+bool CoordinatorSignaling::joinSession(const std::string& code,
+                                       const std::string& displayName,
+                                       const std::string& authToken) {
+    return d_->sendRaw(encodeJoinSession(code, displayName, authToken));
 }
 bool CoordinatorSignaling::sendSignal(const std::string& toPeerId,
                                       const SignalMessage& msg) {
@@ -597,6 +617,36 @@ int coordinatorSignalingSelfTest() {
     check(encodeJoinSession("JEFE-7K2M") ==
               "{\"action\":\"join-session\",\"code\":\"JEFE-7K2M\"}",
           "join-session exact");
+
+    // ---- JEF-31: optional authToken / displayName ----
+    // Explicitly-empty extras MUST produce byte-identical output to the
+    // pre-auth protocol, so a self-hosted coordinator and the --coord-test
+    // harness see exactly what they saw before.
+    check(encodeCreateSession("") == "{\"action\":\"create-session\"}",
+          "create-session empty token identical");
+    check(encodeJoinSession("JEFE-7K2M", "", "") ==
+              "{\"action\":\"join-session\",\"code\":\"JEFE-7K2M\"}",
+          "join-session empty extras identical");
+
+    check(encodeCreateSession("tok123") ==
+              "{\"action\":\"create-session\",\"authToken\":\"tok123\"}",
+          "create-session with token");
+    check(encodeJoinSession("JEFE-7K2M", "Alice", "tok123") ==
+              "{\"action\":\"join-session\",\"code\":\"JEFE-7K2M\","
+              "\"displayName\":\"Alice\",\"authToken\":\"tok123\"}",
+          "join-session with name and token");
+    check(encodeJoinSession("JEFE-7K2M", "Alice", "") ==
+              "{\"action\":\"join-session\",\"code\":\"JEFE-7K2M\","
+              "\"displayName\":\"Alice\"}",
+          "join-session name only");
+
+    // A display name is user input that reaches JSON: a bare quote must be
+    // escaped, or the coordinator rejects the frame as bad-json.
+    check(encodeJoinSession("JEFE-7K2M", "A\"B", "") ==
+              "{\"action\":\"join-session\",\"code\":\"JEFE-7K2M\","
+              "\"displayName\":\"A\\\"B\"}",
+          "join-session escapes displayName");
+
 
     {
         SignalMessage m;

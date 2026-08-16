@@ -563,6 +563,9 @@ void RemoteDialog_Qt::onCreateCloudClicked() {
 
     jefe::qt::RemoteCloudHostParams p;
     p.coordinatorUrl = url.toStdString();
+    // Reuses the Host tab's session-name field until the Cloud tab grows its
+    // own (client plan T7). Empty falls back to "Host" in the bridge.
+    p.hostName       = serverNameEdit_->text().trimmed().toStdString();
     launchCloudConnect(/*wasHost*/ true, [p]() { jefe::qt::connectAsCloudHost(p); });
 }
 

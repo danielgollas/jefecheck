@@ -388,14 +388,23 @@ void connectAsClient(const RemoteClientParams& params);
 // event loop keeps running, then marshal the result back to the UI thread.
 struct RemoteCloudHostParams {
     std::string coordinatorUrl;
-    std::string password;
+    // Shown to participants. Was hardcoded to "jefe-cloud-host" for EVERY
+    // cloud host, so every host appeared under the same name.
+    std::string hostName;
+    // JEF-31 coordinator access JWT. Empty = anonymous; the coordinator
+    // answers auth-required if it gates create-session.
+    std::string authToken;
+    // NOTE: no `password`. The coordinator protocol has no password concept,
+    // the dialog never set one, and the transport discarded it.
 };
 
 struct RemoteCloudJoinParams {
     std::string clientName;
     std::string coordinatorUrl;
     std::string sessionCode;
-    std::string password;
+    // Optional (JEF-37): joining needs no account, but a valid token earns a
+    // verified badge in the host's admit prompt.
+    std::string authToken;
 };
 
 void connectAsCloudHost(const RemoteCloudHostParams& params);

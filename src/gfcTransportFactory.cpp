@@ -37,6 +37,10 @@ std::unique_ptr<ITransport> makeTransport(const TransportConfig& configIn) {
             if (const char* c = std::getenv("JEFECHECK_SESSION_CODE"))
                 cfg.sessionCode = c;
         }
+        if (cfg.authToken.empty()) {
+            if (const char* t = std::getenv("JEFECHECK_COORDINATOR_TOKEN"))
+                cfg.authToken = t;
+        }
         cfg.kind = TransportKind::WebRtc;  // coordinator mode is WebRTC
     }
 
@@ -45,7 +49,8 @@ std::unique_ptr<ITransport> makeTransport(const TransportConfig& configIn) {
         auto t = std::make_unique<WebRtcTransport>();
         if (cfg.coordinatorMode) {
             t->configureCoordinator(cfg.coordinatorUrl, cfg.sessionCode,
-                                    cfg.password);
+                                    cfg.password, cfg.authToken,
+                                    cfg.displayName);
         }
         return t;
 #else

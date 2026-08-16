@@ -34,6 +34,12 @@ struct TransportConfig {
     std::string coordinatorUrl;   // ws:// or wss:// coordinator endpoint
     std::string sessionCode;      // join-only (the code to join); host: empty
     std::string password;
+    // JEF-31: coordinator access JWT. Empty = anonymous; the coordinator
+    // answers auth-required if it gates create-session, and the caller runs
+    // sign-in then retries.
+    std::string authToken;
+    // JEF-37: nickname shown to the host in the admit prompt when knocking.
+    std::string displayName;
 };
 
 // Legacy overloads (kept working; delegate to the config form).

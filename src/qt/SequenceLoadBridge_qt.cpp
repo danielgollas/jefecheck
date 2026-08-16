@@ -1148,12 +1148,19 @@ void connectAsCloudHost(const RemoteCloudHostParams& params) {
     if (gBridgeShuttingDown.load(std::memory_order_acquire)) return;
     if (networkManager.getConnected()) return;
     gfcServerParams sp;
-    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", "jefe-cloud-host");
-    std::snprintf(sp.password,   sizeof(sp.password),   "%s",
-                  params.password.c_str());
+    // The host's name reaches participants as its nickname
+    // (gfcnetworkmanager.cpp: clientParams.nickname = server.getName()). This
+    // was hardcoded to "jefe-cloud-host", so every cloud host showed up under
+    // that one name.
+    const std::string hostName =
+        params.hostName.empty() ? std::string("Host") : params.hostName;
+    std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", hostName.c_str());
+    // No password: the coordinator protocol has none (see RemoteCloudHostParams).
+    sp.password[0]     = '\0';
     sp.port            = 0;              // ignored in coordinator mode
     sp.coordinatorMode = true;
     sp.coordinatorUrl  = params.coordinatorUrl;
+    sp.authToken       = params.authToken;
     // BLOCKS up to ~5s for the coordinator-assigned code — callers run this off
     // the GUI thread. Hold the in-flight guard so the GUI-thread pump doesn't
     // race the transport bring-up.
@@ -1169,10 +1176,11 @@ void connectAsCloudClient(const RemoteCloudJoinParams& params) {
     cp.nickname        = params.clientName;
     cp.serverIP        = "";            // ignored in coordinator mode
     cp.port            = 0;
-    cp.password        = params.password;
+    cp.password        = "";            // coordinator protocol has no password
     cp.coordinatorMode = true;
     cp.coordinatorUrl  = params.coordinatorUrl;
     cp.sessionCode     = params.sessionCode;
+    cp.authToken       = params.authToken;
     gCloudConnectInFlight.store(true, std::memory_order_release);
     networkManager.startConnection(&cp);
     gCloudConnectInFlight.store(false, std::memory_order_release);

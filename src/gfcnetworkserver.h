@@ -81,6 +81,8 @@ public:
     std::string password;
     bool coordinatorMode = false;
     std::string coordinatorUrl;
+    // JEF-31 access JWT forwarded to the coordinator on create-session.
+    std::string coordinatorAuthToken;
     unsigned int ConnectionCount();
     gfcNetworkLog* log;
 
