@@ -45,6 +45,12 @@ endif()
 file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
 list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
 
+# Desktop sign-in (JEF-31). Its own directory rather than src/qt/: these units
+# depend on Qt but not on the viewport or the rendering chain, so they stay
+# includable from headless self-tests without dragging GL in.
+file(GLOB JEFECHECK_AUTH_SOURCES src/auth/*.cpp)
+list(APPEND JEFECHECK_SOURCES ${JEFECHECK_AUTH_SOURCES})
+
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
 

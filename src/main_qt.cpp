@@ -28,6 +28,7 @@
 #include <QProcessEnvironment>
 
 #include "gfcCoordinatorSignaling.h"
+#include "auth/gfcOAuthPkce.h"
 #include "gfcTestCoordinator.h"
 #include "gfcSignaling.h"
 #include "gfcStructures.h"
@@ -400,6 +401,15 @@ int main(int argc, char* argv[]) {
     // truly needs nothing else set up first.
     if (hasWireTest(argc, argv)) {
         return jefe::wire::selfTest();
+    }
+
+    // Headless PKCE codec self-test (--pkce-test, JEF-31): pure string/crypto
+    // work with no sockets and no event loop, so like --wire-test it runs and
+    // exits before QApplication exists.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--pkce-test") == 0) {
+            return jefe::auth::pkceSelfTest();
+        }
     }
 
     // Headless signaling-stub self-test (--signal-test, JEF-24): brings up a
