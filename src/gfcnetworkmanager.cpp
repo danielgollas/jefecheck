@@ -146,6 +146,26 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
                 if (!server.getAssignedSessionCode().empty()) break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
             }
+            // NO CODE => NO SESSION. The coordinator refused create-session
+            // (auth-required, insufficient-credits) or never answered.
+            //
+            // Bailing out here is load-bearing: the tail of this function used
+            // to set connected=true unconditionally, so a refused session still
+            // flipped the UI into its session view — an empty participant list,
+            // chat that went nowhere, and an End Session button with nothing to
+            // end. "Connected" has to mean a session exists, or every symptom
+            // of a failed start looks like a bug somewhere else.
+            if (server.getAssignedSessionCode().empty()) {
+                networkLog.addToLog(
+                    "Cloud session was refused by the coordinator (no session "
+                    "code assigned). Check that you are signed in and have "
+                    "credits.");
+                server.stop();
+                client.enableGUI();
+                isServer = false;
+                connected = false;
+                return;
+            }
         }
         clientParams.sessionCode=server.getAssignedSessionCode();
         client.setIsServerClient(true);
