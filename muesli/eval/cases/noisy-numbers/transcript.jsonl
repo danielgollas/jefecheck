@@ -1,0 +1,6 @@
+{"i": 0, "t0": 0.9, "t1": 9.0, "speaker": "S1", "text": "Quick budget check before Friday. Where did the cloud spend land last month?", "conf": 0.93}
+{"i": 1, "t0": 9.7, "t1": 22.5, "speaker": "S2", "text": "Somewhere around forty... sorry, the line is bad — either fourteen or forty thousand, I'll confirm from the console after this.", "conf": 0.62}
+{"i": 2, "t0": 23.2, "t1": 33.8, "speaker": "S1", "text": "That's a big range. If it's the higher number we're over the quarterly cap and I need to flag it to finance.", "conf": 0.91}
+{"i": 3, "t0": 34.5, "t1": 45.1, "speaker": "S2", "text": "Understood. The GPU cluster is the swing factor — the training runs from the recommender team.", "conf": 0.88}
+{"i": 4, "t0": 45.8, "t1": 55.9, "speaker": "S1", "text": "Okay. Send me the exact figure today, and either way let's cap the recommender runs until we know.", "conf": 0.92}
+{"i": 5, "t0": 56.6, "t1": 63.0, "speaker": "S2", "text": "Will do. Figure by end of day, and I'll pause new training jobs now.", "conf": 0.9}

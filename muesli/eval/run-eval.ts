@@ -16,7 +16,12 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { parseTranscript } from "../packages/muesli-format/src/index.ts";
+import {
+  parseTranscript,
+  extractSystemPrompt,
+  buildEnhancementRequest,
+  renderTranscriptForPrompt,
+} from "../packages/muesli-format/src/index.ts";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const GRADER_MODEL = "claude-opus-5";
@@ -36,9 +41,8 @@ if (!apiKey) {
   process.exit(2);
 }
 
-const systemPrompt = extractSystemPrompt(
-  fs.readFileSync(path.join(here, "../prompts/enhance-v1.md"), "utf8"),
-);
+const promptFile = fs.readFileSync(path.join(here, "../prompts/enhance-v1.md"), "utf8");
+extractSystemPrompt(promptFile); // fail fast if the prompt file is malformed
 const rubric = fs.readFileSync(path.join(here, "rubric.md"), "utf8");
 
 const casesDir = path.join(here, "cases");
@@ -63,12 +67,16 @@ for (const name of caseNames) {
   const templateId = (readOptional(path.join(dir, "template.txt")) ?? "default").trim();
   const template = fs.readFileSync(path.join(here, `../templates/${templateId}.md`), "utf8");
 
-  const transcriptText = transcript
-    .map((u) => `[${u.i}] ${u.speaker ?? "?"}: ${u.text}`)
-    .join("\n");
+  const transcriptText = renderTranscriptForPrompt(transcript);
 
   process.stderr.write(`${name}: generating (${productModel})…`);
-  const notes = await generateNotes({ template, glossary, transcriptText, rawNotes });
+  const notes = await generateNotes({
+    promptFile,
+    template,
+    glossary,
+    transcript,
+    rawNotes,
+  });
   process.stderr.write(" grading…");
   const scores = await gradeNotes({ notes, transcriptText, rawNotes, reference });
   process.stderr.write(" done\n");
@@ -80,20 +88,25 @@ report(results);
 // ---------------------------------------------------------------------------
 
 async function generateNotes(input: {
-  template: string; glossary: string; transcriptText: string; rawNotes: string;
+  promptFile: string;
+  template: string;
+  glossary: string;
+  transcript: ReturnType<typeof parseTranscript>;
+  rawNotes: string;
 }): Promise<string> {
+  // Assembled by the same code the product uses, so eval and product can't drift.
+  const request = buildEnhancementRequest({
+    promptFile: input.promptFile,
+    template: input.template,
+    glossary: input.glossary,
+    transcript: input.transcript,
+    rawNotesText: input.rawNotes,
+  });
   const body = {
     model: productModel,
     max_tokens: 4096,
-    system: [
-      { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
-    ],
-    messages: [{
-      role: "user",
-      content:
-        `# Template\n${input.template}\n\n# Glossary\n${input.glossary}\n\n` +
-        `# Transcript\n${input.transcriptText}\n\n# Raw notes\n${input.rawNotes}`,
-    }],
+    system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: request.user }],
   };
   const msg = await callApi(body);
   return msg.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
@@ -179,15 +192,6 @@ function report(all: { name: string; scores: Scores }[]): void {
     process.exit(1);
   }
   console.log("\nAll gates passed.");
-}
-
-function extractSystemPrompt(promptFile: string): string {
-  // The system prompt is the content between "## System prompt" and the next "## ".
-  const start = promptFile.indexOf("## System prompt");
-  if (start === -1) throw new Error("prompts/enhance-v1.md: '## System prompt' section not found");
-  const afterHeading = promptFile.indexOf("\n", start) + 1;
-  const next = promptFile.indexOf("\n## ", afterHeading);
-  return promptFile.slice(afterHeading, next === -1 ? undefined : next).trim();
 }
 
 function readOptional(p: string): string | null {

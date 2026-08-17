@@ -51,8 +51,9 @@ muesli/
 ├── docs/                     Founding spec (product, architecture, format, roadmap)
 ├── fixtures/                 Golden meeting folders — the cross-platform contract
 ├── packages/
-│   ├── muesli-format/        TypeScript reference implementation of the format (tested)
-│   └── MuesliCore/           Swift package: format + (eventually) capture/ASR/enhancement
+│   ├── muesli-format/        TypeScript reference implementation of the format + enhancement pipeline
+│   ├── muesli-cli/           Dev CLI: new / enhance / validate meeting folders (everything downstream of ASR)
+│   └── MuesliCore/           Swift package: format + enhancement pipeline (capture/ASR come with the apps)
 ├── prompts/                  Enhancement prompt (versioned data, shared by all platforms)
 ├── templates/                Built-in note templates
 └── eval/                     Accuracy eval harness — gates all model/prompt changes
@@ -63,6 +64,10 @@ same golden fixtures on every change under `muesli/`.
 
 ## Status
 
-M0 (foundations) in progress: storage format v1 implemented and tested in
-TypeScript and Swift; enhancement prompt v1 and eval harness in place. Eval
-cases and the iPhone app (M1) are next.
+M0 (foundations) largely complete: storage format v1 implemented and tested in
+TypeScript and Swift; the enhancement pipeline (prompt assembly, model
+selection/escalation, notes generation, validation) implemented in both
+languages with a dev CLI; eval harness in place with six bootstrap cases.
+Remaining for M0: grow the eval set toward ~20 cases (real consented meetings
+preferred) and run a first live eval. Then M1: the iPhone app, where capture
+and on-device ASR live.

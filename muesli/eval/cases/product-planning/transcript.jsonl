@@ -1,0 +1,10 @@
+{"i": 0, "t0": 1.0, "t1": 8.2, "speaker": "S1", "text": "Goal today is to lock the Q4 scope for the mobile app: offline mode, widgets, or the redesign. We can fund two.", "conf": 0.95}
+{"i": 1, "t0": 9.0, "t1": 22.4, "speaker": "S2", "text": "Support tickets say offline is the top complaint. Two hundred and twelve tickets last quarter mention losing notes on the subway.", "conf": 0.93}
+{"i": 2, "t0": 23.1, "t1": 30.5, "speaker": "S3", "text": "Widgets are cheap though. I can ship widgets in three weeks with one engineer.", "conf": 0.94}
+{"i": 3, "t0": 31.2, "t1": 45.0, "speaker": "S1", "text": "The redesign keeps slipping. If we take it on now we blow the quarter again. I want to park it until Q1.", "conf": 0.92}
+{"i": 4, "t0": 45.8, "t1": 58.3, "speaker": "S2", "text": "Agreed on parking the redesign. But offline is not small — sync conflicts alone are a month of work.", "conf": 0.9}
+{"i": 5, "t0": 59.0, "t1": 74.6, "speaker": "S3", "text": "What if offline ships in two phases? Read-only cache first, then edit-and-sync in November.", "conf": 0.91}
+{"i": 6, "t0": 75.2, "t1": 88.0, "speaker": "S1", "text": "I like phased offline. Decision: Q4 is offline phase one plus widgets. Redesign moves to Q1.", "conf": 0.95}
+{"i": 7, "t0": 88.8, "t1": 97.5, "speaker": "S2", "text": "I'll write the offline phase one spec by next Friday and get sizing from the platform team.", "conf": 0.93}
+{"i": 8, "t0": 98.1, "t1": 104.0, "speaker": "S3", "text": "And I'll draft the widget designs this week so engineering can start Monday.", "conf": 0.94}
+{"i": 9, "t0": 104.6, "t1": 112.3, "speaker": "S1", "text": "Good. I'll tell the exec team the redesign is Q1 so nobody is surprised.", "conf": 0.95}

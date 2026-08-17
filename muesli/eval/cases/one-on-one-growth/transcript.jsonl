@@ -1,0 +1,8 @@
+{"i": 0, "t0": 0.8, "t1": 9.1, "speaker": "S1", "text": "So, two weeks since we talked. The migration shipped — how did it land?", "conf": 0.95}
+{"i": 1, "t0": 9.8, "t1": 24.0, "speaker": "S2", "text": "Smoothly, honestly. Zero rollbacks. The runbook I wrote got reused by the payments team already.", "conf": 0.93}
+{"i": 2, "t0": 24.7, "t1": 39.2, "speaker": "S1", "text": "That runbook was excellent. One piece of feedback: in the incident review you jumped to solutions before the timeline was established. It made the room defensive.", "conf": 0.92}
+{"i": 3, "t0": 40.0, "t1": 51.5, "speaker": "S2", "text": "That's fair. I get impatient when I already see the fix. I can hold questions until the facts are on the table.", "conf": 0.9}
+{"i": 4, "t0": 52.1, "t1": 68.8, "speaker": "S2", "text": "On growth — I want to move toward tech lead. What's actually missing for me?", "conf": 0.94}
+{"i": 5, "t0": 69.5, "t1": 88.2, "speaker": "S1", "text": "Scope, mostly. You run projects well; you haven't yet owned a multi-team effort. The search revamp next quarter could be that. It needs a lead and it touches three teams.", "conf": 0.91}
+{"i": 6, "t0": 88.9, "t1": 96.0, "speaker": "S2", "text": "I want it. What would you need from me to feel good about it?", "conf": 0.93}
+{"i": 7, "t0": 96.7, "t1": 110.4, "speaker": "S1", "text": "A one-page plan: milestones, the cross-team dependencies, and how you'd keep the teams aligned. Bring it to our next one-on-one and I'll take it to staffing.", "conf": 0.92}

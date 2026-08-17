@@ -1,0 +1,8 @@
+{"i": 0, "t0": 1.0, "t1": 10.5, "speaker": "S1", "text": "You spent four years at a payments startup — walk me through the system you owned there.", "conf": 0.94}
+{"i": 1, "t0": 11.2, "t1": 32.0, "speaker": "S2", "text": "I owned the ledger service. Double-entry, append-only, about twelve thousand transactions a second at peak. The interesting part was migrating it from Postgres to a sharded setup with zero downtime.", "conf": 0.92}
+{"i": 2, "t0": 32.7, "t1": 41.9, "speaker": "S1", "text": "How did you keep the books consistent during the shard migration?", "conf": 0.95}
+{"i": 3, "t0": 42.6, "t1": 63.8, "speaker": "S2", "text": "Dual writes with a reconciliation job. Writes went to both stores, reads stayed on the old one, and a nightly diff had to be empty for two weeks before we flipped reads. We caught a timezone bug in the diff that would have corrupted month-end.", "conf": 0.9}
+{"i": 4, "t0": 64.5, "t1": 74.0, "speaker": "S1", "text": "Suppose the diff never went clean — what's your rollback story?", "conf": 0.94}
+{"i": 5, "t0": 74.7, "t1": 88.2, "speaker": "S2", "text": "Reads never left the old store until the diff was clean, so rollback was just stopping dual writes. Honestly we never rehearsed the full rollback, which I'd do differently now.", "conf": 0.91}
+{"i": 6, "t0": 88.9, "t1": 99.5, "speaker": "S1", "text": "On the team side — you mentioned you've never formally mentored. How do you level up juniors around you?", "conf": 0.93}
+{"i": 7, "t0": 100.2, "t1": 115.8, "speaker": "S2", "text": "Mostly through review. I write long, teaching-style review comments. One junior told me my reviews were the best onboarding doc the team had. But no, I haven't run a formal mentorship.", "conf": 0.9}

@@ -1,0 +1,13 @@
+{
+  "name": "muesli-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Development CLI for the Muesli pipeline: create, enhance, and validate meeting folders (everything downstream of ASR).",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/cli.test.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

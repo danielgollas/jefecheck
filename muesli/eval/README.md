@@ -28,6 +28,10 @@ cases/
     └── template.txt          # optional — template id (default: "default")
 ```
 
+Six synthetic bootstrap cases ship in the repo, covering all five templates
+plus a hallucination trap (`noisy-numbers`: an ambiguous dollar figure the
+notes must flag as ⚠︎ unclear rather than pick a value for).
+
 Target set (M0 exit criteria): ~20 cases spanning short/long meetings, 2–6
 speakers, noisy transcripts (low-conf words), heavy/light raw notes, each
 built-in template, and at least one non-English meeting. Real recorded meetings
