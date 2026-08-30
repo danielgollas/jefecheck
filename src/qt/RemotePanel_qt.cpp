@@ -21,6 +21,10 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QRadioButton>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QInputDialog>
@@ -154,11 +158,18 @@ QWidget* makeHostPage(QLineEdit*& nameOut, QSpinBox*& portOut,
 // shipped build until somebody notices. So it arrives one of two ways:
 //
 //   1. -DJEFECHECK_GOOGLE_CLIENT_SECRET=... at configure time (release CI,
-//      from a repository secret), or
-//   2. $JEFECHECK_GOOGLE_CLIENT_SECRET at run time (local development).
+//      from a repository secret),
+//   2. $JEFECHECK_GOOGLE_CLIENT_SECRET at run time, or
+//   3. ~/.config/jefecheck/google_client.json — the credentials file Google's
+//      console hands you, unedited.
 //
-// With neither, sign-in is simply unavailable and says so, rather than failing
-// deep in a token exchange with an error nobody can act on.
+// (3) exists because (2) does not survive a Finder or Dock launch: macOS gives
+// a GUI app the login environment, not a shell's, so an `export` in a terminal
+// is invisible to the way the app is normally started. A file on disk works
+// either way, and keeps the value out of the repository.
+//
+// With none of the three, sign-in is simply unavailable and says so, rather
+// than failing deep in a token exchange with an error nobody can act on.
 constexpr const char* kGoogleDesktopClientId =
     "424897654904-s5i61ngt4gm2ir8kihqt4d7qcro5g0db.apps.googleusercontent.com";
 
@@ -168,11 +179,36 @@ constexpr const char* kBuiltInGoogleClientSecret = JEFECHECK_GOOGLE_CLIENT_SECRE
 constexpr const char* kBuiltInGoogleClientSecret = "";
 #endif
 
-/** Baked-in secret when a release build supplied one, else the env override. */
+/** Path of the credentials file Google's console downloads. */
+static QString googleClientFilePath() {
+    return QDir::homePath() +
+           QStringLiteral("/.config/jefecheck/google_client.json");
+}
+
+/**
+ * Build-time secret, else the environment, else the downloaded credentials
+ * file. Returns "" when none is configured — callers must treat that as
+ * "sign-in unavailable", never as "try anyway".
+ */
 static std::string googleClientSecret() {
     if (kBuiltInGoogleClientSecret[0] != '\0') return kBuiltInGoogleClientSecret;
+
     const QByteArray env = qgetenv("JEFECHECK_GOOGLE_CLIENT_SECRET");
-    return env.isEmpty() ? std::string() : env.toStdString();
+    if (!env.isEmpty()) return env.toStdString();
+
+    QFile f(googleClientFilePath());
+    if (!f.open(QIODevice::ReadOnly)) return {};
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    f.close();
+    if (!doc.isObject()) return {};
+    // Google nests under "installed" for a desktop client and "web" for a web
+    // one. Accept either: pointing this at the wrong file should fail on the
+    // client id not matching, not on a key name.
+    const QJsonObject root = doc.object();
+    const QJsonObject creds = root.contains(QStringLiteral("installed"))
+                                  ? root.value(QStringLiteral("installed")).toObject()
+                                  : root.value(QStringLiteral("web")).toObject();
+    return creds.value(QStringLiteral("client_secret")).toString().toStdString();
 }
 
 /** Seconds as HH:MM:SS — the same unit and format the admin console uses. */
