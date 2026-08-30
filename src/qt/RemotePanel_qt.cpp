@@ -143,14 +143,37 @@ QWidget* makeHostPage(QLineEdit*& nameOut, QSpinBox*& portOut,
 
 // Google Desktop-app OAuth client (JEF-31).
 //
-// The "secret" is not a secret: RFC 8252 installed apps are PUBLIC clients
-// that cannot keep one, and Google issues this value expecting it to ship in
-// the binary. PKCE is what actually protects the exchange. Stated plainly here
-// so nobody later mistakes it for a credential worth protecting — or worse,
-// tries to "fix" it by hiding it somewhere that gives false comfort.
+// The "secret" is not confidential in the usual sense: RFC 8252 installed apps
+// are PUBLIC clients that cannot keep one, and Google's token endpoint still
+// demands it (probe it and you get "client_secret is missing"). PKCE is what
+// actually protects the exchange.
+//
+// It is nevertheless NOT hardcoded here, for a reason that has nothing to do
+// with cryptography: this repository is public. A literal in the source gets
+// caught by secret scanning and auto-revoked, which breaks sign-in for every
+// shipped build until somebody notices. So it arrives one of two ways:
+//
+//   1. -DJEFECHECK_GOOGLE_CLIENT_SECRET=... at configure time (release CI,
+//      from a repository secret), or
+//   2. $JEFECHECK_GOOGLE_CLIENT_SECRET at run time (local development).
+//
+// With neither, sign-in is simply unavailable and says so, rather than failing
+// deep in a token exchange with an error nobody can act on.
 constexpr const char* kGoogleDesktopClientId =
     "424897654904-s5i61ngt4gm2ir8kihqt4d7qcro5g0db.apps.googleusercontent.com";
-constexpr const char* kGoogleDesktopClientSecret = "";
+
+#ifdef JEFECHECK_GOOGLE_CLIENT_SECRET
+constexpr const char* kBuiltInGoogleClientSecret = JEFECHECK_GOOGLE_CLIENT_SECRET;
+#else
+constexpr const char* kBuiltInGoogleClientSecret = "";
+#endif
+
+/** Baked-in secret when a release build supplied one, else the env override. */
+static std::string googleClientSecret() {
+    if (kBuiltInGoogleClientSecret[0] != '\0') return kBuiltInGoogleClientSecret;
+    const QByteArray env = qgetenv("JEFECHECK_GOOGLE_CLIENT_SECRET");
+    return env.isEmpty() ? std::string() : env.toStdString();
+}
 
 /** Seconds as HH:MM:SS — the same unit and format the admin console uses. */
 QString formatDurationHMS(long long seconds) {
@@ -802,7 +825,7 @@ jefe::auth::AuthSession* RemoteDialog_Qt::authSession() {
     }
     cfg.account = ws.toStdString();
     cfg.googleClientId = kGoogleDesktopClientId;
-    cfg.googleClientSecret = kGoogleDesktopClientSecret;
+    cfg.googleClientSecret = googleClientSecret();
 
     authSession_ = new jefe::auth::AuthSession(cfg, tokenStore_.get(), this);
 
@@ -981,7 +1004,16 @@ void RemoteDialog_Qt::onCloudConnectFinished(bool wasHost) {
             // nothing they could act on, and the three causes below need three
             // different responses.
             const std::string ec = jefe::qt::remoteCoordinatorErrorCode();
-            if (ec == "auth-required" && !hostRetryPending_ &&
+            // No secret configured: say so here rather than opening a browser
+            // for a flow that cannot finish. Google's token endpoint rejects
+            // this client without one ("client_secret is missing"), so the
+            // user would consent, get redirected, and hit a dead end.
+            if (ec == "auth-required" && googleClientSecret().empty()) {
+                failMsg =
+                    "This coordinator requires an account, but this build has no "
+                    "Google client secret configured, so sign-in cannot complete. "
+                    "Set JEFECHECK_GOOGLE_CLIENT_SECRET and restart.";
+            } else if (ec == "auth-required" && !hostRetryPending_ &&
                 authSession() != nullptr) {
                 // The coordinator wants an account after all. THIS is the
                 // moment sign-in is warranted — the user asked to host and the

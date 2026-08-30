@@ -160,6 +160,25 @@ if(JEFECHECK_WEBRTC)
     target_compile_definitions(jefecheck PRIVATE JEFECHECK_WEBRTC=1)
 endif()
 
+# --- Google OAuth client secret (JEF-31) ------------------------------------
+# Google's token endpoint requires a client_secret even for an RFC 8252
+# installed app, so a build without one cannot complete sign-in. It is NOT in
+# the source: this repository is public, and a literal would be caught by
+# secret scanning and auto-revoked -- breaking sign-in for every shipped build
+# until somebody noticed.
+#
+# Release CI passes it from a repository secret:
+#   cmake -B build -DJEFECHECK_GOOGLE_CLIENT_SECRET=GOCSPX-...
+# Local development can instead export JEFECHECK_GOOGLE_CLIENT_SECRET at run
+# time. With neither, the app builds fine and reports that sign-in is
+# unavailable rather than failing inside a token exchange.
+set(JEFECHECK_GOOGLE_CLIENT_SECRET "" CACHE STRING
+    "Google OAuth client secret for desktop sign-in (release builds only)")
+if(JEFECHECK_GOOGLE_CLIENT_SECRET)
+    target_compile_definitions(jefecheck PRIVATE
+        JEFECHECK_GOOGLE_CLIENT_SECRET="${JEFECHECK_GOOGLE_CLIENT_SECRET}")
+endif()
+
 # --- Static FFmpeg for video export ----------------------------------------
 # Fetch the same GPL static ffmpeg the release packaging uses, once, into the
 # build tree, so a dev/.app build resolves it from the bundle. GUI launches
