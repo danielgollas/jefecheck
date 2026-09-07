@@ -1250,20 +1250,53 @@ int main(int argc, char* argv[]) {
     // frame of plate 0 into <dir> and quit.
     const QString renderTestDir = resolveRenderTestDir(argc, argv);
     if (!renderTestDir.isEmpty()) {
-        QDir().mkpath(renderTestDir);
-        QTimer::singleShot(5000, &window, [&window, renderTestDir]() {
+        // The destination must be a usable DIRECTORY before anything renders.
+        // mkpath's result used to be discarded, so passing an image path by
+        // mistake — easy, since --fx-test next door takes exactly that —
+        // left every write failing while the run still reported success.
+        if (!QDir().mkpath(renderTestDir)) {
+            printf("RENDER-TEST FAIL: cannot use %s as an output directory\n",
+                   renderTestDir.toLocal8Bit().constData());
+            fflush(stdout);
+            return 2;
+        }
+        // Snapshot first, so pre-existing files in the directory can't be
+        // counted as this run's output.
+        const QStringList before =
+            QDir(renderTestDir).entryList(QDir::Files | QDir::NoDotAndDotDot);
+        QTimer::singleShot(5000, &window, [&window, renderTestDir, before]() {
             // The render (GL readback + OIIO save) lives in MainWindow's
             // TU, which can touch the viewport's GL context and the bridge
             // without pulling glad into this Qt entry-point TU.
-            const int n = window.runHeadlessRenderTest(renderTestDir);
-            printf("RENDER-TEST: wrote %d frame(s) to %s\n",
-                   n, renderTestDir.toLocal8Bit().constData());
+            const int claimed = window.runHeadlessRenderTest(renderTestDir);
+
+            // Count what actually landed. The old report printed the render
+            // path's OWN frame count and exited 0 on any positive number —
+            // so a run where every single OIIO write failed announced
+            // "wrote 107 frame(s)" and passed. A test that reports success
+            // without looking at the disk is worse than no test: it answers
+            // the question it was asked without ever checking.
+            const QStringList after =
+                QDir(renderTestDir).entryList(QDir::Files | QDir::NoDotAndDotDot);
+            int landed = 0;
+            for (const QString& f : after)
+                if (!before.contains(f)) ++landed;
+
+            printf("RENDER-TEST: %d frame(s) claimed, %d file(s) on disk in %s\n",
+                   claimed, landed, renderTestDir.toLocal8Bit().constData());
+            if (landed == 0)
+                printf("RENDER-TEST FAIL: nothing was written\n");
+            else if (claimed > 0 && landed < claimed)
+                printf("RENDER-TEST FAIL: %d frame(s) claimed but only %d written\n",
+                       claimed, landed);
+            else
+                printf("RENDER-TEST PASS\n");
             fflush(stdout);
             // OIIO has already flushed/closed the output files. Skip Qt's
             // global teardown (it trips a pre-existing trace trap in
             // gfcPlaybackGUI's destructor on macOS) so the harness gets a
             // deterministic exit code.
-            std::_Exit(n > 0 ? 0 : 2);
+            std::_Exit((landed > 0 && landed >= claimed) ? 0 : 2);
         });
     }
 
