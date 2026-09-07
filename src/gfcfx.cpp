@@ -26,6 +26,9 @@ extern gfcLUTManager lutManager;
 
 //extern std::vector<CubeLUT> lutArray;
 
+//the per texture unit size uniforms every FX gets for free
+static const char *gfcFXTexCoordNames[4]={"texCoord0","texCoord1","texCoord2","texCoord3"};
+
 std::string getInfoLog ( GLhandleARB obj )
 {
 	int infologLength = 0;
@@ -78,6 +81,89 @@ gfcFX::gfcFX()
 	vertexShader=0;
 	fragmentShader=0;
 	ShaderProgram=0;
+	invalidateUniformLocations();
+}
+
+void gfcFX::invalidateUniformLocations()
+{
+	uniformsPrepared=false;
+	currentFrameLocation=-1;
+	targetFPSLocation=-1;
+	timestepLocation=-1;
+	for ( int i=0;i<4;i++ )
+		texCoordLocations[i]=-1;
+	preparedGroups.clear();
+}
+
+/**
+ * Resolves every uniform this FX can write into a flat prepared list, once,
+ * right after the shader program is linked. bind() then replays that list with
+ * cached locations instead of asking the driver to look up each name by string
+ * on every single frame. Only LOCATIONS are cached here, never values.
+ */
+void gfcFX::prepareUniformLocations()
+{
+	invalidateUniformLocations();
+
+	if ( ShaderProgram==0 )
+		return;
+
+	//the program state uniforms, passed before the widgets so a control can override them
+	currentFrameLocation=glGetUniformLocationARB ( ShaderProgram,"currentFrame" );
+	targetFPSLocation=glGetUniformLocationARB ( ShaderProgram,"targetFPS" );
+	timestepLocation=glGetUniformLocationARB ( ShaderProgram,"timestep" );
+
+	for ( int i=0;i<4;i++ )
+		texCoordLocations[i]=glGetUniformLocationARB ( ShaderProgram,gfcFXTexCoordNames[i] );
+
+	//walk the groups in exactly the order bind() walks them (map order for the
+	//groups, widgetsOrder for the widgets), so texture units still get assigned
+	//in the order the FX author declared them and not alphabetically.
+	std::map<std::string,gfcFXWidgetGroup>::iterator groupsIter=groups.begin();
+	std::map<std::string,gfcFXWidgetGroup>::iterator groupsIterEnd=groups.end();
+	for ( groupsIter;groupsIter!=groupsIterEnd;groupsIter++ )
+	{
+		gfcFXPreparedGroup preparedGroup;
+		preparedGroup.name=groupsIter->first;
+
+		std::vector<std::string>::iterator widgetIter=groupsIter->second.widgetsOrder.begin();
+		std::vector<std::string>::iterator widgetIterEnd=groupsIter->second.widgetsOrder.end();
+		for ( widgetIter;widgetIter!=widgetIterEnd;widgetIter++ )
+		{
+			const gfcFXWidget &widget=groupsIter->second.widgets[*widgetIter];
+
+			switch ( widget.type )
+			{
+				case FX_GUI_BOOL:
+				case FX_GUI_CHOICE:
+				case FX_GUI_FLOAT:
+				case FX_GUI_CUBE:
+				case FX_GUI_LUT:
+				case FX_GUI_TEXTURE:
+				{
+					gfcFXUniformBinding binding;
+					binding.type=widget.type;
+					binding.widgetName=*widgetIter;
+					binding.location=glGetUniformLocationARB ( ShaderProgram,widget.varName.c_str() );
+
+					//a cube also publishes its edge size as varName_size
+					if ( widget.type==FX_GUI_CUBE )
+						binding.sizeLocation=glGetUniformLocationARB ( ShaderProgram,std::string ( widget.varName+"_size" ).c_str() );
+
+					preparedGroup.bindings.push_back ( binding );
+				}
+				break;
+
+				default:
+					//spacers and newlines are layout only, they bind nothing
+				break;
+			}
+		}
+
+		preparedGroups.push_back ( preparedGroup );
+	}
+
+	uniformsPrepared=true;
 }
 
 /*gfcFX::gfcFX(const gfcFX &fx)
@@ -168,6 +254,9 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 	
 	loadedAndCompiled=false;
 	errorWhileLoading=false;
+	//any location cached from a previous load of this object belongs to a
+	//program we are about to replace, so drop it before anything else.
+	invalidateUniformLocations();
 	//char shaderPath[2500];
 	std::string shaderPath;
 	//printf("*LOADING FX PLUGIN: %s",GetFilenameNoPath(pfilename).c_str());
@@ -694,6 +783,10 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 		{
 			loadedAndCompiled=true;
 
+			//the program is linked, so its uniform locations are now fixed for
+			//its lifetime. Resolve them all once, here, so bind() never has to.
+			prepareUniformLocations();
+
 			//calculate the FXs md5 hash
 			md5Hash=GetMD5Hash ( inputForHash );
 			//printf ( "\nFX Hash:lenght=%s:%i\n",md5Hash.c_str(),md5Hash.size() );
@@ -746,9 +839,6 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 	PlateFXParams params;
 	params.pass=FXPASS_INTERMEDIATE;
 
-	std::string texCoordLocationNames[4]={"texCoord0","texCoord1","texCoord2","texCoord3"};
-	//std::string texCoordYLocationNames[4]={"texCoord0.y","texCoord1.y","texCoord2.y","texCoord3.y"};
-	
 	if ( loadedAndCompiled )
 	{
 		//printf("Binding!\n");
@@ -760,62 +850,59 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 		glPrintError();
 		//printf("Shader Info:\n *Name: %s\n *Active shader %i, should be: %i\n",name, glGetHandleARB(GL_PROGRAM_OBJECT_ARB),ShaderProgram);
 
+		//Safety net only. The prepared list is built once, at link time, in
+		//load(). This catches a program that somehow reached bind() without one
+		//instead of silently binding nothing at all, it is not the mechanism.
+		if ( !uniformsPrepared )
+			prepareUniformLocations();
+
 		int CubeUnitCounter=4; //each texture accesed by the shader must be in a different texture unit, so each time we bind a texture or cube, we increment this by 1 and use it as an offset to GL_TEXTURE0.
 		int textureCounter=0; //keep track of weather we have a texture in the controls or not, if not, we use the fboInfo passed as a parameter
-		
+
 
 		//NEW STUFF!! Pass some additional program state data to the shader, it can use it if it wants, the data is also sent to the shader before the params, so the controls
-		//can override the values if they want, but I can't see why that would be needed. 
+		//can override the values if they want, but I can't see why that would be needed.
+		//All of these locations were resolved when the program was linked, a
+		//location of -1 means the compiler dropped the uniform, so skip it.
 
 		//pass current frame number
-		GLuint location=glGetUniformLocationARB ( ShaderProgram,"currentFrame");
-		if(location!=-1){
-		 glUniform1fARB ( location,playbackManager.getCurrentFrame());
-		 //printf("location for currentFrame=%i\n",location);
-		}
+		if ( currentFrameLocation!=-1 )
+			glUniform1fARB ( currentFrameLocation,playbackManager.getCurrentFrame() );
+
 		//pass target FPS (do we really need this?)
-		location=glGetUniformLocationARB ( ShaderProgram,"targetFPS");
-		if(location!=-1)
-			glUniform1fARB ( location,playbackManager.getTargetFPS());
+		if ( targetFPSLocation!=-1 )
+			glUniform1fARB ( targetFPSLocation,playbackManager.getTargetFPS() );
 
 		//pass current timestep
-		location=glGetUniformLocationARB ( ShaderProgram,"timestep");
-		if(location!=-1)
-			glUniform1fARB ( location,playbackManager.getTimestep());
-		
+		if ( timestepLocation!=-1 )
+			glUniform1fARB ( timestepLocation,playbackManager.getTimestep() );
 
-		//the widgets and variables should be iterated using the ordered vector, since we want to bind the textures in the correct texture unit, not in alphabetical order (wich iterating throug the map would give us). It is the same problem as iterating throug the map when creating the FX's GUI
-		std::map<std::string,gfcFXWidgetGroup>::iterator groupsIter=groups.begin();
-		std::map<std::string,gfcFXWidgetGroup>::iterator groupsIterEnd=groups.end();
-		
-		for ( groupsIter;groupsIter!=groupsIterEnd;groupsIter++ )
+
+		//the prepared list already holds the widgets in the order the FX author declared them,
+		//which is what decides the texture units, so walking it replays the old
+		//groups/widgetsOrder walk exactly, minus the per frame name lookups.
+		for ( size_t groupIndex=0;groupIndex<preparedGroups.size();groupIndex++ )
 		{
+			const gfcFXPreparedGroup &preparedGroup=preparedGroups[groupIndex];
+			gfcFXWidgetGroup &group=groups[preparedGroup.name];
 
-
-			/*std::map<std::string,gfcFXWidget>::iterator widgetsIter=groupsIter->second.widgets.begin();
-			std::map<std::string,gfcFXWidget>::iterator widgetsIterEnd=groupsIter->second.widgets.end();*/
-
-			std::vector<std::string>::iterator widgetIter=groupsIter->second.widgetsOrder.begin();
-			std::vector<std::string>::iterator widgetIterEnd=groupsIter->second.widgetsOrder.end();
-
-			for ( widgetIter;widgetIter!=widgetIterEnd;widgetIter++ )
+			for ( size_t bindingIndex=0;bindingIndex<preparedGroup.bindings.size();bindingIndex++ )
 			{
-				//printf("Binding %s\n",widgetsIter->second.varName);
-				//groupsIter->second.widgets[*widgetIter]; //get the actual widget from the map using the name from the
-				switch ( groupsIter->second.widgets[*widgetIter].type )
+				const gfcFXUniformBinding &binding=preparedGroup.bindings[bindingIndex];
+				//the VALUE is always read live from the widget, only the location is cached,
+				//otherwise dragging a slider would stop reaching the shader.
+				gfcFXWidget &widget=group.widgets[binding.widgetName];
+
+				switch ( binding.type )
 				{
 
 					case FX_GUI_BOOL:
 					case FX_GUI_CHOICE:
 					case FX_GUI_FLOAT:
 					{
-
-						GLuint location=glGetUniformLocationARB ( ShaderProgram,groupsIter->second.widgets[*widgetIter].varName.c_str() );
-						//printf("-Binding location %i with value %f to program %i\n",location, groupsIter->second.widgets[*widgetIter].value, ShaderProgram);
-
-						glUniform1fARB ( location,groupsIter->second.widgets[*widgetIter].value );
-
-						//printf("-finished location %i binding\n",location);
+						//printf("-Binding location %i with value %f to program %i\n",binding.location, widget.value, ShaderProgram);
+						if ( binding.location!=-1 )
+							glUniform1fARB ( binding.location,widget.value );
 					}
 					break;
 
@@ -825,28 +912,22 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 						glActiveTexture ( GL_TEXTURE0+CubeUnitCounter );
 						//do a switch to figure out from what sequence we will assign the texture, or if we use the previousTexID
 
-						//printf("binding 3D cube: %i to variable %s in unit GL_TEXTURE0+%i\n",lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).texture3D,groupsIter->second.widgets[*widgetIter].varName.c_str(),CubeUnitCounter);
-						glBindTexture ( GL_TEXTURE_3D,lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).texture3D );
+						//printf("binding 3D cube: %i to variable %s in unit GL_TEXTURE0+%i\n",lutManager.getLUT(widget.value).texture3D,binding.widgetName.c_str(),CubeUnitCounter);
+						glBindTexture ( GL_TEXTURE_3D,lutManager.getLUT ( widget.value ).texture3D );
 
-						glUniform1iARB ( glGetUniformLocationARB ( ShaderProgram,groupsIter->second.widgets[*widgetIter].varName.c_str() ),   CubeUnitCounter ); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
+						if ( binding.location!=-1 )
+							glUniform1iARB ( binding.location,CubeUnitCounter ); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
 
 						CubeUnitCounter++;
-				
-						
+
+
 						glActiveTexture ( GL_TEXTURE0 );
-						
-						
+
+
 						//also pass the lutSize to use in 3d lut calculations
-						{
-							GLuint location=glGetUniformLocationARB(ShaderProgram,std::string(groupsIter->second.widgets[*widgetIter].varName+"_size").c_str());
-							if(location!=-1){
-								glUniform1fARB(location, (float)lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).size);
-					
-							}
-						}
+						if ( binding.sizeLocation!=-1 )
+							glUniform1fARB ( binding.sizeLocation, ( float ) lutManager.getLUT ( widget.value ).size );
 
-
-						//glUniform1f(glGetUniformLocationARB(ShaderProgram,groupsIter->second.widgets[*widgetIter].varName.c_str()),groupsIter->second.widgets[*widgetIter].value);
 					}
 					break;
 
@@ -856,34 +937,28 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 						glActiveTexture ( GL_TEXTURE0+CubeUnitCounter );
 						//do a switch to figure out from what sequence we will assign the texture, or if we use the previousTexID
 
-						//printf("binding 1D cube: %i to variable %s in unit GL_TEXTURE0+%i\n",lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).texture1D,groupsIter->second.widgets[*widgetIter].varName.c_str(),CubeUnitCounter);
-						GLuint location=glGetUniformLocationARB ( ShaderProgram,groupsIter->second.widgets[*widgetIter].varName.c_str() );
-						glBindTexture ( GL_TEXTURE_1D,lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).texture1D );
-						//printf("Bindging texture %i to GL_TEXTURE_1D on location %i\n",lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).texture1D,location);
-						
-						glUniform1iARB ( location,   CubeUnitCounter ); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
+						//printf("binding 1D cube: %i to variable %s in unit GL_TEXTURE0+%i\n",lutManager.getLUT(widget.value).texture1D,binding.widgetName.c_str(),CubeUnitCounter);
+						glBindTexture ( GL_TEXTURE_1D,lutManager.getLUT ( widget.value ).texture1D );
+
+						if ( binding.location!=-1 )
+							glUniform1iARB ( binding.location,CubeUnitCounter ); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
 
 						CubeUnitCounter++;
 
 
 						glActiveTexture ( GL_TEXTURE0 );
 
-						//glUniform1f(glGetUniformLocationARB(ShaderProgram,groupsIter->second.widgets[*widgetIter].varName.c_str()),groupsIter->second.widgets[*widgetIter].value);
 					}
 					break;
 
 					case FX_GUI_TEXTURE:
-
+					{
 
 						glActiveTexture ( GL_TEXTURE0+textureCounter );
-						
-							//pass current textureCoordinates size
-							
-						
 
-						//do a switch to figure out from what sequence we will assign the texture, or if we use the previousTexID						
-						int textureCase=( int ) groupsIter->second.widgets[*widgetIter].value;
-						
+						//do a switch to figure out from what sequence we will assign the texture, or if we use the previousTexID
+						int textureCase=( int ) widget.value;
+
 						switch ( textureCase )
 						{
 							case 0: //use previousTexID
@@ -895,19 +970,12 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 								params.texCoords[textureCounter]=fboTexCoords;
 
 								//pass the size of the texture as a whole also, som shader might use it
-								location=glGetUniformLocationARB ( ShaderProgram,texCoordLocationNames[textureCounter].c_str());
-								if(location!=-1)
+								if ( textureCounter<4 && texCoordLocations[textureCounter]!=-1 )
 								{
-									
-									glUniform2fARB ( location,fboTexCoords.s,fboTexCoords.y );
-									//printf("**%s(%i): %f %f\n",texCoordLocationNames[textureCounter].c_str(),textureCounter,(float)fboTexCoords.s,(float)fboTexCoords.y);
+
+									glUniform2fARB ( texCoordLocations[textureCounter],fboTexCoords.s,fboTexCoords.y );
+									//printf("**%s(%i): %f %f\n",gfcFXTexCoordNames[textureCounter],textureCounter,(float)fboTexCoords.s,(float)fboTexCoords.y);
 								}
-								/*location=glGetUniformLocationARB ( ShaderProgram,texCoordXLocationNames[0].c_str());
-								if(location!=-1) glUniform1fARB ( location,fboTexCoords.r );
-
-								location=glGetUniformLocationARB ( ShaderProgram,texCoordYLocationNames[0].c_str());
-								if(location!=-1) glUniform1fARB ( location,fboTexCoords.s );*/
-
 
 								break;
 							case 1:
@@ -915,7 +983,7 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 							case 3: //Get textures from the trackManager
 							case 4:
 							{
-								gfcFrame tmpFrame = trackManager.getSequence(groupsIter->second.widgets[*widgetIter].value-1)->getFrame(playbackManager.getCurrentFrame(),forcedLoading);
+								gfcFrame tmpFrame = trackManager.getSequence ( widget.value-1 )->getFrame ( playbackManager.getCurrentFrame(),forcedLoading );
 								glBindTexture ( GL_TEXTURE_RECTANGLE_ARB,tmpFrame.textureID );
 								//TODO: Contemplate the case where the texture is compressed so we don't use texture rectangle
 								//set the tex coords in the params, remember that we have to invert the vertical texture coordinates (t for y).
@@ -923,35 +991,30 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 								params.texCoords[textureCounter].y=0;
 								params.texCoords[textureCounter].s=tmpFrame.sizeX;
 								params.texCoords[textureCounter].t=tmpFrame.sizeY;
-								
-								//pass the size of the texture as a whole also, some shader might use it
-								location=glGetUniformLocationARB ( ShaderProgram,texCoordLocationNames[textureCounter].c_str());
-								//printf("Finding location for texCoordLocationNames[%i]=%s =%i shader: %i\n",textureCounter,texCoordLocationNames[textureCounter].c_str(),location,ShaderProgram);
-								if(location!=-1)
-								{
-									
-									glUniform2fARB ( location,tmpFrame.sizeX,tmpFrame.sizeY);
-									//printf("%s(%i): %f %f\n",texCoordLocationNames[textureCounter].c_str(),textureCounter,(float)tmpFrame.sizeX,(float)tmpFrame.sizeY);
-								}
-								/*location=glGetUniformLocationARB ( ShaderProgram,texCoordYLocationNames[textureCase-1].c_str());
-								if(location!=-1){
-									glUniform1fARB ( location,tmpFrame.sizeY );
-									printf("Sending Tex CoordY: %f\n",tmpFrame.sizeY );
-								}*/
 
-								/*params.texCoords[textureCounter].s=tmpFrame.texCoords.w;
-								params.texCoords[textureCounter].t=tmpFrame.texCoords.h;*/
+								//pass the size of the texture as a whole also, some shader might use it
+								if ( textureCounter<4 && texCoordLocations[textureCounter]!=-1 )
+								{
+
+									glUniform2fARB ( texCoordLocations[textureCounter],tmpFrame.sizeX,tmpFrame.sizeY );
+									//printf("%s(%i): %f %f\n",gfcFXTexCoordNames[textureCounter],textureCounter,(float)tmpFrame.sizeX,(float)tmpFrame.sizeY);
+								}
 
 							}
 							break;
 
 
 						}
-						glUniform1iARB ( glGetUniformLocationARB ( ShaderProgram, ( groupsIter->second.widgets[*widgetIter].varName.c_str() ) ),textureCounter ); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
+						if ( binding.location!=-1 )
+							glUniform1iARB ( binding.location,textureCounter ); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
 						glActiveTexture ( GL_TEXTURE0 );
 						textureCounter++;
 
-						break;
+					}
+					break;
+
+					default:
+					break;
 				}
 
 			}
@@ -967,12 +1030,10 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 				glTexParameteri ( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 				params.texCoords[textureCounter]=fboTexCoords;
 				params.texCoords[textureCounter]=fboTexCoords;
-				location=glGetUniformLocationARB ( ShaderProgram,texCoordLocationNames[textureCounter].c_str());
-				//printf("Finding location for texCoordLocationNames[%i]=%s =%i shader: %i\n",textureCounter,texCoordLocationNames[textureCounter].c_str(),location,ShaderProgram);
-				if(location!=-1)
+				if ( texCoordLocations[textureCounter]!=-1 )
 				{
 
-					glUniform2fARB ( location,fboTexCoords.s,fboTexCoords.y);
+					glUniform2fARB ( texCoordLocations[textureCounter],fboTexCoords.s,fboTexCoords.y);
 					//printf("%f %f %f %f\n",fboTexCoords.x, fboTexCoords.y, fboTexCoords.r, fboTexCoords.s);
 				}
 				textureCounter=1;

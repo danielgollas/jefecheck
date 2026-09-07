@@ -92,6 +92,34 @@ std::map<std::string, gfcFXWidget> widgets;
 std::vector<std::string> widgetsOrder;
 };
 
+//A uniform location resolved once, when the shader program is linked.
+//glGetUniformLocationARB() is a driver side search of the program's symbol
+//table, and bind() runs once per active FX, per plate, per frame, so doing the
+//lookups there cost thousands of string searches a second. Uniform locations
+//are stable for the life of a linked program, so they are resolved at load
+//time and only the VALUES are still read live from the widgets on every bind.
+class gfcFXUniformBinding{
+public:
+
+gfcFXUniformBinding(){
+	type=FX_GUI_UNKNOWN;
+	location=-1;
+	sizeLocation=-1;
+}
+
+GFC_FX_GUI_TYPE type; //the kind of widget that drives this uniform
+std::string widgetName; //key into the group's widgets map, so the value stays live
+GLint location; //-1 when the compiler optimized the uniform away, skip it
+GLint sizeLocation; //companion varName+"_size" uniform, cubes only
+};
+
+//The bindings of one widget group, stored in the very order bind() walks them.
+class gfcFXPreparedGroup{
+public:
+std::string name;
+std::vector<gfcFXUniformBinding> bindings;
+};
+
 class gfcFX{
 public:
     gfcFX();
@@ -160,6 +188,23 @@ public:
     GLhandleARB fragmentShader;
     //the Shader Program (handle)
     GLhandleARB ShaderProgram;
+
+    private:
+
+    //resolves every uniform location of the freshly linked ShaderProgram into
+    //preparedGroups. MUST be called from wherever ShaderProgram is linked, and
+    //never lazily from bind(): gfcPlate copies the whole gfcFX by value, so a
+    //list built inside bind() would be built on a temporary and thrown away.
+    void prepareUniformLocations();
+    //drops the prepared list, so a stale location can never survive a relink.
+    void invalidateUniformLocations();
+
+    bool uniformsPrepared;
+    GLint currentFrameLocation;
+    GLint targetFPSLocation;
+    GLint timestepLocation;
+    GLint texCoordLocations[4];
+    std::vector<gfcFXPreparedGroup> preparedGroups;
     //the texture uniforms (map)
     //the cube uniforms (map)
     //the float uniforms (map)
