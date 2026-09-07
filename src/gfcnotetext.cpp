@@ -4,21 +4,16 @@ gfcNoteText::gfcNoteText()
 {
 }
 
-
 gfcNoteText::~gfcNoteText()
 {
-
 }
 
-
-void gfcNoteText::fillSpecificPane()
+gfcNoteType gfcNoteText::noteType() const
 {
-
+	return GFCNOTE_TEXT;
 }
 
-void gfcNoteText::draw()
+std::vector<gfcNotePoint> gfcNoteText::points() const
 {
-
+	return { anchor };
 }
-
-

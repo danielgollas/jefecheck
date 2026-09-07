@@ -5,16 +5,19 @@
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
+	@brief A text note: an anchor point plus a string, in normalised image space.
 */
 class gfcNoteText : public gfcNote
 {
-public:
-    gfcNoteText();
+	public:
+		gfcNoteText();
+		~gfcNoteText() override;
 
-    ~gfcNoteText();
+		gfcNoteType noteType() const override;
+		std::vector<gfcNotePoint> points() const override;
 
-     virtual void draw();
-     virtual void fillSpecificPane();
+		gfcNotePoint anchor;
+		std::string text;
 };
 
 #endif
