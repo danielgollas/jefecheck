@@ -36,7 +36,7 @@ class MainWindow_Qt : public QMainWindow {
 public:
     // --ui-preview: open the Remote dock with the Cloud/admission layouts
     // populated by sample data, for design review without a live session.
-    void showRemoteUiPreview();
+    void showRemoteUiPreview(bool knocking = false);
 
     // --auto-cloud-host / --auto-cloud-join <code>: open the Remote dock and
     // click Host / Join for real, through the same slots a person's mouse

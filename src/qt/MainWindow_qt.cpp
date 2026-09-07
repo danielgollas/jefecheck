@@ -1000,9 +1000,11 @@ void MainWindow_Qt::buildDocks() {
     }
 }
 
-void MainWindow_Qt::showRemoteUiPreview() {
+void MainWindow_Qt::showRemoteUiPreview(bool knocking) {
     if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
-    if (remoteDialog_) remoteDialog_->applyUiPreview();
+    if (!remoteDialog_) return;
+    if (knocking) remoteDialog_->applyUiPreviewKnocking();
+    else          remoteDialog_->applyUiPreview();
 }
 
 void MainWindow_Qt::autoCloudHost() {

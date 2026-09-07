@@ -1153,8 +1153,13 @@ int main(int argc, char* argv[]) {
     // sign-in and lobby wiring exists. Deferred so docks are laid out first.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--ui-preview") == 0) {
-            QTimer::singleShot(0, &window, [&window]() {
-                window.showRemoteUiPreview();
+            // Optional "knock" selects the joiner's waiting screen instead of
+            // the host's lobby. Two different people's views of the same
+            // moment; both need looking at.
+            const bool knocking =
+                i + 1 < argc && std::strcmp(argv[i + 1], "knock") == 0;
+            QTimer::singleShot(0, &window, [&window, knocking]() {
+                window.showRemoteUiPreview(knocking);
             });
             break;
         }

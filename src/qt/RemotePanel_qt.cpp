@@ -9,7 +9,9 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QGroupBox>
+#include <QDateTime>
 #include <QHBoxLayout>
+#include <QProgressBar>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -697,12 +699,74 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     sessionSplitter->setStretchFactor(1, 0);   // log stays compact
     sessionSplitter->setSizes({400, 120});
 
+    // ---- Knock panel (JEF-37, joiner side) -------------------------------
+    // Shown INSTEAD of the connect forms while waiting on the host. Three
+    // things a person needs while blocked on someone else's decision, and the
+    // small amber status line carried none of them: that the request was
+    // actually sent, that the app is still alive, and how long it has been.
+    //
+    // The bar is indeterminate on purpose. There is no progress to report —
+    // a human is deciding — but a still panel and a hung panel look identical,
+    // and that ambiguity is the whole complaint. Motion answers it without
+    // implying a percentage nobody can know.
+    knockPanel_ = new QWidget(this);
+    knockPanel_->setObjectName("remote.knock.panel");
+    // A card, not floating text. Waiting is a state the app is IN, and giving
+    // it its own surface says that more directly than any wording — the
+    // amber matches the status dot for the same phase.
+    knockPanel_->setStyleSheet(
+        "#remote\\.knock\\.panel {"
+        "  background-color: #241f1a;"
+        "  border: 1px solid #4a3a28;"
+        "  border-radius: 6px;"
+        "}");
+    {
+        auto* kl = new QVBoxLayout(knockPanel_);
+        kl->setContentsMargins(16, 14, 16, 14);
+        kl->setSpacing(8);
+
+        auto* title = new QLabel(QStringLiteral("Waiting to be let in"), knockPanel_);
+        title->setObjectName("remote.knock.title");
+        title->setStyleSheet("font-size: 15px; font-weight: 600;");
+        kl->addWidget(title);
+
+        knockDetail_ = new QLabel(knockPanel_);
+        knockDetail_->setObjectName("remote.knock.detail");
+        knockDetail_->setWordWrap(true);
+        knockDetail_->setStyleSheet("color: #a0a0a8;");
+        kl->addWidget(knockDetail_);
+
+        knockBar_ = new QProgressBar(knockPanel_);
+        knockBar_->setObjectName("remote.knock.bar");
+        knockBar_->setRange(0, 0);        // indeterminate — animates by itself
+        knockBar_->setTextVisible(false);
+        knockBar_->setFixedHeight(4);
+        knockBar_->setStyleSheet(
+            "QProgressBar { background-color: #322a22; border: none;"
+            "               border-radius: 2px; }"
+            "QProgressBar::chunk { background-color: #d6a15b;"
+            "                      border-radius: 2px; }");
+        kl->addWidget(knockBar_);
+
+        auto* krow = new QHBoxLayout();
+        krow->addStretch(1);
+        knockCancelBtn_ = new QPushButton(QStringLiteral("Cancel"), knockPanel_);
+        knockCancelBtn_->setObjectName("remote.knock.cancel");
+        krow->addWidget(knockCancelBtn_);
+        kl->addLayout(krow);
+    }
+    knockPanel_->setVisible(false);
+    // Same action as the repurposed Join button: stop waiting, leave the queue.
+    connect(knockCancelBtn_, &QPushButton::clicked,
+            this, &RemoteDialog_Qt::onJoinCloudClicked);
+
     // ---- Assemble --------------------------------------------------------
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(14, 14, 14, 14);
     outer->setSpacing(12);
     outer->addLayout(statusRow);
     outer->addWidget(connectPanel_);
+    outer->addWidget(knockPanel_);
     outer->addWidget(errorLabel_);
     outer->addWidget(sessionSplitter, /*stretch*/ 1);   // fills remaining space
 
@@ -1142,15 +1206,48 @@ void RemoteDialog_Qt::refreshConnectionState() {
 
     // Contextual sections: forms when there is no session, the session view
     // when there is. setVisible / setText are no-ops when unchanged.
-    connectPanel_->setVisible(!st.inSession);
+    // JEF-37: knocking replaces the connect forms rather than sitting beside
+    // them. Leaving the forms up meant a submitted join changed almost nothing
+    // on screen, which read as "the button didn't work" — and the natural
+    // response, pressing Join again, queues a second knock.
+    const bool knocking = st.phase == Phase::Knocking;
+    connectPanel_->setVisible(!st.inSession && !knocking);
+    if (knockPanel_ != nullptr) knockPanel_->setVisible(knocking);
     sessionBox_->setVisible(st.inSession);
+
+    if (knocking) {
+        // Stamp the start once per knock, not once per tick.
+        if (knockStartedMs_ == 0) knockStartedMs_ = QDateTime::currentMSecsSinceEpoch();
+        const qint64 secs =
+            (QDateTime::currentMSecsSinceEpoch() - knockStartedMs_) / 1000;
+        // Naming the code matters when someone is in more than one session's
+        // queue, or suspects they typed the wrong one — the alternative is
+        // cancelling just to re-read what they entered.
+        QString code = QString::fromStdString(st.sessionCode).trimmed();
+        if (code.isEmpty() && joinCodeEdit_ != nullptr)
+            code = joinCodeEdit_->text().trimmed();
+        QString detail = QStringLiteral(
+            "Your request reached the host. They decide when to let you in.");
+        if (!code.isEmpty())
+            detail += QStringLiteral("\nSession %1").arg(code.toHtmlEscaped());
+        detail += secs < 1
+            ? QStringLiteral("\nJust asked")
+            : QStringLiteral("\nWaiting %1").arg(
+                  secs < 60
+                      ? QStringLiteral("%1s").arg(secs)
+                      : QStringLiteral("%1m %2s").arg(secs / 60).arg(secs % 60));
+        if (knockDetail_ != nullptr && knockDetail_->text() != detail)
+            knockDetail_->setText(detail);
+    } else {
+        knockStartedMs_ = 0;
+    }
     // Host ends the session for everyone; a joiner just leaves it.
     disconnectBtn_->setText(st.isHost ? "End Session" : "Leave");
 
     // JEF-37: while knocking, the Join button becomes the way OUT. Without it
     // someone waiting on a host who never answers has no control at all — and
     // a still-live "Join" invites them to queue a second time.
-    if (st.phase == Phase::Knocking) {
+    if (knocking) {
         connectClientBtn_->setEnabled(true);
         connectClientBtn_->setText("Cancel");
         cloudHostBtn_->setEnabled(false);   // can't host while queued elsewhere
@@ -1681,6 +1778,28 @@ void RemoteDialog_Qt::clickJoinWithCode(const QString& code) {
     if (joinModeCodeRadio_ != nullptr) joinModeCodeRadio_->setChecked(true);
     if (joinCodeEdit_ != nullptr) joinCodeEdit_->setText(code);
     if (connectClientBtn_ != nullptr) connectClientBtn_->click();
+}
+
+void RemoteDialog_Qt::applyUiPreviewKnocking() {
+    previewState_ = jefe::qt::RemoteUiState{};
+    previewState_.phase = jefe::qt::RemotePhase::Knocking;
+    previewState_.statusText = "Waiting for the host to let you in…";
+    previewState_.sessionCode = "JEFE-6ZDN";
+    previewState_.inSession = false;
+    previewState_.isHost = false;
+    uiPreviewActive_ = true;
+
+    if (joinToggle_ != nullptr) joinToggle_->setChecked(true);
+    if (hostToggle_ != nullptr) hostToggle_->setChecked(false);
+    if (cloudToggle_ != nullptr) cloudToggle_->setChecked(false);
+    if (joinCodeEdit_ != nullptr) joinCodeEdit_->setText("JEFE-6ZDN");
+
+    // Backdate the stamp so the elapsed readout shows a real duration rather
+    // than "Just asked" — the state worth reviewing is the one that has been
+    // sitting there a while, since that is when people start wondering
+    // whether anything is happening.
+    knockStartedMs_ = QDateTime::currentMSecsSinceEpoch() - 47000;
+    refreshConnectionState();
 }
 
 void RemoteDialog_Qt::applyUiPreview() {

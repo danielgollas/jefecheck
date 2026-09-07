@@ -23,6 +23,7 @@ class QGroupBox;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QProgressBar;
 class QPushButton;
 class QScrollArea;
 class QSpinBox;
@@ -62,6 +63,14 @@ private:
     // Purely presentational; wires nothing.
 public:
     void applyUiPreview();
+    /**
+     * The JOINER half of the preview: knocking, waiting on a host. Separate
+     * because it is a different person's screen — the host preview shows the
+     * lobby being judged, this shows being judged. Reviewing one told us
+     * nothing about the other, which is how the waiting screen shipped as a
+     * status line nobody noticed.
+     */
+    void applyUiPreviewKnocking();
     // Screenshot / hands-off harness entry points. These press the SAME
     // buttons a person does — no shortcut around the panel's own logic.
     void clickHostOnCloud();
@@ -166,6 +175,18 @@ private:
     QWidget*     hostForm_ = nullptr;
     QWidget*     cloudForm_ = nullptr;
     QWidget*     joinForm_ = nullptr;
+    // JEF-37 lobby, joiner side. While knocking, the connect forms come DOWN
+    // and this goes up in their place. Leaving the forms on screen made a
+    // submitted join look like a no-op — same controls, same layout, only a
+    // small status line changed — so people pressed Join again while already
+    // in the queue.
+    QWidget*      knockPanel_ = nullptr;
+    QLabel*       knockDetail_ = nullptr;    // "Asked 12s ago", session code
+    QProgressBar* knockBar_ = nullptr;       // indeterminate: proves liveness
+    QPushButton*  knockCancelBtn_ = nullptr; // the forms' Cancel is hidden now
+    /** When this knock started, for the elapsed readout. 0 = not knocking. */
+    qint64        knockStartedMs_ = 0;
+
     QWidget*     sessionBox_ = nullptr;    // participants + chat + disconnect
     QLabel*      participantsHeader_ = nullptr;
 
