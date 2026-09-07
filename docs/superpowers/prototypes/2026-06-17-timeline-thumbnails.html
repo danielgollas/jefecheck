@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JefeCheck — Timeline Thumbnails Prototype</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; background: #1c1c1c; color: #ddd;
+    font: 13px/1.4 -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  header { padding: 12px 16px; border-bottom: 1px solid #333; }
+  h1 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: #888; font-size: 12px; }
+  .controls {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px 22px; padding: 14px 16px; border-bottom: 1px solid #333;
+  }
+  .ctrl label { display: block; color: #aaa; margin-bottom: 3px; }
+  .ctrl .val { color: #d4771e; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; }
+  select { background:#2a2a2a; color:#ddd; border:1px solid #444; padding:3px 6px; border-radius:4px; }
+  .metrics {
+    padding: 10px 16px; color: #9ad29a; font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid #333; font-size: 12px;
+  }
+  .metrics b { color:#d4771e; }
+  .strips { padding: 8px 16px 40px; overflow-x: auto; }
+  .strip { margin: 14px 0; }
+  .strip .name { color:#bbb; margin-bottom: 5px; font-weight:600; }
+  .strip .desc { color:#777; font-size:11px; margin: 2px 0 6px; }
+  canvas { display:block; background:#111; border:1px solid #2a2a2a; image-rendering:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Timeline Thumbnails — layout prototype</h1>
+  <div class="sub">Placeholder "frames" stand in for decoded thumbnails (hue = frame index, number shown). Sweep the controls — especially <b>Range</b> and <b>Width</b> — to compare how each strategy behaves as frame density changes.</div>
+</header>
+
+<div class="controls">
+  <div class="ctrl"><label>Timeline range (frames): <span class="val" id="rangeV"></span></label>
+    <input type="range" id="range" min="2" max="2000" value="48"></div>
+  <div class="ctrl"><label>Window width (px): <span class="val" id="widthV"></span></label>
+    <input type="range" id="width" min="300" max="1800" value="1100"></div>
+  <div class="ctrl"><label>Row height — preview (px): <span class="val" id="heightV"></span></label>
+    <input type="range" id="height" min="24" max="120" value="46"></div>
+  <div class="ctrl"><label>Slim row height — no preview (px): <span class="val" id="slimV"></span></label>
+    <input type="range" id="slim" min="8" max="28" value="16"></div>
+  <div class="ctrl"><label>Frame aspect (w:h): <span class="val" id="aspectV"></span></label>
+    <select id="aspect">
+      <option value="1.7778">16:9 (1.78)</option>
+      <option value="2.39">2.39:1 scope</option>
+      <option value="1.85">1.85:1</option>
+      <option value="1.3333" selected>4:3 (1.33)</option>
+      <option value="1.0">1:1</option>
+      <option value="0.5625">9:16 vertical</option>
+    </select></div>
+  <div class="ctrl"><label>Loaded: <span class="val" id="loadedV"></span>%</label>
+    <input type="range" id="loaded" min="0" max="100" value="70"></div>
+  <div class="ctrl"><label>Gap between tiles (px): <span class="val" id="gapV"></span></label>
+    <input type="range" id="gap" min="0" max="6" value="0"></div>
+</div>
+
+<div class="metrics" id="metrics"></div>
+
+<div class="strips" id="strips"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ctrls = ["range","width","height","slim","aspect","loaded","gap"];
+ctrls.forEach(c => $(c).addEventListener("input", render));
+
+// One placeholder "frame": a diagonal gradient by hue + the frame number.
+function drawFrameImage(ctx, dx, dy, dw, dh, idx, total) {
+  const hue = total > 1 ? (idx / (total - 1)) * 300 : 0;
+  const g = ctx.createLinearGradient(dx, dy, dx + dw, dy + dh);
+  g.addColorStop(0, `hsl(${hue},45%,42%)`);
+  g.addColorStop(1, `hsl(${(hue + 40) % 360},45%,26%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(dx, dy, dw, dh);
+  // frame number if there's room
+  if (dw >= 16 && dh >= 12) {
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = `${Math.min(11, dh - 4)}px ui-monospace, monospace`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(idx + 1), dx + dw / 2, dy + dh / 2);
+  }
+}
+
+const PAD = 4;        // matches kScrubberPad in the widget
+const GREEN = "#96b996";
+
+// Fit helpers return the drawn rect for a source aspect inside a box.
+function letterbox(aspect, bw, bh) {
+  let w = bh * aspect, h = bh;
+  if (w > bw) { w = bw; h = bw / aspect; }
+  return { w, h };
+}
+
+function metrics(range, usableW) {
+  const ppf = usableW / range;            // pixels per frame ("one tick")
+  return { ppf };
+}
+
+// --- strategies: each returns a list of {x, w, frame} tiles to draw ---
+// loadedX0/loadedX1 = pixel extent of the loaded region.
+function stripPerFrame(range, usableW, loadedFrames) {
+  const ppf = usableW / range;
+  const tiles = [];
+  for (let i = 0; i < loadedFrames; i++) tiles.push({ x: PAD + i * ppf, w: ppf, frame: i });
+  return tiles;
+}
+function stripTiled(range, usableW, h, aspect, gap, loadedFrac) {
+  const thumbW = h * aspect;
+  const loadedW = usableW * loadedFrac;
+  const n = Math.max(1, Math.floor(loadedW / (thumbW + gap)));
+  const tiles = [];
+  for (let j = 0; j < n; j++) {
+    const x = PAD + j * (thumbW + gap);
+    const frame = Math.round(((j + 0.5) / n) * (range - 1));
+    tiles.push({ x, w: thumbW, frame });
+  }
+  return tiles;
+}
+
+function drawStrip(canvas, opts) {
+  const { range, w, h, aspect, loadedFrac, gap, mode } = opts;
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#202020"; ctx.fillRect(0, 0, w, h);
+
+  const usableW = Math.max(w - 2 * PAD, 1);
+  const ppf = usableW / range;                 // pixels per frame ("tick")
+  const loadedFrames = Math.round(range * loadedFrac);
+
+  if (mode === "slim") {
+    ctx.fillStyle = "#555"; ctx.fillRect(PAD, 2, usableW, h - 4);
+    ctx.fillStyle = GREEN; ctx.fillRect(PAD, 2, usableW * loadedFrac, h - 4);
+    return;
+  }
+
+  const stripTop = 2, stripH = h - 4 - 4;       // room for the thin loaded bar
+  const naturalW = stripH * aspect;             // thumbnail's only width
+
+  if (mode === "natural") {
+    // RECOMMENDED: each frame drawn at natural width, centered on its tick
+    // x; skip any frame that would overlap the previous thumbnail. Sparse →
+    // every frame (tick-aligned, gaps); dense → auto-samples + packs.
+    let lastRight = -1e9;
+    for (let i = 0; i < loadedFrames; i++) {
+      const cx = PAD + (i + 0.5) * ppf;
+      let x = cx - naturalW / 2;
+      if (x < lastRight + gap) continue;        // would overlap → skip (sample)
+      // clamp the first/last so they don't bleed past the lane edges
+      x = Math.max(PAD, Math.min(x, PAD + usableW - naturalW));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, stripTop, naturalW, stripH); ctx.clip();
+      drawFrameImage(ctx, x, stripTop, naturalW, stripH, i, range);
+      ctx.restore();
+      lastRight = x + naturalW;
+    }
+  } else if (mode === "perframe-letterbox") {
+    // rejected reference: one slot per frame (slotW = ppf), letterboxed.
+    for (let i = 0; i < loadedFrames; i++) {
+      const slotX = PAD + i * ppf;
+      if (ppf < 0.5) break;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(slotX, stripTop, ppf, stripH); ctx.clip();
+      const f = letterbox(aspect, ppf, stripH);
+      drawFrameImage(ctx, slotX + (ppf - f.w) / 2, stripTop + (stripH - f.h) / 2,
+                     f.w, f.h, i, range);
+      ctx.restore();
+    }
+  } else if (mode === "tiled") {
+    // contrast: natural-width tiles packed left-to-right (ignores tick x).
+    const loadedW = usableW * loadedFrac;
+    const n = Math.max(1, Math.floor(loadedW / (naturalW + gap)));
+    for (let j = 0; j < n; j++) {
+      const x = PAD + j * (naturalW + gap);
+      const frame = Math.round(((j + 0.5) / n) * (range - 1));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, stripTop, naturalW, stripH); ctx.clip();
+      drawFrameImage(ctx, x, stripTop, naturalW, stripH, frame, range);
+      ctx.restore();
+    }
+  }
+
+  ctx.fillStyle = GREEN;
+  ctx.fillRect(PAD, h - 4, usableW * loadedFrac, 3);
+}
+
+const STRATS = [
+  { mode:"slim", name:"Slim (no preview)", desc:"Thumbnails OFF — thin row, green = loaded. Reference." },
+  { mode:"natural", name:"★ Natural width · tick-aligned · skip-overlap (recommended)", desc:"Each frame drawn at its natural width (height×aspect) centered on its tick x; frames whose thumbnail would overlap the previous one are skipped. One rule: sparse shows every frame with gaps, dense auto-samples and packs. Min width = natural ratio." },
+  { mode:"tiled", name:"Tiled · packed (contrast)", desc:"Same natural-width thumbs but packed left-to-right and sampled, ignoring each frame's tick position. Continuous filmstrip look but not position-accurate." },
+  { mode:"perframe-letterbox", name:"Per-frame · letterbox (rejected)", desc:"One slot per frame (slotW = width/range) letterboxed — gets very tight / very short. Shown for contrast." },
+];
+
+function render() {
+  const range = +$("range").value, width = +$("width").value;
+  const height = +$("height").value, slim = +$("slim").value;
+  const aspect = +$("aspect").value, loaded = +$("loaded").value;
+  const gap = +$("gap").value;
+  $("rangeV").textContent = range; $("widthV").textContent = width;
+  $("heightV").textContent = height; $("slimV").textContent = slim;
+  $("aspectV").textContent = aspect.toFixed(2); $("loadedV").textContent = loaded;
+  $("gapV").textContent = gap;
+
+  const usableW = Math.max(width - 2 * PAD, 1);
+  const stripH = height - 8;
+  const ppf = usableW / range;
+  const naturalW = stripH * aspect;
+  const shown = Math.min(range, Math.max(1, Math.floor((usableW * loaded / 100) / (naturalW + gap))));
+  $("metrics").innerHTML =
+    `pixels per frame ("tick") = <b>${ppf.toFixed(2)}px</b> &nbsp;·&nbsp; ` +
+    `natural thumb width (stripH×aspect) = <b>${naturalW.toFixed(0)}px</b> &nbsp;·&nbsp; ` +
+    `recommended strip shows ~<b>${shown}</b> of <b>${range}</b> loaded frames &nbsp;·&nbsp; ` +
+    (ppf >= naturalW ? "→ roomy: every frame drawn at its tick (gaps between)"
+                     : "→ dense: one frame per tick is sub-thumbnail; auto-samples to fit");
+
+  const strips = $("strips"); strips.innerHTML = "";
+  for (const s of STRATS) {
+    const wrap = document.createElement("div"); wrap.className = "strip";
+    const name = document.createElement("div"); name.className = "name"; name.textContent = s.name;
+    const desc = document.createElement("div"); desc.className = "desc"; desc.textContent = s.desc;
+    const cv = document.createElement("canvas");
+    wrap.appendChild(name); wrap.appendChild(desc); wrap.appendChild(cv);
+    strips.appendChild(wrap);
+    drawStrip(cv, {
+      range, w: width, h: (s.mode === "slim" ? slim : height),
+      aspect, loadedFrac: loaded / 100, gap, mode: s.mode,
+    });
+  }
+}
+render();
+</script>
+</body>
+</html>

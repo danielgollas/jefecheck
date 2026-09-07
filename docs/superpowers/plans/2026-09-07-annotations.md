@@ -21,7 +21,7 @@
 - Use ARB shader entry points only (`glUseProgramObjectARB`, not `glUseProgram`). On macOS `GLhandleARB` is `void*`, not `GLuint`; mixing them breaks the build.
 - Initialise every GL handle to `0` in constructors. An uninitialised handle passed to `glDeleteObjectARB` is a trace trap on macOS.
 - Qt code reaches the rendering-chain managers ONLY through `jefe::qt::` accessors in `SequenceLoadBridge_qt`. See `developer_notes.md` §1 — glad and QOpenGLWidget cannot share a translation unit on macOS.
-- The 2006 note files are NOT in `CMakeLists.txt`. Task 0 adds every source file this plan creates; no other task edits `CMakeLists.txt`.
+- **Do not edit `CMakeLists.txt`.** It globs `src/*.cpp` and `src/qt/*.cpp`, so new sources are collected automatically. After creating a new file you MUST re-run `cmake -B build` before building, because a glob is evaluated at configure time and an incremental `cmake --build build` will not see the new file.
 - Build: `cmake -B build && cmake --build build`. Binary: `./build/jefecheck.app/Contents/MacOS/jefecheck`.
 - Test footage: any `.exr` under `/Users/dgollas/projects/openexr-images`.
 - No literal newlines inside a single bash command — join with `&&` or `;`.
@@ -34,7 +34,6 @@ something — report it instead.
 
 | Task | Wave | Owns |
 |---|---|---|
-| 0 | 0 | `CMakeLists.txt` |
 | 1 | 0 | `src/gfcNoteGeometry.h`, `src/gfcnote.{h,cpp}`, `src/gfcnotestroke.{h,cpp}`, `src/gfcnotearrow.{h,cpp}`, `src/gfcnotebox.{h,cpp}`, `src/gfcnotetext.{h,cpp}`, `src/gfcrevision.{h,cpp}`, `src/gfcreview.{h,cpp}` |
 | 2 | 1 | `src/gfcNoteStore.{h,cpp}` |
 | 3 | 1 | `src/gfcNoteOverlay.{h,cpp}` |
@@ -43,57 +42,7 @@ something — report it instead.
 | 6 | 2 | `src/qt/NotesPanel_qt.{h,cpp}`, `src/qt/SequenceLoadBridge_qt.{h,cpp}`, `src/qt/MainWindow_qt.{h,cpp}` |
 | 7 | 2 | `src/main_qt.cpp` |
 
-Tasks 0 and 1 run first, in that order. Then 2, 3, 4 in parallel. Then 5, 6, 7 in parallel.
-
----
-
-### Task 0: Register every new source file in the build
-
-**Files:**
-- Modify: `CMakeLists.txt`
-
-**Interfaces:**
-- Produces: a build that compiles all files this plan creates, so no later task has to touch `CMakeLists.txt` and collide with a sibling.
-
-The 2006 note files (`gfcnote`, `gfcnotetext`, `gfcrevision`, `gfcreview`) are currently NOT in the build at all. Verify with `grep -n gfcnote CMakeLists.txt` — it returns nothing.
-
-- [ ] **Step 1: Find the source list**
-
-Run: `grep -n 'gfcplatemanager.cpp\|add_executable\|set(.*SOURCES' CMakeLists.txt`
-
-- [ ] **Step 2: Add all sources**
-
-Add these to the same list, in the same style as neighbouring entries:
-
-```
-src/gfcnote.cpp
-src/gfcnotestroke.cpp
-src/gfcnotearrow.cpp
-src/gfcnotebox.cpp
-src/gfcnotetext.cpp
-src/gfcrevision.cpp
-src/gfcreview.cpp
-src/gfcNoteStore.cpp
-src/gfcNoteOverlay.cpp
-src/qt/NotesPanel_qt.cpp
-```
-
-- [ ] **Step 3: Create empty stubs so the build stays green**
-
-For each `.cpp` above that does not exist yet, create it containing only a comment:
-`// Implemented in a later task of the JEF-39 plan.`
-Create a matching `.h` with an include guard and nothing else, for each one Task 1 does not own.
-
-- [ ] **Step 4: Verify the build still succeeds**
-
-Run: `cmake -B build && cmake --build build 2>&1 | tail -5`
-Expected: builds and links with no errors.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add CMakeLists.txt src && git commit -m "JEF-39: register annotation sources in the build"
-```
+Task 1 runs first, alone. Then 2, 3, 4 in parallel. Then 5, 6, 7 in parallel.
 
 ---
 

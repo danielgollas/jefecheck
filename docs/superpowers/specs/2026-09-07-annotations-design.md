@@ -17,8 +17,9 @@ is built here. They are **not** in this scope.
 ## Why this shape
 
 JefeCheck has had a sketch of this since 2006: `gfcReview`, `gfcRevision`,
-`gfcNote` and `gfcNoteText` exist as headers with empty method bodies, excluded
-from the build. The hierarchy is right and two of its decisions are sharper than
+`gfcNote` and `gfcNoteText` exist as headers with empty method bodies. They are
+compiled today — the build globs `src/*.cpp` — they simply do nothing and
+nothing references them. The hierarchy is right and two of its decisions are sharper than
 a fresh design would have been:
 
 - `gfcRevision::locked` — a round of notes can be finalised, which is a real
@@ -226,7 +227,7 @@ directly.
 
 **Modified**
 
-- `CMakeLists.txt` — the 2006 note files are NOT currently in the build; all of the above must be added
+- `CMakeLists.txt` — NOT modified. It uses `file(GLOB src/*.cpp)` and `file(GLOB src/qt/*.cpp)`, so every new source is picked up automatically (the 2006 note files are already compiled this way today). The only requirement is re-running `cmake -B build` after adding a file, since a glob is evaluated at configure time.
 - `src/gfcPlate.cpp` — overlay call in `FXPASS_LAST`, and the export composite
 - `src/gfcrenderparams.h` — `burnInNotes`
 - `src/qt/RenderDialog_qt.cpp` — the toggle
