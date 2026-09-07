@@ -78,6 +78,7 @@ bool AuthSession::haveStoredToken() const {
 }
 
 std::string AuthSession::accessToken() const { return d_->accessToken; }
+std::string AuthSession::httpBase() const { return d_->config.httpBase; }
 QString AuthSession::email() const { return d_->email; }
 long long AuthSession::creditBalanceSeconds() const { return d_->balanceSeconds; }
 

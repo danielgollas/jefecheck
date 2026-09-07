@@ -1033,7 +1033,17 @@ int main(int argc, char* argv[]) {
             printf("COORD-LIVE-TEST: code=%s loopback=%d\n",
                    jefe::qt::coordTestGetCode().c_str(), up ? 1 : 0);
             fflush(stdout);
-            if (!up) std::_Exit(2);
+            if (!up) {
+                // Print WHY. A refusal is a legitimate outcome here (hosting
+                // the real service anonymously earns auth-required), and it is
+                // the reason code — not the bare failure — that says whether
+                // the coordinator behaved correctly.
+                printf("COORD-LIVE-TEST: refused code=[%s] message=[%s]\n",
+                       jefe::qt::remoteCoordinatorErrorCode().c_str(),
+                       jefe::qt::remoteCoordinatorErrorMessage().c_str());
+                fflush(stdout);
+                std::_Exit(2);
+            }
             // Hold open so a joiner can knock, then admit it. Prints 0 knocks
             // when run alone, which is a valid outcome — the loopback assertion
             // above is the part that runs unattended.

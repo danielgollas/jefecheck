@@ -63,6 +63,13 @@ public:
     /** Current access token, or "" when none is live. */
     std::string accessToken() const;
 
+    /**
+     * The coordinator HTTP API base this session will talk to. Empty means
+     * unconfigured — callers must report that rather than start a sign-in,
+     * since the browser round trip would only fail after the user consents.
+     */
+    std::string httpBase() const;
+
     /** Identity from the last successful exchange/refresh. */
     QString email() const;
     /** Credit balance in seconds from the last exchange/refresh; -1 unknown. */

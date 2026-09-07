@@ -836,26 +836,36 @@ jefe::auth::AuthSession* RemoteDialog_Qt::authSession() {
 
     jefe::auth::AuthConfig cfg;
     const QString ws = coordinatorUrlSetting().trimmed();
-    // The HTTP API sits alongside the WebSocket coordinator. Derived rather
-    // than configured separately so there is one thing to set, and one thing
-    // that can be wrong.
-    // The HTTP API sits at the same host as the WebSocket coordinator, minus
-    // the API Gateway stage suffix: wss://<id>.execute-api…/dev has its REST
-    // twin at https://<id2>.execute-api…. Allow an explicit override for
-    // deployments where they are not siblings.
+    // Where the HTTP API lives. This used to be DERIVED from the WebSocket URL
+    // by swapping the scheme and dropping the stage, on the assumption that the
+    // two are the same host. On AWS they are not: an API Gateway WebSocket API
+    // and an HTTP API are separate resources with separate ids, so the derived
+    // address pointed at the WebSocket endpoint, which answers every POST with
+    // 426 Upgrade Required. Google sign-in completed, the browser redirected,
+    // and only then did the token exchange hit a wall — reported as a bare
+    // "sign-in failed" with the actual cause nowhere on screen.
+    //
+    // So: no guessing. An explicit setting, an environment override for
+    // testing, and a known constant for the hosted service. Anything else is
+    // reported as unconfigured BEFORE a browser opens.
     {
-        const QString override =
+        const QByteArray env = qgetenv("JEFECHECK_HTTP_API_BASE");
+        const QString setting =
             QSettings().value("Remote/httpApiBase").toString().trimmed();
-        if (!override.isEmpty()) {
-            cfg.httpBase = override.toStdString();
+        if (!env.isEmpty()) {
+            cfg.httpBase = env.toStdString();
+        } else if (!setting.isEmpty()) {
+            cfg.httpBase = setting.toStdString();
+        } else if (ws.contains(QStringLiteral("execute-api"))) {
+            // A raw API Gateway WebSocket URL with no companion configured.
+            // Leaving httpBase empty makes AuthSession fail fast with a
+            // reason, instead of posting credentials at the wrong endpoint.
+            cfg.httpBase.clear();
         } else {
+            // Self-hosted: one process serves both, so same host, no stage.
             QString http = ws;
             http.replace(QStringLiteral("wss://"), QStringLiteral("https://"));
             http.replace(QStringLiteral("ws://"), QStringLiteral("http://"));
-            const int lastSlash = http.lastIndexOf(QLatin1Char('/'));
-            if (lastSlash > http.indexOf(QStringLiteral("//")) + 1) {
-                http = http.left(lastSlash);
-            }
             cfg.httpBase = http.toStdString();
         }
     }
@@ -1048,7 +1058,19 @@ void RemoteDialog_Qt::onCloudConnectFinished(bool wasHost) {
                 failMsg =
                     "This coordinator requires an account, but this build has no "
                     "Google client secret configured, so sign-in cannot complete. "
-                    "Set JEFECHECK_GOOGLE_CLIENT_SECRET and restart.";
+                    "Put Google's credentials file at "
+                    "~/.config/jefecheck/google_client.json and restart.";
+            } else if (ec == "auth-required" &&
+                       (authSession() == nullptr ||
+                        authSession()->httpBase().empty())) {
+                // Caught BEFORE the browser opens. Signing in against an
+                // unknown API address wastes the user's consent and then
+                // fails somewhere they cannot see.
+                failMsg =
+                    "This coordinator requires an account, but the address of its "
+                    "HTTP API is not configured, so sign-in cannot complete. Set "
+                    "Remote/httpApiBase (or $JEFECHECK_HTTP_API_BASE) to the "
+                    "coordinator's https:// endpoint.";
             } else if (ec == "auth-required" && !hostRetryPending_ &&
                 authSession() != nullptr) {
                 // The coordinator wants an account after all. THIS is the
