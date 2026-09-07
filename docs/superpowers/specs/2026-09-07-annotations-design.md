@@ -42,7 +42,11 @@ gfcRevision              one round of notes, in time
   notes[]                std::vector<std::unique_ptr<gfcNote>>
 
 gfcNote (abstract)       existing fields kept unchanged:
-  type, name, quadID, from, to, always, colorR/G/B, size
+  name, quadID, from, to, always, colorR/G/B, size
+  noteType()             REPLACES the stored `type` field — a virtual, so the
+                         declared type can never disagree with the actual
+                         subclass. The XML `type=` attribute is written by
+                         mapping noteType() to a string, not from a field.
   id                     NEW — UUID
   author                 NEW — who drew this note
   geometry               NEW — see below
