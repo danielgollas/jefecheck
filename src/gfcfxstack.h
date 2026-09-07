@@ -39,6 +39,7 @@ public:
     void clearStack();
     void addFX(gfcFX theFX);
     gfcFX getFX(int index);
+    gfcFX& fxAt(int index);
     std::vector< gfcFX > getAllFXs();
 
     // Direct widget-value setter, mirroring processNetFXAttribInfo's

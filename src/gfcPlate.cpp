@@ -1348,7 +1348,15 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                     //JUST A TEST: with the binded fboTexture, draw to the FBO and move on to next step
                     for ( int i=0; i<fxStack.getNumOfFXs();i++ ) {
 
-                        gfcFX theFX=fxStack.getFX(i);
+                        // fxAt() returns a reference into fxStack's backing vector instead of
+                        // getFX()'s by-value copy -- avoids deep-copying the FX's whole param
+                        // tree (nested std::map/std::vector of widget structs with std::strings)
+                        // every frame for every active effect, and lets any state bind() caches
+                        // on the object actually persist between frames instead of living and
+                        // dying on a discarded temporary. Safe here because nothing in this loop
+                        // body adds/removes FXs from fxStack, which is the only thing that could
+                        // invalidate the reference.
+                        gfcFX& theFX=fxStack.fxAt(i);
                         if ( theFX.active ) {
                             //"swap" the active FBO
                             activeFBO=!activeFBO;
