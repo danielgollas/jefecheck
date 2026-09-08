@@ -37,6 +37,21 @@ public:
 
     void Update();
 
+    /**
+     * Note sync (JEF-39). Outgoing messages are QUEUED rather than sent
+     * inline because only Update() owns the transport pump; it flushes
+     * whatever accumulated since the last tick.
+     *
+     * These were briefly file-static globals in the .cpp, because the task
+     * that added them was scoped to the .cpp files and could not declare a
+     * member here. That is a scoping artefact, not a design: the queues
+     * belong to the client that drains them, and a second client instance
+     * would have silently shared one global.
+     */
+    void queueNoteMessage(std::vector<unsigned char> bytes);
+    /** Note add/remove/lock events received since the last call. */
+    std::vector<jefe::net::NoteSyncEvent> drainNoteSyncEvents();
+
 
 	void saveCurrentToRecentIPs();
 	void setRecent(std::vector<std::string> recents);
@@ -78,6 +93,9 @@ public:
     gfcPointerStorage pointers;
 
 private:
+    std::vector<std::vector<unsigned char>> pendingOutgoingNoteMessages_;
+    std::vector<jefe::net::NoteSyncEvent>   pendingNoteSyncEvents_;
+
     void setStatusInternal(std::string s, int color);
 
     bool gotMessages;

@@ -625,7 +625,8 @@ inline std::unique_ptr<gfcNote> unserializeNote(RakNet::BitStream* bs) {
 // this task does not own.
 //
 // Instead: gfcNetworkManager::broadcastNoteAdd/Remove/RevisionLock (see
-// gfcnetworkmanager.cpp) hand a fully-encoded message to queueClientMessage()
+// gfcnetworkmanager.cpp) hand a fully-encoded message to
+// gfcNetworkClient::queueNoteMessage()
 // below; gfcNetworkClient::Update() -- an EXISTING method, so its body is in
 // scope -- flushes that queue to the server once per pump. Symmetrically,
 // drainNoteSyncEvents() lets a future consumer (the notes dock, Task 6) pull
@@ -638,20 +639,12 @@ inline std::unique_ptr<gfcNote> unserializeNote(RakNet::BitStream* bs) {
 // gfcnetworkclient.h in scope could fold this into proper member methods.
 namespace jefe { namespace net {
 
-// Queues a fully-encoded outgoing message (leading type byte included) to be
-// sent to the server on the next gfcNetworkClient::Update() pump.
-void queueClientMessage(std::vector<unsigned char> bytes);
-
 struct NoteSyncEvent {
 	enum Kind { Add, Remove, RevisionLock } kind = Add;
 	std::unique_ptr<gfcNote> note;   // set when kind == Add
 	std::string noteId;              // set when kind == Remove
 	std::string revisionId;          // set when kind == RevisionLock
 };
-
-// Drains note add/remove/lock events the client has received since the last
-// call.
-std::vector<NoteSyncEvent> drainNoteSyncEvents();
 
 } } // namespace jefe::net
 
