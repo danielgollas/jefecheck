@@ -18,6 +18,8 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 
 #include "gfcimagesaver.h"
 
+#include "gfcNoteOverlay.h"
+
 #include "gfchistogram.h"
 
 // "Screen" framebuffer for the active GL context. 0 under FLTK; under Qt's
@@ -1217,6 +1219,48 @@ void gfcPlate::updateRot ( float timeStep, bool flip, bool flop ) {
 
 }
 
+// ---------------------------------------------------------------------------
+// Note overlay
+//
+// Notes are stored in normalised image space: x and y in 0..1 across the
+// source image, with (0,0) the image's TOP-LEFT corner and y increasing
+// DOWNWARD. That is what a drawing tool naturally produces (a mouse position
+// is top-down) and what the sidecar stores.
+//
+// GL at both call sites is y-up: the on-screen ortho is
+// glOrtho(-w/2, w/2, -h/2, h/2) (gfcplatemanager.cpp) and the FBO's is
+// glOrtho(-fboVP.w/2, fboVP.w/2, -fboVP.h/2, fboVP.h/2) above. In both, the
+// image's top row lives at POSITIVE y. That one fact is the whole Y story:
+// callers pass a rect whose origin sits at the TOP and whose height is
+// NEGATIVE, so normalised y walks downward. gfcNoteOverlay::mapPoint is
+// deliberately a straight affine map with no flip of its own, so the decision
+// belongs here, in the code that knows how the plate is oriented.
+//
+// Flip and flop are deliberately NOT expressed in the rect. On screen this is
+// called inside startTransform()/endTransform(), so the plate's flip
+// (glRotatef(rX,1,0,0)) and flop (glRotatef(rY,0,1,0)) are already in the
+// modelview and carry the notes around with the image — which is the entire
+// point of storing geometry in image space rather than screen pixels.
+// Negating the rect on top of that would flip the notes twice and mirror them
+// relative to the frame they annotate. The export path applies no flip/flop at
+// all today (its modelview is identity), so it needs none either.
+// ---------------------------------------------------------------------------
+void gfcPlate::drawNoteOverlay(float originX, float originY, float extentX, float extentY) {
+    if (plateNotes.empty())
+        return;   // the common case: no GL touched at all, so a plate with no
+                  // annotations renders exactly as it did before this existed.
+
+    gfcNoteOverlay::Rect target;
+    target.x = originX;
+    target.y = originY;
+    target.w = extentX;
+    target.h = extentY;
+
+    // draw() filters by quadID and frame range and saves/restores the bound
+    // shader program plus all GL state, so there is nothing to do around it.
+    gfcNoteOverlay::draw(plateNotes, currentFrame, quadID, target);
+}
+
 void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
     if (!myGUI)
         return;
@@ -1452,6 +1496,20 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                 glDisable(GL_TEXTURE_RECTANGLE_ARB);
                 stopSuperShader();
 
+                // Burn the notes in, if asked. Same reasoning as on screen:
+                // after the super-shader, never through it. Before the crop
+                // bake below, so a baked letterbox covers markup that fell
+                // outside the framing, exactly as it does on screen.
+                //
+                // (Only on the ping-pong path. A forceSingleBufferedFX GPU
+                // can't run this pass at all, which is why it already loses
+                // colour correction in renders; notes share that limitation
+                // rather than inventing a second, untested composite.)
+                if (renderParams.burnInNotes) {
+                    drawNoteOverlay(-fboVP.w/2.0f,  fboVP.h/2.0f,
+                                     (float)fboVP.w, -(float)fboVP.h);
+                }
+
                 // Optional: bake the aspect/crop letterbox into the render.
                 // The crop bars are computed in poly space; scale them to the
                 // FBO. Opaque black (a letterbox is solid, unlike the on-screen
@@ -1597,6 +1655,16 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
 			stopSuperShader();
             glBindTexture ( GL_TEXTURE_RECTANGLE_ARB,0 );
             glDisable ( GL_TEXTURE_RECTANGLE_ARB );
+
+            // Annotations, on the transformed quad we just textured, so they
+            // track pan, zoom, flip and flop with the image. This is AFTER
+            // stopSuperShader() on purpose: markup must never go through
+            // colour correction, or a note's red would shift when exposure is
+            // pulled and the markup would start lying about itself. The quad
+            // spans +/-polySize/2 with the image's top at +polySizeY/2, hence
+            // the negative height.
+            drawNoteOverlay(-polySizeX/2.0f,  polySizeY/2.0f,
+                             polySizeX,      -polySizeY);
         }
 		
         drawCropBars();
@@ -1726,6 +1794,17 @@ void gfcPlate::draw3Drect(int pcurrentFrame) {
             glEnd();
 			stopSuperShader();
             glColorMask(1,1,1,1);
+
+            // Annotations. Same rect and the same after-the-super-shader rule
+            // as the FX path in draw3DrectWithFX(); see drawNoteOverlay().
+            //
+            // The plan named only draw3DrectWithFX, but that function only
+            // runs when the plate has an active FX or is rendering — a plate
+            // with a clean stack comes through here instead, and that is the
+            // common case. Notes that vanished the moment you removed an FX
+            // would be a worse bug than the one line this costs.
+            drawNoteOverlay(-polySizeX/2.0f,  polySizeY/2.0f,
+                             polySizeX,      -polySizeY);
         }
         //END OF DRAW THE TEXTURED POLY
         //Stop the effects we needed for the alpha background

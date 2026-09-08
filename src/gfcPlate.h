@@ -24,6 +24,7 @@
 //#include "mtpoly.h"
 
 class gfcRenderParams;
+class gfcNote;   // annotations; only ever held by pointer here, see setNotes()
 struct GFLC_BITMAP;
 class gfcSequence;
 class gfcFrame;
@@ -282,6 +283,21 @@ class gfcPlate: public gfcPickNotifee
 	bool forRender; //turn on when rendering, turn off when drawing to screen. 
 	//gfcPlateRenderParams renderParams;
 	gfcRenderParams renderParams;
+
+	/** The notes this plate draws over its image, in normalised image space.
+	    Empty by default, and empty means the render path is byte-identical to
+	    a build without annotations: gfcNoteOverlay::draw() returns before it
+	    touches any GL state when there is nothing to draw.
+
+	    The plate does NOT own these and does NOT filter them. Ownership stays
+	    with the gfcReview / gfcRevision that holds the unique_ptrs; the
+	    overlay filters by quadID and frame range itself. The Notes dock is
+	    what populates this (it owns the loaded review), re-pushing the list
+	    whenever the review changes, notes are toggled off, or the plate's
+	    footage changes. Every pointer must outlive the next draw. */
+	void setNotes(const std::vector<const gfcNote*>& pNotes) { plateNotes = pNotes; }
+	void clearNotes() { plateNotes.clear(); }
+	const std::vector<const gfcNote*>& getNotes() const { return plateNotes; }
 	//MtPoly poly;
 	
 	//network pointer vars
@@ -293,6 +309,13 @@ class gfcPlate: public gfcPickNotifee
 	
 	bool forceSingleBufferedFX;
 private:
+
+	std::vector<const gfcNote*> plateNotes;   // see setNotes(); not owned
+
+	// Maps normalised image space (0..1, y down from the image's top-left)
+	// onto whatever GL rectangle the caller is currently drawing in.
+	// Defined in gfcPlate.cpp so this header keeps pulling in no note headers.
+	void drawNoteOverlay(float originX, float originY, float extentX, float extentY);
 
 	void buildShader(int useLut,int useGammaExp, int useBCS, int useRGBMask,int textureType);
     void calculatePolySizesCropEtc();
