@@ -1030,6 +1030,13 @@ bool noteDrawInProgress();
     after anything that changes a review: a draw, a sync event, a media load. */
 void syncPlateNotes();
 
+/**
+ * Put one of each note type on a plate, for --notes-demo. Coordinates are
+ * literal normalised values so the result is identical every run, which is
+ * what makes it usable as a visual regression shot rather than a picture.
+ */
+void addDemoNotes(int plateIdx);
+
 bool notesVisible();
 void setNotesVisible(bool visible);
 void toggleNotesVisible();

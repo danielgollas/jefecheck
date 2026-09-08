@@ -2413,6 +2413,60 @@ void setNotesVisible(bool visible) { g_notesVisible = visible; }
 
 void syncPlateNotes() { syncPlateNotesImpl(); }
 
+void addDemoNotes(int plateIdx) {
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) {
+        printf("NOTES-DEMO: no media on plate %d\n", plateIdx);
+        fflush(stdout);
+        return;
+    }
+    gfcRevision* rev = review->openRevision();
+    if (!rev) rev = &review->beginRevision("demo");
+
+    auto stamp = [&](gfcNote& n, float r, float g, float bl, int size) {
+        n.quadID = plateIdx;
+        n.always = true;          // visible on every frame, so the shot is stable
+        n.author = "demo";
+        n.colorR = r; n.colorG = g; n.colorB = bl;
+        n.size = size;
+    };
+
+    // A freehand squiggle circling something, the way a supervisor actually
+    // marks a frame.
+    auto stroke = std::make_unique<gfcNoteStroke>();
+    for (int i = 0; i <= 40; ++i) {
+        const float t = float(i) / 40.0f * 6.2831853f;
+        stroke->pts.push_back(gfcNotePoint{
+            0.30f + 0.10f * std::cos(t),
+            0.34f + 0.13f * std::sin(t) });
+    }
+    stamp(*stroke, 1.0f, 0.25f, 0.20f, 3);
+    rev->addNote(std::move(stroke));
+
+    auto arrow = std::make_unique<gfcNoteArrow>();
+    arrow->tail = gfcNotePoint{0.62f, 0.20f};
+    arrow->head = gfcNotePoint{0.44f, 0.32f};
+    stamp(*arrow, 1.0f, 0.78f, 0.20f, 3);
+    rev->addNote(std::move(arrow));
+
+    auto box = std::make_unique<gfcNoteBox>();
+    box->a = gfcNotePoint{0.55f, 0.55f};
+    box->b = gfcNotePoint{0.86f, 0.82f};
+    stamp(*box, 0.35f, 0.85f, 1.0f, 2);
+    rev->addNote(std::move(box));
+
+    auto text = std::make_unique<gfcNoteText>();
+    text->anchor = gfcNotePoint{0.55f, 0.52f};
+    text->text = "too warm here";
+    stamp(*text, 0.35f, 0.85f, 1.0f, 2);
+    rev->addNote(std::move(text));
+
+    printf("NOTES-DEMO: plate %d now has %d note(s)\n",
+           plateIdx, (int)rev->notes.size());
+    fflush(stdout);   // the process may be killed before stdio drains
+    syncPlateNotesImpl();
+}
+
 bool noteDrawingArmed() { return g_noteDrawArmed; }
 void setNoteDrawingArmed(bool armed) {
     g_noteDrawArmed = armed;

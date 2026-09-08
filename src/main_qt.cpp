@@ -11,6 +11,7 @@
 #include <QSettings>
 #include <QStringList>
 #include <QSurfaceFormat>
+#include <QPixmap>
 #include <QTimer>
 
 #include <cstdlib>
@@ -348,6 +349,35 @@ int main(int argc, char* argv[]) {
         QTimer::singleShot(0, &window, [&window, plateIdx, path]() {
             window.loadFileIntoPlate(plateIdx, path);
         });
+    }
+
+    // --notes-demo: put one of each note type on plate 0 once the footage
+    // has decoded, so the annotation overlay can be seen (and screenshotted)
+    // without anyone drawing by hand. Coordinates are fixed, so the resulting
+    // frame is comparable run to run rather than merely illustrative.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--notes-demo") == 0) {
+            QTimer::singleShot(2500, &window, []() {
+                jefe::qt::addDemoNotes(0);
+            });
+            break;
+        }
+    }
+
+    // --screenshot <path> [delayMs]: grab the window itself, not the screen,
+    // so the image is the application and nothing overlapping it.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--screenshot") != 0) continue;
+        const QString path = QString::fromUtf8(argv[i + 1]);
+        int delayMs = 4000;
+        if (i + 2 < argc && argv[i + 2][0] != '-') delayMs = std::atoi(argv[i + 2]);
+        QTimer::singleShot(delayMs, &window, [&window, path]() {
+            const QPixmap shot = window.grab();
+            printf("SCREENSHOT=%s ok=%d\n", path.toUtf8().constData(),
+                   shot.save(path) ? 1 : 0);
+            fflush(stdout);
+        });
+        break;
     }
 
     // Headless render smoke test (--render-test <dir>): after the footage
