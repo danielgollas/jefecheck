@@ -100,7 +100,12 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolGroup->addButton(toolBox_,      jefe::qt::NOTETOOL_BOX);
     toolGroup->addButton(toolText_,     jefe::qt::NOTETOOL_TEXT);
     connect(toolGroup, &QButtonGroup::idClicked, this,
-            [](int id) { jefe::qt::setActiveNoteTool(id); });
+            [](int id) {
+                jefe::qt::setActiveNoteTool(id);
+                // Picking a tool arms drawing on the viewport. Until this,
+                // the tool buttons set state nothing read.
+                jefe::qt::setNoteDrawingArmed(true);
+            });
     switch (jefe::qt::activeNoteTool()) {
         case jefe::qt::NOTETOOL_ARROW: toolArrow_->setChecked(true); break;
         case jefe::qt::NOTETOOL_BOX:   toolBox_->setChecked(true); break;

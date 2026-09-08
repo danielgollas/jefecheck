@@ -149,6 +149,28 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
         const bool ctrl  = e->modifiers().testFlag(Qt::ControlModifier);
         const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
         const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
+
+        // JEF-39: with a note tool armed, a left-drag draws instead of
+        // panning or picking. Checked FIRST — a pick pass would consume the
+        // click, and panning under the pencil would move the image out from
+        // under the stroke being drawn on it.
+        if (jefe::qt::noteDrawingArmed()) {
+            const int plate = jefe::qt::plateAtViewportPos(
+                int(lastMouseX_), int(lastMouseY_), width(), height());
+            makeCurrent();
+            const bool began = jefe::qt::noteDrawBegin(xFb, yFb, plate);
+            doneCurrent();
+            if (began) {
+                noteDragActive_ = true;
+                dragPlate_ = -1;          // do not also pan
+                update();
+                if (listener_) listener_->onEvent(jefe::ui::EventType::Push);
+                return;
+            }
+            // Missed the image, or the round is locked. Fall through to the
+            // normal handling rather than swallowing the click silently.
+        }
+
         makeCurrent();
         const bool picked = jefe::qt::viewportPickDown(xFb, yFb, ctrl, alt, shift) != 0;
         doneCurrent();
@@ -182,6 +204,15 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
 }
 
 void GlViewport_Qt::mouseReleaseEvent(QMouseEvent* e) {
+    if (noteDragActive_) {
+        noteDragActive_ = false;
+        jefe::qt::noteDrawEnd();   // adds, broadcasts and saves the sidecar
+        update();
+        emit plateStateChanged();  // the dock's list has a new row
+        if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
+        return;
+    }
+
     if (pickDragActive_) {
         const float dpr = devicePixelRatioF();
         const int xFb = int(float(e->position().x()) * dpr);
@@ -210,6 +241,17 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent* e) {
 }
 
 void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
+    if (noteDragActive_) {
+        const float dpr = devicePixelRatioF();
+        const int xFb = int(float(e->position().x()) * dpr);
+        const int yFb = int((float(height()) - float(e->position().y())) * dpr);
+        makeCurrent();
+        jefe::qt::noteDrawAppend(xFb, yFb);
+        doneCurrent();
+        update();   // live feedback: the line follows the cursor as it is drawn
+        return;
+    }
+
     // Pick-overlay drag (histogram sub-window). Latched on press; runs the
     // pick dispatch with the GL context current and consumes the motion so
     // the plate doesn't also pan.
@@ -410,6 +452,17 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
 }
 
 void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
+    // JEF-39: Escape puts the pencil down. Checked before the chat handler
+    // below claims Escape, but only when a tool is actually armed, so chat
+    // keeps its cancel key the rest of the time.
+    if (e->key() == Qt::Key_Escape && jefe::qt::noteDrawingArmed() &&
+        !jefe::qt::remoteChatModeActive()) {
+        jefe::qt::setNoteDrawingArmed(false);
+        update();
+        emit plateStateChanged();
+        return;
+    }
+
     // Remote chat entry: when in chat mode, keystrokes build the message.
     if (jefe::qt::remoteChatModeActive()) {
         if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {

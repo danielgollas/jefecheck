@@ -2040,7 +2040,7 @@ std::vector<ChatEntry> remoteChatEntries() {
 // JEF-39: forward-declared here so pumpNetwork() (just below) can drain
 // inbound note sync events; defined with the rest of the Notes dock support
 // near the end of this file, alongside the gfcReview storage it touches.
-namespace { bool applyInboundNoteSyncEvents(); }
+namespace { bool applyInboundNoteSyncEvents(); void syncPlateNotesImpl(); }
 
 bool pumpNetwork() {
     static bool        prevConnected = false;
@@ -2063,6 +2063,9 @@ bool pumpNetwork() {
     // "changed" signal as chat/participants so MainWindow's tick refreshes
     // the Notes dock exactly the way it already refreshes the Remote dialog.
     const bool notesApplied = applyInboundNoteSyncEvents();
+    // A note that arrived from a peer changed the store; push it through to
+    // the plates or it stays invisible until something else happens to sync.
+    if (notesApplied) syncPlateNotesImpl();
     const bool changed = (nowConnected != prevConnected) ||
                          (nowPeers != prevPeers) || (nowChat != prevChat) ||
                          (nowStatus != prevStatus) || gotInbound || notesApplied;
@@ -2203,6 +2206,36 @@ gfcReview* reviewForPlate(int plateIdx) {
     if (seq->filenameGeneric.empty()) return nullptr;
     return &reviewForPath(gfcNoteStore::normalisePath(seq->filenameGeneric));
 }
+
+// ---------------------------------------------------------------------------
+// Store -> renderer. gfcPlate::setNotes takes BORROWED pointers, so what is
+// pushed must outlive the next draw: these point into g_noteReviews, which
+// lives for the session and is only mutated here, never mid-frame.
+// ---------------------------------------------------------------------------
+void syncPlateNotesImpl() {
+    for (int i = 0; i < plateManager.plateCount(); ++i) {
+        std::vector<const gfcNote*> out;
+        if (gfcReview* review = reviewForPlate(i)) {
+            // Every revision, locked or not: a locked round stays VISIBLE,
+            // which is the whole reason the model has rounds — you give
+            // Wednesday's notes while looking at Monday's.
+            for (const auto& revision : review->revisions)
+                for (const auto& n : revision.notes)
+                    if (n) out.push_back(n.get());
+        }
+        plateManager.setPlateNotes(i, out);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mouse drawing.
+// ---------------------------------------------------------------------------
+bool g_noteDrawArmed = false;
+int  g_drawPlate = -1;
+std::unique_ptr<gfcNote> g_drawNote;
+
+/** Points collected so far; for arrow/box only the first and last matter. */
+std::vector<gfcNotePoint> g_drawPoints;
 
 bool applyInboundNoteSyncEvents() {
     bool applied = false;
@@ -2377,6 +2410,103 @@ int  activeNoteSize() { return g_noteSize; }
 
 bool notesVisible() { return g_notesVisible; }
 void setNotesVisible(bool visible) { g_notesVisible = visible; }
+
+void syncPlateNotes() { syncPlateNotesImpl(); }
+
+bool noteDrawingArmed() { return g_noteDrawArmed; }
+void setNoteDrawingArmed(bool armed) {
+    g_noteDrawArmed = armed;
+    if (!armed) noteDrawCancel();
+}
+bool noteDrawInProgress() { return g_drawNote != nullptr; }
+
+void noteDrawCancel() {
+    g_drawNote.reset();
+    g_drawPoints.clear();
+    g_drawPlate = -1;
+}
+
+bool noteDrawBegin(int xFb, int yFb, int plateIdx) {
+    noteDrawCancel();
+    if (!g_noteDrawArmed || plateIdx < 0) return false;
+
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) return false;
+    // Refuse before the first point rather than at commit: letting someone
+    // draw a whole stroke and then silently dropping it is worse than not
+    // letting the stroke start.
+    gfcRevision* open = review->openRevision();
+    if (open && open->locked) return false;
+
+    float nx = 0.0f, ny = 0.0f;
+    if (!plateManager.cursorToNormalisedImage(xFb, yFb, plateIdx, nx, ny)) return false;
+
+    switch (activeNoteTool()) {
+        case NOTETOOL_ARROW: g_drawNote = std::make_unique<gfcNoteArrow>(); break;
+        case NOTETOOL_BOX:   g_drawNote = std::make_unique<gfcNoteBox>();   break;
+        case NOTETOOL_TEXT:  g_drawNote = std::make_unique<gfcNoteText>();  break;
+        default:             g_drawNote = std::make_unique<gfcNoteStroke>(); break;
+    }
+    g_drawPlate = plateIdx;
+    g_drawPoints.assign(1, gfcNotePoint{nx, ny});
+
+    g_drawNote->quadID = plateIdx;
+    g_drawNote->author = localAuthorName();
+    // A note drawn on a paused frame belongs to that frame. from==to is the
+    // spec's default and the reviewer can widen it in the dock afterwards.
+    const int f = getCurrentFrame();
+    g_drawNote->from = f;
+    g_drawNote->to   = f;
+    getActiveNoteColor(g_drawNote->colorR, g_drawNote->colorG, g_drawNote->colorB);
+    g_drawNote->size = activeNoteSize();
+    return true;
+}
+
+void noteDrawAppend(int xFb, int yFb) {
+    if (!g_drawNote || g_drawPlate < 0) return;
+    float nx = 0.0f, ny = 0.0f;
+    // A drag that leaves the image keeps the last point inside it rather than
+    // ending the note — people overshoot constantly and losing the stroke for
+    // it would be maddening.
+    if (!plateManager.cursorToNormalisedImage(xFb, yFb, g_drawPlate, nx, ny)) return;
+    g_drawPoints.push_back(gfcNotePoint{nx, ny});
+    // Live feedback: the in-progress note is pushed into the plate each move
+    // so the reviewer sees the line as they draw it, not on release.
+    if (auto* stroke = dynamic_cast<gfcNoteStroke*>(g_drawNote.get()))
+        stroke->pts = g_drawPoints;
+    else if (auto* arrow = dynamic_cast<gfcNoteArrow*>(g_drawNote.get()))
+        { arrow->tail = g_drawPoints.front(); arrow->head = g_drawPoints.back(); }
+    else if (auto* box = dynamic_cast<gfcNoteBox*>(g_drawNote.get()))
+        { box->a = g_drawPoints.front(); box->b = g_drawPoints.back(); }
+}
+
+bool noteDrawEnd() {
+    if (!g_drawNote || g_drawPlate < 0) { noteDrawCancel(); return false; }
+
+    // A click with no drag is a degenerate arrow or box — zero-area, invisible,
+    // and pure clutter in the dock. A single-point freehand is a legitimate
+    // dot, so only the two-point tools are rejected.
+    const bool needsDrag = g_drawNote->noteType() == GFCNOTE_ARROW ||
+                           g_drawNote->noteType() == GFCNOTE_BOX;
+    if (needsDrag && g_drawPoints.size() < 2) { noteDrawCancel(); return false; }
+
+    gfcReview* review = reviewForPlate(g_drawPlate);
+    if (!review) { noteDrawCancel(); return false; }
+    gfcRevision* open = review->openRevision();
+    if (!open) open = &review->beginRevision(localAuthorName());
+
+    const gfcNote& sent = *g_drawNote;
+    networkManager.broadcastNoteAdd(sent);      // before the move steals it
+    const bool added = open->addNote(std::move(g_drawNote));
+    if (added) {
+        gfcNoteStore::save(*review);
+        syncPlateNotesImpl();
+    }
+    g_drawPoints.clear();
+    g_drawPlate = -1;
+    g_drawNote.reset();
+    return added;
+}
 void toggleNotesVisible() { g_notesVisible = !g_notesVisible; }
 
 }  // namespace jefe::qt

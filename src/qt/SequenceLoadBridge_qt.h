@@ -1005,6 +1005,31 @@ int  activeNoteSize();
 // on-screen overlay call site (Task 5, gfcPlate.cpp -- not owned by Task 6)
 // reads it; see the Task 6 report for the forward-declared accessor Task 5
 // needs to call.
+// --- Mouse drawing on the viewport --------------------------------------
+// Armed by picking a tool in the Notes dock; disarmed by Escape or by
+// toggling the tool off. While armed the viewport draws instead of panning,
+// which is why it is an explicit flag rather than "a tool is selected" —
+// a reviewer who has ever touched the dock would otherwise lose panning
+// for the rest of the session.
+bool noteDrawingArmed();
+void setNoteDrawingArmed(bool armed);
+
+/** Begin a note on the plate under the cursor. Framebuffer coords, GL y-up.
+    False when the point misses the image or the round is locked. */
+bool noteDrawBegin(int xFb, int yFb, int plateIdx);
+/** Extend the in-progress note. No-op when none is in progress. */
+void noteDrawAppend(int xFb, int yFb);
+/** Commit: add to the open revision, broadcast, save the sidecar.
+    False when nothing was in progress or the note was degenerate. */
+bool noteDrawEnd();
+/** Discard an in-progress note (Escape). */
+void noteDrawCancel();
+bool noteDrawInProgress();
+
+/** Push every plate's notes from the review store into the renderer. Call
+    after anything that changes a review: a draw, a sync event, a media load. */
+void syncPlateNotes();
+
 bool notesVisible();
 void setNotesVisible(bool visible);
 void toggleNotesVisible();

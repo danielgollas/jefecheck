@@ -103,6 +103,12 @@ public:
 
     void setCursorCoords(int cx, int cy);
     Vec3D getCursorPositionIn2DSpace(int px, int py, int quadID);
+    bool cursorToNormalisedImage(int px, int py, int whichOne, float& nx, float& ny);
+    /** How many plates exist. */
+    int  plateCount() const;
+    /** Hand a plate its BORROWED note pointers; they must outlive the next
+        draw. Kept as a method so `plates` stays private. */
+    void setPlateNotes(int whichOne, const std::vector<const gfcNote*>& notes);
     void storePointerInfo(gfcNetRemotePointerInfo info);
     
     void setRemotePointerOptions(int pfontSize, int psize, bool pfade, int pfadeDelay, bool ptrail, float ptrailLenght,int pColor);

@@ -1274,6 +1274,22 @@ void gfcPlate::drawNoteOverlay(float originX, float originY, float extentX, floa
     gfcNoteOverlay::draw(plateNotes, currentFrame, quadID, target);
 }
 
+bool gfcPlate::cursorToNormalisedImage(int px, int py, float& nx, float& ny) {
+    if (!theFrame.loaded) return false;
+    if (polySizeX <= 0.0f || polySizeY <= 0.0f) return false;
+
+    const Vec3D v = getCursorPositionIn2DSpace(px, py);
+
+    // drawNoteOverlay maps 0..1 onto (-polySizeX/2, +polySizeY/2) with extent
+    // (+polySizeX, -polySizeY). This is that, solved for the normalised pair.
+    nx = (float(v.x) + polySizeX * 0.5f) / polySizeX;
+    ny = (polySizeY * 0.5f - float(v.y)) / polySizeY;
+
+    // Outside the image is a miss, not a clamp. Clamping would silently pin a
+    // stray click to the border and produce a note the user never drew.
+    return nx >= 0.0f && nx <= 1.0f && ny >= 0.0f && ny <= 1.0f;
+}
+
 void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
     if (!myGUI)
         return;

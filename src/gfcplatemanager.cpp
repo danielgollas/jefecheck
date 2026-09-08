@@ -1293,6 +1293,21 @@ Vec3D gfcPlateManager::getCursorPositionIn2DSpace(int px, int py, int whichOne) 
     return tmpVec;
 }
 
+bool gfcPlateManager::cursorToNormalisedImage(int px, int py, int whichOne,
+                                             float& nx, float& ny) {
+    if (whichOne < 0 || whichOne >= (int)plates.size()) return false;
+    return plates[whichOne].cursorToNormalisedImage(px, py, nx, ny);
+}
+
+int gfcPlateManager::plateCount() const {
+    return (int)plates.size();
+}
+
+void gfcPlateManager::setPlateNotes(int whichOne, const std::vector<const gfcNote*>& notes) {
+    if (whichOne < 0 || whichOne >= (int)plates.size()) return;
+    plates[whichOne].setNotes(notes);
+}
+
 std::vector< gfcNetTransformationInfo > gfcPlateManager::getTransformations() {
     std::vector< gfcNetTransformationInfo  > result;
     int size=plates.size();

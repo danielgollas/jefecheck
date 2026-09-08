@@ -318,6 +318,21 @@ private:
 	void drawNoteOverlay(float originX, float originY, float extentX, float extentY,
                              bool honorVisibilityToggle = true);
 
+    public:
+        /**
+         * Screen point -> normalised image space (0..1, y DOWN), the exact
+         * inverse of what drawNoteOverlay() maps out. Returns false when the
+         * plate has no frame or the point misses the image, so a stray click
+         * outside the picture cannot start a note at a nonsense coordinate.
+         *
+         * px/py are FRAMEBUFFER coordinates with y already flipped GL-style,
+         * matching what viewportPickDown() is given. Requires a current GL
+         * context: getCursorPositionIn2DSpace gluUnProjects through this
+         * plate's live modelview, which is what makes pan, zoom, flip and
+         * flop come out right without re-deriving any of them here.
+         */
+        bool cursorToNormalisedImage(int px, int py, float& nx, float& ny);
+
 	void buildShader(int useLut,int useGammaExp, int useBCS, int useRGBMask,int textureType);
     void calculatePolySizesCropEtc();
     void drawCropBars();
