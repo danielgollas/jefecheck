@@ -903,6 +903,111 @@ bool saveCCFavoritesFile(const std::string& path);
 bool loadCCFavoritesFile(const std::string& path);
 std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
 
+// --- Notes dock (JEF-39 Task 6) ---------------------------------------------
+// NotesPanel_Qt must not include gfcreview.h / gfcrevision.h / gfcnote.h --
+// only this TU may (developer_notes.md §1). Everything the dock needs comes
+// through the plain-data accessors below, mirroring the PlaylistTrackDetail /
+// ChatEntry convention already in this header.
+
+// One drawn note, flattened out of gfcNote so the panel never touches the
+// polymorphic type. typeIndex mirrors gfcNoteType (0 stroke, 1 arrow, 2 box,
+// 3 text) without pulling in gfcnote.h's enum.
+struct NoteRow {
+    std::string id;
+    std::string author;
+    int   typeIndex = 0;
+    int   quadID = 0;
+    int   from = 0, to = 0;
+    bool  always = false;
+    float colorR = 1.0f, colorG = 0.2f, colorB = 0.2f;
+    int   size = 3;
+};
+
+// One round of notes and the notes drawn on THIS plate within it (a shared
+// gfcReview can hold notes for other quads too -- see gfcNote::quadID in the
+// spec -- those are filtered out here since this plate's dock only shows its
+// own markup).
+struct RevisionRow {
+    std::string id;
+    std::string author;
+    long long   created = 0;   // time_t, widened for the panel's plain int use
+    bool        locked = false;
+    std::vector<NoteRow> notes;
+};
+
+// Revisions for the media loaded on `plateIdx`, most-recent first. Empty
+// (not an error) when nothing is loaded or no notes have been drawn yet.
+// Lazily loads the sidecar the first time a given plate's media is asked
+// about (gfcNoteStore::load), then serves the in-memory gfcReview after
+// that, the same lazy-load-once shape gfcSessionManager uses for its XML.
+std::vector<RevisionRow> notesForPlate(int plateIdx);
+
+// True when `plateIdx` has media loaded (so the dock's controls should be
+// enabled even if no notes have been drawn on it yet).
+bool notesAvailableForPlate(int plateIdx);
+
+// Lock/unlock state of `plateIdx`'s review, for the dock's single "Lock
+// Round" button (it flips to "Unlock Round" and back rather than being two
+// buttons -- mirrors the transport play/pause toggle).
+enum NoteLockState { NOTELOCK_NONE = 0, NOTELOCK_OPEN = 1, NOTELOCK_LOCKED = 2 };
+int  noteLockState(int plateIdx);
+
+// Locks the open (last unlocked) revision, persists the sidecar, and
+// broadcasts GFCNETID_REVISIONLOCKMESSAGE (see gfcnetworkmanager.h). Returns
+// false (refuses, changes nothing) when there is no open revision, or when
+// !isNotesHost().
+bool lockOpenRevision(int plateIdx);
+
+// Unlocks the most recent revision if it is locked. Local-only: Task 4 did
+// not add a wire message for unlock (only GFCNETID_REVISIONLOCKMESSAGE), so
+// this does not sync to remote peers -- see the Task 6 report for the
+// follow-up this leaves. Returns false when nothing is locked, or when
+// !isNotesHost().
+bool unlockLatestRevision(int plateIdx);
+
+// True when this client may lock/unlock: solo (no remote session) is always
+// allowed; in a session, only the host may (mirrors "Locking is a host
+// action" in the design). Also gates the dock's lock button enablement.
+bool isNotesHost();
+
+// The name attributed to notes THIS client adds/removes -- sett.nickName,
+// falling back to "local" when unset (matches the Remote panel's nickname
+// field, preferences.remote.nickname.edit).
+std::string localAuthorName();
+
+// True when `noteId` on `plateIdx` may be removed by this client: its
+// revision must be unlocked, and the requester must be the note's author or
+// the session host (mirrors "Removal is limited to the note's author or the
+// host" in the spec). Query-only, for the Remove button's enabled state.
+bool canRemoveNote(int plateIdx, const std::string& noteId);
+
+// Removes `noteId` from `plateIdx`'s review, persists, and broadcasts
+// GFCNETID_NOTEREMOVEMESSAGE. Refuses (returns false, changes nothing) when
+// !canRemoveNote -- callers should already have disabled the control, this
+// is the belt-and-suspenders check.
+bool removeNoteFromPlate(int plateIdx, const std::string& noteId);
+
+// --- Drawing-tool selection ---------------------------------------------
+// State only. Mouse drawing on the viewport is NOT wired by Task 6 (see the
+// plan's file-ownership map) -- these accessors just give a future viewport
+// hook one place to read the reviewer's chosen tool/colour/size instead of
+// the dock reaching into gfcPlate directly.
+enum NoteTool { NOTETOOL_FREEHAND = 0, NOTETOOL_ARROW, NOTETOOL_BOX, NOTETOOL_TEXT };
+void setActiveNoteTool(int tool);
+int  activeNoteTool();
+void setActiveNoteColor(float r, float g, float b);
+void getActiveNoteColor(float& r, float& g, float& b);
+void setActiveNoteSize(int size);
+int  activeNoteSize();
+
+// Bare `N` visibility toggle (MainWindow_qt.cpp). Pure UI state until the
+// on-screen overlay call site (Task 5, gfcPlate.cpp -- not owned by Task 6)
+// reads it; see the Task 6 report for the forward-declared accessor Task 5
+// needs to call.
+bool notesVisible();
+void setNotesVisible(bool visible);
+void toggleNotesVisible();
+
 }  // namespace jefe::qt
 
 #endif

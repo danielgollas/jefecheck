@@ -15,6 +15,10 @@
 #include "../gfcplaylistitem.h"
 #include "../gfcnetworkmanager.h"
 #include "../gfcsessionmanager.h"
+#include "../gfcreview.h"
+#include "../gfcrevision.h"
+#include "../gfcnote.h"
+#include "../gfcNoteStore.h"
 #include "../gfcpickmanager.h"
 #include "../xmlParser.h"
 #include "../gfcSequence.h"
@@ -29,6 +33,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <thread>
 
@@ -2031,6 +2036,11 @@ std::vector<ChatEntry> remoteChatEntries() {
     return out;
 }
 
+// JEF-39: forward-declared here so pumpNetwork() (just below) can drain
+// inbound note sync events; defined with the rest of the Notes dock support
+// near the end of this file, alongside the gfcReview storage it touches.
+namespace { bool applyInboundNoteSyncEvents(); }
+
 bool pumpNetwork() {
     static bool        prevConnected = false;
     static size_t      prevPeers     = 0;
@@ -2046,9 +2056,15 @@ bool pumpNetwork() {
     // only repaints on local input — without this the receiver wouldn't redraw
     // remote changes until the user interacted locally.
     const bool gotInbound = networkManager.consumeGotMessages();
+    // JEF-39: apply inbound note add/remove/lock events into the in-memory
+    // gfcReview store (see the Notes dock section below) so a remote peer's
+    // markup shows up here without a local interaction. Folded into the same
+    // "changed" signal as chat/participants so MainWindow's tick refreshes
+    // the Notes dock exactly the way it already refreshes the Remote dialog.
+    const bool notesApplied = applyInboundNoteSyncEvents();
     const bool changed = (nowConnected != prevConnected) ||
                          (nowPeers != prevPeers) || (nowChat != prevChat) ||
-                         (nowStatus != prevStatus) || gotInbound;
+                         (nowStatus != prevStatus) || gotInbound || notesApplied;
     prevConnected = nowConnected; prevPeers = nowPeers; prevChat = nowChat;
     prevStatus = nowStatus;
     return changed;
@@ -2141,5 +2157,225 @@ void remoteChatSubmit() {
     networkManager.gChatTextString.clear();
     networkManager.gChatMode = 0;
 }
+
+// -----------------------------------------------------------------------
+// Notes dock (JEF-39 Task 6)
+//
+// One gfcReview per piece of footage (mediaPath is the identity, matching
+// the spec), not per plate -- two plates showing the same sequence share a
+// review, and gfcNote::quadID picks out which plate's markup a note is.
+// g_noteReviews holds every review touched this session; reviewForPlate()
+// resolves "whichever review belongs to the media currently on this plate"
+// and lazily loads its sidecar (gfcNoteStore::load) the first time that
+// media is asked about, mirroring gfcSessionManager's own lazy-XML shape.
+// -----------------------------------------------------------------------
+namespace {
+
+// gfcReview declares its own destructor (~gfcReview(), gfcreview.h), which
+// suppresses the implicit move constructor, and it holds a
+// vector<gfcRevision> whose notes are unique_ptr -- so gfcReview is neither
+// copyable nor movable. std::vector<gfcReview> can't grow (push_back would
+// need to relocate existing elements). Hence unique_ptr<gfcReview> here.
+std::vector<std::unique_ptr<gfcReview>> g_noteReviews;
+
+// Finds the in-memory review for `normalisedPath`, loading its sidecar on
+// first touch. `load()` leaves its argument untouched on failure, and the
+// argument already has mediaPath set, so a review with no sidecar yet still
+// comes back with the right identity and zero revisions.
+gfcReview& reviewForPath(const std::string& normalisedPath) {
+    for (auto& r : g_noteReviews) {
+        if (r->mediaPath == normalisedPath) return *r;
+    }
+    auto r = std::make_unique<gfcReview>();
+    r->mediaPath = normalisedPath;
+    gfcNoteStore::load(normalisedPath, *r);
+    g_noteReviews.push_back(std::move(r));
+    return *g_noteReviews.back();
+}
+
+// nullptr when nothing is loaded on this plate -- mirrors the
+// getPreviewFrame().loaded gate getLoadedSequenceName() already uses.
+gfcReview* reviewForPlate(int plateIdx) {
+    gfcSequence* seq = sequenceForPlate(plateIdx);
+    if (!seq) return nullptr;
+    if (!seq->getPreviewFrame().loaded) return nullptr;
+    if (seq->filenameGeneric.empty()) return nullptr;
+    return &reviewForPath(gfcNoteStore::normalisePath(seq->filenameGeneric));
+}
+
+bool applyInboundNoteSyncEvents() {
+    bool applied = false;
+    for (auto& ev : networkManager.drainNoteSyncEvents()) {
+        using Kind = jefe::net::NoteSyncEvent::Kind;
+        if (ev.kind == Kind::Add && ev.note) {
+            gfcReview* review = reviewForPlate(ev.note->quadID);
+            if (!review) continue;
+            gfcRevision* open = review->openRevision();
+            if (!open) open = &review->beginRevision(ev.note->author);
+            if (open->addNote(std::move(ev.note))) {
+                gfcNoteStore::save(*review);
+                applied = true;
+            }
+        } else if (ev.kind == Kind::Remove) {
+            for (auto& review : g_noteReviews) {
+                bool removedHere = false;
+                for (auto& revision : review->revisions) {
+                    if (revision.removeNote(ev.noteId)) { removedHere = true; break; }
+                }
+                if (removedHere) { gfcNoteStore::save(*review); applied = true; break; }
+            }
+        } else if (ev.kind == Kind::RevisionLock) {
+            for (auto& review : g_noteReviews) {
+                bool lockedHere = false;
+                for (auto& revision : review->revisions) {
+                    if (revision.id == ev.revisionId) {
+                        revision.locked = true;
+                        revision.modified = time(nullptr);
+                        lockedHere = true;
+                    }
+                }
+                if (lockedHere) { gfcNoteStore::save(*review); applied = true; }
+            }
+        }
+    }
+    return applied;
+}
+
+// Drawing-tool selection state (Task 6 does not wire mouse drawing -- see
+// the plan's file-ownership map). Kept as plain file-scope state so a
+// future viewport hook has one accessor to read instead of the dock
+// reaching into gfcPlate.
+int   g_activeNoteTool  = NOTETOOL_FREEHAND;
+float g_noteColorR = 1.0f, g_noteColorG = 0.2f, g_noteColorB = 0.2f;
+int   g_noteSize   = 3;
+bool  g_notesVisible = true;
+
+}  // namespace
+
+std::vector<RevisionRow> notesForPlate(int plateIdx) {
+    std::vector<RevisionRow> out;
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) return out;
+    // Most-recent first: beginRevision() appends, so walk in reverse.
+    for (auto it = review->revisions.rbegin(); it != review->revisions.rend(); ++it) {
+        RevisionRow rr;
+        rr.id      = it->id;
+        rr.author  = it->author;
+        rr.created = static_cast<long long>(it->created);
+        rr.locked  = it->locked;
+        for (auto& n : it->notes) {
+            // This review may hold notes for a sibling plate showing the
+            // same footage (gfcNote::quadID) -- only this plate's markup
+            // belongs in its own dock.
+            if (n->quadID != plateIdx) continue;
+            NoteRow nr;
+            nr.id        = n->id;
+            nr.author    = n->author;
+            nr.typeIndex = static_cast<int>(n->noteType());
+            nr.quadID    = n->quadID;
+            nr.from      = n->from;
+            nr.to        = n->to;
+            nr.always    = n->always;
+            nr.colorR    = n->colorR;
+            nr.colorG    = n->colorG;
+            nr.colorB    = n->colorB;
+            nr.size      = n->size;
+            rr.notes.push_back(std::move(nr));
+        }
+        out.push_back(std::move(rr));
+    }
+    return out;
+}
+
+bool notesAvailableForPlate(int plateIdx) {
+    return reviewForPlate(plateIdx) != nullptr;
+}
+
+int noteLockState(int plateIdx) {
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) return NOTELOCK_NONE;
+    if (review->openRevision() != nullptr) return NOTELOCK_OPEN;
+    if (!review->revisions.empty() && review->revisions.back().locked) return NOTELOCK_LOCKED;
+    return NOTELOCK_NONE;
+}
+
+bool isNotesHost() {
+    return !isRemoteConnected() || isRemoteServer();
+}
+
+std::string localAuthorName() {
+    return sett.nickName.empty() ? std::string("local") : sett.nickName;
+}
+
+bool lockOpenRevision(int plateIdx) {
+    if (!isNotesHost()) return false;
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) return false;
+    gfcRevision* open = review->openRevision();
+    if (!open) return false;
+    open->locked = true;
+    open->modified = time(nullptr);
+    gfcNoteStore::save(*review);
+    networkManager.broadcastRevisionLock(open->id);
+    return true;
+}
+
+bool unlockLatestRevision(int plateIdx) {
+    // Local-only: Task 4 (gfcnetworkmanager.h) added a wire message for LOCK
+    // (GFCNETID_REVISIONLOCKMESSAGE) but not its unlock counterpart, so this
+    // does not sync to remote peers. See the Task 6 report.
+    if (!isNotesHost()) return false;
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review || review->revisions.empty()) return false;
+    gfcRevision& latest = review->revisions.back();
+    if (!latest.locked) return false;
+    latest.locked = false;
+    latest.modified = time(nullptr);
+    gfcNoteStore::save(*review);
+    return true;
+}
+
+bool canRemoveNote(int plateIdx, const std::string& noteId) {
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) return false;
+    for (auto& revision : review->revisions) {
+        for (auto& n : revision.notes) {
+            if (n->id != noteId) continue;
+            if (revision.locked) return false;
+            return isNotesHost() || n->author == localAuthorName();
+        }
+    }
+    return false;
+}
+
+bool removeNoteFromPlate(int plateIdx, const std::string& noteId) {
+    if (!canRemoveNote(plateIdx, noteId)) return false;
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) return false;
+    for (auto& revision : review->revisions) {
+        if (revision.removeNote(noteId)) {
+            gfcNoteStore::save(*review);
+            networkManager.broadcastNoteRemove(noteId);
+            return true;
+        }
+    }
+    return false;
+}
+
+void setActiveNoteTool(int tool) { g_activeNoteTool = tool; }
+int  activeNoteTool() { return g_activeNoteTool; }
+
+void setActiveNoteColor(float r, float g, float b) {
+    g_noteColorR = r; g_noteColorG = g; g_noteColorB = b;
+}
+void getActiveNoteColor(float& r, float& g, float& b) {
+    r = g_noteColorR; g = g_noteColorG; b = g_noteColorB;
+}
+void setActiveNoteSize(int size) { g_noteSize = size; }
+int  activeNoteSize() { return g_noteSize; }
+
+bool notesVisible() { return g_notesVisible; }
+void setNotesVisible(bool visible) { g_notesVisible = visible; }
+void toggleNotesVisible() { g_notesVisible = !g_notesVisible; }
 
 }  // namespace jefe::qt

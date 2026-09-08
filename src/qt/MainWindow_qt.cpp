@@ -3,6 +3,7 @@
 #include "FXLutPanel_qt.h"
 #include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
+#include "NotesPanel_qt.h"
 #include "PlaylistPanel_qt.h"
 #include "RemotePanel_qt.h"
 #include "ImageLoadBridge_qt.h"
@@ -321,6 +322,11 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         // remote changes show without needing a local interaction on this side.
         if (jefe::qt::pumpNetwork()) {
             if (remoteDialog_) remoteDialog_->refreshConnectionState();
+            // JEF-39: pumpNetwork() also drains inbound note add/remove/lock
+            // events into the in-memory review store, folded into the same
+            // "changed" signal as chat/participants -- refresh the dock so a
+            // remote peer's markup shows up without a local interaction.
+            if (notesPanelWidget_) notesPanelWidget_->refresh();
             wantRepaint = true;
         }
         // Skip everything when nothing is playing and no raw frames are
@@ -598,6 +604,19 @@ void MainWindow_Qt::buildMenuBar() {
                         this, []() {
         jefe::qt::toggleHistogramAll();
     })->setObjectName("menu.view.histogramall");
+    // JEF-39: bare N toggles note-overlay visibility (verified free --
+    // F H L M O P R T V are taken). ApplicationShortcut context matches the
+    // bare-H help-overlay toggle below so it fires regardless of which
+    // dock/widget has focus.
+    auto* notesVisibleAction = viewMenu->addAction(
+        tr("Show &Notes"), QKeySequence(Qt::Key_N), this, [this]() {
+            jefe::qt::toggleNotesVisible();
+            if (viewport_) viewport_->update();
+        });
+    notesVisibleAction->setShortcutContext(Qt::ApplicationShortcut);
+    notesVisibleAction->setCheckable(true);
+    notesVisibleAction->setChecked(jefe::qt::notesVisible());
+    notesVisibleAction->setObjectName("menu.view.notesvisible");
     viewMenu->addSeparator();
     // Toggle actions for each dock. createDockWidget() exposes a built-in
     // toggleViewAction() that flips visibility and tracks state for us.
@@ -936,6 +955,23 @@ void MainWindow_Qt::buildDocks() {
     if (lutDock_) tabifyDockWidget(lutDock_, remoteDock_);
     remoteDock_->hide();   // hidden until the user opens it from a menu
 
+    // Notes — right side (JEF-39 Task 6). Qt tabifies it with the LUT
+    // (and hidden Remote) group rather than honoring a plain vertical split
+    // once that group already exists -- same tabbed-group behavior Remote
+    // already gets below -- so it's requested explicitly here instead of
+    // pretending it will stay split. toggleViewAction()'s raise() (wired
+    // below, addDockToggle) brings its tab to front on F7.
+    notesDock_ = new QDockWidget("Notes", this);
+    notesDock_->setObjectName("dock.notes");
+    notesDock_->setAccessibleName("Notes dock");
+    notesPanelWidget_ = new NotesPanel_Qt(notesDock_);
+    notesDock_->setWidget(notesPanelWidget_);
+    notesDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    notesPanelWidget_->setMinimumWidth(220);
+    notesPanelWidget_->setMinimumHeight(160);
+    addDockWidget(Qt::RightDockWidgetArea, notesDock_);
+    if (lutDock_) tabifyDockWidget(lutDock_, notesDock_);
+
     // Refresh the FX param panel whenever viewport-driven plate edits
     // fire (this also catches active-plate changes — clicking a plate
     // card emits plateStateChanged via PlateManager_Qt's wiring).
@@ -949,6 +985,15 @@ void MainWindow_Qt::buildDocks() {
     // The idle playback tick skips repaints when nothing's playing, so a
     // stack change otherwise wouldn't show until the next viewport move.
     connect(fxParamPanelWidget_, &FXParamPanel_Qt::viewportRepaintRequested,
+            this, [this]() { if (viewport_) viewport_->update(); });
+
+    // JEF-39: same two triggers as the FX panel above -- active-plate switch
+    // refreshes the Notes dock's revision/note list, and its own actions
+    // (jump/lock/unlock/remove) ask for a repaint the same way FX edits do.
+    connect(viewport_, &GlViewport_Qt::plateStateChanged,
+            notesPanelWidget_, &NotesPanel_Qt::refresh,
+            Qt::QueuedConnection);
+    connect(notesPanelWidget_, &NotesPanel_Qt::viewportRepaintRequested,
             this, [this]() { if (viewport_) viewport_->update(); });
 
     // JEF-17: populate the consolidated Panels menu now that the docks exist.
@@ -976,6 +1021,7 @@ void MainWindow_Qt::buildDocks() {
         addDockToggle(fxParamsDock_, QKeySequence(Qt::Key_F3), "menu.panels.fxparams");
         addDockToggle(lutDock_,      QKeySequence(Qt::Key_F4), "menu.panels.lut");
         addDockToggle(playlistDock_, QKeySequence(),           "menu.panels.playlist");
+        addDockToggle(notesDock_,    QKeySequence(Qt::Key_F7), "menu.panels.notes");
 
         panelsMenu_->addSeparator();
         // Remote Session… (F5): the modeless persistent dock (JEF-4). Lazy-
