@@ -20,6 +20,9 @@
 #include <QProcess>
 
 #include "gfcStructures.h"
+#include "gfcnote.h"
+#include "gfcNoteStore.h"
+#include "gfcNoteOverlay.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
@@ -159,6 +162,16 @@ static bool hasAspectTest(int argc, char* argv[]) {
     return false;
 }
 
+// --notes-test : headless JEF-39 regression. Runs the note model, sidecar
+// store, and overlay geometry self-tests (pure data/arithmetic, no GL or
+// window needed). Runs all three even if an earlier one fails, so a
+// developer sees every broken area at once. Takes no argument.
+static bool hasNotesTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--notes-test") == 0) return true;
+    return false;
+}
+
 // --remote-test : orchestrator/server role (spawns a peer child).
 static bool hasRemoteTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
@@ -276,6 +289,21 @@ int main(int argc, char* argv[]) {
     if (hasAspectTest(argc, argv)) {
         const bool ok = jefe::qt::runAspectSelfTest();
         std::_Exit(ok ? 0 : 2);
+    }
+
+    // Headless note self-tests (--notes-test, JEF-39): model, sidecar store,
+    // and overlay geometry are all pure data/arithmetic, no window or GL
+    // needed. Runs all three regardless of earlier failures, so a developer
+    // sees every broken area in one pass, then exits non-zero if any failed.
+    if (hasNotesTest(argc, argv)) {
+        const int modelFail   = noteModelSelfTest();
+        const int storeFail   = noteStoreSelfTest();
+        const int overlayFail = noteOverlaySelfTest();
+        // The self-tests print via std::printf but do not flush; std::_Exit
+        // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
+        // stdout not a tty) would silently drop all three lines.
+        std::fflush(stdout);
+        std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0) ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
