@@ -328,6 +328,7 @@ struct RenderParams {
     int exrFormat       = 0;    // GFC_HALF=0, GFC_FLOAT=1
     int bitsPerChannel  = 8;    // 8 or 16 (PNG/TIFF)
     bool bakeCropBars   = false; // burn aspect/crop letterbox bars into output
+    bool burnInNotes    = false; // burn annotation markup into output
 };
 
 // Returns a sample filename built from `params` using the existing

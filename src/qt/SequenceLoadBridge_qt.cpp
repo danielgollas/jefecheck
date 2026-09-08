@@ -875,6 +875,7 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     p.exrFormat       = src.exrFormat;
     p.bitsPerChannel  = src.bitsPerChannel;
     p.bakeCropBars    = src.bakeCropBars;
+    p.burnInNotes     = src.burnInNotes;
     return p;
 }
 }  // namespace

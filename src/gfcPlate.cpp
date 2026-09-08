@@ -1245,7 +1245,20 @@ void gfcPlate::updateRot ( float timeStep, bool flip, bool flop ) {
 // relative to the frame they annotate. The export path applies no flip/flop at
 // all today (its modelview is identity), so it needs none either.
 // ---------------------------------------------------------------------------
-void gfcPlate::drawNoteOverlay(float originX, float originY, float extentX, float extentY) {
+// Declared in src/qt/SequenceLoadBridge_qt.h. Forward-declared rather than
+// included: it takes and returns only plain types, so the rendering chain can
+// ask the question without pulling a Qt header into this TU (developer_notes §1).
+namespace jefe { namespace qt { bool notesVisible(); } }
+
+void gfcPlate::drawNoteOverlay(float originX, float originY, float extentX, float extentY,
+                               bool honorVisibilityToggle) {
+    // Bare `N` hides notes ON SCREEN. It deliberately does NOT reach the
+    // export path: burn-in is governed only by its own Render-dialog
+    // checkbox, so what you hide from your own view can never silently
+    // change what a delivered render contains.
+    if (honorVisibilityToggle && !jefe::qt::notesVisible())
+        return;
+
     if (plateNotes.empty())
         return;   // the common case: no GL touched at all, so a plate with no
                   // annotations renders exactly as it did before this existed.
@@ -1506,8 +1519,13 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                 // colour correction in renders; notes share that limitation
                 // rather than inventing a second, untested composite.)
                 if (renderParams.burnInNotes) {
+                    // honorVisibilityToggle=false: this is the EXPORT path.
+                    // The user ticked "Burn in notes"; whether they happen to
+                    // have notes hidden on their own screen is irrelevant to
+                    // what the render must contain.
                     drawNoteOverlay(-fboVP.w/2.0f,  fboVP.h/2.0f,
-                                     (float)fboVP.w, -(float)fboVP.h);
+                                     (float)fboVP.w, -(float)fboVP.h,
+                                     /*honorVisibilityToggle*/ false);
                 }
 
                 // Optional: bake the aspect/crop letterbox into the render.

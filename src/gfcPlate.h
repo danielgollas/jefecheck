@@ -315,7 +315,8 @@ private:
 	// Maps normalised image space (0..1, y down from the image's top-left)
 	// onto whatever GL rectangle the caller is currently drawing in.
 	// Defined in gfcPlate.cpp so this header keeps pulling in no note headers.
-	void drawNoteOverlay(float originX, float originY, float extentX, float extentY);
+	void drawNoteOverlay(float originX, float originY, float extentX, float extentY,
+                             bool honorVisibilityToggle = true);
 
 	void buildShader(int useLut,int useGammaExp, int useBCS, int useRGBMask,int textureType);
     void calculatePolySizesCropEtc();

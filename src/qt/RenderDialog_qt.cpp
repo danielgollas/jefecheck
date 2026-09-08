@@ -35,27 +35,6 @@ namespace {
 // The dialog talks to the core through jefe::qt::RenderParams, the mirror
 // struct in SequenceLoadBridge_qt.h. `burnInNotes` exists on the core
 // gfcRenderParams (gfcrenderparams.h) but the mirror and its copy function
-// live in files this change does not own, so it detects the field instead of
-// assuming it: the checkbox is inert until that one-line mirror + one-line
-// copy land, and starts working the moment they do, without touching this
-// file again. See the task report.
-template <class P, class = void>
-struct HasBurnInNotes : std::false_type {};
-template <class P>
-struct HasBurnInNotes<P, std::void_t<decltype(std::declval<P&>().burnInNotes)>>
-    : std::true_type {};
-
-// Must be a template: `if constexpr` only discards a branch inside one. In a
-// plain function the discarded statement is still type-checked, so writing the
-// member access directly would not compile until the field exists.
-template <class P>
-void setBurnInNotes(P& params, bool on) {
-    if constexpr (HasBurnInNotes<P>::value) {
-        params.burnInNotes = on;
-    } else {
-        (void)params; (void)on;
-    }
-}
 }  // namespace
 
 namespace {
@@ -678,7 +657,7 @@ void RenderDialog_Qt::startRender() {
     renderParams_.bakeCropBars = bakeCropBarsCheck_->isChecked();
     if (const auto* notesCheck =
             findChild<QCheckBox*>("dialog.render.notes.check")) {
-        setBurnInNotes(renderParams_, notesCheck->isChecked());
+        renderParams_.burnInNotes = notesCheck->isChecked();
     }
     renderParams_.jpegQuality     = jpegQualitySpin_->value();
     renderParams_.jpegProgressive = jpegProgressiveCheck_->isChecked();
