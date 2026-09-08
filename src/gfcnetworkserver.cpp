@@ -49,6 +49,37 @@ const int kColorPaletteSize = sizeof(kColorPalette) / sizeof(kColorPalette[0]);
 const int kDefaultColor = packRGB(128, 128, 128);
 }  // namespace
 
+namespace {
+// JEF-39: server-side cache of the currently known open-revision notes, so a
+// joiner can be handed a snapshot the same way GFCNETID_PEERSINSESSION hands
+// them the current peer list (see the GFCNETID_NICKNAMESEND handling below).
+// File-static rather than a gfcNetworkServer member because
+// gfcnetworkserver.h is out of scope for this change -- see
+// gfcNetworkStructures.h for the full rationale.
+std::vector<std::unique_ptr<gfcNote>> g_openRevisionNotes;
+bool g_revisionLocked = false;
+std::string g_lockedRevisionId;
+
+gfcNote* findOpenRevisionNote(const std::string& id) {
+    for (auto& n : g_openRevisionNotes)
+        if (n->id == id) return n.get();
+    return nullptr;
+}
+
+void cacheOrReplaceNote(std::unique_ptr<gfcNote> n) {
+    for (auto it = g_openRevisionNotes.begin(); it != g_openRevisionNotes.end(); ++it) {
+        if ((*it)->id == n->id) { g_openRevisionNotes.erase(it); break; }
+    }
+    g_openRevisionNotes.push_back(std::move(n));
+}
+
+void uncacheNote(const std::string& id) {
+    for (auto it = g_openRevisionNotes.begin(); it != g_openRevisionNotes.end(); ++it) {
+        if ((*it)->id == id) { g_openRevisionNotes.erase(it); break; }
+    }
+}
+}  // namespace
+
 int gfcNetworkServer::assignColor(int preferred) {
     auto inUse = [this](int c) {
         for (const auto& kv : colorAddressMap)
@@ -681,6 +712,24 @@ void gfcNetworkServer::Update() {
             startFXSinc ( ev.peer,false );
             //startLUTSinc ( ev.peer,false );
 
+            // JEF-39: hand the joiner a snapshot of the open revision, the
+            // same way GFCNETID_PEERSINSESSION above just handed them the
+            // current peer list. Each cached note goes out as an ordinary
+            // *ADDBROADCASTMESSAGE, but sent only to the new peer
+            // (broadcast=false) instead of to everyone -- nobody else needs
+            // to be told about a note they already have.
+            for ( const auto& n : g_openRevisionNotes ) {
+                RakNet::BitStream outBSNote;
+                outBSNote.Write ( ( unsigned char ) GFCNETID_NOTEADDBROADCASTMESSAGE );
+                serializeNote ( *n, &outBSNote );
+                transport_->send ( outBSNote.GetData(), ( int ) outBSNote.GetNumberOfBytesUsed(), ev.peer, false );
+            }
+            if ( g_revisionLocked ) {
+                RakNet::BitStream outBSLock;
+                outBSLock.Write ( ( unsigned char ) GFCNETID_REVISIONLOCKBROADCASTMESSAGE );
+                StringCompressor::Instance()->EncodeString ( g_lockedRevisionId.c_str(),GFCNET_MAX_NOTE_ID_LENGTH,&outBSLock );
+                transport_->send ( outBSLock.GetData(), ( int ) outBSLock.GetNumberOfBytesUsed(), ev.peer, false );
+            }
 
         }
         break;
@@ -771,6 +820,77 @@ void gfcNetworkServer::Update() {
 						printf("%s changed color to %i\n",nickNameAddressMap[ev.peer].c_str(),theInt);
 						colorAddressMap[ev.peer]=assignColor(theInt);
 
+					}
+					break;
+
+					case GFCNETID_NOTEADDMESSAGE:
+					{
+						// Client -> server: mirrors GFCNETID_POINTERINFOMESSAGE.
+						// The server never trusts the client's claimed author --
+						// it stamps the verified nickname before caching and
+						// rebroadcasting, the same way the pointer broadcast's
+						// nickname comes from nickNameAddressMap rather than the
+						// client payload. This is what makes the author-or-host
+						// check on GFCNETID_NOTEREMOVEMESSAGE below meaningful.
+						RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),true );
+						bs.IgnoreBits ( 8 );
+						std::unique_ptr<gfcNote> note = unserializeNote ( &bs );
+						if ( note ) {
+							note->author = nickNameAddressMap[ev.peer];
+
+							RakNet::BitStream outBS;
+							outBS.Write ( ( unsigned char ) GFCNETID_NOTEADDBROADCASTMESSAGE );
+							serializeNote ( *note, &outBS );
+							transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), jefe::net::kInvalidPeerId, true );
+
+							cacheOrReplaceNote ( std::move ( note ) );
+						}
+					}
+					break;
+
+					case GFCNETID_NOTEREMOVEMESSAGE:
+					{
+						RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),true );
+						bs.IgnoreBits ( 8 );
+						char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
+						StringCompressor::Instance()->DecodeString ( idBuf,GFCNET_MAX_NOTE_ID_LENGTH,&bs );
+						std::string noteId = idBuf;
+
+						// Removal is honoured only from the note's author or the
+						// host (the server's own loopback nickname -- see
+						// gfcNetworkManager::startServer). An unknown id (already
+						// removed, or a race) is a silent no-op.
+						gfcNote* existing = findOpenRevisionNote ( noteId );
+						bool requesterIsHost = ( nickNameAddressMap[ev.peer] == this->name );
+						if ( existing && ( existing->author == nickNameAddressMap[ev.peer] || requesterIsHost ) ) {
+							RakNet::BitStream outBS;
+							outBS.Write ( ( unsigned char ) GFCNETID_NOTEREMOVEBROADCASTMESSAGE );
+							StringCompressor::Instance()->EncodeString ( noteId.c_str(),GFCNET_MAX_NOTE_ID_LENGTH,&outBS );
+							transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), jefe::net::kInvalidPeerId, true );
+
+							uncacheNote ( noteId );
+						}
+					}
+					break;
+
+					case GFCNETID_REVISIONLOCKMESSAGE:
+					{
+						// Host only.
+						RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),true );
+						bs.IgnoreBits ( 8 );
+						char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
+						StringCompressor::Instance()->DecodeString ( idBuf,GFCNET_MAX_NOTE_ID_LENGTH,&bs );
+						std::string revisionId = idBuf;
+
+						if ( nickNameAddressMap[ev.peer] == this->name ) {
+							g_revisionLocked = true;
+							g_lockedRevisionId = revisionId;
+
+							RakNet::BitStream outBS;
+							outBS.Write ( ( unsigned char ) GFCNETID_REVISIONLOCKBROADCASTMESSAGE );
+							StringCompressor::Instance()->EncodeString ( revisionId.c_str(),GFCNET_MAX_NOTE_ID_LENGTH,&outBS );
+							transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), jefe::net::kInvalidPeerId, true );
+						}
 					}
 					break;
 

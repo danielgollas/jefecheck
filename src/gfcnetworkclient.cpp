@@ -39,6 +39,31 @@ extern gfcPlaybackManager playbackManager;
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
 
+namespace {
+// JEF-39 note sync bridge storage (see gfcNetworkStructures.h for the full
+// rationale). File-static rather than gfcNetworkClient members because
+// gfcnetworkclient.h is out of scope for this change -- these are drained
+// and flushed only from gfcNetworkClient::Update(), whose BODY (defined in
+// this .cpp) is in scope even though no new method may be declared on the
+// class.
+std::vector<std::vector<unsigned char>> g_pendingOutgoingNoteMessages;
+std::vector<jefe::net::NoteSyncEvent> g_pendingNoteSyncEvents;
+}  // namespace
+
+namespace jefe { namespace net {
+
+void queueClientMessage(std::vector<unsigned char> bytes) {
+    g_pendingOutgoingNoteMessages.push_back(std::move(bytes));
+}
+
+std::vector<NoteSyncEvent> drainNoteSyncEvents() {
+    std::vector<NoteSyncEvent> out = std::move(g_pendingNoteSyncEvents);
+    g_pendingNoteSyncEvents.clear();
+    return out;
+}
+
+} }  // namespace jefe::net
+
 gfcNetworkClient::gfcNetworkClient() {
     transport_ = std::make_unique<jefe::net::RakNetTransport>();
 	haveSentMyPlaylist=false;
@@ -215,6 +240,17 @@ bool gfcNetworkClient::GetGotMessages()
 }
 
 void gfcNetworkClient::Update() {
+    // JEF-39: flush any note add/remove/lock messages queued via
+    // jefe::net::queueClientMessage() since the last pump (see
+    // gfcNetworkStructures.h -- new outgoing note message types route
+    // through this queue rather than a new SendXxx method).
+    if ( !g_pendingOutgoingNoteMessages.empty() ) {
+        for ( auto& bytes : g_pendingOutgoingNoteMessages ) {
+            transport_->send ( bytes.data(), ( int ) bytes.size(), serverPeerId_, false );
+        }
+        g_pendingOutgoingNoteMessages.clear();
+    }
+
     jefe::net::TransportEvent ev;
     while ( transport_->poll ( ev ) ) {
 		gotMessages=true;
@@ -989,6 +1025,52 @@ void gfcNetworkClient::Update() {
 				networkManager.setTakeNotifications(true);
 			}
 			break;
+
+		case GFCNETID_NOTEADDBROADCASTMESSAGE: {
+			// JEF-39: mirrors GFCNETID_POINTERINFOBROADCASTMESSAGE's shape --
+			// decode and hand off to the poll queue rather than apply
+			// directly, since there is no reviewManager-equivalent global in
+			// scope for this task to write into (see gfcNetworkStructures.h).
+			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
+			bs.IgnoreBits ( 8 );
+			std::unique_ptr<gfcNote> note = unserializeNote ( &bs );
+			if ( note ) {
+				jefe::net::NoteSyncEvent noteEvent;
+				noteEvent.kind = jefe::net::NoteSyncEvent::Add;
+				noteEvent.note = std::move ( note );
+				g_pendingNoteSyncEvents.push_back ( std::move ( noteEvent ) );
+				statusChange = true;
+			}
+		}
+		break;
+
+		case GFCNETID_NOTEREMOVEBROADCASTMESSAGE: {
+			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
+			bs.IgnoreBits ( 8 );
+			char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
+			StringCompressor::Instance()->DecodeString ( idBuf,GFCNET_MAX_NOTE_ID_LENGTH,&bs );
+
+			jefe::net::NoteSyncEvent noteEvent;
+			noteEvent.kind = jefe::net::NoteSyncEvent::Remove;
+			noteEvent.noteId = idBuf;
+			g_pendingNoteSyncEvents.push_back ( std::move ( noteEvent ) );
+			statusChange = true;
+		}
+		break;
+
+		case GFCNETID_REVISIONLOCKBROADCASTMESSAGE: {
+			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
+			bs.IgnoreBits ( 8 );
+			char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
+			StringCompressor::Instance()->DecodeString ( idBuf,GFCNET_MAX_NOTE_ID_LENGTH,&bs );
+
+			jefe::net::NoteSyncEvent noteEvent;
+			noteEvent.kind = jefe::net::NoteSyncEvent::RevisionLock;
+			noteEvent.revisionId = idBuf;
+			g_pendingNoteSyncEvents.push_back ( std::move ( noteEvent ) );
+			statusChange = true;
+		}
+		break;
 
 //NEXT CASE GOES HERE
 

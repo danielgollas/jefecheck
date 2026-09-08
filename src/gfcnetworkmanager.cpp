@@ -2,6 +2,8 @@
 #include "gfcTextRenderer.h"
 
 #include "gfcNetworkStructures.h"
+#include "BitStream.h"
+#include "StringCompressor.h"
 
 #include "gfcnetworklog.h"
 extern gfcNetworkLog networkLog;
@@ -819,6 +821,46 @@ void gfcNetworkManager::sendRemotePointerColor(int color){
 	if(connected && takeNotifications){
 		client.SendRemotePointerColor(color);
 	}
+}
+
+// JEF-39: note sync. gfcnetworkclient.h is out of scope for this change (see
+// the file-ownership map in docs/superpowers/plans/2026-09-07-annotations.md,
+// Task 4), so there is no gfcNetworkClient::SendNoteAddMessage to call the
+// way sendPointerInfoMessage calls client.SendPointerInfoMessage above.
+// Instead the fully-encoded message is handed to
+// jefe::net::queueClientMessage(), which gfcNetworkClient::Update() (an
+// existing, in-scope method) flushes to the server on its next pump. See
+// gfcNetworkStructures.h for the full rationale.
+void gfcNetworkManager::broadcastNoteAdd(const gfcNote& n)
+{
+	RakNet::BitStream outBS;
+	outBS.Write((unsigned char)GFCNETID_NOTEADDMESSAGE);
+	serializeNote(n, &outBS);
+	std::vector<unsigned char> bytes(outBS.GetData(), outBS.GetData() + outBS.GetNumberOfBytesUsed());
+	jefe::net::queueClientMessage(std::move(bytes));
+}
+
+void gfcNetworkManager::broadcastNoteRemove(const std::string& noteId)
+{
+	RakNet::BitStream outBS;
+	outBS.Write((unsigned char)GFCNETID_NOTEREMOVEMESSAGE);
+	StringCompressor::Instance()->EncodeString(noteId.c_str(), GFCNET_MAX_NOTE_ID_LENGTH, &outBS);
+	std::vector<unsigned char> bytes(outBS.GetData(), outBS.GetData() + outBS.GetNumberOfBytesUsed());
+	jefe::net::queueClientMessage(std::move(bytes));
+}
+
+void gfcNetworkManager::broadcastRevisionLock(const std::string& revisionId)
+{
+	RakNet::BitStream outBS;
+	outBS.Write((unsigned char)GFCNETID_REVISIONLOCKMESSAGE);
+	StringCompressor::Instance()->EncodeString(revisionId.c_str(), GFCNET_MAX_NOTE_ID_LENGTH, &outBS);
+	std::vector<unsigned char> bytes(outBS.GetData(), outBS.GetData() + outBS.GetNumberOfBytesUsed());
+	jefe::net::queueClientMessage(std::move(bytes));
+}
+
+std::vector<jefe::net::NoteSyncEvent> gfcNetworkManager::drainNoteSyncEvents()
+{
+	return jefe::net::drainNoteSyncEvents();
 }
 
 void gfcNetworkManager::sendPlaylistEvent(gfcNetPlaylistEvent theEvent)

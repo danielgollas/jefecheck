@@ -9,14 +9,24 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <memory>
 #include <stdio.h>
 #include "BitStream.h"
+#include "StringCompressor.h"
 
 #include "trilerp.h"
 
 #include "gfcStructures.h"
 
 #include "gfcfx.h"
+
+// JEF-39: note sync -- gfcNote and its concrete subclasses (Task 1 of the
+// annotations plan, docs/superpowers/plans/2026-09-07-annotations.md).
+#include "gfcnote.h"
+#include "gfcnotestroke.h"
+#include "gfcnotearrow.h"
+#include "gfcnotebox.h"
+#include "gfcnotetext.h"
 
 #include "gfcnetremotepointerinfo.h"
 
@@ -30,6 +40,7 @@
 
 #define GFCNET_MAX_NICKNAME_LENGHT 50
 #define GFCNET_MAX_TEXT_LENGHT 32000
+#define GFCNET_MAX_NOTE_ID_LENGTH 64 // note/revision ids are 32 hex chars (gfcnote.cpp); leave headroom
 #define GFCNET_CHAT_FADE_SPEED 1
 #define GFCNET_POINTER_SEND_FREQUENCY 0.0133333
 #define GFCNET_REMOTE_POINTER_FADE_SPEED 4
@@ -61,8 +72,16 @@ GFCNETID_LAYERCHANGEMESSAGE,
 GFCNETID_REQUESTFXHASHES, GFCNETID_LOADEDFXSHASHES, GFCNETID_REQUESTFXS, GFCNETID_REQUESTEDFXS, GFCNETID_MISSINGFXS, GFCNETID_FXSINCCOMPLETE,
 GFCNETID_REQUESTLUTSHASHES, GFCNETID_LOADEDLUTSHASHES, GFCNETID_REQUESTLUTS, GFCNETID_REQUESTEDLUTS, GFCNETID_MISSINGLUTS, GFCNETID_LUTSSINCCOMPLETE,
 GFCNETID_SENDFXTACKS, GFCNETID_RECEIVEDFXSTACKS, GFCNETID_SENDSTACKSINCFINISHED,
-GFCNETID_REQUESTPLAYLIST, GFCNETID_SENDPLAYLISTFORMERGE, GFCNETID_MERGEDPLAYLISTS, GFCNETID_PLAYLISTMERGEFINISHED, 
+GFCNETID_REQUESTPLAYLIST, GFCNETID_SENDPLAYLISTFORMERGE, GFCNETID_MERGEDPLAYLISTS, GFCNETID_PLAYLISTMERGEFINISHED,
 GFCNETID_SENDALLREADY,
+
+// JEF-39: note sync. Appended at the END of the enum, never inserted in the
+// middle -- these values are wire-visible and renumbering would silently
+// desync any peer running a different build. See
+// docs/superpowers/plans/2026-09-07-annotations.md, Task 4.
+GFCNETID_NOTEADDMESSAGE, GFCNETID_NOTEADDBROADCASTMESSAGE,
+GFCNETID_NOTEREMOVEMESSAGE, GFCNETID_NOTEREMOVEBROADCASTMESSAGE,
+GFCNETID_REVISIONLOCKMESSAGE, GFCNETID_REVISIONLOCKBROADCASTMESSAGE,
 
 };
 
@@ -453,6 +472,188 @@ char lutOrCube[60]; // for LUTs and CUBEs
 };
 
 
+// ---------------------------------------------------------------------------
+// JEF-39: note sync (docs/superpowers/plans/2026-09-07-annotations.md, Task 4)
+// ---------------------------------------------------------------------------
+// A note's geometry is variable length -- a freehand stroke can be hundreds
+// of points, text is an arbitrary string -- so unlike the fixed structs above
+// it is serialized field-by-field directly into the BitStream, the same way
+// gfcNetTransformationMessage writes its count-prefixed vector rather than a
+// POD struct. The message pairing itself mirrors GFCNETID_POINTERINFOMESSAGE
+// / GFCNETID_POINTERINFOBROADCASTMESSAGE exactly: a client sends the
+// *MESSAGE form to the server; the server stamps a verified author from its
+// own nickname map (never trusted from the client -- see
+// gfcnetworkserver.cpp's GFCNETID_NOTEADDMESSAGE handling) and relays the
+// *BROADCASTMESSAGE form to everyone.
+//
+// A note carries no revisionId of its own (see gfcnote.h) -- it always
+// belongs to whatever the sender considers "the open revision". The server
+// caches known notes and, on GFCNETID_REVISIONLOCKMESSAGE (host only),
+// records which revision id is locked, purely so a joiner can be handed a
+// snapshot (see gfcnetworkserver.cpp's GFCNETID_NICKNAMESEND handling, which
+// hands out the snapshot the same way it already hands out the peer list).
+
+inline void serializeNote(const gfcNote& note, RakNet::BitStream* bs) {
+	bs->Write((unsigned char)note.noteType());
+	StringCompressor::Instance()->EncodeString(note.id.c_str(), GFCNET_MAX_NOTE_ID_LENGTH, bs);
+	StringCompressor::Instance()->EncodeString(note.author.c_str(), GFCNET_MAX_NICKNAME_LENGHT, bs);
+	StringCompressor::Instance()->EncodeString(note.name.c_str(), GFCNET_MAX_NICKNAME_LENGHT, bs);
+	bs->WriteCompressed(note.quadID);
+	bs->WriteCompressed(note.from);
+	bs->WriteCompressed(note.to);
+	bs->Write(note.always);
+	bs->Write(note.colorR);
+	bs->Write(note.colorG);
+	bs->Write(note.colorB);
+	bs->WriteCompressed(note.size);
+
+	switch (note.noteType()) {
+	case GFCNOTE_STROKE: {
+		const gfcNoteStroke& s = static_cast<const gfcNoteStroke&>(note);
+		bs->WriteCompressed((int)s.pts.size());
+		for (const gfcNotePoint& p : s.pts) { bs->Write(p.x); bs->Write(p.y); }
+		break;
+	}
+	case GFCNOTE_ARROW: {
+		const gfcNoteArrow& a = static_cast<const gfcNoteArrow&>(note);
+		bs->Write(a.tail.x); bs->Write(a.tail.y);
+		bs->Write(a.head.x); bs->Write(a.head.y);
+		break;
+	}
+	case GFCNOTE_BOX: {
+		const gfcNoteBox& b = static_cast<const gfcNoteBox&>(note);
+		bs->Write(b.a.x); bs->Write(b.a.y);
+		bs->Write(b.b.x); bs->Write(b.b.y);
+		break;
+	}
+	case GFCNOTE_TEXT: {
+		const gfcNoteText& t = static_cast<const gfcNoteText&>(note);
+		bs->Write(t.anchor.x); bs->Write(t.anchor.y);
+		StringCompressor::Instance()->EncodeString(t.text.c_str(), GFCNET_MAX_TEXT_LENGHT, bs);
+		break;
+	}
+	}
+}
+
+// Reconstructs the correct concrete subclass from the wire type byte -- there
+// is no stored "type" field on gfcNote, noteType() is virtual, so the
+// declared type can never disagree with the actual subclass. Returns nullptr
+// on an unrecognised type byte (e.g. a newer peer's note type reaching an
+// older build) so callers can safely ignore it.
+inline std::unique_ptr<gfcNote> unserializeNote(RakNet::BitStream* bs) {
+	unsigned char rawType = 0;
+	bs->Read(rawType);
+
+	char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
+	StringCompressor::Instance()->DecodeString(idBuf, GFCNET_MAX_NOTE_ID_LENGTH, bs);
+	char authorBuf[GFCNET_MAX_NICKNAME_LENGHT];
+	StringCompressor::Instance()->DecodeString(authorBuf, GFCNET_MAX_NICKNAME_LENGHT, bs);
+	char nameBuf[GFCNET_MAX_NICKNAME_LENGHT];
+	StringCompressor::Instance()->DecodeString(nameBuf, GFCNET_MAX_NICKNAME_LENGHT, bs);
+
+	int quadID = 0, from = 0, to = 0, size = 3;
+	bool always = false;
+	float colorR = 1.0f, colorG = 0.2f, colorB = 0.2f;
+	bs->ReadCompressed(quadID);
+	bs->ReadCompressed(from);
+	bs->ReadCompressed(to);
+	bs->Read(always);
+	bs->Read(colorR); bs->Read(colorG); bs->Read(colorB);
+	bs->ReadCompressed(size);
+
+	std::unique_ptr<gfcNote> note;
+	switch ((gfcNoteType)rawType) {
+	case GFCNOTE_STROKE: {
+		auto s = std::make_unique<gfcNoteStroke>();
+		int count = 0;
+		bs->ReadCompressed(count);
+		if (count > 0) {
+			s->pts.resize((size_t)count);
+			for (gfcNotePoint& p : s->pts) { bs->Read(p.x); bs->Read(p.y); }
+		}
+		note = std::move(s);
+		break;
+	}
+	case GFCNOTE_ARROW: {
+		auto a = std::make_unique<gfcNoteArrow>();
+		bs->Read(a->tail.x); bs->Read(a->tail.y);
+		bs->Read(a->head.x); bs->Read(a->head.y);
+		note = std::move(a);
+		break;
+	}
+	case GFCNOTE_BOX: {
+		auto b = std::make_unique<gfcNoteBox>();
+		bs->Read(b->a.x); bs->Read(b->a.y);
+		bs->Read(b->b.x); bs->Read(b->b.y);
+		note = std::move(b);
+		break;
+	}
+	case GFCNOTE_TEXT: {
+		auto t = std::make_unique<gfcNoteText>();
+		bs->Read(t->anchor.x); bs->Read(t->anchor.y);
+		char textBuf[GFCNET_MAX_TEXT_LENGHT];
+		StringCompressor::Instance()->DecodeString(textBuf, GFCNET_MAX_TEXT_LENGHT, bs);
+		t->text = textBuf;
+		note = std::move(t);
+		break;
+	}
+	default:
+		return nullptr;
+	}
+
+	note->id = idBuf;
+	note->author = authorBuf;
+	note->name = nameBuf;
+	note->quadID = quadID;
+	note->from = from;
+	note->to = to;
+	note->always = always;
+	note->colorR = colorR; note->colorG = colorG; note->colorB = colorB;
+	note->size = size;
+	return note;
+}
+
+// ---------------------------------------------------------------------------
+// Client <-> gfcNetworkClient::Update() bridge for outgoing/incoming note
+// messages.
+//
+// gfcnetworkclient.h and gfcnetworkserver.h are OUT OF SCOPE for JEF-39 Task
+// 4 (see the plan's file-ownership map) -- only the .cpp bodies are. That
+// means a new outgoing message type cannot become a new
+// gfcNetworkClient::SendXxx method the way SendPointerInfoMessage was added
+// for pointer sync, since that requires a new method declaration in a header
+// this task does not own.
+//
+// Instead: gfcNetworkManager::broadcastNoteAdd/Remove/RevisionLock (see
+// gfcnetworkmanager.cpp) hand a fully-encoded message to queueClientMessage()
+// below; gfcNetworkClient::Update() -- an EXISTING method, so its body is in
+// scope -- flushes that queue to the server once per pump. Symmetrically,
+// drainNoteSyncEvents() lets a future consumer (the notes dock, Task 6) pull
+// inbound add/remove/lock events the same way gfcNetworkClient::getChatLog()
+// is polled today. Both are implemented in gfcnetworkclient.cpp.
+//
+// This is a deliberate, minimal-footprint workaround for the file-ownership
+// boundary, not a new architectural pattern -- the wire messages themselves
+// still mirror the pointer-info convention exactly. A follow-up with
+// gfcnetworkclient.h in scope could fold this into proper member methods.
+namespace jefe { namespace net {
+
+// Queues a fully-encoded outgoing message (leading type byte included) to be
+// sent to the server on the next gfcNetworkClient::Update() pump.
+void queueClientMessage(std::vector<unsigned char> bytes);
+
+struct NoteSyncEvent {
+	enum Kind { Add, Remove, RevisionLock } kind = Add;
+	std::unique_ptr<gfcNote> note;   // set when kind == Add
+	std::string noteId;              // set when kind == Remove
+	std::string revisionId;          // set when kind == RevisionLock
+};
+
+// Drains note add/remove/lock events the client has received since the last
+// call.
+std::vector<NoteSyncEvent> drainNoteSyncEvents();
+
+} } // namespace jefe::net
 
 
 

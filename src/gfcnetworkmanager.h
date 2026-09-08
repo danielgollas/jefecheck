@@ -90,6 +90,19 @@ public:
 	
 	void sendRemotePointerColor(int color);
 
+	// JEF-39: note sync. Mirrors the pointer-info client->server->broadcast
+	// convention; see gfcNetworkStructures.h and gfcnetworkserver.cpp for the
+	// wire format and the author-or-host removal check. gfcNote comes from
+	// Task 1 (src/gfcnote.h).
+	void broadcastNoteAdd(const gfcNote& n);
+	void broadcastNoteRemove(const std::string& noteId);
+	void broadcastRevisionLock(const std::string& revisionId);
+
+	// Drains note add/remove/lock events received since the last call --
+	// mirrors chatLogLines()/getChatLog()'s poll-and-drain shape. For a
+	// future consumer (the notes dock, Task 6).
+	std::vector<jefe::net::NoteSyncEvent> drainNoteSyncEvents();
+
 	void handleAllReady(); //this sets whatever needs to be set when the server tells us that all the players are ready.
 	void handleSincStart(); //this sets whatever needs to be set when the server requests we sinc our state, like when we join. 
 	void handleNewPlayer(); //when a new player joins. 
