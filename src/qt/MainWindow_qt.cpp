@@ -1125,6 +1125,11 @@ void MainWindow_Qt::refreshAfterSessionLoad() {
         if (plateManagerWidget_)   plateManagerWidget_->refreshAllCards();
         if (lutPanelWidget_)       lutPanelWidget_->refreshList();
         if (timelinePanelWidget_)  timelinePanelWidget_->refreshFromPlayback();
+        // Deliberately inside the deferred lambda: this path decodes
+        // asynchronously, so the first call can run before the preview frame
+        // exists and find no media. The 250/750ms repeats below are what
+        // actually catch it.
+        refreshNotesForLoadedMedia();
         if (viewport_)             viewport_->update();
     };
     refresh();
@@ -1688,6 +1693,18 @@ void MainWindow_Qt::maybeRestoreSessionAtStartup() {
         doLoad();
 }
 
+void MainWindow_Qt::refreshNotesForLoadedMedia() {
+    // Two halves, and the bug was having neither. syncPlateNotes() lazily
+    // loads the sidecar and hands the notes to the plate, so footage that was
+    // annotated last week shows its markup the moment it opens. refresh()
+    // updates the dock, which otherwise waits for a viewport-driven
+    // plateStateChanged -- i.e. until the user happens to click the image --
+    // and until then insists no media is loaded while notes are visibly
+    // drawn on it.
+    jefe::qt::syncPlateNotes();
+    if (notesPanelWidget_) notesPanelWidget_->refresh();
+}
+
 void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path) {
     loadFileIntoPlate(plateIdx, path, 1.0f);
 }
@@ -1748,6 +1765,7 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
     // state (e.g. the Aspect control's native ratio) update immediately
     // rather than waiting for the next viewport-driven plateStateChanged.
     if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+    refreshNotesForLoadedMedia();
     static const char kPlateNames[4] = {'A', 'B', 'C', 'D'};
     if (scale < 0.999f) {
         // Flash a 3-second message so the Shift / Shift+Cmd modifier
@@ -1790,6 +1808,7 @@ void MainWindow_Qt::openLoadWindow() {
         // reflects what was just loaded.
         connect(loadWindowDialog_, &QDialog::finished, this, [this](int) {
             if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+            refreshNotesForLoadedMedia();
         });
     }
     loadWindowDialog_->show();

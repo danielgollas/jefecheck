@@ -2202,7 +2202,18 @@ gfcReview& reviewForPath(const std::string& normalisedPath) {
 gfcReview* reviewForPlate(int plateIdx) {
     gfcSequence* seq = sequenceForPlate(plateIdx);
     if (!seq) return nullptr;
-    if (!seq->getPreviewFrame().loaded) return nullptr;
+    // Gate on the MEDIA PATH, not on a loaded preview frame.
+    //
+    // This used to also require seq->getPreviewFrame().loaded, mirroring
+    // getLoadedSequenceName(). That is wrong here, and intermittently so: the
+    // preview frame is a Load-Sequence-Manager concept, populated when that
+    // modal stages a track. A plate that loaded footage through Quick Load,
+    // drag-drop or --open-file plays its numbered sequence frames and may have
+    // no preview at all — so the Notes dock reported "no media loaded" over an
+    // image that was visibly on screen, depending on which path had loaded it.
+    //
+    // A review is keyed by media path. If a plate has a path, it can have
+    // notes; whether a preview frame happens to be decoded is unrelated.
     if (seq->filenameGeneric.empty()) return nullptr;
     return &reviewForPath(gfcNoteStore::normalisePath(seq->filenameGeneric));
 }

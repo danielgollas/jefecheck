@@ -45,6 +45,16 @@ public:
     // happen on the calling thread), and refreshes the status bar.
     // Used by --open-file at startup and by drag-and-drop at runtime.
     void loadFileIntoPlate(int plateIdx, const QString& path);
+
+    /**
+     * JEF-39: after media changes on a plate, pull that footage's notes out
+     * of their sidecar into the renderer and tell the Notes dock to redraw.
+     *
+     * Call this from every path that LOADS media — not from transform or
+     * colour edits, which cannot change which notes exist and would make
+     * this a tree rebuild on every drag.
+     */
+    void refreshNotesForLoadedMedia();
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
     // Headless render smoke test (--render-test). Renders one frame of

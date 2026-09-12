@@ -357,8 +357,13 @@ int main(int argc, char* argv[]) {
     // frame is comparable run to run rather than merely illustrative.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--notes-demo") == 0) {
-            QTimer::singleShot(2500, &window, []() {
+            QTimer::singleShot(2500, &window, [&window]() {
                 jefe::qt::addDemoNotes(0);
+                // Real drawing refreshes the dock via the viewport's
+                // plateStateChanged on mouse-up; the demo bypasses the mouse,
+                // so it has to say so itself or the shot shows notes on the
+                // frame and an empty list beside them.
+                window.refreshNotesForLoadedMedia();
             });
             break;
         }
