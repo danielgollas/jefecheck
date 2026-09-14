@@ -26,10 +26,12 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDir>
 #include <QDesktopServices>
 #include <QDockWidget>
 #include <QUrl>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImage>
@@ -43,6 +45,15 @@
 #include <QStatusBar>
 #include <QElapsedTimer>
 #include <QTimer>
+
+#include <memory>
+
+#include "../gfcReviewSummary.h"
+#include "../gfcNoteStore.h"
+#include "../gfcreview.h"
+#include "../gfcrevision.h"
+#include "../gfcnotestroke.h"
+#include "../gfcnotetext.h"
 
 namespace {
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
@@ -1741,6 +1752,123 @@ bool MainWindow_Qt::stampActiveFrameNotes(const QString& outPath, QString* messa
             .arg(QFileInfo(outPath).fileName())
             .arg(r.markedTexels));
     return true;
+}
+
+bool MainWindow_Qt::exportReviewSummary(const QString& outPath, ReviewSummaryStats* stats, QString* message) {
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    const QString suffix = QFileInfo(outPath).suffix().toLower();
+    if (suffix != "txt" && suffix != "csv") {
+        say(tr("Unsupported summary format \"%1\": use .pdf, .txt or .csv").arg(suffix));
+        return false;
+    }
+    const std::vector<jefe::qt::SessionMedia> media = jefe::qt::getSessionMediaSet();
+    if (media.empty()) {
+        say(tr("Nothing to summarise: the session has no media"));
+        return false;
+    }
+    const QString title = currentSessionPath_.isEmpty()
+                          ? tr("Untitled session")
+                          : QFileInfo(currentSessionPath_).completeBaseName();
+    const gfcReviewSummary::Doc doc = jefe::qt::buildReviewSummary(media, title.toStdString());
+
+    const std::string contents = (suffix == "txt") ? gfcReviewSummary::toText(doc)
+                                                   : gfcReviewSummary::toCsv(doc);
+    std::string err;
+    if (!gfcReviewSummary::writeFileAtomically(outPath.toStdString(), contents, &err)) {
+        say(QString::fromStdString(err));
+        return false;
+    }
+
+    ReviewSummaryStats s;
+    s.media = int(doc.media.size());
+    s.rounds = gfcReviewSummary::roundCount(doc);
+    s.notes = gfcReviewSummary::noteCount(doc);
+    if (stats) *stats = s;
+    say(tr("Summary written: %1 %2 %3 media, %4 rounds, %5 notes")
+            .arg(QFileInfo(outPath).fileName(), QString::fromUtf8("\xE2\x80\x94"))
+            .arg(s.media).arg(s.rounds).arg(s.notes));
+    return true;
+}
+
+int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("SUMMARY-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    auto readBytes = [](const QString& path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    if (!viewport_) { printf("SUMMARY-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
+
+    // A private copy of the image, so the sidecar next to it is this test's alone.
+    const QString work = QDir::tempPath() + "/jefecheck_summarytest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    QDir().mkpath(work);
+    const QString media = work + "/" + QFileInfo(imagePath).fileName();
+    if (!QFile::copy(imagePath, media)) {
+        printf("SUMMARY-TEST FAIL cannot copy %s\n", qPrintable(imagePath));
+        fflush(stdout);
+        return 2;
+    }
+
+    // One locked round with a stroke on frame 1 and a text note on every
+    // frame, then an open round with no notes.
+    {
+        gfcReview review;
+        review.mediaPath = gfcNoteStore::normalisePath(media.toStdString());
+        gfcRevision& r1 = review.beginRevision("Supervisor");
+        auto stroke = std::make_unique<gfcNoteStroke>();
+        stroke->author = "Supervisor";
+        stroke->quadID = 0;
+        stroke->from = 1;
+        stroke->to = 1;
+        stroke->colorR = 1.0f; stroke->colorG = 0.0f; stroke->colorB = 0.0f;
+        stroke->size = 12;
+        stroke->pts = { gfcNotePoint{0.1f, 0.1f}, gfcNotePoint{0.9f, 0.9f}, gfcNotePoint{0.1f, 0.9f} };
+        r1.addNote(std::move(stroke));
+        auto text = std::make_unique<gfcNoteText>();
+        text->author = "Supervisor";
+        text->quadID = 0;
+        text->always = true;
+        text->anchor = gfcNotePoint{0.5f, 0.5f};
+        text->text = "too warm, \"here\"";
+        r1.addNote(std::move(text));
+        r1.locked = true;
+        review.beginRevision("Artist");
+        check(gfcNoteStore::save(review), "fixture sidecar saved");
+    }
+
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+
+    ReviewSummaryStats stats;
+    QString msg;
+    const QString txt = work + "/summary.txt";
+    check(exportReviewSummary(txt, &stats, &msg), "text summary exported");
+    check(stats.media == 1 && stats.rounds == 2 && stats.notes == 2,
+          "counts: one media, two rounds, two notes");
+    const QString text = QString::fromUtf8(readBytes(txt));
+    check(text.contains("== " + QFileInfo(media).fileName() + " =="), "text names the media");
+    check(text.contains(QString::fromUtf8("Round 1 \xE2\x80\x94 Supervisor")) && text.contains("locked"),
+          "text has the locked Supervisor round");
+    check(text.contains(QString::fromUtf8("Round 2 \xE2\x80\x94 Artist")) && text.contains("  No notes"),
+          "text keeps the empty Artist round");
+    check(text.contains("\"too warm, \"here\"\""), "text quotes the text note");
+
+    const QString csv = work + "/summary.csv";
+    check(exportReviewSummary(csv, &stats, &msg), "CSV summary exported");
+    const QByteArray csvBytes = readBytes(csv);
+    check(csvBytes.startsWith("media,round_id,round_author,"), "CSV starts with the header");
+    check(csvBytes.count("\r\n") == 3, "CSV has the header and one row per note");
+    check(csvBytes.contains("\"too warm, \"\"here\"\"\""), "CSV quotes the text note");
+    check(!QFile::exists(txt + ".partial") && !QFile::exists(csv + ".partial"), "no partial files left");
+    check(!exportReviewSummary(work + "/summary.doc", &stats, &msg), "an unknown extension is refused");
+
+    printf("SUMMARY-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
 }
 
 void MainWindow_Qt::refreshNotesForLoadedMedia() {

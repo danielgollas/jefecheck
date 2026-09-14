@@ -414,6 +414,38 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // --summary-test <image>: end-to-end proof of File -> Export Review Summary.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--summary-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessSummaryTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --export-summary <out>: write the review summary of what is loaded, then quit.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--export-summary") != 0) continue;
+        const QString out = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(6000, &window, [&window, out]() {
+            MainWindow_Qt::ReviewSummaryStats s;
+            QString msg;
+            const bool ok = window.exportReviewSummary(out, &s, &msg);
+            if (ok) {
+                printf("SUMMARY: wrote=%s media=%d rounds=%d notes=%d thumbs=%d thumbfail=%d\n",
+                       qPrintable(out), s.media, s.rounds, s.notes, s.thumbs, s.thumbFail);
+            } else {
+                printf("SUMMARY: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+            std::_Exit(ok ? 0 : 2);
+        });
+        break;
+    }
+
     // --window-rect X Y W H: place the window, in logical pixels, so two
     // instances can sit side by side for a recording.
     for (int i = 1; i + 4 < argc; ++i) {

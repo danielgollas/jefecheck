@@ -17,6 +17,7 @@
 #include "../gfcsessionmanager.h"
 #include "../gfcreview.h"
 #include "../gfcrevision.h"
+#include "../gfcReviewSummary.h"
 #include "../gfcnote.h"
 #include "../gfcNoteStore.h"
 #include "../gfcNoteOverlay.h"
@@ -2277,6 +2278,10 @@ std::unique_ptr<gfcNote> g_drawNote;
 /** Points collected so far; for arrow/box only the first and last matter. */
 std::vector<gfcNotePoint> g_drawPoints;
 
+/** Copies published by setPlateNotesToRound(); plates borrow them until the
+    next syncPlateNotesImpl() republishes the real notes and frees these. */
+std::vector<std::unique_ptr<gfcNote>> g_roundNoteCopies;
+
 void syncPlateNotesImpl() {
     for (int i = 0; i < plateManager.plateCount(); ++i) {
         std::vector<const gfcNote*> out;
@@ -2296,6 +2301,9 @@ void syncPlateNotesImpl() {
         if (g_drawNote && g_drawPlate == i) out.push_back(g_drawNote.get());
         plateManager.setPlateNotes(i, out);
     }
+    // Every plate now borrows the real notes again, so the round copies a
+    // summary thumbnail was drawing can go.
+    g_roundNoteCopies.clear();
 }
 
 bool applyInboundNoteSyncEvents() {
@@ -2514,6 +2522,135 @@ bool notesVisible() { return g_notesVisible; }
 void setNotesVisible(bool visible) { g_notesVisible = visible; }
 
 void syncPlateNotes() { syncPlateNotesImpl(); }
+
+std::vector<SessionMedia> getSessionMediaSet() {
+    std::vector<SessionMedia> out;
+    auto add = [&out](const std::string& key, const std::string& framePath,
+                      int track, int item, int itemTrack) {
+        if (key.empty()) return;
+        const std::string mediaPath = gfcNoteStore::normalisePath(key);
+        for (const SessionMedia& m : out) {
+            if (m.mediaPath == mediaPath) return;
+        }
+        SessionMedia m;
+        m.mediaPath = mediaPath;
+        m.anyFramePath = framePath.empty() ? key : framePath;
+        m.track = track;
+        m.playlistItem = item;
+        m.playlistTrack = itemTrack;
+        out.push_back(m);
+    };
+    for (int t = 0; t < GFC_MAX_SEQUENCES; ++t) {
+        gfcSequence* seq = trackManager.getSequence(t);
+        if (!seq || !seq->myGUI) continue;
+        const std::string gui = seq->myGUI->getFilename();
+        // Same key reviewForPlate() uses, so the summary finds the same review.
+        add(seq->filenameGeneric.empty() ? gui : seq->filenameGeneric, gui, t, -1, -1);
+    }
+    if (auto* entries = playlistManager.getPlaylist()) {
+        for (int i = 0; i < (int)entries->size(); ++i) {
+            const gfcPlaylistItem& item = (*entries)[i];
+            for (size_t k = 0; k < item.loadParams.size(); ++k) {
+                add(item.loadParams[k].fileName, item.loadParams[k].fileName, -1, i, (int)k);
+            }
+        }
+    }
+    return out;
+}
+
+gfcReviewSummary::Doc buildReviewSummary(const std::vector<SessionMedia>& media,
+                                         const std::string& title) {
+    gfcReviewSummary::Doc doc;
+    doc.title = title;
+    doc.exportedAt = time(nullptr);
+    doc.appVersion = JEFE_VERSION;
+    for (const SessionMedia& m : media) {
+        gfcReview& review = reviewForPath(m.mediaPath);
+        gfcReviewSummary::Media entry = gfcReviewSummary::fromReview(review);
+        if (review.revisions.empty()) {
+            // No rounds: either there is no sidecar, or it exists and did not parse.
+            gfcReview probe;
+            probe.mediaPath = m.mediaPath;
+            std::error_code ec;
+            if (!gfcNoteStore::load(m.mediaPath, probe) &&
+                std::filesystem::exists(gfcNoteStore::sidecarPathFor(m.mediaPath), ec)) {
+                entry.notesReadable = false;
+            }
+        }
+        doc.media.push_back(std::move(entry));
+    }
+    return doc;
+}
+
+int plateShowingTrack(int track) {
+    if (track < 0) return -1;
+    for (int i = 0; i < plateManager.plateCount(); ++i) {
+        if (plateManager.getTrackOnPlate(i) == track) return i;
+    }
+    return -1;
+}
+
+namespace {
+// A note's copy drawn on `plateIdx`. The overlay only draws notes whose quadID
+// matches the plate, and a round's notes may have been drawn on another plate.
+std::unique_ptr<gfcNote> copyNoteForPlate(const gfcNote& n, int plateIdx) {
+    std::unique_ptr<gfcNote> c;
+    if (const auto* s = dynamic_cast<const gfcNoteStroke*>(&n)) {
+        auto x = std::make_unique<gfcNoteStroke>();
+        x->pts = s->pts;
+        c = std::move(x);
+    } else if (const auto* a = dynamic_cast<const gfcNoteArrow*>(&n)) {
+        auto x = std::make_unique<gfcNoteArrow>();
+        x->tail = a->tail;
+        x->head = a->head;
+        c = std::move(x);
+    } else if (const auto* b = dynamic_cast<const gfcNoteBox*>(&n)) {
+        auto x = std::make_unique<gfcNoteBox>();
+        x->a = b->a;
+        x->b = b->b;
+        c = std::move(x);
+    } else if (const auto* t = dynamic_cast<const gfcNoteText*>(&n)) {
+        auto x = std::make_unique<gfcNoteText>();
+        x->anchor = t->anchor;
+        x->text = t->text;
+        c = std::move(x);
+    } else {
+        return nullptr;
+    }
+    c->id = n.id;
+    c->author = n.author;
+    c->name = n.name;
+    c->quadID = plateIdx;
+    c->from = n.from;
+    c->to = n.to;
+    c->always = n.always;
+    c->colorR = n.colorR;
+    c->colorG = n.colorG;
+    c->colorB = n.colorB;
+    c->size = n.size;
+    return c;
+}
+}  // namespace
+
+bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundIndex) {
+    if (plateIdx < 0 || plateIdx >= plateManager.plateCount()) return false;
+    gfcReview& review = reviewForPath(mediaPath);
+    if (roundIndex < 0 || roundIndex >= (int)review.revisions.size()) return false;
+    std::vector<std::unique_ptr<gfcNote>> copies;
+    std::vector<const gfcNote*> borrowed;
+    for (const auto& n : review.revisions[roundIndex].notes) {
+        if (!n) continue;
+        if (auto c = copyNoteForPlate(*n, plateIdx)) {
+            borrowed.push_back(c.get());
+            copies.push_back(std::move(c));
+        }
+    }
+    // Publish the new list before freeing the copies the plate may still hold.
+    plateManager.setPlateNotes(plateIdx, borrowed);
+    g_roundNoteCopies.clear();
+    g_roundNoteCopies = std::move(copies);
+    return true;
+}
 
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,

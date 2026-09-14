@@ -63,6 +63,28 @@ public:
      * Fills @a message with a one-line outcome either way.
      */
     bool stampActiveFrameNotes(const QString& outPath, QString* message);
+
+    /** Counts from exportReviewSummary(). */
+    struct ReviewSummaryStats {
+        int media = 0;
+        int rounds = 0;
+        int notes = 0;
+        int thumbs = 0;
+        int thumbFail = 0;
+        QString firstThumbnail;   // PDF only: the first thumbnail rendered (for tests)
+    };
+
+    /**
+     * Writes the review summary of every media in the session to @a outPath;
+     * the extension picks the format (.pdf, .txt or .csv). Fills @a message
+     * with a one-line outcome either way. See
+     * docs/superpowers/specs/2026-09-14-review-summary-export-design.md.
+     */
+    bool exportReviewSummary(const QString& outPath, ReviewSummaryStats* stats, QString* message);
+
+    /** Headless end-to-end proof of the summary export (--summary-test <image>). */
+    int runHeadlessSummaryTest(const QString& imagePath);
+
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
     // Headless render smoke test (--render-test). Renders one frame of

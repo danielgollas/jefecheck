@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "../gfcReviewSummary.h"
+
 class gfcPlateGUI_Qt;
 
 namespace jefe::qt {
@@ -1046,6 +1048,41 @@ void demoNoteAppend(float nx, float ny);
 /** Push every plate's notes from the review store into the renderer. Call
     after anything that changes a review: a draw, a sync event, a media load. */
 void syncPlateNotes();
+
+/**
+ * One piece of media in the session, for the review summary and the review
+ * package. `mediaPath` is the normalised pattern notes are keyed by;
+ * `anyFramePath` is a real file of it. `track` is the first track (0..3)
+ * holding it, or -1 when only a playlist item does — then `playlistItem` and
+ * `playlistTrack` say which item and which of its tracks.
+ */
+struct SessionMedia {
+    std::string mediaPath;
+    std::string anyFramePath;
+    int track = -1;
+    int playlistItem = -1;
+    int playlistTrack = -1;
+};
+
+/** Tracks A–D in order, then every playlist item's tracks in playlist order;
+    a media already listed is not repeated. */
+std::vector<SessionMedia> getSessionMediaSet();
+
+/** The summary model for @a media, from the in-memory reviews (sidecars load
+    on first touch). Thumbnail paths are left empty. */
+gfcReviewSummary::Doc buildReviewSummary(const std::vector<SessionMedia>& media,
+                                         const std::string& title);
+
+/** The first plate showing @a track, or -1. */
+int plateShowingTrack(int track);
+
+/**
+ * Points plate @a plateIdx at round @a roundIndex of the review for
+ * @a mediaPath only, whatever plate those notes were drawn on. The plate draws
+ * copies owned by the bridge until the next syncPlateNotes(), which restores
+ * the normal list. Returns false for an unknown plate or round.
+ */
+bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundIndex);
 
 /**
  * Put one of each note type on a plate, for --notes-demo. Coordinates are
