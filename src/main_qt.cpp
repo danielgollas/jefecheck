@@ -24,6 +24,7 @@
 #include "gfcnote.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteOverlay.h"
+#include "gfcNoteStamp.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
@@ -164,7 +165,7 @@ static bool hasAspectTest(int argc, char* argv[]) {
 }
 
 // --notes-test : headless JEF-39 regression. Runs the note model, sidecar
-// store, and overlay geometry self-tests (pure data/arithmetic, no GL or
+// store, overlay geometry and EXR stamp self-tests (pure data/IO, no GL or
 // window needed). Runs all three even if an earlier one fails, so a
 // developer sees every broken area at once. Takes no argument.
 static bool hasNotesTest(int argc, char* argv[]) {
@@ -300,11 +301,13 @@ int main(int argc, char* argv[]) {
         const int modelFail   = noteModelSelfTest();
         const int storeFail   = noteStoreSelfTest();
         const int overlayFail = noteOverlaySelfTest();
+        const int stampFail   = noteStampSelfTest();
         // The self-tests print via std::printf but do not flush; std::_Exit
         // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
         // stdout not a tty) would silently drop all three lines.
         std::fflush(stdout);
-        std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0) ? 0 : 2);
+        std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
+                    stampFail == 0) ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,

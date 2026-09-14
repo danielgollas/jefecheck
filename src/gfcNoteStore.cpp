@@ -496,6 +496,117 @@ namespace
 // Public interface
 // ---------------------------------------------------------------------------
 
+namespace
+{
+	/** JSON string escaping: quotes, backslash, and the control range. */
+	std::string jsonEscape(const std::string& in)
+	{
+		std::string out;
+		out.reserve(in.size() + 8);
+		for (unsigned char ch : in)
+		{
+			switch (ch)
+			{
+				case '"':  out += "\\\""; break;
+				case '\\': out += "\\\\"; break;
+				case '\n': out += "\\n";  break;
+				case '\r': out += "\\r";  break;
+				case '\t': out += "\\t";  break;
+				default:
+					if (ch < 0x20)
+					{
+						char buf[8];
+						std::snprintf(buf, sizeof(buf), "\\u%04x", ch);
+						out += buf;
+					}
+					else
+					{
+						out += (char)ch;
+					}
+			}
+		}
+		return out;
+	}
+
+	const char* jsonTypeName(gfcNoteType t)
+	{
+		switch (t)
+		{
+			case GFCNOTE_ARROW: return "arrow";
+			case GFCNOTE_BOX:   return "box";
+			case GFCNOTE_TEXT:  return "text";
+			default:            return "stroke";
+		}
+	}
+}
+
+std::string gfcNoteStore::toJsonString(const gfcReview& review)
+{
+	std::string out = "{\"schema\":\"jefecheck.notes/1\",\"media\":\"";
+	out += jsonEscape(normalisePath(review.mediaPath));
+	out += "\",\"revisions\":[";
+
+	bool firstRev = true;
+	for (const gfcRevision& rev : review.revisions)
+	{
+		if (!firstRev) out += ",";
+		firstRev = false;
+		out += "{\"author\":\"" + jsonEscape(rev.author) + "\",";
+		out += "\"locked\":" + std::string(rev.locked ? "true" : "false") + ",";
+		out += "\"notes\":[";
+
+		bool firstNote = true;
+		for (const std::unique_ptr<gfcNote>& n : rev.notes)
+		{
+			if (!n) continue;
+			if (!firstNote) out += ",";
+			firstNote = false;
+
+			char buf[256];
+			std::snprintf(buf, sizeof(buf),
+				"{\"type\":\"%s\",\"plate\":%d,\"always\":%s,",
+				jsonTypeName(n->noteType()), n->quadID,
+				n->always ? "true" : "false");
+			out += buf;
+			out += "\"author\":\"" + jsonEscape(n->author) + "\",";
+
+			// OTIO's vocabulary: a range is a start plus a duration, not a
+			// start plus an end. Frames are integers HERE only because the
+			// model is -- see the rational-time limitation in the spec.
+			std::snprintf(buf, sizeof(buf),
+				"\"range\":{\"start_frame\":%d,\"duration_frames\":%d},",
+				n->from, (n->to - n->from) + 1);
+			out += buf;
+
+			std::snprintf(buf, sizeof(buf),
+				"\"color\":[%.4f,%.4f,%.4f],\"width\":%d,",
+				n->colorR, n->colorG, n->colorB, n->size);
+			out += buf;
+
+			if (const gfcNoteText* t = dynamic_cast<const gfcNoteText*>(n.get()))
+			{
+				out += "\"text\":\"" + jsonEscape(t->text) + "\",";
+			}
+
+			// Normalised image space, 0..1, y down -- stated in the blob so a
+			// reader never has to guess which corner is the origin.
+			out += "\"space\":\"normalised-image-yd\",\"points\":[";
+			bool firstPt = true;
+			for (const gfcNotePoint& p : n->points())
+			{
+				if (!firstPt) out += ",";
+				firstPt = false;
+				std::snprintf(buf, sizeof(buf), "[%.6f,%.6f]", p.x, p.y);
+				out += buf;
+			}
+			out += "]}";
+		}
+		out += "]}";
+	}
+	out += "]}";
+	return out;
+}
+
 std::string gfcNoteStore::normalisePath(const std::string& anyFramePath)
 {
 	std::smatch m;
