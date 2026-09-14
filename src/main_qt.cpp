@@ -29,6 +29,7 @@
 #include "gfcNoteStore.h"
 #include "gfcNoteOverlay.h"
 #include "gfcNoteStamp.h"
+#include "gfcReviewSummary.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
@@ -306,12 +307,13 @@ int main(int argc, char* argv[]) {
         const int storeFail   = noteStoreSelfTest();
         const int overlayFail = noteOverlaySelfTest();
         const int stampFail   = noteStampSelfTest();
+        const int summaryFail = reviewSummarySelfTest();
         // The self-tests print via std::printf but do not flush; std::_Exit
         // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
         // stdout not a tty) would silently drop all three lines.
         std::fflush(stdout);
         std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
-                    stampFail == 0) ? 0 : 2);
+                    stampFail == 0 && summaryFail == 0) ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
