@@ -116,8 +116,10 @@ notes** burned in:
    arrive over later ticks.
 3. For each round and frame entry: set the plate's borrowed note list to that
    round's notes only (a new bridge call; the normal sync publishes every
-   round), wait until the frame is decoded (bounded wait, 10 s per frame,
-   pumping the event loop), and render that one frame with
+   round), make sure the track's frame list exists (starting the track's load
+   if it has none — renders force-decode the frame they draw, via
+   `gfcSequence::getFrame(frame, forceLoad)`, so no decode wait is needed),
+   and render that one frame with
    `jefe::qt::triggerSyncRender` — `quadrant` = the plate, `from = to` = the
    frame (`kAllFrames` renders the media's first frame), `burnInNotes = true`,
    PNG, `outWidth` 960 and `outHeight` from the plate aspect — into a temporary
