@@ -2263,6 +2263,16 @@ gfcReview* reviewForPlate(int plateIdx) {
 // pushed must outlive the next draw: these point into g_noteReviews, which
 // lives for the session and is only mutated here, never mid-frame.
 // ---------------------------------------------------------------------------
+
+// Mouse-drawing state, declared here rather than beside the drawing code
+// because the list published below includes the stroke being drawn.
+bool g_noteDrawArmed = false;
+int  g_drawPlate = -1;
+std::unique_ptr<gfcNote> g_drawNote;
+
+/** Points collected so far; for arrow/box only the first and last matter. */
+std::vector<gfcNotePoint> g_drawPoints;
+
 void syncPlateNotesImpl() {
     for (int i = 0; i < plateManager.plateCount(); ++i) {
         std::vector<const gfcNote*> out;
@@ -2274,19 +2284,15 @@ void syncPlateNotesImpl() {
                 for (const auto& n : revision.notes)
                     if (n) out.push_back(n.get());
         }
+        // The stroke being drawn right now. Without this nothing appeared
+        // until the mouse was released, although the drawing code claimed live
+        // feedback. It is borrowed like the rest: every path that destroys
+        // g_drawNote -- cancel, or a commit the revision refuses -- re-syncs
+        // before returning, so the plate is never left holding it.
+        if (g_drawNote && g_drawPlate == i) out.push_back(g_drawNote.get());
         plateManager.setPlateNotes(i, out);
     }
 }
-
-// ---------------------------------------------------------------------------
-// Mouse drawing.
-// ---------------------------------------------------------------------------
-bool g_noteDrawArmed = false;
-int  g_drawPlate = -1;
-std::unique_ptr<gfcNote> g_drawNote;
-
-/** Points collected so far; for arrow/box only the first and last matter. */
-std::vector<gfcNotePoint> g_drawPoints;
 
 bool applyInboundNoteSyncEvents() {
     bool applied = false;
@@ -2295,6 +2301,35 @@ bool applyInboundNoteSyncEvents() {
         if (ev.kind == Kind::Add && ev.note) {
             gfcReview* review = reviewForPlate(ev.note->quadID);
             if (!review) continue;
+
+            // Idempotent by note id, as the design requires. The server relays
+            // every note-add to ALL peers -- including the one that drew it,
+            // whose own loopback client receives it back -- so without this
+            // check whoever draws a note stores it twice: once on commit, once
+            // from the echo. Recorded in a two-player run: the host's sidecar
+            // held 8 notes for 4 drawn.
+            //
+            // A note that already exists is not added again, but it does adopt
+            // the author the server stamped. The server takes the name from
+            // its own peer map rather than the payload, so its attribution is
+            // the verified one; the drawer's local copy only had its own
+            // preference name.
+            gfcNote* existing = nullptr;
+            for (auto& revision : review->revisions) {
+                for (auto& n : revision.notes) {
+                    if (n && n->id == ev.note->id) { existing = n.get(); break; }
+                }
+                if (existing) break;
+            }
+            if (existing) {
+                if (existing->author != ev.note->author) {
+                    existing->author = ev.note->author;
+                    gfcNoteStore::save(*review);
+                    applied = true;
+                }
+                continue;
+            }
+
             gfcRevision* open = review->openRevision();
             if (!open) open = &review->beginRevision(ev.note->author);
             if (open->addNote(std::move(ev.note))) {
@@ -2635,10 +2670,29 @@ void setNoteDrawingArmed(bool armed) {
 bool noteDrawInProgress() { return g_drawNote != nullptr; }
 
 void noteDrawCancel() {
+    const bool hadStroke = g_drawNote != nullptr;
     g_drawNote.reset();
     g_drawPoints.clear();
     g_drawPlate = -1;
+    // The plate may be holding a borrowed pointer to the stroke just
+    // destroyed; republish before anything can paint.
+    if (hadStroke) syncPlateNotesImpl();
 }
+
+namespace {
+// Writes g_drawPoints into the in-progress note's own geometry.
+void applyDrawPoints() {
+    if (!g_drawNote || g_drawPoints.empty()) return;
+    if (auto* stroke = dynamic_cast<gfcNoteStroke*>(g_drawNote.get()))
+        stroke->pts = g_drawPoints;
+    else if (auto* arrow = dynamic_cast<gfcNoteArrow*>(g_drawNote.get()))
+        { arrow->tail = g_drawPoints.front(); arrow->head = g_drawPoints.back(); }
+    else if (auto* box = dynamic_cast<gfcNoteBox*>(g_drawNote.get()))
+        { box->a = g_drawPoints.front(); box->b = g_drawPoints.back(); }
+    else if (auto* text = dynamic_cast<gfcNoteText*>(g_drawNote.get()))
+        text->anchor = g_drawPoints.back();   // dragging a text note repositions it
+}
+}  // namespace
 
 bool noteDrawBegin(int xFb, int yFb, int plateIdx) {
     noteDrawCancel();
@@ -2678,6 +2732,7 @@ bool noteDrawBegin(int xFb, int yFb, int plateIdx) {
     g_drawNote->to   = f;
     getActiveNoteColor(g_drawNote->colorR, g_drawNote->colorG, g_drawNote->colorB);
     g_drawNote->size = activeNoteSize();
+    syncPlateNotesImpl();   // show the first point immediately
     return true;
 }
 
@@ -2689,16 +2744,10 @@ void noteDrawAppend(int xFb, int yFb) {
     // it would be maddening.
     if (!plateManager.cursorToNormalisedImage(xFb, yFb, g_drawPlate, nx, ny)) return;
     g_drawPoints.push_back(gfcNotePoint{nx, ny});
-    // Live feedback: the in-progress note is pushed into the plate each move
-    // so the reviewer sees the line as they draw it, not on release.
-    if (auto* stroke = dynamic_cast<gfcNoteStroke*>(g_drawNote.get()))
-        stroke->pts = g_drawPoints;
-    else if (auto* arrow = dynamic_cast<gfcNoteArrow*>(g_drawNote.get()))
-        { arrow->tail = g_drawPoints.front(); arrow->head = g_drawPoints.back(); }
-    else if (auto* box = dynamic_cast<gfcNoteBox*>(g_drawNote.get()))
-        { box->a = g_drawPoints.front(); box->b = g_drawPoints.back(); }
-    else if (auto* text = dynamic_cast<gfcNoteText*>(g_drawNote.get()))
-        text->anchor = g_drawPoints.back();   // dragging a text note repositions it
+    applyDrawPoints();
+    // Live feedback, for real now: republish so the plate draws the stroke as
+    // it grows. The note list is a handful of pointers, so this is cheap.
+    syncPlateNotesImpl();
 }
 
 bool noteDrawIsText() {
@@ -2737,11 +2786,15 @@ bool noteDrawEnd() {
     const bool added = open->addNote(std::move(g_drawNote));
     if (added) {
         gfcNoteStore::save(*review);
-        syncPlateNotesImpl();
     }
     g_drawPoints.clear();
     g_drawPlate = -1;
     g_drawNote.reset();
+    // Unconditionally. The plate has been drawing this stroke through a
+    // borrowed pointer; a refused commit destroyed the note inside addNote(),
+    // so republishing only on success would leave the plate holding a
+    // dangling pointer until something else happened to sync.
+    syncPlateNotesImpl();
     return added;
 }
 void toggleNotesVisible() { g_notesVisible = !g_notesVisible; }
