@@ -56,6 +56,27 @@ namespace gfcNoteOverlay
 	/** Maps one normalised point onto @a target. Pure arithmetic, exposed so
 	    the geometry can be tested without a GL context. */
 	gfcNotePoint mapPoint(const gfcNotePoint& p, const Rect& target);
+
+	/**
+		Renders the visible notes into an offscreen buffer the size of the
+		source image and returns the pixels: RGBA8, premultiplied, row-major,
+		TOP row first (flipped from GL's bottom-up read), exactly
+		width * height * 4 bytes.
+
+		Notes are normalised to the source image, so mapping them onto a
+		buffer of the source's own dimensions is exact -- no display
+		transform, crop or pan is involved. This feeds the notes.R/G/B/A
+		layer gfcNoteStamp writes.
+
+		Uses its own framebuffer and restores the caller's framebuffer
+		binding, viewport, matrices and pixel-store state, so it is safe to
+		call between frames of a live viewport. Requires a current GL context.
+		Returns false and fills @a err on failure, including an image larger
+		than GL_MAX_RENDERBUFFER_SIZE.
+	*/
+	bool rasterise(const std::vector<const gfcNote*>& notes,
+	               int frame, int quadID, int width, int height,
+	               std::vector<unsigned char>& rgba, std::string* err);
 }
 
 /** Runs the overlay geometry self-test; prints NOTE-OVERLAY: pass=N fail=N

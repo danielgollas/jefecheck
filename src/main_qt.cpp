@@ -372,6 +372,24 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // --stamp-notes <out.exr>: once the footage (and any --notes-demo notes)
+    // are in place, stamp the active plate's current frame into <out.exr> and
+    // report. With --notes-demo this checks the layer path end to end, which
+    // needs the real GL context only a live window provides.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--stamp-notes") == 0) {
+            const QString out = QString::fromUtf8(argv[i + 1]);
+            QTimer::singleShot(4500, &window, [&window, out]() {
+                QString msg;
+                const bool ok = window.stampActiveFrameNotes(out, &msg);
+                printf("NOTES-STAMP: %s %s\n", ok ? "ok" : "FAIL",
+                       msg.toUtf8().constData());
+                fflush(stdout);
+            });
+            break;
+        }
+    }
+
     // --screenshot <path> [delayMs]: grab the window itself, not the screen,
     // so the image is the application and nothing overlapping it.
     for (int i = 1; i + 1 < argc; ++i) {

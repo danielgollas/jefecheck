@@ -75,6 +75,25 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 	OIIO::ImageSpec outSpec = src;          // carries every source attribute through
 	outSpec.nchannels = outChannels;
 
+	// When a spec has per-channel formats, that array must be exactly nchannels
+	// long. Raising nchannels without extending it made the writer read formats
+	// past the end of the array and misalign the conversion of every channel:
+	// on a real CG render (mixed half RGBA + float Z) R and G came back as NaN
+	// and 1.748, and the notes layer as 3.4e38. Keep each source channel's own
+	// storage type, and store the notes channels in the source's primary format.
+	if (!src.channelformats.empty())
+	{
+		outSpec.channelformats = src.channelformats;
+		outSpec.channelformats.resize((size_t)srcChannels, src.format);
+		if (wantLayer)
+		{
+			for (int c = 0; c < 4; ++c)
+			{
+				outSpec.channelformats.push_back(src.format);
+			}
+		}
+	}
+
 	// Channel names: keep the source's, then append the notes layer. OIIO and
 	// OpenEXR both treat a dotted prefix as a layer, which is exactly how
 	// gfcImageLoaderOIIO already discovers layers on the way back IN -- so a
@@ -148,6 +167,16 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 	return true;
 }
 
+bool gfcNoteStamp::imageSize(const std::string& path, int* width, int* height)
+{
+	auto in = OIIO::ImageInput::open(path);
+	if (!in) return false;
+	if (width)  *width  = in->spec().width;
+	if (height) *height = in->spec().height;
+	in->close();
+	return true;
+}
+
 std::string gfcNoteStamp::readEmbeddedJson(const std::string& exrPath)
 {
 	auto in = OIIO::ImageInput::open(exrPath);
@@ -185,12 +214,40 @@ int noteStampSelfTest()
 	const std::string outPath = dir + "/stamped.exr";
 	std::remove(outPath.c_str());
 
-	// A tiny source frame with a known value, so "unchanged" is checkable.
+	// The source is deliberately MIXED-format: R, G, B, A stored as half and Z
+	// as float, declared through per-channel channelformats -- the same shape
+	// as a real CG render (openexr-images/ScanLines/Blobbies.exr). An earlier
+	// version of this test used a uniform half source and passed while the
+	// stamp corrupted every mixed-format EXR it touched. Values vary per pixel
+	// and per channel so any channel shift or misalignment shows up, and all
+	// are exactly representable in half, so the comparison can be tight.
 	const int w = 8, h = 4;
+	const int srcCh = 5;
+	auto srcValue = [](int x, int y, int c) -> float
 	{
-		OIIO::ImageSpec s(w, h, 3, OIIO::TypeDesc::HALF);
+		switch (c)
+		{
+			case 0: return 0.125f * (float)(x % 4);        // R
+			case 1: return 0.5f;                            // G
+			case 2: return 0.25f + 0.125f * (float)(y % 2); // B
+			case 3: return 1.0f;                            // A
+			default: return 10.0f + (float)y;               // Z, float
+		}
+	};
+	{
+		OIIO::ImageSpec s(w, h, srcCh, OIIO::TypeDesc::HALF);
+		s.channelnames = { "R", "G", "B", "A", "Z" };
+		s.channelformats = { OIIO::TypeDesc::HALF, OIIO::TypeDesc::HALF,
+		                     OIIO::TypeDesc::HALF, OIIO::TypeDesc::HALF,
+		                     OIIO::TypeDesc::FLOAT };
+		s.alpha_channel = 3;
+		s.z_channel = 4;
+		std::vector<float> px((size_t)w * h * srcCh);
+		for (int y = 0; y < h; ++y)
+			for (int x = 0; x < w; ++x)
+				for (int c = 0; c < srcCh; ++c)
+					px[((size_t)y * w + x) * srcCh + c] = srcValue(x, y, c);
 		auto o = OIIO::ImageOutput::create(srcPath);
-		std::vector<float> px((size_t)w * h * 3, 0.25f);
 		if (o && o->open(srcPath, s)) { o->write_image(OIIO::TypeDesc::FLOAT, px.data()); o->close(); }
 	}
 
@@ -203,11 +260,19 @@ int noteStampSelfTest()
 	stroke->author = "selftest";
 	rev.addNote(std::move(stroke));
 
+	// One marked texel with four DIFFERENT channel values, so a swapped or
+	// shifted notes channel cannot pass for a correct one.
+	const int markX = 2, markY = 1;
 	gfcNoteStamp::Options opt;
 	opt.writeHeader = true;
 	opt.layerRGBA.assign((size_t)w * h * 4, 0);
-	opt.layerRGBA[0] = 255;                     // one opaque red-ish texel
-	opt.layerRGBA[3] = 255;
+	{
+		const size_t m = ((size_t)markY * w + markX) * 4;
+		opt.layerRGBA[m + 0] = 255;
+		opt.layerRGBA[m + 1] = 128;
+		opt.layerRGBA[m + 2] = 64;
+		opt.layerRGBA[m + 3] = 255;
+	}
 	opt.layerWidth = w;
 	opt.layerHeight = h;
 
@@ -222,25 +287,63 @@ int noteStampSelfTest()
 	check(json.find("\"points\"") != std::string::npos,
 	      "geometry survives into the header");
 
-	// The beauty must be untouched, and the notes layer must be addressable
-	// by name rather than by position.
+	// Every channel is looked up BY NAME. The EXR reader is free to reorder
+	// channels, so a positional check can pass against the wrong channel.
 	{
 		auto in = OIIO::ImageInput::open(outPath);
 		check(in != nullptr, "the stamped file opens");
 		if (in)
 		{
 			const OIIO::ImageSpec& s = in->spec();
-			check(s.nchannels == 7, "3 source channels + 4 notes channels");
-			bool named = false;
-			for (const std::string& n : s.channelnames)
-				if (n == "notes.A") named = true;
-			check(named, "the notes layer is named, so a viewer can find it");
+			check(s.nchannels == srcCh + 4, "5 source channels + 4 notes channels");
+
+			auto idx = [&](const char* name) -> int
+			{
+				for (int c = 0; c < (int)s.channelnames.size(); ++c)
+					if (s.channelnames[c] == name) return c;
+				return -1;
+			};
+			const int srcIdx[5] = { idx("R"), idx("G"), idx("B"), idx("A"), idx("Z") };
+			const int noteIdx[4] = { idx("notes.R"), idx("notes.G"), idx("notes.B"), idx("notes.A") };
+			bool allNamed = true;
+			for (int c = 0; c < 5; ++c) allNamed = allNamed && srcIdx[c] >= 0;
+			for (int c = 0; c < 4; ++c) allNamed = allNamed && noteIdx[c] >= 0;
+			check(allNamed, "every source channel and every notes channel is present by name");
 
 			std::vector<float> px((size_t)w * h * s.nchannels);
 			in->read_image(0, 0, 0, s.nchannels, OIIO::TypeDesc::FLOAT, px.data());
-			check(px[0] > 0.24f && px[0] < 0.26f, "source pixel value is unchanged");
-			check(px[3] > 0.99f, "the notes layer carries what was handed in");
 			in->close();
+
+			if (allNamed)
+			{
+				bool beautyExact = true;
+				bool layerSane = true;
+				for (int y = 0; y < h; ++y)
+				{
+					for (int x = 0; x < w; ++x)
+					{
+						const float* p = &px[((size_t)y * w + x) * s.nchannels];
+						for (int c = 0; c < 5; ++c)
+						{
+							const float d = p[srcIdx[c]] - srcValue(x, y, c);
+							if (!(d > -1e-4f && d < 1e-4f)) beautyExact = false;
+						}
+						for (int c = 0; c < 4; ++c)
+						{
+							const float v = p[noteIdx[c]];
+							if (!(v >= 0.0f && v <= 1.0f)) layerSane = false;
+						}
+					}
+				}
+				check(beautyExact, "every source channel of every pixel is unchanged (mixed half/float)");
+				check(layerSane, "every notes value is finite and within 0..1");
+
+				const float* m = &px[((size_t)markY * w + markX) * s.nchannels];
+				auto near = [](float a, float b) { return a - b > -0.01f && a - b < 0.01f; };
+				check(near(m[noteIdx[0]], 1.0f) && near(m[noteIdx[1]], 128.0f / 255.0f) &&
+				      near(m[noteIdx[2]], 64.0f / 255.0f) && near(m[noteIdx[3]], 1.0f),
+				      "the marked texel carries R, G, B and A in the right channels");
+			}
 		}
 	}
 

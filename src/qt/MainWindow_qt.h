@@ -55,6 +55,14 @@ public:
      * this a tree rebuild on every drag.
      */
     void refreshNotesForLoadedMedia();
+
+    /**
+     * JEF-41: copy the active plate's current frame to @a outPath with its
+     * notes attached (JSON header + notes.* layer), without re-rendering.
+     * Makes the viewport GL context current for the layer rasterisation.
+     * Fills @a message with a one-line outcome either way.
+     */
+    bool stampActiveFrameNotes(const QString& outPath, QString* message);
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
     // Headless render smoke test (--render-test). Renders one frame of

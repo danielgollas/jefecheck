@@ -313,6 +313,16 @@ public:
     //int getSizeXAtFrame(int frameNo,int slice=0);
     //int getSizeYAtFrame(int frameNo,int slice=0);
     char * getFilenameatFrame(int frameNo);
+    /**
+     * The on-disk path of a timeline frame, undecorated.
+     *
+     * getFilenameatFrame() is for DISPLAY: it appends " - NOT IN RAM" or
+     * " (HOLDING FIRST)" to the name, so using it as a path fails for any
+     * frame that is not currently decoded. This returns the raw path, or an
+     * empty string when frameNo falls outside the sequence. Normal hold-mode
+     * mapping only -- hold modes redirect what is DISPLAYED, not what is on disk.
+     */
+    std::string framePathAt(int frameNo) const;
    
     Rectang getFrameSizeAt(int frameNo);
     void resizeSldr(void);

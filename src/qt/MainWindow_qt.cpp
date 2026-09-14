@@ -529,6 +529,17 @@ void MainWindow_Qt::buildMenuBar() {
     recentPlaylistMenu_ = fileMenu->addMenu(tr("Recent Playlists"));
     recentPlaylistMenu_->setObjectName("menu.file.recentplaylists");
 
+    // JEF-41: attach the active frame's notes to a copy of its EXR.
+    fileMenu->addSeparator();
+    fileMenu->addAction(tr("Stamp Notes into EXR…"), this, [this]() {
+        const QString out = QFileDialog::getSaveFileName(
+            this, tr("Stamp Notes into EXR"), QString(), tr("OpenEXR (*.exr)"));
+        if (out.isEmpty()) return;
+        QString message;
+        stampActiveFrameNotes(out, &message);
+        statusBar()->showMessage(message, 8000);
+    })->setObjectName("menu.file.stampnotes");
+
     // Rebuild both recent submenus each time the File menu opens.
     connect(fileMenu, &QMenu::aboutToShow, this, [this]() {
         rebuildRecentSessionsMenu();
@@ -1691,6 +1702,37 @@ void MainWindow_Qt::maybeRestoreSessionAtStartup() {
              "Recover the previous session?");
     if (QMessageBox::question(this, tr("Session"), msg) == QMessageBox::Yes)
         doLoad();
+}
+
+bool MainWindow_Qt::stampActiveFrameNotes(const QString& outPath, QString* message) {
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    if (!viewport_) {
+        say(tr("Stamp failed: no viewport"));
+        return false;
+    }
+
+    const int plate = jefe::qt::getActivePlate();
+    jefe::qt::NoteStampResult r;
+
+    // The notes layer is rasterised on the GPU, so the viewport's context must
+    // be current -- the same requirement a render has (developer_notes.md §18).
+    viewport_->makeCurrent();
+    const bool ok = jefe::qt::stampNotesIntoExr(plate < 0 ? 0 : plate,
+                                                outPath.toStdString(),
+                                                /*writeHeader*/ true,
+                                                /*writeLayer*/ true, r);
+    viewport_->doneCurrent();
+
+    if (!ok) {
+        say(tr("Stamp failed: %1").arg(QString::fromStdString(r.error)));
+        return false;
+    }
+    say(tr("Stamped %1 note(s) from %2 into %3 — %4 marked texels in the notes layer")
+            .arg(r.noteCount)
+            .arg(QFileInfo(QString::fromStdString(r.sourcePath)).fileName())
+            .arg(QFileInfo(outPath).fileName())
+            .arg(r.markedTexels));
+    return true;
 }
 
 void MainWindow_Qt::refreshNotesForLoadedMedia() {

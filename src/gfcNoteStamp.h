@@ -59,6 +59,9 @@ namespace gfcNoteStamp
 
 	/** Reads jefecheck:notes back out of an EXR. Empty when absent. */
 	std::string readEmbeddedJson(const std::string& exrPath);
+
+	/** Pixel dimensions of an image, read from its header without its pixels. */
+	bool imageSize(const std::string& path, int* width, int* height);
 }
 
 /** Self-test: stamps a generated EXR and reads the attribute back. */

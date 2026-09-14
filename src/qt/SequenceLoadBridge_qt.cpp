@@ -19,6 +19,8 @@
 #include "../gfcrevision.h"
 #include "../gfcnote.h"
 #include "../gfcNoteStore.h"
+#include "../gfcNoteOverlay.h"
+#include "../gfcNoteStamp.h"
 #include "../gfcpickmanager.h"
 #include "../xmlParser.h"
 #include "../gfcSequence.h"
@@ -2423,6 +2425,103 @@ bool notesVisible() { return g_notesVisible; }
 void setNotesVisible(bool visible) { g_notesVisible = visible; }
 
 void syncPlateNotes() { syncPlateNotesImpl(); }
+
+bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
+                       bool writeHeader, bool writeLayer,
+                       NoteStampResult& result) {
+    result = NoteStampResult{};
+    auto fail = [&](const std::string& why) {
+        result.error = why;
+        return false;
+    };
+
+    // The header attribute and the named layer only mean something in EXR.
+    // Refuse anything else up front rather than write a PNG that silently
+    // dropped both.
+    std::string ext = outExr.size() >= 4 ? outExr.substr(outExr.size() - 4) : std::string();
+    for (char& c : ext) {
+        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+    }
+    if (ext != ".exr") return fail("the output must be an .exr file");
+
+    gfcSequence* seq = sequenceForPlate(plateIdx);
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!seq || !review) return fail("no media is loaded on this plate");
+
+    // Resolve the file of what the plate is DISPLAYING, which lives in one of
+    // two places.
+    //
+    // A sequence loaded for playback populates the decoded-frames list, and
+    // framePathAt() gives that frame's path -- never getFilenameatFrame(),
+    // which is a display string that appends " - NOT IN RAM" to any frame not
+    // decoded right now.
+    //
+    // A still opened through Quick Load, drag-drop or --open-file leaves that
+    // list EMPTY and is drawn from the sequence's preview frame instead
+    // (gfcPlate::getFrameAndSequence, showPreview branch). Asking only the
+    // frames list reported "frame 1 is outside this plate's sequence" over an
+    // image that was plainly on screen -- so fall back to the preview frame's
+    // own path.
+    //
+    // Both of those are filled by an ASYNCHRONOUS decode, so right after a load
+    // either can still be empty: the same stamp failed at 4.5 s on one run and
+    // succeeded on the next with no code change. filenameGeneric is set when
+    // the sequence is identified, before any decode, and for a single still it
+    // is simply that file's path -- so it closes the race for stills. A true
+    // sequence pattern ("name.####.exr") is not a path, and guessing its frame
+    // numbering would risk stamping the wrong file, so that case says what to
+    // do instead of guessing.
+    const int frame = getCurrentFrame();
+    result.sourcePath = seq->framePathAt(frame);
+    if (result.sourcePath.empty()) {
+        result.sourcePath = seq->getPreviewFrame().fileName;
+    }
+    if (result.sourcePath.empty() &&
+        !seq->filenameGeneric.empty() &&
+        seq->filenameGeneric.find('#') == std::string::npos) {
+        result.sourcePath = seq->filenameGeneric;
+    }
+    if (result.sourcePath.empty()) {
+        return fail("frame " + std::to_string(frame) +
+                    " is not decoded yet -- wait for loading to finish and try again");
+    }
+
+    std::vector<const gfcNote*> notes;
+    for (const auto& rev : review->revisions) {
+        for (const auto& n : rev.notes) {
+            if (n) notes.push_back(n.get());
+        }
+    }
+    result.noteCount = (int)notes.size();
+
+    if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
+        return fail("cannot read " + result.sourcePath);
+    }
+
+    gfcNoteStamp::Options opt;
+    opt.writeHeader = writeHeader;
+    std::string err;
+    if (writeLayer) {
+        // Rasterised at the SOURCE image's own size. Notes are normalised to
+        // the source, so this mapping is exact -- none of the plate's pan,
+        // zoom or crop is involved.
+        if (!gfcNoteOverlay::rasterise(notes, frame, plateIdx,
+                                       result.width, result.height,
+                                       opt.layerRGBA, &err)) {
+            return fail(err);
+        }
+        opt.layerWidth = result.width;
+        opt.layerHeight = result.height;
+        for (size_t p = 3; p < opt.layerRGBA.size(); p += 4) {
+            if (opt.layerRGBA[p] != 0) ++result.markedTexels;
+        }
+    }
+
+    if (!gfcNoteStamp::stamp(result.sourcePath, outExr, *review, opt, &err)) {
+        return fail(err);
+    }
+    return true;
+}
 
 void addDemoNotes(int plateIdx) {
     gfcReview* review = reviewForPlate(plateIdx);

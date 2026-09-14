@@ -251,7 +251,14 @@ void gfcNoteOverlay::draw(const std::vector<const gfcNote*>& notes,
 	glDisable(GL_TEXTURE_RECTANGLE_ARB);
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	// Colour: ordinary "over". Alpha: ONE, ONE_MINUS_SRC_ALPHA -- not SRC_ALPHA.
+	// With plain glBlendFunc the destination alpha comes out a*a over a
+	// transparent buffer, which is wrong for the rasterised notes layer, and
+	// 1 - a + a*a over an opaque screen, which quietly punches alpha holes along
+	// every outline edge. Separate factors leave the colour identical and make
+	// the alpha correct in both places.
+	glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
+	                    GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 	for (size_t i = 0; i < visible.size(); ++i)
 	{
@@ -297,6 +304,113 @@ void gfcNoteOverlay::draw(const std::vector<const gfcNote*>& notes,
 		glUseProgramObjectARB(prevProgram);
 	}
 	glPopAttrib();
+}
+
+bool gfcNoteOverlay::rasterise(const std::vector<const gfcNote*>& notes,
+                               int frame, int quadID, int width, int height,
+                               std::vector<unsigned char>& rgba, std::string* err)
+{
+	auto fail = [&](const std::string& why)
+	{
+		if (err)
+		{
+			*err = why;
+		}
+		return false;
+	};
+
+	if (width <= 0 || height <= 0)
+	{
+		return fail("rasterise: image has no size");
+	}
+
+	GLint maxRb = 0;
+	glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE_EXT, &maxRb);
+	if (width > maxRb || height > maxRb)
+	{
+		return fail("rasterise: " + std::to_string(width) + "x" + std::to_string(height) +
+		            " exceeds this GPU's renderbuffer limit of " + std::to_string(maxRb));
+	}
+
+	// The viewport renders into QOpenGLWidget's own framebuffer rather than 0,
+	// so the binding is saved and put back instead of assumed.
+	GLint prevFbo = 0;
+	glGetIntegerv(GL_FRAMEBUFFER_BINDING_EXT, &prevFbo);
+
+	GLuint fbo = 0;
+	GLuint rb = 0;
+	glGenFramebuffersEXT(1, &fbo);
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fbo);
+	glGenRenderbuffersEXT(1, &rb);
+	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, rb);
+	glRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_RGBA8, width, height);
+	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+	                             GL_RENDERBUFFER_EXT, rb);
+
+	const GLenum status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
+	if (status != GL_FRAMEBUFFER_COMPLETE_EXT)
+	{
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, (GLuint)prevFbo);
+		glDeleteRenderbuffersEXT(1, &rb);
+		glDeleteFramebuffersEXT(1, &fbo);
+		return fail("rasterise: offscreen framebuffer incomplete (status " +
+		            std::to_string((unsigned)status) + ")");
+	}
+
+	glPushAttrib(GL_VIEWPORT_BIT | GL_COLOR_BUFFER_BIT | GL_TRANSFORM_BIT);
+	glPushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
+
+	glViewport(0, 0, width, height);
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0.0, (double)width, 0.0, (double)height, -1.0, 1.0);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// Notes are y-DOWN normalised and this ortho is y-UP. An origin on the top
+	// edge with a negative height is the flip -- the same convention gfcPlate
+	// uses for both the screen and the export composite.
+	Rect target;
+	target.x = 0.0f;
+	target.y = (float)height;
+	target.w = (float)width;
+	target.h = -(float)height;
+	draw(notes, frame, quadID, target);
+
+	rgba.assign((size_t)width * (size_t)height * 4, 0);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glPopClientAttrib();
+	glPopAttrib();
+
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, (GLuint)prevFbo);
+	glDeleteRenderbuffersEXT(1, &rb);
+	glDeleteFramebuffersEXT(1, &fbo);
+
+	// GL reads the bottom row first; EXR and the stamp want the top row first.
+	const size_t row = (size_t)width * 4;
+	for (int y = 0; y < height / 2; ++y)
+	{
+		unsigned char* top = &rgba[(size_t)y * row];
+		unsigned char* bot = &rgba[(size_t)(height - 1 - y) * row];
+		for (size_t x = 0; x < row; ++x)
+		{
+			const unsigned char t = top[x];
+			top[x] = bot[x];
+			bot[x] = t;
+		}
+	}
+	return true;
 }
 
 // ---------------------------------------------------------------------------

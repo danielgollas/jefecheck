@@ -1037,6 +1037,30 @@ void syncPlateNotes();
  */
 void addDemoNotes(int plateIdx);
 
+/** Outcome of stampNotesIntoExr(), so the caller can report it plainly. */
+struct NoteStampResult {
+    std::string sourcePath;   // the frame file on disk the stamp copied from
+    int width = 0;
+    int height = 0;
+    int noteCount = 0;        // notes embedded in the header (the whole review)
+    long markedTexels = 0;    // non-transparent texels in this frame's notes layer
+    std::string error;        // set when the stamp failed
+};
+
+/**
+ * JEF-41: copy the plate's CURRENT frame file to outExr with its notes
+ * attached -- the review's geometry as a jefecheck:notes JSON header
+ * attribute, and this frame's visible markup rasterised into a notes.R/G/B/A
+ * layer. The beauty channels come from the file on disk; nothing is
+ * re-rendered, so the FX stack and colour correction cannot alter them.
+ *
+ * Requires the viewport GL context to be current, because the layer is
+ * rasterised on the GPU. outExr must end in .exr and differ from the source.
+ */
+bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
+                       bool writeHeader, bool writeLayer,
+                       NoteStampResult& result);
+
 bool notesVisible();
 void setNotesVisible(bool visible);
 void toggleNotesVisible();

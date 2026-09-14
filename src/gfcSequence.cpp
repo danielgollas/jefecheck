@@ -1411,6 +1411,13 @@ gfcFrame gfcSequence::getFrame ( int frameNo,bool pforceLoad ) {
 
 
 
+std::string gfcSequence::framePathAt ( int frameNo ) const {
+	const long idx = ( long ) frameNo - 1 - ( long ) frameOffset;
+	if ( idx < 0 || idx >= ( long ) frames.size() )
+		return std::string();
+	return frames[ ( size_t ) idx ].fileName;
+}
+
 char * gfcSequence::getFilenameatFrame ( int frameNo ) {
 	static char tmp[2048];
 	/*
