@@ -82,6 +82,9 @@ GFCNETID_SENDALLREADY,
 GFCNETID_NOTEADDMESSAGE, GFCNETID_NOTEADDBROADCASTMESSAGE,
 GFCNETID_NOTEREMOVEMESSAGE, GFCNETID_NOTEREMOVEBROADCASTMESSAGE,
 GFCNETID_REVISIONLOCKMESSAGE, GFCNETID_REVISIONLOCKBROADCASTMESSAGE,
+// Unlock was missing, so a host unlocking a round changed only their own copy
+// while every peer kept it locked. Appended for the same reason as above.
+GFCNETID_REVISIONUNLOCKMESSAGE, GFCNETID_REVISIONUNLOCKBROADCASTMESSAGE,
 
 };
 
@@ -640,10 +643,10 @@ inline std::unique_ptr<gfcNote> unserializeNote(RakNet::BitStream* bs) {
 namespace jefe { namespace net {
 
 struct NoteSyncEvent {
-	enum Kind { Add, Remove, RevisionLock } kind = Add;
+	enum Kind { Add, Remove, RevisionLock, RevisionUnlock } kind = Add;
 	std::unique_ptr<gfcNote> note;   // set when kind == Add
 	std::string noteId;              // set when kind == Remove
-	std::string revisionId;          // set when kind == RevisionLock
+	std::string revisionId;          // set when kind == RevisionLock or RevisionUnlock
 };
 
 } } // namespace jefe::net

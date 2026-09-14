@@ -959,11 +959,9 @@ int  noteLockState(int plateIdx);
 // !isNotesHost().
 bool lockOpenRevision(int plateIdx);
 
-// Unlocks the most recent revision if it is locked. Local-only: Task 4 did
-// not add a wire message for unlock (only GFCNETID_REVISIONLOCKMESSAGE), so
-// this does not sync to remote peers -- see the Task 6 report for the
-// follow-up this leaves. Returns false when nothing is locked, or when
-// !isNotesHost().
+// Unlocks the most recent revision if it is locked, persists the sidecar, and
+// broadcasts GFCNETID_REVISIONUNLOCKMESSAGE so every peer unlocks it too.
+// Returns false when nothing is locked, or when !isNotesHost().
 bool unlockLatestRevision(int plateIdx);
 
 // True when this client may lock/unlock: solo (no remote session) is always
@@ -1025,6 +1023,11 @@ bool noteDrawEnd();
 /** Discard an in-progress note (Escape). */
 void noteDrawCancel();
 bool noteDrawInProgress();
+/** True when the in-progress note is a text note, which needs its words
+    before noteDrawEnd() will commit it. */
+bool noteDrawIsText();
+/** Set the words of the in-progress text note. No-op for other note types. */
+void noteDrawSetText(const std::string& text);
 
 /** Push every plate's notes from the review store into the renderer. Call
     after anything that changes a review: a draw, a sync event, a media load. */

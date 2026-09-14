@@ -97,6 +97,7 @@ public:
 	void broadcastNoteAdd(const gfcNote& n);
 	void broadcastNoteRemove(const std::string& noteId);
 	void broadcastRevisionLock(const std::string& revisionId);
+	void broadcastRevisionUnlock(const std::string& revisionId);
 
 	// Drains note add/remove/lock events received since the last call --
 	// mirrors chatLogLines()/getChatLog()'s poll-and-drain shape. For a

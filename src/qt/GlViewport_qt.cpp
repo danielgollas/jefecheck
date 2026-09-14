@@ -14,7 +14,9 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QGestureEvent>
+#include <QInputDialog>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPinchGesture>
@@ -206,7 +208,26 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
 void GlViewport_Qt::mouseReleaseEvent(QMouseEvent* e) {
     if (noteDragActive_) {
         noteDragActive_ = false;
-        jefe::qt::noteDrawEnd();   // adds, broadcasts and saves the sidecar
+        if (jefe::qt::noteDrawIsText()) {
+            // A text note needs its words before it can exist. Ask on release
+            // -- the click placed it, a drag moved it -- and treat Cancel or
+            // an empty answer as "never mind" rather than committing a note
+            // with nothing in it, which would draw nothing and still clutter
+            // the dock.
+            bool ok = false;
+            const QString text = QInputDialog::getText(
+                this, tr("Text Note"), tr("Note:"), QLineEdit::Normal,
+                QString(), &ok);
+            setFocus(Qt::OtherFocusReason);   // the dialog took keyboard focus
+            if (ok && !text.trimmed().isEmpty()) {
+                jefe::qt::noteDrawSetText(text.trimmed().toStdString());
+                jefe::qt::noteDrawEnd();
+            } else {
+                jefe::qt::noteDrawCancel();
+            }
+        } else {
+            jefe::qt::noteDrawEnd();   // adds, broadcasts and saves the sidecar
+        }
         update();
         emit plateStateChanged();  // the dock's list has a new row
         if (listener_) listener_->onEvent(jefe::ui::EventType::Release);

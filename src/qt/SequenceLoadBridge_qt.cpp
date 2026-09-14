@@ -2283,6 +2283,18 @@ bool applyInboundNoteSyncEvents() {
                 }
                 if (lockedHere) { gfcNoteStore::save(*review); applied = true; }
             }
+        } else if (ev.kind == Kind::RevisionUnlock) {
+            for (auto& review : g_noteReviews) {
+                bool unlockedHere = false;
+                for (auto& revision : review->revisions) {
+                    if (revision.id == ev.revisionId && revision.locked) {
+                        revision.locked = false;
+                        revision.modified = time(nullptr);
+                        unlockedHere = true;
+                    }
+                }
+                if (unlockedHere) { gfcNoteStore::save(*review); applied = true; }
+            }
         }
     }
     return applied;
@@ -2368,9 +2380,6 @@ bool lockOpenRevision(int plateIdx) {
 }
 
 bool unlockLatestRevision(int plateIdx) {
-    // Local-only: Task 4 (gfcnetworkmanager.h) added a wire message for LOCK
-    // (GFCNETID_REVISIONLOCKMESSAGE) but not its unlock counterpart, so this
-    // does not sync to remote peers. See the Task 6 report.
     if (!isNotesHost()) return false;
     gfcReview* review = reviewForPlate(plateIdx);
     if (!review || review->revisions.empty()) return false;
@@ -2379,6 +2388,9 @@ bool unlockLatestRevision(int plateIdx) {
     latest.locked = false;
     latest.modified = time(nullptr);
     gfcNoteStore::save(*review);
+    // Without this the unlock stayed on the host's machine: every peer kept
+    // the round locked and could not add to it, while the host could.
+    networkManager.broadcastRevisionUnlock(latest.id);
     return true;
 }
 
@@ -2613,6 +2625,11 @@ bool noteDrawBegin(int xFb, int yFb, int plateIdx) {
     }
     g_drawPlate = plateIdx;
     g_drawPoints.assign(1, gfcNotePoint{nx, ny});
+    // A text note is placed where it is clicked. Without this its anchor stayed
+    // at the default (0,0), so every text note landed in the image's top-left
+    // corner no matter where it was put.
+    if (auto* text = dynamic_cast<gfcNoteText*>(g_drawNote.get()))
+        text->anchor = gfcNotePoint{nx, ny};
 
     g_drawNote->quadID = plateIdx;
     g_drawNote->author = localAuthorName();
@@ -2642,6 +2659,17 @@ void noteDrawAppend(int xFb, int yFb) {
         { arrow->tail = g_drawPoints.front(); arrow->head = g_drawPoints.back(); }
     else if (auto* box = dynamic_cast<gfcNoteBox*>(g_drawNote.get()))
         { box->a = g_drawPoints.front(); box->b = g_drawPoints.back(); }
+    else if (auto* text = dynamic_cast<gfcNoteText*>(g_drawNote.get()))
+        text->anchor = g_drawPoints.back();   // dragging a text note repositions it
+}
+
+bool noteDrawIsText() {
+    return g_drawNote && g_drawNote->noteType() == GFCNOTE_TEXT;
+}
+
+void noteDrawSetText(const std::string& text) {
+    if (auto* t = dynamic_cast<gfcNoteText*>(g_drawNote.get()))
+        t->text = text;
 }
 
 bool noteDrawEnd() {
@@ -2653,6 +2681,13 @@ bool noteDrawEnd() {
     const bool needsDrag = g_drawNote->noteType() == GFCNOTE_ARROW ||
                            g_drawNote->noteType() == GFCNOTE_BOX;
     if (needsDrag && g_drawPoints.size() < 2) { noteDrawCancel(); return false; }
+
+    // The same reasoning for text: a text note with no words renders nothing,
+    // so it is refused here as well as in the viewport's prompt -- a second
+    // caller that forgets to set the text must not commit an invisible note.
+    if (auto* t = dynamic_cast<gfcNoteText*>(g_drawNote.get())) {
+        if (t->text.empty()) { noteDrawCancel(); return false; }
+    }
 
     gfcReview* review = reviewForPlate(g_drawPlate);
     if (!review) { noteDrawCancel(); return false; }

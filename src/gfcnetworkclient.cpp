@@ -1059,6 +1059,20 @@ void gfcNetworkClient::Update() {
 		}
 		break;
 
+		case GFCNETID_REVISIONUNLOCKBROADCASTMESSAGE: {
+			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
+			bs.IgnoreBits ( 8 );
+			char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
+			StringCompressor::Instance()->DecodeString ( idBuf,GFCNET_MAX_NOTE_ID_LENGTH,&bs );
+
+			jefe::net::NoteSyncEvent noteEvent;
+			noteEvent.kind = jefe::net::NoteSyncEvent::RevisionUnlock;
+			noteEvent.revisionId = idBuf;
+			pendingNoteSyncEvents_.push_back ( std::move ( noteEvent ) );
+			statusChange = true;
+		}
+		break;
+
 //NEXT CASE GOES HERE
 
         }

@@ -894,6 +894,32 @@ void gfcNetworkServer::Update() {
 					}
 					break;
 
+					case GFCNETID_REVISIONUNLOCKMESSAGE:
+					{
+						// Host only, like lock. Clearing g_revisionLocked matters
+						// beyond this broadcast: the joiner snapshot sends a LOCK
+						// whenever it is set, so leaving it stale would re-lock
+						// the round for everyone who joins after the unlock.
+						RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),true );
+						bs.IgnoreBits ( 8 );
+						char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
+						StringCompressor::Instance()->DecodeString ( idBuf,GFCNET_MAX_NOTE_ID_LENGTH,&bs );
+						std::string revisionId = idBuf;
+
+						if ( nickNameAddressMap[ev.peer] == this->name ) {
+							if ( g_revisionLocked && g_lockedRevisionId == revisionId ) {
+								g_revisionLocked = false;
+								g_lockedRevisionId.clear();
+							}
+
+							RakNet::BitStream outBS;
+							outBS.Write ( ( unsigned char ) GFCNETID_REVISIONUNLOCKBROADCASTMESSAGE );
+							StringCompressor::Instance()->EncodeString ( revisionId.c_str(),GFCNET_MAX_NOTE_ID_LENGTH,&outBS );
+							transport_->send ( outBS.GetData(), ( int ) outBS.GetNumberOfBytesUsed(), jefe::net::kInvalidPeerId, true );
+						}
+					}
+					break;
+
 					///these cases simply forward the bitstream to all except original sender
 					case GFCNETID_COLORCORRECTIONMESSAGE:
 					case GFCNETID_OTHERSTATESMESSAGE:

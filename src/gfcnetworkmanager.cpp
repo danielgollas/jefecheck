@@ -857,6 +857,15 @@ void gfcNetworkManager::broadcastRevisionLock(const std::string& revisionId)
 	client.queueNoteMessage(std::move(bytes));
 }
 
+void gfcNetworkManager::broadcastRevisionUnlock(const std::string& revisionId)
+{
+	RakNet::BitStream outBS;
+	outBS.Write((unsigned char)GFCNETID_REVISIONUNLOCKMESSAGE);
+	StringCompressor::Instance()->EncodeString(revisionId.c_str(), GFCNET_MAX_NOTE_ID_LENGTH, &outBS);
+	std::vector<unsigned char> bytes(outBS.GetData(), outBS.GetData() + outBS.GetNumberOfBytesUsed());
+	client.queueNoteMessage(std::move(bytes));
+}
+
 std::vector<jefe::net::NoteSyncEvent> gfcNetworkManager::drainNoteSyncEvents()
 {
 	return client.drainNoteSyncEvents();
