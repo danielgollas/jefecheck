@@ -1459,6 +1459,10 @@ void toggleTextModeAll() {
     plateManager.setChanged();
 }
 
+void clearTextModeAll() {
+    plateManager.clearTextModeAll();
+}
+
 void resetActivePlate() {
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;
@@ -2680,7 +2684,9 @@ void noteDrawCancel() {
 }
 
 namespace {
-// Writes g_drawPoints into the in-progress note's own geometry.
+// Writes g_drawPoints into the in-progress note's own geometry. Shared by the
+// pencil (noteDrawAppend) and the scripting hook (demoNoteAppend) so the two
+// can never interpret the same points differently.
 void applyDrawPoints() {
     if (!g_drawNote || g_drawPoints.empty()) return;
     if (auto* stroke = dynamic_cast<gfcNoteStroke*>(g_drawNote.get()))
@@ -2757,6 +2763,46 @@ bool noteDrawIsText() {
 void noteDrawSetText(const std::string& text) {
     if (auto* t = dynamic_cast<gfcNoteText*>(g_drawNote.get()))
         t->text = text;
+}
+
+bool demoNoteBegin(int plateIdx, int tool, float nx, float ny,
+                   float r, float g, float b, int size) {
+    noteDrawCancel();
+    if (plateIdx < 0) return false;
+
+    gfcReview* review = reviewForPlate(plateIdx);
+    if (!review) return false;
+    gfcRevision* open = review->openRevision();
+    if (open && open->locked) return false;
+
+    switch (tool) {
+        case NOTETOOL_ARROW: g_drawNote = std::make_unique<gfcNoteArrow>(); break;
+        case NOTETOOL_BOX:   g_drawNote = std::make_unique<gfcNoteBox>();   break;
+        case NOTETOOL_TEXT:  g_drawNote = std::make_unique<gfcNoteText>();  break;
+        default:             g_drawNote = std::make_unique<gfcNoteStroke>(); break;
+    }
+    g_drawPlate = plateIdx;
+    g_drawPoints.assign(1, gfcNotePoint{nx, ny});
+    applyDrawPoints();
+
+    g_drawNote->quadID = plateIdx;
+    g_drawNote->author = localAuthorName();
+    const int f = getCurrentFrame();
+    g_drawNote->from = f;
+    g_drawNote->to   = f;
+    g_drawNote->colorR = r;
+    g_drawNote->colorG = g;
+    g_drawNote->colorB = b;
+    g_drawNote->size = size;
+    syncPlateNotesImpl();
+    return true;
+}
+
+void demoNoteAppend(float nx, float ny) {
+    if (!g_drawNote || g_drawPlate < 0) return;
+    g_drawPoints.push_back(gfcNotePoint{nx, ny});
+    applyDrawPoints();
+    syncPlateNotesImpl();
 }
 
 bool noteDrawEnd() {

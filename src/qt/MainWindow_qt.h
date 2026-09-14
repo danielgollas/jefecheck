@@ -100,6 +100,16 @@ public:
     // draw3DrectWithFX into the next plate's draw.
     int runHeadlessFXMultiTest(const QString& imagePath);
 
+    /** Demo harness: hide every dock so the viewport fills the window. */
+    void hideControlsForDemo();
+    /**
+     * Demo harness: repaint the viewport synchronously. A scripted edit has no
+     * mouse event or inbound packet to schedule a paint, and macOS does not
+     * reliably service an async update() posted from a timer while the app is
+     * otherwise idle.
+     */
+    void repaintViewportNow();
+
 protected:
     void closeEvent(QCloseEvent* e) override;
 

@@ -1704,6 +1704,14 @@ void MainWindow_Qt::maybeRestoreSessionAtStartup() {
         doLoad();
 }
 
+void MainWindow_Qt::hideControlsForDemo() {
+    if (!controlsHidden_) toggleHideControls();
+}
+
+void MainWindow_Qt::repaintViewportNow() {
+    if (viewport_) viewport_->repaint();
+}
+
 bool MainWindow_Qt::stampActiveFrameNotes(const QString& outPath, QString* message) {
     auto say = [&](const QString& m) { if (message) *message = m; };
     if (!viewport_) {

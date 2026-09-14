@@ -11,6 +11,10 @@
 #include <QSettings>
 #include <QStringList>
 #include <QSurfaceFormat>
+#include <QDateTime>
+#include <QFont>
+#include <QImage>
+#include <QPainter>
 #include <QPixmap>
 #include <QTimer>
 
@@ -404,6 +408,200 @@ int main(int argc, char* argv[]) {
             });
             break;
         }
+    }
+
+    // --window-rect X Y W H: place the window, in logical pixels, so two
+    // instances can sit side by side for a recording.
+    for (int i = 1; i + 4 < argc; ++i) {
+        if (std::strcmp(argv[i], "--window-rect") == 0) {
+            const int x = std::atoi(argv[i + 1]);
+            const int y = std::atoi(argv[i + 2]);
+            const int w = std::atoi(argv[i + 3]);
+            const int h = std::atoi(argv[i + 4]);
+            QTimer::singleShot(0, &window, [&window, x, y, w, h]() {
+                window.setGeometry(x, y, w, h);
+            });
+            break;
+        }
+    }
+
+    // --load-all: do what the Load Sequence Manager's Load All button does --
+    // leave preview mode and start loading every track -- so a plate filled by
+    // --open-file shows its decoded frame, not the preview and its info dump.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--load-all") == 0) {
+            QTimer::singleShot(2000, &window, []() {
+                jefe::qt::setAllPlatesShowPreview(false);
+                jefe::qt::startLoadingAllTracks();
+            });
+            break;
+        }
+    }
+
+    // --hide-controls: hide every dock and the text overlay so the picture
+    // fills the window, then fit it once the resize and decode have settled.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--hide-controls") == 0) {
+            QTimer::singleShot(0, &window, [&window]() { window.hideControlsForDemo(); });
+            auto tidy = [&window]() {
+                jefe::qt::clearTextModeAll();
+                jefe::qt::fitAllPlates();
+                window.repaintViewportNow();
+                printf("DEMO: controls hidden, plates fitted\n");
+                fflush(stdout);
+            };
+            QTimer::singleShot(2500, &window, tidy);
+            QTimer::singleShot(8000, &window, tidy);
+            break;
+        }
+    }
+
+    // --demo-host <port> / --demo-join <ip> <port>: start a LAN review
+    // session without the Remote dialog. The two sides use different
+    // nicknames on purpose -- the server refuses a duplicate. The host then
+    // draws a fixed script through the real pencil draw session, so what the
+    // joiner receives is ordinary note sync; only the host's mouse input is
+    // synthesised.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--demo-host") != 0) continue;
+        const int port = std::atoi(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [port]() {
+            jefe::qt::RemoteServerParams sp;
+            sp.serverName = "Supervisor";
+            sp.port = port;
+            sp.password = "";
+            jefe::qt::connectAsServer(sp);
+            printf("DEMO: Supervisor hosting on %d\n", port);
+            fflush(stdout);
+        });
+
+        auto at = [&window](int ms, auto fn) { QTimer::singleShot(ms, &window, fn); };
+        auto drawn = [&window]() { window.repaintViewportNow(); };
+        int t = 10000;
+
+        // 1. A freehand ellipse around a blob, drawn point by point.
+        at(t, []() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_FREEHAND, 0.40f, 0.34f,
+                                    1.0f, 0.25f, 0.20f, 4);
+        });
+        for (int k = 1; k <= 60; ++k) {
+            t += 35;
+            const float a = (float)k / 60.0f * 6.2831853f;
+            at(t, [a, drawn]() {
+                jefe::qt::demoNoteAppend(0.30f + 0.10f * std::cos(a),
+                                         0.34f + 0.13f * std::sin(a));
+                drawn();
+            });
+        }
+        t += 500;
+        at(t, [drawn]() { jefe::qt::noteDrawEnd(); drawn(); printf("DEMO: ellipse sent\n"); fflush(stdout); });
+
+        // 2. An arrow pointing into it.
+        t += 1500;
+        at(t, []() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_ARROW, 0.66f, 0.18f,
+                                    1.0f, 0.78f, 0.20f, 4);
+        });
+        for (int k = 1; k <= 24; ++k) {
+            t += 35;
+            const float u = (float)k / 24.0f;
+            at(t, [u, drawn]() {
+                jefe::qt::demoNoteAppend(0.66f + (0.44f - 0.66f) * u,
+                                         0.18f + (0.32f - 0.18f) * u);
+                drawn();
+            });
+        }
+        t += 500;
+        at(t, [drawn]() { jefe::qt::noteDrawEnd(); drawn(); printf("DEMO: arrow sent\n"); fflush(stdout); });
+
+        // 3. A box around a second area.
+        t += 1500;
+        at(t, []() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_BOX, 0.55f, 0.56f,
+                                    0.35f, 0.85f, 1.0f, 3);
+        });
+        for (int k = 1; k <= 24; ++k) {
+            t += 35;
+            const float u = (float)k / 24.0f;
+            at(t, [u, drawn]() {
+                jefe::qt::demoNoteAppend(0.55f + (0.86f - 0.55f) * u,
+                                         0.56f + (0.83f - 0.56f) * u);
+                drawn();
+            });
+        }
+        t += 500;
+        at(t, [drawn]() { jefe::qt::noteDrawEnd(); drawn(); printf("DEMO: box sent\n"); fflush(stdout); });
+
+        // 4. A text note labelling the box.
+        t += 1500;
+        at(t, [drawn]() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_TEXT, 0.55f, 0.52f,
+                                    0.35f, 0.85f, 1.0f, 3);
+            jefe::qt::noteDrawSetText("too warm here");
+            jefe::qt::noteDrawEnd();
+            drawn();
+            printf("DEMO: text sent\n");
+            fflush(stdout);
+        });
+        at(t + 500, []() { printf("DEMO: script done\n"); fflush(stdout); });
+        break;
+    }
+    for (int i = 1; i + 2 < argc; ++i) {
+        if (std::strcmp(argv[i], "--demo-join") != 0) continue;
+        const std::string ip = argv[i + 1];
+        const int port = std::atoi(argv[i + 2]);
+        QTimer::singleShot(5000, &window, [ip, port]() {
+            jefe::qt::RemoteClientParams cp;
+            cp.clientName = "Artist";
+            cp.serverIP = ip;
+            cp.port = port;
+            cp.password = "";
+            jefe::qt::connectAsClient(cp);
+            printf("DEMO: Artist joining %s:%d\n", ip.c_str(), port);
+            fflush(stdout);
+        });
+        break;
+    }
+
+    // --grab-frames <dir> <caption> <startMs> <endMs>: save the window as a
+    // captioned JPEG every 66 ms between the two times. Files are named by
+    // wall-clock bucket, so two instances can be stitched side by side frame
+    // for frame -- and it works when the screen itself cannot be recorded
+    // (locked, asleep, no capture permission).
+    for (int i = 1; i + 4 < argc; ++i) {
+        if (std::strcmp(argv[i], "--grab-frames") != 0) continue;
+        const QString dir = QString::fromUtf8(argv[i + 1]);
+        const QString caption = QString::fromUtf8(argv[i + 2]);
+        const int startMs = std::atoi(argv[i + 3]);
+        const int endMs = std::atoi(argv[i + 4]);
+        constexpr int kGrabIntervalMs = 66;
+        QDir().mkpath(dir);
+        auto* grabTimer = new QTimer(&window);
+        grabTimer->setInterval(kGrabIntervalMs);
+        QObject::connect(grabTimer, &QTimer::timeout, &window, [&window, dir, caption]() {
+            QImage frame = window.grab().toImage().convertToFormat(QImage::Format_RGB32);
+            QPainter p(&frame);
+            const qreal dpr = frame.devicePixelRatio();
+            p.scale(1.0 / dpr, 1.0 / dpr);   // draw in physical pixels
+            QFont font = p.font();
+            font.setPixelSize(int(15 * dpr));
+            font.setBold(true);
+            p.setFont(font);
+            const QRect band(0, 0, frame.width(), int(30 * dpr));
+            p.fillRect(band, QColor(0, 0, 0, 170));
+            p.setPen(QColor(235, 235, 235));
+            p.drawText(band.adjusted(int(12 * dpr), 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft, caption);
+            p.end();
+            const qint64 bucket = QDateTime::currentMSecsSinceEpoch() / kGrabIntervalMs;
+            frame.save(dir + "/" + QString::number(bucket) + ".jpg", "JPG", 92);
+        });
+        QTimer::singleShot(startMs, grabTimer, [grabTimer]() { grabTimer->start(); });
+        QTimer::singleShot(endMs, grabTimer, [grabTimer, dir]() {
+            grabTimer->stop();
+            printf("GRAB: frames written to %s\n", dir.toUtf8().constData());
+            fflush(stdout);
+        });
+        break;
     }
 
     // --screenshot <path> [delayMs]: grab the window itself, not the screen,

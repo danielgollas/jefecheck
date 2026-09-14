@@ -685,6 +685,8 @@ void cycleTrackOnActivePlate(int direction);  // -1 prev, +1 next
 // users can keep one plate clean while another shows metadata.
 void toggleTextModeActive();
 void toggleTextModeAll();
+/** Turn the text overlay off on every plate (textMode 0). */
+void clearTextModeAll();
 
 // Plate reset shortcuts. `resetActivePlate` clears every per-plate
 // override on the active plate (zoom, pan, rotation, flip/flop,
@@ -1028,6 +1030,18 @@ bool noteDrawInProgress();
 bool noteDrawIsText();
 /** Set the words of the in-progress text note. No-op for other note types. */
 void noteDrawSetText(const std::string& text);
+
+/**
+ * Scripting hooks for demos and tests. They drive the SAME draw session the
+ * pencil uses, taking normalised image coordinates instead of mouse
+ * positions, so noteDrawEnd() then commits, broadcasts and saves exactly as it
+ * does for a real stroke -- only the input is synthesised. demoNoteBegin()
+ * refuses wherever the pencil's own begin would: no media, or a locked round.
+ * tool is a NoteTool value.
+ */
+bool demoNoteBegin(int plateIdx, int tool, float nx, float ny,
+                   float r, float g, float b, int size);
+void demoNoteAppend(float nx, float ny);
 
 /** Push every plate's notes from the review store into the renderer. Call
     after anything that changes a review: a draw, a sync event, a media load. */

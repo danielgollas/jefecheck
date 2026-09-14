@@ -38,6 +38,7 @@ public:
     
     void toggleTextMode(int whichOne);
     void toggleTextModeAll();
+    void clearTextModeAll();   ///< every plate to textMode 0 (no overlay text)
     
 	void fitToViewport(int whichOne);
 	void fitToViewportAll();

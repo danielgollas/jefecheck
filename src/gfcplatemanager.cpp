@@ -953,6 +953,12 @@ void gfcPlateManager::toggleTextModeAll() {
     textModeReset=false;
 }
 
+void gfcPlateManager::clearTextModeAll() {
+    setChanged();
+    for (size_t i=0;i<plates.size();i++)
+        plates[i].toggleTextMode(1);
+}
+
 
 void gfcPlateManager::toggleHistogramMode(int whichOne) {
     
