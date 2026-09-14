@@ -155,7 +155,29 @@ class gfcPlate: public gfcPickNotifee
 		int ssProgramCompleteBCS;
 
 		int ssProgramCreated;
-		
+
+		// Uniform locations for ssProgram. startSuperShader() runs for every
+		// plate on every frame -- whether or not any FX is active -- and used
+		// to look each of these up by name each time: twelve driver-side string
+		// searches per plate per frame, ~48 a frame in a 2x2 layout, for values
+		// that cannot change until the program is relinked. Resolved once per
+		// successful link in buildShader(); -1 means "not in this program", the
+		// same sentinel glGetUniformLocationARB returns for an optimised-out
+		// uniform. GLint, not GLuint: the old GLuint compared against -1 only
+		// worked by accident of unsigned promotion.
+		GLint ssLocLUT;
+		GLint ssLocLutSize;
+		GLint ssLocImage;
+		GLint ssLocR;
+		GLint ssLocG;
+		GLint ssLocB;
+		GLint ssLocA;
+		GLint ssLocGamma;
+		GLint ssLocExposure;
+		GLint ssLocBrightness;
+		GLint ssLocContrast;
+		GLint ssLocSaturation;
+
 		//the following variables determine the current state of the shader.
 		int usingLUT;
 		int currentLUTType;

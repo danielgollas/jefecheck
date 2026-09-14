@@ -167,6 +167,12 @@ gfcPlate::gfcPlate ( void )
     ssVertexShader=0;
     ssFramgmentShader=0;
     ssProgram=0;
+    // No program is linked yet, so no uniform is known. buildShader() fills
+    // these in after its first successful link.
+    ssLocLUT = ssLocLutSize = ssLocImage = -1;
+    ssLocR = ssLocG = ssLocB = ssLocA = -1;
+    ssLocGamma = ssLocExposure = -1;
+    ssLocBrightness = ssLocContrast = ssLocSaturation = -1;
     useShader=false;
 	
 	// Color-correction neutral defaults. Without these the members are
@@ -271,16 +277,15 @@ void gfcPlate::startSuperShader(){
 				//printf("binding 3D cube: %i to variable %s in unit GL_TEXTURE0+%i\n",lutManager.getLUT(groupsIter->second.widgets[*widgetIter].value).texture3D,groupsIter->second.widgets[*widgetIter].varName.c_str(),CubeUnitCounter);
 				glBindTexture ( this->lutType==CubeLUT::JEFECHECK1D?GL_TEXTURE_1D:GL_TEXTURE_3D,this->lutID);
 				//printf("Setting LUT to id=%i\n",this->lutID);
-				GLuint location=glGetUniformLocationARB(ssProgram,"LUT");
+				GLint location=ssLocLUT;
 				if(location!=-1){
 					glUniform1iARB(location, 4); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.
-					printf("Assigning lut: %i to %s on texUnit: %i on location: %i\n",lutID,this->lutType==CubeLUT::JEFECHECK1D?"GL_TEXTURE_1D":"GL_TEXTURE_3D",GL_TEXTURE0_ARB+1,location);
 				}
 				//glActiveTexture ( GL_TEXTURE0_ARB );
 
 				//also pass the lutSize to use in 3d lut calculations
 				{
-					location=glGetUniformLocationARB(ssProgram,"lutSize");
+					location=ssLocLutSize;
 					if(location!=-1){
 						glUniform1fARB(location, (float)this->lutSize); 
 					}
@@ -303,7 +308,7 @@ void gfcPlate::startSuperShader(){
 					break;
 				}
 				
-				GLuint location=glGetUniformLocationARB (ssProgram,"image");
+				GLint location=ssLocImage;
 				if(location!=-1){
 					//printf("Assigning texture unit 0 to location: %i\n",location);
 					glUniform1iARB ( location, 0); //the parameter we assign to the uniform variable is the texture unit this texture was assigned to.	
@@ -317,7 +322,7 @@ void gfcPlate::startSuperShader(){
 			
 			if(usingRGBAMasks){
 				//RGB
-				GLuint location=glGetUniformLocationARB (ssProgram,"R");
+				GLint location=ssLocR;
 				if(location!=-1){
 					glUniform1fARB (location,(GLfloat)rMask);
 					//printf("ASsigning R: %i on location: %ui\n",rMask,location);
@@ -327,7 +332,7 @@ void gfcPlate::startSuperShader(){
 					//printf("R got incorrect address: %i\n");
 				}
 
-				location=glGetUniformLocationARB (ssProgram,"G");
+				location=ssLocG;
 				if(location!=-1){
 					glUniform1fARB (location,this->gMask);
 					//printf("ASsigning G: %i on location: %i\n",gMask,location);
@@ -337,7 +342,7 @@ void gfcPlate::startSuperShader(){
 					//printf("G got incorrect address: %i\n");
 				}
 
-				location=glGetUniformLocationARB (ssProgram,"B");
+				location=ssLocB;
 				if(location!=-1){
 					glUniform1fARB (location,this->bMask);
 					//printf("ASsigning B: %i on location: %i\n",bMask,location);
@@ -347,7 +352,7 @@ void gfcPlate::startSuperShader(){
 					//printf("B got incorrect address: %i\n");
 				}
 
-				location=glGetUniformLocationARB (ssProgram,"A");
+				location=ssLocA;
 				if(location!=-1){
 					glUniform1fARB (location, this->aMask);
 					//printf("Assigning A: %i on location: %i\n",aMask,location);
@@ -362,7 +367,7 @@ void gfcPlate::startSuperShader(){
 
 			if(usingGammaExp){
 				//gamma
-				GLuint location=glGetUniformLocationARB (ssProgram,"Gamma");
+				GLint location=ssLocGamma;
 				if(location!=-1){
 					glUniform1fARB (location,this->gamma);
 					//printf("ASsigning gamma: %f on location: %i\n",gamma,location);
@@ -373,24 +378,24 @@ void gfcPlate::startSuperShader(){
 				}
 
 					//exposure
-					location=glGetUniformLocationARB ( ssProgram,"Exposure");
+					location=ssLocExposure;
 					if(location!=-1)
 						glUniform1fARB (location, this->exposure);
 			}
 
 			if(usingBCS){
 				//brightness
-				GLuint location=glGetUniformLocationARB ( ssProgram,"Brightness");
+				GLint location=ssLocBrightness;
 				if(location!=-1)
 					glUniform1fARB (location, this->brightness);
 			
 				//contrast
-				location=glGetUniformLocationARB ( ssProgram,"Contrast");
+				location=ssLocContrast;
 				if(location!=-1)
 					glUniform1fARB (location, this->contrast);
 			
 				//saturation
-				location=glGetUniformLocationARB ( ssProgram,"Saturation");
+				location=ssLocSaturation;
 				if(location!=-1)
 					glUniform1fARB (location, this->saturation);
 			}
@@ -593,19 +598,43 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		glAttachObjectARB(ssProgram,ssVertexShader);
 		glAttachObjectARB(ssProgram,ssFramgmentShader);
 
+		// A new program invalidates every location from the old one. Reset
+		// first, so a failed link can never leave stale locations behind that
+		// startSuperShader() would then write through into the wrong slots.
+		ssLocLUT = ssLocLutSize = ssLocImage = -1;
+		ssLocR = ssLocG = ssLocB = ssLocA = -1;
+		ssLocGamma = ssLocExposure = -1;
+		ssLocBrightness = ssLocContrast = ssLocSaturation = -1;
+
 		glLinkProgramARB(ssProgram);
-		
+
 		std::string infoLog;
 		infoLog = getInfoLog ( ssProgram );
 		if ( ( strstr ( infoLog.c_str(),"error" ) !=0 ) )
 		{
 			printf ( "Shader Program Linking error!:\n%s\n",infoLog.c_str() );
-			
+
 		}
 		else
 		{
 			printf ( "SuperShader: Program linked OK\n");
 			ssProgramCreated=1;
+
+			// Resolved once here instead of on every frame in
+			// startSuperShader(). Locations are fixed for the life of a linked
+			// program, and this block is the only place ssProgram is relinked.
+			ssLocLUT        = glGetUniformLocationARB(ssProgram, "LUT");
+			ssLocLutSize    = glGetUniformLocationARB(ssProgram, "lutSize");
+			ssLocImage      = glGetUniformLocationARB(ssProgram, "image");
+			ssLocR          = glGetUniformLocationARB(ssProgram, "R");
+			ssLocG          = glGetUniformLocationARB(ssProgram, "G");
+			ssLocB          = glGetUniformLocationARB(ssProgram, "B");
+			ssLocA          = glGetUniformLocationARB(ssProgram, "A");
+			ssLocGamma      = glGetUniformLocationARB(ssProgram, "Gamma");
+			ssLocExposure   = glGetUniformLocationARB(ssProgram, "Exposure");
+			ssLocBrightness = glGetUniformLocationARB(ssProgram, "Brightness");
+			ssLocContrast   = glGetUniformLocationARB(ssProgram, "Contrast");
+			ssLocSaturation = glGetUniformLocationARB(ssProgram, "Saturation");
 		}
 		
 
@@ -1348,7 +1377,15 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                     //JUST A TEST: with the binded fboTexture, draw to the FBO and move on to next step
                     for ( int i=0; i<fxStack.getNumOfFXs();i++ ) {
 
-                        gfcFX theFX=fxStack.getFX(i);
+                        // fxAt() returns a reference into fxStack's backing vector instead of
+                        // getFX()'s by-value copy -- avoids deep-copying the FX's whole param
+                        // tree (nested std::map/std::vector of widget structs with std::strings)
+                        // every frame for every active effect, and lets any state bind() caches
+                        // on the object actually persist between frames instead of living and
+                        // dying on a discarded temporary. Safe here because nothing in this loop
+                        // body adds/removes FXs from fxStack, which is the only thing that could
+                        // invalidate the reference.
+                        gfcFX& theFX=fxStack.fxAt(i);
                         if ( theFX.active ) {
                             //"swap" the active FBO
                             activeFBO=!activeFBO;

@@ -45,6 +45,43 @@ gfcFX gfcFXStack::getFX(int index) {
     }
 }
 
+/**
+ * Reference-returning counterpart to getFX(). getFX() copies the whole gfcFX
+ * (its nested std::map/std::vector param tree, all std::strings) out by value,
+ * which is exactly the per-frame, per-effect deep copy that the render loop in
+ * gfcPlate.cpp needs to avoid: it also throws away any state bind() caches on
+ * the object, since that state lives on a temporary that's discarded at the
+ * end of each loop iteration.
+ *
+ * Callers MUST only use this for direct, same-iteration access (e.g. the FX
+ * render loop's bind()/unbind() pair) and must not hold the reference across
+ * anything that can add/remove FXs from this stack (addFX(), FX_DELETE /
+ * FX_MOVEUP / FX_MOVEDOWN via handleGUICB(), moveFX(), setActive(),
+ * processNetFXCommonInfo(), clearStack(), appendFXStack()) -- those can
+ * reallocate or reorder the backing std::vector<gfcFX> and invalidate this
+ * reference, same as any vector<T>& element reference would be invalidated.
+ *
+ * Bounds handling: unlike getFX(), we can't manufacture a fresh temporary to
+ * return by reference, so an out-of-range index returns a function-local
+ * static "sentinel" gfcFX instead of a copy. We explicitly force the
+ * sentinel's active flag to false (gfcFX's own default ctor otherwise leaves
+ * active=true) so that a caller following the same "if (fx.active) bind()"
+ * pattern the render loop uses never ends up calling bind()/unbind() on a
+ * dummy, empty-initialized FX. The sentinel is shared across all out-of-range
+ * calls, but this path only exists to keep a caller mistake from touching
+ * memory outside the vector -- it is not something the per-frame render path
+ * is expected to ever hit (the loop bound is fxStack.getNumOfFXs()).
+ */
+gfcFX& gfcFXStack::fxAt(int index) {
+    if (index>=0 && index<(int)fxs.size()) {
+        return fxs[index];
+    }
+    printf("gfcFXStack::fxAt: index %i out of range (size %zu), returning inactive sentinel FX\n",index,fxs.size());
+    static gfcFX sentinel;
+    sentinel.active=false;
+    return sentinel;
+}
+
 void gfcFXStack::addFXGUIInfo(fxParamInfo theInfo, void* widgetHandle) {
     guiToFX[widgetHandle]=theInfo;
 }
