@@ -3732,7 +3732,21 @@ If "the track loads the moved media" fails while `resolved=1`, print both paths:
 
 - [ ] **Step 7: CLI check**
 
-Run: `T=$(mktemp -d) && mkdir -p "$T/JefeCheck" && printf '[%%General]\nopenLoadWindowAtStartup=0\n\n[Session]\ncleanExit=true\n' > "$T/JefeCheck/JefeCheck.ini" && cp /Users/dgollas/projects/openexr-images/ScanLines/Blobbies.exr "$T/" && ./build_qt/jefecheck.app/Contents/MacOS/jefecheck --config-dir "$T" --open-file "$T/Blobbies.exr" --export-package "$T/cli.jcreview" 2>&1 | grep '^PACKAGE:' && (./build_qt/jefecheck.app/Contents/MacOS/jefecheck --config-dir "$T" --open-package "$T/cli.jcreview" > "$T/open.log" 2>&1 &) ; sleep 8; grep '^PACKAGE:' "$T/open.log"; pkill -f "open-package $T/cli.jcreview"`
+`--open-package` keeps the app running, so this check needs a wait; the shell tool refuses a foreground `sleep`, so write these lines to `/private/tmp/claude-501/-Users-dgollas-projects-jefecheck2/08ddc330-7d2c-4dfd-ab4b-8499ea2a66ca/scratchpad/open-package-check.sh` with the Write tool and run it with `zsh <that file>` from the repo root:
+
+```zsh
+T=$(mktemp -d)
+mkdir -p "$T/JefeCheck"
+printf '[%%General]\nopenLoadWindowAtStartup=0\n\n[Session]\ncleanExit=true\n' > "$T/JefeCheck/JefeCheck.ini"
+cp /Users/dgollas/projects/openexr-images/ScanLines/Blobbies.exr "$T/"
+B=./build_qt/jefecheck.app/Contents/MacOS/jefecheck
+"$B" --config-dir "$T" --open-file "$T/Blobbies.exr" --export-package "$T/cli.jcreview" 2>&1 | grep '^PACKAGE:'
+("$B" --config-dir "$T" --open-package "$T/cli.jcreview" > "$T/open.log" 2>&1 &)
+sleep 8
+grep '^PACKAGE:' "$T/open.log"
+pkill -f "open-package $T/cli.jcreview"
+```
+
 Expected: `PACKAGE: wrote=…` then `PACKAGE: opened=<T>/cli.jcreview media=1 resolved=1 missing=0`.
 
 - [ ] **Step 8: Commit**
