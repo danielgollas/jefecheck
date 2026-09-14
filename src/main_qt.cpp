@@ -315,19 +315,35 @@ int main(int argc, char* argv[]) {
     {
         std::string peerIp; int peerPort = 0;
         if (resolveRemotePeer(argc, argv, peerIp, peerPort)) {
+            const auto tInit = std::chrono::steady_clock::now();
             jefe::qt::initializeRenderingChain();
+            printf("REMOTE-PEER: initializeRenderingChain took %lldms\n",
+                   (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - tInit).count());
+            fflush(stdout);
             jefe::qt::remoteTestPeerConnect(peerIp, peerPort, /*holdMs=*/2000, /*play=*/true);
             std::_Exit(0);
         }
     }
     if (hasRemoteTest(argc, argv)) {
+        const auto tInit = std::chrono::steady_clock::now();
         jefe::qt::initializeRenderingChain();
+        printf("REMOTE-SERVER: initializeRenderingChain took %lldms\n",
+               (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now() - tInit).count());
+        fflush(stdout);
         const int port = 60123;
         QProcess peer;
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--remote-test-peer", "127.0.0.1", QString::number(port)});
+        // Forward the child's output into this process's. It used to be
+        // discarded, which made a failing two-process test impossible to
+        // diagnose from its log: only the server's half was ever visible.
+        peer.setProcessChannelMode(QProcess::ForwardedChannels);
         peer.start();
         if (!peer.waitForStarted(2000)) { printf("REMOTE-TEST: child failed to start: %s\n", peer.errorString().toUtf8().constData()); fflush(stdout); std::_Exit(3); }
+        printf("REMOTE-SERVER: peer process started\n");
+        fflush(stdout);
         const bool sawPlay = jefe::qt::remoteTestServerSawPlay(port, /*settleMs=*/4000);
         const int  peak    = (int)jefe::qt::remoteParticipants().size();
         peer.waitForFinished(3000);

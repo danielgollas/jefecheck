@@ -2078,31 +2078,69 @@ bool pumpNetwork() {
 
 // Child/client role: connect, pump until connected (or timeout), optionally
 // start playback (mirrors a play message — used by Task 5), then hold.
+// Both halves of --remote-test print timestamped milestones. The test used to
+// report only a final participants/mirrored_play line, which cannot tell apart
+// "the peer started too slowly", "the peer never connected and played into
+// nothing" and "play arrived but was not mirrored" -- three different faults
+// with the same summary.
+namespace {
+long long remoteTestMsSince(const std::chrono::steady_clock::time_point& t0) {
+    return (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now() - t0).count();
+}
+}  // namespace
+
 void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play) {
+    const auto t0 = std::chrono::steady_clock::now();
     RemoteClientParams cp; cp.clientName = "peer"; cp.serverIP = ip; cp.port = port; cp.password = "";
     connectAsClient(cp);
+    printf("REMOTE-PEER: +%lldms connectAsClient returned\n", remoteTestMsSince(t0));
+    fflush(stdout);
     for (int t = 0; t < 3000 && !isRemoteConnected(); t += 10) {
         pumpNetwork();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    if (play) togglePlayFwd();   // sends a play/pause message to the server
+    const bool connected = isRemoteConnected();
+    printf("REMOTE-PEER: +%lldms connected=%d\n", remoteTestMsSince(t0), connected ? 1 : 0);
+    fflush(stdout);
+    if (play) {
+        togglePlayFwd();   // sends a play/pause message to the server
+        printf("REMOTE-PEER: +%lldms play toggled (reaches the server only if connected)\n",
+               remoteTestMsSince(t0));
+        fflush(stdout);
+    }
     for (int t = 0; t < holdMs; t += 10) {
         pumpNetwork();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    printf("REMOTE-PEER: +%lldms hold finished\n", remoteTestMsSince(t0));
+    fflush(stdout);
 }
 
 // Orchestrator/server role: host, pump while the child connects and toggles
 // play, and report whether the mirrored play state arrived on this (server) side.
 bool remoteTestServerSawPlay(int port, int settleMs) {
+    const auto t0 = std::chrono::steady_clock::now();
     RemoteServerParams sp; sp.serverName = "jefe-remote-test"; sp.port = port; sp.password = "";
     connectAsServer(sp);
+    printf("REMOTE-SERVER: +%lldms hosting on %d\n", remoteTestMsSince(t0), port);
+    fflush(stdout);
     bool sawPlay = false;
+    size_t lastParticipants = (size_t)-1;
     for (int t = 0; t < settleMs; t += 10) {
         pumpNetwork();
+        const size_t n = remoteParticipants().size();
+        if (n != lastParticipants) {
+            printf("REMOTE-SERVER: +%lldms participants=%zu\n", remoteTestMsSince(t0), n);
+            fflush(stdout);
+            lastParticipants = n;
+        }
         if (isPlaying()) { sawPlay = true; break; }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    printf("REMOTE-SERVER: +%lldms window closed, sawPlay=%d\n",
+           remoteTestMsSince(t0), sawPlay ? 1 : 0);
+    fflush(stdout);
     return sawPlay;
 }
 
