@@ -52,6 +52,8 @@ scanning it:
       "originalPath": "/shows/x/shot.####.exr",
       "packagedPath": "media/000/shot.####.exr",
       "fingerprint": "fp1:3b1f…",
+      "width": 1920,
+      "height": 1080,
       "frames": ["shot.0001.exr", "shot.0002.exr"],
       "notes": "notes/000.jnotes" }
   ],
@@ -59,7 +61,11 @@ scanning it:
 }
 ```
 
-`packagedPath` is empty when media is not included.
+`packagedPath` is empty when media is not included. `width` and `height` are
+the first frame's, so a relink search can discard candidates before hashing
+them. Entry names in the manifest (`packagedPath`, `notes`, LUT `file`) must be
+safe relative names, and `frames` are bare file names; a manifest breaking
+either rule is refused.
 
 ## Media fingerprint
 
@@ -114,7 +120,10 @@ proving the fallback names are unchanged.
 ## Open
 
 - **File → Open Review Package…** and **CLI** `--open-package <file>`, which
-  prints `PACKAGE: opened=<file> media=<M> resolved=<K> missing=<J>`.
+  prints `PACKAGE: opened=<file> media=<M> resolved=<K> missing=<J>` (or
+  `PACKAGE: FAIL <reason>`) and, unlike the test flags, keeps the app running
+  with the package loaded — opening a package from a shell is for looking at
+  it. It never prompts; media it cannot resolve count as missing.
 - Steps:
   1. Read and validate `manifest.json` (format and version); refuse unknown
      versions with a message naming the version.
@@ -164,9 +173,10 @@ ordinary files.
 | `src/gfcTarArchive.{h,cpp}` | ustar writer (streaming, incremental) and reader (list, extract), header checksum validation, self-test. | C++ standard library |
 | `src/gfcSha1.{h,cpp}` | SHA-1 (incremental and one-shot, hex output), lifted from `gfcNoteStore.cpp`; self-test with the FIPS 180 vectors. `gfcNoteStore` switches to it. | C++ standard library |
 | `src/gfcMediaFingerprint.{h,cpp}` | `fp1` fingerprint of a sequence from its frame paths, self-test. | OIIO, `gfcSha1` |
-| `src/gfcSessionPaths.{h,cpp}` | List and rewrite media paths inside `.jcs` XML; self-test on a fixture. | xmlParser |
-| `src/gfcNoteMerge.{h,cpp}` | Union-merge two reviews by revision and note id; self-test. | `gfcReview` |
-| `src/qt/ReviewPackage_qt.{h,cpp}` | Manifest JSON (QtCore `QJsonDocument`), export and open orchestration steps, relink search. | QtCore, the units above, bridge |
+| `src/gfcSessionPaths.{h,cpp}` | List and rewrite media paths inside `.jcs` XML; list its LUT names and FX names; self-test on a fixture. | xmlParser |
+| `src/gfcNoteMerge.{h,cpp}` | Union-merge two reviews by revision and note id, moving notes out of the incoming review; self-test. | `gfcReview` |
+| `src/gfcNoteStore.{h,cpp}` | Gains `toXmlString` / `fromXmlString`, so a package carries each review as the sidecar document without touching disk. | xmlParser |
+| `src/qt/ReviewPackage_qt.{h,cpp}` | Manifest JSON (QtCore `QJsonDocument`), the incremental exporter, the opener (extract, relink, merge, rewrite) with its app-side services passed in as callbacks; pure self-tests. | QtCore, the units above |
 | `src/qt/ReviewPackageDialog_qt.{h,cpp}` | Export dialog: path, Include media + size, progress, cancel. | QtWidgets |
 | `src/qt/SequenceLoadBridge_qt.{h,cpp}` | Session media set (shared), frame file lists, LUT source paths, loading LUT files. | managers |
 | `src/qt/MainWindow_qt.{h,cpp}` | Menu actions, save-temp-session and open-session plumbing, messages. | the above |
@@ -189,20 +199,34 @@ Self-tests join the `--notes-test` battery, each printing `NAME: pass=N fail=N`:
 - **SHA-1** (`NOTE-SHA1`): FIPS 180 vectors (`""`, `"abc"`, the 56-byte
   message, one million `a`s fed incrementally); the notes-store self-test
   still passes unchanged after `gfcNoteStore` switches to the shared unit.
+- **Package** (`NOTE-PACKAGE`): manifest round trip; a foreign format, an
+  unknown version (named in the error) and unsafe entry names refused; the
+  exporter writes entries in the stated order, packages media byte for byte,
+  points the session at packaged media, and leaves no partial file on success,
+  cancel, or a missing frame.
+- **Package open** (`NOTE-PACKAGE-OPEN`): extraction with its `.complete`
+  marker and reuse on reopen; packaged LUTs loaded before the session; the
+  session pointed at extracted media, or at original paths for a lean
+  package; notes placed beside the resolved media and not duplicated on
+  reopen; missing media counted and left at its path; truncated and
+  unknown-version packages refused.
 
-End-to-end flags on copies of openexr-images media in a temporary directory,
-run with `--config-dir` pointing at a temporary settings directory; like every
-test flag they exit 0 on pass and 2 on fail:
+End-to-end flags on a private copy of an openexr-images file, run with
+`--config-dir` pointing at a temporary settings directory; like every test
+flag they exit 0 on pass and 2 on fail:
 
-- `--package-test <workdir>`: export with media → open → the loaded tracks
-  point inside the extraction directory, each media's bytes hash equal to the
-  source, notes equal (by `gfcNoteStore::toJsonString`), plate
-  exposure/gamma/LUT name equal to the exporting session's.
-- `--relink-test <workdir>`: export without media → move the media into a
-  directory written into the test's settings as the only search path
-  (`Search/paths`, "use search paths" off to prove it is not required) → open
-  → media resolved by fingerprint (`resolved=1 missing=0`) and its notes
-  present.
+- `--package-test <image>`: export with media and without → open the one with
+  media → the loaded track points inside the extraction directory, the media's
+  bytes equal the source, notes equal (by `gfcNoteStore::toJsonString`, media
+  path aside), plate exposure/gamma/LUT equal to the exporting session's; a
+  truncated package is refused and changes nothing.
+- `--relink-test <image>`: export without media → move the media into a
+  directory set as the only search path ("use search paths" off, to prove it
+  is not required) → open → media resolved by fingerprint
+  (`resolved=1 missing=0`) and its notes present.
+- `--package-dialog-test <image>`: the export dialog writes a package with
+  progress reaching 100 %, Cancel leaves neither package nor partial file, an
+  empty path is refused with a message.
 
 ## Error handling
 
