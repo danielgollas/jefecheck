@@ -17,7 +17,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <vector>
+
+namespace jefe::qt {
 
 namespace {
 
@@ -57,11 +60,43 @@ QString noteLine(const gfcReviewSummary::Note& n) {
     return s;
 }
 
+// Computes the height of a frame entry (thumbnail on left, text on right).
+// Used both to reserve space in the header's ensureRoom() and to measure the
+// entry itself, so both passes make identical decisions.
+int computeFrameEntryHeight(const gfcReviewSummary::Frame& f, QPdfWriter& pdf, 
+                             const Fonts& fonts, int W,
+                             const std::function<int(const QFont&, const QString&, int)>& measure) {
+    const int thumbW = mm(80);
+    QImage img;
+    if (!f.thumbnailPath.empty()) img.load(qs(f.thumbnailPath));
+    const int thumbH = (img.isNull() || img.width() <= 0)
+                       ? mm(45)
+                       : std::max(1, int(double(thumbW) * img.height() / img.width() + 0.5));
+    const int textX = thumbW + mm(5);
+    const int textW = W - textX;
+    const int noteW = textW - mm(5);
+
+    const QString label = qs(gfcReviewSummary::frameLabel(f));
+    const int labelH = measure(fonts.frame, label, textW);
+    int textH = labelH + mm(1);
+    for (const gfcReviewSummary::Note& n : f.notes) {
+        const int nh = std::max(measure(fonts.body, noteLine(n), noteW), mm(3.5));
+        textH += nh + mm(1);
+    }
+    return std::max(thumbH, textH);
+}
+
+// Trace of round-header and first-entry page assignments (for self-test).
+struct LayoutTrace {
+    std::vector<int> roundHeaderPages;     // page of each round header
+    std::vector<int> roundFirstEntryPages; // page of first frame in each round (-1 if no frames)
+};
+
 // Walks the whole document. With painter == nullptr it only measures and
 // returns the page count; with a painter it draws, using totalPages in the
 // footers. Both passes make identical break decisions because both measure
 // with the same fonts against the same device.
-int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Doc& doc, int totalPages) {
+int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Doc& doc, int totalPages, LayoutTrace* trace = nullptr) {
     const Fonts fonts = makeFonts();
     const QRect area = pdf.pageLayout().paintRectPixels(kDpi);
     const int W = area.width();
@@ -129,14 +164,35 @@ int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Do
                                    " " + emDash() + " created " + qs(gfcReviewSummary::isoUtc(r.created)) +
                                    " " + emDash() + " " + (r.locked ? "locked" : "open");
             const int headerH = measure(fonts.round, header, W);
-            ensureRoom(headerH + mm(20));   // keep a round header with the start of its first entry
+            
+            // Compute the height of the first entry (if any) to reserve accurate space.
+            int firstEntryH = 0;
+            if (r.frames.empty()) {
+                // "No notes" line is body text
+                firstEntryH = measure(fonts.body, QStringLiteral("No notes"), W);
+            } else {
+                firstEntryH = computeFrameEntryHeight(r.frames[0], pdf, fonts, W, measure);
+            }
+            ensureRoom(headerH + mm(2) + firstEntryH);
+            if (trace) trace->roundHeaderPages.push_back(page);
+            
             drawText(fonts.round, header, 0, y, W, headerH);
             y += headerH + mm(2);
             if (r.frames.empty()) {
+                if (trace) trace->roundFirstEntryPages.push_back(-1);
                 paragraph(fonts.body, QStringLiteral("No notes"), mm(4));
                 continue;
             }
+            
+            bool firstEntry = true;
             for (const gfcReviewSummary::Frame& f : r.frames) {
+                const int entryH = computeFrameEntryHeight(f, pdf, fonts, W, measure);
+                ensureRoom(entryH);
+                if (firstEntry && trace) {
+                    trace->roundFirstEntryPages.push_back(page);
+                    firstEntry = false;
+                }
+
                 const int thumbW = mm(80);
                 QImage img;
                 if (!f.thumbnailPath.empty()) img.load(qs(f.thumbnailPath));
@@ -157,8 +213,7 @@ int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Do
                     noteHeights.push_back(nh);
                     textH += nh + mm(1);
                 }
-                const int entryH = std::max(thumbH, textH);
-                ensureRoom(entryH);
+                // Note: entryH already computed above; we've verified it fits
 
                 if (painter) {
                     const QRect thumbRect(0, y, thumbW, thumbH);
@@ -196,10 +251,9 @@ int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Do
 
 }  // namespace
 
-namespace jefe::qt {
-
-bool writeReviewSummaryPdf(const gfcReviewSummary::Doc& doc, const QString& path,
-                           int* pagesOut, QString* err) {
+// Internal test entry point that allows capturing layout trace.
+bool writeReviewSummaryPdfWithTrace(const gfcReviewSummary::Doc& doc, const QString& path,
+                                     int* pagesOut, QString* err, LayoutTrace* trace) {
     const QString partial = path + ".partial";
     QFile::remove(partial);
     int pages = 0;
@@ -211,14 +265,14 @@ bool writeReviewSummaryPdf(const gfcReviewSummary::Doc& doc, const QString& path
         pdf.setTitle(qs(doc.title));
         pdf.setCreator("JefeCheck " + qs(doc.appVersion));
 
-        pages = layoutSummary(pdf, nullptr, doc, 0);
+        pages = layoutSummary(pdf, nullptr, doc, 0, trace);
         QPainter painter;
         if (!painter.begin(&pdf)) {
             if (err) *err = QStringLiteral("Cannot write %1").arg(path);
             QFile::remove(partial);
             return false;
         }
-        layoutSummary(pdf, &painter, doc, pages);
+        layoutSummary(pdf, &painter, doc, pages, trace);
         painter.end();
     }
     QFile::remove(path);
@@ -229,6 +283,11 @@ bool writeReviewSummaryPdf(const gfcReviewSummary::Doc& doc, const QString& path
     }
     if (pagesOut) *pagesOut = pages;
     return true;
+}
+
+bool writeReviewSummaryPdf(const gfcReviewSummary::Doc& doc, const QString& path,
+                           int* pagesOut, QString* err) {
+    return writeReviewSummaryPdfWithTrace(doc, path, pagesOut, err, nullptr);
 }
 
 int reviewSummaryPdfSelfTest() {
@@ -318,6 +377,87 @@ int reviewSummaryPdfSelfTest() {
     int pages2 = 0;
     check(!writeReviewSummaryPdf(doc, "/nonexistent_dir_jefe/x.pdf", &pages2, &err2) && !err2.isEmpty(),
           "an unwritable path reports an error");
+
+    // Test that round headers stay on the same page as their first entry.
+    // Build a document with enough content in round 1 to fill most of a page,
+    // then add round 2 with a tall first entry that would be orphaned if the
+    // reserve height is insufficient (mm(20) vs actual entry height).
+    gfcReviewSummary::Doc docHeaderTest;
+    docHeaderTest.title = "Header orphan test";
+    docHeaderTest.exportedAt = 1789400000;
+    docHeaderTest.appVersion = "1.7.0";
+    
+    gfcReviewSummary::Media m;
+    m.mediaPath = "/test/media.exr";
+    m.displayName = "media.exr";
+    
+    // Round 1: many frames to fill most of the page
+    gfcReviewSummary::Round r1;
+    r1.id = "r1";
+    r1.author = "Round 1";
+    r1.created = 1789400000;
+    for (int i = 0; i < 18; ++i) {
+        gfcReviewSummary::Frame f;
+        f.frame = i;
+        f.thumbnailPath = thumbPath.toStdString();
+        for (int j = 0; j < 2; ++j) {
+            gfcReviewSummary::Note n;
+            n.id = "n_r1_" + std::to_string(i) + "_" + std::to_string(j);
+            n.type = "text";
+            n.author = "Reviewer";
+            n.from = i;
+            n.to = i;
+            n.text = "Note";
+            f.notes.push_back(n);
+        }
+        r1.frames.push_back(f);
+    }
+    m.rounds.push_back(r1);
+    
+    // Round 2: has a tall first frame to test the page reservation fix
+    gfcReviewSummary::Round r2;
+    r2.id = "r2";
+    r2.author = "Round 2";
+    r2.created = 1789400001;
+    gfcReviewSummary::Frame f2;
+    f2.frame = 100;
+    f2.thumbnailPath = thumbPath.toStdString();
+    for (int j = 0; j < 6; ++j) {
+        gfcReviewSummary::Note n;
+        n.id = "n_r2_" + std::to_string(j);
+        n.type = "text";
+        n.author = "Reviewer";
+        n.from = 100;
+        n.to = 100;
+        n.text = "Note";
+        f2.notes.push_back(n);
+    }
+    r2.frames.push_back(f2);
+    m.rounds.push_back(r2);
+    
+    docHeaderTest.media = {m};
+    
+    const QString outHeaderTest = dir + "/header_test.pdf";
+    int pagesHeaderTest = 0;
+    QString errHeaderTest;
+    LayoutTrace traceHeaderTest;
+    check(writeReviewSummaryPdfWithTrace(docHeaderTest, outHeaderTest, &pagesHeaderTest, &errHeaderTest, &traceHeaderTest),
+          "header-orphan test document renders");
+    
+    // Verify that round headers are on the same page as their first entries.
+    bool headerPageMismatch = false;
+    if (traceHeaderTest.roundHeaderPages.size() == traceHeaderTest.roundFirstEntryPages.size()) {
+        for (size_t i = 0; i < traceHeaderTest.roundHeaderPages.size(); ++i) {
+            if (traceHeaderTest.roundFirstEntryPages[i] >= 0 &&
+                traceHeaderTest.roundHeaderPages[i] != traceHeaderTest.roundFirstEntryPages[i]) {
+                headerPageMismatch = true;
+                break;
+            }
+        }
+    } else {
+        headerPageMismatch = true;
+    }
+    check(!headerPageMismatch, "round headers on same page as first entry");
 
     std::printf("NOTE-SUMMARY-PDF: pass=%d fail=%d\n", pass, fail);
     return fail;
