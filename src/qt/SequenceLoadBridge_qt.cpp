@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
+#include <map>
 #include <thread>
 
 extern gfcPlateManager plateManager;
@@ -2278,9 +2279,14 @@ std::unique_ptr<gfcNote> g_drawNote;
 /** Points collected so far; for arrow/box only the first and last matter. */
 std::vector<gfcNotePoint> g_drawPoints;
 
-/** Copies published by setPlateNotesToRound(); plates borrow them until the
-    next syncPlateNotesImpl() republishes the real notes and frees these. */
-std::vector<std::unique_ptr<gfcNote>> g_roundNoteCopies;
+/** Copies published by setPlateNotesToRound(), keyed by plate index. Plates
+    borrow them until the next syncPlateNotesImpl() republishes the real
+    notes and frees all of them. Kept per plate -- not one shared pool --
+    because gfcPlate::setNotes() stores borrowed pointers per plate until
+    THAT plate is republished, so freeing one plate's copies while
+    replacing another's would leave the first plate pointing at freed
+    memory. */
+std::map<int, std::vector<std::unique_ptr<gfcNote>>> g_roundNoteCopies;
 
 void syncPlateNotesImpl() {
     for (int i = 0; i < plateManager.plateCount(); ++i) {
@@ -2544,7 +2550,12 @@ std::vector<SessionMedia> getSessionMediaSet() {
         gfcSequence* seq = trackManager.getSequence(t);
         if (!seq || !seq->myGUI) continue;
         const std::string gui = seq->myGUI->getFilename();
-        // Same key reviewForPlate() uses, so the summary finds the same review.
+        // Prefer the generic pattern; fall back to the one real frame path
+        // when the sequence hasn't been scanned yet (filenameGeneric still
+        // empty) -- unlike reviewForPlate(), which skips the track in that
+        // case. normalisePath() collapses a frame path to the same pattern
+        // as its generic form, so this still lands on the sidecar's real
+        // key and the track still belongs in the summary.
         add(seq->filenameGeneric.empty() ? gui : seq->filenameGeneric, gui, t, -1, -1);
     }
     if (auto* entries = playlistManager.getPlaylist()) {
@@ -2645,10 +2656,11 @@ bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundI
             copies.push_back(std::move(c));
         }
     }
-    // Publish the new list before freeing the copies the plate may still hold.
+    // Publish the new list before freeing this plate's previous copies --
+    // and only this plate's entry, so a sibling plate's still-borrowed
+    // copies are untouched.
     plateManager.setPlateNotes(plateIdx, borrowed);
-    g_roundNoteCopies.clear();
-    g_roundNoteCopies = std::move(copies);
+    g_roundNoteCopies[plateIdx] = std::move(copies);
     return true;
 }
 

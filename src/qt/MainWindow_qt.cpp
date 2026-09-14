@@ -1866,6 +1866,35 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     check(!QFile::exists(txt + ".partial") && !QFile::exists(csv + ".partial"), "no partial files left");
     check(!exportReviewSummary(work + "/summary.doc", &stats, &msg), "an unknown extension is refused");
 
+    // A second media whose sidecar exists but is not a notes document (valid
+    // XML, wrong shape) -- buildReviewSummary() should report it as
+    // "Notes unreadable" rather than silently showing "No notes". Track 1,
+    // not track 0: the next task's PDF checks assume track 0 is still the
+    // first media, so it must stay exactly as the checks above left it.
+    const QString media2 = work + "/unreadable_" + QFileInfo(media).fileName();
+    if (!QFile::copy(imagePath, media2)) {
+        printf("SUMMARY-TEST FAIL cannot copy %s\n", qPrintable(imagePath));
+        fflush(stdout);
+        return 2;
+    }
+    const std::string sidecar2 = gfcNoteStore::sidecarPathFor(
+        gfcNoteStore::normalisePath(media2.toStdString()));
+    {
+        QFile f(QString::fromStdString(sidecar2));
+        check(f.open(QIODevice::WriteOnly) && f.write("<other/>") > 0,
+              "unreadable-notes sidecar written");
+    }
+
+    loadFileIntoPlate(1, media2);
+
+    const QString txt2 = work + "/summary2.txt";
+    check(exportReviewSummary(txt2, &stats, &msg), "third text summary exported");
+    const QString text2 = QString::fromUtf8(readBytes(txt2));
+    check(text2.contains("== " + QFileInfo(media2).fileName() + " ==\n  Notes unreadable\n"),
+          "unreadable notes are reported for the second media");
+    check(text2.contains(QString::fromUtf8("Round 1 \xE2\x80\x94 Supervisor")),
+          "first media's round is still in the summary");
+
     printf("SUMMARY-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);
     return failures == 0 ? 0 : 2;
