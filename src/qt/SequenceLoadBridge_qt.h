@@ -1148,6 +1148,19 @@ bool setReviewFingerprint(const std::string& mediaPath, const std::string& finge
 /** The source file of the loaded LUT sessions call @a lutName, or "" when none is loaded under that name. */
 std::string lutSourcePath(const std::string& lutName);
 
+/** What loadLUTFileReportingConflict() did with a LUT file. */
+enum class LutLoadOutcome {
+    Loaded,                   // a new LUT was added
+    SameAlreadyLoaded,        // a LUT of this file name is loaded and its source has identical bytes
+    DifferentAlreadyLoaded,   // the name is loaded but its bytes differ, or its source can't be read
+    Failed,                   // the file could not be loaded
+};
+
+/** Loads the LUT at @a path like loadLUTFile(), but says whether a LUT of the same
+    file name was already loaded and, if so, whether it is the same file. The caller
+    makes the GL context current. */
+LutLoadOutcome loadLUTFileReportingConflict(const std::string& path);
+
 /** Whether @a path lies inside a directory LUTs autoload from (sett.lutPath, the bundle FX/, ./FX/). */
 bool isInstallLutPath(const std::string& path);
 

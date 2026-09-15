@@ -38,6 +38,8 @@
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <thread>
 
@@ -2738,6 +2740,28 @@ std::string lutSourcePath(const std::string& lutName) {
     const int index = lutManager.getLutIndexByName(lutName);
     if (index < 0) return {};
     return std::string(lutManager.getLUT(index).filename);
+}
+
+LutLoadOutcome loadLUTFileReportingConflict(const std::string& path) {
+    if (path.empty()) return LutLoadOutcome::Failed;
+    // gfcLUTManager::loadLUT keeps the first LUT of a given file name and
+    // silently ignores the rest, so a clash has to be found before calling it.
+    const std::string loadedSource = lutSourcePath(std::filesystem::path(path).filename().string());
+    if (!loadedSource.empty()) {
+        auto readAll = [](const std::string& file, std::string& out) {
+            std::ifstream in(file, std::ios::binary);
+            if (!in) return false;
+            out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            return !in.bad();
+        };
+        std::string loadedBytes, newBytes;
+        if (!readAll(loadedSource, loadedBytes)) return LutLoadOutcome::DifferentAlreadyLoaded;
+        if (!readAll(path, newBytes)) return LutLoadOutcome::Failed;
+        return loadedBytes == newBytes ? LutLoadOutcome::SameAlreadyLoaded : LutLoadOutcome::DifferentAlreadyLoaded;
+    }
+    const size_t before = lutManager.getAllNames().size();
+    lutManager.loadLUT(path);
+    return lutManager.getAllNames().size() > before ? LutLoadOutcome::Loaded : LutLoadOutcome::Failed;
 }
 
 bool isInstallLutPath(const std::string& path) {

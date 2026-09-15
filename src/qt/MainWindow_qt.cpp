@@ -628,7 +628,10 @@ void MainWindow_Qt::buildMenuBar() {
         if (!stats.missingMedia.isEmpty()) problems << tr("Media not found: %1").arg(stats.missingMedia.join(", "));
         if (!stats.missingFx.isEmpty()) problems << tr("FX not installed: %1").arg(stats.missingFx.join(", "));
         if (!stats.notesProblems.isEmpty()) problems << tr("Notes not merged:\n%1").arg(stats.notesProblems.join("\n"));
-        if (!stats.lutsNotLoaded.isEmpty()) problems << tr("LUTs not loaded: %1").arg(stats.lutsNotLoaded.join(", "));
+        if (!stats.lutsNotLoaded.isEmpty()) {
+            problems << tr("LUTs not loaded (a different LUT with the same name is already loaded, "
+                           "or the file could not be read): %1").arg(stats.lutsNotLoaded.join(", "));
+        }
         if (!problems.isEmpty()) {
             QMessageBox::information(this, tr("Open Review Package"), problems.join("\n"));
         }
@@ -2772,6 +2775,7 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     check(openReviewPackage(withMedia, false, &stats, &msg), "the package with media opens");
     printf("PACKAGE-TEST open: %s\n", qPrintable(msg));
     check(jefe::qt::getRecentSessions() == knownRecents, "opening leaves Recent Sessions unchanged");
+    check(stats.lutsNotLoaded.isEmpty(), "an identical LUT already loaded under the same name counts as loaded");
     check(stats.resolved == 1 && stats.missing == 0, "media resolved from the package");
     const QString loaded = QString::fromStdString(jefe::qt::getTrackParams(0).filename);
     check(!stats.extractDir.isEmpty() &&
@@ -2808,6 +2812,15 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
           "plate colour correction and LUT survive the round trip");
     check(openReviewPackage(withMedia, false, &stats, &msg), "opening the same package again works");
 
+    // The loaded LUT's source changes on disk: the packaged LUT of the same
+    // name is now a different grade, which must be reported, not shadowed.
+    {
+        QFile f(lutPath);
+        check(f.open(QIODevice::Append) && f.write("# changed after export\n") > 0, "the loaded LUT's source is changed");
+    }
+    check(openReviewPackage(withMedia, false, &stats, &msg) && stats.lutsNotLoaded.size() == 1,
+          "a different LUT already loaded under the same name is reported as not loaded");
+
     const QByteArray packageBytes = readBytes(withMedia);
     const QString truncated = work + "/truncated.jcreview";
     {
@@ -2841,9 +2854,11 @@ bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interacti
     pkg::OpenServices services;
     services.loadLut = [this](const std::string& path) {
         viewport_->makeCurrent();   // loading a LUT creates GL textures
-        const bool ok = jefe::qt::loadLUTFile(path);
+        const jefe::qt::LutLoadOutcome outcome = jefe::qt::loadLUTFileReportingConflict(path);
         viewport_->doneCurrent();
-        return ok;
+        // A different LUT already loaded under this name would silently
+        // shadow the packaged grade, so it lands in lutsNotLoaded.
+        return outcome == jefe::qt::LutLoadOutcome::Loaded || outcome == jefe::qt::LutLoadOutcome::SameAlreadyLoaded;
     };
     services.reloadReview = [](const std::string& mediaPath) { jefe::qt::reloadReviewFromDisk(mediaPath); };
     services.searchPaths = jefe::qt::getSearchPaths();
