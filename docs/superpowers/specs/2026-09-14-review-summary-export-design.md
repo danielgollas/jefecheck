@@ -180,8 +180,9 @@ summary is still written.
   thumbnail rendered with notes differs from the same frame rendered with the
   plate's notes cleared (mean absolute difference > 0), proving burn-in
   reached the thumbnail — the same shape as `--cc-test`.
-- **State restore**: after the export the active track's filename, current
-  frame and plate exposure equal their values before it.
+- **State restore**: after the export the track's filename and the current
+  frame equal their values before it (the session reload restores colour
+  correction with the rest of the session file).
 
 ## Error handling
 

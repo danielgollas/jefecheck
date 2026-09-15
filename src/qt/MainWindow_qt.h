@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include "SequenceLoadBridge_qt.h"
+
 class QDockWidget;
 class FXParamPanel_Qt;
 class GlViewport_Qt;
@@ -174,6 +176,12 @@ private:
 
     void startAutoload();
     void autoloadStep();
+
+    /** Renders one thumbnail per frame entry of @a doc into a temporary directory
+        (through the plate pipeline, that round's notes burned in), then restores
+        the plates' notes, the session and the current frame. */
+    void renderSummaryThumbnails(const std::vector<jefe::qt::SessionMedia>& media,
+                                 gfcReviewSummary::Doc& doc, ReviewSummaryStats* stats);
 
     class LoadWindowDialog_Qt* loadWindowDialog_ = nullptr;
     RemoteDialog_Qt* remoteDialog_ = nullptr;

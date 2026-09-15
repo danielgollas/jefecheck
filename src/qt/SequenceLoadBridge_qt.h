@@ -1085,6 +1085,19 @@ int plateShowingTrack(int track);
 bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundIndex);
 
 /**
+ * Makes sure @a track has its frame list, starting the track's load when it
+ * has none (a single image quick-loaded shows as a preview without one).
+ * Only STARTS the async load -- gfcSequence::forceLoad (what a forRender=true
+ * frame request falls back to for a frame not yet decoded) needs that frame's
+ * load params, which are recorded only once the loader thread has reached it,
+ * so a render immediately after this call can still see an empty frame. The
+ * caller must wait for at least one decoded frame (see renderSummaryThumbnails
+ * in MainWindow_qt.cpp) before rendering. Returns whether the track now has
+ * frames.
+ */
+bool prepareTrackForRender(int track);
+
+/**
  * Put one of each note type on a plate, for --notes-demo. Coordinates are
  * literal normalised values so the result is identical every run, which is
  * what makes it usable as a visual regression shot rather than a picture.

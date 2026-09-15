@@ -14,6 +14,7 @@
 #include "qt_prefs_persist.h"
 #include "RenderBridge_qt.h"
 #include "RenderDialog_qt.h"
+#include "ReviewSummaryPdf_qt.h"
 #include "VideoEncoder_qt.h"
 
 #include <QEventLoop>
@@ -44,8 +45,11 @@
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QElapsedTimer>
+#include <QThread>
 #include <QTimer>
 
+#include <algorithm>
+#include <cstdlib>
 #include <memory>
 
 #include "../gfcReviewSummary.h"
@@ -550,6 +554,24 @@ void MainWindow_Qt::buildMenuBar() {
         stampActiveFrameNotes(out, &message);
         statusBar()->showMessage(message, 8000);
     })->setObjectName("menu.file.stampnotes");
+
+    fileMenu->addAction(tr("Export Review Summary…"), this, [this]() {
+        QString filter;
+        QString out = QFileDialog::getSaveFileName(
+            this, tr("Export Review Summary"), QString(),
+            tr("PDF (*.pdf);;Text (*.txt);;CSV (*.csv)"), &filter);
+        if (out.isEmpty()) return;
+        if (QFileInfo(out).suffix().isEmpty()) {
+            out += filter.startsWith("Text") ? ".txt" : filter.startsWith("CSV") ? ".csv" : ".pdf";
+        }
+        ReviewSummaryStats stats;
+        QString message;
+        if (exportReviewSummary(out, &stats, &message)) {
+            statusBar()->showMessage(message, 8000);
+        } else {
+            QMessageBox::warning(this, tr("Export Review Summary"), message);
+        }
+    })->setObjectName("menu.file.exportsummary");
 
     // Rebuild both recent submenus each time the File menu opens.
     connect(fileMenu, &QMenu::aboutToShow, this, [this]() {
@@ -1757,7 +1779,7 @@ bool MainWindow_Qt::stampActiveFrameNotes(const QString& outPath, QString* messa
 bool MainWindow_Qt::exportReviewSummary(const QString& outPath, ReviewSummaryStats* stats, QString* message) {
     auto say = [&](const QString& m) { if (message) *message = m; };
     const QString suffix = QFileInfo(outPath).suffix().toLower();
-    if (suffix != "txt" && suffix != "csv") {
+    if (suffix != "txt" && suffix != "csv" && suffix != "pdf") {
         say(tr("Unsupported summary format \"%1\": use .pdf, .txt or .csv").arg(suffix));
         return false;
     }
@@ -1766,28 +1788,150 @@ bool MainWindow_Qt::exportReviewSummary(const QString& outPath, ReviewSummarySta
         say(tr("Nothing to summarise: the session has no media"));
         return false;
     }
+    {
+        // Refuse an unwritable destination before any rendering starts.
+        QFile probe(outPath + ".partial");
+        if (!probe.open(QIODevice::WriteOnly)) {
+            say(tr("Cannot write %1").arg(outPath));
+            return false;
+        }
+        probe.close();
+        probe.remove();
+    }
     const QString title = currentSessionPath_.isEmpty()
                           ? tr("Untitled session")
                           : QFileInfo(currentSessionPath_).completeBaseName();
-    const gfcReviewSummary::Doc doc = jefe::qt::buildReviewSummary(media, title.toStdString());
-
-    const std::string contents = (suffix == "txt") ? gfcReviewSummary::toText(doc)
-                                                   : gfcReviewSummary::toCsv(doc);
-    std::string err;
-    if (!gfcReviewSummary::writeFileAtomically(outPath.toStdString(), contents, &err)) {
-        say(QString::fromStdString(err));
-        return false;
-    }
+    gfcReviewSummary::Doc doc = jefe::qt::buildReviewSummary(media, title.toStdString());
 
     ReviewSummaryStats s;
     s.media = int(doc.media.size());
     s.rounds = gfcReviewSummary::roundCount(doc);
     s.notes = gfcReviewSummary::noteCount(doc);
+
+    if (suffix == "pdf") {
+        renderSummaryThumbnails(media, doc, &s);
+        int pages = 0;
+        QString err;
+        if (!jefe::qt::writeReviewSummaryPdf(doc, outPath, &pages, &err)) {
+            say(err);
+            return false;
+        }
+    } else {
+        const std::string contents = (suffix == "txt") ? gfcReviewSummary::toText(doc)
+                                                       : gfcReviewSummary::toCsv(doc);
+        std::string err;
+        if (!gfcReviewSummary::writeFileAtomically(outPath.toStdString(), contents, &err)) {
+            say(QString::fromStdString(err));
+            return false;
+        }
+    }
+
     if (stats) *stats = s;
     say(tr("Summary written: %1 %2 %3 media, %4 rounds, %5 notes")
             .arg(QFileInfo(outPath).fileName(), QString::fromUtf8("\xE2\x80\x94"))
             .arg(s.media).arg(s.rounds).arg(s.notes));
     return true;
+}
+
+void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionMedia>& media,
+                                            gfcReviewSummary::Doc& doc, ReviewSummaryStats* stats) {
+    const QString dir = QDir::tempPath() + "/jefecheck_summary_" +
+                        QString::number(QDateTime::currentMSecsSinceEpoch());
+    QDir().mkpath(dir);
+    const QString restore = dir + "/restore.jcs";
+    const bool saved = jefe::qt::saveSession(restore.toStdString());
+    const int savedFrame = jefe::qt::getCurrentFrame();
+
+    // gfcSequence::forceLoad (what a forRender=true frame request falls back
+    // to when a frame hasn't decoded yet) only works once the async loader
+    // thread has reached that frame at least once -- its load params are
+    // recorded then. Immediately after (re)starting a track's load, frames
+    // are still empty, so a render right then writes nothing. Wait, bounded,
+    // draining the GL upload queue, until at least one frame has landed.
+    auto waitForTrackFrame = [this](int track, int timeoutMs) {
+        QElapsedTimer waitTimer;
+        waitTimer.start();
+        while (jefe::qt::getTrackTimelineState(track).loadedCount <= 0 &&
+               waitTimer.elapsed() < timeoutMs) {
+            if (jefe::qt::hasPendingTextureUploads()) {
+                viewport_->makeCurrent();
+                jefe::qt::uploadPendingTextures();
+                viewport_->doneCurrent();
+            } else {
+                QThread::msleep(5);
+            }
+        }
+        return jefe::qt::getTrackTimelineState(track).loadedCount > 0;
+    };
+
+    for (size_t mi = 0; mi < media.size() && mi < doc.media.size(); ++mi) {
+        const jefe::qt::SessionMedia& m = media[mi];
+        gfcReviewSummary::Media& entry = doc.media[mi];
+        int track = m.track;
+        if (track < 0 && m.playlistItem >= 0) {
+            // Loads the item's tracks, FX stacks and program state: its reviewed look.
+            jefe::qt::loadPlaylistItem(m.playlistItem);
+            track = m.playlistTrack;
+        }
+        const int plate = jefe::qt::plateShowingTrack(track);
+        bool ready = plate >= 0 && jefe::qt::prepareTrackForRender(track);
+        if (ready) ready = waitForTrackFrame(track, 5000);
+        const int firstFrame = ready ? jefe::qt::getTrackTimelineState(track).rangeStart : 1;
+
+        for (size_t ri = 0; ri < entry.rounds.size(); ++ri) {
+            for (size_t fi = 0; fi < entry.rounds[ri].frames.size(); ++fi) {
+                gfcReviewSummary::Frame& f = entry.rounds[ri].frames[fi];
+                if (!ready || !jefe::qt::setPlateNotesToRound(plate, m.mediaPath, int(ri))) {
+                    ++stats->thumbFail;
+                    continue;
+                }
+                jefe::qt::RenderParams p;
+                p.quadrant = plate;
+                p.format = 5;               // PNG
+                p.formatString = "png";
+                p.from = p.to = (f.frame == gfcReviewSummary::kAllFrames) ? firstFrame : f.frame;
+                p.padding = 4;
+                p.scale = 1.0f;
+                p.path = dir.toStdString();
+                p.prefix = QString("thumb_m%1_r%2_f%3_").arg(mi).arg(ri).arg(fi).toStdString();
+                int sw = 0, sh = 0;
+                jefe::qt::getRenderSourceSize(plate, sw, sh);
+                if (sw > 0 && sh > 0) {
+                    p.outWidth = 960;
+                    p.outHeight = std::max(1, int(960.0 * sh / sw + 0.5));
+                }
+                p.burnInNotes = true;
+                const QString file = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+                viewport_->makeCurrent();
+                const int rendered = jefe::qt::triggerSyncRender(p);
+                viewport_->doneCurrent();
+                if (rendered == 1 && !QImage(file).isNull()) {
+                    f.thumbnailPath = file.toStdString();
+                    ++stats->thumbs;
+                    if (stats->firstThumbnail.isEmpty()) stats->firstThumbnail = file;
+                } else {
+                    ++stats->thumbFail;
+                }
+            }
+        }
+    }
+
+    // Put everything back: the plates' real notes, the session, the frame.
+    jefe::qt::syncPlateNotes();
+    if (saved) {
+        viewport_->makeCurrent();
+        if (jefe::qt::loadSession(restore.toStdString())) jefe::qt::startLoadingAllTracks();
+        viewport_->doneCurrent();
+        refreshAfterSessionLoad();
+        // startLoadingAllTracks() is async -- wait for each track that has
+        // media to land its first frame so a caller that renders right after
+        // this returns (e.g. a burn-in comparison) doesn't see a mid-reload
+        // blank plate.
+        for (int t = 0; t < 4; ++t) {
+            if (!jefe::qt::getTrackParams(t).filename.empty()) waitForTrackFrame(t, 5000);
+        }
+    }
+    jefe::qt::seekToFrame(savedFrame);
 }
 
 int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
@@ -1894,6 +2038,64 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
           "unreadable notes are reported for the second media");
     check(text2.contains(QString::fromUtf8("Round 1 \xE2\x80\x94 Supervisor")),
           "first media's round is still in the summary");
+
+    // PDF: thumbnails through the plate pipeline with the round's notes burned
+    // in, and the session put back afterwards.
+    const std::string beforeFile = jefe::qt::getTrackParams(0).filename;
+    const int beforeFrame = jefe::qt::getCurrentFrame();
+    const QString pdf = work + "/summary.pdf";
+    check(exportReviewSummary(pdf, &stats, &msg), "PDF summary exported");
+    printf("SUMMARY-TEST pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg), stats.thumbs, stats.thumbFail);
+    check(stats.thumbs == 2 && stats.thumbFail == 0, "one thumbnail per frame entry, none failed");
+    const QByteArray pdfBytes = readBytes(pdf);
+    check(pdfBytes.startsWith("%PDF-") && pdfBytes.trimmed().endsWith("%%EOF"), "PDF file is complete");
+    check(!QFile::exists(pdf + ".partial"), "no partial PDF left");
+    check(jefe::qt::getTrackParams(0).filename == beforeFile, "the track's media is restored");
+    check(jefe::qt::getCurrentFrame() == beforeFrame, "the current frame is restored");
+
+    // Burn-in reached the thumbnail: the same frame rendered with the empty
+    // round (no notes) must differ from it.
+    QImage withNotes(stats.firstThumbnail);
+    check(!withNotes.isNull(), "first thumbnail readable");
+    const std::vector<jefe::qt::SessionMedia> set = jefe::qt::getSessionMediaSet();
+    if (!withNotes.isNull() && !set.empty()) {
+        check(jefe::qt::setPlateNotesToRound(0, set[0].mediaPath, 1), "plate shows the empty round");
+        jefe::qt::RenderParams p;
+        p.quadrant = 0;
+        p.format = 5;
+        p.formatString = "png";
+        p.from = p.to = jefe::qt::getTrackTimelineState(0).rangeStart;
+        p.padding = 4;
+        p.scale = 1.0f;
+        p.path = work.toStdString();
+        p.prefix = "nonotes_";
+        p.outWidth = withNotes.width();
+        p.outHeight = withNotes.height();
+        p.burnInNotes = true;
+        const QString file = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        viewport_->makeCurrent();
+        jefe::qt::triggerSyncRender(p);
+        viewport_->doneCurrent();
+        jefe::qt::syncPlateNotes();
+        QImage without(file);
+        double diff = 0.0;
+        if (!without.isNull()) {
+            const QImage a = withNotes.convertToFormat(QImage::Format_RGBA8888);
+            const QImage b = without.convertToFormat(QImage::Format_RGBA8888);
+            const int w = std::min(a.width(), b.width());
+            const int h = std::min(a.height(), b.height());
+            double sum = 0.0;
+            long long n = 0;
+            for (int y = 0; y < h; ++y) {
+                const uchar* ra = a.constScanLine(y);
+                const uchar* rb = b.constScanLine(y);
+                for (int x = 0; x < w * 4; ++x) { sum += std::abs(int(ra[x]) - int(rb[x])); ++n; }
+            }
+            diff = n ? sum / double(n) : 0.0;
+        }
+        printf("SUMMARY-TEST burn-in mean abs diff: %.3f\n", diff);
+        check(!without.isNull() && diff > 0.0, "notes are burned into the thumbnail");
+    }
 
     printf("SUMMARY-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);

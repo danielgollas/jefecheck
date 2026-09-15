@@ -2664,6 +2664,13 @@ bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundI
     return true;
 }
 
+bool prepareTrackForRender(int track) {
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq) return false;
+    if (seq->getNumFrames() <= 0) trackManager.startLoadingSequence(track);
+    return seq->getNumFrames() > 0;
+}
+
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,
                        NoteStampResult& result) {
