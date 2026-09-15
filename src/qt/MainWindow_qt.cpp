@@ -2762,9 +2762,14 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
         if (t.open(QIODevice::WriteOnly)) t.write(packageBytes.left(packageBytes.size() / 2));
     }
     const std::string trackBefore = jefe::qt::getTrackParams(0).filename;
+    const QString titleBefore = windowTitle();
+    const int lutCountBefore = jefe::qt::getLoadedLUTCount();
     check(!openReviewPackage(truncated, false, &stats, &msg) && msg.contains("truncated"),
           "a truncated package is refused");
-    check(jefe::qt::getTrackParams(0).filename == trackBefore, "a refused package changes nothing");
+    check(jefe::qt::getTrackParams(0).filename == trackBefore &&
+          windowTitle() == titleBefore &&
+          jefe::qt::getLoadedLUTCount() == lutCountBefore,
+          "a refused package changes nothing");
     if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
 
     printf("PACKAGE-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
@@ -2802,7 +2807,9 @@ bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interacti
                        .arg(QString::fromStdString(chosen))) == QMessageBox::Yes;
     };
 
-    const QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/packages";
+    const QString cacheRoot = !packageCacheRoot_.isEmpty()
+        ? packageCacheRoot_
+        : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/packages";
     QDir().mkpath(cacheRoot);
     pkg::OpenResult result;
     QString err;
@@ -2816,7 +2823,12 @@ bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interacti
     if (loaded) jefe::qt::startLoadingAllTracks();
     viewport_->doneCurrent();
     if (!loaded) {
-        say(tr("Could not load the package's session"));
+        // By this point the package's LUTs are loaded and its notes are
+        // merged into the local sidecars (openPackage already did both) --
+        // only the session itself failed to load, so say so instead of
+        // implying nothing happened.
+        say(tr("The package's notes and LUTs were applied, but its session could not be loaded: %1")
+                .arg(QString::fromStdString(result.sessionPath)));
         return false;
     }
 
@@ -2846,10 +2858,14 @@ bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interacti
                       .arg(s.media);
     if (!s.notesProblems.isEmpty() || !s.lutsNotLoaded.isEmpty()) {
         QStringList extras;
-        if (!s.notesProblems.isEmpty())
-            extras << tr("%1 notes problems").arg(s.notesProblems.size());
-        if (!s.lutsNotLoaded.isEmpty())
-            extras << tr("%1 LUT not loaded").arg(s.lutsNotLoaded.size());
+        if (!s.notesProblems.isEmpty()) {
+            extras << (s.notesProblems.size() == 1 ? tr("1 notes problem")
+                                                    : tr("%1 notes problems").arg(s.notesProblems.size()));
+        }
+        if (!s.lutsNotLoaded.isEmpty()) {
+            extras << (s.lutsNotLoaded.size() == 1 ? tr("1 LUT not loaded")
+                                                    : tr("%1 LUTs not loaded").arg(s.lutsNotLoaded.size()));
+        }
         msg += "; " + extras.join("; ");
     }
     say(msg);
@@ -2898,6 +2914,10 @@ int MainWindow_Qt::runHeadlessRelinkTest(const QString& imagePath) {
     printf("RELINK-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);
     return failures == 0 ? 0 : 2;
+}
+
+void MainWindow_Qt::setPackageCacheRoot(const QString& dir) {
+    packageCacheRoot_ = dir;
 }
 
 void MainWindow_Qt::refreshNotesForLoadedMedia() {

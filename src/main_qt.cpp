@@ -380,6 +380,13 @@ int main(int argc, char* argv[]) {
     window.setObjectName("MainWindow");
     window.show();
 
+    // Test-mode isolation (continued): also keep review-package extraction
+    // inside the caller-supplied config dir, not the developer's real
+    // AppDataLocation -- --config-dir only redirects QSettings on its own.
+    if (!configDir.isEmpty()) {
+        window.setPackageCacheRoot(configDir + "/packages");
+    }
+
     // Load each --open-file into the matching plate after the event
     // loop has spun up the GL context. Deferred via QTimer::singleShot
     // so paintGL has fired (initializing GLAD) before the bridge tries

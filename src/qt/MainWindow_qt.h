@@ -132,6 +132,11 @@ public:
     /** Headless proof that a lean package relinks moved media (--relink-test <image>). */
     int runHeadlessRelinkTest(const QString& imagePath);
 
+    /** Overrides where openReviewPackage extracts packages; empty (the default)
+        falls back to <AppDataLocation>/packages. Tests point this at a temp dir
+        so a --config-dir run never touches the developer's real app data. */
+    void setPackageCacheRoot(const QString& dir);
+
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
     // Headless render smoke test (--render-test). Renders one frame of
@@ -209,6 +214,7 @@ private:
     bool controlsHidden_ = false;
     QString currentSessionPath_;
     QString packageTitle_;   // the open review package's file name, when the session came from one
+    QString packageCacheRoot_;   // override for where openReviewPackage extracts (tests)
     // Guards exportReviewSummary() against re-entry: its PDF path pumps the
     // event loop (excluding user input) for up to several seconds while
     // waiting for frames to decode, so a second click / auto-fired call
