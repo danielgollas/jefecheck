@@ -328,6 +328,154 @@ Exporter::State runToEnd(Exporter& exporter, QString* err) {
     while ((state = exporter.step(err)) == Exporter::State::Running) {}
     return state;
 }
+
+constexpr uint64_t kMaxEntryBytes = 64ull * 1024 * 1024;
+
+// Reads `path`, refusing anything past kMaxEntryBytes. `label` names the
+// entry in the failure message.
+bool readCapped(const std::filesystem::path& path, const std::string& label, std::string& out, std::string* err) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const uint64_t size = fs::file_size(path, ec);
+    if (ec) {
+        if (err) *err = "Cannot read " + label;
+        return false;
+    }
+    if (size > kMaxEntryBytes) {
+        if (err) *err = label + " is larger than 64 MiB";
+        return false;
+    }
+    out = readText(path.string());
+    return true;
+}
+
+// True once every file the manifest names -- the session, each media's
+// notes entry, each LUT, and (when media is included) every packaged frame
+// -- exists under `dir`.
+bool manifestFilesPresent(const Manifest& manifest, const std::filesystem::path& dir) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::exists(dir / manifest.session, ec)) return false;
+    for (const ManifestMedia& media : manifest.media) {
+        if (!fs::exists(dir / media.notes, ec)) return false;
+        if (manifest.mediaIncluded && !media.packagedPath.empty()) {
+            for (const std::string& f : media.frames) {
+                if (!fs::exists(dir / indexDir("media", media.index) / f, ec)) return false;
+            }
+        }
+    }
+    for (const ManifestLut& lut : manifest.luts) {
+        if (!fs::exists(dir / lut.file, ec)) return false;
+    }
+    return true;
+}
+
+// Extracts `reader` into `dir`, unless a prior extraction there is already
+// complete (a `.complete` marker AND every manifest-named file present); a
+// partial or damaged cache is discarded and re-extracted from scratch.
+bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, const std::filesystem::path& dir,
+                     std::string* err) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (fs::exists(dir / ".complete", ec) && manifestFilesPresent(manifest, dir)) return true;
+
+    fs::remove_all(dir, ec);
+    if (ec) {
+        if (err) *err = "Cannot clear the cache directory " + dir.string() + ": " + ec.message();
+        return false;
+    }
+    for (const gfcTar::Entry& entry : reader.entries()) {
+        // Reader::open has already refused absolute and ".." names.
+        std::string entryErr;
+        if (!reader.extractTo(entry, (dir / entry.name).string(), &entryErr)) {
+            if (err) *err = "Cannot extract the package: " + entryErr;
+            return false;
+        }
+    }
+    std::ofstream marker((dir / ".complete").string());
+    marker << "ok\n";
+    marker.close();
+    if (marker.fail()) {
+        if (err) *err = "Cannot write to " + dir.string();
+        return false;
+    }
+    return true;
+}
+
+// Frames of the media, in order: packaged (only when every packaged frame is
+// present) -> original path (when absolute) -> fingerprint search ->
+// interactive locate. Empty when unresolved.
+std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncluded,
+                                      const std::filesystem::path& extractDir, const OpenServices& services) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (media.frames.empty()) return {};
+
+    auto framesAt = [&](const fs::path& base) {
+        std::vector<std::string> out;
+        bool allThere = true;
+        for (const std::string& f : media.frames) {
+            out.push_back((base / f).string());
+            if (!fs::exists(out.back(), ec)) allThere = false;
+        }
+        return allThere ? out : std::vector<std::string>{};
+    };
+
+    if (mediaIncluded && !media.packagedPath.empty()) {
+        std::vector<std::string> frames = framesAt(extractDir / indexDir("media", media.index));
+        if (!frames.empty()) return frames;
+    }
+
+    const fs::path originalPath(media.originalPath);
+    if (originalPath.is_absolute()) {
+        std::vector<std::string> frames = framesAt(originalPath.parent_path());
+        if (!frames.empty()) return frames;
+    }
+
+    std::vector<std::string> frames = findByFingerprint(media, services.searchPaths, services.searchRecursive);
+    if (!frames.empty() || !services.interactive || !services.locate) return frames;
+
+    const std::string chosen = services.locate(media);
+    if (chosen.empty()) return {};
+    auto sequences = gfcMediaFingerprint::sequencesIn(fs::path(chosen).parent_path().string(), false);
+    const auto found = sequences.find(gfcNoteStore::normalisePath(chosen));
+    if (found == sequences.end()) return {};
+    if (gfcMediaFingerprint::compute(found->second, nullptr) == media.fingerprint ||
+        (services.confirmMismatch && services.confirmMismatch(media, chosen))) {
+        return found->second;
+    }
+    return {};
+}
+
+// Loads any existing sidecar for `resolvedMedia`, merges `notesXml` into it
+// and saves the result. Returns true when the sidecar ends up saved
+// (including when `notesXml` carries nothing to merge, which touches
+// nothing); returns false and sets `problem`, leaving the local sidecar
+// untouched, when a sidecar exists but doesn't load, or the save fails.
+bool mergeNotes(const std::string& resolvedMedia, const std::string& notesXml, const std::string& fallbackFingerprint,
+                std::string* problem) {
+    gfcReview incoming;
+    if (!gfcNoteStore::fromXmlString(notesXml, incoming)) return true;   // nothing packaged to merge
+
+    const std::string sidecarPath = gfcNoteStore::sidecarPathFor(resolvedMedia);
+    std::error_code ec;
+    const bool sidecarExists = std::filesystem::exists(sidecarPath, ec);
+    gfcReview local;
+    local.mediaPath = resolvedMedia;
+    const bool loaded = gfcNoteStore::load(resolvedMedia, local);
+    if (sidecarExists && !loaded) {
+        if (problem) *problem = "local notes unreadable, package notes not merged";
+        return false;
+    }
+    local.mediaPath = resolvedMedia;   // a loaded sidecar may name an older path
+    gfcNoteMerge::mergeInto(local, std::move(incoming));
+    if (local.fingerprint.empty()) local.fingerprint = fallbackFingerprint;
+    if (!gfcNoteStore::save(local)) {
+        if (problem) *problem = "notes could not be saved";
+        return false;
+    }
+    return true;
+}
 }  // namespace
 
 std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std::vector<std::string>& roots,
@@ -354,47 +502,6 @@ std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std
     return {};
 }
 
-namespace {
-// Frames of the media, in order: packaged -> original path -> fingerprint
-// search -> interactive locate. Empty when unresolved.
-std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncluded,
-                                      const std::filesystem::path& extractDir, const OpenServices& services) {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    if (media.frames.empty()) return {};
-
-    std::vector<std::string> frames;
-    if (mediaIncluded && !media.packagedPath.empty()) {
-        for (const std::string& f : media.frames) {
-            frames.push_back((extractDir / indexDir("media", media.index) / f).string());
-        }
-        return fs::exists(frames.front(), ec) ? frames : std::vector<std::string>{};
-    }
-
-    const fs::path originalDir = fs::path(media.originalPath).parent_path();
-    bool allThere = true;
-    for (const std::string& f : media.frames) {
-        frames.push_back((originalDir / f).string());
-        if (!fs::exists(frames.back(), ec)) allThere = false;
-    }
-    if (allThere) return frames;
-
-    frames = findByFingerprint(media, services.searchPaths, services.searchRecursive);
-    if (!frames.empty() || !services.interactive || !services.locate) return frames;
-
-    const std::string chosen = services.locate(media);
-    if (chosen.empty()) return {};
-    auto sequences = gfcMediaFingerprint::sequencesIn(fs::path(chosen).parent_path().string(), false);
-    const auto found = sequences.find(gfcNoteStore::normalisePath(chosen));
-    if (found == sequences.end()) return {};
-    if (gfcMediaFingerprint::compute(found->second, nullptr) == media.fingerprint ||
-        (services.confirmMismatch && services.confirmMismatch(media, chosen))) {
-        return found->second;
-    }
-    return {};
-}
-}  // namespace
-
 bool openPackage(const std::string& packagePath, const std::string& cacheRoot, const OpenServices& services,
                  OpenResult& result, QString* err) {
     namespace fs = std::filesystem;
@@ -410,8 +517,10 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
     if (reader.entries().empty() || reader.entries()[0].name != "manifest.json") {
         return fail("Not a JefeCheck review package: manifest.json is missing");
     }
+    const gfcTar::Entry& manifestEntry = reader.entries()[0];
+    if (manifestEntry.size > kMaxEntryBytes) return fail("manifest.json is larger than 64 MiB");
     std::string manifestBytes;
-    if (!reader.readBytes(reader.entries()[0], manifestBytes, &e)) return fail("Cannot read the package: " + e);
+    if (!reader.readBytes(manifestEntry, manifestBytes, &e)) return fail("Cannot read the package: " + e);
     if (!manifestFromJson(QByteArray::fromStdString(manifestBytes), result.manifest, err)) return false;
     const Manifest& manifest = result.manifest;
 
@@ -419,33 +528,47 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
     const std::string absolute = fs::absolute(packagePath, ec).string();
     const uint64_t size = fs::file_size(packagePath, ec);
     const long long mtime = static_cast<long long>(fs::last_write_time(packagePath, ec).time_since_epoch().count());
-    const fs::path dir = fs::path(cacheRoot) / gfcSha1::hex(absolute + "|" + std::to_string(size) + "|" + std::to_string(mtime));
+    const fs::path dir = fs::path(cacheRoot) /
+        gfcSha1::hex(absolute + "|" + std::to_string(size) + "|" + std::to_string(mtime) + "|" + manifestBytes);
     result.extractDir = dir.string();
-    if (!fs::exists(dir / ".complete", ec)) {
-        fs::remove_all(dir, ec);
-        for (const gfcTar::Entry& entry : reader.entries()) {
-            // Reader::open has already refused absolute and ".." names.
-            if (!reader.extractTo(entry, (dir / entry.name).string(), &e)) return fail("Cannot extract the package: " + e);
-        }
-        std::ofstream marker((dir / ".complete").string());
-        marker << "ok\n";
-        if (!marker) return fail("Cannot write to " + dir.string());
-    }
+    if (!ensureExtracted(reader, manifest, dir, &e)) return fail(e);
 
-    for (const ManifestLut& lut : manifest.luts) {
-        if (services.loadLut) services.loadLut((dir / lut.file).string());
-    }
-
-    const std::string sessionXml = readText((dir / manifest.session).string());
+    // The session must exist, be a sane size, and actually parse before
+    // anything else happens: a package this broken loads no LUTs and
+    // changes no notes.
+    std::string sessionXml, capErr;
+    if (!readCapped(dir / manifest.session, manifest.session, sessionXml, &capErr)) return fail(capErr);
     std::vector<gfcSessionPaths::MediaRef> refs;
     if (!gfcSessionPaths::listMedia(sessionXml, refs, &e)) return fail("The package's session is unreadable: " + e);
 
+    for (const ManifestLut& lut : manifest.luts) {
+        const std::string lutPath = (dir / lut.file).string();
+        if (!services.loadLut || !services.loadLut(lutPath)) result.lutsNotLoaded.push_back(lutPath);
+    }
+
+    struct PendingNotes {
+        std::string resolvedMedia;
+        std::string notesXml;
+        std::string originalPath;
+        std::string fingerprint;
+    };
+    std::vector<PendingNotes> pending;
     std::map<std::string, std::string> mapping;
     for (const ManifestMedia& media : manifest.media) {
         const std::vector<std::string> frames = resolveMedia(media, manifest.mediaIncluded, dir, services);
+        const std::string packagedPrefix = indexDir("media", media.index) + "/";
         if (frames.empty()) {
             ++result.missing;
             result.missingMedia.push_back(fs::path(media.originalPath).filename().string());
+            // A ref that pointed at the packaged copy (which turned out to be
+            // unusable) is mapped back to alongside the original path; a ref
+            // that already named the original path is left untouched by
+            // having no mapping entry.
+            const fs::path originalDir = fs::path(media.originalPath).parent_path();
+            for (const gfcSessionPaths::MediaRef& ref : refs) {
+                if (ref.path.rfind(packagedPrefix, 0) != 0) continue;
+                mapping[ref.path] = (originalDir / fs::path(ref.path).filename()).string();
+            }
             continue;
         }
         ++result.resolved;
@@ -453,7 +576,6 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
         // Every session reference to this media points at the same frame of the
         // resolved sequence (matched by position, since a relinked sequence may
         // be named differently).
-        const std::string packagedPrefix = indexDir("media", media.index) + "/";
         for (const gfcSessionPaths::MediaRef& ref : refs) {
             const bool ours = ref.path.rfind(packagedPrefix, 0) == 0 ||
                               gfcNoteStore::normalisePath(ref.path) == media.originalPath;
@@ -464,19 +586,12 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
             mapping[ref.path] = frames[std::min(index, frames.size() - 1)];
         }
 
-        // Notes: union into whatever the resolved media already has.
-        const std::string resolvedMedia = gfcNoteStore::normalisePath(frames.front());
-        gfcReview incoming;
-        if (gfcNoteStore::fromXmlString(readText((dir / media.notes).string()), incoming)) {
-            gfcReview local;
-            local.mediaPath = resolvedMedia;
-            gfcNoteStore::load(resolvedMedia, local);
-            local.mediaPath = resolvedMedia;   // a loaded sidecar may name an older path
-            gfcNoteMerge::mergeInto(local, std::move(incoming));
-            if (local.fingerprint.empty()) local.fingerprint = media.fingerprint;
-            gfcNoteStore::save(local);
-        }
-        if (services.reloadReview) services.reloadReview(resolvedMedia);
+        // Notes are only read here; nothing is merged or saved to disk until
+        // the session rewrite below has succeeded and been verified.
+        std::string notesXml;
+        if (!readCapped(dir / media.notes, media.notes, notesXml, nullptr)) notesXml.clear();
+        pending.push_back(PendingNotes{gfcNoteStore::normalisePath(frames.front()), notesXml, media.originalPath,
+                                       media.fingerprint});
     }
 
     std::string rewritten;
@@ -486,6 +601,18 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
     if (readText(sessionOut.string()) != rewritten) return fail("Cannot write " + sessionOut.string());
     result.sessionPath = sessionOut.string();
     gfcSessionPaths::listFxNames(rewritten, result.fxNames, nullptr);
+
+    // The rewritten session is on disk and verified: only now are the merged
+    // notes placed, and the app told which reviews changed.
+    for (PendingNotes& p : pending) {
+        std::string problem;
+        if (!mergeNotes(p.resolvedMedia, p.notesXml, p.fingerprint, &problem)) {
+            result.notesProblems.push_back(p.originalPath + ": " + problem);
+            continue;
+        }
+        if (services.reloadReview) services.reloadReview(p.resolvedMedia);
+    }
+
     return true;
 }
 
@@ -755,6 +882,12 @@ int packageOpenSelfTest() {
           placed.revisions[0].notes.size() == 1 && placed.fingerprint == "fp1:0000",
           "notes are placed beside the extracted media");
     check(result.fxNames == std::vector<std::string>{"Grade"}, "the session's FX names are reported");
+    check(result.notesProblems.empty() && result.lutsNotLoaded.empty(),
+          "no notes problems or LUT failures on a normal open");
+
+    // Fix round 1, point 2a: a file that does not belong to the package
+    // must survive an open that reuses a complete cache.
+    writeText((fs::path(result.extractDir) / "sentinel.txt").string(), "keep-me");
 
     OpenResult again;
     check(openPackage(in.outPath, cache, services, again, &err) && again.extractDir == result.extractDir,
@@ -763,6 +896,142 @@ int packageOpenSelfTest() {
     check(gfcNoteStore::load(extractedMedia, placedAgain) && placedAgain.revisions.size() == 1 &&
           placedAgain.revisions[0].notes.size() == 1,
           "reopening does not duplicate notes");
+    check(fs::exists(fs::path(again.extractDir) / "sentinel.txt", ec),
+          "reopening a complete cache does not touch its other contents");
+
+    // Fix round 1, point 2a: a completed cache missing one packaged frame is
+    // damaged, not reusable -- it is discarded and re-extracted.
+    fs::remove(extracted, ec);
+    OpenResult damaged;
+    check(openPackage(in.outPath, cache, services, damaged, &err) && damaged.extractDir == result.extractDir &&
+          damaged.resolved == 1 && fs::exists(extracted, ec) &&
+          !fs::exists(fs::path(damaged.extractDir) / "sentinel.txt", ec),
+          "a damaged cache (a packaged frame missing) is re-extracted, and the frame comes back");
+
+    // Fix round 1, point 2a: a cache whose .complete marker is gone is not
+    // reusable either.
+    fs::remove(fs::path(result.extractDir) / ".complete", ec);
+    OpenResult noMarker;
+    check(openPackage(in.outPath, cache, services, noMarker, &err) && noMarker.resolved == 1 &&
+          fs::exists(fs::path(noMarker.extractDir) / ".complete", ec),
+          "a cache without a .complete marker is re-extracted and succeeds");
+
+    // Fix round 1, point 1: merging into an existing, readable local sidecar
+    // keeps both the local and the package's notes.
+    fs::create_directories(dir / "src3", ec);
+    const std::string mrgFrame = (dir / "src3" / "mrg010.0001.exr").string();
+    writeText(mrgFrame, "merge-frame");
+    gfcReview mrgReview;
+    mrgReview.mediaPath = gfcNoteStore::normalisePath(mrgFrame);
+    {
+        gfcRevision& r = mrgReview.beginRevision("Pkg-Author");
+        r.id = "round-pkg";
+        auto n = std::make_unique<gfcNoteStroke>();
+        n->id = "note-pkg";
+        n->pts = { gfcNotePoint{0.2f, 0.2f} };
+        r.addNote(std::move(n));
+    }
+    ExportInput mergePkg;
+    mergePkg.outPath = (dir / "merge.jcreview").string();
+    mergePkg.includeMedia = true;
+    mergePkg.appVersion = "1.7.0";
+    mergePkg.createdIso = "2026-09-14T20:10:00Z";
+    mergePkg.sessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/>") +
+                          "<tracks><track trackID=\"0\" filename=\"" + mrgFrame + "\"/></tracks><playlist/></root>\n";
+    ExportMedia mrgMedia;
+    mrgMedia.mediaPath = mrgReview.mediaPath;
+    mrgMedia.frames = {mrgFrame};
+    mrgMedia.notesXml = gfcNoteStore::toXmlString(mrgReview);
+    mrgMedia.fingerprint = "fp1:merge";
+    mrgMedia.width = 1;
+    mrgMedia.height = 1;
+    mergePkg.media.push_back(mrgMedia);
+    check(exportAll(mergePkg, &err), "merge-fixture package exported");
+
+    OpenResult mergePre;
+    check(openPackage(mergePkg.outPath, cache, services, mergePre, &err),
+          "merge fixture opens once to learn its resolved path");
+    const fs::path mrgExtracted = fs::path(mergePre.extractDir) / "media" / "000" / "mrg010.0001.exr";
+    const std::string mrgResolvedMedia = gfcNoteStore::normalisePath(mrgExtracted.string());
+
+    // Seed a DIFFERENT local sidecar, as if the user had already annotated
+    // this media outside of any package.
+    gfcReview localOnly;
+    localOnly.mediaPath = mrgResolvedMedia;
+    {
+        gfcRevision& r = localOnly.beginRevision("Local-Author");
+        r.id = "round-local";
+        auto n = std::make_unique<gfcNoteStroke>();
+        n->id = "note-local";
+        n->pts = { gfcNotePoint{0.7f, 0.7f} };
+        r.addNote(std::move(n));
+    }
+    check(gfcNoteStore::save(localOnly), "a pre-existing local sidecar is seeded");
+
+    OpenResult merged;
+    check(openPackage(mergePkg.outPath, cache, services, merged, &err), "merge fixture reopens");
+    gfcReview mrgPlaced;
+    check(gfcNoteStore::load(mrgResolvedMedia, mrgPlaced) && mrgPlaced.revisions.size() == 2,
+          "both the local and the package revisions are present after merging");
+    bool hasLocalNote = false, hasPkgNote = false;
+    for (const gfcRevision& r : mrgPlaced.revisions) {
+        for (const auto& n : r.notes) {
+            if (n->id == "note-local") hasLocalNote = true;
+            if (n->id == "note-pkg") hasPkgNote = true;
+        }
+    }
+    check(hasLocalNote && hasPkgNote, "the local note and the package note are both present");
+
+    // Fix round 1, point 1: a local sidecar that exists but fails to parse
+    // must not be merged into or overwritten; the open still succeeds and
+    // reports the problem.
+    fs::create_directories(dir / "src4", ec);
+    const std::string garbleFrame = (dir / "src4" / "garble010.0001.exr").string();
+    writeText(garbleFrame, "garble-frame");
+    gfcReview garbleReview;
+    garbleReview.mediaPath = gfcNoteStore::normalisePath(garbleFrame);
+    {
+        gfcRevision& r = garbleReview.beginRevision("Pkg-Author");
+        r.id = "round-pkg2";
+        auto n = std::make_unique<gfcNoteStroke>();
+        n->id = "note-pkg2";
+        n->pts = { gfcNotePoint{0.3f, 0.3f} };
+        r.addNote(std::move(n));
+    }
+    ExportInput garblePkg;
+    garblePkg.outPath = (dir / "garble.jcreview").string();
+    garblePkg.includeMedia = true;
+    garblePkg.appVersion = "1.7.0";
+    garblePkg.createdIso = "2026-09-14T20:10:00Z";
+    garblePkg.sessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/>") +
+                           "<tracks><track trackID=\"0\" filename=\"" + garbleFrame + "\"/></tracks><playlist/></root>\n";
+    ExportMedia garbleMedia;
+    garbleMedia.mediaPath = garbleReview.mediaPath;
+    garbleMedia.frames = {garbleFrame};
+    garbleMedia.notesXml = gfcNoteStore::toXmlString(garbleReview);
+    garbleMedia.fingerprint = "fp1:garble";
+    garbleMedia.width = 1;
+    garbleMedia.height = 1;
+    garblePkg.media.push_back(garbleMedia);
+    check(exportAll(garblePkg, &err), "garbled-sidecar fixture package exported");
+
+    OpenResult garblePre;
+    check(openPackage(garblePkg.outPath, cache, services, garblePre, &err),
+          "garbled fixture opens once to learn its resolved path");
+    const fs::path garbleExtracted = fs::path(garblePre.extractDir) / "media" / "000" / "garble010.0001.exr";
+    const std::string garbleResolvedMedia = gfcNoteStore::normalisePath(garbleExtracted.string());
+    const std::string garbleSidecar = gfcNoteStore::sidecarPathFor(garbleResolvedMedia);
+    const std::string garbageBytes = "this is not xml at all, just garbage bytes";
+    writeText(garbleSidecar, garbageBytes);
+
+    OpenResult garbled;
+    err.clear();
+    check(openPackage(garblePkg.outPath, cache, services, garbled, &err),
+          "opening still succeeds despite a corrupt local sidecar");
+    check(readText(garbleSidecar) == garbageBytes, "the corrupt local sidecar is left byte-identical");
+    check(garbled.notesProblems.size() == 1 &&
+          garbled.notesProblems[0] == garbleMedia.mediaPath + ": local notes unreadable, package notes not merged",
+          "the problem is reported against the media's original path");
 
     ExportInput lean = in;
     lean.outPath = (dir / "lean.jcreview").string();
@@ -778,6 +1047,126 @@ int packageOpenSelfTest() {
           gone.missingMedia == std::vector<std::string>{"sh010.####.exr"} &&
           readText(gone.sessionPath).find("filename=\"" + f1 + "\"") != std::string::npos,
           "missing media is counted and keeps its original path");
+
+    // Fix round 1: a lean-package rewrite where the resolved path actually
+    // differs from what the session recorded, so the rewrite is genuinely
+    // observed rather than a same-string round trip. The session names a
+    // second, non-existent frame of the sequence; only the first frame
+    // exists, so the rewrite must map the reference to a different path.
+    fs::create_directories(dir / "src2", ec);
+    const std::string rw1 = (dir / "src2" / "rw010.0001.exr").string();
+    const std::string rw2 = (dir / "src2" / "rw010.0002.exr").string();   // never created
+    writeText(rw1, "rw-frame-one");
+    gfcReview rwReview;
+    rwReview.mediaPath = gfcNoteStore::normalisePath(rw1);
+    ExportInput rewriteCheck;
+    rewriteCheck.outPath = (dir / "rewrite_check.jcreview").string();
+    rewriteCheck.includeMedia = false;
+    rewriteCheck.appVersion = "1.7.0";
+    rewriteCheck.createdIso = "2026-09-14T20:10:00Z";
+    rewriteCheck.sessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/>") +
+                              "<tracks><track trackID=\"0\" filename=\"" + rw2 + "\"/></tracks><playlist/></root>\n";
+    ExportMedia rwMedia;
+    rwMedia.mediaPath = rwReview.mediaPath;
+    rwMedia.frames = {rw1};
+    rwMedia.notesXml = gfcNoteStore::toXmlString(rwReview);
+    rwMedia.fingerprint = "fp1:rw";
+    rwMedia.width = 1;
+    rwMedia.height = 1;
+    rewriteCheck.media.push_back(rwMedia);
+    check(exportAll(rewriteCheck, &err), "rewrite-check package exported");
+    OpenResult rewriteResult;
+    check(openPackage(rewriteCheck.outPath, cache, services, rewriteResult, &err) && rewriteResult.resolved == 1 &&
+          readText(rewriteResult.sessionPath).find("filename=\"" + rw1 + "\"") != std::string::npos &&
+          readText(rewriteResult.sessionPath).find("filename=\"" + rw2 + "\"") == std::string::npos,
+          "a lean package's rewrite is observed when the resolved path differs from the recorded reference");
+
+    // Fix round 1, point 2b/2c: included media whose packaged frame the
+    // archive does not actually contain, and whose original path is also
+    // absent, counts as missing -- and the rewritten session maps the
+    // packaged-path reference back to alongside the original path, not
+    // "media/NNN/...".
+    {
+        Manifest ghostManifest;
+        ghostManifest.created = "2026-09-14T20:10:00Z";
+        ghostManifest.app = "1.7.0";
+        ghostManifest.session = "session.jcs";
+        ghostManifest.mediaIncluded = true;
+        ManifestMedia gm;
+        gm.index = 0;
+        gm.originalPath = (dir / "ghost_src" / "ghost.####.exr").string();
+        gm.packagedPath = "media/000/ghost.0001.exr";
+        gm.fingerprint.clear();   // deliberately empty: skip any fingerprint search
+        gm.width = 1;
+        gm.height = 1;
+        gm.frames = {"ghost.0001.exr"};
+        gm.notes = "notes/000.jnotes";
+        ghostManifest.media.push_back(gm);
+
+        const std::string ghostSessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/>") +
+            "<tracks><track trackID=\"0\" filename=\"media/000/ghost.0001.exr\"/></tracks><playlist/></root>\n";
+
+        gfcTar::Writer writer;
+        std::string terr;
+        writer.open((dir / "ghost.jcreview").string(), &terr);
+        writer.addBytes("manifest.json", manifestToJson(ghostManifest).toStdString(), &terr);
+        writer.addBytes("session.jcs", ghostSessionXml, &terr);
+        writer.addBytes("notes/000.jnotes", "<jefecheckNotes version=\"1\"/>", &terr);
+        // Deliberately no "media/000/ghost.0001.exr" entry: the manifest
+        // names a frame the archive does not contain.
+        writer.finish(&terr);
+
+        OpenResult ghost;
+        err.clear();
+        const std::string expectedGhostPath = (dir / "ghost_src" / "ghost.0001.exr").string();
+        check(openPackage((dir / "ghost.jcreview").string(), cache, services, ghost, &err) &&
+              ghost.resolved == 0 && ghost.missing == 1 &&
+              ghost.missingMedia == std::vector<std::string>{"ghost.####.exr"} &&
+              readText(ghost.sessionPath).find("filename=\"" + expectedGhostPath + "\"") != std::string::npos &&
+              readText(ghost.sessionPath).find("filename=\"media/000/ghost.0001.exr\"") == std::string::npos,
+              "missing included media maps the session reference back to alongside the original path");
+    }
+
+    // Fix round 1, point 4: a session that fails to parse loads no LUTs and
+    // writes no notes.
+    {
+        Manifest badManifest;
+        badManifest.created = "2026-09-14T20:10:00Z";
+        badManifest.app = "1.7.0";
+        badManifest.session = "session.jcs";
+        badManifest.mediaIncluded = true;
+        ManifestMedia bm;
+        bm.index = 0;
+        bm.originalPath = (dir / "src" / "bad.####.exr").string();
+        bm.packagedPath = "media/000/bad.0001.exr";
+        bm.fingerprint = "fp1:bad";
+        bm.width = 1;
+        bm.height = 1;
+        bm.frames = {"bad.0001.exr"};
+        bm.notes = "notes/000.jnotes";
+        badManifest.media.push_back(bm);
+        badManifest.luts.push_back(ManifestLut{"look.cube", "luts/look.cube"});
+
+        gfcTar::Writer writer;
+        std::string terr;
+        writer.open((dir / "badsession.jcreview").string(), &terr);
+        writer.addBytes("manifest.json", manifestToJson(badManifest).toStdString(), &terr);
+        writer.addBytes("session.jcs", "not a valid session document", &terr);
+        writer.addBytes("notes/000.jnotes", "<jefecheckNotes version=\"1\"/>", &terr);
+        writer.addBytes("luts/look.cube", "LUT", &terr);
+        writer.addBytes("media/000/bad.0001.exr", "frame", &terr);
+        writer.finish(&terr);
+
+        const std::vector<std::string> lutsBefore = lutsLoaded;
+        OpenResult badSession;
+        err.clear();
+        check(!openPackage((dir / "badsession.jcreview").string(), cache, services, badSession, &err) &&
+              lutsLoaded.size() == lutsBefore.size(),
+              "an unparsable session loads no LUTs");
+        gfcReview shouldNotExist;
+        check(!gfcNoteStore::load(gfcNoteStore::normalisePath(bm.originalPath), shouldNotExist),
+              "and no sidecar is written");
+    }
 
     const std::string whole = readText(in.outPath);
     writeText((dir / "truncated.jcreview").string(), whole.substr(0, whole.size() / 2));

@@ -138,6 +138,8 @@ struct OpenResult {
     int missing = 0;
     std::vector<std::string> missingMedia;    // display names
     std::vector<std::string> fxNames;         // every FX the session uses
+    std::vector<std::string> notesProblems;   // "<originalPath>: <reason>"; local notes untouched
+    std::vector<std::string> lutsNotLoaded;   // packaged LUT paths services.loadLut failed on
 };
 
 /**
@@ -151,12 +153,21 @@ std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std
 
 /**
  * Validates the manifest, extracts into <cacheRoot>/<id> (id = SHA-1 of the
- * package's absolute path, size and modification time; reused once it holds a
- * .complete marker), loads packaged LUTs, resolves every media (packaged ->
- * original path -> fingerprint search -> services.locate), union-merges each
- * media's notes into the sidecar beside the resolved media, and writes the
- * session with media paths rewritten to the resolved frames. Media that stays
- * unresolved keeps its original path and is counted as missing. Returns false
+ * package's absolute path, size, modification time and manifest bytes;
+ * reused once it holds a .complete marker AND every file the manifest names
+ * -- a partial or damaged cache is discarded and re-extracted), loads
+ * packaged LUTs (failures recorded in lutsNotLoaded), resolves every media
+ * (packaged -> original path -> fingerprint search -> services.locate),
+ * union-merges each media's notes into the sidecar beside the resolved
+ * media, and writes the session with media paths rewritten to the resolved
+ * frames. Notes are placed, and the session rewritten, only after the
+ * session has been read and parsed; a session that fails to parse or to
+ * rewrite loads no LUTs and changes no notes. A sidecar that exists but
+ * fails to load is left untouched, and a save failure leaves it untouched
+ * too -- both are recorded in notesProblems as "<originalPath>: <reason>"
+ * without failing the open. Media that stays unresolved keeps its original
+ * path in the session (a reference to the packaged copy is mapped back to
+ * alongside the original path) and is counted as missing. Returns false
  * (loading nothing) for an unreadable, truncated, foreign or unknown-version
  * package.
  */
