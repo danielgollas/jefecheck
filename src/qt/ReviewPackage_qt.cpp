@@ -712,6 +712,10 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
             if (!ours) continue;
             const std::string name = fs::path(ref.path).filename().string();
             const auto at = std::find(media.frames.begin(), media.frames.end(), name);
+            // A reference whose file name is not in media.frames only arises
+            // when that file vanished or the reference is a pattern. Frame 0 of
+            // the same resolved sequence loads the same sequence, and the frame
+            // range lives in separate session attributes, so nothing is lost.
             const size_t index = (at == media.frames.end()) ? 0 : size_t(at - media.frames.begin());
             mapping[ref.path] = frames[std::min(index, frames.size() - 1)];
         }
