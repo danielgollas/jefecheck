@@ -75,6 +75,11 @@ namespace
 bool gfcTar::isSafeName(const std::string& name)
 {
 	if (name.empty() || name[0] == '/' || name.find('\\') != std::string::npos) return false;
+	// ':' covers drive-qualified names ("C:/x", "C:x") and NTFS alternate
+	// streams ("a.exr:stream"): on Windows `dir / "C:/x"` discards `dir`.
+	if (name.find(':') != std::string::npos) return false;
+	const std::filesystem::path asPath(name);
+	if (asPath.has_root_name() || asPath.has_root_directory()) return false;
 	size_t start = 0;
 	while (start <= name.size())
 	{
@@ -346,6 +351,12 @@ int tarSelfTest()
 	check(!gfcTar::isSafeName("../evil") && !gfcTar::isSafeName("a/../b") && !gfcTar::isSafeName("/abs") &&
 		  !gfcTar::isSafeName("a//b") && !gfcTar::isSafeName("a\\b") && !gfcTar::isSafeName(""),
 		  "absolute, parent, empty-segment and backslash names are unsafe");
+	// On Windows, std::filesystem's `dir / "C:/..."` discards `dir`, so a
+	// drive-qualified name (or an NTFS alternate-stream name) would escape
+	// the extraction directory.
+	check(!gfcTar::isSafeName("C:/evil.txt"), "a drive-qualified absolute name is unsafe");
+	check(!gfcTar::isSafeName("C:evil.txt"), "a drive-relative name is unsafe");
+	check(!gfcTar::isSafeName("a.exr:stream"), "an alternate-data-stream name is unsafe");
 
 	std::string err;
 	{

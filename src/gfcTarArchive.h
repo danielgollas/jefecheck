@@ -23,7 +23,8 @@ namespace gfcTar
 		uint64_t dataOffset = 0;   // where the entry's bytes start in the archive
 	};
 
-	/** Relative, no leading '/', no backslash, no empty, "." or ".." segment. */
+	/** Relative, no leading '/', no backslash, no ':' (drive or stream), no root
+	    name or root directory, no empty, "." or ".." segment. */
 	bool isSafeName(const std::string& name);
 
 	/** Splits a name into the ustar prefix (<= 155) and name (<= 100) fields;

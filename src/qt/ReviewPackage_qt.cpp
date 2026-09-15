@@ -370,6 +370,21 @@ bool manifestFilesPresent(const Manifest& manifest, const std::filesystem::path&
     return true;
 }
 
+// True when `candidate`, lexically normalised, lies strictly inside `dir`.
+// Compares whole path components, so "/cache/abc" does not contain
+// "/cache/abcd/x".
+bool isInsideDir(const std::filesystem::path& dir, const std::filesystem::path& candidate) {
+    const std::filesystem::path base = dir.lexically_normal();
+    const std::filesystem::path full = candidate.lexically_normal();
+    auto b = base.begin();
+    auto f = full.begin();
+    for (; b != base.end(); ++b, ++f) {
+        if (b->empty() && std::next(b) == base.end()) break;   // a trailing separator's empty element
+        if (f == full.end() || *f != *b) return false;
+    }
+    return f != full.end();
+}
+
 // Extracts `reader` into `dir`, unless a prior extraction there is already
 // complete (a `.complete` marker AND every manifest-named file present). A
 // partial (crash before `.complete`) or damaged (a manifest-named file went
@@ -385,9 +400,15 @@ bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, con
     if (fs::exists(dir / ".complete", ec) && manifestFilesPresent(manifest, dir)) return true;
 
     for (const gfcTar::Entry& entry : reader.entries()) {
-        // Reader::open has already refused absolute and ".." names.
+        // Reader::open has already refused unsafe names (gfcTar::isSafeName);
+        // this is a second guard against anything that still resolves outside.
+        const fs::path dest = dir / entry.name;
+        if (!isInsideDir(dir, dest)) {
+            if (err) *err = "Cannot extract the package: unsafe entry name: " + entry.name;
+            return false;
+        }
         std::string entryErr;
-        if (!reader.extractTo(entry, (dir / entry.name).string(), &entryErr)) {
+        if (!reader.extractTo(entry, dest.string(), &entryErr)) {
             if (err) *err = "Cannot extract the package: " + entryErr;
             return false;
         }
@@ -706,6 +727,15 @@ int packageSelfTest() {
     Manifest unsafe = m;
     unsafe.media[0].notes = "../escape.jnotes";
     check(!manifestFromJson(manifestToJson(unsafe), back, &err), "an unsafe entry name is refused");
+    Manifest driveSession = m;
+    driveSession.session = "C:/evil";
+    check(!manifestFromJson(manifestToJson(driveSession), back, &err), "a drive-qualified session name is refused");
+    Manifest driveNotes = m;
+    driveNotes.media[0].notes = "C:/evil";
+    check(!manifestFromJson(manifestToJson(driveNotes), back, &err), "a drive-qualified notes name is refused");
+    Manifest driveLut = m;
+    driveLut.luts[0].file = "C:/evil";
+    check(!manifestFromJson(manifestToJson(driveLut), back, &err), "a drive-qualified LUT name is refused");
     auto withMediaIndex = [&m](int index) {
         QJsonObject o = QJsonDocument::fromJson(manifestToJson(m)).object();
         QJsonArray media = o["media"].toArray();
@@ -728,6 +758,11 @@ int packageSelfTest() {
     err.clear();
     check(!manifestFromJson(withDuplicateMediaIndex(), back, &err) && err.contains("Invalid media index"),
           "a repeated media index is refused");
+    check(isInsideDir("/cache/abc", "/cache/abc/media/000/x.exr") &&
+          !isInsideDir("/cache/abc", "/cache/abcd/x.exr") &&
+          !isInsideDir("/cache/abc", "/cache/abc/../evil.txt") &&
+          !isInsideDir("/cache/abc", "/cache/abc"),
+          "extraction containment compares whole path components");
     check(!manifestFromJson("not json", back, &err), "text that is not JSON is refused");
     check(indexDir("media", 7) == "media/007", "index directories are zero-padded");
 
