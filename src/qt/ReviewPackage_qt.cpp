@@ -447,15 +447,23 @@ std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncl
     return {};
 }
 
-// Loads any existing sidecar for `resolvedMedia`, merges `notesXml` into it
-// and saves the result. Returns true when the sidecar ends up saved
-// (including when `notesXml` carries nothing to merge, which touches
-// nothing); returns false and sets `problem`, leaving the local sidecar
-// untouched, when a sidecar exists but doesn't load, or the save fails.
+// Loads any existing sidecar for `resolvedMedia`, merges `notesXml` (the
+// package's own notes entry) into it and saves the result. `notesXml` being
+// unreadable or failing to parse is reported as a problem too -- a
+// well-formed package always carries a parseable (if empty) notes document
+// for every media, so a parse failure here is not "nothing to merge", it is
+// the packaged notes themselves being broken. Returns true when the sidecar
+// ends up saved (including when the packaged notes carry nothing to merge,
+// which still saves); returns false and sets `problem`, leaving the local
+// sidecar untouched, when the packaged notes don't parse, a local sidecar
+// exists but doesn't load, or the save fails.
 bool mergeNotes(const std::string& resolvedMedia, const std::string& notesXml, const std::string& fallbackFingerprint,
                 std::string* problem) {
     gfcReview incoming;
-    if (!gfcNoteStore::fromXmlString(notesXml, incoming)) return true;   // nothing packaged to merge
+    if (!gfcNoteStore::fromXmlString(notesXml, incoming)) {
+        if (problem) *problem = "package notes unreadable, not merged";
+        return false;
+    }
 
     const std::string sidecarPath = gfcNoteStore::sidecarPathFor(resolvedMedia);
     std::error_code ec;
@@ -587,7 +595,11 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
         }
 
         // Notes are only read here; nothing is merged or saved to disk until
-        // the session rewrite below has succeeded and been verified.
+        // the session rewrite below has succeeded and been verified. An
+        // unreadable notes entry is left as an empty string, which
+        // mergeNotes below reports as a problem rather than skipping
+        // silently -- a well-formed package always carries a parseable (if
+        // empty) notes document for every media.
         std::string notesXml;
         if (!readCapped(dir / media.notes, media.notes, notesXml, nullptr)) notesXml.clear();
         pending.push_back(PendingNotes{gfcNoteStore::normalisePath(frames.front()), notesXml, media.originalPath,
@@ -1032,6 +1044,51 @@ int packageOpenSelfTest() {
     check(garbled.notesProblems.size() == 1 &&
           garbled.notesProblems[0] == garbleMedia.mediaPath + ": local notes unreadable, package notes not merged",
           "the problem is reported against the media's original path");
+
+    // Fix round 1 follow-up: the package's OWN notes entry being garbage
+    // must not be skipped silently either -- it is reported, and no local
+    // sidecar gets created from it.
+    {
+        Manifest badNotesManifest;
+        badNotesManifest.created = "2026-09-14T20:10:00Z";
+        badNotesManifest.app = "1.7.0";
+        badNotesManifest.session = "session.jcs";
+        badNotesManifest.mediaIncluded = true;
+        ManifestMedia bnMedia;
+        bnMedia.index = 0;
+        bnMedia.originalPath = (dir / "badnotes_src" / "badnotes.####.exr").string();
+        bnMedia.packagedPath = "media/000/badnotes.0001.exr";
+        bnMedia.fingerprint = "fp1:badnotes";
+        bnMedia.width = 1;
+        bnMedia.height = 1;
+        bnMedia.frames = {"badnotes.0001.exr"};
+        bnMedia.notes = "notes/000.jnotes";
+        badNotesManifest.media.push_back(bnMedia);
+
+        const std::string badNotesSessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/>") +
+            "<tracks><track trackID=\"0\" filename=\"media/000/badnotes.0001.exr\"/></tracks><playlist/></root>\n";
+
+        gfcTar::Writer writer;
+        std::string terr;
+        writer.open((dir / "badnotes.jcreview").string(), &terr);
+        writer.addBytes("manifest.json", manifestToJson(badNotesManifest).toStdString(), &terr);
+        writer.addBytes("session.jcs", badNotesSessionXml, &terr);
+        writer.addBytes("notes/000.jnotes", "this is not xml notes at all, just garbage", &terr);
+        writer.addBytes("media/000/badnotes.0001.exr", "badnotes-frame", &terr);
+        writer.finish(&terr);
+
+        OpenResult badNotes;
+        err.clear();
+        check(openPackage((dir / "badnotes.jcreview").string(), cache, services, badNotes, &err) &&
+              badNotes.resolved == 1 && badNotes.missing == 0 &&
+              badNotes.notesProblems.size() == 1 &&
+              badNotes.notesProblems[0] == bnMedia.originalPath + ": package notes unreadable, not merged",
+              "the package's own unparsable notes entry is reported, not silently skipped");
+        const std::string bnResolvedMedia = gfcNoteStore::normalisePath(
+            (fs::path(badNotes.extractDir) / "media" / "000" / "badnotes.0001.exr").string());
+        gfcReview bnLocal;
+        check(!gfcNoteStore::load(bnResolvedMedia, bnLocal), "no local sidecar is created from unreadable package notes");
+    }
 
     ExportInput lean = in;
     lean.outPath = (dir / "lean.jcreview").string();
