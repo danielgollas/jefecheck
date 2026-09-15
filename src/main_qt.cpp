@@ -534,6 +534,18 @@ int main(int argc, char* argv[]) {
         break;
     }
 
+    // --package-dialog-test <image>: the export dialog writes, cancels and refuses.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--package-dialog-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessPackageDialogTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
     // --window-rect X Y W H: place the window, in logical pixels, so two
     // instances can sit side by side for a recording.
     for (int i = 1; i + 4 < argc; ++i) {

@@ -14,6 +14,7 @@
 #include "qt_prefs_persist.h"
 #include "RenderBridge_qt.h"
 #include "RenderDialog_qt.h"
+#include "ReviewPackageDialog_qt.h"
 #include "ReviewSummaryPdf_qt.h"
 #include "VideoEncoder_qt.h"
 
@@ -30,6 +31,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDesktopServices>
+#include <QCoreApplication>
 #include <QDockWidget>
 #include <QUrl>
 #include <QFile>
@@ -591,6 +593,37 @@ void MainWindow_Qt::buildMenuBar() {
             QMessageBox::warning(this, tr("Export Review Summary"), message);
         }
     })->setObjectName("menu.file.exportsummary");
+
+    fileMenu->addAction(tr("Export Review Package…"), this, [this]() {
+        ReviewPackageDialog_Qt dialog(
+            [this](const QString& out, bool includeMedia, jefe::qt::package::ExportInput& input, QString* message) {
+                return gatherPackageInput(out, includeMedia, input, message);
+            },
+            packageMediaBytes(), this);
+        dialog.exec();
+        if (!dialog.lastMessage().isEmpty()) statusBar()->showMessage(dialog.lastMessage(), 8000);
+    })->setObjectName("menu.file.exportpackage");
+
+    fileMenu->addAction(tr("Open Review Package…"), this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(this, tr("Open Review Package"), QString(),
+                                                          tr("JefeCheck Review Package (*.jcreview)"));
+        if (path.isEmpty()) return;
+        PackageStats stats;
+        QString message;
+        if (!openReviewPackage(path, true, &stats, &message)) {
+            QMessageBox::warning(this, tr("Open Review Package"), message);
+            return;
+        }
+        statusBar()->showMessage(message, 8000);
+        QStringList problems;
+        if (!stats.missingMedia.isEmpty()) problems << tr("Media not found: %1").arg(stats.missingMedia.join(", "));
+        if (!stats.missingFx.isEmpty()) problems << tr("FX not installed: %1").arg(stats.missingFx.join(", "));
+        if (!stats.notesProblems.isEmpty()) problems << tr("Notes not merged:\n%1").arg(stats.notesProblems.join("\n"));
+        if (!stats.lutsNotLoaded.isEmpty()) problems << tr("LUTs not loaded: %1").arg(stats.lutsNotLoaded.join(", "));
+        if (!problems.isEmpty()) {
+            QMessageBox::information(this, tr("Open Review Package"), problems.join("\n"));
+        }
+    })->setObjectName("menu.file.openpackage");
 
     // Rebuild both recent submenus each time the File menu opens.
     connect(fileMenu, &QMenu::aboutToShow, this, [this]() {
@@ -2912,6 +2945,64 @@ int MainWindow_Qt::runHeadlessRelinkTest(const QString& imagePath) {
     if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
 
     printf("RELINK-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
+}
+
+int MainWindow_Qt::runHeadlessPackageDialogTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("PACKAGE-DIALOG-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    const QString work = QDir::tempPath() + "/jefecheck_packagedialogtest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    const QString media = makePackageFixture(imagePath, work);
+    if (media.isEmpty()) { printf("PACKAGE-DIALOG-TEST FAIL fixture\n"); fflush(stdout); return 2; }
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+
+    check(ReviewPackageDialog_Qt::formatBytes(0) == "0 B" &&
+          ReviewPackageDialog_Qt::formatBytes(1536) == "1.5 KB" &&
+          ReviewPackageDialog_Qt::formatBytes(5LL * 1024 * 1024 * 1024) == "5.0 GB",
+          "sizes are formatted for people");
+
+    ReviewPackageDialog_Qt dialog(
+        [this](const QString& out, bool includeMedia, jefe::qt::package::ExportInput& input, QString* message) {
+            return gatherPackageInput(out, includeMedia, input, message);
+        },
+        packageMediaBytes(), this);
+    auto waitUntilIdle = [&dialog]() {
+        QElapsedTimer clock;
+        clock.start();
+        while (dialog.isRunning() && clock.elapsed() < 60000) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
+    };
+
+    const QString out = work + "/dialog.jcreview";
+    dialog.setOutputPath(out);
+    dialog.setIncludeMedia(true);
+    dialog.startExport();
+    check(dialog.isRunning(), "the export starts");
+    waitUntilIdle();
+    printf("PACKAGE-DIALOG-TEST message: %s\n", qPrintable(dialog.lastMessage()));
+    check(!dialog.isRunning() && QFileInfo::exists(out) && dialog.progressPercent() == 100,
+          "the export finishes with progress at 100%");
+
+    const QString cancelled = work + "/cancelled.jcreview";
+    dialog.setOutputPath(cancelled);
+    dialog.startExport();
+    dialog.cancelExport();
+    QCoreApplication::processEvents();
+    check(!dialog.isRunning() && !QFileInfo::exists(cancelled) && !QFileInfo::exists(cancelled + ".partial"),
+          "cancel leaves neither package nor partial file");
+
+    dialog.setOutputPath(QString());
+    dialog.startExport();
+    check(!dialog.isRunning() && !dialog.lastMessage().isEmpty(), "an empty path is refused with a message");
+
+    printf("PACKAGE-DIALOG-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);
     return failures == 0 ? 0 : 2;
 }

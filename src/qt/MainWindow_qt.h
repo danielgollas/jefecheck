@@ -132,6 +132,9 @@ public:
     /** Headless proof that a lean package relinks moved media (--relink-test <image>). */
     int runHeadlessRelinkTest(const QString& imagePath);
 
+    /** Headless proof of the export dialog (--package-dialog-test <image>). */
+    int runHeadlessPackageDialogTest(const QString& imagePath);
+
     /** Overrides where openReviewPackage extracts packages; empty (the default)
         falls back to <AppDataLocation>/packages. Tests point this at a temp dir
         so a --config-dir run never touches the developer's real app data. */
