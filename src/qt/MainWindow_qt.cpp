@@ -54,7 +54,6 @@
 
 #include "../gfcReviewSummary.h"
 #include "../gfcNoteStore.h"
-#include "../ui/IApplication.h"
 #include "../gfcreview.h"
 #include "../gfcrevision.h"
 #include "../gfcnotestroke.h"
@@ -66,6 +65,15 @@ constexpr const char* kSettingsGeometry = "MainWindow/geometry";
 // an over-tall bottom dock row (which could collapse/hide the Plate Manager).
 // Old "MainWindow/state" is ignored, so first-launch defaults reapply once.
 constexpr const char* kSettingsState    = "MainWindow/state_v2";
+
+// Sets *flag true for the scope and false again on every return path
+// (including early returns), so a guarded function can't be mistaken for
+// still running if an exception or an early `return` skips a manual reset.
+struct ScopedFlag {
+    bool* flag;
+    explicit ScopedFlag(bool* f) : flag(f) { *flag = true; }
+    ~ScopedFlag() { *flag = false; }
+};
 }
 
 MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
@@ -1779,6 +1787,11 @@ bool MainWindow_Qt::stampActiveFrameNotes(const QString& outPath, QString* messa
 
 bool MainWindow_Qt::exportReviewSummary(const QString& outPath, ReviewSummaryStats* stats, QString* message) {
     auto say = [&](const QString& m) { if (message) *message = m; };
+    if (summaryExportInProgress_) {
+        say(tr("An export is already running"));
+        return false;
+    }
+    ScopedFlag exportGuard(&summaryExportInProgress_);
     const QString suffix = QFileInfo(outPath).suffix().toLower();
     if (suffix != "txt" && suffix != "csv" && suffix != "pdf") {
         say(tr("Unsupported summary format \"%1\": use .pdf, .txt or .csv").arg(suffix));
@@ -1842,6 +1855,13 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     const QString restore = dir + "/restore.jcs";
     const bool saved = jefe::qt::saveSession(restore.toStdString());
     const int savedFrame = jefe::qt::getCurrentFrame();
+    // Playback would otherwise keep advancing frames (via playbackTimer_,
+    // which the excluded-user-input event pump below still services) while
+    // notes/frames are swapped out for rendering. Pause for the duration and
+    // resume afterward, once the session restore and seek have put the
+    // track/plate state back.
+    const bool wasPlaying = jefe::qt::isPlaying();
+    if (wasPlaying) jefe::qt::pausePlayback();
 
     // gfcSequence::forceLoad (what a forRender=true frame request falls back
     // to when a frame hasn't decoded yet) only works once the async loader
@@ -1850,12 +1870,17 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     // are still empty, so a render right then writes nothing. Wait, bounded,
     // draining the GL upload queue, until at least one frame has landed.
     //
-    // Pumps the Qt event loop between polls the same way
-    // autoloadFXsFromPath() does in SequenceLoadBridge_qt.cpp (see the
-    // comment there) -- a blocking sleep here would stall the GUI thread for
-    // up to the full timeout per track (4 tracks x 5s after the restore
-    // reload), which breaks AX queries and back-to-back headless test
-    // launches exactly like an unyielded shader-compile pass does.
+    // Pumps the Qt event loop between polls (excluding user input, see
+    // below) so timers, paints and accessibility keep running instead of
+    // stalling the GUI thread for up to the full timeout per track (4
+    // tracks x 5s after the restore reload) the way an unyielded
+    // shader-compile pass does (see autoloadFXsFromPath()'s comment in
+    // SequenceLoadBridge_qt.cpp for the same problem elsewhere).
+    // summaryExportInProgress_ (set for the whole of exportReviewSummary)
+    // keeps a second export from starting mid-wait; excluding user input
+    // events here additionally queues any click/keystroke that arrives
+    // during the wait instead of letting it interact with a half-restored
+    // session.
     auto waitForTrackFrame = [this](int track, int timeoutMs) {
         QElapsedTimer waitTimer;
         waitTimer.start();
@@ -1872,7 +1897,9 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
                 // wait exists to avoid.
                 QThread::msleep(2);
             }
-            jefe::ui::IApplication::instance().processEvents();
+            // Exclude user input so a queued click/keystroke can't re-enter
+            // export mid-wait; timers, paints and accessibility still run.
+            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         }
         return jefe::qt::getTrackTimelineState(track).loadedCount > 0;
     };
@@ -1945,6 +1972,10 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
         }
     }
     jefe::qt::seekToFrame(savedFrame);
+    // Resume playback only after the session/frame are back to what the user
+    // had -- togglePlayFwd() starts forward playback from a paused state,
+    // which is where pausePlayback() above left it.
+    if (wasPlaying) jefe::qt::togglePlayFwd();
 }
 
 int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
@@ -2057,6 +2088,22 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     const std::string beforeFile = jefe::qt::getTrackParams(0).filename;
     const int beforeFrame = jefe::qt::getCurrentFrame();
     const QString pdf = work + "/summary.pdf";
+
+    // Re-entrancy (JEF-39 fix round 2): the export's frame-decode wait pumps
+    // the event loop (excluding user input), so schedule a second export to
+    // fire from that pump -- the only way it can actually land inside the
+    // first export's call stack -- and confirm it's refused rather than
+    // running concurrently with the first.
+    bool reentrantFired = false;
+    bool reentrantResult = true;
+    QString reentrantMsg;
+    const QString reentrantPdf = work + "/reentrant.pdf";
+    QTimer::singleShot(0, this, [&]() {
+        reentrantFired = true;
+        ReviewSummaryStats reentrantStats;
+        reentrantResult = exportReviewSummary(reentrantPdf, &reentrantStats, &reentrantMsg);
+    });
+
     check(exportReviewSummary(pdf, &stats, &msg), "PDF summary exported");
     printf("SUMMARY-TEST pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg), stats.thumbs, stats.thumbFail);
     check(stats.thumbs == 2 && stats.thumbFail == 0, "one thumbnail per frame entry, none failed");
@@ -2065,6 +2112,14 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     check(!QFile::exists(pdf + ".partial"), "no partial PDF left");
     check(jefe::qt::getTrackParams(0).filename == beforeFile, "the track's media is restored");
     check(jefe::qt::getCurrentFrame() == beforeFrame, "the current frame is restored");
+
+    if (!reentrantFired) {
+        check(false, "re-entrant export timer never fired during the export (test inconclusive -- the wait pump was not exercised)");
+    } else {
+        check(!reentrantResult, "a re-entrant export while one is running is refused");
+        check(reentrantMsg.contains("already running"), "re-entrant export message says already running");
+        check(!QFile::exists(reentrantPdf), "the re-entrant export wrote nothing");
+    }
 
     // Burn-in reached the thumbnail: the same frame rendered with the empty
     // round (no notes) must differ from it.

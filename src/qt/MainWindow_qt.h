@@ -163,6 +163,12 @@ private:
     void toggleHideControls();
     bool controlsHidden_ = false;
     QString currentSessionPath_;
+    // Guards exportReviewSummary() against re-entry: its PDF path pumps the
+    // event loop (excluding user input) for up to several seconds while
+    // waiting for frames to decode, so a second click / auto-fired call
+    // could otherwise start a second export -- interleaving two
+    // save/restore sessions and GL renders -- while the first is mid-flight.
+    bool summaryExportInProgress_ = false;
     QMenu*  recentMenu_ = nullptr;
     QMenu*  recentPlaylistMenu_ = nullptr;   // File → Recent Playlists (JEF-18)
     // The consolidated "Panels" menu (replaces the legacy "Dialogs" menu,
