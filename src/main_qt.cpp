@@ -460,6 +460,42 @@ int main(int argc, char* argv[]) {
         break;
     }
 
+    // --package-test <image>: end-to-end proof of the review package.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--package-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessPackageTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --export-package <out> [--no-media]: package what is loaded, then quit.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--export-package") != 0) continue;
+        const QString out = QString::fromUtf8(argv[i + 1]);
+        bool includeMedia = true;
+        for (int k = 1; k < argc; ++k) {
+            if (std::strcmp(argv[k], "--no-media") == 0) includeMedia = false;
+        }
+        QTimer::singleShot(6000, &window, [&window, out, includeMedia]() {
+            MainWindow_Qt::PackageStats s;
+            QString msg;
+            const bool ok = window.exportReviewPackage(out, includeMedia, &s, &msg);
+            if (ok) {
+                printf("PACKAGE: wrote=%s media=%d included=%d bytes=%lld\n", qPrintable(out), s.media,
+                       s.mediaIncluded ? 1 : 0, static_cast<long long>(s.bytes));
+            } else {
+                printf("PACKAGE: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+            std::_Exit(ok ? 0 : 2);
+        });
+        break;
+    }
+
     // --window-rect X Y W H: place the window, in logical pixels, so two
     // instances can sit side by side for a recording.
     for (int i = 1; i + 4 < argc; ++i) {

@@ -60,6 +60,11 @@
 #include "../gfcrevision.h"
 #include "../gfcnotestroke.h"
 #include "../gfcnotetext.h"
+#include "../gfcMediaFingerprint.h"
+#include "../gfcSessionPaths.h"
+#include "../gfcTarArchive.h"
+
+#include <ctime>
 
 namespace {
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
@@ -2435,6 +2440,235 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     jefe::qt::disconnectRemote();
 
     printf("SUMMARY-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
+}
+
+bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia,
+                                       jefe::qt::package::ExportInput& input, QString* message) {
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    const std::vector<jefe::qt::SessionMedia> media = jefe::qt::getSessionMediaSet();
+    if (media.empty()) {
+        say(tr("Nothing to package: the session has no media"));
+        return false;
+    }
+
+    const QString dir = QDir::tempPath() + "/jefecheck_package_" +
+                        QString::number(QDateTime::currentMSecsSinceEpoch());
+    QDir().mkpath(dir);
+    const QString sessionFile = dir + "/session.jcs";
+    if (!jefe::qt::saveSession(sessionFile.toStdString())) {
+        say(tr("Cannot save the session"));
+        return false;
+    }
+    QFile saved(sessionFile);
+    if (!saved.open(QIODevice::ReadOnly)) {
+        say(tr("Cannot read the saved session"));
+        return false;
+    }
+
+    input = jefe::qt::package::ExportInput{};
+    input.outPath = outPath.toStdString();
+    input.includeMedia = includeMedia;
+    input.sessionXml = saved.readAll().toStdString();
+    // gfcSessionPaths::parseRoot (Task 4) calls XMLNode::parseString directly,
+    // which -- unlike XMLNode::parseFile -- does not skip a leading UTF-8 BOM;
+    // a saved .jcs always has one, so both listLutNames() below and the
+    // Exporter's own listMedia()/rewriteMedia() would otherwise fail with
+    // "session XML has no <root>".
+    if (input.sessionXml.compare(0, 3, "\xEF\xBB\xBF") == 0) input.sessionXml.erase(0, 3);
+    // Hardcoded copy of gfcStructures.h's JEFE_VERSION -- can't include the
+    // header here because it pulls glad, which doesn't share a TU with Qt's
+    // QtGui on macOS (see the About dialog above). Bumped together with the
+    // source-of-truth define and CMakeLists.txt's project() VERSION, per
+    // CLAUDE.md.
+    input.appVersion = "1.7.0";
+    input.createdIso = gfcReviewSummary::isoUtc(time(nullptr));
+
+    for (const jefe::qt::SessionMedia& m : media) {
+        jefe::qt::package::ExportMedia em;
+        em.mediaPath = m.mediaPath;
+        em.frames = jefe::qt::listSequenceFrames(m.anyFramePath);
+        if (em.frames.empty()) {
+            say(tr("Cannot find the frames of %1").arg(QString::fromStdString(m.anyFramePath)));
+            return false;
+        }
+        std::string err;
+        gfcMediaFingerprint::Probe probe;
+        if (!gfcMediaFingerprint::probe(em.frames.front(), probe, &err)) {
+            say(QString::fromStdString(err));
+            return false;
+        }
+        em.width = probe.width;
+        em.height = probe.height;
+        em.fingerprint = jefe::qt::reviewFingerprint(m.mediaPath);
+        if (em.fingerprint.empty()) {
+            em.fingerprint = gfcMediaFingerprint::compute(em.frames, &err);
+            if (em.fingerprint.empty()) {
+                say(QString::fromStdString(err));
+                return false;
+            }
+            // Best effort: an unwritable sidecar keeps the value in memory, and
+            // the packaged notes below carry it either way.
+            jefe::qt::setReviewFingerprint(m.mediaPath, em.fingerprint);
+        }
+        em.notesXml = jefe::qt::reviewXmlForMedia(m.mediaPath);
+        input.media.push_back(std::move(em));
+    }
+
+    std::vector<std::string> lutNames;
+    std::string perr;
+    if (!gfcSessionPaths::listLutNames(input.sessionXml, lutNames, &perr)) {
+        say(QString::fromStdString(perr));
+        return false;
+    }
+    for (const std::string& name : lutNames) {
+        const std::string source = jefe::qt::lutSourcePath(name);
+        if (!source.empty() && !jefe::qt::isInstallLutPath(source)) input.luts.emplace_back(name, source);
+    }
+    return true;
+}
+
+qint64 MainWindow_Qt::packageMediaBytes() {
+    qint64 total = 0;
+    for (const jefe::qt::SessionMedia& m : jefe::qt::getSessionMediaSet()) {
+        for (const std::string& frame : jefe::qt::listSequenceFrames(m.anyFramePath)) {
+            total += QFileInfo(QString::fromStdString(frame)).size();
+        }
+    }
+    return total;
+}
+
+bool MainWindow_Qt::exportReviewPackage(const QString& outPath, bool includeMedia, PackageStats* stats, QString* message) {
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    jefe::qt::package::ExportInput input;
+    if (!gatherPackageInput(outPath, includeMedia, input, message)) return false;
+
+    jefe::qt::package::Exporter exporter;
+    QString err;
+    if (!exporter.begin(input, &err)) {
+        say(err);
+        return false;
+    }
+    using State = jefe::qt::package::Exporter::State;
+    State state = State::Running;
+    while ((state = exporter.step(&err)) == State::Running) {}
+    if (state != State::Done) {
+        say(err.isEmpty() ? tr("Export failed") : err);
+        return false;
+    }
+
+    PackageStats s;
+    s.media = int(input.media.size());
+    s.mediaIncluded = includeMedia;
+    s.bytes = QFileInfo(outPath).size();
+    if (stats) *stats = s;
+    say(tr("Review package written: %1 (%2 media, %3)")
+            .arg(QFileInfo(outPath).fileName())
+            .arg(s.media)
+            .arg(includeMedia ? tr("media included") : tr("media referenced")));
+    return true;
+}
+
+QString MainWindow_Qt::makePackageFixture(const QString& imagePath, const QString& work) {
+    const QString srcDir = work + "/src";
+    QDir().mkpath(srcDir);
+    const QString media = srcDir + "/" + QFileInfo(imagePath).fileName();
+    if (!QFile::copy(imagePath, media)) return QString();
+    gfcReview review;
+    review.mediaPath = gfcNoteStore::normalisePath(media.toStdString());
+    gfcRevision& round = review.beginRevision("Supervisor");
+    auto stroke = std::make_unique<gfcNoteStroke>();
+    stroke->author = "Supervisor";
+    stroke->quadID = 0;
+    stroke->from = 1;
+    stroke->to = 1;
+    stroke->pts = { gfcNotePoint{0.2f, 0.2f}, gfcNotePoint{0.8f, 0.8f} };
+    round.addNote(std::move(stroke));
+    round.locked = true;
+    return gfcNoteStore::save(review) ? media : QString();
+}
+
+int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("PACKAGE-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    auto readBytes = [](const QString& path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    if (!viewport_) { printf("PACKAGE-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
+
+    const QString work = QDir::tempPath() + "/jefecheck_packagetest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    const QString media = makePackageFixture(imagePath, work);
+    if (media.isEmpty()) { printf("PACKAGE-TEST FAIL fixture\n"); fflush(stdout); return 2; }
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+    jefe::qt::adjustPlateExposure(0, 1.5f);
+    const std::string mediaKey = gfcNoteStore::normalisePath(media.toStdString());
+    const std::string imageName = QFileInfo(media).fileName().toStdString();
+
+    PackageStats stats;
+    QString msg;
+    const QString withMedia = work + "/with.jcreview";
+    check(exportReviewPackage(withMedia, true, &stats, &msg), "package with media exported");
+    printf("PACKAGE-TEST export: %s\n", qPrintable(msg));
+    check(stats.media == 1 && stats.mediaIncluded && stats.bytes > QFileInfo(media).size(),
+          "stats: one media, included, larger than the image");
+
+    gfcTar::Reader reader;
+    std::string terr;
+    std::string bytes;
+    check(reader.open(withMedia.toStdString(), &terr), "the package is a valid archive");
+    check(!reader.entries().empty() && reader.entries()[0].name == "manifest.json", "manifest.json is the first entry");
+    const gfcTar::Entry* image = reader.find("media/000/" + imageName);
+    check(image && reader.readBytes(*image, bytes, &terr) && QByteArray::fromStdString(bytes) == readBytes(media),
+          "the image is packaged byte for byte");
+    const gfcTar::Entry* session = reader.find("session.jcs");
+    check(session && reader.readBytes(*session, bytes, &terr) &&
+          bytes.find("filename=\"media/000/" + imageName + "\"") != std::string::npos,
+          "the session points at the packaged image");
+    gfcReview packagedNotes;
+    const gfcTar::Entry* notes = reader.find("notes/000.jnotes");
+    check(notes && reader.readBytes(*notes, bytes, &terr) && gfcNoteStore::fromXmlString(bytes, packagedNotes) &&
+          packagedNotes.revisions.size() == 1,
+          "the notes are packaged");
+    jefe::qt::package::Manifest manifest;
+    QString merr;
+    std::string manifestBytes;
+    check(!reader.entries().empty() && reader.readBytes(reader.entries()[0], manifestBytes, &terr) &&
+          jefe::qt::package::manifestFromJson(QByteArray::fromStdString(manifestBytes), manifest, &merr) &&
+          manifest.mediaIncluded && manifest.media.size() == 1 &&
+          manifest.media[0].fingerprint.rfind("fp1:", 0) == 0 &&
+          manifest.media[0].frames == std::vector<std::string>{imageName} && manifest.media[0].width > 0,
+          "the manifest describes the media");
+    gfcReview onDisk;
+    check(gfcNoteStore::load(mediaKey, onDisk) && !manifest.media.empty() &&
+          onDisk.fingerprint == manifest.media[0].fingerprint,
+          "the source sidecar now records the fingerprint");
+
+    const QString withoutMedia = work + "/without.jcreview";
+    check(exportReviewPackage(withoutMedia, false, &stats, &msg), "package without media exported");
+    gfcTar::Reader lean;
+    bool anyMedia = false;
+    const bool leanOpened = lean.open(withoutMedia.toStdString(), &terr);
+    if (leanOpened) {
+        for (const gfcTar::Entry& e : lean.entries()) {
+            if (e.name.rfind("media/", 0) == 0) anyMedia = true;
+        }
+    }
+    const gfcTar::Entry* leanSession = leanOpened ? lean.find("session.jcs") : nullptr;
+    check(leanOpened && !anyMedia && leanSession && lean.readBytes(*leanSession, bytes, &terr) &&
+          bytes.find(media.toStdString()) != std::string::npos,
+          "the lean package has no media and keeps the absolute path");
+    check(!QFile::exists(withMedia + ".partial") && !QFile::exists(withoutMedia + ".partial"), "no partial files left");
+
+    // (Task 9 inserts the open round trip here.)
+
+    printf("PACKAGE-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);
     return failures == 0 ? 0 : 2;
 }

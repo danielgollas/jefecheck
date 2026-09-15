@@ -12,11 +12,13 @@
 
 #include <QImage>
 #include <QMainWindow>
+#include <QStringList>
 
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "ReviewPackage_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
 class QDockWidget;
@@ -88,6 +90,34 @@ public:
 
     /** Headless end-to-end proof of the summary export (--summary-test <image>). */
     int runHeadlessSummaryTest(const QString& imagePath);
+
+    /** Counts from exportReviewPackage() and openReviewPackage(). */
+    struct PackageStats {
+        int media = 0;
+        bool mediaIncluded = false;
+        qint64 bytes = 0;
+        int resolved = 0;
+        int missing = 0;
+        QString extractDir;
+        QStringList missingMedia;
+        QStringList missingFx;
+    };
+
+    /** Collects what a package of the current session needs: the saved session,
+        every media's frames, fingerprint (computed and saved if missing) and
+        notes, and the non-bundled LUTs the session uses. */
+    bool gatherPackageInput(const QString& outPath, bool includeMedia,
+                            jefe::qt::package::ExportInput& input, QString* message);
+
+    /** Total size of every frame file in the session (for "Include media"). */
+    qint64 packageMediaBytes();
+
+    /** Writes a review package synchronously (CLI and tests; the dialog steps it). See
+        docs/superpowers/specs/2026-09-14-review-package-design.md. */
+    bool exportReviewPackage(const QString& outPath, bool includeMedia, PackageStats* stats, QString* message);
+
+    /** Headless end-to-end proof of the review package (--package-test <image>). */
+    int runHeadlessPackageTest(const QString& imagePath);
 
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
@@ -193,6 +223,10 @@ private:
     void renderSummaryThumbnails(const std::vector<jefe::qt::SessionMedia>& media,
                                  gfcReviewSummary::Doc& doc, const QString& dir,
                                  ReviewSummaryStats* stats);
+
+    /** Copies @a imagePath into @a work/src and writes a one-round sidecar beside it.
+        Returns the copy's path, or an empty string on failure. */
+    QString makePackageFixture(const QString& imagePath, const QString& work);
 
     class LoadWindowDialog_Qt* loadWindowDialog_ = nullptr;
     RemoteDialog_Qt* remoteDialog_ = nullptr;

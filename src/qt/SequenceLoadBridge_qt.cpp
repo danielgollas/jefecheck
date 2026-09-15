@@ -52,6 +52,10 @@ extern gfcSessionManager sessionManager;
 extern gfcPickManager pickManager;
 extern gfcSettings sett;
 
+// Defined in gfcSequence.cpp; not declared in any header.
+void findSequence(std::vector<std::string>& refFiles, std::string inputFilename,
+                  std::string& label, int& startNum, int& endNum);
+
 namespace jefe::qt {
 
 int getDefaultTextureFormat() {
@@ -2705,6 +2709,54 @@ void restorePlaylistSelection(int index, bool contentFromPlaylist) {
 
 void setRemoteBroadcastsMuted(bool muted) {
     networkManager.setTakeNotifications(!muted);
+}
+
+std::vector<std::string> listSequenceFrames(const std::string& anyFramePath) {
+    std::vector<std::string> files;
+    std::string label;
+    int startNum = 0;
+    int endNum = 0;
+    ::findSequence(files, anyFramePath, label, startNum, endNum);
+    return files;
+}
+
+std::string reviewXmlForMedia(const std::string& mediaPath) {
+    return gfcNoteStore::toXmlString(reviewForPath(mediaPath));
+}
+
+std::string reviewFingerprint(const std::string& mediaPath) {
+    return reviewForPath(mediaPath).fingerprint;
+}
+
+bool setReviewFingerprint(const std::string& mediaPath, const std::string& fingerprint) {
+    gfcReview& review = reviewForPath(mediaPath);
+    review.fingerprint = fingerprint;
+    return gfcNoteStore::save(review);
+}
+
+std::string lutSourcePath(const std::string& lutName) {
+    const int index = lutManager.getLutIndexByName(lutName);
+    if (index < 0) return {};
+    return std::string(lutManager.getLUT(index).filename);
+}
+
+bool isInstallLutPath(const std::string& path) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const std::string file = fs::weakly_canonical(fs::path(path), ec).string();
+    if (ec) return false;
+    std::vector<std::string> dirs;
+    if (!sett.lutPath.empty()) dirs.push_back(sett.lutPath);
+    dirs.push_back(::getApplicationDataPath() + "FX/");
+    dirs.push_back("FX/");
+    for (const std::string& d : dirs) {
+        std::error_code dec;
+        std::string dir = fs::weakly_canonical(fs::path(d), dec).string();
+        if (dec || dir.empty()) continue;
+        if (dir.back() != '/') dir += '/';
+        if (file.compare(0, dir.size(), dir) == 0) return true;
+    }
+    return false;
 }
 
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,

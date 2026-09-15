@@ -1132,6 +1132,25 @@ void restorePlaylistSelection(int index, bool contentFromPlaylist);
  */
 void setRemoteBroadcastsMuted(bool muted);
 
+/** Every frame file of the sequence @a anyFramePath belongs to, in frame order. */
+std::vector<std::string> listSequenceFrames(const std::string& anyFramePath);
+
+/** The sidecar document of the in-memory review for @a mediaPath (loaded on first touch). */
+std::string reviewXmlForMedia(const std::string& mediaPath);
+
+/** The fingerprint recorded on the review for @a mediaPath, or "". */
+std::string reviewFingerprint(const std::string& mediaPath);
+
+/** Records @a fingerprint on the review for @a mediaPath and saves its sidecar.
+    Returns false when the sidecar could not be written (the value stays in memory). */
+bool setReviewFingerprint(const std::string& mediaPath, const std::string& fingerprint);
+
+/** The source file of the loaded LUT sessions call @a lutName, or "" when none is loaded under that name. */
+std::string lutSourcePath(const std::string& lutName);
+
+/** Whether @a path lies inside a directory LUTs autoload from (sett.lutPath, the bundle FX/, ./FX/). */
+bool isInstallLutPath(const std::string& path);
+
 /**
  * Put one of each note type on a plate, for --notes-demo. Coordinates are
  * literal normalised values so the result is identical every run, which is
