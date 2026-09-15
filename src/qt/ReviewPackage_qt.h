@@ -9,6 +9,7 @@
 #include <QString>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -112,8 +113,61 @@ private:
     State state_ = State::Failed;
 };
 
+/** What opening a package needs from the running app. */
+struct OpenServices {
+    /** Loads a packaged LUT file; called for every LUT before the session. */
+    std::function<bool(const std::string& lutPath)> loadLut;
+    /** Called after a media's notes are merged on disk, so in-memory copies reload. */
+    std::function<void(const std::string& mediaPath)> reloadReview;
+    /** Preferences -> Search Paths, used whether or not "use search paths" is ticked. */
+    std::vector<std::string> searchPaths;
+    bool searchRecursive = false;
+    /** When false, nothing prompts: unresolved media count as missing. */
+    bool interactive = false;
+    /** Returns a chosen frame file of the media, or "" to skip it. */
+    std::function<std::string(const ManifestMedia& media)> locate;
+    /** Asked when the located media's fingerprint differs; true uses it anyway. */
+    std::function<bool(const ManifestMedia& media, const std::string& chosenFrame)> confirmMismatch;
+};
+
+struct OpenResult {
+    Manifest manifest;
+    std::string extractDir;
+    std::string sessionPath;                  // the rewritten session, ready to load
+    int resolved = 0;
+    int missing = 0;
+    std::vector<std::string> missingMedia;    // display names
+    std::vector<std::string> fxNames;         // every FX the session uses
+};
+
+/**
+ * The frames of the first sequence under @a roots whose fingerprint equals the
+ * media's. Candidates must match the frame count and first-frame size before
+ * any fingerprint is computed; candidates with the media's file-name pattern
+ * are tried first. Empty when nothing matches.
+ */
+std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std::vector<std::string>& roots,
+                                           bool recursive);
+
+/**
+ * Validates the manifest, extracts into <cacheRoot>/<id> (id = SHA-1 of the
+ * package's absolute path, size and modification time; reused once it holds a
+ * .complete marker), loads packaged LUTs, resolves every media (packaged ->
+ * original path -> fingerprint search -> services.locate), union-merges each
+ * media's notes into the sidecar beside the resolved media, and writes the
+ * session with media paths rewritten to the resolved frames. Media that stays
+ * unresolved keeps its original path and is counted as missing. Returns false
+ * (loading nothing) for an unreadable, truncated, foreign or unknown-version
+ * package.
+ */
+bool openPackage(const std::string& packagePath, const std::string& cacheRoot, const OpenServices& services,
+                 OpenResult& result, QString* err);
+
 /** Manifest and exporter self-test; prints NOTE-PACKAGE: pass=N fail=N. */
 int packageSelfTest();
+
+/** Opener self-test; prints NOTE-PACKAGE-OPEN: pass=N fail=N. */
+int packageOpenSelfTest();
 
 }  // namespace jefe::qt::package
 

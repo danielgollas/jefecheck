@@ -8,15 +8,24 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <system_error>
 
+#include "../gfcMediaFingerprint.h"
+#include "../gfcNoteMerge.h"
 #include "../gfcNoteStore.h"
 #include "../gfcSessionPaths.h"
+#include "../gfcSha1.h"
+#include "../gfcnotestroke.h"
+#include "../gfcreview.h"
+#include "../gfcrevision.h"
 
 namespace jefe::qt::package {
 
@@ -321,6 +330,165 @@ Exporter::State runToEnd(Exporter& exporter, QString* err) {
 }
 }  // namespace
 
+std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std::vector<std::string>& roots,
+                                           bool recursive) {
+    namespace fs = std::filesystem;
+    if (media.fingerprint.empty() || media.frames.empty()) return {};
+    const std::string wantedName = fs::path(media.originalPath).filename().string();
+    std::vector<std::vector<std::string>> sameName;
+    std::vector<std::vector<std::string>> others;
+    for (const std::string& root : roots) {
+        for (const auto& [key, frames] : gfcMediaFingerprint::sequencesIn(root, recursive)) {
+            if (frames.size() != media.frames.size()) continue;
+            gfcMediaFingerprint::Probe probe;
+            if (!gfcMediaFingerprint::probe(frames.front(), probe, nullptr)) continue;
+            if (probe.width != media.width || probe.height != media.height) continue;
+            (fs::path(key).filename().string() == wantedName ? sameName : others).push_back(frames);
+        }
+    }
+    for (const auto* group : {&sameName, &others}) {
+        for (const std::vector<std::string>& frames : *group) {
+            if (gfcMediaFingerprint::compute(frames, nullptr) == media.fingerprint) return frames;
+        }
+    }
+    return {};
+}
+
+namespace {
+// Frames of the media, in order: packaged -> original path -> fingerprint
+// search -> interactive locate. Empty when unresolved.
+std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncluded,
+                                      const std::filesystem::path& extractDir, const OpenServices& services) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (media.frames.empty()) return {};
+
+    std::vector<std::string> frames;
+    if (mediaIncluded && !media.packagedPath.empty()) {
+        for (const std::string& f : media.frames) {
+            frames.push_back((extractDir / indexDir("media", media.index) / f).string());
+        }
+        return fs::exists(frames.front(), ec) ? frames : std::vector<std::string>{};
+    }
+
+    const fs::path originalDir = fs::path(media.originalPath).parent_path();
+    bool allThere = true;
+    for (const std::string& f : media.frames) {
+        frames.push_back((originalDir / f).string());
+        if (!fs::exists(frames.back(), ec)) allThere = false;
+    }
+    if (allThere) return frames;
+
+    frames = findByFingerprint(media, services.searchPaths, services.searchRecursive);
+    if (!frames.empty() || !services.interactive || !services.locate) return frames;
+
+    const std::string chosen = services.locate(media);
+    if (chosen.empty()) return {};
+    auto sequences = gfcMediaFingerprint::sequencesIn(fs::path(chosen).parent_path().string(), false);
+    const auto found = sequences.find(gfcNoteStore::normalisePath(chosen));
+    if (found == sequences.end()) return {};
+    if (gfcMediaFingerprint::compute(found->second, nullptr) == media.fingerprint ||
+        (services.confirmMismatch && services.confirmMismatch(media, chosen))) {
+        return found->second;
+    }
+    return {};
+}
+}  // namespace
+
+bool openPackage(const std::string& packagePath, const std::string& cacheRoot, const OpenServices& services,
+                 OpenResult& result, QString* err) {
+    namespace fs = std::filesystem;
+    auto fail = [err](const std::string& message) {
+        if (err) *err = QString::fromStdString(message);
+        return false;
+    };
+    result = OpenResult{};
+
+    gfcTar::Reader reader;
+    std::string e;
+    if (!reader.open(packagePath, &e)) return fail("Cannot read the package: " + e);
+    if (reader.entries().empty() || reader.entries()[0].name != "manifest.json") {
+        return fail("Not a JefeCheck review package: manifest.json is missing");
+    }
+    std::string manifestBytes;
+    if (!reader.readBytes(reader.entries()[0], manifestBytes, &e)) return fail("Cannot read the package: " + e);
+    if (!manifestFromJson(QByteArray::fromStdString(manifestBytes), result.manifest, err)) return false;
+    const Manifest& manifest = result.manifest;
+
+    std::error_code ec;
+    const std::string absolute = fs::absolute(packagePath, ec).string();
+    const uint64_t size = fs::file_size(packagePath, ec);
+    const long long mtime = static_cast<long long>(fs::last_write_time(packagePath, ec).time_since_epoch().count());
+    const fs::path dir = fs::path(cacheRoot) / gfcSha1::hex(absolute + "|" + std::to_string(size) + "|" + std::to_string(mtime));
+    result.extractDir = dir.string();
+    if (!fs::exists(dir / ".complete", ec)) {
+        fs::remove_all(dir, ec);
+        for (const gfcTar::Entry& entry : reader.entries()) {
+            // Reader::open has already refused absolute and ".." names.
+            if (!reader.extractTo(entry, (dir / entry.name).string(), &e)) return fail("Cannot extract the package: " + e);
+        }
+        std::ofstream marker((dir / ".complete").string());
+        marker << "ok\n";
+        if (!marker) return fail("Cannot write to " + dir.string());
+    }
+
+    for (const ManifestLut& lut : manifest.luts) {
+        if (services.loadLut) services.loadLut((dir / lut.file).string());
+    }
+
+    const std::string sessionXml = readText((dir / manifest.session).string());
+    std::vector<gfcSessionPaths::MediaRef> refs;
+    if (!gfcSessionPaths::listMedia(sessionXml, refs, &e)) return fail("The package's session is unreadable: " + e);
+
+    std::map<std::string, std::string> mapping;
+    for (const ManifestMedia& media : manifest.media) {
+        const std::vector<std::string> frames = resolveMedia(media, manifest.mediaIncluded, dir, services);
+        if (frames.empty()) {
+            ++result.missing;
+            result.missingMedia.push_back(fs::path(media.originalPath).filename().string());
+            continue;
+        }
+        ++result.resolved;
+
+        // Every session reference to this media points at the same frame of the
+        // resolved sequence (matched by position, since a relinked sequence may
+        // be named differently).
+        const std::string packagedPrefix = indexDir("media", media.index) + "/";
+        for (const gfcSessionPaths::MediaRef& ref : refs) {
+            const bool ours = ref.path.rfind(packagedPrefix, 0) == 0 ||
+                              gfcNoteStore::normalisePath(ref.path) == media.originalPath;
+            if (!ours) continue;
+            const std::string name = fs::path(ref.path).filename().string();
+            const auto at = std::find(media.frames.begin(), media.frames.end(), name);
+            const size_t index = (at == media.frames.end()) ? 0 : size_t(at - media.frames.begin());
+            mapping[ref.path] = frames[std::min(index, frames.size() - 1)];
+        }
+
+        // Notes: union into whatever the resolved media already has.
+        const std::string resolvedMedia = gfcNoteStore::normalisePath(frames.front());
+        gfcReview incoming;
+        if (gfcNoteStore::fromXmlString(readText((dir / media.notes).string()), incoming)) {
+            gfcReview local;
+            local.mediaPath = resolvedMedia;
+            gfcNoteStore::load(resolvedMedia, local);
+            local.mediaPath = resolvedMedia;   // a loaded sidecar may name an older path
+            gfcNoteMerge::mergeInto(local, std::move(incoming));
+            if (local.fingerprint.empty()) local.fingerprint = media.fingerprint;
+            gfcNoteStore::save(local);
+        }
+        if (services.reloadReview) services.reloadReview(resolvedMedia);
+    }
+
+    std::string rewritten;
+    if (!gfcSessionPaths::rewriteMedia(sessionXml, mapping, rewritten, &e)) return fail(e);
+    const fs::path sessionOut = dir / "session.opened.jcs";
+    writeText(sessionOut.string(), rewritten);
+    if (readText(sessionOut.string()) != rewritten) return fail("Cannot write " + sessionOut.string());
+    result.sessionPath = sessionOut.string();
+    gfcSessionPaths::listFxNames(rewritten, result.fxNames, nullptr);
+    return true;
+}
+
 int packageSelfTest() {
     namespace fs = std::filesystem;
     int pass = 0;
@@ -505,6 +673,182 @@ int packageSelfTest() {
 
     fs::remove_all(dir, ec);
     std::printf("NOTE-PACKAGE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int packageOpenSelfTest() {
+    namespace fs = std::filesystem;
+    int pass = 0;
+    int fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) {
+            ++pass;
+        } else {
+            ++fail;
+            std::fprintf(stderr, "NOTE-PACKAGE-OPEN FAIL: %s\n", msg);
+        }
+    };
+    std::error_code ec;
+    const fs::path dir = fs::temp_directory_path() /
+        ("jefe_package_open_test_" + std::to_string(QDateTime::currentMSecsSinceEpoch()));
+    fs::create_directories(dir / "src", ec);
+    const std::string f1 = (dir / "src" / "sh010.0001.exr").string();
+    const std::string lut = (dir / "look.cube").string();
+    writeText(f1, "frame-one");
+    writeText(lut, "LUT");
+
+    gfcReview review;
+    review.mediaPath = gfcNoteStore::normalisePath(f1);
+    {
+        gfcRevision& round = review.beginRevision("Supervisor");
+        round.id = "round-1";
+        auto n = std::make_unique<gfcNoteStroke>();
+        n->id = "note-1";
+        n->pts = { gfcNotePoint{0.1f, 0.1f} };
+        round.addNote(std::move(n));
+    }
+
+    ExportInput in;
+    in.outPath = (dir / "with.jcreview").string();
+    in.includeMedia = true;
+    in.appVersion = "1.7.0";
+    in.createdIso = "2026-09-14T20:10:00Z";
+    in.sessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates><plate plateID=\"0\" lut=\"look.cube\"><stack><FXS><FX name=\"Grade\"/></FXS></stack></plate></plates>") +
+                    "<tracks><track trackID=\"0\" filename=\"" + f1 + "\"/></tracks><playlist/></root>\n";
+    ExportMedia em;
+    em.mediaPath = review.mediaPath;
+    em.frames = {f1};
+    em.notesXml = gfcNoteStore::toXmlString(review);
+    em.fingerprint = "fp1:0000";
+    em.width = 1;
+    em.height = 1;
+    in.media.push_back(em);
+    in.luts.emplace_back("look.cube", lut);
+    auto exportAll = [](const ExportInput& input, QString* err) {
+        Exporter exporter;
+        return exporter.begin(input, err) && runToEnd(exporter, err) == Exporter::State::Done;
+    };
+    QString err;
+    check(exportAll(in, &err), "fixture package exported");
+
+    std::vector<std::string> lutsLoaded;
+    std::vector<std::string> reviewsReloaded;
+    OpenServices services;
+    services.loadLut = [&lutsLoaded](const std::string& path) { lutsLoaded.push_back(path); return true; };
+    services.reloadReview = [&reviewsReloaded](const std::string& media) { reviewsReloaded.push_back(media); };
+    const std::string cache = (dir / "cache").string();
+
+    OpenResult result;
+    check(openPackage(in.outPath, cache, services, result, &err), "the package opens");
+    const fs::path extracted = fs::path(result.extractDir) / "media" / "000" / "sh010.0001.exr";
+    const std::string extractedMedia = gfcNoteStore::normalisePath(extracted.string());
+    check(result.resolved == 1 && result.missing == 0, "packaged media resolves");
+    check(fs::exists(fs::path(result.extractDir) / ".complete", ec) && fs::exists(extracted, ec),
+          "the package is extracted with a completion marker");
+    check(readText(result.sessionPath).find("filename=\"" + extracted.string() + "\"") != std::string::npos,
+          "the session points at the extracted media");
+    check(lutsLoaded.size() == 1 && lutsLoaded[0] == (fs::path(result.extractDir) / "luts" / "look.cube").string(),
+          "the packaged LUT is loaded");
+    check(reviewsReloaded.size() == 1 && reviewsReloaded[0] == extractedMedia, "the app is told to reload the review");
+    gfcReview placed;
+    check(gfcNoteStore::load(extractedMedia, placed) && placed.revisions.size() == 1 &&
+          placed.revisions[0].notes.size() == 1 && placed.fingerprint == "fp1:0000",
+          "notes are placed beside the extracted media");
+    check(result.fxNames == std::vector<std::string>{"Grade"}, "the session's FX names are reported");
+
+    OpenResult again;
+    check(openPackage(in.outPath, cache, services, again, &err) && again.extractDir == result.extractDir,
+          "reopening reuses the extraction");
+    gfcReview placedAgain;
+    check(gfcNoteStore::load(extractedMedia, placedAgain) && placedAgain.revisions.size() == 1 &&
+          placedAgain.revisions[0].notes.size() == 1,
+          "reopening does not duplicate notes");
+
+    ExportInput lean = in;
+    lean.outPath = (dir / "lean.jcreview").string();
+    lean.includeMedia = false;
+    check(exportAll(lean, &err), "lean package exported");
+    OpenResult leanResult;
+    check(openPackage(lean.outPath, cache, services, leanResult, &err) && leanResult.resolved == 1 &&
+          readText(leanResult.sessionPath).find("filename=\"" + f1 + "\"") != std::string::npos,
+          "a lean package uses the media at its original path");
+    fs::remove(f1, ec);
+    OpenResult gone;
+    check(openPackage(lean.outPath, cache, services, gone, &err) && gone.resolved == 0 && gone.missing == 1 &&
+          gone.missingMedia == std::vector<std::string>{"sh010.####.exr"} &&
+          readText(gone.sessionPath).find("filename=\"" + f1 + "\"") != std::string::npos,
+          "missing media is counted and keeps its original path");
+
+    const std::string whole = readText(in.outPath);
+    writeText((dir / "truncated.jcreview").string(), whole.substr(0, whole.size() / 2));
+    OpenResult cut;
+    err.clear();
+    check(!openPackage((dir / "truncated.jcreview").string(), cache, services, cut, &err) && err.contains("truncated"),
+          "a truncated package is refused");
+    {
+        QJsonObject future = QJsonDocument::fromJson(manifestToJson(Manifest{})).object();
+        future["version"] = 2;
+        gfcTar::Writer writer;
+        std::string terr;
+        writer.open((dir / "future.jcreview").string(), &terr);
+        writer.addBytes("manifest.json", QJsonDocument(future).toJson().toStdString(), &terr);
+        writer.finish(&terr);
+    }
+    OpenResult future;
+    err.clear();
+    check(!openPackage((dir / "future.jcreview").string(), cache, services, future, &err) && err.contains("version 2"),
+          "an unknown package version is refused, naming it");
+
+    // Open point 2: the tar reader's refusal of an unsafe entry name is what
+    // the opener relies on to stay inside the cache root. Build a minimal
+    // ustar header by hand (gfcTar::Writer itself refuses an unsafe name, so
+    // it cannot be used to create this fixture) naming an entry "../evil.txt",
+    // with a correctly recomputed checksum, and confirm openPackage refuses
+    // the package and creates nothing outside the cache root.
+    {
+        auto putOctal = [](unsigned char* field, size_t width, uint64_t value) {
+            std::string digits(width - 1, '0');
+            for (size_t i = width - 1; i-- > 0 && value > 0; ) {
+                digits[i] = static_cast<char>('0' + (value & 7));
+                value >>= 3;
+            }
+            std::memcpy(field, digits.data(), width - 1);
+            field[width - 1] = '\0';
+        };
+        const std::string content = "evil";
+        const std::string name = "../evil.txt";
+        unsigned char header[512] = {};
+        std::memcpy(header, name.data(), name.size());
+        putOctal(header + 100, 8, 0644);
+        putOctal(header + 108, 8, 0);
+        putOctal(header + 116, 8, 0);
+        putOctal(header + 124, 12, content.size());
+        putOctal(header + 136, 12, 0);
+        header[156] = '0';
+        std::memcpy(header + 257, "ustar", 6);
+        std::memcpy(header + 263, "00", 2);
+        std::memset(header + 148, ' ', 8);
+        uint64_t sum = 0;
+        for (unsigned char b : header) sum += b;
+        putOctal(header + 148, 7, sum);
+        header[155] = ' ';
+
+        std::ofstream out((dir / "unsafe.jcreview").string(), std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(header), sizeof(header));
+        out.write(content.data(), std::streamsize(content.size()));
+        const std::string contentPad(512 - content.size(), '\0');
+        out.write(contentPad.data(), std::streamsize(contentPad.size()));
+        const std::string endMarker(1024, '\0');
+        out.write(endMarker.data(), std::streamsize(endMarker.size()));
+    }
+    OpenResult unsafe;
+    err.clear();
+    check(!openPackage((dir / "unsafe.jcreview").string(), cache, services, unsafe, &err) &&
+          err.contains("unsafe") && unsafe.extractDir.empty() && !fs::exists(fs::path(cache) / "evil.txt", ec),
+          "a package with an unsafe entry name is refused, and nothing is created outside the cache root");
+
+    fs::remove_all(dir, ec);
+    std::printf("NOTE-PACKAGE-OPEN: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
 
