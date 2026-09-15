@@ -122,22 +122,36 @@ std::map<std::string, std::vector<std::string>> gfcMediaFingerprint::sequencesIn
 		const std::string path = entry.path().string();
 		out[gfcNoteStore::normalisePath(path)].push_back(path);
 	};
-	std::error_code ec;
-	if (recursive)
+
+	// One directory at a time: skip_permission_denied only papers over
+	// permission errors, and a bare recursive_directory_iterator stops its
+	// *entire* walk on any other error (a stat race, an I/O error, a broken
+	// entry) partway through -- silently dropping everything after it. A
+	// per-directory work list means such an error only ends that one
+	// directory's listing; every other directory still gets visited.
+	std::vector<fs::path> work = {dir};
+	while (!work.empty())
 	{
-		for (fs::recursive_directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec), end;
-			 !ec && it != end; it.increment(ec))
+		const fs::path d = work.back();
+		work.pop_back();
+		std::error_code ec;
+		fs::directory_iterator it(d, fs::directory_options::skip_permission_denied, ec);
+		if (ec) continue;   // could not open this directory; move on
+		const fs::directory_iterator end;
+		while (it != end)
 		{
-			visit(*it);
+			const fs::directory_entry entry = *it;
+			std::error_code fec;
+			if (recursive && entry.is_directory(fec) && !entry.is_symlink(fec))
+			{
+				work.push_back(entry.path());   // never follow symlinked dirs: avoids a link-loop hang
+			}
+			visit(entry);
+			it.increment(ec);
+			if (ec) break;   // stop iterating this directory only; other directories are unaffected
 		}
 	}
-	else
-	{
-		for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
-		{
-			visit(*it);
-		}
-	}
+
 	for (auto& kv : out)
 	{
 		std::sort(kv.second.begin(), kv.second.end());
@@ -224,6 +238,22 @@ int mediaFingerprintSelfTest()
 	const std::string key = gfcNoteStore::normalisePath((b / "renamed.0001.exr").string());
 	check(deep.count(key) == 1 && deep.at(key).size() == 2 && deep.at(key)[0] < deep.at(key)[1],
 		  "a recursive search groups a sequence with its frames sorted");
+
+	// An unreadable subdirectory must not truncate the rest of the walk: `z`
+	// sorts after `locked`, so a walk that stops at the first error would
+	// miss it.
+	const fs::path walk = dir / "walk";
+	const fs::path locked = walk / "locked";
+	check(writeFrame(walk / "a" / "shot.0001.exr", 1, false), "walk fixture a written");
+	fs::create_directories(locked, ec);
+	check(writeFrame(walk / "z" / "other.0001.exr", 1, false), "walk fixture z written");
+	fs::permissions(locked, fs::perms::none, ec);
+	const auto walked = gfcMediaFingerprint::sequencesIn(walk.string(), true);
+	const std::string keyA = gfcNoteStore::normalisePath((walk / "a" / "shot.0001.exr").string());
+	const std::string keyZ = gfcNoteStore::normalisePath((walk / "z" / "other.0001.exr").string());
+	check(walked.count(keyA) == 1 && walked.count(keyZ) == 1,
+		  "an unreadable directory does not stop the walk from finding sequences past it");
+	fs::permissions(locked, fs::perms::owner_all, ec);
 
 	fs::remove_all(dir, ec);
 	std::printf("NOTE-FINGERPRINT: pass=%d fail=%d\n", pass, fail);
