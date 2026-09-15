@@ -105,25 +105,36 @@ Each frame entry gets one thumbnail, **rendered through the plate pipeline**
 (super-shader colour correction and the plate's LUT), with **only that round's
 notes** burned in:
 
-1. Before anything else, save the current session to a temporary `.jcs`
-   (`jefe::qt::saveSession`).
+1. Only when a playlist item will have to be loaded (step 2), first save the
+   current session to a temporary `.jcs` in the export's temporary directory
+   (`jefe::qt::saveSession`). Otherwise no session is saved or reopened.
 2. For each media: if it is on a track, use the plate showing that track. If it
    is only a playlist media, load its playlist item (`jefe::qt::loadPlaylistItem`,
    the Playlist dock's path — which also applies the item's saved FX stacks and
    program state) and use the plate showing its track. The plate's colour
    correction and LUT are whatever that plate has — the look the reviewers had.
    Loading is asynchronous: frame file names are known immediately, pixels
-   arrive over later ticks.
-3. For each round and frame entry: set the plate's borrowed note list to that
-   round's notes only (a new bridge call; the normal sync publishes every
-   round), make sure the track's frame list exists (starting the track's load
-   if it has none — renders force-decode the frame they draw, via
-   `gfcSequence::getFrame(frame, forceLoad)`, but only once the track's async
-   loader has recorded that frame's load parameters, so before rendering the
-   export waits (bounded, 5 s per track, pumping the event loop and uploading
-   pending textures) until the track reports loaded frames; a track that does
-   not get there counts its entries in `thumbfail`), and render that one frame
-   with
+   arrive over later ticks. **Not during a live remote session**
+   (`jefe::qt::isRemoteConnected`): a playlist load is sent to the peers, so
+   the export loads none, those media's frame entries count in `thumbfail`,
+   and the PDF is still written. Nothing the export does is sent to remote
+   peers: the steps that change shared state (pause/resume, renders — which
+   seek the playhead — and the restore) run with remote notifications muted,
+   and a track load that would announce itself is not started (its entries
+   count in `thumbfail`).
+3. For each round and frame entry: make sure the track's frame list exists
+   (starting the track's load if it has none, then waiting — bounded, 5 s,
+   pumping the event loop and uploading pending textures — until the track
+   reports loaded frames; a track that does not get there counts its entries
+   in `thumbfail`); make sure the frame is ready — renders force-decode the
+   frame they draw, via `gfcSequence::getFrame(frame, forceLoad)`, but only
+   once the track's async loader has recorded that frame's load parameters, so
+   a frame that is not ready (`jefe::qt::isTrackFrameReady`) gets the track's
+   load restarted at it (`jefe::qt::restartTrackLoadAtFrame`) and the same
+   bounded wait for that frame; a frame that does not get there counts in
+   `thumbfail`; set the plate's borrowed note list to that round's notes only
+   (a new bridge call; the normal sync publishes every round); and render that
+   one frame with
    `jefe::qt::triggerSyncRender` — `quadrant` = the plate, `from = to` = the
    frame (`kAllFrames` renders the media's first frame), `burnInNotes = true`,
    PNG, `outWidth` 960 and `outHeight` from the plate aspect — into a temporary
@@ -131,14 +142,20 @@ notes** burned in:
    (`path + prefix + padded frame + postfix + ".png"`). There is no in-memory
    render API; the PDF writer loads the PNG.
 4. After the last render — and on every failure or cancel path — republish the
-   plate note lists from the review store (`jefe::qt::syncPlateNotes`) and
-   reopen the temporary session through the same path as File → Open Session
-   (GL current, `loadSession`, `startLoadingAllTracks`, refresh after load), so
-   tracks, playlist selection, colour correction and the current frame are as
-   the user left them.
+   plate note lists from the review store (`jefe::qt::syncPlateNotes`). Only if
+   a playlist item was loaded, reopen the temporary session through the same
+   path as File → Open Session (GL current, `loadSession`,
+   `startLoadingAllTracks`, refresh after load), which brings back the tracks
+   with their colour correction and FX. Then, always, put back explicitly what
+   a session reopen or a track load does not: the playlist selection and its
+   auto-advance arming, the in/out points, the current frame, the play state,
+   and the Recent Sessions list (saving and opening a session push onto it).
+   The export's temporary directory (thumbnails and session) is deleted once
+   the PDF has been written or the export has failed.
 
-The GL context is made current for the renders (the MainWindow's viewport, as
-the Render dialog and `runHeadlessRenderTest` do). A thumbnail that cannot be produced (undecodable frame,
+The GL context is made current for the renders and for every step that loads a
+track (a load deletes the track's textures) — the MainWindow's viewport, as the
+Render dialog and `runHeadlessRenderTest` do. A thumbnail that cannot be produced (undecodable frame,
 render error, timeout) leaves `thumbnailPath` empty; the PDF draws a
 "thumbnail unavailable" box and the run reports the count in `thumbfail`. The
 summary is still written.
@@ -153,7 +170,9 @@ summary is still written.
 - **Frame entry**: thumbnail on the left (80 mm wide), note list on the right —
   a colour swatch, type, author, frame range, and quoted text for text notes.
   An entry that does not fit the remaining page moves to the next page;
-  entries are never split.
+  entries are never split. An entry whose note list is taller than a page
+  shows the notes that fit next to its thumbnail and a final `+N more notes`
+  line (the TXT and CSV outputs still list every note).
 - **Footer**: `<title> — page X of Y`.
 
 ## Components
