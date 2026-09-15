@@ -32,6 +32,18 @@ namespace jefe::qt::package {
 namespace {
 QString qs(const std::string& s) { return QString::fromStdString(s); }
 std::string ss(const QJsonValue& v) { return v.toString().toStdString(); }
+
+std::string lowerAscii(std::string s) {
+    for (char& c : s) {
+        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+    }
+    return s;
+}
+
+// Test-only counters, read by packageOpenSelfTest: how many search roots were
+// walked and how many candidate sequences had their first frame probed.
+int searchRootWalks = 0;
+int candidateProbes = 0;
 }  // namespace
 
 std::string indexDir(const char* root, int index) {
@@ -427,7 +439,8 @@ bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, con
 // present) -> original path (when absolute) -> fingerprint search ->
 // interactive locate. Empty when unresolved.
 std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncluded,
-                                      const std::filesystem::path& extractDir, const OpenServices& services) {
+                                      const std::filesystem::path& extractDir, const OpenServices& services,
+                                      SequenceSearch& search) {
     namespace fs = std::filesystem;
     std::error_code ec;
     if (media.frames.empty()) return {};
@@ -453,7 +466,7 @@ std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncl
         if (!frames.empty()) return frames;
     }
 
-    std::vector<std::string> frames = findByFingerprint(media, services.searchPaths, services.searchRecursive);
+    std::vector<std::string> frames = findByFingerprint(media, search);
     if (!frames.empty() || !services.interactive || !services.locate) return frames;
 
     const std::string chosen = services.locate(media);
@@ -533,16 +546,37 @@ bool mergeNotes(const std::string& resolvedMedia, const std::string& notesXml, c
 }
 }  // namespace
 
+SequenceSearch::SequenceSearch(std::vector<std::string> roots, bool recursive)
+    : roots_(std::move(roots)), recursive_(recursive), indexes_(roots_.size()) {}
+
+const SequenceSearch::Index& SequenceSearch::root(size_t i) {
+    if (!indexes_[i]) {
+        ++searchRootWalks;
+        indexes_[i] = gfcMediaFingerprint::sequencesIn(roots_[i], recursive_);
+    }
+    return *indexes_[i];
+}
+
 std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std::vector<std::string>& roots,
                                            bool recursive) {
+    SequenceSearch search(roots, recursive);
+    return findByFingerprint(media, search);
+}
+
+std::vector<std::string> findByFingerprint(const ManifestMedia& media, SequenceSearch& search) {
     namespace fs = std::filesystem;
     if (media.fingerprint.empty() || media.frames.empty()) return {};
     const std::string wantedName = fs::path(media.originalPath).filename().string();
+    const std::string wantedExtension = lowerAscii(fs::path(media.originalPath).extension().string());
     std::vector<std::vector<std::string>> sameName;
     std::vector<std::vector<std::string>> others;
-    for (const std::string& root : roots) {
-        for (const auto& [key, frames] : gfcMediaFingerprint::sequencesIn(root, recursive)) {
+    for (size_t r = 0; r < search.rootCount(); ++r) {
+        for (const auto& [key, frames] : search.root(r)) {
             if (frames.size() != media.frames.size()) continue;
+            // Every file in the tree is a sequence candidate; probing opens it,
+            // so anything that isn't even the same kind of file is skipped first.
+            if (lowerAscii(fs::path(frames.front()).extension().string()) != wantedExtension) continue;
+            ++candidateProbes;
             gfcMediaFingerprint::Probe probe;
             if (!gfcMediaFingerprint::probe(frames.front(), probe, nullptr)) continue;
             if (probe.width != media.width || probe.height != media.height) continue;
@@ -604,8 +638,11 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
     };
     std::vector<PendingNotes> pending;
     std::map<std::string, std::string> mapping;
+    // Shared by every media of this open: a root is walked only when a media
+    // first reaches the fingerprint search, and then reused.
+    SequenceSearch search(services.searchPaths, services.searchRecursive);
     for (const ManifestMedia& media : manifest.media) {
-        const std::vector<std::string> frames = resolveMedia(media, manifest.mediaIncluded, dir, services);
+        const std::vector<std::string> frames = resolveMedia(media, manifest.mediaIncluded, dir, services, search);
         const std::string packagedPrefix = indexDir("media", media.index) + "/";
         if (frames.empty()) {
             ++result.missing;
@@ -1466,6 +1503,62 @@ int packageOpenSelfTest() {
     check(!openPackage((dir / "unsafe.jcreview").string(), cache, services, unsafe, &err) &&
           err.contains("unsafe") && unsafe.extractDir.empty() && !fs::exists(fs::path(cache) / "evil.txt", ec),
           "a package with an unsafe entry name is refused, and nothing is created outside the cache root");
+
+    // Final review, item 4: only candidates with the original's extension
+    // (case-insensitive) are probed. Both files here are one-frame sequences,
+    // like the media; neither is an image, so a probe would be wasted I/O.
+    {
+        const fs::path root = dir / "extsearch";
+        fs::create_directories(root, ec);
+        writeText((root / "ext010.0001.txt").string(), "not an image");
+        writeText((root / "ext010.0001.EXR").string(), "not an image either");
+        ManifestMedia extMedia;
+        extMedia.originalPath = (dir / "gone" / "ext010.####.exr").string();
+        extMedia.fingerprint = "fp1:ext";
+        extMedia.frames = {"ext010.0001.exr"};
+        extMedia.width = 1;
+        extMedia.height = 1;
+        candidateProbes = 0;
+        check(findByFingerprint(extMedia, {root.string()}, false).empty() && candidateProbes == 1,
+              "a candidate with a different extension is not probed; a different-case one is");
+    }
+
+    // Final review, item 4: two unresolved media under one search root walk
+    // that root once, not once per media.
+    {
+        const fs::path root = dir / "walkroot";
+        fs::create_directories(root, ec);
+        writeText((root / "unrelated.0001.exr").string(), "not the media");
+        ExportInput twoLean;
+        twoLean.outPath = (dir / "twolean.jcreview").string();
+        twoLean.includeMedia = false;
+        twoLean.appVersion = "1.7.0";
+        twoLean.createdIso = "2026-09-14T20:10:00Z";
+        const std::string wa = (dir / "walk_src" / "wa010.0001.exr").string();   // never created
+        const std::string wb = (dir / "walk_src" / "wb010.0001.exr").string();   // never created
+        twoLean.sessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/><tracks>") +
+                             "<track trackID=\"0\" filename=\"" + wa + "\"/>" +
+                             "<track trackID=\"1\" filename=\"" + wb + "\"/></tracks><playlist/></root>\n";
+        for (const std::string& frame : {wa, wb}) {
+            ExportMedia wm;
+            wm.mediaPath = gfcNoteStore::normalisePath(frame);
+            wm.frames = {frame};
+            wm.notesXml = "<jefecheckNotes version=\"1\"/>";
+            wm.fingerprint = "fp1:" + fs::path(frame).stem().string();
+            wm.width = 1;
+            wm.height = 1;
+            twoLean.media.push_back(wm);
+        }
+        check(exportAll(twoLean, &err), "two-media lean fixture package exported");
+        OpenServices searching = services;
+        searching.searchPaths = {root.string()};
+        searching.searchRecursive = true;
+        OpenResult twoResult;
+        searchRootWalks = 0;
+        check(openPackage(twoLean.outPath, cache, searching, twoResult, &err) && twoResult.missing == 2 &&
+              searchRootWalks == 1,
+              "two unresolved media under one search root walk it once");
+    }
 
     fs::remove_all(dir, ec);
     std::printf("NOTE-PACKAGE-OPEN: pass=%d fail=%d\n", pass, fail);

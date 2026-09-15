@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -143,11 +145,35 @@ struct OpenResult {
 };
 
 /**
- * The frames of the first sequence under @a roots whose fingerprint equals the
- * media's. Candidates must match the frame count and first-frame size before
- * any fingerprint is computed; candidates with the media's file-name pattern
- * are tried first. Empty when nothing matches.
+ * The search roots of one open, each walked (gfcMediaFingerprint::sequencesIn)
+ * lazily on first use and at most once, so several unresolved media share one
+ * walk per root.
  */
+class SequenceSearch {
+public:
+    using Index = std::map<std::string, std::vector<std::string>>;
+
+    SequenceSearch(std::vector<std::string> roots, bool recursive);
+    size_t rootCount() const { return roots_.size(); }
+    /** The sequence index of root @a i, walked the first time it is asked for. */
+    const Index& root(size_t i);
+
+private:
+    std::vector<std::string> roots_;
+    bool recursive_ = false;
+    std::vector<std::optional<Index>> indexes_;
+};
+
+/**
+ * The frames of the first sequence under the search roots whose fingerprint
+ * equals the media's. Candidates must have the original's file extension
+ * (case-insensitive) and frame count before their first frame is probed, and
+ * the first-frame size before any fingerprint is computed; candidates with the
+ * media's file-name pattern are tried first. Empty when nothing matches.
+ */
+std::vector<std::string> findByFingerprint(const ManifestMedia& media, SequenceSearch& search);
+
+/** As above, walking @a roots afresh for this one call. */
 std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std::vector<std::string>& roots,
                                            bool recursive);
 
