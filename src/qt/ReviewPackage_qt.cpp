@@ -411,6 +411,13 @@ bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, con
     std::error_code ec;
     if (fs::exists(dir / ".complete", ec) && manifestFilesPresent(manifest, dir)) return true;
 
+    // A marker left from an earlier extraction must not outlive a repair that
+    // stops part-way (a crash, a failed entry): drop it before rewriting.
+    fs::remove(dir / ".complete", ec);
+    if (ec) {
+        if (err) *err = "Cannot write to " + dir.string();
+        return false;
+    }
     for (const gfcTar::Entry& entry : reader.entries()) {
         // Reader::open has already refused unsafe names (gfcTar::isSafeName);
         // this is a second guard against anything that still resolves outside.
@@ -425,6 +432,9 @@ bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, con
             return false;
         }
     }
+    // An archive that lacks a file its manifest names is usable (that media
+    // just resolves elsewhere or counts as missing) but never marked complete.
+    if (!manifestFilesPresent(manifest, dir)) return true;
     std::ofstream marker((dir / ".complete").string());
     marker << "ok\n";
     marker.close();
@@ -1040,6 +1050,23 @@ int packageOpenSelfTest() {
           fs::exists(fs::path(noMarker.extractDir) / ".complete", ec),
           "a cache without a .complete marker is re-extracted and succeeds");
 
+    // Final review, item 5: a repair that fails part-way must not leave the
+    // old .complete marker vouching for a half-rewritten cache. A directory
+    // where the notes entry belongs makes that entry's extraction fail.
+    fs::remove(extracted, ec);
+    const fs::path notesEntry = fs::path(result.extractDir) / "notes" / "000.jnotes";
+    fs::remove(notesEntry, ec);
+    fs::create_directories(notesEntry / "blocker", ec);
+    OpenResult brokenRepair;
+    check(!openPackage(in.outPath, cache, services, brokenRepair, &err) &&
+          !fs::exists(fs::path(result.extractDir) / ".complete", ec),
+          "a repair that fails part-way leaves no .complete marker");
+    fs::remove_all(notesEntry, ec);
+    OpenResult repaired;
+    check(openPackage(in.outPath, cache, services, repaired, &err) && repaired.resolved == 1 &&
+          fs::exists(fs::path(result.extractDir) / ".complete", ec),
+          "a repaired cache has its .complete marker again");
+
     // Fix round 2, point 1: LUTs are only loaded once the rewritten session
     // is confirmed on disk -- a session-write failure (after the rewrite
     // itself already succeeded) loads none. Triggered by pre-creating a
@@ -1387,6 +1414,8 @@ int packageOpenSelfTest() {
               readText(ghost.sessionPath).find("filename=\"" + expectedGhostPath + "\"") != std::string::npos &&
               readText(ghost.sessionPath).find("filename=\"media/000/ghost.0001.exr\"") == std::string::npos,
               "missing included media maps the session reference back to alongside the original path");
+        check(!ghost.extractDir.empty() && !fs::exists(fs::path(ghost.extractDir) / ".complete", ec),
+              "an archive lacking a manifest-named frame leaves no .complete marker");
     }
 
     // Fix round 1, point 4: a session that fails to parse loads no LUTs and
