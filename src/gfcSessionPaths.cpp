@@ -55,11 +55,14 @@ namespace
 		}
 	}
 
-	void addUnique(std::vector<std::string>& out, XMLCSTR value)
+	// "no LUT" is the plate@lut placeholder for "none selected", not a real LUT
+	// name; excludeNoLut narrows that exclusion to plate@lut callers so it
+	// cannot swallow a widget value or FX literally named "no LUT".
+	void addUnique(std::vector<std::string>& out, XMLCSTR value, bool excludeNoLut = false)
 	{
 		if (!value) return;
 		const std::string name(value);
-		if (name.empty() || name == "no LUT") return;
+		if (name.empty() || (excludeNoLut && name == "no LUT")) return;
 		if (std::find(out.begin(), out.end(), name) == out.end()) out.push_back(name);
 	}
 
@@ -110,7 +113,7 @@ bool gfcSessionPaths::listLutNames(const std::string& jcsXml, std::vector<std::s
 	{
 		if (nameIs(node, "plate"))
 		{
-			addUnique(out, node.getAttribute("lut"));
+			addUnique(out, node.getAttribute("lut"), /*excludeNoLut=*/true);
 		}
 		else if (nameIs(node, "widget"))
 		{
@@ -246,6 +249,24 @@ int sessionPathsSelfTest()
 
 	err.clear();
 	check(!listMedia("<other/>", refs, &err) && !err.empty(), "a document without <root> is refused");
+
+	// "no LUT" is only a plate-LUT placeholder: an FX (or a cube/lut widget)
+	// literally named/valued "no LUT" is a real name, not "none selected".
+	const std::string noLutXml = R"xml(<?xml version="1.0"?>
+<root comment="fixture">
+  <plates>
+    <plate plateID="0" trackID="0" gamma="1" lut="no LUT">
+      <stack><FXS><FX name="no LUT" menuName="X" hash="h1" active="1"/></FXS></stack>
+    </plate>
+  </plates>
+</root>
+)xml";
+	std::vector<std::string> noLutFx;
+	check(listFxNames(noLutXml, noLutFx, &err) && noLutFx == std::vector<std::string>{"no LUT"},
+		  "an FX literally named \"no LUT\" is still listed");
+	std::vector<std::string> noLutLuts;
+	check(listLutNames(noLutXml, noLutLuts, &err) && noLutLuts.empty(),
+		  "a plate with lut=\"no LUT\" still contributes nothing to the LUT list");
 
 	std::printf("NOTE-SESSIONPATHS: pass=%d fail=%d\n", pass, fail);
 	return fail;
