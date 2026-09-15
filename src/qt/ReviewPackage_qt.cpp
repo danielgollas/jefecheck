@@ -91,10 +91,16 @@ bool manifestFromJson(const QByteArray& json, Manifest& out, QString* err) {
     m.session = root.value("session").toString(QStringLiteral("session.jcs")).toStdString();
     m.mediaIncluded = root.value("mediaIncluded").toBool(false);
     if (!gfcTar::isSafeName(m.session)) return fail(QStringLiteral("Unsafe session name in the manifest"));
-    for (const QJsonValue& value : root.value("media").toArray()) {
+    const QJsonArray mediaArray = root.value("media").toArray();
+    std::vector<bool> seenIndex(size_t(mediaArray.size()), false);
+    for (const QJsonValue& value : mediaArray) {
         const QJsonObject o = value.toObject();
         ManifestMedia mm;
         mm.index = o.value("index").toInt();
+        if (mm.index < 0 || mm.index >= mediaArray.size() || seenIndex[size_t(mm.index)]) {
+            return fail(QStringLiteral("Invalid media index %1 in the manifest").arg(mm.index));
+        }
+        seenIndex[size_t(mm.index)] = true;
         mm.originalPath = ss(o.value("originalPath"));
         mm.packagedPath = ss(o.value("packagedPath"));
         mm.fingerprint = ss(o.value("fingerprint"));
@@ -168,11 +174,18 @@ bool Exporter::begin(const ExportInput& input, QString* err) {
         notes.push_back(Item{mm.notes, m.notesXml, std::string(), m.notesXml.size()});
         manifest.media.push_back(std::move(mm));
     }
+    std::map<std::string, std::string> lutEntryToSource;
     for (const auto& [name, source] : input.luts) {
         std::error_code ec;
         const uint64_t size = fs::file_size(source, ec);
         if (ec) return fail("Cannot read " + source);
         const std::string entry = "luts/" + fs::path(source).filename().string();
+        const auto existing = lutEntryToSource.find(entry);
+        if (existing != lutEntryToSource.end()) {
+            return fail("Two LUT files are both named " + fs::path(source).filename().string() + ": " +
+                         existing->second + " and " + source);
+        }
+        lutEntryToSource[entry] = source;
         luts.push_back(Item{entry, std::string(), source, size});
         manifest.luts.push_back(ManifestLut{name, entry});
     }
@@ -358,6 +371,28 @@ int packageSelfTest() {
     Manifest unsafe = m;
     unsafe.media[0].notes = "../escape.jnotes";
     check(!manifestFromJson(manifestToJson(unsafe), back, &err), "an unsafe entry name is refused");
+    auto withMediaIndex = [&m](int index) {
+        QJsonObject o = QJsonDocument::fromJson(manifestToJson(m)).object();
+        QJsonArray media = o["media"].toArray();
+        QJsonObject mo = media[0].toObject();
+        mo["index"] = index;
+        media[0] = mo;
+        o["media"] = media;
+        return QJsonDocument(o).toJson();
+    };
+    err.clear();
+    check(!manifestFromJson(withMediaIndex(5), back, &err) && err.contains("Invalid media index"),
+          "an out-of-range media index is refused");
+    auto withDuplicateMediaIndex = [&m]() {
+        QJsonObject o = QJsonDocument::fromJson(manifestToJson(m)).object();
+        QJsonArray media = o["media"].toArray();
+        media.append(media[0]);
+        o["media"] = media;
+        return QJsonDocument(o).toJson();
+    };
+    err.clear();
+    check(!manifestFromJson(withDuplicateMediaIndex(), back, &err) && err.contains("Invalid media index"),
+          "a repeated media index is refused");
     check(!manifestFromJson("not json", back, &err), "text that is not JSON is refused");
     check(indexDir("media", 7) == "media/007", "index directories are zero-padded");
 
@@ -455,6 +490,18 @@ int packageSelfTest() {
     check(!missingExporter.begin(missing, &err) && err.contains("gone.0003.exr") &&
           !fs::exists(missing.outPath + ".partial", ec),
           "a missing frame fails before anything is written");
+
+    ExportInput dupLut = in;
+    dupLut.outPath = (dir / "duplut.jcreview").string();
+    fs::create_directories(dir / "other", ec);
+    const std::string lut2 = (dir / "other" / "look.cube").string();
+    writeText(lut2, "LUT2");
+    dupLut.luts.emplace_back("look2.cube", lut2);
+    Exporter dupLutExporter;
+    err.clear();
+    check(!dupLutExporter.begin(dupLut, &err) && err.contains("look.cube") &&
+          !fs::exists(dupLut.outPath + ".partial", ec),
+          "two same-named LUT files are refused");
 
     fs::remove_all(dir, ec);
     std::printf("NOTE-PACKAGE: pass=%d fail=%d\n", pass, fail);
