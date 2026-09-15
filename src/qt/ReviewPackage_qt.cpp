@@ -371,19 +371,19 @@ bool manifestFilesPresent(const Manifest& manifest, const std::filesystem::path&
 }
 
 // Extracts `reader` into `dir`, unless a prior extraction there is already
-// complete (a `.complete` marker AND every manifest-named file present); a
-// partial or damaged cache is discarded and re-extracted from scratch.
+// complete (a `.complete` marker AND every manifest-named file present). A
+// partial (crash before `.complete`) or damaged (a manifest-named file went
+// missing) cache is repaired by writing the archive's entries back over the
+// directory -- gfcTar::Reader::extractTo truncates an existing file and
+// creates a missing one -- rather than discarding the directory first, so
+// anything that isn't part of the package (most notably a reviewer's own
+// .jnotes sidecar beside the extracted media) survives the repair.
 bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, const std::filesystem::path& dir,
                      std::string* err) {
     namespace fs = std::filesystem;
     std::error_code ec;
     if (fs::exists(dir / ".complete", ec) && manifestFilesPresent(manifest, dir)) return true;
 
-    fs::remove_all(dir, ec);
-    if (ec) {
-        if (err) *err = "Cannot clear the cache directory " + dir.string() + ": " + ec.message();
-        return false;
-    }
     for (const gfcTar::Entry& entry : reader.entries()) {
         // Reader::open has already refused absolute and ".." names.
         std::string entryErr;
@@ -448,17 +448,31 @@ std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncl
 }
 
 // Loads any existing sidecar for `resolvedMedia`, merges `notesXml` (the
-// package's own notes entry) into it and saves the result. `notesXml` being
-// unreadable or failing to parse is reported as a problem too -- a
-// well-formed package always carries a parseable (if empty) notes document
-// for every media, so a parse failure here is not "nothing to merge", it is
-// the packaged notes themselves being broken. Returns true when the sidecar
-// ends up saved (including when the packaged notes carry nothing to merge,
-// which still saves); returns false and sets `problem`, leaving the local
-// sidecar untouched, when the packaged notes don't parse, a local sidecar
-// exists but doesn't load, or the save fails.
+// package's own notes entry) into it and saves the result when anything
+// actually changed. `notesXml` being unreadable or failing to parse is
+// reported as a problem too -- a well-formed package always carries a
+// parseable (if empty) notes document for every media, so a parse failure
+// here is not "nothing to merge", it is the packaged notes themselves being
+// broken.
+//
+// A PRIMARY sidecar (gfcNoteStore::sidecarPathFor) that exists must load on
+// its own: gfcNoteStore::load() would otherwise fall through to a stale
+// fallback-location sidecar when the primary fails to parse, silently
+// merging into the wrong file and masking the corruption. gfcNoteStore
+// exposes no way to load one specific location, so the primary's bytes are
+// read and parsed directly (gfcNoteStore::fromXmlString), the same parse
+// tryLoad() uses internally.
+//
+// Returns true when the packaged notes were placed -- `*changed` says
+// whether that meant an actual save (false when the merge added no
+// revision and no note to an existing sidecar; a sidecar that doesn't yet
+// exist is always created, even from empty packaged notes). Returns false
+// and sets `problem`, leaving the local sidecar untouched, when the
+// packaged notes don't parse, a local sidecar exists but doesn't load, or
+// the save fails.
 bool mergeNotes(const std::string& resolvedMedia, const std::string& notesXml, const std::string& fallbackFingerprint,
-                std::string* problem) {
+                std::string* problem, bool* changed) {
+    if (changed) *changed = false;
     gfcReview incoming;
     if (!gfcNoteStore::fromXmlString(notesXml, incoming)) {
         if (problem) *problem = "package notes unreadable, not merged";
@@ -470,18 +484,30 @@ bool mergeNotes(const std::string& resolvedMedia, const std::string& notesXml, c
     const bool sidecarExists = std::filesystem::exists(sidecarPath, ec);
     gfcReview local;
     local.mediaPath = resolvedMedia;
-    const bool loaded = gfcNoteStore::load(resolvedMedia, local);
-    if (sidecarExists && !loaded) {
-        if (problem) *problem = "local notes unreadable, package notes not merged";
-        return false;
+    if (sidecarExists) {
+        // gfcNoteStore::save() (XMLNode::writeToFile) writes a leading
+        // UTF-8 BOM; fromXmlString's parseString, unlike load()'s
+        // parseFile, does not strip one on its own.
+        std::string primaryBytes = readText(sidecarPath);
+        if (primaryBytes.compare(0, 3, "\xEF\xBB\xBF") == 0) primaryBytes.erase(0, 3);
+        if (!gfcNoteStore::fromXmlString(primaryBytes, local)) {
+            if (problem) *problem = "local notes unreadable, package notes not merged";
+            return false;
+        }
+    } else {
+        gfcNoteStore::load(resolvedMedia, local);   // may still find a fallback-location sidecar
     }
     local.mediaPath = resolvedMedia;   // a loaded sidecar may name an older path
-    gfcNoteMerge::mergeInto(local, std::move(incoming));
+    const gfcNoteMerge::Result mergeResult = gfcNoteMerge::mergeInto(local, std::move(incoming));
     if (local.fingerprint.empty()) local.fingerprint = fallbackFingerprint;
+    if (sidecarExists && mergeResult.revisionsAdded == 0 && mergeResult.notesAdded == 0) {
+        return true;   // nothing changed; leave the sidecar and its modification time alone
+    }
     if (!gfcNoteStore::save(local)) {
         if (problem) *problem = "notes could not be saved";
         return false;
     }
+    if (changed) *changed = true;
     return true;
 }
 }  // namespace
@@ -549,11 +575,6 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
     std::vector<gfcSessionPaths::MediaRef> refs;
     if (!gfcSessionPaths::listMedia(sessionXml, refs, &e)) return fail("The package's session is unreadable: " + e);
 
-    for (const ManifestLut& lut : manifest.luts) {
-        const std::string lutPath = (dir / lut.file).string();
-        if (!services.loadLut || !services.loadLut(lutPath)) result.lutsNotLoaded.push_back(lutPath);
-    }
-
     struct PendingNotes {
         std::string resolvedMedia;
         std::string notesXml;
@@ -614,15 +635,22 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
     result.sessionPath = sessionOut.string();
     gfcSessionPaths::listFxNames(rewritten, result.fxNames, nullptr);
 
-    // The rewritten session is on disk and verified: only now are the merged
-    // notes placed, and the app told which reviews changed.
+    // LUTs and notes are only touched once the rewritten session is
+    // confirmed on disk: a rewrite or write failure loads nothing and
+    // changes nothing.
+    for (const ManifestLut& lut : manifest.luts) {
+        const std::string lutPath = (dir / lut.file).string();
+        if (!services.loadLut || !services.loadLut(lutPath)) result.lutsNotLoaded.push_back(lutPath);
+    }
+
     for (PendingNotes& p : pending) {
         std::string problem;
-        if (!mergeNotes(p.resolvedMedia, p.notesXml, p.fingerprint, &problem)) {
+        bool changed = false;
+        if (!mergeNotes(p.resolvedMedia, p.notesXml, p.fingerprint, &problem, &changed)) {
             result.notesProblems.push_back(p.originalPath + ": " + problem);
             continue;
         }
-        if (services.reloadReview) services.reloadReview(p.resolvedMedia);
+        if (changed && services.reloadReview) services.reloadReview(p.resolvedMedia);
     }
 
     return true;
@@ -911,14 +939,26 @@ int packageOpenSelfTest() {
     check(fs::exists(fs::path(again.extractDir) / "sentinel.txt", ec),
           "reopening a complete cache does not touch its other contents");
 
-    // Fix round 1, point 2a: a completed cache missing one packaged frame is
-    // damaged, not reusable -- it is discarded and re-extracted.
+    // Fix round 1, point 2a / fix round 2, point 3: a completed cache
+    // missing one packaged frame is damaged, not reusable as-is -- it is
+    // repaired by writing the archive's entries back over the directory
+    // (gfcTar::Reader::extractTo truncates an existing file and creates a
+    // missing one) rather than discarding the whole directory first, so a
+    // reviewer's own sidecar beside the extracted media -- and anything
+    // else that isn't part of the package -- survives the repair.
+    gfcReview sidecarBeforeDamage;
+    check(gfcNoteStore::load(extractedMedia, sidecarBeforeDamage) && sidecarBeforeDamage.revisions.size() == 1,
+          "a sidecar exists beside the extracted media before the cache is damaged");
     fs::remove(extracted, ec);
     OpenResult damaged;
     check(openPackage(in.outPath, cache, services, damaged, &err) && damaged.extractDir == result.extractDir &&
           damaged.resolved == 1 && fs::exists(extracted, ec) &&
-          !fs::exists(fs::path(damaged.extractDir) / "sentinel.txt", ec),
-          "a damaged cache (a packaged frame missing) is re-extracted, and the frame comes back");
+          fs::exists(fs::path(damaged.extractDir) / "sentinel.txt", ec),
+          "a damaged cache (a packaged frame missing) is repaired without discarding the sentinel file");
+    gfcReview sidecarAfterDamage;
+    check(gfcNoteStore::load(extractedMedia, sidecarAfterDamage) && sidecarAfterDamage.revisions.size() == 1 &&
+          sidecarAfterDamage.revisions[0].id == "round-1",
+          "the sidecar beside the extracted media survives re-extraction");
 
     // Fix round 1, point 2a: a cache whose .complete marker is gone is not
     // reusable either.
@@ -927,6 +967,99 @@ int packageOpenSelfTest() {
     check(openPackage(in.outPath, cache, services, noMarker, &err) && noMarker.resolved == 1 &&
           fs::exists(fs::path(noMarker.extractDir) / ".complete", ec),
           "a cache without a .complete marker is re-extracted and succeeds");
+
+    // Fix round 2, point 1: LUTs are only loaded once the rewritten session
+    // is confirmed on disk -- a session-write failure (after the rewrite
+    // itself already succeeded) loads none. Triggered by pre-creating a
+    // directory at the exact path openPackage writes the rewritten session
+    // to, so the write-and-verify step fails cleanly.
+    fs::remove(fs::path(result.extractDir) / "session.opened.jcs", ec);
+    fs::create_directory(fs::path(result.extractDir) / "session.opened.jcs", ec);
+    const size_t lutsLoadedBeforeWriteFailure = lutsLoaded.size();
+    OpenResult writeFail;
+    err.clear();
+    check(!openPackage(in.outPath, cache, services, writeFail, &err) &&
+          lutsLoaded.size() == lutsLoadedBeforeWriteFailure,
+          "a session-write failure after a successful rewrite loads no LUTs");
+    fs::remove_all(fs::path(result.extractDir) / "session.opened.jcs", ec);
+
+    // Fix round 2, point 5: reopening a package whose notes haven't changed
+    // must leave the sidecar untouched and must not tell the app to reload
+    // it.
+    const std::string stableSidecar = gfcNoteStore::sidecarPathFor(extractedMedia);
+    const std::string stableSidecarBytesBefore = readText(stableSidecar);
+    const auto stableSidecarMtimeBefore = fs::last_write_time(stableSidecar, ec);
+    const size_t reloadsBeforeUnchangedReopen = reviewsReloaded.size();
+    OpenResult unchanged;
+    check(openPackage(in.outPath, cache, services, unchanged, &err) && unchanged.notesProblems.empty(),
+          "reopening an unchanged package still opens cleanly");
+    check(readText(stableSidecar) == stableSidecarBytesBefore, "an unchanged reopen leaves the sidecar bytes unchanged");
+    check(fs::last_write_time(stableSidecar, ec) == stableSidecarMtimeBefore,
+          "an unchanged reopen leaves the sidecar's modification time unchanged");
+    check(reviewsReloaded.size() == reloadsBeforeUnchangedReopen, "an unchanged reopen makes no reloadReview call");
+
+    // Fix round 2, point 4: a PRIMARY sidecar that exists but is corrupt
+    // must not silently fall through to a stale fallback-location sidecar
+    // -- gfcNoteStore::load() spans both locations, so the primary is
+    // checked directly. The fallback location is set up the same way
+    // gfcNoteStore's own self-test (noteStoreSelfTest) verifies it, since
+    // gfcNoteStore exposes no way to target one location specifically.
+    fs::create_directories(dir / "src5", ec);
+    const std::string fbFrame = (dir / "src5" / "fb010.0001.exr").string();
+    writeText(fbFrame, "fallback-frame");
+    const std::string fbNormalised = gfcNoteStore::normalisePath(fbFrame);
+
+    gfcReview fbFallbackReview;
+    fbFallbackReview.mediaPath = fbNormalised;
+    {
+        gfcRevision& r = fbFallbackReview.beginRevision("Fallback-Author");
+        r.id = "round-fallback";
+        auto n = std::make_unique<gfcNoteStroke>();
+        n->id = "note-fallback";
+        n->pts = { gfcNotePoint{0.4f, 0.4f} };
+        r.addNote(std::move(n));
+    }
+    const char* fbHome = std::getenv("HOME");
+    const std::string fbHomeDir = (fbHome && *fbHome) ? fbHome : ".";
+    const std::string fbFallbackPath = fbHomeDir + "/.config/jefecheck/notes/" + gfcSha1::hex(fbNormalised) + ".jnotes";
+    fs::create_directories(fs::path(fbFallbackPath).parent_path(), ec);
+    writeText(fbFallbackPath, gfcNoteStore::toXmlString(fbFallbackReview));
+
+    // A CORRUPT primary sidecar, right beside the media (that directory is
+    // definitely writable -- it is inside our own temp dir).
+    const std::string fbPrimaryPath = gfcNoteStore::sidecarPathFor(fbNormalised);
+    check(fbPrimaryPath != fbFallbackPath, "the fallback setup actually targets the fallback location");
+    writeText(fbPrimaryPath, "not xml, a corrupt primary sidecar");
+
+    ExportInput fbPkg;
+    fbPkg.outPath = (dir / "fallback.jcreview").string();
+    fbPkg.includeMedia = false;
+    fbPkg.appVersion = "1.7.0";
+    fbPkg.createdIso = "2026-09-14T20:10:00Z";
+    fbPkg.sessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/>") +
+                       "<tracks><track trackID=\"0\" filename=\"" + fbFrame + "\"/></tracks><playlist/></root>\n";
+    ExportMedia fbMedia;
+    fbMedia.mediaPath = fbNormalised;
+    fbMedia.frames = {fbFrame};
+    fbMedia.notesXml = "<jefecheckNotes version=\"1\"/>";
+    fbMedia.fingerprint = "fp1:fallback";
+    fbMedia.width = 1;
+    fbMedia.height = 1;
+    fbPkg.media.push_back(fbMedia);
+    check(exportAll(fbPkg, &err), "fallback-precedence fixture package exported");
+
+    OpenResult fbResult;
+    err.clear();
+    check(openPackage(fbPkg.outPath, cache, services, fbResult, &err), "fallback-precedence fixture opens");
+    check(fbResult.notesProblems.size() == 1 &&
+          fbResult.notesProblems[0] == fbMedia.mediaPath + ": local notes unreadable, package notes not merged",
+          "a corrupt primary sidecar is reported even though a valid fallback sidecar exists");
+    check(readText(fbPrimaryPath) == "not xml, a corrupt primary sidecar", "the corrupt primary sidecar is left untouched");
+    gfcReview fbFallbackAfter;
+    check(gfcNoteStore::load(fbNormalised, fbFallbackAfter) && fbFallbackAfter.revisions.size() == 1 &&
+          fbFallbackAfter.revisions[0].id == "round-fallback",
+          "the untouched fallback sidecar still has only its own original content");
+    fs::remove(fbFallbackPath, ec);   // best-effort: don't leave test debris under the real $HOME
 
     // Fix round 1, point 1: merging into an existing, readable local sidecar
     // keeps both the local and the package's notes.
@@ -1220,9 +1353,15 @@ int packageOpenSelfTest() {
         check(!openPackage((dir / "badsession.jcreview").string(), cache, services, badSession, &err) &&
               lutsLoaded.size() == lutsBefore.size(),
               "an unparsable session loads no LUTs");
+        // Fix round 2, point 2: a merge would write beside the EXTRACTED
+        // media (the archive's own frame is present, since extraction runs
+        // before the session is even read), not beside the fictitious
+        // original path -- point the check there, or it can never fail.
+        const std::string badSessionResolvedMedia = gfcNoteStore::normalisePath(
+            (fs::path(badSession.extractDir) / "media" / "000" / "bad.0001.exr").string());
         gfcReview shouldNotExist;
-        check(!gfcNoteStore::load(gfcNoteStore::normalisePath(bm.originalPath), shouldNotExist),
-              "and no sidecar is written");
+        check(!gfcNoteStore::load(badSessionResolvedMedia, shouldNotExist),
+              "and no sidecar is written beside the extracted media");
     }
 
     const std::string whole = readText(in.outPath);

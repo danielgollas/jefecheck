@@ -155,18 +155,23 @@ std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std
  * Validates the manifest, extracts into <cacheRoot>/<id> (id = SHA-1 of the
  * package's absolute path, size, modification time and manifest bytes;
  * reused once it holds a .complete marker AND every file the manifest names
- * -- a partial or damaged cache is discarded and re-extracted), loads
- * packaged LUTs (failures recorded in lutsNotLoaded), resolves every media
- * (packaged -> original path -> fingerprint search -> services.locate),
- * union-merges each media's notes into the sidecar beside the resolved
- * media, and writes the session with media paths rewritten to the resolved
- * frames. Notes are placed, and the session rewritten, only after the
- * session has been read and parsed; a session that fails to parse or to
- * rewrite loads no LUTs and changes no notes. A sidecar that exists but
- * fails to load is left untouched, and a save failure leaves it untouched
- * too -- both are recorded in notesProblems as "<originalPath>: <reason>"
- * without failing the open. Media that stays unresolved keeps its original
- * path in the session (a reference to the packaged copy is mapped back to
+ * -- a partial or damaged cache is repaired by re-extracting the archive's
+ * entries over the directory rather than discarding it first, so files
+ * that aren't part of the package, such as a reviewer's own sidecar, are
+ * left alone), resolves every media (packaged -> original path ->
+ * fingerprint search -> services.locate), and writes the session with media
+ * paths rewritten to the resolved frames. Only once that rewritten session
+ * is written and verified are packaged LUTs loaded (failures recorded in
+ * lutsNotLoaded) and each media's notes union-merged into the sidecar
+ * beside the resolved media (the save, and the reload callback, are both
+ * skipped when the merge changed nothing) -- a session that fails to parse
+ * or to rewrite loads no LUTs and changes no notes. A PRIMARY sidecar that
+ * exists but fails to load (it is not allowed to fall through to a stale
+ * fallback-location sidecar), a save failure, and unreadable or unparsable
+ * packaged notes are all recorded in notesProblems as
+ * "<originalPath>: <reason>" without failing the open, leaving the local
+ * sidecar untouched. Media that stays unresolved keeps its original path in
+ * the session (a reference to the packaged copy is mapped back to
  * alongside the original path) and is counted as missing. Returns false
  * (loading nothing) for an unreadable, truncated, foreign or unknown-version
  * package.
