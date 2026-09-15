@@ -258,6 +258,16 @@ bool Exporter::begin(const ExportInput& input, QString* err) {
     for (std::vector<Item>* group : {&notes, &luts, &media}) {
         for (Item& item : *group) items_.push_back(std::move(item));
     }
+    // Refuse anything the tar writer would reject before a partial exists.
+    for (const Item& item : items_) {
+        if (!gfcTar::isSafeName(item.entryName) || !gfcTar::nameFits(item.entryName)) {
+            return fail("Cannot package " + item.entryName +
+                        ": the name is too long for the package format or uses a character it does not allow");
+        }
+        if (item.size > gfcTar::kMaxEntrySize) {
+            return fail("Cannot package " + item.entryName + ": it is larger than 8 GiB");
+        }
+    }
     for (const Item& item : items_) total_ += qint64(item.size);
 
     std::string werr;
@@ -273,7 +283,7 @@ Exporter::State Exporter::step(QString* err) {
 
     if (next_ >= items_.size()) {
         if (!writer_.finish(&e)) {
-            failWith(e, err);
+            failWith("Cannot write " + outPath_ + ": " + e, err);
             return state_;
         }
         std::error_code ec;
@@ -293,7 +303,7 @@ Exporter::State Exporter::step(QString* err) {
     Item& item = items_[next_];
     if (!entryOpen_) {
         if (!writer_.beginEntry(item.entryName, item.size, &e)) {
-            failWith(e, err);
+            failWith("Cannot write " + outPath_ + ": " + e, err);
             return state_;
         }
         entryOpen_ = true;
@@ -301,7 +311,7 @@ Exporter::State Exporter::step(QString* err) {
     }
     if (item.sourcePath.empty()) {
         if (!writer_.write(item.bytes.data(), item.bytes.size(), &e)) {
-            failWith(e, err);
+            failWith("Cannot write " + outPath_ + ": " + e, err);
             return state_;
         }
         offsetInItem_ = item.size;
@@ -318,7 +328,7 @@ Exporter::State Exporter::step(QString* err) {
             return state_;
         }
         if (!writer_.write(chunk.data(), n, &e)) {
-            failWith(e, err);
+            failWith("Cannot write " + outPath_ + ": " + e, err);
             return state_;
         }
         offsetInItem_ += n;
@@ -326,7 +336,7 @@ Exporter::State Exporter::step(QString* err) {
     }
     if (offsetInItem_ >= item.size) {
         if (!writer_.endEntry(&e)) {
-            failWith(e, err);
+            failWith("Cannot write " + outPath_ + ": " + e, err);
             return state_;
         }
         entryOpen_ = false;
@@ -957,6 +967,22 @@ int packageSelfTest() {
           readText(f2) == "frame-two-xyz" && !fs::exists(f2 + ".partial", ec),
           "an output path equal to a source frame is refused");
     overSourceExporter.cancel();
+
+    // Final review, item 7: an entry the tar format cannot hold is refused in
+    // begin(), naming it, before any partial file exists. A 120-byte frame
+    // name leaves "media/000/<name>" with no split whose name field is <= 100.
+    ExportInput longFrame = in;
+    longFrame.outPath = (dir / "longframe.jcreview").string();
+    const std::string longFrameName = std::string(116, 'x') + ".exr";
+    const std::string longFramePath = (dir / "src" / longFrameName).string();
+    writeText(longFramePath, "long");
+    longFrame.media[0].frames.push_back(longFramePath);
+    Exporter longFrameExporter;
+    err.clear();
+    check(fs::exists(longFramePath, ec) && !longFrameExporter.begin(longFrame, &err) &&
+          err.contains(QString::fromStdString(longFrameName)) && !fs::exists(longFrame.outPath + ".partial", ec),
+          "a frame name too long for the tar format is refused in begin, and no partial exists");
+    longFrameExporter.cancel();
 
     fs::remove_all(dir, ec);
     std::printf("NOTE-PACKAGE: pass=%d fail=%d\n", pass, fail);

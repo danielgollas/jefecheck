@@ -31,6 +31,9 @@ namespace gfcTar
 	    false when it cannot fit. */
 	bool splitName(const std::string& name, std::string& prefix, std::string& base);
 
+	/** Whether @a name fits the ustar prefix and name fields (splitName succeeds). */
+	bool nameFits(const std::string& name);
+
 	class Writer
 	{
 		public:

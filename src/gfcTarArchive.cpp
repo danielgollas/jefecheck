@@ -114,6 +114,12 @@ bool gfcTar::splitName(const std::string& name, std::string& prefix, std::string
 	return false;
 }
 
+bool gfcTar::nameFits(const std::string& name)
+{
+	std::string prefix, base;
+	return splitName(name, prefix, base);
+}
+
 bool gfcTar::Writer::open(const std::string& path, std::string* err)
 {
 	out.open(path, std::ios::binary | std::ios::trunc);
