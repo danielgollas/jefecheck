@@ -566,12 +566,8 @@ bool mergeNotes(const std::string& resolvedMedia, const std::string& notesXml, c
     gfcReview local;
     local.mediaPath = resolvedMedia;
     if (sidecarExists) {
-        // gfcNoteStore::save() (XMLNode::writeToFile) writes a leading
-        // UTF-8 BOM; fromXmlString's parseString, unlike load()'s
-        // parseFile, does not strip one on its own.
-        std::string primaryBytes = readText(sidecarPath);
-        if (primaryBytes.compare(0, 3, "\xEF\xBB\xBF") == 0) primaryBytes.erase(0, 3);
-        if (!gfcNoteStore::fromXmlString(primaryBytes, local)) {
+        // save() writes a leading UTF-8 BOM; fromXmlString skips it.
+        if (!gfcNoteStore::fromXmlString(readText(sidecarPath), local)) {
             if (problem) *problem = "local notes unreadable, package notes not merged";
             return false;
         }

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "gfcUtf8.h"
 #include "xmlParser.h"
 
 namespace
@@ -21,8 +22,7 @@ namespace
 		// XMLNode::parseString, which every caller here uses, does not --
 		// so every caller of this file would otherwise see a document with
 		// no <root>.
-		const char* text = xml.c_str();
-		if (xml.compare(0, 3, "\xEF\xBB\xBF") == 0) text += 3;
+		const char* text = skipUtf8Bom(xml.c_str());
 
 		XMLResults results;
 		top = XMLNode::parseString(text, NULL, &results);

@@ -9,6 +9,7 @@
 #include "gfcnotetext.h"
 
 #include "gfcSha1.h"
+#include "gfcUtf8.h"
 #include "xmlParser.h"
 
 #include <algorithm>
@@ -593,8 +594,10 @@ bool gfcNoteStore::fromXmlString(const std::string& xml, gfcReview& out)
 	// that name is NULL, so the comparison segfaults. Parsing untagged and
 	// locating the root ourselves (locateNotesRoot(), shared with tryLoad())
 	// sidesteps this.
+	// parseString, unlike parseFile, does not skip a leading UTF-8 BOM, and
+	// save() writes one -- so sidecar bytes read into a string start with it.
 	XMLResults results;
-	XMLNode xFile = XMLNode::parseString(xml.c_str(), NULL, &results);
+	XMLNode xFile = XMLNode::parseString(skipUtf8Bom(xml.c_str()), NULL, &results);
 	if (results.error != eXMLErrorNone)
 	{
 		return false;
@@ -771,6 +774,18 @@ int noteStoreSelfTest()
 	check(gfcNoteStore::fromXmlString(gfcNoteStore::toXmlString(w), fromString) &&
 		  gfcNoteStore::toJsonString(fromString) == gfcNoteStore::toJsonString(w),
 		  "a review survives an XML string round trip");
+	// save() writes a leading UTF-8 BOM, so a sidecar read back as bytes starts with one.
+	gfcReview fromBomString;
+	check(gfcNoteStore::fromXmlString("\xEF\xBB\xBF" + gfcNoteStore::toXmlString(w), fromBomString) &&
+		  gfcNoteStore::toJsonString(fromBomString) == gfcNoteStore::toJsonString(w),
+		  "a BOM-prefixed XML string parses");
+	// With an XML declaration after the BOM -- the shape of a saved .jcs, and
+	// the case where parseString's lack of BOM handling actually bites.
+	gfcReview fromBomDeclString;
+	check(gfcNoteStore::fromXmlString("\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+										  gfcNoteStore::toXmlString(w), fromBomDeclString) &&
+		  gfcNoteStore::toJsonString(fromBomDeclString) == gfcNoteStore::toJsonString(w),
+		  "a BOM-prefixed XML string with a declaration parses");
 	gfcReview untouched;
 	check(!gfcNoteStore::fromXmlString("not a notes document", untouched) && untouched.revisions.empty(),
 		  "a string that is not a notes document is refused");
