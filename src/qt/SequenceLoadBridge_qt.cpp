@@ -2759,6 +2759,36 @@ bool isInstallLutPath(const std::string& path) {
     return false;
 }
 
+void reloadReviewFromDisk(const std::string& mediaPath) {
+    // Plates borrow pointers into the review: move it out first, republish
+    // (which loads the sidecar afresh for any plate showing this media), and
+    // only then let the old copy go.
+    std::vector<std::unique_ptr<gfcReview>> stale;
+    for (auto it = g_noteReviews.begin(); it != g_noteReviews.end();) {
+        if ((*it)->mediaPath == mediaPath) {
+            stale.push_back(std::move(*it));
+            it = g_noteReviews.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    syncPlateNotesImpl();
+}
+
+std::vector<std::string> getSearchPaths() { return sett.searchPaths; }
+
+bool getSearchPathsRecursive() { return sett.searchPathsRecursive; }
+
+void setSearchPaths(const std::vector<std::string>& paths, bool recursive, bool enabled) {
+    sett.searchPaths = paths;
+    sett.searchPathsRecursive = recursive;
+    sett.useSearchPaths = enabled;
+}
+
+bool isFxLoaded(const std::string& fxName) {
+    return fxManager.getFXIndexByName(fxName) >= 0;
+}
+
 std::string appVersion() { return JEFE_VERSION; }
 
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,

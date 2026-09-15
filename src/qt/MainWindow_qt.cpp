@@ -51,6 +51,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <functional>
 #include <memory>
 
@@ -63,6 +64,7 @@
 #include "../gfcMediaFingerprint.h"
 #include "../gfcSessionPaths.h"
 #include "../gfcTarArchive.h"
+#include "../xmlParser.h"
 
 #include <ctime>
 
@@ -1164,6 +1166,7 @@ void MainWindow_Qt::openSessionPath(const QString& path) {
     viewport_->doneCurrent();
     if (ok) {
         currentSessionPath_ = path;
+        packageTitle_.clear();
         updateSessionTitle();
         refreshAfterSessionLoad();
         statusBar()->showMessage(
@@ -1700,9 +1703,13 @@ int MainWindow_Qt::runHeadlessFXMultiTest(const QString& imagePath) {
 }
 
 void MainWindow_Qt::updateSessionTitle() {
-    if (currentSessionPath_.isEmpty()) setWindowTitle("JefeCheck");
-    else setWindowTitle(QString("JefeCheck — %1")
-                            .arg(QFileInfo(currentSessionPath_).fileName()));
+    if (!currentSessionPath_.isEmpty()) {
+        setWindowTitle(QString("JefeCheck — %1").arg(QFileInfo(currentSessionPath_).fileName()));
+    } else if (!packageTitle_.isEmpty()) {
+        setWindowTitle(QString("JefeCheck — %1").arg(packageTitle_));
+    } else {
+        setWindowTitle("JefeCheck");
+    }
 }
 
 void MainWindow_Qt::saveLayout() {
@@ -2706,9 +2713,183 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
           "the lean package has no media and keeps the absolute path");
     check(!QFile::exists(withMedia + ".partial") && !QFile::exists(withoutMedia + ".partial"), "no partial files left");
 
-    // (Task 9 inserts the open round trip here.)
+    // Round trip: open the package with media.
+    const QString before = work + "/before.jcs";
+    jefe::qt::saveSession(before.toStdString());
+    check(openReviewPackage(withMedia, false, &stats, &msg), "the package with media opens");
+    printf("PACKAGE-TEST open: %s\n", qPrintable(msg));
+    check(stats.resolved == 1 && stats.missing == 0, "media resolved from the package");
+    const QString loaded = QString::fromStdString(jefe::qt::getTrackParams(0).filename);
+    check(!stats.extractDir.isEmpty() &&
+          QFileInfo(loaded).canonicalFilePath().startsWith(QFileInfo(stats.extractDir).canonicalFilePath()),
+          "the track loads media from the extraction directory");
+    check(readBytes(loaded) == readBytes(media), "the extracted media is byte-identical");
+    gfcReview original;
+    gfcReview reopened;
+    const bool bothLoaded = gfcNoteStore::load(mediaKey, original) &&
+                            gfcNoteStore::load(gfcNoteStore::normalisePath(loaded.toStdString()), reopened);
+    original.mediaPath.clear();
+    reopened.mediaPath.clear();
+    check(bothLoaded && gfcNoteStore::toJsonString(original) == gfcNoteStore::toJsonString(reopened),
+          "notes are identical after the round trip");
+    const QString after = work + "/after.jcs";
+    jefe::qt::saveSession(after.toStdString());
+    auto plateAttr = [&readBytes](const QString& jcs, const char* name) {
+        const QByteArray xml = readBytes(jcs);
+        XMLResults results;
+        XMLNode top = XMLNode::parseString(xml.constData(), NULL, &results);
+        XMLNode plate = top.getChildNode("root").getChildNode("plates").getChildNode("plate", 0);
+        XMLCSTR value = plate.isEmpty() ? nullptr : plate.getAttribute(name);
+        return QString(value ? value : "");
+    };
+    check(!plateAttr(before, "exposure").isEmpty() &&
+          plateAttr(before, "exposure") == plateAttr(after, "exposure") &&
+          plateAttr(before, "gamma") == plateAttr(after, "gamma") &&
+          plateAttr(before, "lut") == plateAttr(after, "lut"),
+          "plate colour correction and LUT survive the round trip");
+    check(openReviewPackage(withMedia, false, &stats, &msg), "opening the same package again works");
+
+    const QByteArray packageBytes = readBytes(withMedia);
+    const QString truncated = work + "/truncated.jcreview";
+    {
+        QFile t(truncated);
+        if (t.open(QIODevice::WriteOnly)) t.write(packageBytes.left(packageBytes.size() / 2));
+    }
+    const std::string trackBefore = jefe::qt::getTrackParams(0).filename;
+    check(!openReviewPackage(truncated, false, &stats, &msg) && msg.contains("truncated"),
+          "a truncated package is refused");
+    check(jefe::qt::getTrackParams(0).filename == trackBefore, "a refused package changes nothing");
+    if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
 
     printf("PACKAGE-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
+}
+
+bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interactive, PackageStats* stats, QString* message) {
+    namespace pkg = jefe::qt::package;
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    if (!viewport_) {
+        say(tr("No viewport"));
+        return false;
+    }
+
+    pkg::OpenServices services;
+    services.loadLut = [this](const std::string& path) {
+        viewport_->makeCurrent();   // loading a LUT creates GL textures
+        const bool ok = jefe::qt::loadLUTFile(path);
+        viewport_->doneCurrent();
+        return ok;
+    };
+    services.reloadReview = [](const std::string& mediaPath) { jefe::qt::reloadReviewFromDisk(mediaPath); };
+    services.searchPaths = jefe::qt::getSearchPaths();
+    services.searchRecursive = jefe::qt::getSearchPathsRecursive();
+    services.interactive = interactive;
+    services.locate = [this](const pkg::ManifestMedia& media) {
+        const QString name = QString::fromStdString(std::filesystem::path(media.originalPath).filename().string());
+        return QFileDialog::getOpenFileName(this, tr("Locate %1").arg(name)).toStdString();
+    };
+    services.confirmMismatch = [this](const pkg::ManifestMedia&, const std::string& chosen) {
+        return QMessageBox::question(
+                   this, tr("Media does not match"),
+                   tr("%1 does not match the media recorded in the package. Use it anyway?")
+                       .arg(QString::fromStdString(chosen))) == QMessageBox::Yes;
+    };
+
+    const QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/packages";
+    QDir().mkpath(cacheRoot);
+    pkg::OpenResult result;
+    QString err;
+    if (!pkg::openPackage(packagePath.toStdString(), cacheRoot.toStdString(), services, result, &err)) {
+        say(err);
+        return false;
+    }
+
+    viewport_->makeCurrent();   // loadSession uploads preview textures
+    const bool loaded = jefe::qt::loadSession(result.sessionPath);
+    if (loaded) jefe::qt::startLoadingAllTracks();
+    viewport_->doneCurrent();
+    if (!loaded) {
+        say(tr("Could not load the package's session"));
+        return false;
+    }
+
+    // The extracted session is not a file the user chose: Save Session asks where.
+    currentSessionPath_.clear();
+    packageTitle_ = QFileInfo(packagePath).fileName();
+    updateSessionTitle();
+    refreshAfterSessionLoad();
+
+    PackageStats s;
+    s.media = int(result.manifest.media.size());
+    s.mediaIncluded = result.manifest.mediaIncluded;
+    s.bytes = QFileInfo(packagePath).size();
+    s.resolved = result.resolved;
+    s.missing = result.missing;
+    s.extractDir = QString::fromStdString(result.extractDir);
+    for (const std::string& name : result.missingMedia) s.missingMedia << QString::fromStdString(name);
+    for (const std::string& fx : result.fxNames) {
+        if (!jefe::qt::isFxLoaded(fx)) s.missingFx << QString::fromStdString(fx);
+    }
+    for (const std::string& problem : result.notesProblems) s.notesProblems << QString::fromStdString(problem);
+    for (const std::string& lut : result.lutsNotLoaded) s.lutsNotLoaded << QString::fromStdString(lut);
+    if (stats) *stats = s;
+    QString msg = tr("Opened review package %1: %2 of %3 media found")
+                      .arg(QFileInfo(packagePath).fileName())
+                      .arg(s.resolved)
+                      .arg(s.media);
+    if (!s.notesProblems.isEmpty() || !s.lutsNotLoaded.isEmpty()) {
+        QStringList extras;
+        if (!s.notesProblems.isEmpty())
+            extras << tr("%1 notes problems").arg(s.notesProblems.size());
+        if (!s.lutsNotLoaded.isEmpty())
+            extras << tr("%1 LUT not loaded").arg(s.lutsNotLoaded.size());
+        msg += "; " + extras.join("; ");
+    }
+    say(msg);
+    return true;
+}
+
+int MainWindow_Qt::runHeadlessRelinkTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("RELINK-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    if (!viewport_) { printf("RELINK-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
+
+    const QString work = QDir::tempPath() + "/jefecheck_relinktest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    const QString media = makePackageFixture(imagePath, work);
+    if (media.isEmpty()) { printf("RELINK-TEST FAIL fixture\n"); fflush(stdout); return 2; }
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+
+    PackageStats stats;
+    QString msg;
+    const QString lean = work + "/lean.jcreview";
+    check(exportReviewPackage(lean, false, &stats, &msg), "package without media exported");
+
+    const QString movedDir = work + "/moved/deep";
+    QDir().mkpath(movedDir);
+    const QString moved = movedDir + "/" + QFileInfo(media).fileName();
+    check(QFile::rename(media, moved), "the media is moved away from its recorded path");
+    // "use search paths" off: the fingerprint relink must not depend on it.
+    jefe::qt::setSearchPaths({(work + "/moved").toStdString()}, true, false);
+
+    check(openReviewPackage(lean, false, &stats, &msg), "the package opens");
+    printf("RELINK-TEST open: %s resolved=%d missing=%d\n", qPrintable(msg), stats.resolved, stats.missing);
+    check(stats.resolved == 1 && stats.missing == 0, "the media is resolved by fingerprint");
+    check(QFileInfo(QString::fromStdString(jefe::qt::getTrackParams(0).filename)).canonicalFilePath() ==
+          QFileInfo(moved).canonicalFilePath(),
+          "the track loads the moved media");
+    gfcReview relinked;
+    check(gfcNoteStore::load(gfcNoteStore::normalisePath(moved.toStdString()), relinked) &&
+          relinked.revisions.size() == 1,
+          "the notes follow the media");
+    if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
+
+    printf("RELINK-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);
     return failures == 0 ? 0 : 2;
 }

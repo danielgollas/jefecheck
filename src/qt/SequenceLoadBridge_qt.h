@@ -1151,6 +1151,19 @@ std::string lutSourcePath(const std::string& lutName);
 /** Whether @a path lies inside a directory LUTs autoload from (sett.lutPath, the bundle FX/, ./FX/). */
 bool isInstallLutPath(const std::string& path);
 
+/** Drops the in-memory review for @a mediaPath and republishes plate notes, so
+    the next use reads its sidecar from disk again (after a package merge). */
+void reloadReviewFromDisk(const std::string& mediaPath);
+
+/** Preferences -> Search Paths. */
+std::vector<std::string> getSearchPaths();
+bool getSearchPathsRecursive();
+/** Sets the search paths for this run (not persisted); @a enabled is "use search paths". */
+void setSearchPaths(const std::vector<std::string>& paths, bool recursive, bool enabled);
+
+/** Whether an FX with this name is loaded. */
+bool isFxLoaded(const std::string& fxName);
+
 /** JEFE_VERSION (gfcStructures.h), for callers that cannot include that header
     themselves (it drags glad, which doesn't share a TU with Qt's QtGui on macOS). */
 std::string appVersion();

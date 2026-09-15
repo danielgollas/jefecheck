@@ -101,6 +101,8 @@ public:
         QString extractDir;
         QStringList missingMedia;
         QStringList missingFx;
+        QStringList notesProblems;
+        QStringList lutsNotLoaded;
     };
 
     /** Collects what a package of the current session needs: the saved session,
@@ -118,6 +120,17 @@ public:
 
     /** Headless end-to-end proof of the review package (--package-test <image>). */
     int runHeadlessPackageTest(const QString& imagePath);
+
+    /**
+     * Opens a review package: extracts it, finds its media, merges its notes and
+     * loads its session. @a interactive allows "Locate…" prompts for media it
+     * cannot find; without it they count as missing. See
+     * docs/superpowers/specs/2026-09-14-review-package-design.md.
+     */
+    bool openReviewPackage(const QString& packagePath, bool interactive, PackageStats* stats, QString* message);
+
+    /** Headless proof that a lean package relinks moved media (--relink-test <image>). */
+    int runHeadlessRelinkTest(const QString& imagePath);
 
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
@@ -195,6 +208,7 @@ private:
     void toggleHideControls();
     bool controlsHidden_ = false;
     QString currentSessionPath_;
+    QString packageTitle_;   // the open review package's file name, when the session came from one
     // Guards exportReviewSummary() against re-entry: its PDF path pumps the
     // event loop (excluding user input) for up to several seconds while
     // waiting for frames to decode, so a second click / auto-fired call

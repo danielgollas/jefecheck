@@ -497,6 +497,36 @@ int main(int argc, char* argv[]) {
         break;
     }
 
+    // --relink-test <image>: a lean package finds moved media by fingerprint.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--relink-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessRelinkTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --open-package <file>: open a review package and keep running.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--open-package") != 0) continue;
+        const QString file = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [&window, file]() {
+            MainWindow_Qt::PackageStats s;
+            QString msg;
+            if (window.openReviewPackage(file, false, &s, &msg)) {
+                printf("PACKAGE: opened=%s media=%d resolved=%d missing=%d\n", qPrintable(file), s.media,
+                       s.resolved, s.missing);
+            } else {
+                printf("PACKAGE: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+        });
+        break;
+    }
+
     // --window-rect X Y W H: place the window, in logical pixels, so two
     // instances can sit side by side for a recording.
     for (int i = 1; i + 4 < argc; ++i) {
