@@ -118,8 +118,12 @@ notes** burned in:
    round's notes only (a new bridge call; the normal sync publishes every
    round), make sure the track's frame list exists (starting the track's load
    if it has none — renders force-decode the frame they draw, via
-   `gfcSequence::getFrame(frame, forceLoad)`, so no decode wait is needed),
-   and render that one frame with
+   `gfcSequence::getFrame(frame, forceLoad)`, but only once the track's async
+   loader has recorded that frame's load parameters, so before rendering the
+   export waits (bounded, 5 s per track, pumping the event loop and uploading
+   pending textures) until the track reports loaded frames; a track that does
+   not get there counts its entries in `thumbfail`), and render that one frame
+   with
    `jefe::qt::triggerSyncRender` — `quadrant` = the plate, `from = to` = the
    frame (`kAllFrames` renders the media's first frame), `burnInNotes = true`,
    PNG, `outWidth` 960 and `outHeight` from the plate aspect — into a temporary

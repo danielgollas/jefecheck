@@ -54,6 +54,7 @@
 
 #include "../gfcReviewSummary.h"
 #include "../gfcNoteStore.h"
+#include "../ui/IApplication.h"
 #include "../gfcreview.h"
 #include "../gfcrevision.h"
 #include "../gfcnotestroke.h"
@@ -1848,6 +1849,13 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     // recorded then. Immediately after (re)starting a track's load, frames
     // are still empty, so a render right then writes nothing. Wait, bounded,
     // draining the GL upload queue, until at least one frame has landed.
+    //
+    // Pumps the Qt event loop between polls the same way
+    // autoloadFXsFromPath() does in SequenceLoadBridge_qt.cpp (see the
+    // comment there) -- a blocking sleep here would stall the GUI thread for
+    // up to the full timeout per track (4 tracks x 5s after the restore
+    // reload), which breaks AX queries and back-to-back headless test
+    // launches exactly like an unyielded shader-compile pass does.
     auto waitForTrackFrame = [this](int track, int timeoutMs) {
         QElapsedTimer waitTimer;
         waitTimer.start();
@@ -1858,8 +1866,13 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
                 jefe::qt::uploadPendingTextures();
                 viewport_->doneCurrent();
             } else {
-                QThread::msleep(5);
+                // Nothing to drain yet -- a tiny sleep keeps this from
+                // busy-spinning while the loader thread works, short enough
+                // to stay well clear of the AX/event-loop stall this whole
+                // wait exists to avoid.
+                QThread::msleep(2);
             }
+            jefe::ui::IApplication::instance().processEvents();
         }
         return jefe::qt::getTrackTimelineState(track).loadedCount > 0;
     };
