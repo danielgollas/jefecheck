@@ -340,6 +340,29 @@ namespace
 		return xTop.writeToFile(path.c_str()) == eXMLErrorNone;
 	}
 
+	// Finds the <jefecheckNotes> element in an already-parsed document `parsed`
+	// (a file or a string, parsed with no tag argument -- see fromXmlString for
+	// why a tag argument isn't safe to pass to xmlParser here). Some xmlParser
+	// builds hand back the named root directly when there is no separate
+	// <?xml?> declaration in front of it, rather than as a child of a wrapper
+	// node, so both shapes are checked. Returns false, `top` unset, if neither
+	// shape matches.
+	bool locateNotesRoot(const XMLNode& parsed, XMLNode& top)
+	{
+		XMLNode child = parsed.getChildNode("jefecheckNotes");
+		if (!child.isEmpty())
+		{
+			top = child;
+			return true;
+		}
+		if (std::strcmp(parsed.getName() ? parsed.getName() : "", "jefecheckNotes") == 0)
+		{
+			top = parsed;
+			return true;
+		}
+		return false;
+	}
+
 	// Loads the <jefecheckNotes> root from `path` if it exists and parses.
 	// Silent on a missing file -- callers try multiple candidate locations.
 	bool tryLoad(const std::string& path, gfcReview& out)
@@ -357,19 +380,10 @@ namespace
 			return false;
 		}
 
-		XMLNode xTop = xFile.getChildNode("jefecheckNotes");
-		if (xTop.isEmpty())
+		XMLNode xTop;
+		if (!locateNotesRoot(xFile, xTop))
 		{
-			// Some xmlParser builds hand back the named root directly when
-			// there is no separate <?xml?> declaration in front of it.
-			if (std::strcmp(xFile.getName() ? xFile.getName() : "", "jefecheckNotes") == 0)
-			{
-				xTop = xFile;
-			}
-			else
-			{
-				return false;
-			}
+			return false;
 		}
 
 		return loadFromXml(xTop, out);
@@ -573,12 +587,12 @@ std::string gfcNoteStore::toXmlString(const gfcReview& review)
 
 bool gfcNoteStore::fromXmlString(const std::string& xml, gfcReview& out)
 {
-	// Parsed WITHOUT a tag argument, unlike the brief's original sketch: when
-	// content has no XML tag at all (e.g. plain text), xmlParser's tag-search
-	// branch in parseString() calls _tcsicmp() on a null node name and
-	// segfaults. parseFile() sidesteps this the same way (passes tag=NULL and
-	// locates the root itself) -- tryLoad() above mirrors that same pattern,
-	// so this does too.
+	// Parsed WITHOUT a tag argument: when passed one, parseString() compares
+	// it against the parsed root's node name via _tcsicmp() -- and for input
+	// with no XML tag at all (e.g. plain text), no element is created and
+	// that name is NULL, so the comparison segfaults. Parsing untagged and
+	// locating the root ourselves (locateNotesRoot(), shared with tryLoad())
+	// sidesteps this.
 	XMLResults results;
 	XMLNode xFile = XMLNode::parseString(xml.c_str(), NULL, &results);
 	if (results.error != eXMLErrorNone)
@@ -586,17 +600,10 @@ bool gfcNoteStore::fromXmlString(const std::string& xml, gfcReview& out)
 		return false;
 	}
 
-	XMLNode xTop = xFile.getChildNode("jefecheckNotes");
-	if (xTop.isEmpty())
+	XMLNode xTop;
+	if (!locateNotesRoot(xFile, xTop))
 	{
-		if (std::strcmp(xFile.getName() ? xFile.getName() : "", "jefecheckNotes") == 0)
-		{
-			xTop = xFile;
-		}
-		else
-		{
-			return false;
-		}
+		return false;
 	}
 
 	gfcReview parsed;
