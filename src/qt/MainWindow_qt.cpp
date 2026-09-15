@@ -3031,6 +3031,31 @@ int MainWindow_Qt::runHeadlessPackageDialogTest(const QString& imagePath) {
     check(!dialog.isRunning() && QFileInfo::exists(out) && dialog.progressPercent() == 100,
           "the export finishes with progress at 100%");
 
+    // A path without the .jcreview suffix gets it appended, and the file the
+    // path named is neither created nor overwritten.
+    const QString txtOut = work + "/out.txt";
+    dialog.setOutputPath(txtOut);
+    dialog.setIncludeMedia(false);
+    dialog.startExport();
+    waitUntilIdle();
+    check(!dialog.isRunning() && QFileInfo::exists(txtOut + ".jcreview") && !QFileInfo::exists(txtOut),
+          "out.txt is written as out.txt.jcreview and out.txt is not created");
+    const QString keepOut = work + "/keep.txt";
+    {
+        QFile keep(keepOut);
+        if (keep.open(QIODevice::WriteOnly)) keep.write("keep me");
+    }
+    dialog.setOutputPath(keepOut);
+    dialog.startExport();
+    waitUntilIdle();
+    {
+        QFile keep(keepOut);
+        check(!dialog.isRunning() && QFileInfo::exists(keepOut + ".jcreview") && keep.open(QIODevice::ReadOnly) &&
+              keep.readAll() == "keep me",
+              "an existing keep.txt is left untouched; the package goes to keep.txt.jcreview");
+    }
+    dialog.setIncludeMedia(true);
+
     const QString cancelled = work + "/cancelled.jcreview";
     dialog.setOutputPath(cancelled);
     dialog.startExport();

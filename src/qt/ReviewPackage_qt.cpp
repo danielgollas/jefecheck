@@ -165,6 +165,30 @@ bool Exporter::begin(const ExportInput& input, QString* err) {
     outPath_ = input.outPath;
     partialPath_ = input.outPath + ".partial";
 
+    // The finished package replaces whatever is at the output path, so that
+    // must not be one of its own sources. Compared canonically where the
+    // files exist, lexically (after resolving what does exist) otherwise.
+    auto sameFile = [](const std::string& a, const std::string& b) {
+        std::error_code ea, eb;
+        if (fs::exists(a, ea) && fs::exists(b, eb)) {
+            std::error_code e;
+            return fs::equivalent(a, b, e) && !e;
+        }
+        const fs::path ca = fs::weakly_canonical(a, ea);
+        const fs::path cb = fs::weakly_canonical(b, eb);
+        return !ea && !eb && ca == cb;
+    };
+    for (const ExportMedia& m : input.media) {
+        for (const std::string& frame : m.frames) {
+            if (sameFile(frame, input.outPath)) return fail("The package would overwrite its own source " + frame);
+        }
+    }
+    for (const auto& lutSource : input.luts) {
+        if (sameFile(lutSource.second, input.outPath)) {
+            return fail("The package would overwrite its own source " + lutSource.second);
+        }
+    }
+
     Manifest manifest;
     manifest.created = input.createdIso;
     manifest.app = input.appVersion;
@@ -253,7 +277,10 @@ Exporter::State Exporter::step(QString* err) {
             return state_;
         }
         std::error_code ec;
+#ifdef _WIN32
+        // POSIX rename replaces the destination atomically; Windows' does not.
         fs::remove(outPath_, ec);
+#endif
         fs::rename(partialPath_, outPath_, ec);
         if (ec) {
             failWith("Cannot rename " + partialPath_ + ": " + ec.message(), err);
@@ -919,6 +946,17 @@ int packageSelfTest() {
     check(!dupLutExporter.begin(dupLut, &err) && err.contains("look.cube") &&
           !fs::exists(dupLut.outPath + ".partial", ec),
           "two same-named LUT files are refused");
+
+    // Final review, item 6: the package must never be written over one of
+    // its own sources (the rename at the end would replace the frame).
+    ExportInput overSource = in;
+    overSource.outPath = f2;
+    Exporter overSourceExporter;
+    err.clear();
+    check(!overSourceExporter.begin(overSource, &err) && err.contains("sh010.0002.exr") &&
+          readText(f2) == "frame-two-xyz" && !fs::exists(f2 + ".partial", ec),
+          "an output path equal to a source frame is refused");
+    overSourceExporter.cancel();
 
     fs::remove_all(dir, ec);
     std::printf("NOTE-PACKAGE: pass=%d fail=%d\n", pass, fail);

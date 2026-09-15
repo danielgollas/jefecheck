@@ -16,6 +16,15 @@
 
 #include "qticons.h"
 
+namespace {
+/** @a path with ".jcreview" appended unless it already ends in it (any case). */
+QString withPackageSuffix(const QString& path) {
+    return QFileInfo(path).suffix().compare(QLatin1String("jcreview"), Qt::CaseInsensitive) == 0
+               ? path
+               : path + QStringLiteral(".jcreview");
+}
+}  // namespace
+
 ReviewPackageDialog_Qt::ReviewPackageDialog_Qt(Gather gather, qint64 mediaBytes, QWidget* parent)
     : QDialog(parent), gather_(std::move(gather)), mediaBytes_(mediaBytes) {
     setWindowTitle(tr("Export Review Package"));
@@ -72,8 +81,7 @@ ReviewPackageDialog_Qt::ReviewPackageDialog_Qt(Gather gather, qint64 mediaBytes,
         QString out = QFileDialog::getSaveFileName(this, tr("Export Review Package"), pathEdit_->text(),
                                                    tr("JefeCheck Review Package (*.jcreview)"));
         if (out.isEmpty()) return;
-        if (QFileInfo(out).suffix().isEmpty()) out += ".jcreview";
-        pathEdit_->setText(out);
+        pathEdit_->setText(withPackageSuffix(out));
     });
     connect(includeMediaCheck_, &QCheckBox::toggled, this, [this]() { updateSizeLabel(); });
     connect(exportButton_, &QPushButton::clicked, this, [this]() { startExport(); });
@@ -123,7 +131,10 @@ void ReviewPackageDialog_Qt::startExport() {
         finishWith(false, tr("Choose where to write the package"));
         return;
     }
-    if (QFileInfo(out).suffix().isEmpty()) out += ".jcreview";
+    // Always a .jcreview: a path naming some other file (out.txt) must not
+    // have that file replaced by the package.
+    out = withPackageSuffix(out);
+    pathEdit_->setText(out);
 
     jefe::qt::package::ExportInput input;
     QString message;
