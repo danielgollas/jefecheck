@@ -557,6 +557,59 @@ bool gfcNoteStore::load(const std::string& normalisedPath, gfcReview& out)
 	return false;
 }
 
+std::string gfcNoteStore::toXmlString(const gfcReview& review)
+{
+	XMLNode xTop = buildXml(review, review.mediaPath);
+	int size = 0;
+	XMLSTR text = xTop.createXMLString(1, &size);
+	if (!text)
+	{
+		return {};
+	}
+	std::string out(text, static_cast<size_t>(size));
+	free(text);   // this xmlParser allocates with malloc and has no freeXMLString
+	return out;
+}
+
+bool gfcNoteStore::fromXmlString(const std::string& xml, gfcReview& out)
+{
+	// Parsed WITHOUT a tag argument, unlike the brief's original sketch: when
+	// content has no XML tag at all (e.g. plain text), xmlParser's tag-search
+	// branch in parseString() calls _tcsicmp() on a null node name and
+	// segfaults. parseFile() sidesteps this the same way (passes tag=NULL and
+	// locates the root itself) -- tryLoad() above mirrors that same pattern,
+	// so this does too.
+	XMLResults results;
+	XMLNode xFile = XMLNode::parseString(xml.c_str(), NULL, &results);
+	if (results.error != eXMLErrorNone)
+	{
+		return false;
+	}
+
+	XMLNode xTop = xFile.getChildNode("jefecheckNotes");
+	if (xTop.isEmpty())
+	{
+		if (std::strcmp(xFile.getName() ? xFile.getName() : "", "jefecheckNotes") == 0)
+		{
+			xTop = xFile;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	gfcReview parsed;
+	if (!loadFromXml(xTop, parsed))
+	{
+		return false;
+	}
+	out.mediaPath = parsed.mediaPath;
+	out.fingerprint = parsed.fingerprint;
+	out.revisions = std::move(parsed.revisions);
+	return true;
+}
+
 // ---------------------------------------------------------------------------
 // Self-test
 // ---------------------------------------------------------------------------
@@ -705,6 +758,15 @@ int noteStoreSelfTest()
 	check(gfcNoteStore::load(roNormalised, roBack), "load() finds the note via the fallback location");
 	check(roBack.revisions.size() == 1 && roBack.revisions[0].notes.size() == 1,
 		  "the read-only-fallback note round-trips");
+
+	// XML strings: what a review package carries.
+	gfcReview fromString;
+	check(gfcNoteStore::fromXmlString(gfcNoteStore::toXmlString(w), fromString) &&
+		  gfcNoteStore::toJsonString(fromString) == gfcNoteStore::toJsonString(w),
+		  "a review survives an XML string round trip");
+	gfcReview untouched;
+	check(!gfcNoteStore::fromXmlString("not a notes document", untouched) && untouched.revisions.empty(),
+		  "a string that is not a notes document is refused");
 
 	std::printf("NOTE-STORE: pass=%d fail=%d\n", pass, fail);
 	return fail == 0 ? 0 : 1;

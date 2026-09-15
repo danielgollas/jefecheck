@@ -31,6 +31,7 @@
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
 #include "gfcNoteStore.h"
+#include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
 #include "gfcNoteStamp.h"
 #include "gfcReviewSummary.h"
@@ -318,13 +319,15 @@ int main(int argc, char* argv[]) {
         const int tarFail     = tarSelfTest();
         const int fingerprintFail = mediaFingerprintSelfTest();
         const int sessionPathsFail = sessionPathsSelfTest();
+        const int mergeFail = noteMergeSelfTest();
         // The self-tests print via std::printf but do not flush; std::_Exit
         // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
         // stdout not a tty) would silently drop all three lines.
         std::fflush(stdout);
         std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
                     stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
-                    tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0) ? 0 : 2);
+                    tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0 &&
+                    mergeFail == 0) ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
