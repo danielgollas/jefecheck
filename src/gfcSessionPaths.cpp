@@ -16,8 +16,16 @@ namespace
 
 	bool parseRoot(const std::string& xml, XMLNode& top, XMLNode& root, std::string* err)
 	{
+		// A saved .jcs always starts with a UTF-8 BOM (gfcSessionManager
+		// writes one). XMLNode::parseFile strips a leading EF BB BF itself;
+		// XMLNode::parseString, which every caller here uses, does not --
+		// so every caller of this file would otherwise see a document with
+		// no <root>.
+		const char* text = xml.c_str();
+		if (xml.compare(0, 3, "\xEF\xBB\xBF") == 0) text += 3;
+
 		XMLResults results;
-		top = XMLNode::parseString(xml.c_str(), NULL, &results);
+		top = XMLNode::parseString(text, NULL, &results);
 		if (results.error != eXMLErrorNone)
 		{
 			setErr(err, "session XML does not parse (xmlParser error " + std::to_string(static_cast<int>(results.error)) + ")");
@@ -224,6 +232,19 @@ int sessionPathsSelfTest()
 		check(refs[2].kind == Kind::Playlist && refs[2].index == 0 && refs[2].sub == 1 &&
 			  refs[2].path == "/shots/a/sh010.0001.exr", "the second playlist track");
 	}
+
+	// A saved .jcs always starts with a UTF-8 BOM (gfcSessionManager writes
+	// one); XMLNode::parseString, unlike parseFile, does not skip it on its
+	// own, so parseRoot() must.
+	std::vector<MediaRef> bomRefs;
+	check(listMedia("\xEF\xBB\xBF" + xml, bomRefs, &err) && bomRefs.size() == 3 &&
+		  bomRefs[0].kind == Kind::Track && bomRefs[0].index == 0 && bomRefs[0].sub == -1 &&
+		  bomRefs[0].path == "/shots/a/sh010.0001.exr" &&
+		  bomRefs[1].kind == Kind::Playlist && bomRefs[1].index == 0 && bomRefs[1].sub == 0 &&
+		  bomRefs[1].path == "/shots/b/sh020.0001.exr" &&
+		  bomRefs[2].kind == Kind::Playlist && bomRefs[2].index == 0 && bomRefs[2].sub == 1 &&
+		  bomRefs[2].path == "/shots/a/sh010.0001.exr",
+		  "a leading UTF-8 BOM does not break parsing -- the same 3 media refs are listed");
 
 	std::vector<std::string> luts;
 	check(listLutNames(xml, luts, &err) &&
