@@ -27,6 +27,7 @@
 #include "gfcStructures.h"
 #include "gfcSha1.h"
 #include "gfcTarArchive.h"
+#include "gfcMediaFingerprint.h"
 #include "gfcnote.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteOverlay.h"
@@ -314,13 +315,14 @@ int main(int argc, char* argv[]) {
         const int pdfFail     = jefe::qt::reviewSummaryPdfSelfTest();
         const int sha1Fail    = sha1SelfTest();
         const int tarFail     = tarSelfTest();
+        const int fingerprintFail = mediaFingerprintSelfTest();
         // The self-tests print via std::printf but do not flush; std::_Exit
         // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
         // stdout not a tty) would silently drop all three lines.
         std::fflush(stdout);
         std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
                     stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
-                    tarFail == 0) ? 0 : 2);
+                    tarFail == 0 && fingerprintFail == 0) ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
