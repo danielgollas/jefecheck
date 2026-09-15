@@ -42,6 +42,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSettings>
 #include <QShortcut>
 #include <QStandardPaths>
@@ -2964,7 +2965,9 @@ int MainWindow_Qt::runHeadlessPackageDialogTest(const QString& imagePath) {
 
     check(ReviewPackageDialog_Qt::formatBytes(0) == "0 B" &&
           ReviewPackageDialog_Qt::formatBytes(1536) == "1.5 KB" &&
-          ReviewPackageDialog_Qt::formatBytes(5LL * 1024 * 1024 * 1024) == "5.0 GB",
+          ReviewPackageDialog_Qt::formatBytes(5LL * 1024 * 1024 * 1024) == "5.0 GB" &&
+          ReviewPackageDialog_Qt::formatBytes(1023) == "1023 B" &&
+          ReviewPackageDialog_Qt::formatBytes(1048525) == "1.0 MB",
           "sizes are formatted for people");
 
     ReviewPackageDialog_Qt dialog(
@@ -2993,6 +2996,10 @@ int MainWindow_Qt::runHeadlessPackageDialogTest(const QString& imagePath) {
     const QString cancelled = work + "/cancelled.jcreview";
     dialog.setOutputPath(cancelled);
     dialog.startExport();
+    {
+        QPushButton* cancelButton = dialog.findChild<QPushButton*>("dialog.package.cancel.button");
+        check(cancelButton && cancelButton->text() == tr("Cancel"), "a new export shows Cancel, not Close");
+    }
     dialog.cancelExport();
     QCoreApplication::processEvents();
     check(!dialog.isRunning() && !QFileInfo::exists(cancelled) && !QFileInfo::exists(cancelled + ".partial"),

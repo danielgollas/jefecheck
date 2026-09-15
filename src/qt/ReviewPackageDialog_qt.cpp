@@ -12,6 +12,8 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include <cmath>
+
 #include "qticons.h"
 
 ReviewPackageDialog_Qt::ReviewPackageDialog_Qt(Gather gather, qint64 mediaBytes, QWidget* parent)
@@ -98,6 +100,13 @@ QString ReviewPackageDialog_Qt::formatBytes(qint64 bytes) {
         value /= 1024.0;
         ++unit;
     }
+    // Rounding to one decimal can carry the displayed value up to 1024 (e.g.
+    // 1048525 bytes is 1023.95 KB, which rounds to "1024.0 KB"); bump the
+    // unit once more so the value shown is always what actually displays.
+    if (unit > 0 && unit < 4 && std::round(value * 10.0) / 10.0 >= 1024.0) {
+        value /= 1024.0;
+        ++unit;
+    }
     if (unit == 0) return QString("%1 B").arg(bytes);
     return QString("%1 %2").arg(value, 0, 'f', 1).arg(units[unit]);
 }
@@ -128,6 +137,7 @@ void ReviewPackageDialog_Qt::startExport() {
     }
     outPath_ = out;
     running_ = true;
+    cancelButton_->setText(tr("Cancel"));
     progress_->setValue(0);
     statusLabel_->setText(tr("Writing %1…").arg(QFileInfo(out).fileName()));
     setInputsEnabled(false);
