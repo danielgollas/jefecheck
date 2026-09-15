@@ -51,6 +51,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -2736,8 +2737,13 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     jefe::qt::saveSession(after.toStdString());
     auto plateAttr = [&readBytes](const QString& jcs, const char* name) {
         const QByteArray xml = readBytes(jcs);
+        // A saved .jcs always starts with a UTF-8 BOM (gfcSessionManager
+        // writes one); XMLNode::parseString, unlike parseFile, does not skip
+        // it on its own -- same 3-byte skip as gfcSessionPaths.cpp's parseRoot.
+        const char* text = xml.constData();
+        if (xml.size() >= 3 && memcmp(text, "\xEF\xBB\xBF", 3) == 0) text += 3;
         XMLResults results;
-        XMLNode top = XMLNode::parseString(xml.constData(), NULL, &results);
+        XMLNode top = XMLNode::parseString(text, NULL, &results);
         XMLNode plate = top.getChildNode("root").getChildNode("plates").getChildNode("plate", 0);
         XMLCSTR value = plate.isEmpty() ? nullptr : plate.getAttribute(name);
         return QString(value ? value : "");
