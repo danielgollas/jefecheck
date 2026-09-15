@@ -87,6 +87,14 @@ struct ScopedFlag {
     explicit ScopedFlag(bool* f) : flag(f) { *flag = true; }
     ~ScopedFlag() { *flag = false; }
 };
+
+// Snapshots Recent Sessions and puts it back on every return path. Saving or
+// loading a session pushes its path onto the list, which a temporary or
+// extracted session must not leave behind.
+struct RecentSessionsGuard {
+    const std::vector<std::string> saved = jefe::qt::getRecentSessions();
+    ~RecentSessionsGuard() { jefe::qt::setRecentSessions(saved); }
+};
 }
 
 MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
@@ -2506,6 +2514,7 @@ bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia
         return false;
     }
     const QString sessionFile = tempDir.filePath("session.jcs");
+    const RecentSessionsGuard keepRecents;   // the temp session must not stay on Recent Sessions
     if (!jefe::qt::saveSession(sessionFile.toStdString())) {
         say(tr("Cannot save the session"));
         return false;
@@ -2688,11 +2697,19 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
         jefe::qt::applyLUTToPlate(0, int(lutPos - lutNames.begin()) + 1);
     }
 
+    // Exporting saves the session to a temporary file and opening loads the
+    // extracted one; neither may leave its path on Recent Sessions. A known,
+    // non-empty list makes the comparison meaningful.
+    const std::vector<std::string> knownRecents = { (work + "/earlier.jcs").toStdString(),
+                                                    (work + "/earliest.jcs").toStdString() };
+    jefe::qt::setRecentSessions(knownRecents);
+
     PackageStats stats;
     QString msg;
     const QString withMedia = work + "/with.jcreview";
     check(exportReviewPackage(withMedia, true, &stats, &msg), "package with media exported");
     printf("PACKAGE-TEST export: %s\n", qPrintable(msg));
+    check(jefe::qt::getRecentSessions() == knownRecents, "exporting leaves Recent Sessions unchanged");
     check(stats.media == 1 && stats.mediaIncluded && stats.bytes > QFileInfo(media).size(),
           "stats: one media, included, larger than the image");
 
@@ -2751,8 +2768,10 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     // Round trip: open the package with media.
     const QString before = work + "/before.jcs";
     jefe::qt::saveSession(before.toStdString());
+    jefe::qt::setRecentSessions(knownRecents);   // the save above pushed before.jcs
     check(openReviewPackage(withMedia, false, &stats, &msg), "the package with media opens");
     printf("PACKAGE-TEST open: %s\n", qPrintable(msg));
+    check(jefe::qt::getRecentSessions() == knownRecents, "opening leaves Recent Sessions unchanged");
     check(stats.resolved == 1 && stats.missing == 0, "media resolved from the package");
     const QString loaded = QString::fromStdString(jefe::qt::getTrackParams(0).filename);
     check(!stats.extractDir.isEmpty() &&
@@ -2852,10 +2871,14 @@ bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interacti
         return false;
     }
 
-    viewport_->makeCurrent();   // loadSession uploads preview textures
-    const bool loaded = jefe::qt::loadSession(result.sessionPath);
-    if (loaded) jefe::qt::startLoadingAllTracks();
-    viewport_->doneCurrent();
+    bool loaded = false;
+    {
+        const RecentSessionsGuard keepRecents;   // the extracted session is not one the user chose
+        viewport_->makeCurrent();   // loadSession uploads preview textures
+        loaded = jefe::qt::loadSession(result.sessionPath);
+        if (loaded) jefe::qt::startLoadingAllTracks();
+        viewport_->doneCurrent();
+    }
     if (!loaded) {
         // By this point the package's LUTs are loaded and its notes are
         // merged into the local sidecars (openPackage already did both) --
