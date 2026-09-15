@@ -60,36 +60,85 @@ QString noteLine(const gfcReviewSummary::Note& n) {
     return s;
 }
 
-// Computes the height of a frame entry (thumbnail on left, text on right).
-// Used both to reserve space in the header's ensureRoom() and to measure the
-// entry itself, so both passes make identical decisions.
-int computeFrameEntryHeight(const gfcReviewSummary::Frame& f, QPdfWriter& pdf, 
-                             const Fonts& fonts, int W,
-                             const std::function<int(const QFont&, const QString&, int)>& measure) {
-    const int thumbW = mm(80);
-    QImage img;
-    if (!f.thumbnailPath.empty()) img.load(qs(f.thumbnailPath));
-    const int thumbH = (img.isNull() || img.width() <= 0)
-                       ? mm(45)
-                       : std::max(1, int(double(thumbW) * img.height() / img.width() + 0.5));
-    const int textX = thumbW + mm(5);
-    const int textW = W - textX;
-    const int noteW = textW - mm(5);
+/** Where everything in one frame entry goes: thumbnail on the left, frame
+    label and note lines on the right. Measuring and drawing both use this, so
+    the page-break decisions and the drawing always agree. */
+struct FrameEntryLayout {
+    QImage img;                     // null when the thumbnail is unavailable
+    int thumbW = 0;                 // drawn thumbnail size
+    int thumbH = 0;
+    int textX = 0;
+    int textW = 0;
+    int noteX = 0;
+    int noteW = 0;
+    QString label;
+    int labelH = 0;
+    std::vector<int> noteHeights;   // one per note shown, in stored order
+    int hiddenNotes = 0;            // notes left out behind moreLine
+    QString moreLine;               // "+N more notes", empty when none are hidden
+    int moreH = 0;
+    int height = 0;                 // whole entry
+};
 
-    const QString label = qs(gfcReviewSummary::frameLabel(f));
-    const int labelH = measure(fonts.frame, label, textW);
-    int textH = labelH + mm(1);
-    for (const gfcReviewSummary::Note& n : f.notes) {
-        const int nh = std::max(measure(fonts.body, noteLine(n), noteW), mm(3.5));
-        textH += nh + mm(1);
+/** Lays out @a f within @a maxHeight. Entries are never split across pages,
+    so a note list taller than that is cut to the notes that fit and closed
+    with a "+N more notes" line (the TXT and CSV outputs still list them all). */
+FrameEntryLayout layoutFrameEntry(const gfcReviewSummary::Frame& f, const Fonts& fonts, int W, int maxHeight,
+                                  const std::function<int(const QFont&, const QString&, int)>& measure) {
+    FrameEntryLayout e;
+    const int column = mm(80);
+    if (!f.thumbnailPath.empty()) e.img.load(qs(f.thumbnailPath));
+    e.thumbW = column;
+    e.thumbH = (e.img.isNull() || e.img.width() <= 0)
+               ? mm(45)
+               : std::max(1, int(double(column) * e.img.height() / e.img.width() + 0.5));
+    if (e.thumbH > maxHeight) {
+        // A very tall image: shrink it to the page, keeping its aspect.
+        e.thumbW = std::max(1, int(double(e.thumbW) * maxHeight / e.thumbH + 0.5));
+        e.thumbH = maxHeight;
     }
-    return std::max(thumbH, textH);
+    e.textX = column + mm(5);
+    e.textW = W - e.textX;
+    e.noteX = e.textX + mm(5);
+    e.noteW = e.textW - mm(5);
+
+    const int gap = mm(1);
+    e.label = qs(gfcReviewSummary::frameLabel(f));
+    e.labelH = measure(fonts.frame, e.label, e.textW);
+    int textH = e.labelH + gap;
+    const int total = int(f.notes.size());
+    e.moreH = std::max(measure(fonts.body, "+" + counted(total, "more note", "more notes"), e.noteW), mm(3.5));
+    for (int i = 0; i < total; ++i) {
+        const int nh = std::max(measure(fonts.body, noteLine(f.notes[i]), e.noteW), mm(3.5));
+        // Keep room for the "+N more notes" line unless this is the last note.
+        const int reserve = (i == total - 1) ? 0 : e.moreH + gap;
+        if (textH + nh + gap + reserve > maxHeight) break;
+        e.noteHeights.push_back(nh);
+        textH += nh + gap;
+    }
+    e.hiddenNotes = total - int(e.noteHeights.size());
+    if (e.hiddenNotes > 0) {
+        e.moreLine = "+" + counted(e.hiddenNotes, "more note", "more notes");
+        textH += e.moreH + gap;
+    }
+    e.height = std::max(e.thumbH, textH);
+    return e;
 }
+
+// Where one frame entry landed (for self-test).
+struct EntryTrace {
+    int page = 0;
+    int top = 0;
+    int bottom = 0;        // top + entry height
+    int hiddenNotes = 0;   // notes left out behind "+N more notes"
+};
 
 // Trace of round-header and first-entry page assignments (for self-test).
 struct LayoutTrace {
     std::vector<int> roundHeaderPages;     // page of each round header
     std::vector<int> roundFirstEntryPages; // page of first frame in each round (-1 if no frames)
+    std::vector<EntryTrace> entries;       // every frame entry, in layout order
+    int footerTop = 0;                     // y where the footer band starts
 };
 
 // Walks the whole document. With painter == nullptr it only measures and
@@ -105,6 +154,7 @@ int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Do
     const int bottom = H - footerH;
     int page = 1;
     int y = 0;
+    if (trace) trace->footerTop = bottom;
 
     auto measure = [&](const QFont& font, const QString& text, int width) {
         const QFontMetricsF fm(font, &pdf);
@@ -164,14 +214,18 @@ int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Do
                                    " " + emDash() + " created " + qs(gfcReviewSummary::isoUtc(r.created)) +
                                    " " + emDash() + " " + (r.locked ? "locked" : "open");
             const int headerH = measure(fonts.round, header, W);
-            
-            // Compute the height of the first entry (if any) to reserve accurate space.
+            // The first entry shares its page with the round header, so it gets
+            // the page minus the header; later entries get a whole page.
+            const int firstEntryMaxH = bottom - (headerH + mm(2));
+
+            // Reserve the header plus the first entry (if any), so the header is
+            // never left alone at the bottom of a page.
             int firstEntryH = 0;
             if (r.frames.empty()) {
                 // "No notes" line is body text
                 firstEntryH = measure(fonts.body, QStringLiteral("No notes"), W);
             } else {
-                firstEntryH = computeFrameEntryHeight(r.frames[0], pdf, fonts, W, measure);
+                firstEntryH = layoutFrameEntry(r.frames[0], fonts, W, firstEntryMaxH, measure).height;
             }
             ensureRoom(headerH + mm(2) + firstEntryH);
             if (trace) trace->roundHeaderPages.push_back(page);
@@ -186,38 +240,16 @@ int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Do
             
             bool firstEntry = true;
             for (const gfcReviewSummary::Frame& f : r.frames) {
-                const int entryH = computeFrameEntryHeight(f, pdf, fonts, W, measure);
-                ensureRoom(entryH);
-                if (firstEntry && trace) {
-                    trace->roundFirstEntryPages.push_back(page);
-                    firstEntry = false;
-                }
-
-                const int thumbW = mm(80);
-                QImage img;
-                if (!f.thumbnailPath.empty()) img.load(qs(f.thumbnailPath));
-                const int thumbH = (img.isNull() || img.width() <= 0)
-                                   ? mm(45)
-                                   : std::max(1, int(double(thumbW) * img.height() / img.width() + 0.5));
-                const int textX = thumbW + mm(5);
-                const int textW = W - textX;
-                const int noteX = textX + mm(5);
-                const int noteW = textW - mm(5);
-
-                const QString label = qs(gfcReviewSummary::frameLabel(f));
-                const int labelH = measure(fonts.frame, label, textW);
-                std::vector<int> noteHeights;
-                int textH = labelH + mm(1);
-                for (const gfcReviewSummary::Note& n : f.notes) {
-                    const int nh = std::max(measure(fonts.body, noteLine(n), noteW), mm(3.5));
-                    noteHeights.push_back(nh);
-                    textH += nh + mm(1);
-                }
-                // Note: entryH already computed above; we've verified it fits
+                const FrameEntryLayout e =
+                    layoutFrameEntry(f, fonts, W, firstEntry ? firstEntryMaxH : bottom, measure);
+                ensureRoom(e.height);
+                if (firstEntry && trace) trace->roundFirstEntryPages.push_back(page);
+                firstEntry = false;
+                if (trace) trace->entries.push_back(EntryTrace{page, y, y + e.height, e.hiddenNotes});
 
                 if (painter) {
-                    const QRect thumbRect(0, y, thumbW, thumbH);
-                    if (img.isNull()) {
+                    const QRect thumbRect(0, y, e.thumbW, e.thumbH);
+                    if (e.img.isNull()) {
                         painter->setPen(QPen(Qt::gray, mm(0.3)));
                         painter->setBrush(Qt::NoBrush);
                         painter->drawRect(thumbRect);
@@ -226,22 +258,25 @@ int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Do
                                           QStringLiteral("thumbnail unavailable"));
                         painter->setPen(Qt::black);
                     } else {
-                        painter->drawImage(thumbRect, img);
+                        painter->drawImage(thumbRect, e.img);
                     }
                     int ty = y;
-                    drawText(fonts.frame, label, textX, ty, textW, labelH);
-                    ty += labelH + mm(1);
-                    for (size_t ni = 0; ni < f.notes.size(); ++ni) {
+                    drawText(fonts.frame, e.label, e.textX, ty, e.textW, e.labelH);
+                    ty += e.labelH + mm(1);
+                    for (size_t ni = 0; ni < e.noteHeights.size(); ++ni) {
                         const gfcReviewSummary::Note& n = f.notes[ni];
                         const QColor swatch = QColor::fromRgbF(std::clamp(n.r, 0.0f, 1.0f),
                                                                std::clamp(n.g, 0.0f, 1.0f),
                                                                std::clamp(n.b, 0.0f, 1.0f));
-                        painter->fillRect(QRect(textX, ty + mm(0.6), mm(3), mm(3)), swatch);
-                        drawText(fonts.body, noteLine(n), noteX, ty, noteW, noteHeights[ni]);
-                        ty += noteHeights[ni] + mm(1);
+                        painter->fillRect(QRect(e.textX, ty + mm(0.6), mm(3), mm(3)), swatch);
+                        drawText(fonts.body, noteLine(n), e.noteX, ty, e.noteW, e.noteHeights[ni]);
+                        ty += e.noteHeights[ni] + mm(1);
+                    }
+                    if (!e.moreLine.isEmpty()) {
+                        drawText(fonts.body, e.moreLine, e.noteX, ty, e.noteW, e.moreH);
                     }
                 }
-                y += entryH + mm(5);
+                y += e.height + mm(5);
             }
         }
     }
@@ -458,6 +493,57 @@ int reviewSummaryPdfSelfTest() {
         headerPageMismatch = true;
     }
     check(!headerPageMismatch, "round headers on same page as first entry");
+
+    // A frame entry with more notes than one page can hold is capped to what
+    // fits next to its thumbnail, with a "+N more notes" line -- entries are
+    // never split, so an uncapped one would run past the footer line.
+    gfcReviewSummary::Doc docLong;
+    docLong.title = "Long entry test";
+    docLong.exportedAt = 1789400000;
+    docLong.appVersion = "1.7.0";
+    gfcReviewSummary::Media longMedia;
+    longMedia.mediaPath = "/test/long.exr";
+    longMedia.displayName = "long.exr";
+    gfcReviewSummary::Round longRound;
+    longRound.id = "r1";
+    longRound.author = "Supervisor";
+    longRound.created = 1789400000;
+    gfcReviewSummary::Frame longFrame;
+    longFrame.frame = 7;
+    longFrame.thumbnailPath = thumbPath.toStdString();
+    for (int j = 0; j < 80; ++j) {
+        gfcReviewSummary::Note n;
+        n.id = "n_long_" + std::to_string(j);
+        n.type = "text";
+        n.author = "Supervisor";
+        n.from = 7;
+        n.to = 7;
+        n.text = "note " + std::to_string(j + 1);
+        longFrame.notes.push_back(n);
+    }
+    longRound.frames.push_back(longFrame);
+    longMedia.rounds.push_back(longRound);
+    docLong.media = {longMedia};
+
+    const QString outLong = dir + "/long_entry.pdf";
+    int pagesLong = 0;
+    QString errLong;
+    LayoutTrace traceLong;
+    check(writeReviewSummaryPdfWithTrace(docLong, outLong, &pagesLong, &errLong, &traceLong),
+          "long-entry document renders");
+    bool longFits = !traceLong.entries.empty() && traceLong.footerTop > 0;
+    bool longCapped = !traceLong.entries.empty();
+    for (const EntryTrace& e : traceLong.entries) {
+        std::printf("NOTE-SUMMARY-PDF long entry: page=%d top=%d bottom=%d footerTop=%d hidden=%d\n",
+                    e.page, e.top, e.bottom, traceLong.footerTop, e.hiddenNotes);
+        if (e.bottom > traceLong.footerTop) longFits = false;
+        if (e.hiddenNotes <= 0 || e.hiddenNotes >= 80) longCapped = false;
+    }
+    check(longFits, "an 80-note entry ends above the footer line");
+    check(longCapped, "an 80-note entry hides the notes that do not fit behind +N more notes");
+    check(!traceLong.roundHeaderPages.empty() &&
+          traceLong.roundHeaderPages == traceLong.roundFirstEntryPages,
+          "an 80-note entry stays on its round header's page");
 
     std::printf("NOTE-SUMMARY-PDF: pass=%d fail=%d\n", pass, fail);
     return fail;
