@@ -8,10 +8,10 @@
 #include "gfcnotebox.h"
 #include "gfcnotetext.h"
 
+#include "gfcSha1.h"
 #include "xmlParser.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -36,122 +36,6 @@ namespace
 		return re;
 	}
 
-	// ---- minimal self-contained SHA-1 -------------------------------------
-	// Only used to name the fallback sidecar file so two different sequence
-	// paths never collide. Deliberately not sharing RakNet's CSHA1 (src/SHA1.h)
-	// here -- that header drags in RakMemoryOverride.h/Export.h from the
-	// networking side of the tree, and this store owns exactly two files
-	// (src/gfcNoteStore.{h,cpp}) per the plan's file-ownership map, so it
-	// stays fully self-contained instead of creating a cross-module coupling
-	// nobody asked for. Public-domain algorithm (FIPS PUB 180-1).
-	struct Sha1State
-	{
-		uint32_t h[5] = {0x67452301u, 0xEFCDAB89u, 0x98BADCFEu, 0x10325476u, 0xC3D2E1F0u};
-		uint64_t bitLen = 0;
-		unsigned char buffer[64];
-		size_t bufferLen = 0;
-
-		static uint32_t rol(uint32_t v, int bits) { return (v << bits) | (v >> (32 - bits)); }
-
-		void processBlock(const unsigned char* p)
-		{
-			uint32_t w[80];
-			for (int i = 0; i < 16; ++i)
-			{
-				w[i] = (static_cast<uint32_t>(p[i * 4]) << 24) |
-					   (static_cast<uint32_t>(p[i * 4 + 1]) << 16) |
-					   (static_cast<uint32_t>(p[i * 4 + 2]) << 8) |
-					   (static_cast<uint32_t>(p[i * 4 + 3]));
-			}
-			for (int i = 16; i < 80; ++i)
-			{
-				w[i] = rol(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
-			}
-
-			uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4];
-			for (int i = 0; i < 80; ++i)
-			{
-				uint32_t f, k;
-				if (i < 20)      { f = (b & c) | ((~b) & d);        k = 0x5A827999u; }
-				else if (i < 40) { f = b ^ c ^ d;                   k = 0x6ED9EBA1u; }
-				else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDCu; }
-				else             { f = b ^ c ^ d;                   k = 0xCA62C1D6u; }
-
-				uint32_t temp = rol(a, 5) + f + e + k + w[i];
-				e = d; d = c; c = rol(b, 30); b = a; a = temp;
-			}
-
-			h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e;
-		}
-
-		void update(const unsigned char* data, size_t len)
-		{
-			bitLen += static_cast<uint64_t>(len) * 8;
-			while (len > 0)
-			{
-				size_t take = std::min(len, sizeof(buffer) - bufferLen);
-				std::memcpy(buffer + bufferLen, data, take);
-				bufferLen += take;
-				data += take;
-				len -= take;
-				if (bufferLen == sizeof(buffer))
-				{
-					processBlock(buffer);
-					bufferLen = 0;
-				}
-			}
-		}
-	};
-
-	// Runs Merkle-Damgard padding (0x80, zero pad to 56 mod 64, then the
-	// ORIGINAL bit length as big-endian 64-bit) and returns the digest as
-	// lowercase hex. A free function rather than a method on Sha1State so
-	// the "original bit length" is a local captured before update() mutates
-	// state.bitLen with the padding bytes.
-
-	std::string sha1Hex(const std::string& input)
-	{
-		Sha1State state;
-		const uint64_t originalBitLen = static_cast<uint64_t>(input.size()) * 8;
-		state.update(reinterpret_cast<const unsigned char*>(input.data()), input.size());
-
-		// Standard SHA-1 finish: append 0x80, zero-pad to 56 bytes mod 64,
-		// then the ORIGINAL bit length as a big-endian 64-bit integer.
-		unsigned char pad = 0x80;
-		state.update(&pad, 1);
-		unsigned char zero = 0x00;
-		while (state.bufferLen != 56)
-		{
-			state.update(&zero, 1);
-		}
-		unsigned char lenBytes[8];
-		for (int i = 0; i < 8; ++i)
-		{
-			lenBytes[7 - i] = static_cast<unsigned char>(originalBitLen >> (8 * i));
-		}
-		std::memcpy(state.buffer + 56, lenBytes, 8);
-		state.processBlock(state.buffer);
-		state.bufferLen = 0;
-
-		unsigned char digest[20];
-		for (int i = 0; i < 5; ++i)
-		{
-			digest[i * 4]     = static_cast<unsigned char>(state.h[i] >> 24);
-			digest[i * 4 + 1] = static_cast<unsigned char>(state.h[i] >> 16);
-			digest[i * 4 + 2] = static_cast<unsigned char>(state.h[i] >> 8);
-			digest[i * 4 + 3] = static_cast<unsigned char>(state.h[i]);
-		}
-
-		static const char hexDigits[] = "0123456789abcdef";
-		std::string out;
-		out.reserve(40);
-		for (unsigned char byte : digest)
-		{
-			out.push_back(hexDigits[(byte >> 4) & 0xF]);
-			out.push_back(hexDigits[byte & 0xF]);
-		}
-		return out;
-	}
 
 	// <sequence_dir>/<basename>.jnotes -- basename has the frame-number
 	// segment AND the extension stripped (sh010_v003.####.exr -> sh010_v003).
@@ -184,7 +68,7 @@ namespace
 	{
 		const char* home = std::getenv("HOME");
 		std::string homeDir = (home && *home) ? home : ".";
-		return homeDir + "/.config/jefecheck/notes/" + sha1Hex(normalisedPath) + ".jnotes";
+		return homeDir + "/.config/jefecheck/notes/" + gfcSha1::hex(normalisedPath) + ".jnotes";
 	}
 
 	// Detect unwritability by attempting a real write, never by inspecting
