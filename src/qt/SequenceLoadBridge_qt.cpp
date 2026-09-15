@@ -2759,6 +2759,8 @@ bool isInstallLutPath(const std::string& path) {
     return false;
 }
 
+std::string appVersion() { return JEFE_VERSION; }
+
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,
                        NoteStampResult& result) {

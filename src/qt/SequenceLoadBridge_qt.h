@@ -1151,6 +1151,10 @@ std::string lutSourcePath(const std::string& lutName);
 /** Whether @a path lies inside a directory LUTs autoload from (sett.lutPath, the bundle FX/, ./FX/). */
 bool isInstallLutPath(const std::string& path);
 
+/** JEFE_VERSION (gfcStructures.h), for callers that cannot include that header
+    themselves (it drags glad, which doesn't share a TU with Qt's QtGui on macOS). */
+std::string appVersion();
+
 /**
  * Put one of each note type on a plate, for --notes-demo. Coordinates are
  * literal normalised values so the result is identical every run, which is

@@ -2453,10 +2453,17 @@ bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia
         return false;
     }
 
-    const QString dir = QDir::tempPath() + "/jefecheck_package_" +
-                        QString::number(QDateTime::currentMSecsSinceEpoch());
-    QDir().mkpath(dir);
-    const QString sessionFile = dir + "/session.jcs";
+    // A QTemporaryDir removes itself (and the session copy it holds) when it
+    // goes out of scope, on every return path -- the session bytes only need
+    // to pass through disk because saveSession() writes a file, not a string;
+    // once read into input.sessionXml below, the copy on disk serves no
+    // further purpose.
+    QTemporaryDir tempDir;
+    if (!tempDir.isValid()) {
+        say(tr("Cannot create a temporary directory"));
+        return false;
+    }
+    const QString sessionFile = tempDir.filePath("session.jcs");
     if (!jefe::qt::saveSession(sessionFile.toStdString())) {
         say(tr("Cannot save the session"));
         return false;
@@ -2471,18 +2478,7 @@ bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia
     input.outPath = outPath.toStdString();
     input.includeMedia = includeMedia;
     input.sessionXml = saved.readAll().toStdString();
-    // gfcSessionPaths::parseRoot (Task 4) calls XMLNode::parseString directly,
-    // which -- unlike XMLNode::parseFile -- does not skip a leading UTF-8 BOM;
-    // a saved .jcs always has one, so both listLutNames() below and the
-    // Exporter's own listMedia()/rewriteMedia() would otherwise fail with
-    // "session XML has no <root>".
-    if (input.sessionXml.compare(0, 3, "\xEF\xBB\xBF") == 0) input.sessionXml.erase(0, 3);
-    // Hardcoded copy of gfcStructures.h's JEFE_VERSION -- can't include the
-    // header here because it pulls glad, which doesn't share a TU with Qt's
-    // QtGui on macOS (see the About dialog above). Bumped together with the
-    // source-of-truth define and CMakeLists.txt's project() VERSION, per
-    // CLAUDE.md.
-    input.appVersion = "1.7.0";
+    input.appVersion = jefe::qt::appVersion();
     input.createdIso = gfcReviewSummary::isoUtc(time(nullptr));
 
     for (const jefe::qt::SessionMedia& m : media) {
@@ -2611,6 +2607,45 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     const std::string mediaKey = gfcNoteStore::normalisePath(media.toStdString());
     const std::string imageName = QFileInfo(media).fileName().toStdString();
 
+    // A LUT outside the install path, assigned to plate 0, so the with-media
+    // export below also proves the LUT-packaging path (listLutNames ->
+    // lutSourcePath -> isInstallLutPath -> input.luts). A minimal but valid
+    // Truelight Cube v2.0 (the only format loadLUT's ".cube" branch reads):
+    // a header, a "# width" line giving the cube's edge length, a "# Cube"
+    // marker, then edge^3 whitespace-separated RGB triads.
+    const QString lutPath = work + "/review_test.cube";
+    {
+        QFile f(lutPath);
+        check(f.open(QIODevice::WriteOnly) &&
+              f.write("# Truelight Cube v2.0\n"
+                      "# width 2 2 2\n"
+                      "# Cube\n"
+                      "0.0 0.0 0.0\n"
+                      "1.0 0.0 0.0\n"
+                      "0.0 1.0 0.0\n"
+                      "1.0 1.0 0.0\n"
+                      "0.0 0.0 1.0\n"
+                      "1.0 0.0 1.0\n"
+                      "0.0 1.0 1.0\n"
+                      "1.0 1.0 1.0\n") > 0,
+              "test LUT written");
+    }
+    const std::string lutName = QFileInfo(lutPath).fileName().toStdString();
+    // gfcLUTManager::loadLUT() calls CubeLUT::create3DTexture(), which needs
+    // a current GL context (same requirement stampNotesIntoExr documents).
+    viewport_->makeCurrent();
+    jefe::qt::loadLUTFile(lutPath.toStdString());
+    viewport_->doneCurrent();
+    const std::vector<std::string> lutNames = jefe::qt::getLutNames();
+    const auto lutPos = std::find(lutNames.begin(), lutNames.end(), lutName);
+    check(lutPos != lutNames.end(), "test LUT loaded");
+    if (lutPos != lutNames.end()) {
+        // applyLUTToPlate() takes the GUI's row index: 0 = "(No LUT)",
+        // row r>=1 = lutManager entry r-1 -- so the position found above
+        // (a raw lutManager index) needs +1.
+        jefe::qt::applyLUTToPlate(0, int(lutPos - lutNames.begin()) + 1);
+    }
+
     PackageStats stats;
     QString msg;
     const QString withMedia = work + "/with.jcreview";
@@ -2649,6 +2684,11 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     check(gfcNoteStore::load(mediaKey, onDisk) && !manifest.media.empty() &&
           onDisk.fingerprint == manifest.media[0].fingerprint,
           "the source sidecar now records the fingerprint");
+    const gfcTar::Entry* lut = reader.find("luts/" + lutName);
+    check(lut && reader.readBytes(*lut, bytes, &terr) && !bytes.empty(), "the LUT is packaged");
+    check(!manifest.luts.empty() && manifest.luts[0].name == lutName &&
+          manifest.luts[0].file == "luts/" + lutName,
+          "the manifest lists the packaged LUT");
 
     const QString withoutMedia = work + "/without.jcreview";
     check(exportReviewPackage(withoutMedia, false, &stats, &msg), "package without media exported");
