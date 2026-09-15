@@ -10,6 +10,7 @@
 #ifndef JEFECHECK_QT_MAIN_WINDOW_H
 #define JEFECHECK_QT_MAIN_WINDOW_H
 
+#include <QImage>
 #include <QMainWindow>
 
 #include <memory>
@@ -73,7 +74,8 @@ public:
         int notes = 0;
         int thumbs = 0;
         int thumbFail = 0;
-        QString firstThumbnail;   // PDF only: the first thumbnail rendered (for tests)
+        QImage firstThumbnail;    // PDF only: the first thumbnail rendered (for tests)
+        QString tempDir;          // PDF only: the export's temporary directory, gone on return (for tests)
     };
 
     /**
@@ -183,11 +185,14 @@ private:
     void startAutoload();
     void autoloadStep();
 
-    /** Renders one thumbnail per frame entry of @a doc into a temporary directory
-        (through the plate pipeline, that round's notes burned in), then restores
-        the plates' notes, the session and the current frame. */
+    /** Renders one thumbnail per frame entry of @a doc into @a dir (through the
+        plate pipeline, that round's notes burned in), then puts back what that
+        changed: the plates' notes, the tracks (by reopening a session saved in
+        @a dir, only if a playlist item was loaded), the in/out points, the
+        playlist selection, Recent Sessions, the current frame and playback. */
     void renderSummaryThumbnails(const std::vector<jefe::qt::SessionMedia>& media,
-                                 gfcReviewSummary::Doc& doc, ReviewSummaryStats* stats);
+                                 gfcReviewSummary::Doc& doc, const QString& dir,
+                                 ReviewSummaryStats* stats);
 
     class LoadWindowDialog_Qt* loadWindowDialog_ = nullptr;
     RemoteDialog_Qt* remoteDialog_ = nullptr;

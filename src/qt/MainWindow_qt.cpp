@@ -44,12 +44,14 @@
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QTemporaryDir>
 #include <QElapsedTimer>
 #include <QThread>
 #include <QTimer>
 
 #include <algorithm>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 
 #include "../gfcReviewSummary.h"
@@ -1823,7 +1825,16 @@ bool MainWindow_Qt::exportReviewSummary(const QString& outPath, ReviewSummarySta
     s.notes = gfcReviewSummary::noteCount(doc);
 
     if (suffix == "pdf") {
-        renderSummaryThumbnails(media, doc, &s);
+        // Thumbnails, and the session saved to put a playlist item's tracks
+        // back, live in a temporary directory that is removed when this block
+        // ends -- once the PDF has been written, or has failed.
+        QTemporaryDir tempDir(QDir::tempPath() + "/jefecheck_summary_XXXXXX");
+        if (!tempDir.isValid()) {
+            say(tr("Cannot create a temporary directory for the thumbnails"));
+            return false;
+        }
+        s.tempDir = tempDir.path();
+        renderSummaryThumbnails(media, doc, tempDir.path(), &s);
         int pages = 0;
         QString err;
         if (!jefe::qt::writeReviewSummaryPdf(doc, outPath, &pages, &err)) {
@@ -1848,44 +1859,68 @@ bool MainWindow_Qt::exportReviewSummary(const QString& outPath, ReviewSummarySta
 }
 
 void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionMedia>& media,
-                                            gfcReviewSummary::Doc& doc, ReviewSummaryStats* stats) {
-    const QString dir = QDir::tempPath() + "/jefecheck_summary_" +
-                        QString::number(QDateTime::currentMSecsSinceEpoch());
-    QDir().mkpath(dir);
-    const QString restore = dir + "/restore.jcs";
-    const bool saved = jefe::qt::saveSession(restore.toStdString());
+                                            gfcReviewSummary::Doc& doc, const QString& dir,
+                                            ReviewSummaryStats* stats) {
+    // What the export changes, put back when it is done.
     const int savedFrame = jefe::qt::getCurrentFrame();
+    const int savedIn = jefe::qt::getInPoint();
+    const int savedOut = jefe::qt::getOutPoint();
+    const int savedPlaylistItem = jefe::qt::getSelectedPlaylistItem();
+    const bool savedFromPlaylist = jefe::qt::currentContentIsPlaylistItem();
+    // Saving or opening a session pushes it onto Recent Sessions; the
+    // export's own temporary session must not stay there.
+    const std::vector<std::string> savedRecents = jefe::qt::getRecentSessions();
     // Playback would otherwise keep advancing frames (via playbackTimer_,
     // which the excluded-user-input event pump below still services) while
     // notes/frames are swapped out for rendering. Pause for the duration and
-    // resume afterward, once the session restore and seek have put the
-    // track/plate state back.
+    // resume at the end, once everything else is back.
     const bool wasPlaying = jefe::qt::isPlaying();
-    if (wasPlaying) jefe::qt::pausePlayback();
+
+    // In a live remote session, loads, seeks and play/pause are sent to the
+    // peers, and the export must send nothing. So it loads no playlist item
+    // (those entries count as thumbfail), starts no track load that announces
+    // itself, and mutes notifications around each step that changes shared
+    // state. Those steps pump no events, so an inbound message cannot unmute
+    // them halfway through.
+    const bool remote = jefe::qt::isRemoteConnected();
+    auto quietly = [remote](const std::function<void()>& step) {
+        if (remote) jefe::qt::setRemoteBroadcastsMuted(true);
+        step();
+        if (remote) jefe::qt::setRemoteBroadcastsMuted(false);
+    };
+
+    if (wasPlaying) quietly([] { jefe::qt::pausePlayback(); });
+
+    // A playlist item replaces every track, so the session is saved first and
+    // reopened at the end -- only when an item is going to be loaded.
+    bool needsPlaylistItem = false;
+    for (const jefe::qt::SessionMedia& m : media) {
+        if (m.track < 0 && m.playlistItem >= 0) needsPlaylistItem = true;
+    }
+    const QString restore = dir + "/restore.jcs";
+    const bool saved = needsPlaylistItem && !remote && jefe::qt::saveSession(restore.toStdString());
 
     // gfcSequence::forceLoad (what a forRender=true frame request falls back
     // to when a frame hasn't decoded yet) only works once the async loader
     // thread has reached that frame at least once -- its load params are
-    // recorded then. Immediately after (re)starting a track's load, frames
-    // are still empty, so a render right then writes nothing. Wait, bounded,
-    // draining the GL upload queue, until at least one frame has landed.
+    // recorded then. So the export waits, bounded, draining the GL upload
+    // queue: for a track's first frame before using the track, and for each
+    // frame it renders.
     //
     // Pumps the Qt event loop between polls (excluding user input, see
     // below) so timers, paints and accessibility keep running instead of
-    // stalling the GUI thread for up to the full timeout per track (4
-    // tracks x 5s after the restore reload) the way an unyielded
-    // shader-compile pass does (see autoloadFXsFromPath()'s comment in
-    // SequenceLoadBridge_qt.cpp for the same problem elsewhere).
+    // stalling the GUI thread for up to the full timeout per wait the way an
+    // unyielded shader-compile pass does (see autoloadFXsFromPath()'s comment
+    // in SequenceLoadBridge_qt.cpp for the same problem elsewhere).
     // summaryExportInProgress_ (set for the whole of exportReviewSummary)
     // keeps a second export from starting mid-wait; excluding user input
     // events here additionally queues any click/keystroke that arrives
     // during the wait instead of letting it interact with a half-restored
     // session.
-    auto waitForTrackFrame = [this](int track, int timeoutMs) {
+    auto waitUntil = [this](const std::function<bool()>& done, int timeoutMs) {
         QElapsedTimer waitTimer;
         waitTimer.start();
-        while (jefe::qt::getTrackTimelineState(track).loadedCount <= 0 &&
-               waitTimer.elapsed() < timeoutMs) {
+        while (!done() && waitTimer.elapsed() < timeoutMs) {
             if (jefe::qt::hasPendingTextureUploads()) {
                 viewport_->makeCurrent();
                 jefe::qt::uploadPendingTextures();
@@ -1901,27 +1936,70 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
             // export mid-wait; timers, paints and accessibility still run.
             QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         }
-        return jefe::qt::getTrackTimelineState(track).loadedCount > 0;
+        return done();
+    };
+    auto waitForTrackFrame = [&](int track) {
+        return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).loadedCount > 0; }, 5000);
+    };
+    // Whether @a frame of @a track can be rendered. A frame the loader has not
+    // reached gets the track's load restarted at it, and a wait for it --
+    // except where that restart would be announced to remote peers.
+    auto frameReady = [&](int track, int frame) {
+        if (jefe::qt::isTrackFrameReady(track, frame)) return true;
+        bool started = false;
+        viewport_->makeCurrent();   // restarting deletes the track's frame textures
+        quietly([&] { started = jefe::qt::restartTrackLoadAtFrame(track, frame, !remote); });
+        viewport_->doneCurrent();
+        return started &&
+               waitUntil([track, frame] { return jefe::qt::isTrackFrameReady(track, frame); }, 5000);
     };
 
+    int loadedPlaylistItem = -1;
     for (size_t mi = 0; mi < media.size() && mi < doc.media.size(); ++mi) {
         const jefe::qt::SessionMedia& m = media[mi];
         gfcReviewSummary::Media& entry = doc.media[mi];
         int track = m.track;
+        bool available = true;
         if (track < 0 && m.playlistItem >= 0) {
-            // Loads the item's tracks, FX stacks and program state: its reviewed look.
-            jefe::qt::loadPlaylistItem(m.playlistItem);
             track = m.playlistTrack;
+            if (!saved) {
+                // A remote session, or no saved session to put the tracks
+                // back from: leave the tracks alone.
+                available = false;
+            } else if (loadedPlaylistItem != m.playlistItem) {
+                // Loads the item's tracks, FX stacks and program state: its
+                // reviewed look. Replacing the tracks deletes their textures,
+                // so the GL context must be current.
+                viewport_->makeCurrent();
+                jefe::qt::loadPlaylistItem(m.playlistItem);
+                viewport_->doneCurrent();
+                loadedPlaylistItem = m.playlistItem;
+            }
         }
-        const int plate = jefe::qt::plateShowingTrack(track);
-        bool ready = plate >= 0 && jefe::qt::prepareTrackForRender(track);
-        if (ready) ready = waitForTrackFrame(track, 5000);
+        const int plate = available ? jefe::qt::plateShowingTrack(track) : -1;
+        bool ready = false;
+        if (plate >= 0) {
+            if (remote) {
+                // A track's first load is announced to the peers: use only
+                // a track that already has its frame list.
+                ready = jefe::qt::getTrackTimelineState(track).numFrames > 0;
+            } else {
+                viewport_->makeCurrent();   // starting a load clears the track's textures
+                ready = jefe::qt::prepareTrackForRender(track);
+                viewport_->doneCurrent();
+            }
+        }
+        if (ready) ready = waitForTrackFrame(track);
         const int firstFrame = ready ? jefe::qt::getTrackTimelineState(track).rangeStart : 1;
 
         for (size_t ri = 0; ri < entry.rounds.size(); ++ri) {
             for (size_t fi = 0; fi < entry.rounds[ri].frames.size(); ++fi) {
                 gfcReviewSummary::Frame& f = entry.rounds[ri].frames[fi];
-                if (!ready || !jefe::qt::setPlateNotesToRound(plate, m.mediaPath, int(ri))) {
+                const int frame = (f.frame == gfcReviewSummary::kAllFrames) ? firstFrame : f.frame;
+                // frameReady() may pump events, so point the plate at this
+                // round's notes only after it, right before the render.
+                if (!ready || !frameReady(track, frame) ||
+                    !jefe::qt::setPlateNotesToRound(plate, m.mediaPath, int(ri))) {
                     ++stats->thumbFail;
                     continue;
                 }
@@ -1929,7 +2007,7 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
                 p.quadrant = plate;
                 p.format = 5;               // PNG
                 p.formatString = "png";
-                p.from = p.to = (f.frame == gfcReviewSummary::kAllFrames) ? firstFrame : f.frame;
+                p.from = p.to = frame;
                 p.padding = 4;
                 p.scale = 1.0f;
                 p.path = dir.toStdString();
@@ -1942,13 +2020,15 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
                 }
                 p.burnInNotes = true;
                 const QString file = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+                int rendered = 0;
                 viewport_->makeCurrent();
-                const int rendered = jefe::qt::triggerSyncRender(p);
+                quietly([&] { rendered = jefe::qt::triggerSyncRender(p); });   // renders seek the playhead
                 viewport_->doneCurrent();
-                if (rendered == 1 && !QImage(file).isNull()) {
+                const QImage thumb(file);
+                if (rendered == 1 && !thumb.isNull()) {
                     f.thumbnailPath = file.toStdString();
                     ++stats->thumbs;
-                    if (stats->firstThumbnail.isEmpty()) stats->firstThumbnail = file;
+                    if (stats->firstThumbnail.isNull()) stats->firstThumbnail = thumb;
                 } else {
                     ++stats->thumbFail;
                 }
@@ -1956,9 +2036,11 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
         }
     }
 
-    // Put everything back: the plates' real notes, the session, the frame.
+    // Put back what the export changed: the plates' real notes, then -- only
+    // if a playlist item replaced the tracks -- the saved session, through the
+    // same path as File -> Open Session.
     jefe::qt::syncPlateNotes();
-    if (saved) {
+    if (loadedPlaylistItem >= 0) {
         viewport_->makeCurrent();
         if (jefe::qt::loadSession(restore.toStdString())) jefe::qt::startLoadingAllTracks();
         viewport_->doneCurrent();
@@ -1968,14 +2050,24 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
         // this returns (e.g. a burn-in comparison) doesn't see a mid-reload
         // blank plate.
         for (int t = 0; t < 4; ++t) {
-            if (!jefe::qt::getTrackParams(t).filename.empty()) waitForTrackFrame(t, 5000);
+            if (!jefe::qt::getTrackParams(t).filename.empty()) waitForTrackFrame(t);
         }
     }
-    jefe::qt::seekToFrame(savedFrame);
-    // Resume playback only after the session/frame are back to what the user
-    // had -- togglePlayFwd() starts forward playback from a paused state,
-    // which is where pausePlayback() above left it.
-    if (wasPlaying) jefe::qt::togglePlayFwd();
+    // A session reopen does not restore the playlist selection, and every
+    // track load resets the in/out points, so those go back explicitly, with
+    // Recent Sessions, the frame and playback.
+    jefe::qt::setRecentSessions(savedRecents);
+    quietly([&] {
+        jefe::qt::restorePlaylistSelection(savedPlaylistItem, savedFromPlaylist);
+        // Out first: setOutPoint pulls a later in point down to it, and the
+        // saved in point is never after the saved out point.
+        jefe::qt::setOutPoint(savedOut);
+        jefe::qt::setInPoint(savedIn);
+        jefe::qt::seekToFrame(savedFrame);
+        // togglePlayFwd() starts forward playback from the paused state
+        // pausePlayback() left at the start.
+        if (wasPlaying) jefe::qt::togglePlayFwd();
+    });
 }
 
 int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
@@ -2084,9 +2176,118 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
           "first media's round is still in the summary");
 
     // PDF: thumbnails through the plate pipeline with the round's notes burned
-    // in, and the session put back afterwards.
-    const std::string beforeFile = jefe::qt::getTrackParams(0).filename;
-    const int beforeFrame = jefe::qt::getCurrentFrame();
+    // in, and what the export touched put back afterwards.
+
+    // Pumps events (excluding user input) and drains texture uploads until
+    // done() holds, the way the export itself waits for frames.
+    auto pumpUntil = [this](const std::function<bool()>& done, int timeoutMs) {
+        QElapsedTimer waited;
+        waited.start();
+        while (!done() && waited.elapsed() < timeoutMs) {
+            if (jefe::qt::hasPendingTextureUploads()) {
+                viewport_->makeCurrent();
+                jefe::qt::uploadPendingTextures();
+                viewport_->doneCurrent();
+            } else {
+                QThread::msleep(2);
+            }
+            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        }
+        return done();
+    };
+    // A numbered PNG sequence of `count` frames in its own directory; returns frame 1.
+    auto writeSequence = [](const QString& dir, const QString& stem, int count, int hue) {
+        QDir().mkpath(dir);
+        for (int i = 1; i <= count; ++i) {
+            QImage img(64, 64, QImage::Format_RGB32);
+            img.fill(QColor::fromHsv(hue, 200, 60 + 30 * i));
+            img.save(dir + "/" + stem + QString(".%1.png").arg(i, 4, 10, QChar('0')));
+        }
+        return dir + "/" + stem + ".0001.png";
+    };
+    // One round by `author` with a stroke on each of `frames`.
+    auto saveStrokes = [](const QString& framePath, const char* author, std::initializer_list<int> frames) {
+        gfcReview review;
+        review.mediaPath = gfcNoteStore::normalisePath(framePath.toStdString());
+        gfcRevision& r = review.beginRevision(author);
+        for (int frame : frames) {
+            auto stroke = std::make_unique<gfcNoteStroke>();
+            stroke->author = author;
+            stroke->quadID = 0;
+            stroke->from = frame;
+            stroke->to = frame;
+            stroke->colorR = 0.0f; stroke->colorG = 1.0f; stroke->colorB = 0.0f;
+            stroke->size = 8;
+            stroke->pts = { gfcNotePoint{0.2f, 0.2f}, gfcNotePoint{0.8f, 0.8f} };
+            r.addNote(std::move(stroke));
+        }
+        return gfcNoteStore::save(review);
+    };
+
+    // A six-frame sequence on track 2, with notes on frames 2 and 5.
+    const QString seqFirst = writeSequence(work + "/seq", "shot", 6, 210);
+    check(saveStrokes(seqFirst, "Lead", {2, 5}), "sequence sidecar saved");
+    loadFileIntoPlate(2, seqFirst);
+    check(pumpUntil([] { return jefe::qt::getTrackTimelineState(2).loadedCount >= 6; }, 5000),
+          "the sequence loads all six frames");
+
+    // The user's playlist state: the current tracks kept as playlist item 0
+    // and loaded from it, so item 0 is selected and armed for auto-advance.
+    jefe::qt::addCurrentAsPlaylistItem();
+    viewport_->makeCurrent();
+    jefe::qt::loadPlaylistItem(0);
+    viewport_->doneCurrent();
+    check(pumpUntil([] {
+              return jefe::qt::getTrackTimelineState(0).loadedCount >= 1 &&
+                     jefe::qt::getTrackTimelineState(2).loadedCount >= 6;
+          }, 5000),
+          "the tracks reload from playlist item 0");
+
+    // As if the sequence's loader had been started at frame 4 (Alt+click on
+    // the timeline): frames 1-3 have never been reached, so a forced render of
+    // frame 2 has no load parameters to decode it with.
+    viewport_->makeCurrent();
+    const bool restarted = jefe::qt::restartTrackLoadAtFrame(2, 4, true);
+    viewport_->doneCurrent();
+    check(restarted, "the sequence's load restarts at frame 4");
+    check(pumpUntil([] { return jefe::qt::isTrackFrameReady(2, 6); }, 5000) &&
+          jefe::qt::isTrackFrameReady(2, 5) && !jefe::qt::isTrackFrameReady(2, 2),
+          "fixture: frame 5 is loaded, frame 2 has not been reached");
+
+    // What the export must put back: a frame other than the first, an in/out
+    // range inside the sequence, the playlist selection, Recent Sessions and
+    // the tracks.
+    auto setUserState = []() {
+        jefe::qt::setOutPoint(5);
+        jefe::qt::setInPoint(2);
+        jefe::qt::seekToFrame(3);
+    };
+    jefe::qt::setRecentSessions({ (work + "/earlier.jcs").toStdString() });
+    const std::vector<std::string> beforeRecents = jefe::qt::getRecentSessions();
+    const std::string beforeFiles[3] = { jefe::qt::getTrackParams(0).filename,
+                                         jefe::qt::getTrackParams(1).filename,
+                                         jefe::qt::getTrackParams(2).filename };
+    auto checkRestored = [&](const std::string& when, const ReviewSummaryStats& st) {
+        printf("SUMMARY-TEST %s state: frame=%d in=%d out=%d item=%d fromPlaylist=%d recents=%zu tempDirExists=%d\n",
+               when.c_str(), jefe::qt::getCurrentFrame(), jefe::qt::getInPoint(), jefe::qt::getOutPoint(),
+               jefe::qt::getSelectedPlaylistItem(), jefe::qt::currentContentIsPlaylistItem() ? 1 : 0,
+               jefe::qt::getRecentSessions().size(), QFileInfo::exists(st.tempDir) ? 1 : 0);
+        auto what = [&](const char* s) { return when + ": " + s; };
+        check(jefe::qt::getCurrentFrame() == 3, what("the current frame is restored").c_str());
+        check(jefe::qt::getInPoint() == 2 && jefe::qt::getOutPoint() == 5,
+              what("the in/out points are restored").c_str());
+        check(jefe::qt::getSelectedPlaylistItem() == 0 && jefe::qt::currentContentIsPlaylistItem(),
+              what("the playlist selection and its auto-advance arming are restored").c_str());
+        check(jefe::qt::getRecentSessions() == beforeRecents, what("Recent Sessions is unchanged").c_str());
+        check(!st.tempDir.isEmpty() && !QFileInfo::exists(st.tempDir),
+              what("the export's temporary directory is removed").c_str());
+        bool sameMedia = true;
+        for (int t = 0; t < 3; ++t) {
+            if (jefe::qt::getTrackParams(t).filename != beforeFiles[t]) sameMedia = false;
+        }
+        check(sameMedia, what("the tracks' media is restored").c_str());
+    };
+
     const QString pdf = work + "/summary.pdf";
 
     // Re-entrancy (JEF-39 fix round 2): the export's frame-decode wait pumps
@@ -2104,14 +2305,17 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
         reentrantResult = exportReviewSummary(reentrantPdf, &reentrantStats, &reentrantMsg);
     });
 
+    setUserState();
     check(exportReviewSummary(pdf, &stats, &msg), "PDF summary exported");
     printf("SUMMARY-TEST pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg), stats.thumbs, stats.thumbFail);
-    check(stats.thumbs == 2 && stats.thumbFail == 0, "one thumbnail per frame entry, none failed");
+    // Two entries on the image (all frames, frame 1) and frames 2 and 5 of the
+    // sequence -- frame 2 only renders once the export has loaded it.
+    check(stats.thumbs == 4 && stats.thumbFail == 0,
+          "one thumbnail per frame entry, including a frame the loader had not reached; none failed");
     const QByteArray pdfBytes = readBytes(pdf);
     check(pdfBytes.startsWith("%PDF-") && pdfBytes.trimmed().endsWith("%%EOF"), "PDF file is complete");
     check(!QFile::exists(pdf + ".partial"), "no partial PDF left");
-    check(jefe::qt::getTrackParams(0).filename == beforeFile, "the track's media is restored");
-    check(jefe::qt::getCurrentFrame() == beforeFrame, "the current frame is restored");
+    checkRestored("tracks-only PDF", stats);
 
     if (!reentrantFired) {
         check(false, "re-entrant export timer never fired during the export (test inconclusive -- the wait pump was not exercised)");
@@ -2123,7 +2327,7 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
 
     // Burn-in reached the thumbnail: the same frame rendered with the empty
     // round (no notes) must differ from it.
-    QImage withNotes(stats.firstThumbnail);
+    const QImage withNotes = stats.firstThumbnail;
     check(!withNotes.isNull(), "first thumbnail readable");
     const std::vector<jefe::qt::SessionMedia> set = jefe::qt::getSessionMediaSet();
     if (!withNotes.isNull() && !set.empty()) {
@@ -2164,6 +2368,71 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
         printf("SUMMARY-TEST burn-in mean abs diff: %.3f\n", diff);
         check(!without.isNull() && diff > 0.0, "notes are burned into the thumbnail");
     }
+
+    // Media that is only in a playlist item: a three-frame clip with a note on
+    // frame 2. Rendering it loads the item, which replaces the tracks, so the
+    // export reopens its temporary session afterwards.
+    const QString clipFirst = writeSequence(work + "/playlist", "clip", 3, 30);
+    check(saveStrokes(clipFirst, "Client", {2}), "playlist clip sidecar saved");
+    jefe::qt::addPlaylistFiles({ clipFirst.toStdString() });
+    {
+        bool playlistOnly = false;
+        for (const jefe::qt::SessionMedia& m : jefe::qt::getSessionMediaSet()) {
+            if (m.track < 0 && m.playlistItem == 1) playlistOnly = true;
+        }
+        check(playlistOnly, "the clip is playlist-only media (item 1, on no track)");
+    }
+    // Watches track 0 while an export runs: a loaded playlist item shows up
+    // as track 0 holding the clip.
+    bool sawPlaylistLoad = false;
+    QTimer watch;
+    watch.setInterval(1);
+    connect(&watch, &QTimer::timeout, this, [&]() {
+        if (jefe::qt::getTrackParams(0).filename != beforeFiles[0]) sawPlaylistLoad = true;
+    });
+
+    setUserState();
+    watch.start();
+    ReviewSummaryStats playlistStats;
+    const bool playlistOk = exportReviewSummary(work + "/summary_playlist.pdf", &playlistStats, &msg);
+    watch.stop();
+    printf("SUMMARY-TEST playlist pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg),
+           playlistStats.thumbs, playlistStats.thumbFail);
+    check(playlistOk, "PDF summary with playlist-only media exported");
+    check(playlistStats.thumbs == 5 && playlistStats.thumbFail == 0,
+          "the playlist-only media's frame entry gets a thumbnail too");
+    check(sawPlaylistLoad, "the playlist item was loaded to render it");
+    checkRestored("playlist PDF", playlistStats);
+
+    // In a live remote session a playlist load would be sent to the peers, so
+    // the export loads none: the clip's entry counts as thumbfail and the PDF
+    // is still written.
+    jefe::qt::RemoteServerParams server;
+    server.serverName = "summary-test";
+    server.port = 47913;
+    server.password = "";
+    jefe::qt::connectAsServer(server);
+    check(jefe::qt::isRemoteConnected(), "a remote session is live");
+    check(pumpUntil([] {
+              return jefe::qt::isTrackFrameReady(0, 1) && jefe::qt::isTrackFrameReady(2, 2) &&
+                     jefe::qt::isTrackFrameReady(2, 5);
+          }, 5000),
+          "the reopened tracks have the frames the remote export renders");
+    sawPlaylistLoad = false;
+    setUserState();
+    watch.start();
+    ReviewSummaryStats remoteStats;
+    const QString remotePdf = work + "/summary_remote.pdf";
+    const bool remoteOk = exportReviewSummary(remotePdf, &remoteStats, &msg);
+    watch.stop();
+    printf("SUMMARY-TEST remote pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg),
+           remoteStats.thumbs, remoteStats.thumbFail);
+    check(remoteOk && readBytes(remotePdf).startsWith("%PDF-"), "remote: the PDF is still written");
+    check(remoteStats.thumbs == 4 && remoteStats.thumbFail == 1,
+          "remote: the playlist-only entry counts as thumbfail, the tracks' entries render");
+    check(!sawPlaylistLoad, "remote: no playlist item is loaded");
+    checkRestored("remote PDF", remoteStats);
+    jefe::qt::disconnectRemote();
 
     printf("SUMMARY-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);

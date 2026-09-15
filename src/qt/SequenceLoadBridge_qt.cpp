@@ -2671,6 +2671,42 @@ bool prepareTrackForRender(int track) {
     return seq->getNumFrames() > 0;
 }
 
+bool isTrackFrameReady(int track, int frame) {
+    if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
+    gfcSequence* seq = trackManager.getSequence(track);
+    return seq && seq->frameReadyForRender(frame);
+}
+
+bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce) {
+    if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq || seq->isEmpty()) return false;
+    // gfcSequence::startLoading(fromTrack) takes the 0-based position in the
+    // track, offset not applied. 0 means "from the load range's start", which
+    // is the one start the loader thread announces to remote peers.
+    const int index = frame - 1 - seq->getOffset();
+    if (index < 0 || index >= seq->getNumFrames()) return false;
+    if (index == 0 && !allowAnnounce) return false;
+    plateManager.clearAllHistogramCache();
+    seq->startLoading(index);
+    return true;
+}
+
+void restorePlaylistSelection(int index, bool contentFromPlaylist) {
+    // gfcPlaylistManager::setSelectedItem would broadcast the selection, so
+    // set the same fields it does, directly.
+    auto* entries = playlistManager.getPlaylist();
+    const int count = entries ? (int)entries->size() : 0;
+    const int selected = (index >= 0 && index < count) ? index : -1;
+    for (int i = 0; i < count; ++i) (*entries)[i].selected = (i == selected) ? 1 : 0;
+    playlistManager.selectedItem = selected;
+    gCurrentContentFromPlaylist = contentFromPlaylist;
+}
+
+void setRemoteBroadcastsMuted(bool muted) {
+    networkManager.setTakeNotifications(!muted);
+}
+
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,
                        NoteStampResult& result) {

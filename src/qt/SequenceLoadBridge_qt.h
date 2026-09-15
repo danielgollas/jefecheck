@@ -1098,6 +1098,41 @@ bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundI
 bool prepareTrackForRender(int track);
 
 /**
+ * Whether a render of timeline @a frame on @a track can decode it: the frame is
+ * loaded, or the track's async loader has reached it (gfcSequence::forceLoad
+ * decodes from the load parameters recorded then). False for a frame outside
+ * the track.
+ */
+bool isTrackFrameReady(int track, int frame);
+
+/**
+ * Restarts @a track's load at timeline @a frame, so the async loader reaches
+ * that frame first. Unlike startLoadingTrackAt() it leaves the crash-recovery
+ * session alone. A load from the track's first frame is announced to remote
+ * peers (a "loaded" chat line); @a allowAnnounce = false refuses that case.
+ * Clearing the track's decoded frames deletes their textures, so the viewport
+ * GL context must be current. Returns whether a load was started.
+ */
+bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce);
+
+/**
+ * Puts back a playlist selection read earlier with getSelectedPlaylistItem()
+ * and currentContentIsPlaylistItem(): selects item @a index (-1 for none) and
+ * sets whether the loaded content counts as that playlist item (auto-advance
+ * arming). Loads nothing and, unlike a playlist load, sends nothing to remote
+ * peers.
+ */
+void restorePlaylistSelection(int index, bool contentFromPlaylist);
+
+/**
+ * Mutes (or unmutes) what this client sends to remote peers when local state
+ * changes -- seeks, play/pause, in/out, FX, playlist -- the same switch the
+ * network client flips while applying an inbound message. Only mute around
+ * work that pumps no events: an inbound message unmutes it when applied.
+ */
+void setRemoteBroadcastsMuted(bool muted);
+
+/**
  * Put one of each note type on a plate, for --notes-demo. Coordinates are
  * literal normalised values so the result is identical every run, which is
  * what makes it usable as a visual regression shot rather than a picture.
