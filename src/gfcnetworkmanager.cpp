@@ -18,8 +18,30 @@ extern gfcPlateManager plateManager;
 extern gfcTrackManager trackManager;
 
 #include <sstream>
+#include <chrono>
+#include <random>
+#include <thread>
 
 namespace {
+/**
+ * JEF-37: a fresh per-session secret for the host's own loopback client.
+ *
+ * 32 hex characters (128 bits) from std::random_device — enough that guessing
+ * it is not a strategy even for someone who already knows the session code,
+ * and short enough to survive the coordinator's display-name length cap.
+ * Regenerated per session, so a leaked one is worthless the moment the session
+ * ends. random_device is used directly rather than seeding a PRNG: this runs
+ * once per session, so its cost is irrelevant and its unpredictability is not.
+ */
+std::string makeSelfJoinNonce() {
+    static const char* kHex = "0123456789abcdef";
+    std::random_device rd;
+    std::string out;
+    out.reserve(32);
+    for (int i = 0; i < 32; ++i) out.push_back(kHex[rd() & 0xf]);
+    return out;
+}
+
 std::vector<std::string> wrapToWidth(const std::string& text, int maxW) {
     std::vector<std::string> lines;
     std::istringstream iss(text);
@@ -117,6 +139,13 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
 		
 		resetSincStatus();
         
+        // JEF-37: mint this session's self-join nonce BEFORE the server starts,
+        // so it is already in place when the loopback client knocks. Without
+        // one, a host with knocking on (the default) waits to admit its own
+        // client and the session never gains a single participant.
+        if (params && params->coordinatorMode && params->selfJoinNonce.empty())
+            params->selfJoinNonce = makeSelfJoinNonce();
+
 		server.start(params);
         
         
@@ -128,6 +157,50 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
         clientParams.serverIP="127.0.0.1";
         clientParams.port=server.getPort();
         clientParams.password=server.getPassowrd();
+        // JEF-27: in coordinator mode the loopback client joins the host's own
+        // cloud session by its assigned code instead of dialing 127.0.0.1. The
+        // code is assigned ASYNCHRONOUSLY by the coordinator (a background
+        // rtc::WebSocket thread sets it once the create-session round-trip
+        // completes), so at this point it is very likely still empty. Wait for
+        // it here — bounded — before connecting the loopback client with a valid
+        // code. The wait needs no app-side pumping: the coordinator socket runs
+        // on libdatachannel's own threads, so getAssignedSessionCode() flips
+        // non-empty on its own. LAN/RakNet hosting (coordinatorMode=false) skips
+        // the wait entirely, so that path is unchanged.
+        clientParams.coordinatorMode=server.getCoordinatorMode();
+        clientParams.coordinatorUrl=server.getCoordinatorUrl();
+        // Present the nonce to the COORDINATOR only. `nickname` above is what
+        // participants see, and it is untouched — the two names are separate
+        // precisely so this one can be a secret.
+        if (params) clientParams.coordDisplayName=params->selfJoinNonce;
+        if (server.getCoordinatorMode()) {
+            const int kCodeTimeoutMs = 5000;
+            for (int t = 0; t < kCodeTimeoutMs; t += 20) {
+                if (!server.getAssignedSessionCode().empty()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+            // NO CODE => NO SESSION. The coordinator refused create-session
+            // (auth-required, insufficient-credits) or never answered.
+            //
+            // Bailing out here is load-bearing: the tail of this function used
+            // to set connected=true unconditionally, so a refused session still
+            // flipped the UI into its session view — an empty participant list,
+            // chat that went nowhere, and an End Session button with nothing to
+            // end. "Connected" has to mean a session exists, or every symptom
+            // of a failed start looks like a bug somewhere else.
+            if (server.getAssignedSessionCode().empty()) {
+                networkLog.addToLog(
+                    "Cloud session was refused by the coordinator (no session "
+                    "code assigned). Check that you are signed in and have "
+                    "credits.");
+                server.stop();
+                client.enableGUI();
+                isServer = false;
+                connected = false;
+                return;
+            }
+        }
+        clientParams.sessionCode=server.getAssignedSessionCode();
         client.setIsServerClient(true);
         client.Connect(&clientParams);
         networkLog.addToLog("Loopback Client Started");
@@ -166,6 +239,63 @@ void gfcNetworkManager::stopConnection()
 std::vector<std::string> gfcNetworkManager::participantNames() {
     if (isServer) return server.getParticipantNames();
     return client.getPeersInSession();
+}
+
+std::string gfcNetworkManager::getAssignedSessionCode() {
+    return server.getAssignedSessionCode();
+}
+
+std::vector<jefe::net::PendingJoiner> gfcNetworkManager::pendingJoiners() {
+    if (!isServer) return {};
+    return server.getPendingJoiners();
+}
+
+bool gfcNetworkManager::lastCoordinatorError(std::string& code,
+                                             std::string& message) {
+    // Server first: a refused create-session is the case a caller most needs
+    // to distinguish, and a host that never got a session has nothing on the
+    // client side to report.
+    if (server.lastCoordinatorError(code, message)) return true;
+    return client.lastCoordinatorError(code, message);
+}
+
+bool gfcNetworkManager::isAttemptingConnection() {
+    if (isServer) return false;
+    // getIsConnected() flips on the transport's thread, but `connected` only
+    // flips when update() next consumes the status change. Callers reach here
+    // precisely when `connected` is still false, so counting that one-tick gap
+    // as "attempting" is what keeps it from reading as a disconnect.
+    return client.getAttemptingConnection() || client.getIsConnected() ||
+           client.getJoinHandshakePending();
+}
+
+bool gfcNetworkManager::isAwaitingAdmission() {
+    // A host's own loopback client is admitted by nonce and never lingers in a
+    // lobby, so this is a joiner-only condition -- and reporting it for a host
+    // would put a "waiting to be let in" banner on the person doing the letting.
+    if (isServer) return false;
+    return client.getAwaitingAdmission();
+}
+
+void gfcNetworkManager::decideJoiner(const std::string& joinerId, bool admit) {
+    // Guarded by isServer, not merely by "the UI only shows this to a host":
+    // admit/deny is a host-only action at the coordinator too, and a joiner
+    // sending one would earn a protocol error for a button it should never
+    // have had.
+    if (!isServer) return;
+    server.decideJoiner(joinerId, admit);
+}
+
+// JEF-30: forward to the active transport. A host's stats come from the SERVER
+// transport (its view of every joined peer); a joiner's from the CLIENT
+// transport (its single peer, the host). Solo → empty.
+std::vector<jefe::net::PeerStats> gfcNetworkManager::peerStats() {
+    if (!connected) return {};
+    return isServer ? server.peerStats() : client.peerStats();
+}
+
+std::string gfcNetworkManager::peerNickname(jefe::net::PeerId peer) {
+    return isServer ? server.nicknameForPeer(peer) : std::string();
 }
 
 std::string gfcNetworkManager::connectionStatusText() {

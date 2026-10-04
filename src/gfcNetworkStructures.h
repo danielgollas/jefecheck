@@ -14,6 +14,12 @@
 #include "BitStream.h"
 #include "StringCompressor.h"
 
+// SessionPolicy (host-side create-session policy). Defined with the wire
+// encoders so this struct and the JSON it produces cannot drift apart.
+#include "gfcCoordinatorSignaling.h"
+
+#include "gfcWire.h"
+
 #include "trilerp.h"
 
 #include "gfcStructures.h"
@@ -94,11 +100,20 @@ GFCNETMESSAGETYPE_SYSTEM,
 GFCNETMESSAGETYPE_LOAD
 };
 
-void serializeFX ( const gfcFX* theFX, RakNet::BitStream* bs );
-void unserializeFX ( RakNet::BitStream* bs );
+// jefe::wire FX/LUT serialize helpers (JEF-23; the legacy RakNet-serializer
+// overloads were deleted in Task 4). Field sequences are identical to the
+// legacy versions, modulo the sanctioned wire changes: strings are
+// u32-length-prefixed (compressed-string coding dropped), the legacy explicit
+// "length" fields preceding each compressed string are dropped (writeString
+// carries the length), and the LUT file body travels as length-prefixed raw
+// bytes. The unserialize overloads read ALL fields before performing any
+// side effects (file writes / manager loads) and return false — with no
+// side effects — on a truncated/malformed buffer.
+void serializeFX ( const gfcFX* theFX, jefe::wire::Writer& w );
+bool unserializeFX ( jefe::wire::Reader& r );
 
-void serializeLUT ( CubeLUT* theLUT, RakNet::BitStream* bs );
-void unserializeLUT ( RakNet::BitStream* bs );
+void serializeLUT ( CubeLUT* theLUT, jefe::wire::Writer& w );
+bool unserializeLUT ( jefe::wire::Reader& r );
 
 // Extracts the HH:MM token from an asctime-style string
 // ("Jul  4 14:32:56 2026" -> "14:32"). Returns the input unchanged
@@ -122,6 +137,22 @@ public:
 char serverName[60];
 char password[60];
 int port;
+// JEF-27 cloud-coordinator hosting. When coordinatorMode is set, the host
+// dials coordinatorUrl and creates a session (port is ignored); sessionCode
+// stays empty (the coordinator assigns it).
+bool coordinatorMode = false;
+std::string coordinatorUrl;
+std::string sessionCode;
+// JEF-31: coordinator access JWT (empty = anonymous).
+std::string authToken;
+// JEF-37: host-side session policy (knock / password / idle timeout /
+// capacity) from the selected session group. Sent with create-session; the
+// coordinator enforces it for everyone. Host-only by construction.
+jefe::net::SessionPolicy policy;
+// JEF-37: secret that lets this host's own loopback client skip its own
+// lobby. gfcNetworkManager::startServer generates one when empty and hands
+// the same value to the loopback as its coordinator display name.
+std::string selfJoinNonce;
 };
 
 
@@ -131,7 +162,20 @@ std::string serverIP;
 int port;
 std::string password;
 std::string nickname;
-
+// JEF-27 cloud-coordinator join. When coordinatorMode is set, the client
+// dials coordinatorUrl and joins sessionCode (serverIP/port are ignored).
+bool coordinatorMode = false;
+std::string coordinatorUrl;
+std::string sessionCode;
+// JEF-31: coordinator access JWT (empty = anonymous). Joiners need none --
+// only hosting is gated -- but a valid one earns a verified badge in the
+// host's admit prompt.
+std::string authToken;
+// JEF-37: name presented to the COORDINATOR when knocking, which is separate
+// from `nickname` (the app-level name in the participant list). A host's
+// loopback client puts its self-join nonce here so it is admitted silently,
+// while still showing up under the session's real name. Empty = use nickname.
+std::string coordDisplayName;
 };
 
 //#pragma pack(push,1)

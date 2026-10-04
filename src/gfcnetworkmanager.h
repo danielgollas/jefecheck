@@ -36,6 +36,34 @@ public:
     
     std::vector<std::string> participantNames();
     std::string connectionStatusText();
+
+    // JEF-30: per-peer connection health, forwarded to whichever transport is
+    // active (server side when hosting, client side when joined). Empty when
+    // solo. `peerNickname` resolves a peer's display name (server role only;
+    // empty otherwise).
+    std::vector<jefe::net::PeerStats> peerStats();
+    std::string peerNickname(jefe::net::PeerId peer);
+
+    // JEF-27: the coordinator-assigned cloud session code (host role, coordinator
+    // mode only; empty otherwise). Surfaced for the Remote dialog + --coord-test.
+    std::string getAssignedSessionCode();
+
+    // JEF-37: joiners waiting for admission, and the host's decision on one.
+    // Host role only -- a joiner is never told who else is in the lobby, so
+    // these return empty / no-op for everyone else.
+    std::vector<jefe::net::PendingJoiner> pendingJoiners();
+    void decideJoiner(const std::string& joinerId, bool admit);
+    /** JEF-37, joiner side: knocked, and still waiting on the host. */
+    bool isAwaitingAdmission();
+    /** A join is in flight: dialling, knocking, or mid-handshake. */
+    bool isAttemptingConnection();
+    /**
+     * The coordinator's last refusal, e.g. code "auth-required". False when
+     * there has been none. Checked on BOTH transports because a failed host
+     * attempt leaves its error on the server side and a failed join on the
+     * client side.
+     */
+    bool lastCoordinatorError(std::string& code, std::string& message);
     std::vector<std::string> chatLogLines();
     std::vector<std::string> drainErrors();
 

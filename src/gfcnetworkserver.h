@@ -49,6 +49,38 @@ public:
     int getConnectionCount();
     std::vector<std::string> getParticipantNames();
 
+    // JEF-30: per-peer connection health from the underlying transport (WebRTC
+    // real stats / RakNet basic presence). Empty when not hosting.
+    std::vector<jefe::net::PeerStats> peerStats() {
+        return transport_ ? transport_->peerStats() : std::vector<jefe::net::PeerStats>();
+    }
+    // Resolve a peer's registered nickname (empty if unknown).
+    std::string nicknameForPeer(jefe::net::PeerId peer) {
+        auto it = nickNameAddressMap.find(peer);
+        return it == nickNameAddressMap.end() ? std::string() : it->second;
+    }
+
+    // JEF-27 cloud-coordinator hosting accessors.
+    bool getCoordinatorMode() const { return coordinatorMode; }
+    std::string getCoordinatorUrl() const { return coordinatorUrl; }
+    // The session code the coordinator assigned this host (empty until the
+    // create-session round-trip completes, or when not in coordinator mode).
+    std::string getAssignedSessionCode() {
+        return transport_ ? transport_->assignedSessionCode() : std::string();
+    }
+
+    // JEF-37 lobby: joiners knocking, and the host's decision on one of them.
+    std::vector<jefe::net::PendingJoiner> getPendingJoiners() {
+        return transport_ ? transport_->pendingJoiners()
+                          : std::vector<jefe::net::PendingJoiner>();
+    }
+    void decideJoiner(const std::string& joinerId, bool admit) {
+        if (transport_) transport_->decideJoiner(joinerId, admit);
+    }
+    bool lastCoordinatorError(std::string& code, std::string& message) {
+        return transport_ ? transport_->lastCoordinatorError(code, message) : false;
+    }
+
     void sendChatMessage(unsigned char type, std::string sender, std::string message, int color = 0);
 
     void disableGUI();
@@ -59,6 +91,14 @@ public:
     std::string name;
     std::unique_ptr<jefe::net::ITransport> transport_;
     std::string password;
+    bool coordinatorMode = false;
+    std::string coordinatorUrl;
+    // JEF-31 access JWT forwarded to the coordinator on create-session.
+    std::string coordinatorAuthToken;
+    // JEF-37 host-side session policy forwarded with create-session.
+    jefe::net::SessionPolicy coordinatorPolicy;
+    // JEF-37: this session's self-join nonce (see TransportConfig).
+    std::string selfJoinNonce;
     unsigned int ConnectionCount();
     gfcNetworkLog* log;
 

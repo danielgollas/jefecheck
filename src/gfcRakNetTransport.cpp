@@ -92,11 +92,19 @@ bool RakNetTransport::poll(TransportEvent& ev) {
                                : TransportEventType::ConnectionLost;
             break;
         default:
-            // App packet (>= GFCNET_USER_PACKET_BASE) or unknown system id.
-            // Deliver raw bytes; unknown ids fall through app switches' default
-            // cases exactly as before.
+            // App packet or unknown system id. Since JEF-23, ITransport
+            // carries FRAMES ([u8 version][u16 msgType LE][payload]); the
+            // leading RakNet envelope byte (GFCNET_USER_PACKET_BASE, added
+            // by send() below) is stripped here before the frame is emitted.
+            // A packet shorter than 2 bytes is a bare envelope byte with no
+            // frame — malformed; drop it and keep draining the queue.
+            if (p->length < 2) {
+                peer_->DeallocatePacket(p);
+                p = peer_->Receive();
+                continue;
+            }
             ev.type = TransportEventType::Data;
-            ev.bytes.assign(p->data, p->data + p->length);
+            ev.bytes.assign(p->data + 1, p->data + p->length);
             break;
         }
         peer_->DeallocatePacket(p);
@@ -106,12 +114,28 @@ bool RakNetTransport::poll(TransportEvent& ev) {
 }
 
 void RakNetTransport::send(const unsigned char* data, int len, PeerId target,
-                           bool broadcastExcluding) {
+                           bool broadcastExcluding, Channel channel) {
     SystemAddress addr = (target == kInvalidPeerId)
                              ? UNASSIGNED_SYSTEM_ADDRESS
                              : toSystemAddress(target);
-    peer_->Send((const char*)data, len, HIGH_PRIORITY, RELIABLE_ORDERED, 0,
-                addr, broadcastExcluding);
+    // JEF-23: `data` is a jefe::wire frame. Prepend the single RakNet
+    // envelope byte so RakNet routes the packet as user data (every app
+    // packet arrives with first byte GFCNET_USER_PACKET_BASE == 91 — RakNet
+    // only needs one user id; the real msgType lives in the frame header).
+    // One copy per send is fine at our message rates.
+    std::vector<unsigned char> packet;
+    packet.reserve((size_t)len + 1);
+    packet.push_back(GFCNET_USER_PACKET_BASE);
+    packet.insert(packet.end(), data, data + len);
+    // JEF-28: map Channel::Assets → RakNet ordering channel 1 (a second
+    // reliable-ordered stream) so bulk asset bodies don't head-of-line-block
+    // state traffic on channel 0. On the RECEIVE side RakNet doesn't cheaply
+    // hand back the ordering channel, so poll() leaves TransportEvent.channel
+    // at State for RakNet — the QoS separation is best-effort here (legacy
+    // transport); dispatch is by GFCNETID regardless, so this is harmless.
+    const char orderingChannel = (channel == Channel::Assets) ? 1 : 0;
+    peer_->Send((const char*)packet.data(), (int)packet.size(), HIGH_PRIORITY,
+                RELIABLE_ORDERED, orderingChannel, addr, broadcastExcluding);
 }
 
 void RakNetTransport::closePeer(PeerId peer, bool sendNotification) {
@@ -120,6 +144,36 @@ void RakNetTransport::closePeer(PeerId peer, bool sendNotification) {
 
 int RakNetTransport::connectionCount() {
     return (int)peer_->NumberOfConnections();
+}
+
+// JEF-30: RakNet has no WebRTC stats API (no per-peer rtt/bytes/candidate pair
+// we surface here). Degrade gracefully: enumerate the connected systems and emit
+// one basic PeerStats each — connected=true, path=Unknown, rttMs=-1, bytes=0.
+// The per-peer PeerId is available (GetConnectionList), so we key each entry to
+// its real peer rather than a single aggregate.
+std::vector<PeerStats> RakNetTransport::peerStats() {
+    std::vector<PeerStats> out;
+    unsigned short count = 0;
+    // First query the count with a null buffer, then fetch into a sized vector.
+    if (!peer_->GetConnectionList(nullptr, &count) || count == 0) return out;
+    std::vector<SystemAddress> systems(count);
+    const unsigned short cap = count;   // buffer capacity for the fetch
+    unsigned short filled = cap;
+    if (!peer_->GetConnectionList(systems.data(), &filled)) return out;
+    // GetConnectionList only writes up to `cap` entries but reports the true
+    // active count in `filled`; clamp so a peer that connected between the two
+    // calls can't push us past the buffer.
+    const unsigned short n = filled < cap ? filled : cap;
+    out.reserve(n);
+    for (unsigned short i = 0; i < n; ++i) {
+        PeerStats ps;
+        ps.peer = toPeerId(systems[i]);
+        ps.connected = true;   // present in the connection list == connected
+        ps.path = PeerStats::Path::Unknown;
+        ps.rttMs = -1;
+        out.push_back(ps);
+    }
+    return out;
 }
 
 } // namespace net

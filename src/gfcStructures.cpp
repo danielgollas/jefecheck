@@ -6,6 +6,7 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include "gfcfxstack.h"
 #include "trilerp.h"
 #include <vector>
+#include <cstdint>
 #include <fstream>
 #include <sstream> //for stingstream
 #include "xmlParser.h"
@@ -515,6 +516,71 @@ std::string GetMD5Hash ( std::string theString ) {
     snprintf(buf, sizeof(buf), "%016zx", h);
     return std::string(buf);
 }
+
+// ---------------------------------------------------------------------------
+// Portable content digest (JEF-28 Task 1) — FNV-1a 64-bit over raw bytes.
+// Deterministic + identical across builds/platforms for the same bytes (the
+// old GetMD5Hash used std::hash, whose result is implementation-defined). The
+// P2P LUT/FX sync dedup depends on peers agreeing on the digest, so it MUST be
+// a fixed algorithm over the actual file bytes, not std::hash and not parsed
+// values. FNV-1a is not cryptographic; it is only used for content dedup.
+namespace jefe {
+
+static const uint64_t kFnvOffset = 14695981039346656037ULL;
+static const uint64_t kFnvPrime  = 1099511628211ULL;
+
+std::string contentHash(const unsigned char* data, size_t len) {
+    uint64_t h = kFnvOffset;
+    for (size_t i = 0; i < len; ++i) {
+        h ^= (uint64_t)data[i];
+        h *= kFnvPrime;
+    }
+    char buf[17];
+    snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)h);
+    return std::string(buf);
+}
+
+std::string contentHashString(const std::string& s) {
+    return contentHash((const unsigned char*)s.data(), s.size());
+}
+
+// Streaming FNV-1a so we never materialize a whole file (LUTs can be MBs).
+// Feeds each file's bytes into a running hash; returns "" if `any` is false
+// after all files (i.e. nothing was readable) so callers can detect failure.
+static std::string contentHashFilesImpl(const std::vector<std::string>& paths,
+                                        bool requireAny) {
+    uint64_t h = kFnvOffset;
+    bool any = false;
+    char chunk[65536];
+    for (const std::string& path : paths) {
+        if (path.empty()) continue;
+        std::ifstream f(path.c_str(), std::ios::binary);
+        if (!f.is_open()) continue;
+        any = true;
+        while (f.good()) {
+            f.read(chunk, sizeof(chunk));
+            std::streamsize got = f.gcount();
+            for (std::streamsize i = 0; i < got; ++i) {
+                h ^= (uint64_t)(unsigned char)chunk[i];
+                h *= kFnvPrime;
+            }
+        }
+    }
+    if (requireAny && !any) return std::string();
+    char buf[17];
+    snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)h);
+    return std::string(buf);
+}
+
+std::string contentHashFile(const std::string& path) {
+    return contentHashFilesImpl({path}, /*requireAny=*/true);
+}
+
+std::string contentHashFiles(const std::vector<std::string>& paths) {
+    return contentHashFilesImpl(paths, /*requireAny=*/true);
+}
+
+}  // namespace jefe
 
 void UpdateRecentIPsButtons() {
 }

@@ -7,7 +7,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find system packages
 find_package(OpenGL REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
+# Network: the OAuth loopback listener and the token exchange (JEF-31). Ships
+# in qt6-base, which every platform already installs (brew qt, qt6-base-dev,
+# mingw-w64-x86_64-qt6-base), so this adds no package to any CI image.
+find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets Network)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -44,6 +47,28 @@ endif()
 
 file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
 list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
+
+# Desktop sign-in (JEF-31). Its own directory rather than src/qt/: these units
+# depend on Qt but not on the viewport or the rendering chain, so they stay
+# includable from headless self-tests without dragging GL in.
+file(GLOB JEFECHECK_AUTH_SOURCES src/auth/*.cpp)
+# Token-store backends are platform-exclusive: each defines makeTokenStore(),
+# so linking two would be a duplicate symbol. The glob above picks up the
+# Windows one everywhere, so drop it off-Windows and add the macOS .mm (which
+# the *.cpp glob never sees) on Apple. Linux keeps the file backend, which is
+# compiled everywhere anyway because the self-test uses it on every platform.
+list(FILTER JEFECHECK_AUTH_SOURCES EXCLUDE REGEX "gfcTokenStore_win")
+if(APPLE)
+    list(APPEND JEFECHECK_AUTH_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/auth/gfcTokenStore_mac.mm)
+elseif(WIN32)
+    list(APPEND JEFECHECK_AUTH_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/auth/gfcTokenStore_win.cpp)
+endif()
+list(APPEND JEFECHECK_SOURCES ${JEFECHECK_AUTH_SOURCES})
+
+if(APPLE)
+    find_library(JEFECHECK_SECURITY_FRAMEWORK Security REQUIRED)
+    find_library(JEFECHECK_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+endif()
 
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
@@ -98,8 +123,61 @@ target_link_libraries(jefecheck PRIVATE
     ZLIB::ZLIB
     Qt6::Widgets
     Qt6::OpenGLWidgets
+    Qt6::Network
+    # Token store (JEF-31): Keychain on macOS, Credential Manager on Windows.
+    # Both ship with their platform SDK — no third-party dependency.
+    #
+    # Resolved via find_library rather than a bare "-framework Security" in a
+    # generator expression: CMake splits that on the space and then looks for a
+    # library literally named "Security", which fails to link.
+    ${JEFECHECK_SECURITY_FRAMEWORK}
+    ${JEFECHECK_COREFOUNDATION_FRAMEWORK}
+    $<$<BOOL:${WIN32}>:Advapi32>
 )
 target_compile_definitions(jefecheck PRIVATE JEFECHECK_USE_QT=1)
+
+# --- WebRTC transport (libdatachannel) --------------------------------------
+# JEF-24: second ITransport backend over DTLS-encrypted data channels.
+# RakNet stays the runtime default (env JEFECHECK_TRANSPORT selects).
+option(JEFECHECK_WEBRTC "Build WebRTC transport (libdatachannel)" ON)
+if(JEFECHECK_WEBRTC)
+    # libdatachannel v0.22.0 vendors an old plog whose CMake predates 3.5;
+    # CMake 4.x refuses to configure it without this floor.
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+    if(APPLE)
+        set(OPENSSL_ROOT_DIR /opt/homebrew/opt/openssl@3)
+    endif()
+    include(FetchContent)
+    set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
+    set(NO_TESTS ON CACHE BOOL "" FORCE)
+    set(NO_MEDIA ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(libdatachannel
+        GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
+        GIT_TAG v0.22.0
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(libdatachannel)
+    target_link_libraries(jefecheck PRIVATE LibDataChannel::LibDataChannel)
+    target_compile_definitions(jefecheck PRIVATE JEFECHECK_WEBRTC=1)
+endif()
+
+# --- Google OAuth client secret (JEF-31) ------------------------------------
+# Google's token endpoint requires a client_secret even for an RFC 8252
+# installed app, so a build without one cannot complete sign-in. It is NOT in
+# the source: this repository is public, and a literal would be caught by
+# secret scanning and auto-revoked -- breaking sign-in for every shipped build
+# until somebody noticed.
+#
+# Release CI passes it from a repository secret:
+#   cmake -B build -DJEFECHECK_GOOGLE_CLIENT_SECRET=GOCSPX-...
+# Local development can instead export JEFECHECK_GOOGLE_CLIENT_SECRET at run
+# time. With neither, the app builds fine and reports that sign-in is
+# unavailable rather than failing inside a token exchange.
+set(JEFECHECK_GOOGLE_CLIENT_SECRET "" CACHE STRING
+    "Google OAuth client secret for desktop sign-in (release builds only)")
+if(JEFECHECK_GOOGLE_CLIENT_SECRET)
+    target_compile_definitions(jefecheck PRIVATE
+        JEFECHECK_GOOGLE_CLIENT_SECRET="${JEFECHECK_GOOGLE_CLIENT_SECRET}")
+endif()
 
 # --- Static FFmpeg for video export ----------------------------------------
 # Fetch the same GPL static ffmpeg the release packaging uses, once, into the

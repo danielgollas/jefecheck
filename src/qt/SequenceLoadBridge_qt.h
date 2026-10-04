@@ -378,16 +378,230 @@ struct RemoteClientParams {
 
 void connectAsServer(const RemoteServerParams& params);
 void connectAsClient(const RemoteClientParams& params);
+
+// JEF-27 cloud coordinator mode. Cloud host: dials the coordinator URL and
+// asks it to create a session (the port is ignored); the assigned short code
+// is surfaced via remoteSessionCode() once it arrives. Cloud client: dials the
+// coordinator and joins by that code. Both funnel into
+// gfcNetworkManager::startServer / startConnection with coordinatorMode set.
+//
+// WARNING: connectAsCloudHost BLOCKS for up to ~5s waiting for the coordinator
+// to assign the session code (gfcNetworkManager::startServer's bounded wait).
+// Callers MUST invoke it OFF the GUI thread (QtConcurrent / a worker) so the Qt
+// event loop keeps running, then marshal the result back to the UI thread.
+struct RemoteCloudHostParams {
+    std::string coordinatorUrl;
+    // Shown to participants. Was hardcoded to "jefe-cloud-host" for EVERY
+    // cloud host, so every host appeared under the same name.
+    std::string hostName;
+    // JEF-31 coordinator access JWT. Empty = anonymous; the coordinator
+    // answers auth-required if it gates create-session.
+    std::string authToken;
+
+    // --- Host-side session policy, from the selected session group ---------
+    // These are HOST-only by construction: the coordinator takes them at
+    // create-session and enforces them for everyone. A joiner cannot set,
+    // see, or override any of them.
+    /** Each joiner waits for Admit/Deny (JEF-37). */
+    bool requireKnock = true;
+    /** Optional shared password, checked before a joiner reaches the lobby. */
+    std::string sessionPassword;
+    /**
+     * Minutes of inactivity after which the coordinator closes the session and
+     * STOPS BILLING. 0 = never. Host departure and an explicit close already
+     * end a session; this covers the third case — a host that stops
+     * participating without disconnecting (a sleeping laptop holding the
+     * socket open), where the meter would otherwise run against wall-clock
+     * time nobody was using.
+     */
+    int idleTimeoutMinutes = 30;
+    /** 0 = unlimited. Counts admitted participants, not pending knocks. */
+    int maxParticipants = 8;
+};
+
+struct RemoteCloudJoinParams {
+    std::string clientName;
+    std::string coordinatorUrl;
+    std::string sessionCode;
+    // Optional (JEF-37): joining needs no account, but a valid token earns a
+    // verified badge in the host's admit prompt.
+    std::string authToken;
+};
+
+void connectAsCloudHost(const RemoteCloudHostParams& params);
+void connectAsCloudClient(const RemoteCloudJoinParams& params);
+
+// The coordinator-assigned session code (empty when not a cloud host or before
+// the code has been assigned). Reads gfcNetworkManager::getAssignedSessionCode.
+std::string remoteSessionCode();
+
+// True while a cloud connect (connectAsCloudHost/Client) is running on a worker
+// thread and owns the networkManager. GUI-thread manager readers (the remote
+// getters, drawNetworkOverlay) honor this and no-op; GlViewport_qt checks it so
+// its paintGL overlay call can skip too. See gCloudConnectInFlight in the .cpp.
+bool cloudConnectInFlight();
+
+// Latches an app-shutdown flag (wire to QCoreApplication::aboutToQuit) so a
+// detached cloud-connect worker won't touch networkManager as globals tear down.
+void beginBridgeShutdown();
+
 void disconnectRemote();
 
 // Headless two-process connection smoke-test helpers (--remote-test).
 // Server role: host on `port`, pump for `settleMs` ms, return peak
 // participant count. Client role: connect to `ip:port`, hold for `holdMs` ms
 // (optionally sending a play message), then return.
-void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play);
+void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool play,
+                           int connectTimeoutMs = 3000);
 bool remoteTestServerSawPlay(int port, int settleMs);
+// Split-phase host for the WebRTC harness (see .cpp for the one-shot-play
+// rationale): start + await the loopback client, then settle for the peer's play.
+bool remoteTestServerStart(int port, int loopbackTimeoutMs);
+bool remoteTestServerSettleForPlay(int settleMs);
+// JEF-27 Task 3: --coord-test cloud-coordinator E2E helpers. Host role: start in
+// coordinator mode (create-session), wait for the assigned code + loopback client
+// to come up. Peer role: join by code, hold, toggle play. See the .cpp.
+bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs);
+// JEF-37 --coord-live-test: same bring-up against a REAL coordinator, with the
+// default host policy (knock on). Returns true only once the host's own
+// loopback client appears as a participant — which is exactly what host policy
+// can block, and what the test-double coordinator cannot exercise.
+bool coordLiveHostStart(const std::string& coordUrl, const std::string& authToken,
+                        int loopbackTimeoutMs);
+// Second phase of --coord-live-test: pump until a knock arrives, print who it
+// says it is, admit it, and report whether it became a participant. Returns the
+// number of knocks admitted (0 = nobody knocked within the window).
+int coordLiveAwaitAndAdmit(int timeoutMs);
+// Joiner half of --coord-live-test: knock at `code` and print each phase the
+// panel would render, so the Knocking state is verified end to end rather than
+// inferred from the transport flag.
+void coordLivePeerJoin(const std::string& coordUrl, const std::string& code,
+                       int timeoutMs);
+std::string coordTestGetCode();
+void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
+                       int holdMs, bool play, int connectTimeoutMs = 12000);
+bool coordTestSettleForPlay(int settleMs);
+// JEF-28 Task 2: --asset-test late-join LUT/FX transfer helpers. Host role:
+// load a fixture into the host managers (returns its content hash, "" on
+// failure / no-GL FX), start the RakNet server, pump it while the peer syncs.
+// Peer role reuses remoteTestPeerConnect; these getters read the peer's
+// post-sync manager state (TU-safe wrappers over lutManager/fxManager).
+// Offscreen GL bring-up (offscreen_gl_qt.cpp, its own TU to keep Qt's GL
+// headers away from glad). loadLUT/loadFX create GL objects, so the headless
+// harness needs a current context first. Returns false if GL can't come up.
+bool setupOffscreenTestGL();
+std::string assetTestLoadLUT(const std::string& path);
+std::string assetTestLoadFX(const std::string& path);
+bool assetTestServerStart(int port);
+void assetTestServerPump(int ms);
+bool remoteHasLUTHash(const std::string& hash);
+int  remoteLUTCount();
+bool remoteHasFXHash(const std::string& hash);
+int  remoteFXCount();
 bool isRemoteConnected();
 bool isRemoteServer();
+
+// ---------------------------------------------------------------------------
+// Remote panel state — ONE source of truth.
+//
+// The panel used to derive its appearance from four independently-updated
+// values (getConnected, getIsServer, the assigned session code, and an
+// in-flight flag), each set at a different moment by a different thread. When
+// they disagreed the UI rendered a state the system was not in: a phantom
+// session with an empty participant list, chat that went nowhere, and an End
+// Session button with nothing to end.
+//
+// remoteUiState() samples all of them together and resolves them into one
+// consistent answer, so the invariants live HERE rather than being re-derived
+// at each call site. The panel's job is then a pure render of this struct.
+// ---------------------------------------------------------------------------
+// JEF-37 lobby, host side. Mirrors jefe::net::PendingJoiner without dragging
+// the transport headers into Qt TUs (developer_notes §1). `displayName` is
+// peer-supplied — render it as Qt::PlainText, never rich text. `email` is
+// non-empty only when `verified`, which is the only part of a knock the host
+// can trust: an unverified joiner can call itself anything.
+struct RemotePendingJoiner {
+    std::string joinerId;
+    std::string displayName;
+    std::string email;
+    bool verified = false;
+};
+
+/** Admit (or, with false, refuse) one pending joiner. Host-only; else a no-op. */
+void remoteDecideJoiner(const std::string& joinerId, bool admit);
+
+/**
+ * The coordinator's last refusal code (e.g. "auth-required",
+ * "insufficient-credits", "no-session"), or "" when there has been none.
+ * The panel keys its message — and its decision to sign in and retry — on
+ * this, rather than telling everyone "the session was refused".
+ */
+std::string remoteCoordinatorErrorCode();
+/** Human-readable text that came with it. */
+std::string remoteCoordinatorErrorMessage();
+
+enum class RemotePhase {
+    Offline,      // no session; show the connect forms
+    Connecting,   // a connect attempt is in flight
+    Knocking,     // joined a knock-protected session; waiting on the host
+    HostingLan,   // hosting over RakNet/LAN — nothing metered
+    HostingCloud, // hosting through the coordinator — metered, has a code
+    Joined,       // in someone else's session
+};
+
+struct RemoteUiState {
+    RemotePhase phase = RemotePhase::Offline;
+    /** Human-readable status line. Never empty. */
+    std::string statusText;
+    /** Coordinator-assigned code. Non-empty ONLY in HostingCloud. */
+    std::string sessionCode;
+    /** True when a session exists to leave or end. */
+    bool inSession = false;
+    /** True when this peer is the host (End Session vs Leave). */
+    bool isHost = false;
+    /**
+     * Credits are shown only while hosting a CLOUD session: offline there is
+     * nothing to charge, a LAN session is not metered, and a joiner is free —
+     * showing them a balance would imply a cost that does not exist.
+     */
+    bool showCredits = false;
+    /**
+     * JEF-37: joiners knocking, waiting on this host's decision. Non-empty only
+     * while hosting a cloud session. Part of the state struct rather than a
+     * separate getter so the panel has ONE place it reads state from, and
+     * --ui-preview can populate a lobby without a second override path.
+     */
+    std::vector<RemotePendingJoiner> pending;
+};
+
+/** Resolve the current remote state. Safe to call from the GUI thread. */
+RemoteUiState remoteUiState();
+
+// JEF-30: per-peer session-health snapshot for the Remote dialog indicator.
+// `name` resolves the peer's nickname when possible, else its PeerId as a
+// string. `rttMs` is -1 when unknown (RakNet always, WebRTC on localhost).
+// `bytes` is the running total (sent+received); T2 derives kbps from deltas
+// between refreshes (so `kbps` is left 0 here — carried for the T2 struct
+// shape). `path` is "direct" / "relay" / "n/a". Honors gCloudConnectInFlight
+// (returns empty during a cloud connect, like the other getters).
+struct RemotePeerStat {
+    std::string name;
+    long rttMs = -1;
+    double kbps = 0.0;
+    unsigned long long bytes = 0;   // running total (sent + received)
+    std::string path;               // "direct" / "relay" / "n/a"
+    bool connected = false;
+};
+std::vector<RemotePeerStat> remotePeerStats();
+
+/**
+ * Raise the viewport's on-screen feedback message — the same one plate
+ * operations already use, honoring the Preferences size/fade settings. Exposed
+ * so a knock arriving with the Remote panel closed is visible without a second
+ * notification mechanism.
+ */
+void showViewportMessage(const std::string& text);
+
 std::vector<std::string> remoteParticipants();
 std::string              remoteStatusText();
 std::vector<std::string> remoteChatLog();
