@@ -128,6 +128,7 @@ private:
     // True while a left-drag is moving/resizing an in-viewport pick overlay
     // (the histogram sub-window). Set on press when viewportPickDown reports
     // a hit; suppresses the plate pan/color path for that drag.
+    bool noteDragActive_ = false;   // JEF-39: drawing a note, not panning
     bool pickDragActive_ = false;
 
     bool loadWindowOpen_ = false;

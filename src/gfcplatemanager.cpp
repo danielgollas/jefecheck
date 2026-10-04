@@ -953,6 +953,12 @@ void gfcPlateManager::toggleTextModeAll() {
     textModeReset=false;
 }
 
+void gfcPlateManager::clearTextModeAll() {
+    setChanged();
+    for (size_t i=0;i<plates.size();i++)
+        plates[i].toggleTextMode(1);
+}
+
 
 void gfcPlateManager::toggleHistogramMode(int whichOne) {
     
@@ -1291,6 +1297,21 @@ Vec3D gfcPlateManager::getCursorPositionIn2DSpace(int px, int py, int whichOne) 
         tmpVec=plates[whichOne].getCursorPositionIn2DSpace(px, py);
     }
     return tmpVec;
+}
+
+bool gfcPlateManager::cursorToNormalisedImage(int px, int py, int whichOne,
+                                             float& nx, float& ny) {
+    if (whichOne < 0 || whichOne >= (int)plates.size()) return false;
+    return plates[whichOne].cursorToNormalisedImage(px, py, nx, ny);
+}
+
+int gfcPlateManager::plateCount() const {
+    return (int)plates.size();
+}
+
+void gfcPlateManager::setPlateNotes(int whichOne, const std::vector<const gfcNote*>& notes) {
+    if (whichOne < 0 || whichOne >= (int)plates.size()) return;
+    plates[whichOne].setNotes(notes);
 }
 
 std::vector< gfcNetTransformationInfo > gfcPlateManager::getTransformations() {

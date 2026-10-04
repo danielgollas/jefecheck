@@ -10,16 +10,22 @@
 #ifndef JEFECHECK_QT_MAIN_WINDOW_H
 #define JEFECHECK_QT_MAIN_WINDOW_H
 
+#include <QImage>
 #include <QMainWindow>
+#include <QStringList>
 
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "ReviewPackage_qt.h"
+#include "SequenceLoadBridge_qt.h"
+
 class QDockWidget;
 class FXParamPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
+class NotesPanel_Qt;
 class PlaylistPanel_Qt;
 class RemoteDialog_Qt;
 class PlateManager_Qt;
@@ -44,6 +50,96 @@ public:
     // happen on the calling thread), and refreshes the status bar.
     // Used by --open-file at startup and by drag-and-drop at runtime.
     void loadFileIntoPlate(int plateIdx, const QString& path);
+
+    /**
+     * JEF-39: after media changes on a plate, pull that footage's notes out
+     * of their sidecar into the renderer and tell the Notes dock to redraw.
+     *
+     * Call this from every path that LOADS media — not from transform or
+     * colour edits, which cannot change which notes exist and would make
+     * this a tree rebuild on every drag.
+     */
+    void refreshNotesForLoadedMedia();
+
+    /**
+     * JEF-41: copy the active plate's current frame to @a outPath with its
+     * notes attached (JSON header + notes.* layer), without re-rendering.
+     * Makes the viewport GL context current for the layer rasterisation.
+     * Fills @a message with a one-line outcome either way.
+     */
+    bool stampActiveFrameNotes(const QString& outPath, QString* message);
+
+    /** Counts from exportReviewSummary(). */
+    struct ReviewSummaryStats {
+        int media = 0;
+        int rounds = 0;
+        int notes = 0;
+        int thumbs = 0;
+        int thumbFail = 0;
+        QImage firstThumbnail;    // PDF only: the first thumbnail rendered (for tests)
+        QString tempDir;          // PDF only: the export's temporary directory, gone on return (for tests)
+    };
+
+    /**
+     * Writes the review summary of every media in the session to @a outPath;
+     * the extension picks the format (.pdf, .txt or .csv). Fills @a message
+     * with a one-line outcome either way. See
+     * docs/superpowers/specs/2026-09-14-review-summary-export-design.md.
+     */
+    bool exportReviewSummary(const QString& outPath, ReviewSummaryStats* stats, QString* message);
+
+    /** Headless end-to-end proof of the summary export (--summary-test <image>). */
+    int runHeadlessSummaryTest(const QString& imagePath);
+
+    /** Counts from exportReviewPackage() and openReviewPackage(). */
+    struct PackageStats {
+        int media = 0;
+        bool mediaIncluded = false;
+        qint64 bytes = 0;
+        int resolved = 0;
+        int missing = 0;
+        QString extractDir;
+        QStringList missingMedia;
+        QStringList missingFx;
+        QStringList notesProblems;
+        QStringList lutsNotLoaded;
+    };
+
+    /** Collects what a package of the current session needs: the saved session,
+        every media's frames, fingerprint (computed and saved if missing) and
+        notes, and the non-bundled LUTs the session uses. */
+    bool gatherPackageInput(const QString& outPath, bool includeMedia,
+                            jefe::qt::package::ExportInput& input, QString* message);
+
+    /** Total size of every frame file in the session (for "Include media"). */
+    qint64 packageMediaBytes();
+
+    /** Writes a review package synchronously (CLI and tests; the dialog steps it). See
+        docs/superpowers/specs/2026-09-14-review-package-design.md. */
+    bool exportReviewPackage(const QString& outPath, bool includeMedia, PackageStats* stats, QString* message);
+
+    /** Headless end-to-end proof of the review package (--package-test <image>). */
+    int runHeadlessPackageTest(const QString& imagePath);
+
+    /**
+     * Opens a review package: extracts it, finds its media, merges its notes and
+     * loads its session. @a interactive allows "Locate…" prompts for media it
+     * cannot find; without it they count as missing. See
+     * docs/superpowers/specs/2026-09-14-review-package-design.md.
+     */
+    bool openReviewPackage(const QString& packagePath, bool interactive, PackageStats* stats, QString* message);
+
+    /** Headless proof that a lean package relinks moved media (--relink-test <image>). */
+    int runHeadlessRelinkTest(const QString& imagePath);
+
+    /** Headless proof of the export dialog (--package-dialog-test <image>). */
+    int runHeadlessPackageDialogTest(const QString& imagePath);
+
+    /** Overrides where openReviewPackage extracts packages; empty (the default)
+        falls back to <AppDataLocation>/packages. Tests point this at a temp dir
+        so a --config-dir run never touches the developer's real app data. */
+    void setPackageCacheRoot(const QString& dir);
+
     void loadFileIntoPlate(int plateIdx, const QString& path, float scale);
 
     // Headless render smoke test (--render-test). Renders one frame of
@@ -81,6 +177,16 @@ public:
     // draw3DrectWithFX into the next plate's draw.
     int runHeadlessFXMultiTest(const QString& imagePath);
 
+    /** Demo harness: hide every dock so the viewport fills the window. */
+    void hideControlsForDemo();
+    /**
+     * Demo harness: repaint the viewport synchronously. A scripted edit has no
+     * mouse event or inbound packet to schedule a paint, and macOS does not
+     * reliably service an async update() posted from a timer while the app is
+     * otherwise idle.
+     */
+    void repaintViewportNow();
+
 protected:
     void closeEvent(QCloseEvent* e) override;
 
@@ -110,6 +216,14 @@ private:
     void toggleHideControls();
     bool controlsHidden_ = false;
     QString currentSessionPath_;
+    QString packageTitle_;   // the open review package's file name, when the session came from one
+    QString packageCacheRoot_;   // override for where openReviewPackage extracts (tests)
+    // Guards exportReviewSummary() against re-entry: its PDF path pumps the
+    // event loop (excluding user input) for up to several seconds while
+    // waiting for frames to decode, so a second click / auto-fired call
+    // could otherwise start a second export -- interleaving two
+    // save/restore sessions and GL renders -- while the first is mid-flight.
+    bool summaryExportInProgress_ = false;
     QMenu*  recentMenu_ = nullptr;
     QMenu*  recentPlaylistMenu_ = nullptr;   // File → Recent Playlists (JEF-18)
     // The consolidated "Panels" menu (replaces the legacy "Dialogs" menu,
@@ -124,6 +238,19 @@ private:
     void startAutoload();
     void autoloadStep();
 
+    /** Renders one thumbnail per frame entry of @a doc into @a dir (through the
+        plate pipeline, that round's notes burned in), then puts back what that
+        changed: the plates' notes, the tracks (by reopening a session saved in
+        @a dir, only if a playlist item was loaded), the in/out points, the
+        playlist selection, Recent Sessions, the current frame and playback. */
+    void renderSummaryThumbnails(const std::vector<jefe::qt::SessionMedia>& media,
+                                 gfcReviewSummary::Doc& doc, const QString& dir,
+                                 ReviewSummaryStats* stats);
+
+    /** Copies @a imagePath into @a work/src and writes a one-round sidecar beside it.
+        Returns the copy's path, or an empty string on failure. */
+    QString makePackageFixture(const QString& imagePath, const QString& work);
+
     class LoadWindowDialog_Qt* loadWindowDialog_ = nullptr;
     RemoteDialog_Qt* remoteDialog_ = nullptr;
 
@@ -134,11 +261,13 @@ private:
     QDockWidget* lutDock_ = nullptr;
     QDockWidget* playlistDock_ = nullptr;
     QDockWidget* remoteDock_ = nullptr;
+    QDockWidget* notesDock_ = nullptr;
     PlateManager_Qt* plateManagerWidget_ = nullptr;
     TimelinePanel_Qt* timelinePanelWidget_ = nullptr;
     LUTPanel_Qt* lutPanelWidget_ = nullptr;
     FXParamPanel_Qt* fxParamPanelWidget_ = nullptr;
     PlaylistPanel_Qt* playlistPanelWidget_ = nullptr;
+    NotesPanel_Qt* notesPanelWidget_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
     QLabel* trackStatusLabel_ = nullptr;
     QLabel* loadedStatusLabel_ = nullptr;

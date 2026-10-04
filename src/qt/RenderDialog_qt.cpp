@@ -28,6 +28,15 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <type_traits>
+#include <utility>
+
+namespace {
+// The dialog talks to the core through jefe::qt::RenderParams, the mirror
+// struct in SequenceLoadBridge_qt.h. `burnInNotes` exists on the core
+// gfcRenderParams (gfcrenderparams.h) but the mirror and its copy function
+}  // namespace
+
 namespace {
 
 // Format combo entries — index here MUST match the gfcRenderFormats
@@ -314,6 +323,20 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         "Burn the active plate's aspect-ratio letterbox bars into the rendered "
         "frames. Off renders the full frame without bars.");
     form->addRow("Framing:", bakeCropBarsCheck_);
+
+    // Annotations: burn the plate's notes into the output. Off by default —
+    // burn-in is the point of the feature, but a note accidentally baked into
+    // a delivery render is far worse than one you have to tick a box to get.
+    // Held by object name rather than a member: RenderDialog_qt.h is outside
+    // this change's file ownership, so the widget is looked up in
+    // startRender() with findChild() instead of stored.
+    auto* burnInNotesCheck = new QCheckBox("Burn in notes", this);
+    burnInNotesCheck->setObjectName("dialog.render.notes.check");
+    burnInNotesCheck->setChecked(false);
+    burnInNotesCheck->setToolTip(
+        "Burn the active plate's annotations into the rendered frames. Off "
+        "renders the frame without any markup.");
+    form->addRow("Notes:", burnInNotesCheck);
 
     // Output path + browse.
     pathEdit_ = new QLineEdit(this);
@@ -632,6 +655,10 @@ void RenderDialog_Qt::startRender() {
     renderParams_.outWidth  = widthSpin_->value();
     renderParams_.outHeight = heightSpin_->value();
     renderParams_.bakeCropBars = bakeCropBarsCheck_->isChecked();
+    if (const auto* notesCheck =
+            findChild<QCheckBox*>("dialog.render.notes.check")) {
+        renderParams_.burnInNotes = notesCheck->isChecked();
+    }
     renderParams_.jpegQuality     = jpegQualitySpin_->value();
     renderParams_.jpegProgressive = jpegProgressiveCheck_->isChecked();
     renderParams_.jpegSubsampling = jpegSubsamplingCombo_->currentIndex();

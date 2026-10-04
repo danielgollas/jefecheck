@@ -11,6 +11,11 @@
 #include <QSettings>
 #include <QStringList>
 #include <QSurfaceFormat>
+#include <QDateTime>
+#include <QFont>
+#include <QImage>
+#include <QPainter>
+#include <QPixmap>
 #include <QTimer>
 
 #include <cstdlib>
@@ -20,10 +25,22 @@
 #include <QProcess>
 
 #include "gfcStructures.h"
+#include "gfcSha1.h"
+#include "gfcTarArchive.h"
+#include "gfcMediaFingerprint.h"
+#include "gfcSessionPaths.h"
+#include "gfcnote.h"
+#include "gfcNoteStore.h"
+#include "gfcNoteMerge.h"
+#include "gfcNoteOverlay.h"
+#include "gfcNoteStamp.h"
+#include "gfcReviewSummary.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
 #include "qt/SequenceLoadBridge_qt.h"
+#include "qt/ReviewSummaryPdf_qt.h"
+#include "qt/ReviewPackage_qt.h"
 
 extern gfcSettings sett;
 
@@ -159,6 +176,16 @@ static bool hasAspectTest(int argc, char* argv[]) {
     return false;
 }
 
+// --notes-test : headless JEF-39 regression. Runs the note model, sidecar
+// store, overlay geometry and EXR stamp self-tests (pure data/IO, no GL or
+// window needed). Runs all three even if an earlier one fails, so a
+// developer sees every broken area at once. Takes no argument.
+static bool hasNotesTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--notes-test") == 0) return true;
+    return false;
+}
+
 // --remote-test : orchestrator/server role (spawns a peer child).
 static bool hasRemoteTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
@@ -278,24 +305,68 @@ int main(int argc, char* argv[]) {
         std::_Exit(ok ? 0 : 2);
     }
 
+    // Headless note self-tests (--notes-test, JEF-39): model, sidecar store,
+    // and overlay geometry are all pure data/arithmetic, no window or GL
+    // needed. Runs all three regardless of earlier failures, so a developer
+    // sees every broken area in one pass, then exits non-zero if any failed.
+    if (hasNotesTest(argc, argv)) {
+        const int modelFail   = noteModelSelfTest();
+        const int storeFail   = noteStoreSelfTest();
+        const int overlayFail = noteOverlaySelfTest();
+        const int stampFail   = noteStampSelfTest();
+        const int summaryFail = reviewSummarySelfTest();
+        const int pdfFail     = jefe::qt::reviewSummaryPdfSelfTest();
+        const int sha1Fail    = sha1SelfTest();
+        const int tarFail     = tarSelfTest();
+        const int fingerprintFail = mediaFingerprintSelfTest();
+        const int sessionPathsFail = sessionPathsSelfTest();
+        const int mergeFail = noteMergeSelfTest();
+        const int packageFail = jefe::qt::package::packageSelfTest();
+        const int packageOpenFail = jefe::qt::package::packageOpenSelfTest();
+        // The self-tests print via std::printf but do not flush; std::_Exit
+        // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
+        // stdout not a tty) would silently drop all three lines.
+        std::fflush(stdout);
+        std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
+                    stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
+                    tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0 &&
+                    mergeFail == 0 && packageFail == 0 && packageOpenFail == 0) ? 0 : 2);
+    }
+
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
     // exits. Headless; playback state is pure data (no GL needed).
     {
         std::string peerIp; int peerPort = 0;
         if (resolveRemotePeer(argc, argv, peerIp, peerPort)) {
+            const auto tInit = std::chrono::steady_clock::now();
             jefe::qt::initializeRenderingChain();
+            printf("REMOTE-PEER: initializeRenderingChain took %lldms\n",
+                   (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - tInit).count());
+            fflush(stdout);
             jefe::qt::remoteTestPeerConnect(peerIp, peerPort, /*holdMs=*/2000, /*play=*/true);
             std::_Exit(0);
         }
     }
     if (hasRemoteTest(argc, argv)) {
+        const auto tInit = std::chrono::steady_clock::now();
         jefe::qt::initializeRenderingChain();
+        printf("REMOTE-SERVER: initializeRenderingChain took %lldms\n",
+               (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now() - tInit).count());
+        fflush(stdout);
         const int port = 60123;
         QProcess peer;
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--remote-test-peer", "127.0.0.1", QString::number(port)});
+        // Forward the child's output into this process's. It used to be
+        // discarded, which made a failing two-process test impossible to
+        // diagnose from its log: only the server's half was ever visible.
+        peer.setProcessChannelMode(QProcess::ForwardedChannels);
         peer.start();
         if (!peer.waitForStarted(2000)) { printf("REMOTE-TEST: child failed to start: %s\n", peer.errorString().toUtf8().constData()); fflush(stdout); std::_Exit(3); }
+        printf("REMOTE-SERVER: peer process started\n");
+        fflush(stdout);
         const bool sawPlay = jefe::qt::remoteTestServerSawPlay(port, /*settleMs=*/4000);
         const int  peak    = (int)jefe::qt::remoteParticipants().size();
         peer.waitForFinished(3000);
@@ -309,6 +380,13 @@ int main(int argc, char* argv[]) {
     window.setObjectName("MainWindow");
     window.show();
 
+    // Test-mode isolation (continued): also keep review-package extraction
+    // inside the caller-supplied config dir, not the developer's real
+    // AppDataLocation -- --config-dir only redirects QSettings on its own.
+    if (!configDir.isEmpty()) {
+        window.setPackageCacheRoot(configDir + "/packages");
+    }
+
     // Load each --open-file into the matching plate after the event
     // loop has spun up the GL context. Deferred via QTimer::singleShot
     // so paintGL has fired (initializing GLAD) before the bridge tries
@@ -320,6 +398,362 @@ int main(int argc, char* argv[]) {
         QTimer::singleShot(0, &window, [&window, plateIdx, path]() {
             window.loadFileIntoPlate(plateIdx, path);
         });
+    }
+
+    // --notes-demo: put one of each note type on plate 0 once the footage
+    // has decoded, so the annotation overlay can be seen (and screenshotted)
+    // without anyone drawing by hand. Coordinates are fixed, so the resulting
+    // frame is comparable run to run rather than merely illustrative.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--notes-demo") == 0) {
+            QTimer::singleShot(2500, &window, [&window]() {
+                jefe::qt::addDemoNotes(0);
+                // Real drawing refreshes the dock via the viewport's
+                // plateStateChanged on mouse-up; the demo bypasses the mouse,
+                // so it has to say so itself or the shot shows notes on the
+                // frame and an empty list beside them.
+                window.refreshNotesForLoadedMedia();
+            });
+            break;
+        }
+    }
+
+    // --stamp-notes <out.exr>: once the footage (and any --notes-demo notes)
+    // are in place, stamp the active plate's current frame into <out.exr> and
+    // report. With --notes-demo this checks the layer path end to end, which
+    // needs the real GL context only a live window provides.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--stamp-notes") == 0) {
+            const QString out = QString::fromUtf8(argv[i + 1]);
+            QTimer::singleShot(4500, &window, [&window, out]() {
+                QString msg;
+                const bool ok = window.stampActiveFrameNotes(out, &msg);
+                printf("NOTES-STAMP: %s %s\n", ok ? "ok" : "FAIL",
+                       msg.toUtf8().constData());
+                fflush(stdout);
+            });
+            break;
+        }
+    }
+
+    // --summary-test <image>: end-to-end proof of File -> Export Review Summary.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--summary-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessSummaryTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --export-summary <out>: write the review summary of what is loaded, then quit.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--export-summary") != 0) continue;
+        const QString out = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(6000, &window, [&window, out]() {
+            MainWindow_Qt::ReviewSummaryStats s;
+            QString msg;
+            const bool ok = window.exportReviewSummary(out, &s, &msg);
+            if (ok) {
+                printf("SUMMARY: wrote=%s media=%d rounds=%d notes=%d thumbs=%d thumbfail=%d\n",
+                       qPrintable(out), s.media, s.rounds, s.notes, s.thumbs, s.thumbFail);
+            } else {
+                printf("SUMMARY: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+            std::_Exit(ok ? 0 : 2);
+        });
+        break;
+    }
+
+    // --package-test <image>: end-to-end proof of the review package.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--package-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessPackageTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --export-package <out> [--no-media]: package what is loaded, then quit.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--export-package") != 0) continue;
+        const QString out = QString::fromUtf8(argv[i + 1]);
+        bool includeMedia = true;
+        for (int k = 1; k < argc; ++k) {
+            if (std::strcmp(argv[k], "--no-media") == 0) includeMedia = false;
+        }
+        QTimer::singleShot(6000, &window, [&window, out, includeMedia]() {
+            MainWindow_Qt::PackageStats s;
+            QString msg;
+            const bool ok = window.exportReviewPackage(out, includeMedia, &s, &msg);
+            if (ok) {
+                printf("PACKAGE: wrote=%s media=%d included=%d bytes=%lld\n", qPrintable(out), s.media,
+                       s.mediaIncluded ? 1 : 0, static_cast<long long>(s.bytes));
+            } else {
+                printf("PACKAGE: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+            std::_Exit(ok ? 0 : 2);
+        });
+        break;
+    }
+
+    // --relink-test <image>: a lean package finds moved media by fingerprint.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--relink-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessRelinkTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --open-package <file>: open a review package and keep running.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--open-package") != 0) continue;
+        const QString file = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [&window, file]() {
+            MainWindow_Qt::PackageStats s;
+            QString msg;
+            if (window.openReviewPackage(file, false, &s, &msg)) {
+                printf("PACKAGE: opened=%s media=%d resolved=%d missing=%d\n", qPrintable(file), s.media,
+                       s.resolved, s.missing);
+            } else {
+                printf("PACKAGE: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+        });
+        break;
+    }
+
+    // --package-dialog-test <image>: the export dialog writes, cancels and refuses.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--package-dialog-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessPackageDialogTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --window-rect X Y W H: place the window, in logical pixels, so two
+    // instances can sit side by side for a recording.
+    for (int i = 1; i + 4 < argc; ++i) {
+        if (std::strcmp(argv[i], "--window-rect") == 0) {
+            const int x = std::atoi(argv[i + 1]);
+            const int y = std::atoi(argv[i + 2]);
+            const int w = std::atoi(argv[i + 3]);
+            const int h = std::atoi(argv[i + 4]);
+            QTimer::singleShot(0, &window, [&window, x, y, w, h]() {
+                window.setGeometry(x, y, w, h);
+            });
+            break;
+        }
+    }
+
+    // --load-all: do what the Load Sequence Manager's Load All button does --
+    // leave preview mode and start loading every track -- so a plate filled by
+    // --open-file shows its decoded frame, not the preview and its info dump.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--load-all") == 0) {
+            QTimer::singleShot(2000, &window, []() {
+                jefe::qt::setAllPlatesShowPreview(false);
+                jefe::qt::startLoadingAllTracks();
+            });
+            break;
+        }
+    }
+
+    // --hide-controls: hide every dock and the text overlay so the picture
+    // fills the window, then fit it once the resize and decode have settled.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--hide-controls") == 0) {
+            QTimer::singleShot(0, &window, [&window]() { window.hideControlsForDemo(); });
+            auto tidy = [&window]() {
+                jefe::qt::clearTextModeAll();
+                jefe::qt::fitAllPlates();
+                window.repaintViewportNow();
+                printf("DEMO: controls hidden, plates fitted\n");
+                fflush(stdout);
+            };
+            QTimer::singleShot(2500, &window, tidy);
+            QTimer::singleShot(8000, &window, tidy);
+            break;
+        }
+    }
+
+    // --demo-host <port> / --demo-join <ip> <port>: start a LAN review
+    // session without the Remote dialog. The two sides use different
+    // nicknames on purpose -- the server refuses a duplicate. The host then
+    // draws a fixed script through the real pencil draw session, so what the
+    // joiner receives is ordinary note sync; only the host's mouse input is
+    // synthesised.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--demo-host") != 0) continue;
+        const int port = std::atoi(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [port]() {
+            jefe::qt::RemoteServerParams sp;
+            sp.serverName = "Supervisor";
+            sp.port = port;
+            sp.password = "";
+            jefe::qt::connectAsServer(sp);
+            printf("DEMO: Supervisor hosting on %d\n", port);
+            fflush(stdout);
+        });
+
+        auto at = [&window](int ms, auto fn) { QTimer::singleShot(ms, &window, fn); };
+        auto drawn = [&window]() { window.repaintViewportNow(); };
+        int t = 10000;
+
+        // 1. A freehand ellipse around a blob, drawn point by point.
+        at(t, []() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_FREEHAND, 0.40f, 0.34f,
+                                    1.0f, 0.25f, 0.20f, 4);
+        });
+        for (int k = 1; k <= 60; ++k) {
+            t += 35;
+            const float a = (float)k / 60.0f * 6.2831853f;
+            at(t, [a, drawn]() {
+                jefe::qt::demoNoteAppend(0.30f + 0.10f * std::cos(a),
+                                         0.34f + 0.13f * std::sin(a));
+                drawn();
+            });
+        }
+        t += 500;
+        at(t, [drawn]() { jefe::qt::noteDrawEnd(); drawn(); printf("DEMO: ellipse sent\n"); fflush(stdout); });
+
+        // 2. An arrow pointing into it.
+        t += 1500;
+        at(t, []() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_ARROW, 0.66f, 0.18f,
+                                    1.0f, 0.78f, 0.20f, 4);
+        });
+        for (int k = 1; k <= 24; ++k) {
+            t += 35;
+            const float u = (float)k / 24.0f;
+            at(t, [u, drawn]() {
+                jefe::qt::demoNoteAppend(0.66f + (0.44f - 0.66f) * u,
+                                         0.18f + (0.32f - 0.18f) * u);
+                drawn();
+            });
+        }
+        t += 500;
+        at(t, [drawn]() { jefe::qt::noteDrawEnd(); drawn(); printf("DEMO: arrow sent\n"); fflush(stdout); });
+
+        // 3. A box around a second area.
+        t += 1500;
+        at(t, []() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_BOX, 0.55f, 0.56f,
+                                    0.35f, 0.85f, 1.0f, 3);
+        });
+        for (int k = 1; k <= 24; ++k) {
+            t += 35;
+            const float u = (float)k / 24.0f;
+            at(t, [u, drawn]() {
+                jefe::qt::demoNoteAppend(0.55f + (0.86f - 0.55f) * u,
+                                         0.56f + (0.83f - 0.56f) * u);
+                drawn();
+            });
+        }
+        t += 500;
+        at(t, [drawn]() { jefe::qt::noteDrawEnd(); drawn(); printf("DEMO: box sent\n"); fflush(stdout); });
+
+        // 4. A text note labelling the box.
+        t += 1500;
+        at(t, [drawn]() {
+            jefe::qt::demoNoteBegin(0, jefe::qt::NOTETOOL_TEXT, 0.55f, 0.52f,
+                                    0.35f, 0.85f, 1.0f, 3);
+            jefe::qt::noteDrawSetText("too warm here");
+            jefe::qt::noteDrawEnd();
+            drawn();
+            printf("DEMO: text sent\n");
+            fflush(stdout);
+        });
+        at(t + 500, []() { printf("DEMO: script done\n"); fflush(stdout); });
+        break;
+    }
+    for (int i = 1; i + 2 < argc; ++i) {
+        if (std::strcmp(argv[i], "--demo-join") != 0) continue;
+        const std::string ip = argv[i + 1];
+        const int port = std::atoi(argv[i + 2]);
+        QTimer::singleShot(5000, &window, [ip, port]() {
+            jefe::qt::RemoteClientParams cp;
+            cp.clientName = "Artist";
+            cp.serverIP = ip;
+            cp.port = port;
+            cp.password = "";
+            jefe::qt::connectAsClient(cp);
+            printf("DEMO: Artist joining %s:%d\n", ip.c_str(), port);
+            fflush(stdout);
+        });
+        break;
+    }
+
+    // --grab-frames <dir> <caption> <startMs> <endMs>: save the window as a
+    // captioned JPEG every 66 ms between the two times. Files are named by
+    // wall-clock bucket, so two instances can be stitched side by side frame
+    // for frame -- and it works when the screen itself cannot be recorded
+    // (locked, asleep, no capture permission).
+    for (int i = 1; i + 4 < argc; ++i) {
+        if (std::strcmp(argv[i], "--grab-frames") != 0) continue;
+        const QString dir = QString::fromUtf8(argv[i + 1]);
+        const QString caption = QString::fromUtf8(argv[i + 2]);
+        const int startMs = std::atoi(argv[i + 3]);
+        const int endMs = std::atoi(argv[i + 4]);
+        constexpr int kGrabIntervalMs = 66;
+        QDir().mkpath(dir);
+        auto* grabTimer = new QTimer(&window);
+        grabTimer->setInterval(kGrabIntervalMs);
+        QObject::connect(grabTimer, &QTimer::timeout, &window, [&window, dir, caption]() {
+            QImage frame = window.grab().toImage().convertToFormat(QImage::Format_RGB32);
+            QPainter p(&frame);
+            const qreal dpr = frame.devicePixelRatio();
+            p.scale(1.0 / dpr, 1.0 / dpr);   // draw in physical pixels
+            QFont font = p.font();
+            font.setPixelSize(int(15 * dpr));
+            font.setBold(true);
+            p.setFont(font);
+            const QRect band(0, 0, frame.width(), int(30 * dpr));
+            p.fillRect(band, QColor(0, 0, 0, 170));
+            p.setPen(QColor(235, 235, 235));
+            p.drawText(band.adjusted(int(12 * dpr), 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft, caption);
+            p.end();
+            const qint64 bucket = QDateTime::currentMSecsSinceEpoch() / kGrabIntervalMs;
+            frame.save(dir + "/" + QString::number(bucket) + ".jpg", "JPG", 92);
+        });
+        QTimer::singleShot(startMs, grabTimer, [grabTimer]() { grabTimer->start(); });
+        QTimer::singleShot(endMs, grabTimer, [grabTimer, dir]() {
+            grabTimer->stop();
+            printf("GRAB: frames written to %s\n", dir.toUtf8().constData());
+            fflush(stdout);
+        });
+        break;
+    }
+
+    // --screenshot <path> [delayMs]: grab the window itself, not the screen,
+    // so the image is the application and nothing overlapping it.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--screenshot") != 0) continue;
+        const QString path = QString::fromUtf8(argv[i + 1]);
+        int delayMs = 4000;
+        if (i + 2 < argc && argv[i + 2][0] != '-') delayMs = std::atoi(argv[i + 2]);
+        QTimer::singleShot(delayMs, &window, [&window, path]() {
+            const QPixmap shot = window.grab();
+            printf("SCREENSHOT=%s ok=%d\n", path.toUtf8().constData(),
+                   shot.save(path) ? 1 : 0);
+            fflush(stdout);
+        });
+        break;
     }
 
     // Headless render smoke test (--render-test <dir>): after the footage

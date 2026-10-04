@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "../gfcReviewSummary.h"
+
 class gfcPlateGUI_Qt;
 
 namespace jefe::qt {
@@ -328,6 +330,7 @@ struct RenderParams {
     int exrFormat       = 0;    // GFC_HALF=0, GFC_FLOAT=1
     int bitsPerChannel  = 8;    // 8 or 16 (PNG/TIFF)
     bool bakeCropBars   = false; // burn aspect/crop letterbox bars into output
+    bool burnInNotes    = false; // burn annotation markup into output
 };
 
 // Returns a sample filename built from `params` using the existing
@@ -684,6 +687,8 @@ void cycleTrackOnActivePlate(int direction);  // -1 prev, +1 next
 // users can keep one plate clean while another shows metadata.
 void toggleTextModeActive();
 void toggleTextModeAll();
+/** Turn the text overlay off on every plate (textMode 0). */
+void clearTextModeAll();
 
 // Plate reset shortcuts. `resetActivePlate` clears every per-plate
 // override on the active plate (zoom, pan, rotation, flip/flop,
@@ -902,6 +907,314 @@ void applyCCFavoriteToActive(int slot);
 bool saveCCFavoritesFile(const std::string& path);
 bool loadCCFavoritesFile(const std::string& path);
 std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
+
+// --- Notes dock (JEF-39 Task 6) ---------------------------------------------
+// NotesPanel_Qt must not include gfcreview.h / gfcrevision.h / gfcnote.h --
+// only this TU may (developer_notes.md §1). Everything the dock needs comes
+// through the plain-data accessors below, mirroring the PlaylistTrackDetail /
+// ChatEntry convention already in this header.
+
+// One drawn note, flattened out of gfcNote so the panel never touches the
+// polymorphic type. typeIndex mirrors gfcNoteType (0 stroke, 1 arrow, 2 box,
+// 3 text) without pulling in gfcnote.h's enum.
+struct NoteRow {
+    std::string id;
+    std::string author;
+    int   typeIndex = 0;
+    int   quadID = 0;
+    int   from = 0, to = 0;
+    bool  always = false;
+    float colorR = 1.0f, colorG = 0.2f, colorB = 0.2f;
+    int   size = 3;
+};
+
+// One round of notes and the notes drawn on THIS plate within it (a shared
+// gfcReview can hold notes for other quads too -- see gfcNote::quadID in the
+// spec -- those are filtered out here since this plate's dock only shows its
+// own markup).
+struct RevisionRow {
+    std::string id;
+    std::string author;
+    long long   created = 0;   // time_t, widened for the panel's plain int use
+    bool        locked = false;
+    std::vector<NoteRow> notes;
+};
+
+// Revisions for the media loaded on `plateIdx`, most-recent first. Empty
+// (not an error) when nothing is loaded or no notes have been drawn yet.
+// Lazily loads the sidecar the first time a given plate's media is asked
+// about (gfcNoteStore::load), then serves the in-memory gfcReview after
+// that, the same lazy-load-once shape gfcSessionManager uses for its XML.
+std::vector<RevisionRow> notesForPlate(int plateIdx);
+
+// True when `plateIdx` has media loaded (so the dock's controls should be
+// enabled even if no notes have been drawn on it yet).
+bool notesAvailableForPlate(int plateIdx);
+
+// Lock/unlock state of `plateIdx`'s review, for the dock's single "Lock
+// Round" button (it flips to "Unlock Round" and back rather than being two
+// buttons -- mirrors the transport play/pause toggle).
+enum NoteLockState { NOTELOCK_NONE = 0, NOTELOCK_OPEN = 1, NOTELOCK_LOCKED = 2 };
+int  noteLockState(int plateIdx);
+
+// Locks the open (last unlocked) revision, persists the sidecar, and
+// broadcasts GFCNETID_REVISIONLOCKMESSAGE (see gfcnetworkmanager.h). Returns
+// false (refuses, changes nothing) when there is no open revision, or when
+// !isNotesHost().
+bool lockOpenRevision(int plateIdx);
+
+// Unlocks the most recent revision if it is locked, persists the sidecar, and
+// broadcasts GFCNETID_REVISIONUNLOCKMESSAGE so every peer unlocks it too.
+// Returns false when nothing is locked, or when !isNotesHost().
+bool unlockLatestRevision(int plateIdx);
+
+// True when this client may lock/unlock: solo (no remote session) is always
+// allowed; in a session, only the host may (mirrors "Locking is a host
+// action" in the design). Also gates the dock's lock button enablement.
+bool isNotesHost();
+
+// The name attributed to notes THIS client adds/removes -- sett.nickName,
+// falling back to "local" when unset (matches the Remote panel's nickname
+// field, preferences.remote.nickname.edit).
+std::string localAuthorName();
+
+// True when `noteId` on `plateIdx` may be removed by this client: its
+// revision must be unlocked, and the requester must be the note's author or
+// the session host (mirrors "Removal is limited to the note's author or the
+// host" in the spec). Query-only, for the Remove button's enabled state.
+bool canRemoveNote(int plateIdx, const std::string& noteId);
+
+// Removes `noteId` from `plateIdx`'s review, persists, and broadcasts
+// GFCNETID_NOTEREMOVEMESSAGE. Refuses (returns false, changes nothing) when
+// !canRemoveNote -- callers should already have disabled the control, this
+// is the belt-and-suspenders check.
+bool removeNoteFromPlate(int plateIdx, const std::string& noteId);
+
+// --- Drawing-tool selection ---------------------------------------------
+// State only. Mouse drawing on the viewport is NOT wired by Task 6 (see the
+// plan's file-ownership map) -- these accessors just give a future viewport
+// hook one place to read the reviewer's chosen tool/colour/size instead of
+// the dock reaching into gfcPlate directly.
+enum NoteTool { NOTETOOL_FREEHAND = 0, NOTETOOL_ARROW, NOTETOOL_BOX, NOTETOOL_TEXT };
+void setActiveNoteTool(int tool);
+int  activeNoteTool();
+void setActiveNoteColor(float r, float g, float b);
+void getActiveNoteColor(float& r, float& g, float& b);
+void setActiveNoteSize(int size);
+int  activeNoteSize();
+
+// Bare `N` visibility toggle (MainWindow_qt.cpp). Pure UI state until the
+// on-screen overlay call site (Task 5, gfcPlate.cpp -- not owned by Task 6)
+// reads it; see the Task 6 report for the forward-declared accessor Task 5
+// needs to call.
+// --- Mouse drawing on the viewport --------------------------------------
+// Armed by picking a tool in the Notes dock; disarmed by Escape or by
+// toggling the tool off. While armed the viewport draws instead of panning,
+// which is why it is an explicit flag rather than "a tool is selected" —
+// a reviewer who has ever touched the dock would otherwise lose panning
+// for the rest of the session.
+bool noteDrawingArmed();
+void setNoteDrawingArmed(bool armed);
+
+/** Begin a note on the plate under the cursor. Framebuffer coords, GL y-up.
+    False when the point misses the image or the round is locked. */
+bool noteDrawBegin(int xFb, int yFb, int plateIdx);
+/** Extend the in-progress note. No-op when none is in progress. */
+void noteDrawAppend(int xFb, int yFb);
+/** Commit: add to the open revision, broadcast, save the sidecar.
+    False when nothing was in progress or the note was degenerate. */
+bool noteDrawEnd();
+/** Discard an in-progress note (Escape). */
+void noteDrawCancel();
+bool noteDrawInProgress();
+/** True when the in-progress note is a text note, which needs its words
+    before noteDrawEnd() will commit it. */
+bool noteDrawIsText();
+/** Set the words of the in-progress text note. No-op for other note types. */
+void noteDrawSetText(const std::string& text);
+
+/**
+ * Scripting hooks for demos and tests. They drive the SAME draw session the
+ * pencil uses, taking normalised image coordinates instead of mouse
+ * positions, so noteDrawEnd() then commits, broadcasts and saves exactly as it
+ * does for a real stroke -- only the input is synthesised. demoNoteBegin()
+ * refuses wherever the pencil's own begin would: no media, or a locked round.
+ * tool is a NoteTool value.
+ */
+bool demoNoteBegin(int plateIdx, int tool, float nx, float ny,
+                   float r, float g, float b, int size);
+void demoNoteAppend(float nx, float ny);
+
+/** Push every plate's notes from the review store into the renderer. Call
+    after anything that changes a review: a draw, a sync event, a media load. */
+void syncPlateNotes();
+
+/**
+ * One piece of media in the session, for the review summary and the review
+ * package. `mediaPath` is the normalised pattern notes are keyed by;
+ * `anyFramePath` is a real file of it. `track` is the first track (0..3)
+ * holding it, or -1 when only a playlist item does — then `playlistItem` and
+ * `playlistTrack` say which item and which of its tracks.
+ */
+struct SessionMedia {
+    std::string mediaPath;
+    std::string anyFramePath;
+    int track = -1;
+    int playlistItem = -1;
+    int playlistTrack = -1;
+};
+
+/** Tracks A–D in order, then every playlist item's tracks in playlist order;
+    a media already listed is not repeated. */
+std::vector<SessionMedia> getSessionMediaSet();
+
+/** The summary model for @a media, from the in-memory reviews (sidecars load
+    on first touch). Thumbnail paths are left empty. */
+gfcReviewSummary::Doc buildReviewSummary(const std::vector<SessionMedia>& media,
+                                         const std::string& title);
+
+/** The first plate showing @a track, or -1. */
+int plateShowingTrack(int track);
+
+/**
+ * Points plate @a plateIdx at round @a roundIndex of the review for
+ * @a mediaPath only, whatever plate those notes were drawn on. The plate draws
+ * copies owned by the bridge until the next syncPlateNotes(), which restores
+ * the normal list. Returns false for an unknown plate or round.
+ */
+bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundIndex);
+
+/**
+ * Makes sure @a track has its frame list, starting the track's load when it
+ * has none (a single image quick-loaded shows as a preview without one).
+ * Only STARTS the async load -- gfcSequence::forceLoad (what a forRender=true
+ * frame request falls back to for a frame not yet decoded) needs that frame's
+ * load params, which are recorded only once the loader thread has reached it,
+ * so a render immediately after this call can still see an empty frame. The
+ * caller must wait for at least one decoded frame (see renderSummaryThumbnails
+ * in MainWindow_qt.cpp) before rendering. Returns whether the track now has
+ * frames.
+ */
+bool prepareTrackForRender(int track);
+
+/**
+ * Whether a render of timeline @a frame on @a track can decode it: the frame is
+ * loaded, or the track's async loader has reached it (gfcSequence::forceLoad
+ * decodes from the load parameters recorded then). False for a frame outside
+ * the track.
+ */
+bool isTrackFrameReady(int track, int frame);
+
+/**
+ * Restarts @a track's load at timeline @a frame, so the async loader reaches
+ * that frame first. Unlike startLoadingTrackAt() it leaves the crash-recovery
+ * session alone. A load from the track's first frame is announced to remote
+ * peers (a "loaded" chat line); @a allowAnnounce = false refuses that case.
+ * Clearing the track's decoded frames deletes their textures, so the viewport
+ * GL context must be current. Returns whether a load was started.
+ */
+bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce);
+
+/**
+ * Puts back a playlist selection read earlier with getSelectedPlaylistItem()
+ * and currentContentIsPlaylistItem(): selects item @a index (-1 for none) and
+ * sets whether the loaded content counts as that playlist item (auto-advance
+ * arming). Loads nothing and, unlike a playlist load, sends nothing to remote
+ * peers.
+ */
+void restorePlaylistSelection(int index, bool contentFromPlaylist);
+
+/**
+ * Mutes (or unmutes) what this client sends to remote peers when local state
+ * changes -- seeks, play/pause, in/out, FX, playlist -- the same switch the
+ * network client flips while applying an inbound message. Only mute around
+ * work that pumps no events: an inbound message unmutes it when applied.
+ */
+void setRemoteBroadcastsMuted(bool muted);
+
+/** Every frame file of the sequence @a anyFramePath belongs to, in frame order. */
+std::vector<std::string> listSequenceFrames(const std::string& anyFramePath);
+
+/** The sidecar document of the in-memory review for @a mediaPath (loaded on first touch). */
+std::string reviewXmlForMedia(const std::string& mediaPath);
+
+/** The fingerprint recorded on the review for @a mediaPath, or "". */
+std::string reviewFingerprint(const std::string& mediaPath);
+
+/** Records @a fingerprint on the review for @a mediaPath and saves its sidecar.
+    Returns false when the sidecar could not be written (the value stays in memory). */
+bool setReviewFingerprint(const std::string& mediaPath, const std::string& fingerprint);
+
+/** The source file of the loaded LUT sessions call @a lutName, or "" when none is loaded under that name. */
+std::string lutSourcePath(const std::string& lutName);
+
+/** What loadLUTFileReportingConflict() did with a LUT file. */
+enum class LutLoadOutcome {
+    Loaded,                   // a new LUT was added
+    SameAlreadyLoaded,        // a LUT of this file name is loaded and its source has identical bytes
+    DifferentAlreadyLoaded,   // the name is loaded but its bytes differ, or its source can't be read
+    Failed,                   // the file could not be loaded
+};
+
+/** Loads the LUT at @a path like loadLUTFile(), but says whether a LUT of the same
+    file name was already loaded and, if so, whether it is the same file. The caller
+    makes the GL context current. */
+LutLoadOutcome loadLUTFileReportingConflict(const std::string& path);
+
+/** Whether @a path lies inside a directory LUTs autoload from (sett.lutPath, the bundle FX/, ./FX/). */
+bool isInstallLutPath(const std::string& path);
+
+/** Drops the in-memory review for @a mediaPath and republishes plate notes, so
+    the next use reads its sidecar from disk again (after a package merge). */
+void reloadReviewFromDisk(const std::string& mediaPath);
+
+/** Preferences -> Search Paths. */
+std::vector<std::string> getSearchPaths();
+bool getSearchPathsRecursive();
+/** Sets the search paths for this run (not persisted); @a enabled is "use search paths". */
+void setSearchPaths(const std::vector<std::string>& paths, bool recursive, bool enabled);
+
+/** Whether an FX with this name is loaded. */
+bool isFxLoaded(const std::string& fxName);
+
+/** JEFE_VERSION (gfcStructures.h), for callers that cannot include that header
+    themselves (it drags glad, which doesn't share a TU with Qt's QtGui on macOS). */
+std::string appVersion();
+
+/**
+ * Put one of each note type on a plate, for --notes-demo. Coordinates are
+ * literal normalised values so the result is identical every run, which is
+ * what makes it usable as a visual regression shot rather than a picture.
+ */
+void addDemoNotes(int plateIdx);
+
+/** Outcome of stampNotesIntoExr(), so the caller can report it plainly. */
+struct NoteStampResult {
+    std::string sourcePath;   // the frame file on disk the stamp copied from
+    int width = 0;
+    int height = 0;
+    int noteCount = 0;        // notes embedded in the header (the whole review)
+    long markedTexels = 0;    // non-transparent texels in this frame's notes layer
+    std::string error;        // set when the stamp failed
+};
+
+/**
+ * JEF-41: copy the plate's CURRENT frame file to outExr with its notes
+ * attached -- the review's geometry as a jefecheck:notes JSON header
+ * attribute, and this frame's visible markup rasterised into a notes.R/G/B/A
+ * layer. The beauty channels come from the file on disk; nothing is
+ * re-rendered, so the FX stack and colour correction cannot alter them.
+ *
+ * Requires the viewport GL context to be current, because the layer is
+ * rasterised on the GPU. outExr must end in .exr and differ from the source.
+ */
+bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
+                       bool writeHeader, bool writeLayer,
+                       NoteStampResult& result);
+
+bool notesVisible();
+void setNotesVisible(bool visible);
+void toggleNotesVisible();
 
 }  // namespace jefe::qt
 

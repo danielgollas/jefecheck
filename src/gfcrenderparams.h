@@ -59,6 +59,18 @@ public:
     // frame. Off by default (render the full frame without the bars).
     bool bakeCropBars;
 
+    // When true, burn the plate's notes into the rendered frame. Off by
+    // default, and deliberately so: burn-in is the point of the feature, but a
+    // note accidentally baked into a delivery render is far worse than one the
+    // user has to tick a box to get. See
+    // docs/superpowers/specs/2026-09-07-annotations-design.md ("Rendering —
+    // export").
+    //
+    // A default member initialiser rather than an entry in the constructor's
+    // init list: gfcrenderparams.cpp is outside this change's file ownership,
+    // and this guarantees `false` however the object is built.
+    bool burnInNotes = false;
+
 };
 
 #endif
