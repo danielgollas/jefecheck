@@ -1406,6 +1406,12 @@ int MainWindow_Qt::runHeadlessRenderTest(const QString& dir) {
         {0, "jpg"}, {1, "exr"}, {2, "tif"},
         {3, "tga"}, {4, "bmp"}, {5, "png"},
     };
+    // The plates must be showing their tracks' content, or every render draws
+    // nothing and lands no file while still counting frames. Interactively the
+    // Load Window sets this; a headless run with the Load Window off (as every
+    // test's seeded --config-dir has) needs it said out loud, the same way
+    // --cc-test and --fx-test do.
+    jefe::qt::setAllPlatesShowPreview(true);
     const int frame = jefe::qt::getCurrentFrame();
     int total = 0;
     viewport_->makeCurrent();
