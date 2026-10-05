@@ -100,9 +100,13 @@ proving the fallback names are unchanged.
 - Steps:
   1. Enumerate the session media set (shared with the summary).
   2. Save the current session to a temporary `.jcs`.
-  3. For each media: ensure a fingerprint; copy its sidecar to `notes/NNN.jnotes`
-     (a media without a sidecar gets an empty review so the index stays
-     aligned); when including media, list its frame files.
+  3. For each media: ensure a fingerprint **only when Preferences → Search
+     Paths → "Also match moved media by fingerprint" (`sett.relinkByFingerprint`)
+     is on** — an already-stored fingerprint is always packaged regardless,
+     never deleted, but with the preference off a media that has none stays
+     without one (no pixels read, no sidecar write); copy its sidecar to
+     `notes/NNN.jnotes` (a media without a sidecar gets an empty review so the
+     index stays aligned); when including media, list its frame files.
   4. Rewrite the temporary session's media paths — track `filename` and
      playlist `fn` — to `media/NNN/<file name>` when included; leave them
      absolute otherwise.
@@ -137,15 +141,25 @@ proving the fallback names are unchanged.
      - not included → the original path if it exists; otherwise the first
        sequence under the **Preferences → Search Paths** list
        (`sett.searchPaths`, descending into subdirectories when
-       `sett.searchPathsRecursive`) whose fingerprint matches. The list is
-       used whether or not "use search paths" is ticked — that checkbox
-       governs the older automatic relink, not this explicit one. Candidates
-       are filtered by frame count and first-frame resolution before any
-       fingerprint is computed, and candidates whose file-name pattern matches
-       are tried first. If nothing matches: interactively, a
-       "Locate <display name>…" dialog (the chosen sequence must match the
-       fingerprint, or the user confirms using it anyway); in CLI mode the
-       media is counted as missing.
+       `sett.searchPathsRecursive`) whose **file name and frame count match
+       the manifest's** (`findByName`, case-insensitive, no pixels read —
+       the normal, always-on relink step). The list is used whether or not
+       "use search paths" is ticked — that checkbox governs the older
+       automatic relink, not this explicit one. Only when **Preferences →
+       Search Paths → "Also match moved media by fingerprint"**
+       (`sett.relinkByFingerprint`) is on *and* the media carries a
+       fingerprint does a further fingerprint search run over the same
+       roots (`findByFingerprint`; candidates filtered by frame count and
+       first-frame resolution before any fingerprint is computed, and
+       candidates whose file-name pattern matches are tried first — this is
+       the slower, opt-in step for footage that was renamed, not just
+       moved). `findByName` and `findByFingerprint` share one walk of each
+       root. If nothing matches: interactively, a "Locate <display
+       name>…" dialog — the chosen sequence must match the fingerprint, or
+       the user confirms using it anyway, *unless* the fingerprint step was
+       disabled or the media never had one, in which case the choice is
+       accepted outright, no prompt; in CLI mode the media is counted as
+       missing.
      - A media that stays missing keeps its original path in the session.
        The existing basename-only fallback (`findFileInSearchPaths`, applied
        when "use search paths" is on) may then still pick a file up at load
@@ -209,7 +223,12 @@ Self-tests join the `--notes-test` battery, each printing `NAME: pass=N fail=N`:
   session pointed at extracted media, or at original paths for a lean
   package; notes placed beside the resolved media and not duplicated on
   reopen; missing media counted and left at its path; truncated and
-  unknown-version packages refused.
+  unknown-version packages refused. Fingerprint relink is optional: with
+  `relinkByFingerprint` off, media moved under a search root but keeping its
+  file name resolves with no fingerprint computed, while renamed media
+  stays missing and keeps its original path in the session; with it on,
+  that same renamed media resolves via the fingerprint search; and a
+  file-name match whose frame count differs from the manifest is rejected.
 
 End-to-end flags on a private copy of an openexr-images file, run with
 `--config-dir` pointing at a temporary settings directory; like every test
@@ -220,10 +239,14 @@ flag they exit 0 on pass and 2 on fail:
   bytes equal the source, notes equal (by `gfcNoteStore::toJsonString`, media
   path aside), plate exposure/gamma/LUT equal to the exporting session's; a
   truncated package is refused and changes nothing.
-- `--relink-test <image>`: export without media → move the media into a
-  directory set as the only search path ("use search paths" off, to prove it
-  is not required) → open → media resolved by fingerprint
-  (`resolved=1 missing=0`) and its notes present.
+- `--relink-test <image>`: two passes, each printing which relink mode it
+  used. Pass 1 (`relinkByFingerprint` on): export without media → move AND
+  rename the media into a directory set as the only search path ("use
+  search paths" off, to prove it is not required) → open → the renamed
+  media resolved by the fingerprint search (`resolved=1 missing=0`) and its
+  notes present. Pass 2 (`relinkByFingerprint` off): the same, but the media
+  keeps its recorded name and is only moved → resolved by the cheap
+  file-name match instead.
 - `--package-dialog-test <image>`: the export dialog writes a package with
   progress reaching 100 %, Cancel leaves neither package nor partial file, an
   empty path is refused with a message.
