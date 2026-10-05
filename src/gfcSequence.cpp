@@ -1418,6 +1418,14 @@ std::string gfcSequence::framePathAt ( int frameNo ) const {
 	return frames[ ( size_t ) idx ].fileName;
 }
 
+bool gfcSequence::frameReadyForRender ( int frameNo ) const {
+	const long idx = ( long ) frameNo - 1 - ( long ) frameOffset;
+	if ( idx < 0 || idx >= ( long ) frames.size() )
+		return false;
+	const gfcFrame &frame = frames[ ( size_t ) idx ];
+	return frame.loaded || !frame.savedParams.fileName.empty();
+}
+
 char * gfcSequence::getFilenameatFrame ( int frameNo ) {
 	static char tmp[2048];
 	/*

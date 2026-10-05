@@ -43,6 +43,14 @@ namespace gfcNoteStore
 	    neither exists or parses. `out` is left untouched on failure. */
 	bool load(const std::string& normalisedPath, gfcReview& out);
 
+	/** The sidecar document for `review` (what save() writes), as a string --
+	    how a review package carries notes without touching disk. */
+	std::string toXmlString(const gfcReview& review);
+
+	/** Parses a sidecar document into `out`. Returns false, leaving `out`
+	    untouched, when `xml` is not a notes document. */
+	bool fromXmlString(const std::string& xml, gfcReview& out);
+
 	/**
 	 * A review as JSON, for embedding in an EXR header (jefecheck:notes).
 	 *

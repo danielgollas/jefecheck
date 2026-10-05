@@ -25,14 +25,22 @@
 #include <QProcess>
 
 #include "gfcStructures.h"
+#include "gfcSha1.h"
+#include "gfcTarArchive.h"
+#include "gfcMediaFingerprint.h"
+#include "gfcSessionPaths.h"
 #include "gfcnote.h"
 #include "gfcNoteStore.h"
+#include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
 #include "gfcNoteStamp.h"
+#include "gfcReviewSummary.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
 #include "qt/SequenceLoadBridge_qt.h"
+#include "qt/ReviewSummaryPdf_qt.h"
+#include "qt/ReviewPackage_qt.h"
 
 extern gfcSettings sett;
 
@@ -306,12 +314,23 @@ int main(int argc, char* argv[]) {
         const int storeFail   = noteStoreSelfTest();
         const int overlayFail = noteOverlaySelfTest();
         const int stampFail   = noteStampSelfTest();
+        const int summaryFail = reviewSummarySelfTest();
+        const int pdfFail     = jefe::qt::reviewSummaryPdfSelfTest();
+        const int sha1Fail    = sha1SelfTest();
+        const int tarFail     = tarSelfTest();
+        const int fingerprintFail = mediaFingerprintSelfTest();
+        const int sessionPathsFail = sessionPathsSelfTest();
+        const int mergeFail = noteMergeSelfTest();
+        const int packageFail = jefe::qt::package::packageSelfTest();
+        const int packageOpenFail = jefe::qt::package::packageOpenSelfTest();
         // The self-tests print via std::printf but do not flush; std::_Exit
         // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
         // stdout not a tty) would silently drop all three lines.
         std::fflush(stdout);
         std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
-                    stampFail == 0) ? 0 : 2);
+                    stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
+                    tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0 &&
+                    mergeFail == 0 && packageFail == 0 && packageOpenFail == 0) ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
@@ -361,6 +380,13 @@ int main(int argc, char* argv[]) {
     window.setObjectName("MainWindow");
     window.show();
 
+    // Test-mode isolation (continued): also keep review-package extraction
+    // inside the caller-supplied config dir, not the developer's real
+    // AppDataLocation -- --config-dir only redirects QSettings on its own.
+    if (!configDir.isEmpty()) {
+        window.setPackageCacheRoot(configDir + "/packages");
+    }
+
     // Load each --open-file into the matching plate after the event
     // loop has spun up the GL context. Deferred via QTimer::singleShot
     // so paintGL has fired (initializing GLAD) before the bridge tries
@@ -408,6 +434,116 @@ int main(int argc, char* argv[]) {
             });
             break;
         }
+    }
+
+    // --summary-test <image>: end-to-end proof of File -> Export Review Summary.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--summary-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessSummaryTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --export-summary <out>: write the review summary of what is loaded, then quit.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--export-summary") != 0) continue;
+        const QString out = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(6000, &window, [&window, out]() {
+            MainWindow_Qt::ReviewSummaryStats s;
+            QString msg;
+            const bool ok = window.exportReviewSummary(out, &s, &msg);
+            if (ok) {
+                printf("SUMMARY: wrote=%s media=%d rounds=%d notes=%d thumbs=%d thumbfail=%d\n",
+                       qPrintable(out), s.media, s.rounds, s.notes, s.thumbs, s.thumbFail);
+            } else {
+                printf("SUMMARY: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+            std::_Exit(ok ? 0 : 2);
+        });
+        break;
+    }
+
+    // --package-test <image>: end-to-end proof of the review package.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--package-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessPackageTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --export-package <out> [--no-media]: package what is loaded, then quit.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--export-package") != 0) continue;
+        const QString out = QString::fromUtf8(argv[i + 1]);
+        bool includeMedia = true;
+        for (int k = 1; k < argc; ++k) {
+            if (std::strcmp(argv[k], "--no-media") == 0) includeMedia = false;
+        }
+        QTimer::singleShot(6000, &window, [&window, out, includeMedia]() {
+            MainWindow_Qt::PackageStats s;
+            QString msg;
+            const bool ok = window.exportReviewPackage(out, includeMedia, &s, &msg);
+            if (ok) {
+                printf("PACKAGE: wrote=%s media=%d included=%d bytes=%lld\n", qPrintable(out), s.media,
+                       s.mediaIncluded ? 1 : 0, static_cast<long long>(s.bytes));
+            } else {
+                printf("PACKAGE: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+            std::_Exit(ok ? 0 : 2);
+        });
+        break;
+    }
+
+    // --relink-test <image>: a lean package finds moved media by fingerprint.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--relink-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessRelinkTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --open-package <file>: open a review package and keep running.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--open-package") != 0) continue;
+        const QString file = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [&window, file]() {
+            MainWindow_Qt::PackageStats s;
+            QString msg;
+            if (window.openReviewPackage(file, false, &s, &msg)) {
+                printf("PACKAGE: opened=%s media=%d resolved=%d missing=%d\n", qPrintable(file), s.media,
+                       s.resolved, s.missing);
+            } else {
+                printf("PACKAGE: FAIL %s\n", qPrintable(msg));
+            }
+            fflush(stdout);
+        });
+        break;
+    }
+
+    // --package-dialog-test <image>: the export dialog writes, cancels and refuses.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--package-dialog-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(5000, &window, [&window, image]() {
+            const int code = window.runHeadlessPackageDialogTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
     }
 
     // --window-rect X Y W H: place the window, in logical pixels, so two

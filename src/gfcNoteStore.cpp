@@ -8,10 +8,11 @@
 #include "gfcnotebox.h"
 #include "gfcnotetext.h"
 
+#include "gfcSha1.h"
+#include "gfcUtf8.h"
 #include "xmlParser.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -36,122 +37,6 @@ namespace
 		return re;
 	}
 
-	// ---- minimal self-contained SHA-1 -------------------------------------
-	// Only used to name the fallback sidecar file so two different sequence
-	// paths never collide. Deliberately not sharing RakNet's CSHA1 (src/SHA1.h)
-	// here -- that header drags in RakMemoryOverride.h/Export.h from the
-	// networking side of the tree, and this store owns exactly two files
-	// (src/gfcNoteStore.{h,cpp}) per the plan's file-ownership map, so it
-	// stays fully self-contained instead of creating a cross-module coupling
-	// nobody asked for. Public-domain algorithm (FIPS PUB 180-1).
-	struct Sha1State
-	{
-		uint32_t h[5] = {0x67452301u, 0xEFCDAB89u, 0x98BADCFEu, 0x10325476u, 0xC3D2E1F0u};
-		uint64_t bitLen = 0;
-		unsigned char buffer[64];
-		size_t bufferLen = 0;
-
-		static uint32_t rol(uint32_t v, int bits) { return (v << bits) | (v >> (32 - bits)); }
-
-		void processBlock(const unsigned char* p)
-		{
-			uint32_t w[80];
-			for (int i = 0; i < 16; ++i)
-			{
-				w[i] = (static_cast<uint32_t>(p[i * 4]) << 24) |
-					   (static_cast<uint32_t>(p[i * 4 + 1]) << 16) |
-					   (static_cast<uint32_t>(p[i * 4 + 2]) << 8) |
-					   (static_cast<uint32_t>(p[i * 4 + 3]));
-			}
-			for (int i = 16; i < 80; ++i)
-			{
-				w[i] = rol(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
-			}
-
-			uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4];
-			for (int i = 0; i < 80; ++i)
-			{
-				uint32_t f, k;
-				if (i < 20)      { f = (b & c) | ((~b) & d);        k = 0x5A827999u; }
-				else if (i < 40) { f = b ^ c ^ d;                   k = 0x6ED9EBA1u; }
-				else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDCu; }
-				else             { f = b ^ c ^ d;                   k = 0xCA62C1D6u; }
-
-				uint32_t temp = rol(a, 5) + f + e + k + w[i];
-				e = d; d = c; c = rol(b, 30); b = a; a = temp;
-			}
-
-			h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e;
-		}
-
-		void update(const unsigned char* data, size_t len)
-		{
-			bitLen += static_cast<uint64_t>(len) * 8;
-			while (len > 0)
-			{
-				size_t take = std::min(len, sizeof(buffer) - bufferLen);
-				std::memcpy(buffer + bufferLen, data, take);
-				bufferLen += take;
-				data += take;
-				len -= take;
-				if (bufferLen == sizeof(buffer))
-				{
-					processBlock(buffer);
-					bufferLen = 0;
-				}
-			}
-		}
-	};
-
-	// Runs Merkle-Damgard padding (0x80, zero pad to 56 mod 64, then the
-	// ORIGINAL bit length as big-endian 64-bit) and returns the digest as
-	// lowercase hex. A free function rather than a method on Sha1State so
-	// the "original bit length" is a local captured before update() mutates
-	// state.bitLen with the padding bytes.
-
-	std::string sha1Hex(const std::string& input)
-	{
-		Sha1State state;
-		const uint64_t originalBitLen = static_cast<uint64_t>(input.size()) * 8;
-		state.update(reinterpret_cast<const unsigned char*>(input.data()), input.size());
-
-		// Standard SHA-1 finish: append 0x80, zero-pad to 56 bytes mod 64,
-		// then the ORIGINAL bit length as a big-endian 64-bit integer.
-		unsigned char pad = 0x80;
-		state.update(&pad, 1);
-		unsigned char zero = 0x00;
-		while (state.bufferLen != 56)
-		{
-			state.update(&zero, 1);
-		}
-		unsigned char lenBytes[8];
-		for (int i = 0; i < 8; ++i)
-		{
-			lenBytes[7 - i] = static_cast<unsigned char>(originalBitLen >> (8 * i));
-		}
-		std::memcpy(state.buffer + 56, lenBytes, 8);
-		state.processBlock(state.buffer);
-		state.bufferLen = 0;
-
-		unsigned char digest[20];
-		for (int i = 0; i < 5; ++i)
-		{
-			digest[i * 4]     = static_cast<unsigned char>(state.h[i] >> 24);
-			digest[i * 4 + 1] = static_cast<unsigned char>(state.h[i] >> 16);
-			digest[i * 4 + 2] = static_cast<unsigned char>(state.h[i] >> 8);
-			digest[i * 4 + 3] = static_cast<unsigned char>(state.h[i]);
-		}
-
-		static const char hexDigits[] = "0123456789abcdef";
-		std::string out;
-		out.reserve(40);
-		for (unsigned char byte : digest)
-		{
-			out.push_back(hexDigits[(byte >> 4) & 0xF]);
-			out.push_back(hexDigits[byte & 0xF]);
-		}
-		return out;
-	}
 
 	// <sequence_dir>/<basename>.jnotes -- basename has the frame-number
 	// segment AND the extension stripped (sh010_v003.####.exr -> sh010_v003).
@@ -184,7 +69,7 @@ namespace
 	{
 		const char* home = std::getenv("HOME");
 		std::string homeDir = (home && *home) ? home : ".";
-		return homeDir + "/.config/jefecheck/notes/" + sha1Hex(normalisedPath) + ".jnotes";
+		return homeDir + "/.config/jefecheck/notes/" + gfcSha1::hex(normalisedPath) + ".jnotes";
 	}
 
 	// Detect unwritability by attempting a real write, never by inspecting
@@ -456,6 +341,29 @@ namespace
 		return xTop.writeToFile(path.c_str()) == eXMLErrorNone;
 	}
 
+	// Finds the <jefecheckNotes> element in an already-parsed document `parsed`
+	// (a file or a string, parsed with no tag argument -- see fromXmlString for
+	// why a tag argument isn't safe to pass to xmlParser here). Some xmlParser
+	// builds hand back the named root directly when there is no separate
+	// <?xml?> declaration in front of it, rather than as a child of a wrapper
+	// node, so both shapes are checked. Returns false, `top` unset, if neither
+	// shape matches.
+	bool locateNotesRoot(const XMLNode& parsed, XMLNode& top)
+	{
+		XMLNode child = parsed.getChildNode("jefecheckNotes");
+		if (!child.isEmpty())
+		{
+			top = child;
+			return true;
+		}
+		if (std::strcmp(parsed.getName() ? parsed.getName() : "", "jefecheckNotes") == 0)
+		{
+			top = parsed;
+			return true;
+		}
+		return false;
+	}
+
 	// Loads the <jefecheckNotes> root from `path` if it exists and parses.
 	// Silent on a missing file -- callers try multiple candidate locations.
 	bool tryLoad(const std::string& path, gfcReview& out)
@@ -473,19 +381,10 @@ namespace
 			return false;
 		}
 
-		XMLNode xTop = xFile.getChildNode("jefecheckNotes");
-		if (xTop.isEmpty())
+		XMLNode xTop;
+		if (!locateNotesRoot(xFile, xTop))
 		{
-			// Some xmlParser builds hand back the named root directly when
-			// there is no separate <?xml?> declaration in front of it.
-			if (std::strcmp(xFile.getName() ? xFile.getName() : "", "jefecheckNotes") == 0)
-			{
-				xTop = xFile;
-			}
-			else
-			{
-				return false;
-			}
+			return false;
 		}
 
 		return loadFromXml(xTop, out);
@@ -673,6 +572,54 @@ bool gfcNoteStore::load(const std::string& normalisedPath, gfcReview& out)
 	return false;
 }
 
+std::string gfcNoteStore::toXmlString(const gfcReview& review)
+{
+	XMLNode xTop = buildXml(review, review.mediaPath);
+	int size = 0;
+	XMLSTR text = xTop.createXMLString(1, &size);
+	if (!text)
+	{
+		return {};
+	}
+	std::string out(text, static_cast<size_t>(size));
+	free(text);   // this xmlParser allocates with malloc and has no freeXMLString
+	return out;
+}
+
+bool gfcNoteStore::fromXmlString(const std::string& xml, gfcReview& out)
+{
+	// Parsed WITHOUT a tag argument: when passed one, parseString() compares
+	// it against the parsed root's node name via _tcsicmp() -- and for input
+	// with no XML tag at all (e.g. plain text), no element is created and
+	// that name is NULL, so the comparison segfaults. Parsing untagged and
+	// locating the root ourselves (locateNotesRoot(), shared with tryLoad())
+	// sidesteps this.
+	// parseString, unlike parseFile, does not skip a leading UTF-8 BOM, and
+	// save() writes one -- so sidecar bytes read into a string start with it.
+	XMLResults results;
+	XMLNode xFile = XMLNode::parseString(skipUtf8Bom(xml.c_str()), NULL, &results);
+	if (results.error != eXMLErrorNone)
+	{
+		return false;
+	}
+
+	XMLNode xTop;
+	if (!locateNotesRoot(xFile, xTop))
+	{
+		return false;
+	}
+
+	gfcReview parsed;
+	if (!loadFromXml(xTop, parsed))
+	{
+		return false;
+	}
+	out.mediaPath = parsed.mediaPath;
+	out.fingerprint = parsed.fingerprint;
+	out.revisions = std::move(parsed.revisions);
+	return true;
+}
+
 // ---------------------------------------------------------------------------
 // Self-test
 // ---------------------------------------------------------------------------
@@ -821,6 +768,27 @@ int noteStoreSelfTest()
 	check(gfcNoteStore::load(roNormalised, roBack), "load() finds the note via the fallback location");
 	check(roBack.revisions.size() == 1 && roBack.revisions[0].notes.size() == 1,
 		  "the read-only-fallback note round-trips");
+
+	// XML strings: what a review package carries.
+	gfcReview fromString;
+	check(gfcNoteStore::fromXmlString(gfcNoteStore::toXmlString(w), fromString) &&
+		  gfcNoteStore::toJsonString(fromString) == gfcNoteStore::toJsonString(w),
+		  "a review survives an XML string round trip");
+	// save() writes a leading UTF-8 BOM, so a sidecar read back as bytes starts with one.
+	gfcReview fromBomString;
+	check(gfcNoteStore::fromXmlString("\xEF\xBB\xBF" + gfcNoteStore::toXmlString(w), fromBomString) &&
+		  gfcNoteStore::toJsonString(fromBomString) == gfcNoteStore::toJsonString(w),
+		  "a BOM-prefixed XML string parses");
+	// With an XML declaration after the BOM -- the shape of a saved .jcs, and
+	// the case where parseString's lack of BOM handling actually bites.
+	gfcReview fromBomDeclString;
+	check(gfcNoteStore::fromXmlString("\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+										  gfcNoteStore::toXmlString(w), fromBomDeclString) &&
+		  gfcNoteStore::toJsonString(fromBomDeclString) == gfcNoteStore::toJsonString(w),
+		  "a BOM-prefixed XML string with a declaration parses");
+	gfcReview untouched;
+	check(!gfcNoteStore::fromXmlString("not a notes document", untouched) && untouched.revisions.empty(),
+		  "a string that is not a notes document is refused");
 
 	std::printf("NOTE-STORE: pass=%d fail=%d\n", pass, fail);
 	return fail == 0 ? 0 : 1;

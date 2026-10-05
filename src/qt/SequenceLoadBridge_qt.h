@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "../gfcReviewSummary.h"
+
 class gfcPlateGUI_Qt;
 
 namespace jefe::qt {
@@ -1046,6 +1048,138 @@ void demoNoteAppend(float nx, float ny);
 /** Push every plate's notes from the review store into the renderer. Call
     after anything that changes a review: a draw, a sync event, a media load. */
 void syncPlateNotes();
+
+/**
+ * One piece of media in the session, for the review summary and the review
+ * package. `mediaPath` is the normalised pattern notes are keyed by;
+ * `anyFramePath` is a real file of it. `track` is the first track (0..3)
+ * holding it, or -1 when only a playlist item does — then `playlistItem` and
+ * `playlistTrack` say which item and which of its tracks.
+ */
+struct SessionMedia {
+    std::string mediaPath;
+    std::string anyFramePath;
+    int track = -1;
+    int playlistItem = -1;
+    int playlistTrack = -1;
+};
+
+/** Tracks A–D in order, then every playlist item's tracks in playlist order;
+    a media already listed is not repeated. */
+std::vector<SessionMedia> getSessionMediaSet();
+
+/** The summary model for @a media, from the in-memory reviews (sidecars load
+    on first touch). Thumbnail paths are left empty. */
+gfcReviewSummary::Doc buildReviewSummary(const std::vector<SessionMedia>& media,
+                                         const std::string& title);
+
+/** The first plate showing @a track, or -1. */
+int plateShowingTrack(int track);
+
+/**
+ * Points plate @a plateIdx at round @a roundIndex of the review for
+ * @a mediaPath only, whatever plate those notes were drawn on. The plate draws
+ * copies owned by the bridge until the next syncPlateNotes(), which restores
+ * the normal list. Returns false for an unknown plate or round.
+ */
+bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundIndex);
+
+/**
+ * Makes sure @a track has its frame list, starting the track's load when it
+ * has none (a single image quick-loaded shows as a preview without one).
+ * Only STARTS the async load -- gfcSequence::forceLoad (what a forRender=true
+ * frame request falls back to for a frame not yet decoded) needs that frame's
+ * load params, which are recorded only once the loader thread has reached it,
+ * so a render immediately after this call can still see an empty frame. The
+ * caller must wait for at least one decoded frame (see renderSummaryThumbnails
+ * in MainWindow_qt.cpp) before rendering. Returns whether the track now has
+ * frames.
+ */
+bool prepareTrackForRender(int track);
+
+/**
+ * Whether a render of timeline @a frame on @a track can decode it: the frame is
+ * loaded, or the track's async loader has reached it (gfcSequence::forceLoad
+ * decodes from the load parameters recorded then). False for a frame outside
+ * the track.
+ */
+bool isTrackFrameReady(int track, int frame);
+
+/**
+ * Restarts @a track's load at timeline @a frame, so the async loader reaches
+ * that frame first. Unlike startLoadingTrackAt() it leaves the crash-recovery
+ * session alone. A load from the track's first frame is announced to remote
+ * peers (a "loaded" chat line); @a allowAnnounce = false refuses that case.
+ * Clearing the track's decoded frames deletes their textures, so the viewport
+ * GL context must be current. Returns whether a load was started.
+ */
+bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce);
+
+/**
+ * Puts back a playlist selection read earlier with getSelectedPlaylistItem()
+ * and currentContentIsPlaylistItem(): selects item @a index (-1 for none) and
+ * sets whether the loaded content counts as that playlist item (auto-advance
+ * arming). Loads nothing and, unlike a playlist load, sends nothing to remote
+ * peers.
+ */
+void restorePlaylistSelection(int index, bool contentFromPlaylist);
+
+/**
+ * Mutes (or unmutes) what this client sends to remote peers when local state
+ * changes -- seeks, play/pause, in/out, FX, playlist -- the same switch the
+ * network client flips while applying an inbound message. Only mute around
+ * work that pumps no events: an inbound message unmutes it when applied.
+ */
+void setRemoteBroadcastsMuted(bool muted);
+
+/** Every frame file of the sequence @a anyFramePath belongs to, in frame order. */
+std::vector<std::string> listSequenceFrames(const std::string& anyFramePath);
+
+/** The sidecar document of the in-memory review for @a mediaPath (loaded on first touch). */
+std::string reviewXmlForMedia(const std::string& mediaPath);
+
+/** The fingerprint recorded on the review for @a mediaPath, or "". */
+std::string reviewFingerprint(const std::string& mediaPath);
+
+/** Records @a fingerprint on the review for @a mediaPath and saves its sidecar.
+    Returns false when the sidecar could not be written (the value stays in memory). */
+bool setReviewFingerprint(const std::string& mediaPath, const std::string& fingerprint);
+
+/** The source file of the loaded LUT sessions call @a lutName, or "" when none is loaded under that name. */
+std::string lutSourcePath(const std::string& lutName);
+
+/** What loadLUTFileReportingConflict() did with a LUT file. */
+enum class LutLoadOutcome {
+    Loaded,                   // a new LUT was added
+    SameAlreadyLoaded,        // a LUT of this file name is loaded and its source has identical bytes
+    DifferentAlreadyLoaded,   // the name is loaded but its bytes differ, or its source can't be read
+    Failed,                   // the file could not be loaded
+};
+
+/** Loads the LUT at @a path like loadLUTFile(), but says whether a LUT of the same
+    file name was already loaded and, if so, whether it is the same file. The caller
+    makes the GL context current. */
+LutLoadOutcome loadLUTFileReportingConflict(const std::string& path);
+
+/** Whether @a path lies inside a directory LUTs autoload from (sett.lutPath, the bundle FX/, ./FX/). */
+bool isInstallLutPath(const std::string& path);
+
+/** Drops the in-memory review for @a mediaPath and republishes plate notes, so
+    the next use reads its sidecar from disk again (after a package merge). */
+void reloadReviewFromDisk(const std::string& mediaPath);
+
+/** Preferences -> Search Paths. */
+std::vector<std::string> getSearchPaths();
+bool getSearchPathsRecursive();
+/** Sets the search paths for this run (not persisted); @a enabled is "use search paths". */
+void setSearchPaths(const std::vector<std::string>& paths, bool recursive, bool enabled);
+
+/** Whether an FX with this name is loaded. */
+bool isFxLoaded(const std::string& fxName);
+
+/** JEFE_VERSION (gfcStructures.h), for callers that cannot include that header
+    themselves (it drags glad, which doesn't share a TU with Qt's QtGui on macOS). */
+std::string appVersion();
 
 /**
  * Put one of each note type on a plate, for --notes-demo. Coordinates are

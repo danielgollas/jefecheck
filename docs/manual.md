@@ -480,6 +480,9 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 - **Playlist Manager** (`Ctrl+P`) — Opens the Playlist Window.
 - **Save Session** (`Ctrl+S`) — Saves a complete JefeCheck session including loaded tracks, load-time parameters, and viewport configurations into a single file for later recall.
 - **Open Session** (`Ctrl+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
+- **Export Review Summary…** — Writes the notes on everything in the current session to a PDF, text or CSV file, organized by shot, review round and frame. The PDF also shows a thumbnail of each noted frame with its markup. Use it to send feedback to people who don't have JefeCheck.
+- **Export Review Package…** — Bundles the current session, its notes and any LUTs you loaded yourself into a single `.jcreview` file you can hand to someone else. Leave **Include media** ticked to copy the footage into the package so it opens anywhere; untick it when everyone can reach the same storage, and JefeCheck will find the footage by its content instead.
+- **Open Review Package…** — Opens a `.jcreview` file. JefeCheck loads its session and LUTs, finds the footage (inside the package, where it was originally, by searching your Search Paths, or by asking you to locate it), and adds the package's notes to any notes you already have on that footage — nothing of yours is removed. When it's done, it lists anything it couldn't find or load.
 - **Save Chat Log** — Saves the complete chat log after a remote session.
 - **Preferences** (`Ctrl+P`) — Opens the Preferences Window. See Section 4: Other Stuff.
 - **Quit** (`Ctrl+Q`) — Quits JefeCheck.

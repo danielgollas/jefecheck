@@ -14,6 +14,8 @@
 #include "qt_prefs_persist.h"
 #include "RenderBridge_qt.h"
 #include "RenderDialog_qt.h"
+#include "ReviewPackageDialog_qt.h"
+#include "ReviewSummaryPdf_qt.h"
 #include "VideoEncoder_qt.h"
 
 #include <QEventLoop>
@@ -26,10 +28,13 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDir>
 #include <QDesktopServices>
+#include <QCoreApplication>
 #include <QDockWidget>
 #include <QUrl>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImage>
@@ -37,12 +42,36 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSettings>
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QTemporaryDir>
 #include <QElapsedTimer>
+#include <QThread>
 #include <QTimer>
+
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <functional>
+#include <memory>
+
+#include "../gfcReviewSummary.h"
+#include "../gfcNoteStore.h"
+#include "../gfcreview.h"
+#include "../gfcrevision.h"
+#include "../gfcnotestroke.h"
+#include "../gfcnotetext.h"
+#include "../gfcMediaFingerprint.h"
+#include "../gfcSessionPaths.h"
+#include "../gfcTarArchive.h"
+#include "../gfcUtf8.h"
+#include "../xmlParser.h"
+
+#include <ctime>
 
 namespace {
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
@@ -50,6 +79,23 @@ constexpr const char* kSettingsGeometry = "MainWindow/geometry";
 // an over-tall bottom dock row (which could collapse/hide the Plate Manager).
 // Old "MainWindow/state" is ignored, so first-launch defaults reapply once.
 constexpr const char* kSettingsState    = "MainWindow/state_v2";
+
+// Sets *flag true for the scope and false again on every return path
+// (including early returns), so a guarded function can't be mistaken for
+// still running if an exception or an early `return` skips a manual reset.
+struct ScopedFlag {
+    bool* flag;
+    explicit ScopedFlag(bool* f) : flag(f) { *flag = true; }
+    ~ScopedFlag() { *flag = false; }
+};
+
+// Snapshots Recent Sessions and puts it back on every return path. Saving or
+// loading a session pushes its path onto the list, which a temporary or
+// extracted session must not leave behind.
+struct RecentSessionsGuard {
+    const std::vector<std::string> saved = jefe::qt::getRecentSessions();
+    ~RecentSessionsGuard() { jefe::qt::setRecentSessions(saved); }
+};
 }
 
 MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
@@ -539,6 +585,58 @@ void MainWindow_Qt::buildMenuBar() {
         stampActiveFrameNotes(out, &message);
         statusBar()->showMessage(message, 8000);
     })->setObjectName("menu.file.stampnotes");
+
+    fileMenu->addAction(tr("Export Review Summary…"), this, [this]() {
+        QString filter;
+        QString out = QFileDialog::getSaveFileName(
+            this, tr("Export Review Summary"), QString(),
+            tr("PDF (*.pdf);;Text (*.txt);;CSV (*.csv)"), &filter);
+        if (out.isEmpty()) return;
+        if (QFileInfo(out).suffix().isEmpty()) {
+            out += filter.startsWith("Text") ? ".txt" : filter.startsWith("CSV") ? ".csv" : ".pdf";
+        }
+        ReviewSummaryStats stats;
+        QString message;
+        if (exportReviewSummary(out, &stats, &message)) {
+            statusBar()->showMessage(message, 8000);
+        } else {
+            QMessageBox::warning(this, tr("Export Review Summary"), message);
+        }
+    })->setObjectName("menu.file.exportsummary");
+
+    fileMenu->addAction(tr("Export Review Package…"), this, [this]() {
+        ReviewPackageDialog_Qt dialog(
+            [this](const QString& out, bool includeMedia, jefe::qt::package::ExportInput& input, QString* message) {
+                return gatherPackageInput(out, includeMedia, input, message);
+            },
+            packageMediaBytes(), this);
+        dialog.exec();
+        if (!dialog.lastMessage().isEmpty()) statusBar()->showMessage(dialog.lastMessage(), 8000);
+    })->setObjectName("menu.file.exportpackage");
+
+    fileMenu->addAction(tr("Open Review Package…"), this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(this, tr("Open Review Package"), QString(),
+                                                          tr("JefeCheck Review Package (*.jcreview)"));
+        if (path.isEmpty()) return;
+        PackageStats stats;
+        QString message;
+        if (!openReviewPackage(path, true, &stats, &message)) {
+            QMessageBox::warning(this, tr("Open Review Package"), message);
+            return;
+        }
+        statusBar()->showMessage(message, 8000);
+        QStringList problems;
+        if (!stats.missingMedia.isEmpty()) problems << tr("Media not found: %1").arg(stats.missingMedia.join(", "));
+        if (!stats.missingFx.isEmpty()) problems << tr("FX not installed: %1").arg(stats.missingFx.join(", "));
+        if (!stats.notesProblems.isEmpty()) problems << tr("Notes not merged:\n%1").arg(stats.notesProblems.join("\n"));
+        if (!stats.lutsNotLoaded.isEmpty()) {
+            problems << tr("LUTs not loaded (a different LUT with the same name is already loaded, "
+                           "or the file could not be read): %1").arg(stats.lutsNotLoaded.join(", "));
+        }
+        if (!problems.isEmpty()) {
+            QMessageBox::information(this, tr("Open Review Package"), problems.join("\n"));
+        }
+    })->setObjectName("menu.file.openpackage");
 
     // Rebuild both recent submenus each time the File menu opens.
     connect(fileMenu, &QMenu::aboutToShow, this, [this]() {
@@ -1115,6 +1213,7 @@ void MainWindow_Qt::openSessionPath(const QString& path) {
     viewport_->doneCurrent();
     if (ok) {
         currentSessionPath_ = path;
+        packageTitle_.clear();
         updateSessionTitle();
         refreshAfterSessionLoad();
         statusBar()->showMessage(
@@ -1651,9 +1750,13 @@ int MainWindow_Qt::runHeadlessFXMultiTest(const QString& imagePath) {
 }
 
 void MainWindow_Qt::updateSessionTitle() {
-    if (currentSessionPath_.isEmpty()) setWindowTitle("JefeCheck");
-    else setWindowTitle(QString("JefeCheck — %1")
-                            .arg(QFileInfo(currentSessionPath_).fileName()));
+    if (!currentSessionPath_.isEmpty()) {
+        setWindowTitle(QString("JefeCheck — %1").arg(QFileInfo(currentSessionPath_).fileName()));
+    } else if (!packageTitle_.isEmpty()) {
+        setWindowTitle(QString("JefeCheck — %1").arg(packageTitle_));
+    } else {
+        setWindowTitle("JefeCheck");
+    }
 }
 
 void MainWindow_Qt::saveLayout() {
@@ -1741,6 +1844,1239 @@ bool MainWindow_Qt::stampActiveFrameNotes(const QString& outPath, QString* messa
             .arg(QFileInfo(outPath).fileName())
             .arg(r.markedTexels));
     return true;
+}
+
+bool MainWindow_Qt::exportReviewSummary(const QString& outPath, ReviewSummaryStats* stats, QString* message) {
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    if (summaryExportInProgress_) {
+        say(tr("An export is already running"));
+        return false;
+    }
+    ScopedFlag exportGuard(&summaryExportInProgress_);
+    const QString suffix = QFileInfo(outPath).suffix().toLower();
+    if (suffix != "txt" && suffix != "csv" && suffix != "pdf") {
+        say(tr("Unsupported summary format \"%1\": use .pdf, .txt or .csv").arg(suffix));
+        return false;
+    }
+    const std::vector<jefe::qt::SessionMedia> media = jefe::qt::getSessionMediaSet();
+    if (media.empty()) {
+        say(tr("Nothing to summarise: the session has no media"));
+        return false;
+    }
+    {
+        // Refuse an unwritable destination before any rendering starts.
+        QFile probe(outPath + ".partial");
+        if (!probe.open(QIODevice::WriteOnly)) {
+            say(tr("Cannot write %1").arg(outPath));
+            return false;
+        }
+        probe.close();
+        probe.remove();
+    }
+    const QString title = currentSessionPath_.isEmpty()
+                          ? tr("Untitled session")
+                          : QFileInfo(currentSessionPath_).completeBaseName();
+    gfcReviewSummary::Doc doc = jefe::qt::buildReviewSummary(media, title.toStdString());
+
+    ReviewSummaryStats s;
+    s.media = int(doc.media.size());
+    s.rounds = gfcReviewSummary::roundCount(doc);
+    s.notes = gfcReviewSummary::noteCount(doc);
+
+    if (suffix == "pdf") {
+        // Thumbnails, and the session saved to put a playlist item's tracks
+        // back, live in a temporary directory that is removed when this block
+        // ends -- once the PDF has been written, or has failed.
+        QTemporaryDir tempDir(QDir::tempPath() + "/jefecheck_summary_XXXXXX");
+        if (!tempDir.isValid()) {
+            say(tr("Cannot create a temporary directory for the thumbnails"));
+            return false;
+        }
+        s.tempDir = tempDir.path();
+        renderSummaryThumbnails(media, doc, tempDir.path(), &s);
+        int pages = 0;
+        QString err;
+        if (!jefe::qt::writeReviewSummaryPdf(doc, outPath, &pages, &err)) {
+            say(err);
+            return false;
+        }
+    } else {
+        const std::string contents = (suffix == "txt") ? gfcReviewSummary::toText(doc)
+                                                       : gfcReviewSummary::toCsv(doc);
+        std::string err;
+        if (!gfcReviewSummary::writeFileAtomically(outPath.toStdString(), contents, &err)) {
+            say(QString::fromStdString(err));
+            return false;
+        }
+    }
+
+    if (stats) *stats = s;
+    say(tr("Summary written: %1 %2 %3 media, %4 rounds, %5 notes")
+            .arg(QFileInfo(outPath).fileName(), QString::fromUtf8("\xE2\x80\x94"))
+            .arg(s.media).arg(s.rounds).arg(s.notes));
+    return true;
+}
+
+void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionMedia>& media,
+                                            gfcReviewSummary::Doc& doc, const QString& dir,
+                                            ReviewSummaryStats* stats) {
+    // What the export changes, put back when it is done.
+    const int savedFrame = jefe::qt::getCurrentFrame();
+    const int savedIn = jefe::qt::getInPoint();
+    const int savedOut = jefe::qt::getOutPoint();
+    const int savedPlaylistItem = jefe::qt::getSelectedPlaylistItem();
+    const bool savedFromPlaylist = jefe::qt::currentContentIsPlaylistItem();
+    // Saving or opening a session pushes it onto Recent Sessions; the
+    // export's own temporary session must not stay there.
+    const std::vector<std::string> savedRecents = jefe::qt::getRecentSessions();
+    // Playback would otherwise keep advancing frames (via playbackTimer_,
+    // which the excluded-user-input event pump below still services) while
+    // notes/frames are swapped out for rendering. Pause for the duration and
+    // resume at the end, once everything else is back.
+    const bool wasPlaying = jefe::qt::isPlaying();
+
+    // In a live remote session, loads, seeks and play/pause are sent to the
+    // peers, and the export must send nothing. So it loads no playlist item
+    // (those entries count as thumbfail), starts no track load that announces
+    // itself, and mutes notifications around each step that changes shared
+    // state. Those steps pump no events, so an inbound message cannot unmute
+    // them halfway through.
+    const bool remote = jefe::qt::isRemoteConnected();
+    auto quietly = [remote](const std::function<void()>& step) {
+        if (remote) jefe::qt::setRemoteBroadcastsMuted(true);
+        step();
+        if (remote) jefe::qt::setRemoteBroadcastsMuted(false);
+    };
+
+    if (wasPlaying) quietly([] { jefe::qt::pausePlayback(); });
+
+    // A playlist item replaces every track, so the session is saved first and
+    // reopened at the end -- only when an item is going to be loaded.
+    bool needsPlaylistItem = false;
+    for (const jefe::qt::SessionMedia& m : media) {
+        if (m.track < 0 && m.playlistItem >= 0) needsPlaylistItem = true;
+    }
+    const QString restore = dir + "/restore.jcs";
+    const bool saved = needsPlaylistItem && !remote && jefe::qt::saveSession(restore.toStdString());
+
+    // gfcSequence::forceLoad (what a forRender=true frame request falls back
+    // to when a frame hasn't decoded yet) only works once the async loader
+    // thread has reached that frame at least once -- its load params are
+    // recorded then. So the export waits, bounded, draining the GL upload
+    // queue: for a track's first frame before using the track, and for each
+    // frame it renders.
+    //
+    // Pumps the Qt event loop between polls (excluding user input, see
+    // below) so timers, paints and accessibility keep running instead of
+    // stalling the GUI thread for up to the full timeout per wait the way an
+    // unyielded shader-compile pass does (see autoloadFXsFromPath()'s comment
+    // in SequenceLoadBridge_qt.cpp for the same problem elsewhere).
+    // summaryExportInProgress_ (set for the whole of exportReviewSummary)
+    // keeps a second export from starting mid-wait; excluding user input
+    // events here additionally queues any click/keystroke that arrives
+    // during the wait instead of letting it interact with a half-restored
+    // session.
+    auto waitUntil = [this](const std::function<bool()>& done, int timeoutMs) {
+        QElapsedTimer waitTimer;
+        waitTimer.start();
+        while (!done() && waitTimer.elapsed() < timeoutMs) {
+            if (jefe::qt::hasPendingTextureUploads()) {
+                viewport_->makeCurrent();
+                jefe::qt::uploadPendingTextures();
+                viewport_->doneCurrent();
+            } else {
+                // Nothing to drain yet -- a tiny sleep keeps this from
+                // busy-spinning while the loader thread works, short enough
+                // to stay well clear of the AX/event-loop stall this whole
+                // wait exists to avoid.
+                QThread::msleep(2);
+            }
+            // Exclude user input so a queued click/keystroke can't re-enter
+            // export mid-wait; timers, paints and accessibility still run.
+            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        }
+        return done();
+    };
+    auto waitForTrackFrame = [&](int track) {
+        return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).loadedCount > 0; }, 5000);
+    };
+    // Whether @a frame of @a track can be rendered. A frame the loader has not
+    // reached gets the track's load restarted at it, and a wait for it --
+    // except where that restart would be announced to remote peers.
+    auto frameReady = [&](int track, int frame) {
+        if (jefe::qt::isTrackFrameReady(track, frame)) return true;
+        bool started = false;
+        viewport_->makeCurrent();   // restarting deletes the track's frame textures
+        quietly([&] { started = jefe::qt::restartTrackLoadAtFrame(track, frame, !remote); });
+        viewport_->doneCurrent();
+        return started &&
+               waitUntil([track, frame] { return jefe::qt::isTrackFrameReady(track, frame); }, 5000);
+    };
+
+    int loadedPlaylistItem = -1;
+    for (size_t mi = 0; mi < media.size() && mi < doc.media.size(); ++mi) {
+        const jefe::qt::SessionMedia& m = media[mi];
+        gfcReviewSummary::Media& entry = doc.media[mi];
+        int track = m.track;
+        bool available = true;
+        if (track < 0 && m.playlistItem >= 0) {
+            track = m.playlistTrack;
+            if (!saved) {
+                // A remote session, or no saved session to put the tracks
+                // back from: leave the tracks alone.
+                available = false;
+            } else if (loadedPlaylistItem != m.playlistItem) {
+                // Loads the item's tracks, FX stacks and program state: its
+                // reviewed look. Replacing the tracks deletes their textures,
+                // so the GL context must be current.
+                viewport_->makeCurrent();
+                jefe::qt::loadPlaylistItem(m.playlistItem);
+                viewport_->doneCurrent();
+                loadedPlaylistItem = m.playlistItem;
+            }
+        }
+        const int plate = available ? jefe::qt::plateShowingTrack(track) : -1;
+        bool ready = false;
+        if (plate >= 0) {
+            if (remote) {
+                // A track's first load is announced to the peers: use only
+                // a track that already has its frame list.
+                ready = jefe::qt::getTrackTimelineState(track).numFrames > 0;
+            } else {
+                viewport_->makeCurrent();   // starting a load clears the track's textures
+                ready = jefe::qt::prepareTrackForRender(track);
+                viewport_->doneCurrent();
+            }
+        }
+        if (ready) ready = waitForTrackFrame(track);
+        const int firstFrame = ready ? jefe::qt::getTrackTimelineState(track).rangeStart : 1;
+
+        for (size_t ri = 0; ri < entry.rounds.size(); ++ri) {
+            for (size_t fi = 0; fi < entry.rounds[ri].frames.size(); ++fi) {
+                gfcReviewSummary::Frame& f = entry.rounds[ri].frames[fi];
+                const int frame = (f.frame == gfcReviewSummary::kAllFrames) ? firstFrame : f.frame;
+                // frameReady() may pump events, so point the plate at this
+                // round's notes only after it, right before the render.
+                if (!ready || !frameReady(track, frame) ||
+                    !jefe::qt::setPlateNotesToRound(plate, m.mediaPath, int(ri))) {
+                    ++stats->thumbFail;
+                    continue;
+                }
+                jefe::qt::RenderParams p;
+                p.quadrant = plate;
+                p.format = 5;               // PNG
+                p.formatString = "png";
+                p.from = p.to = frame;
+                p.padding = 4;
+                p.scale = 1.0f;
+                p.path = dir.toStdString();
+                p.prefix = QString("thumb_m%1_r%2_f%3_").arg(mi).arg(ri).arg(fi).toStdString();
+                int sw = 0, sh = 0;
+                jefe::qt::getRenderSourceSize(plate, sw, sh);
+                if (sw > 0 && sh > 0) {
+                    p.outWidth = 960;
+                    p.outHeight = std::max(1, int(960.0 * sh / sw + 0.5));
+                }
+                p.burnInNotes = true;
+                const QString file = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+                int rendered = 0;
+                viewport_->makeCurrent();
+                quietly([&] { rendered = jefe::qt::triggerSyncRender(p); });   // renders seek the playhead
+                viewport_->doneCurrent();
+                const QImage thumb(file);
+                if (rendered == 1 && !thumb.isNull()) {
+                    f.thumbnailPath = file.toStdString();
+                    ++stats->thumbs;
+                    if (stats->firstThumbnail.isNull()) stats->firstThumbnail = thumb;
+                } else {
+                    ++stats->thumbFail;
+                }
+            }
+        }
+    }
+
+    // Put back what the export changed: the plates' real notes, then -- only
+    // if a playlist item replaced the tracks -- the saved session, through the
+    // same path as File -> Open Session.
+    jefe::qt::syncPlateNotes();
+    if (loadedPlaylistItem >= 0) {
+        viewport_->makeCurrent();
+        if (jefe::qt::loadSession(restore.toStdString())) jefe::qt::startLoadingAllTracks();
+        viewport_->doneCurrent();
+        refreshAfterSessionLoad();
+        // startLoadingAllTracks() is async -- wait for each track that has
+        // media to land its first frame so a caller that renders right after
+        // this returns (e.g. a burn-in comparison) doesn't see a mid-reload
+        // blank plate.
+        for (int t = 0; t < 4; ++t) {
+            if (!jefe::qt::getTrackParams(t).filename.empty()) waitForTrackFrame(t);
+        }
+    }
+    // A session reopen does not restore the playlist selection, and every
+    // track load resets the in/out points, so those go back explicitly, with
+    // Recent Sessions, the frame and playback.
+    jefe::qt::setRecentSessions(savedRecents);
+    quietly([&] {
+        jefe::qt::restorePlaylistSelection(savedPlaylistItem, savedFromPlaylist);
+        // Out first: setOutPoint pulls a later in point down to it, and the
+        // saved in point is never after the saved out point.
+        jefe::qt::setOutPoint(savedOut);
+        jefe::qt::setInPoint(savedIn);
+        jefe::qt::seekToFrame(savedFrame);
+        // togglePlayFwd() starts forward playback from the paused state
+        // pausePlayback() left at the start.
+        if (wasPlaying) jefe::qt::togglePlayFwd();
+    });
+}
+
+int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("SUMMARY-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    auto readBytes = [](const QString& path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    if (!viewport_) { printf("SUMMARY-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
+
+    // A private copy of the image, so the sidecar next to it is this test's alone.
+    const QString work = QDir::tempPath() + "/jefecheck_summarytest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    QDir().mkpath(work);
+    const QString media = work + "/" + QFileInfo(imagePath).fileName();
+    if (!QFile::copy(imagePath, media)) {
+        printf("SUMMARY-TEST FAIL cannot copy %s\n", qPrintable(imagePath));
+        fflush(stdout);
+        return 2;
+    }
+
+    // One locked round with a stroke on frame 1 and a text note on every
+    // frame, then an open round with no notes.
+    {
+        gfcReview review;
+        review.mediaPath = gfcNoteStore::normalisePath(media.toStdString());
+        gfcRevision& r1 = review.beginRevision("Supervisor");
+        auto stroke = std::make_unique<gfcNoteStroke>();
+        stroke->author = "Supervisor";
+        stroke->quadID = 0;
+        stroke->from = 1;
+        stroke->to = 1;
+        stroke->colorR = 1.0f; stroke->colorG = 0.0f; stroke->colorB = 0.0f;
+        stroke->size = 12;
+        stroke->pts = { gfcNotePoint{0.1f, 0.1f}, gfcNotePoint{0.9f, 0.9f}, gfcNotePoint{0.1f, 0.9f} };
+        r1.addNote(std::move(stroke));
+        auto text = std::make_unique<gfcNoteText>();
+        text->author = "Supervisor";
+        text->quadID = 0;
+        text->always = true;
+        text->anchor = gfcNotePoint{0.5f, 0.5f};
+        text->text = "too warm, \"here\"";
+        r1.addNote(std::move(text));
+        r1.locked = true;
+        review.beginRevision("Artist");
+        check(gfcNoteStore::save(review), "fixture sidecar saved");
+    }
+
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+
+    ReviewSummaryStats stats;
+    QString msg;
+    const QString txt = work + "/summary.txt";
+    check(exportReviewSummary(txt, &stats, &msg), "text summary exported");
+    check(stats.media == 1 && stats.rounds == 2 && stats.notes == 2,
+          "counts: one media, two rounds, two notes");
+    const QString text = QString::fromUtf8(readBytes(txt));
+    check(text.contains("== " + QFileInfo(media).fileName() + " =="), "text names the media");
+    check(text.contains(QString::fromUtf8("Round 1 \xE2\x80\x94 Supervisor")) && text.contains("locked"),
+          "text has the locked Supervisor round");
+    check(text.contains(QString::fromUtf8("Round 2 \xE2\x80\x94 Artist")) && text.contains("  No notes"),
+          "text keeps the empty Artist round");
+    check(text.contains("\"too warm, \"here\"\""), "text quotes the text note");
+
+    const QString csv = work + "/summary.csv";
+    check(exportReviewSummary(csv, &stats, &msg), "CSV summary exported");
+    const QByteArray csvBytes = readBytes(csv);
+    check(csvBytes.startsWith("media,round_id,round_author,"), "CSV starts with the header");
+    check(csvBytes.count("\r\n") == 3, "CSV has the header and one row per note");
+    check(csvBytes.contains("\"too warm, \"\"here\"\"\""), "CSV quotes the text note");
+    check(!QFile::exists(txt + ".partial") && !QFile::exists(csv + ".partial"), "no partial files left");
+    check(!exportReviewSummary(work + "/summary.doc", &stats, &msg), "an unknown extension is refused");
+
+    // A second media whose sidecar exists but is not a notes document (valid
+    // XML, wrong shape) -- buildReviewSummary() should report it as
+    // "Notes unreadable" rather than silently showing "No notes". Track 1,
+    // not track 0: the next task's PDF checks assume track 0 is still the
+    // first media, so it must stay exactly as the checks above left it.
+    const QString media2 = work + "/unreadable_" + QFileInfo(media).fileName();
+    if (!QFile::copy(imagePath, media2)) {
+        printf("SUMMARY-TEST FAIL cannot copy %s\n", qPrintable(imagePath));
+        fflush(stdout);
+        return 2;
+    }
+    const std::string sidecar2 = gfcNoteStore::sidecarPathFor(
+        gfcNoteStore::normalisePath(media2.toStdString()));
+    {
+        QFile f(QString::fromStdString(sidecar2));
+        check(f.open(QIODevice::WriteOnly) && f.write("<other/>") > 0,
+              "unreadable-notes sidecar written");
+    }
+
+    loadFileIntoPlate(1, media2);
+
+    const QString txt2 = work + "/summary2.txt";
+    check(exportReviewSummary(txt2, &stats, &msg), "third text summary exported");
+    const QString text2 = QString::fromUtf8(readBytes(txt2));
+    check(text2.contains("== " + QFileInfo(media2).fileName() + " ==\n  Notes unreadable\n"),
+          "unreadable notes are reported for the second media");
+    check(text2.contains(QString::fromUtf8("Round 1 \xE2\x80\x94 Supervisor")),
+          "first media's round is still in the summary");
+
+    // PDF: thumbnails through the plate pipeline with the round's notes burned
+    // in, and what the export touched put back afterwards.
+
+    // Pumps events (excluding user input) and drains texture uploads until
+    // done() holds, the way the export itself waits for frames.
+    auto pumpUntil = [this](const std::function<bool()>& done, int timeoutMs) {
+        QElapsedTimer waited;
+        waited.start();
+        while (!done() && waited.elapsed() < timeoutMs) {
+            if (jefe::qt::hasPendingTextureUploads()) {
+                viewport_->makeCurrent();
+                jefe::qt::uploadPendingTextures();
+                viewport_->doneCurrent();
+            } else {
+                QThread::msleep(2);
+            }
+            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        }
+        return done();
+    };
+    // A numbered PNG sequence of `count` frames in its own directory; returns frame 1.
+    auto writeSequence = [](const QString& dir, const QString& stem, int count, int hue) {
+        QDir().mkpath(dir);
+        for (int i = 1; i <= count; ++i) {
+            QImage img(64, 64, QImage::Format_RGB32);
+            img.fill(QColor::fromHsv(hue, 200, 60 + 30 * i));
+            img.save(dir + "/" + stem + QString(".%1.png").arg(i, 4, 10, QChar('0')));
+        }
+        return dir + "/" + stem + ".0001.png";
+    };
+    // One round by `author` with a stroke on each of `frames`.
+    auto saveStrokes = [](const QString& framePath, const char* author, std::initializer_list<int> frames) {
+        gfcReview review;
+        review.mediaPath = gfcNoteStore::normalisePath(framePath.toStdString());
+        gfcRevision& r = review.beginRevision(author);
+        for (int frame : frames) {
+            auto stroke = std::make_unique<gfcNoteStroke>();
+            stroke->author = author;
+            stroke->quadID = 0;
+            stroke->from = frame;
+            stroke->to = frame;
+            stroke->colorR = 0.0f; stroke->colorG = 1.0f; stroke->colorB = 0.0f;
+            stroke->size = 8;
+            stroke->pts = { gfcNotePoint{0.2f, 0.2f}, gfcNotePoint{0.8f, 0.8f} };
+            r.addNote(std::move(stroke));
+        }
+        return gfcNoteStore::save(review);
+    };
+
+    // A six-frame sequence on track 2, with notes on frames 2 and 5.
+    const QString seqFirst = writeSequence(work + "/seq", "shot", 6, 210);
+    check(saveStrokes(seqFirst, "Lead", {2, 5}), "sequence sidecar saved");
+    loadFileIntoPlate(2, seqFirst);
+    check(pumpUntil([] { return jefe::qt::getTrackTimelineState(2).loadedCount >= 6; }, 5000),
+          "the sequence loads all six frames");
+
+    // The user's playlist state: the current tracks kept as playlist item 0
+    // and loaded from it, so item 0 is selected and armed for auto-advance.
+    jefe::qt::addCurrentAsPlaylistItem();
+    viewport_->makeCurrent();
+    jefe::qt::loadPlaylistItem(0);
+    viewport_->doneCurrent();
+    check(pumpUntil([] {
+              return jefe::qt::getTrackTimelineState(0).loadedCount >= 1 &&
+                     jefe::qt::getTrackTimelineState(2).loadedCount >= 6;
+          }, 5000),
+          "the tracks reload from playlist item 0");
+
+    // As if the sequence's loader had been started at frame 4 (Alt+click on
+    // the timeline): frames 1-3 have never been reached, so a forced render of
+    // frame 2 has no load parameters to decode it with.
+    viewport_->makeCurrent();
+    const bool restarted = jefe::qt::restartTrackLoadAtFrame(2, 4, true);
+    viewport_->doneCurrent();
+    check(restarted, "the sequence's load restarts at frame 4");
+    check(pumpUntil([] { return jefe::qt::isTrackFrameReady(2, 6); }, 5000) &&
+          jefe::qt::isTrackFrameReady(2, 5) && !jefe::qt::isTrackFrameReady(2, 2),
+          "fixture: frame 5 is loaded, frame 2 has not been reached");
+
+    // What the export must put back: a frame other than the first, an in/out
+    // range inside the sequence, the playlist selection, Recent Sessions and
+    // the tracks.
+    auto setUserState = []() {
+        jefe::qt::setOutPoint(5);
+        jefe::qt::setInPoint(2);
+        jefe::qt::seekToFrame(3);
+    };
+    jefe::qt::setRecentSessions({ (work + "/earlier.jcs").toStdString() });
+    const std::vector<std::string> beforeRecents = jefe::qt::getRecentSessions();
+    const std::string beforeFiles[3] = { jefe::qt::getTrackParams(0).filename,
+                                         jefe::qt::getTrackParams(1).filename,
+                                         jefe::qt::getTrackParams(2).filename };
+    auto checkRestored = [&](const std::string& when, const ReviewSummaryStats& st) {
+        printf("SUMMARY-TEST %s state: frame=%d in=%d out=%d item=%d fromPlaylist=%d recents=%zu tempDirExists=%d\n",
+               when.c_str(), jefe::qt::getCurrentFrame(), jefe::qt::getInPoint(), jefe::qt::getOutPoint(),
+               jefe::qt::getSelectedPlaylistItem(), jefe::qt::currentContentIsPlaylistItem() ? 1 : 0,
+               jefe::qt::getRecentSessions().size(), QFileInfo::exists(st.tempDir) ? 1 : 0);
+        auto what = [&](const char* s) { return when + ": " + s; };
+        check(jefe::qt::getCurrentFrame() == 3, what("the current frame is restored").c_str());
+        check(jefe::qt::getInPoint() == 2 && jefe::qt::getOutPoint() == 5,
+              what("the in/out points are restored").c_str());
+        check(jefe::qt::getSelectedPlaylistItem() == 0 && jefe::qt::currentContentIsPlaylistItem(),
+              what("the playlist selection and its auto-advance arming are restored").c_str());
+        check(jefe::qt::getRecentSessions() == beforeRecents, what("Recent Sessions is unchanged").c_str());
+        check(!st.tempDir.isEmpty() && !QFileInfo::exists(st.tempDir),
+              what("the export's temporary directory is removed").c_str());
+        bool sameMedia = true;
+        for (int t = 0; t < 3; ++t) {
+            if (jefe::qt::getTrackParams(t).filename != beforeFiles[t]) sameMedia = false;
+        }
+        check(sameMedia, what("the tracks' media is restored").c_str());
+    };
+
+    const QString pdf = work + "/summary.pdf";
+
+    // Re-entrancy (JEF-39 fix round 2): the export's frame-decode wait pumps
+    // the event loop (excluding user input), so schedule a second export to
+    // fire from that pump -- the only way it can actually land inside the
+    // first export's call stack -- and confirm it's refused rather than
+    // running concurrently with the first.
+    bool reentrantFired = false;
+    bool reentrantResult = true;
+    QString reentrantMsg;
+    const QString reentrantPdf = work + "/reentrant.pdf";
+    QTimer::singleShot(0, this, [&]() {
+        reentrantFired = true;
+        ReviewSummaryStats reentrantStats;
+        reentrantResult = exportReviewSummary(reentrantPdf, &reentrantStats, &reentrantMsg);
+    });
+
+    setUserState();
+    check(exportReviewSummary(pdf, &stats, &msg), "PDF summary exported");
+    printf("SUMMARY-TEST pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg), stats.thumbs, stats.thumbFail);
+    // Two entries on the image (all frames, frame 1) and frames 2 and 5 of the
+    // sequence -- frame 2 only renders once the export has loaded it.
+    check(stats.thumbs == 4 && stats.thumbFail == 0,
+          "one thumbnail per frame entry, including a frame the loader had not reached; none failed");
+    const QByteArray pdfBytes = readBytes(pdf);
+    check(pdfBytes.startsWith("%PDF-") && pdfBytes.trimmed().endsWith("%%EOF"), "PDF file is complete");
+    check(!QFile::exists(pdf + ".partial"), "no partial PDF left");
+    checkRestored("tracks-only PDF", stats);
+
+    if (!reentrantFired) {
+        check(false, "re-entrant export timer never fired during the export (test inconclusive -- the wait pump was not exercised)");
+    } else {
+        check(!reentrantResult, "a re-entrant export while one is running is refused");
+        check(reentrantMsg.contains("already running"), "re-entrant export message says already running");
+        check(!QFile::exists(reentrantPdf), "the re-entrant export wrote nothing");
+    }
+
+    // Burn-in reached the thumbnail: the same frame rendered with the empty
+    // round (no notes) must differ from it.
+    const QImage withNotes = stats.firstThumbnail;
+    check(!withNotes.isNull(), "first thumbnail readable");
+    const std::vector<jefe::qt::SessionMedia> set = jefe::qt::getSessionMediaSet();
+    if (!withNotes.isNull() && !set.empty()) {
+        check(jefe::qt::setPlateNotesToRound(0, set[0].mediaPath, 1), "plate shows the empty round");
+        jefe::qt::RenderParams p;
+        p.quadrant = 0;
+        p.format = 5;
+        p.formatString = "png";
+        p.from = p.to = jefe::qt::getTrackTimelineState(0).rangeStart;
+        p.padding = 4;
+        p.scale = 1.0f;
+        p.path = work.toStdString();
+        p.prefix = "nonotes_";
+        p.outWidth = withNotes.width();
+        p.outHeight = withNotes.height();
+        p.burnInNotes = true;
+        const QString file = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        viewport_->makeCurrent();
+        jefe::qt::triggerSyncRender(p);
+        viewport_->doneCurrent();
+        jefe::qt::syncPlateNotes();
+        QImage without(file);
+        double diff = 0.0;
+        if (!without.isNull()) {
+            const QImage a = withNotes.convertToFormat(QImage::Format_RGBA8888);
+            const QImage b = without.convertToFormat(QImage::Format_RGBA8888);
+            const int w = std::min(a.width(), b.width());
+            const int h = std::min(a.height(), b.height());
+            double sum = 0.0;
+            long long n = 0;
+            for (int y = 0; y < h; ++y) {
+                const uchar* ra = a.constScanLine(y);
+                const uchar* rb = b.constScanLine(y);
+                for (int x = 0; x < w * 4; ++x) { sum += std::abs(int(ra[x]) - int(rb[x])); ++n; }
+            }
+            diff = n ? sum / double(n) : 0.0;
+        }
+        printf("SUMMARY-TEST burn-in mean abs diff: %.3f\n", diff);
+        check(!without.isNull() && diff > 0.0, "notes are burned into the thumbnail");
+    }
+
+    // Media that is only in a playlist item: a three-frame clip with a note on
+    // frame 2. Rendering it loads the item, which replaces the tracks, so the
+    // export reopens its temporary session afterwards.
+    const QString clipFirst = writeSequence(work + "/playlist", "clip", 3, 30);
+    check(saveStrokes(clipFirst, "Client", {2}), "playlist clip sidecar saved");
+    jefe::qt::addPlaylistFiles({ clipFirst.toStdString() });
+    {
+        bool playlistOnly = false;
+        for (const jefe::qt::SessionMedia& m : jefe::qt::getSessionMediaSet()) {
+            if (m.track < 0 && m.playlistItem == 1) playlistOnly = true;
+        }
+        check(playlistOnly, "the clip is playlist-only media (item 1, on no track)");
+    }
+    // Watches track 0 while an export runs: a loaded playlist item shows up
+    // as track 0 holding the clip.
+    bool sawPlaylistLoad = false;
+    QTimer watch;
+    watch.setInterval(1);
+    connect(&watch, &QTimer::timeout, this, [&]() {
+        if (jefe::qt::getTrackParams(0).filename != beforeFiles[0]) sawPlaylistLoad = true;
+    });
+
+    setUserState();
+    watch.start();
+    ReviewSummaryStats playlistStats;
+    const bool playlistOk = exportReviewSummary(work + "/summary_playlist.pdf", &playlistStats, &msg);
+    watch.stop();
+    printf("SUMMARY-TEST playlist pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg),
+           playlistStats.thumbs, playlistStats.thumbFail);
+    check(playlistOk, "PDF summary with playlist-only media exported");
+    check(playlistStats.thumbs == 5 && playlistStats.thumbFail == 0,
+          "the playlist-only media's frame entry gets a thumbnail too");
+    check(sawPlaylistLoad, "the playlist item was loaded to render it");
+    checkRestored("playlist PDF", playlistStats);
+
+    // In a live remote session a playlist load would be sent to the peers, so
+    // the export loads none: the clip's entry counts as thumbfail and the PDF
+    // is still written.
+    jefe::qt::RemoteServerParams server;
+    server.serverName = "summary-test";
+    server.port = 47913;
+    server.password = "";
+    jefe::qt::connectAsServer(server);
+    check(jefe::qt::isRemoteConnected(), "a remote session is live");
+    check(pumpUntil([] {
+              return jefe::qt::isTrackFrameReady(0, 1) && jefe::qt::isTrackFrameReady(2, 2) &&
+                     jefe::qt::isTrackFrameReady(2, 5);
+          }, 5000),
+          "the reopened tracks have the frames the remote export renders");
+    sawPlaylistLoad = false;
+    setUserState();
+    watch.start();
+    ReviewSummaryStats remoteStats;
+    const QString remotePdf = work + "/summary_remote.pdf";
+    const bool remoteOk = exportReviewSummary(remotePdf, &remoteStats, &msg);
+    watch.stop();
+    printf("SUMMARY-TEST remote pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg),
+           remoteStats.thumbs, remoteStats.thumbFail);
+    check(remoteOk && readBytes(remotePdf).startsWith("%PDF-"), "remote: the PDF is still written");
+    check(remoteStats.thumbs == 4 && remoteStats.thumbFail == 1,
+          "remote: the playlist-only entry counts as thumbfail, the tracks' entries render");
+    check(!sawPlaylistLoad, "remote: no playlist item is loaded");
+    checkRestored("remote PDF", remoteStats);
+    jefe::qt::disconnectRemote();
+
+    printf("SUMMARY-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
+}
+
+bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia,
+                                       jefe::qt::package::ExportInput& input, QString* message) {
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    const std::vector<jefe::qt::SessionMedia> media = jefe::qt::getSessionMediaSet();
+    if (media.empty()) {
+        say(tr("Nothing to package: the session has no media"));
+        return false;
+    }
+
+    // A QTemporaryDir removes itself (and the session copy it holds) when it
+    // goes out of scope, on every return path -- the session bytes only need
+    // to pass through disk because saveSession() writes a file, not a string;
+    // once read into input.sessionXml below, the copy on disk serves no
+    // further purpose.
+    QTemporaryDir tempDir;
+    if (!tempDir.isValid()) {
+        say(tr("Cannot create a temporary directory"));
+        return false;
+    }
+    const QString sessionFile = tempDir.filePath("session.jcs");
+    const RecentSessionsGuard keepRecents;   // the temp session must not stay on Recent Sessions
+    if (!jefe::qt::saveSession(sessionFile.toStdString())) {
+        say(tr("Cannot save the session"));
+        return false;
+    }
+    QFile saved(sessionFile);
+    if (!saved.open(QIODevice::ReadOnly)) {
+        say(tr("Cannot read the saved session"));
+        return false;
+    }
+
+    input = jefe::qt::package::ExportInput{};
+    input.outPath = outPath.toStdString();
+    input.includeMedia = includeMedia;
+    input.sessionXml = saved.readAll().toStdString();
+    input.appVersion = jefe::qt::appVersion();
+    input.createdIso = gfcReviewSummary::isoUtc(time(nullptr));
+
+    for (const jefe::qt::SessionMedia& m : media) {
+        jefe::qt::package::ExportMedia em;
+        em.mediaPath = m.mediaPath;
+        em.frames = jefe::qt::listSequenceFrames(m.anyFramePath);
+        if (em.frames.empty()) {
+            say(tr("Cannot find the frames of %1").arg(QString::fromStdString(m.anyFramePath)));
+            return false;
+        }
+        std::string err;
+        gfcMediaFingerprint::Probe probe;
+        if (!gfcMediaFingerprint::probe(em.frames.front(), probe, &err)) {
+            say(QString::fromStdString(err));
+            return false;
+        }
+        em.width = probe.width;
+        em.height = probe.height;
+        em.fingerprint = jefe::qt::reviewFingerprint(m.mediaPath);
+        if (em.fingerprint.empty()) {
+            em.fingerprint = gfcMediaFingerprint::compute(em.frames, &err);
+            if (em.fingerprint.empty()) {
+                say(QString::fromStdString(err));
+                return false;
+            }
+            // Best effort: an unwritable sidecar keeps the value in memory, and
+            // the packaged notes below carry it either way.
+            jefe::qt::setReviewFingerprint(m.mediaPath, em.fingerprint);
+        }
+        em.notesXml = jefe::qt::reviewXmlForMedia(m.mediaPath);
+        input.media.push_back(std::move(em));
+    }
+
+    std::vector<std::string> lutNames;
+    std::string perr;
+    if (!gfcSessionPaths::listLutNames(input.sessionXml, lutNames, &perr)) {
+        say(QString::fromStdString(perr));
+        return false;
+    }
+    for (const std::string& name : lutNames) {
+        const std::string source = jefe::qt::lutSourcePath(name);
+        if (!source.empty() && !jefe::qt::isInstallLutPath(source)) input.luts.emplace_back(name, source);
+    }
+    return true;
+}
+
+qint64 MainWindow_Qt::packageMediaBytes() {
+    qint64 total = 0;
+    for (const jefe::qt::SessionMedia& m : jefe::qt::getSessionMediaSet()) {
+        for (const std::string& frame : jefe::qt::listSequenceFrames(m.anyFramePath)) {
+            total += QFileInfo(QString::fromStdString(frame)).size();
+        }
+    }
+    return total;
+}
+
+bool MainWindow_Qt::exportReviewPackage(const QString& outPath, bool includeMedia, PackageStats* stats, QString* message) {
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    jefe::qt::package::ExportInput input;
+    if (!gatherPackageInput(outPath, includeMedia, input, message)) return false;
+
+    jefe::qt::package::Exporter exporter;
+    QString err;
+    if (!exporter.begin(input, &err)) {
+        say(err);
+        return false;
+    }
+    using State = jefe::qt::package::Exporter::State;
+    State state = State::Running;
+    while ((state = exporter.step(&err)) == State::Running) {}
+    if (state != State::Done) {
+        say(err.isEmpty() ? tr("Export failed") : err);
+        return false;
+    }
+
+    PackageStats s;
+    s.media = int(input.media.size());
+    s.mediaIncluded = includeMedia;
+    s.bytes = QFileInfo(outPath).size();
+    if (stats) *stats = s;
+    say(tr("Review package written: %1 (%2 media, %3)")
+            .arg(QFileInfo(outPath).fileName())
+            .arg(s.media)
+            .arg(includeMedia ? tr("media included") : tr("media referenced")));
+    return true;
+}
+
+QString MainWindow_Qt::makePackageFixture(const QString& imagePath, const QString& work) {
+    const QString srcDir = work + "/src";
+    QDir().mkpath(srcDir);
+    const QString media = srcDir + "/" + QFileInfo(imagePath).fileName();
+    if (!QFile::copy(imagePath, media)) return QString();
+    gfcReview review;
+    review.mediaPath = gfcNoteStore::normalisePath(media.toStdString());
+    gfcRevision& round = review.beginRevision("Supervisor");
+    auto stroke = std::make_unique<gfcNoteStroke>();
+    stroke->author = "Supervisor";
+    stroke->quadID = 0;
+    stroke->from = 1;
+    stroke->to = 1;
+    stroke->pts = { gfcNotePoint{0.2f, 0.2f}, gfcNotePoint{0.8f, 0.8f} };
+    round.addNote(std::move(stroke));
+    round.locked = true;
+    return gfcNoteStore::save(review) ? media : QString();
+}
+
+int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("PACKAGE-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    auto readBytes = [](const QString& path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    if (!viewport_) { printf("PACKAGE-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
+
+    const QString work = QDir::tempPath() + "/jefecheck_packagetest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    const QString media = makePackageFixture(imagePath, work);
+    if (media.isEmpty()) { printf("PACKAGE-TEST FAIL fixture\n"); fflush(stdout); return 2; }
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+    jefe::qt::adjustPlateExposure(0, 1.5f);
+    const std::string mediaKey = gfcNoteStore::normalisePath(media.toStdString());
+    const std::string imageName = QFileInfo(media).fileName().toStdString();
+
+    // A LUT outside the install path, assigned to plate 0, so the with-media
+    // export below also proves the LUT-packaging path (listLutNames ->
+    // lutSourcePath -> isInstallLutPath -> input.luts). A minimal but valid
+    // Truelight Cube v2.0 (the only format loadLUT's ".cube" branch reads):
+    // a header, a "# width" line giving the cube's edge length, a "# Cube"
+    // marker, then edge^3 whitespace-separated RGB triads.
+    const QString lutPath = work + "/review_test.cube";
+    {
+        QFile f(lutPath);
+        check(f.open(QIODevice::WriteOnly) &&
+              f.write("# Truelight Cube v2.0\n"
+                      "# width 2 2 2\n"
+                      "# Cube\n"
+                      "0.0 0.0 0.0\n"
+                      "1.0 0.0 0.0\n"
+                      "0.0 1.0 0.0\n"
+                      "1.0 1.0 0.0\n"
+                      "0.0 0.0 1.0\n"
+                      "1.0 0.0 1.0\n"
+                      "0.0 1.0 1.0\n"
+                      "1.0 1.0 1.0\n") > 0,
+              "test LUT written");
+    }
+    const std::string lutName = QFileInfo(lutPath).fileName().toStdString();
+    // gfcLUTManager::loadLUT() calls CubeLUT::create3DTexture(), which needs
+    // a current GL context (same requirement stampNotesIntoExr documents).
+    viewport_->makeCurrent();
+    jefe::qt::loadLUTFile(lutPath.toStdString());
+    viewport_->doneCurrent();
+    const std::vector<std::string> lutNames = jefe::qt::getLutNames();
+    const auto lutPos = std::find(lutNames.begin(), lutNames.end(), lutName);
+    check(lutPos != lutNames.end(), "test LUT loaded");
+    if (lutPos != lutNames.end()) {
+        // applyLUTToPlate() takes the GUI's row index: 0 = "(No LUT)",
+        // row r>=1 = lutManager entry r-1 -- so the position found above
+        // (a raw lutManager index) needs +1.
+        jefe::qt::applyLUTToPlate(0, int(lutPos - lutNames.begin()) + 1);
+    }
+
+    // Exporting saves the session to a temporary file and opening loads the
+    // extracted one; neither may leave its path on Recent Sessions. A known,
+    // non-empty list makes the comparison meaningful.
+    const std::vector<std::string> knownRecents = { (work + "/earlier.jcs").toStdString(),
+                                                    (work + "/earliest.jcs").toStdString() };
+    jefe::qt::setRecentSessions(knownRecents);
+
+    PackageStats stats;
+    QString msg;
+    const QString withMedia = work + "/with.jcreview";
+    check(exportReviewPackage(withMedia, true, &stats, &msg), "package with media exported");
+    printf("PACKAGE-TEST export: %s\n", qPrintable(msg));
+    check(jefe::qt::getRecentSessions() == knownRecents, "exporting leaves Recent Sessions unchanged");
+    check(stats.media == 1 && stats.mediaIncluded && stats.bytes > QFileInfo(media).size(),
+          "stats: one media, included, larger than the image");
+
+    gfcTar::Reader reader;
+    std::string terr;
+    std::string bytes;
+    check(reader.open(withMedia.toStdString(), &terr), "the package is a valid archive");
+    check(!reader.entries().empty() && reader.entries()[0].name == "manifest.json", "manifest.json is the first entry");
+    const gfcTar::Entry* image = reader.find("media/000/" + imageName);
+    check(image && reader.readBytes(*image, bytes, &terr) && QByteArray::fromStdString(bytes) == readBytes(media),
+          "the image is packaged byte for byte");
+    const gfcTar::Entry* session = reader.find("session.jcs");
+    check(session && reader.readBytes(*session, bytes, &terr) &&
+          bytes.find("filename=\"media/000/" + imageName + "\"") != std::string::npos,
+          "the session points at the packaged image");
+    gfcReview packagedNotes;
+    const gfcTar::Entry* notes = reader.find("notes/000.jnotes");
+    check(notes && reader.readBytes(*notes, bytes, &terr) && gfcNoteStore::fromXmlString(bytes, packagedNotes) &&
+          packagedNotes.revisions.size() == 1,
+          "the notes are packaged");
+    jefe::qt::package::Manifest manifest;
+    QString merr;
+    std::string manifestBytes;
+    check(!reader.entries().empty() && reader.readBytes(reader.entries()[0], manifestBytes, &terr) &&
+          jefe::qt::package::manifestFromJson(QByteArray::fromStdString(manifestBytes), manifest, &merr) &&
+          manifest.mediaIncluded && manifest.media.size() == 1 &&
+          manifest.media[0].fingerprint.rfind("fp1:", 0) == 0 &&
+          manifest.media[0].frames == std::vector<std::string>{imageName} && manifest.media[0].width > 0,
+          "the manifest describes the media");
+    gfcReview onDisk;
+    check(gfcNoteStore::load(mediaKey, onDisk) && !manifest.media.empty() &&
+          onDisk.fingerprint == manifest.media[0].fingerprint,
+          "the source sidecar now records the fingerprint");
+    const gfcTar::Entry* lut = reader.find("luts/" + lutName);
+    check(lut && reader.readBytes(*lut, bytes, &terr) && !bytes.empty(), "the LUT is packaged");
+    check(!manifest.luts.empty() && manifest.luts[0].name == lutName &&
+          manifest.luts[0].file == "luts/" + lutName,
+          "the manifest lists the packaged LUT");
+
+    const QString withoutMedia = work + "/without.jcreview";
+    check(exportReviewPackage(withoutMedia, false, &stats, &msg), "package without media exported");
+    gfcTar::Reader lean;
+    bool anyMedia = false;
+    const bool leanOpened = lean.open(withoutMedia.toStdString(), &terr);
+    if (leanOpened) {
+        for (const gfcTar::Entry& e : lean.entries()) {
+            if (e.name.rfind("media/", 0) == 0) anyMedia = true;
+        }
+    }
+    const gfcTar::Entry* leanSession = leanOpened ? lean.find("session.jcs") : nullptr;
+    check(leanOpened && !anyMedia && leanSession && lean.readBytes(*leanSession, bytes, &terr) &&
+          bytes.find(media.toStdString()) != std::string::npos,
+          "the lean package has no media and keeps the absolute path");
+    check(!QFile::exists(withMedia + ".partial") && !QFile::exists(withoutMedia + ".partial"), "no partial files left");
+
+    // Round trip: open the package with media.
+    const QString before = work + "/before.jcs";
+    jefe::qt::saveSession(before.toStdString());
+    jefe::qt::setRecentSessions(knownRecents);   // the save above pushed before.jcs
+    check(openReviewPackage(withMedia, false, &stats, &msg), "the package with media opens");
+    printf("PACKAGE-TEST open: %s\n", qPrintable(msg));
+    check(jefe::qt::getRecentSessions() == knownRecents, "opening leaves Recent Sessions unchanged");
+    check(stats.lutsNotLoaded.isEmpty(), "an identical LUT already loaded under the same name counts as loaded");
+    check(stats.resolved == 1 && stats.missing == 0, "media resolved from the package");
+    const QString loaded = QString::fromStdString(jefe::qt::getTrackParams(0).filename);
+    check(!stats.extractDir.isEmpty() &&
+          QFileInfo(loaded).canonicalFilePath().startsWith(QFileInfo(stats.extractDir).canonicalFilePath()),
+          "the track loads media from the extraction directory");
+    check(readBytes(loaded) == readBytes(media), "the extracted media is byte-identical");
+    gfcReview original;
+    gfcReview reopened;
+    const bool bothLoaded = gfcNoteStore::load(mediaKey, original) &&
+                            gfcNoteStore::load(gfcNoteStore::normalisePath(loaded.toStdString()), reopened);
+    original.mediaPath.clear();
+    reopened.mediaPath.clear();
+    check(bothLoaded && gfcNoteStore::toJsonString(original) == gfcNoteStore::toJsonString(reopened),
+          "notes are identical after the round trip");
+    const QString after = work + "/after.jcs";
+    jefe::qt::saveSession(after.toStdString());
+    auto plateAttr = [&readBytes](const QString& jcs, const char* name) {
+        const QByteArray xml = readBytes(jcs);
+        // A saved .jcs always starts with a UTF-8 BOM (gfcSessionManager
+        // writes one); XMLNode::parseString, unlike parseFile, does not skip it.
+        XMLResults results;
+        XMLNode top = XMLNode::parseString(skipUtf8Bom(xml.constData()), NULL, &results);
+        XMLNode plate = top.getChildNode("root").getChildNode("plates").getChildNode("plate", 0);
+        XMLCSTR value = plate.isEmpty() ? nullptr : plate.getAttribute(name);
+        return QString(value ? value : "");
+    };
+    check(!plateAttr(before, "exposure").isEmpty() &&
+          plateAttr(before, "exposure") == plateAttr(after, "exposure") &&
+          plateAttr(before, "gamma") == plateAttr(after, "gamma") &&
+          plateAttr(before, "lut") == plateAttr(after, "lut"),
+          "plate colour correction and LUT survive the round trip");
+    check(openReviewPackage(withMedia, false, &stats, &msg), "opening the same package again works");
+
+    // The loaded LUT's source changes on disk: the packaged LUT of the same
+    // name is now a different grade, which must be reported, not shadowed.
+    {
+        QFile f(lutPath);
+        check(f.open(QIODevice::Append) && f.write("# changed after export\n") > 0, "the loaded LUT's source is changed");
+    }
+    check(openReviewPackage(withMedia, false, &stats, &msg) && stats.lutsNotLoaded.size() == 1,
+          "a different LUT already loaded under the same name is reported as not loaded");
+
+    const QByteArray packageBytes = readBytes(withMedia);
+    const QString truncated = work + "/truncated.jcreview";
+    {
+        QFile t(truncated);
+        if (t.open(QIODevice::WriteOnly)) t.write(packageBytes.left(packageBytes.size() / 2));
+    }
+    const std::string trackBefore = jefe::qt::getTrackParams(0).filename;
+    const QString titleBefore = windowTitle();
+    const int lutCountBefore = jefe::qt::getLoadedLUTCount();
+    check(!openReviewPackage(truncated, false, &stats, &msg) && msg.contains("truncated"),
+          "a truncated package is refused");
+    check(jefe::qt::getTrackParams(0).filename == trackBefore &&
+          windowTitle() == titleBefore &&
+          jefe::qt::getLoadedLUTCount() == lutCountBefore,
+          "a refused package changes nothing");
+    if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
+
+    printf("PACKAGE-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
+}
+
+bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interactive, PackageStats* stats, QString* message) {
+    namespace pkg = jefe::qt::package;
+    auto say = [&](const QString& m) { if (message) *message = m; };
+    if (!viewport_) {
+        say(tr("No viewport"));
+        return false;
+    }
+
+    pkg::OpenServices services;
+    services.loadLut = [this](const std::string& path) {
+        viewport_->makeCurrent();   // loading a LUT creates GL textures
+        const jefe::qt::LutLoadOutcome outcome = jefe::qt::loadLUTFileReportingConflict(path);
+        viewport_->doneCurrent();
+        // A different LUT already loaded under this name would silently
+        // shadow the packaged grade, so it lands in lutsNotLoaded.
+        return outcome == jefe::qt::LutLoadOutcome::Loaded || outcome == jefe::qt::LutLoadOutcome::SameAlreadyLoaded;
+    };
+    services.reloadReview = [](const std::string& mediaPath) { jefe::qt::reloadReviewFromDisk(mediaPath); };
+    services.searchPaths = jefe::qt::getSearchPaths();
+    services.searchRecursive = jefe::qt::getSearchPathsRecursive();
+    services.interactive = interactive;
+    services.locate = [this](const pkg::ManifestMedia& media) {
+        const QString name = QString::fromStdString(std::filesystem::path(media.originalPath).filename().string());
+        return QFileDialog::getOpenFileName(this, tr("Locate %1").arg(name)).toStdString();
+    };
+    services.confirmMismatch = [this](const pkg::ManifestMedia&, const std::string& chosen) {
+        return QMessageBox::question(
+                   this, tr("Media does not match"),
+                   tr("%1 does not match the media recorded in the package. Use it anyway?")
+                       .arg(QString::fromStdString(chosen))) == QMessageBox::Yes;
+    };
+
+    const QString cacheRoot = !packageCacheRoot_.isEmpty()
+        ? packageCacheRoot_
+        : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/packages";
+    QDir().mkpath(cacheRoot);
+    pkg::OpenResult result;
+    QString err;
+    if (!pkg::openPackage(packagePath.toStdString(), cacheRoot.toStdString(), services, result, &err)) {
+        say(err);
+        return false;
+    }
+
+    bool loaded = false;
+    {
+        const RecentSessionsGuard keepRecents;   // the extracted session is not one the user chose
+        viewport_->makeCurrent();   // loadSession uploads preview textures
+        loaded = jefe::qt::loadSession(result.sessionPath);
+        if (loaded) jefe::qt::startLoadingAllTracks();
+        viewport_->doneCurrent();
+    }
+    if (!loaded) {
+        // By this point the package's LUTs are loaded and its notes are
+        // merged into the local sidecars (openPackage already did both) --
+        // only the session itself failed to load, so say so instead of
+        // implying nothing happened.
+        say(tr("The package's notes and LUTs were applied, but its session could not be loaded: %1")
+                .arg(QString::fromStdString(result.sessionPath)));
+        return false;
+    }
+
+    // The extracted session is not a file the user chose: Save Session asks where.
+    currentSessionPath_.clear();
+    packageTitle_ = QFileInfo(packagePath).fileName();
+    updateSessionTitle();
+    refreshAfterSessionLoad();
+
+    PackageStats s;
+    s.media = int(result.manifest.media.size());
+    s.mediaIncluded = result.manifest.mediaIncluded;
+    s.bytes = QFileInfo(packagePath).size();
+    s.resolved = result.resolved;
+    s.missing = result.missing;
+    s.extractDir = QString::fromStdString(result.extractDir);
+    for (const std::string& name : result.missingMedia) s.missingMedia << QString::fromStdString(name);
+    for (const std::string& fx : result.fxNames) {
+        if (!jefe::qt::isFxLoaded(fx)) s.missingFx << QString::fromStdString(fx);
+    }
+    for (const std::string& problem : result.notesProblems) s.notesProblems << QString::fromStdString(problem);
+    for (const std::string& lut : result.lutsNotLoaded) s.lutsNotLoaded << QString::fromStdString(lut);
+    if (stats) *stats = s;
+    QString msg = tr("Opened review package %1: %2 of %3 media found")
+                      .arg(QFileInfo(packagePath).fileName())
+                      .arg(s.resolved)
+                      .arg(s.media);
+    if (!s.notesProblems.isEmpty() || !s.lutsNotLoaded.isEmpty()) {
+        QStringList extras;
+        if (!s.notesProblems.isEmpty()) {
+            extras << (s.notesProblems.size() == 1 ? tr("1 notes problem")
+                                                    : tr("%1 notes problems").arg(s.notesProblems.size()));
+        }
+        if (!s.lutsNotLoaded.isEmpty()) {
+            extras << (s.lutsNotLoaded.size() == 1 ? tr("1 LUT not loaded")
+                                                    : tr("%1 LUTs not loaded").arg(s.lutsNotLoaded.size()));
+        }
+        msg += "; " + extras.join("; ");
+    }
+    say(msg);
+    return true;
+}
+
+int MainWindow_Qt::runHeadlessRelinkTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("RELINK-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    if (!viewport_) { printf("RELINK-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
+
+    const QString work = QDir::tempPath() + "/jefecheck_relinktest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    const QString media = makePackageFixture(imagePath, work);
+    if (media.isEmpty()) { printf("RELINK-TEST FAIL fixture\n"); fflush(stdout); return 2; }
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+
+    PackageStats stats;
+    QString msg;
+    const QString lean = work + "/lean.jcreview";
+    check(exportReviewPackage(lean, false, &stats, &msg), "package without media exported");
+
+    const QString movedDir = work + "/moved/deep";
+    QDir().mkpath(movedDir);
+    const QString moved = movedDir + "/" + QFileInfo(media).fileName();
+    check(QFile::rename(media, moved), "the media is moved away from its recorded path");
+    // "use search paths" off: the fingerprint relink must not depend on it.
+    jefe::qt::setSearchPaths({(work + "/moved").toStdString()}, true, false);
+
+    check(openReviewPackage(lean, false, &stats, &msg), "the package opens");
+    printf("RELINK-TEST open: %s resolved=%d missing=%d\n", qPrintable(msg), stats.resolved, stats.missing);
+    check(stats.resolved == 1 && stats.missing == 0, "the media is resolved by fingerprint");
+    check(QFileInfo(QString::fromStdString(jefe::qt::getTrackParams(0).filename)).canonicalFilePath() ==
+          QFileInfo(moved).canonicalFilePath(),
+          "the track loads the moved media");
+    gfcReview relinked;
+    check(gfcNoteStore::load(gfcNoteStore::normalisePath(moved.toStdString()), relinked) &&
+          relinked.revisions.size() == 1,
+          "the notes follow the media");
+    if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
+
+    printf("RELINK-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
+}
+
+int MainWindow_Qt::runHeadlessPackageDialogTest(const QString& imagePath) {
+    int failures = 0;
+    auto check = [&](bool ok, const char* what) {
+        printf("PACKAGE-DIALOG-TEST %s %s\n", ok ? "ok  " : "FAIL", what);
+        if (!ok) ++failures;
+    };
+    const QString work = QDir::tempPath() + "/jefecheck_packagedialogtest_" +
+                         QString::number(QDateTime::currentMSecsSinceEpoch());
+    const QString media = makePackageFixture(imagePath, work);
+    if (media.isEmpty()) { printf("PACKAGE-DIALOG-TEST FAIL fixture\n"); fflush(stdout); return 2; }
+    loadFileIntoPlate(0, media);
+    jefe::qt::setActivePlate(0);
+
+    check(ReviewPackageDialog_Qt::formatBytes(0) == "0 B" &&
+          ReviewPackageDialog_Qt::formatBytes(1536) == "1.5 KB" &&
+          ReviewPackageDialog_Qt::formatBytes(5LL * 1024 * 1024 * 1024) == "5.0 GB" &&
+          ReviewPackageDialog_Qt::formatBytes(1023) == "1023 B" &&
+          ReviewPackageDialog_Qt::formatBytes(1048525) == "1.0 MB",
+          "sizes are formatted for people");
+
+    ReviewPackageDialog_Qt dialog(
+        [this](const QString& out, bool includeMedia, jefe::qt::package::ExportInput& input, QString* message) {
+            return gatherPackageInput(out, includeMedia, input, message);
+        },
+        packageMediaBytes(), this);
+    auto waitUntilIdle = [&dialog]() {
+        QElapsedTimer clock;
+        clock.start();
+        while (dialog.isRunning() && clock.elapsed() < 60000) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
+    };
+
+    const QString out = work + "/dialog.jcreview";
+    dialog.setOutputPath(out);
+    dialog.setIncludeMedia(true);
+    dialog.startExport();
+    check(dialog.isRunning(), "the export starts");
+    waitUntilIdle();
+    printf("PACKAGE-DIALOG-TEST message: %s\n", qPrintable(dialog.lastMessage()));
+    check(!dialog.isRunning() && QFileInfo::exists(out) && dialog.progressPercent() == 100,
+          "the export finishes with progress at 100%");
+
+    // A path without the .jcreview suffix gets it appended, and the file the
+    // path named is neither created nor overwritten.
+    const QString txtOut = work + "/out.txt";
+    dialog.setOutputPath(txtOut);
+    dialog.setIncludeMedia(false);
+    dialog.startExport();
+    waitUntilIdle();
+    check(!dialog.isRunning() && QFileInfo::exists(txtOut + ".jcreview") && !QFileInfo::exists(txtOut),
+          "out.txt is written as out.txt.jcreview and out.txt is not created");
+    const QString keepOut = work + "/keep.txt";
+    {
+        QFile keep(keepOut);
+        if (keep.open(QIODevice::WriteOnly)) keep.write("keep me");
+    }
+    dialog.setOutputPath(keepOut);
+    dialog.startExport();
+    waitUntilIdle();
+    {
+        QFile keep(keepOut);
+        check(!dialog.isRunning() && QFileInfo::exists(keepOut + ".jcreview") && keep.open(QIODevice::ReadOnly) &&
+              keep.readAll() == "keep me",
+              "an existing keep.txt is left untouched; the package goes to keep.txt.jcreview");
+    }
+    dialog.setIncludeMedia(true);
+
+    const QString cancelled = work + "/cancelled.jcreview";
+    dialog.setOutputPath(cancelled);
+    dialog.startExport();
+    {
+        QPushButton* cancelButton = dialog.findChild<QPushButton*>("dialog.package.cancel.button");
+        check(cancelButton && cancelButton->text() == tr("Cancel"), "a new export shows Cancel, not Close");
+    }
+    dialog.cancelExport();
+    QCoreApplication::processEvents();
+    check(!dialog.isRunning() && !QFileInfo::exists(cancelled) && !QFileInfo::exists(cancelled + ".partial"),
+          "cancel leaves neither package nor partial file");
+
+    dialog.setOutputPath(QString());
+    dialog.startExport();
+    check(!dialog.isRunning() && !dialog.lastMessage().isEmpty(), "an empty path is refused with a message");
+
+    printf("PACKAGE-DIALOG-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return failures == 0 ? 0 : 2;
+}
+
+void MainWindow_Qt::setPackageCacheRoot(const QString& dir) {
+    packageCacheRoot_ = dir;
 }
 
 void MainWindow_Qt::refreshNotesForLoadedMedia() {

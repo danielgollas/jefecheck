@@ -17,6 +17,7 @@
 #include "../gfcsessionmanager.h"
 #include "../gfcreview.h"
 #include "../gfcrevision.h"
+#include "../gfcReviewSummary.h"
 #include "../gfcnote.h"
 #include "../gfcNoteStore.h"
 #include "../gfcNoteOverlay.h"
@@ -37,6 +38,9 @@
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <map>
 #include <thread>
 
 extern gfcPlateManager plateManager;
@@ -49,6 +53,10 @@ extern gfcNetworkManager networkManager;
 extern gfcSessionManager sessionManager;
 extern gfcPickManager pickManager;
 extern gfcSettings sett;
+
+// Defined in gfcSequence.cpp; not declared in any header.
+void findSequence(std::vector<std::string>& refFiles, std::string inputFilename,
+                  std::string& label, int& startNum, int& endNum);
 
 namespace jefe::qt {
 
@@ -2277,6 +2285,15 @@ std::unique_ptr<gfcNote> g_drawNote;
 /** Points collected so far; for arrow/box only the first and last matter. */
 std::vector<gfcNotePoint> g_drawPoints;
 
+/** Copies published by setPlateNotesToRound(), keyed by plate index. Plates
+    borrow them until the next syncPlateNotesImpl() republishes the real
+    notes and frees all of them. Kept per plate -- not one shared pool --
+    because gfcPlate::setNotes() stores borrowed pointers per plate until
+    THAT plate is republished, so freeing one plate's copies while
+    replacing another's would leave the first plate pointing at freed
+    memory. */
+std::map<int, std::vector<std::unique_ptr<gfcNote>>> g_roundNoteCopies;
+
 void syncPlateNotesImpl() {
     for (int i = 0; i < plateManager.plateCount(); ++i) {
         std::vector<const gfcNote*> out;
@@ -2296,6 +2313,9 @@ void syncPlateNotesImpl() {
         if (g_drawNote && g_drawPlate == i) out.push_back(g_drawNote.get());
         plateManager.setPlateNotes(i, out);
     }
+    // Every plate now borrows the real notes again, so the round copies a
+    // summary thumbnail was drawing can go.
+    g_roundNoteCopies.clear();
 }
 
 bool applyInboundNoteSyncEvents() {
@@ -2514,6 +2534,286 @@ bool notesVisible() { return g_notesVisible; }
 void setNotesVisible(bool visible) { g_notesVisible = visible; }
 
 void syncPlateNotes() { syncPlateNotesImpl(); }
+
+std::vector<SessionMedia> getSessionMediaSet() {
+    std::vector<SessionMedia> out;
+    auto add = [&out](const std::string& key, const std::string& framePath,
+                      int track, int item, int itemTrack) {
+        if (key.empty()) return;
+        const std::string mediaPath = gfcNoteStore::normalisePath(key);
+        for (const SessionMedia& m : out) {
+            if (m.mediaPath == mediaPath) return;
+        }
+        SessionMedia m;
+        m.mediaPath = mediaPath;
+        m.anyFramePath = framePath.empty() ? key : framePath;
+        m.track = track;
+        m.playlistItem = item;
+        m.playlistTrack = itemTrack;
+        out.push_back(m);
+    };
+    for (int t = 0; t < GFC_MAX_SEQUENCES; ++t) {
+        gfcSequence* seq = trackManager.getSequence(t);
+        if (!seq || !seq->myGUI) continue;
+        const std::string gui = seq->myGUI->getFilename();
+        // Prefer the generic pattern; fall back to the one real frame path
+        // when the sequence hasn't been scanned yet (filenameGeneric still
+        // empty) -- unlike reviewForPlate(), which skips the track in that
+        // case. normalisePath() collapses a frame path to the same pattern
+        // as its generic form, so this still lands on the sidecar's real
+        // key and the track still belongs in the summary.
+        add(seq->filenameGeneric.empty() ? gui : seq->filenameGeneric, gui, t, -1, -1);
+    }
+    if (auto* entries = playlistManager.getPlaylist()) {
+        for (int i = 0; i < (int)entries->size(); ++i) {
+            const gfcPlaylistItem& item = (*entries)[i];
+            for (size_t k = 0; k < item.loadParams.size(); ++k) {
+                add(item.loadParams[k].fileName, item.loadParams[k].fileName, -1, i, (int)k);
+            }
+        }
+    }
+    return out;
+}
+
+gfcReviewSummary::Doc buildReviewSummary(const std::vector<SessionMedia>& media,
+                                         const std::string& title) {
+    gfcReviewSummary::Doc doc;
+    doc.title = title;
+    doc.exportedAt = time(nullptr);
+    doc.appVersion = JEFE_VERSION;
+    for (const SessionMedia& m : media) {
+        gfcReview& review = reviewForPath(m.mediaPath);
+        gfcReviewSummary::Media entry = gfcReviewSummary::fromReview(review);
+        if (review.revisions.empty()) {
+            // No rounds: either there is no sidecar, or it exists and did not parse.
+            gfcReview probe;
+            probe.mediaPath = m.mediaPath;
+            std::error_code ec;
+            if (!gfcNoteStore::load(m.mediaPath, probe) &&
+                std::filesystem::exists(gfcNoteStore::sidecarPathFor(m.mediaPath), ec)) {
+                entry.notesReadable = false;
+            }
+        }
+        doc.media.push_back(std::move(entry));
+    }
+    return doc;
+}
+
+int plateShowingTrack(int track) {
+    if (track < 0) return -1;
+    for (int i = 0; i < plateManager.plateCount(); ++i) {
+        if (plateManager.getTrackOnPlate(i) == track) return i;
+    }
+    return -1;
+}
+
+namespace {
+// A note's copy drawn on `plateIdx`. The overlay only draws notes whose quadID
+// matches the plate, and a round's notes may have been drawn on another plate.
+std::unique_ptr<gfcNote> copyNoteForPlate(const gfcNote& n, int plateIdx) {
+    std::unique_ptr<gfcNote> c;
+    if (const auto* s = dynamic_cast<const gfcNoteStroke*>(&n)) {
+        auto x = std::make_unique<gfcNoteStroke>();
+        x->pts = s->pts;
+        c = std::move(x);
+    } else if (const auto* a = dynamic_cast<const gfcNoteArrow*>(&n)) {
+        auto x = std::make_unique<gfcNoteArrow>();
+        x->tail = a->tail;
+        x->head = a->head;
+        c = std::move(x);
+    } else if (const auto* b = dynamic_cast<const gfcNoteBox*>(&n)) {
+        auto x = std::make_unique<gfcNoteBox>();
+        x->a = b->a;
+        x->b = b->b;
+        c = std::move(x);
+    } else if (const auto* t = dynamic_cast<const gfcNoteText*>(&n)) {
+        auto x = std::make_unique<gfcNoteText>();
+        x->anchor = t->anchor;
+        x->text = t->text;
+        c = std::move(x);
+    } else {
+        return nullptr;
+    }
+    c->id = n.id;
+    c->author = n.author;
+    c->name = n.name;
+    c->quadID = plateIdx;
+    c->from = n.from;
+    c->to = n.to;
+    c->always = n.always;
+    c->colorR = n.colorR;
+    c->colorG = n.colorG;
+    c->colorB = n.colorB;
+    c->size = n.size;
+    return c;
+}
+}  // namespace
+
+bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundIndex) {
+    if (plateIdx < 0 || plateIdx >= plateManager.plateCount()) return false;
+    gfcReview& review = reviewForPath(mediaPath);
+    if (roundIndex < 0 || roundIndex >= (int)review.revisions.size()) return false;
+    std::vector<std::unique_ptr<gfcNote>> copies;
+    std::vector<const gfcNote*> borrowed;
+    for (const auto& n : review.revisions[roundIndex].notes) {
+        if (!n) continue;
+        if (auto c = copyNoteForPlate(*n, plateIdx)) {
+            borrowed.push_back(c.get());
+            copies.push_back(std::move(c));
+        }
+    }
+    // Publish the new list before freeing this plate's previous copies --
+    // and only this plate's entry, so a sibling plate's still-borrowed
+    // copies are untouched.
+    plateManager.setPlateNotes(plateIdx, borrowed);
+    g_roundNoteCopies[plateIdx] = std::move(copies);
+    return true;
+}
+
+bool prepareTrackForRender(int track) {
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq) return false;
+    if (seq->getNumFrames() <= 0) trackManager.startLoadingSequence(track);
+    return seq->getNumFrames() > 0;
+}
+
+bool isTrackFrameReady(int track, int frame) {
+    if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
+    gfcSequence* seq = trackManager.getSequence(track);
+    return seq && seq->frameReadyForRender(frame);
+}
+
+bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce) {
+    if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq || seq->isEmpty()) return false;
+    // gfcSequence::startLoading(fromTrack) takes the 0-based position in the
+    // track, offset not applied. 0 means "from the load range's start", which
+    // is the one start the loader thread announces to remote peers.
+    const int index = frame - 1 - seq->getOffset();
+    if (index < 0 || index >= seq->getNumFrames()) return false;
+    if (index == 0 && !allowAnnounce) return false;
+    plateManager.clearAllHistogramCache();
+    seq->startLoading(index);
+    return true;
+}
+
+void restorePlaylistSelection(int index, bool contentFromPlaylist) {
+    // gfcPlaylistManager::setSelectedItem would broadcast the selection, so
+    // set the same fields it does, directly.
+    auto* entries = playlistManager.getPlaylist();
+    const int count = entries ? (int)entries->size() : 0;
+    const int selected = (index >= 0 && index < count) ? index : -1;
+    for (int i = 0; i < count; ++i) (*entries)[i].selected = (i == selected) ? 1 : 0;
+    playlistManager.selectedItem = selected;
+    gCurrentContentFromPlaylist = contentFromPlaylist;
+}
+
+void setRemoteBroadcastsMuted(bool muted) {
+    networkManager.setTakeNotifications(!muted);
+}
+
+std::vector<std::string> listSequenceFrames(const std::string& anyFramePath) {
+    std::vector<std::string> files;
+    std::string label;
+    int startNum = 0;
+    int endNum = 0;
+    ::findSequence(files, anyFramePath, label, startNum, endNum);
+    return files;
+}
+
+std::string reviewXmlForMedia(const std::string& mediaPath) {
+    return gfcNoteStore::toXmlString(reviewForPath(mediaPath));
+}
+
+std::string reviewFingerprint(const std::string& mediaPath) {
+    return reviewForPath(mediaPath).fingerprint;
+}
+
+bool setReviewFingerprint(const std::string& mediaPath, const std::string& fingerprint) {
+    gfcReview& review = reviewForPath(mediaPath);
+    review.fingerprint = fingerprint;
+    return gfcNoteStore::save(review);
+}
+
+std::string lutSourcePath(const std::string& lutName) {
+    const int index = lutManager.getLutIndexByName(lutName);
+    if (index < 0) return {};
+    return std::string(lutManager.getLUT(index).filename);
+}
+
+LutLoadOutcome loadLUTFileReportingConflict(const std::string& path) {
+    if (path.empty()) return LutLoadOutcome::Failed;
+    // gfcLUTManager::loadLUT keeps the first LUT of a given file name and
+    // silently ignores the rest, so a clash has to be found before calling it.
+    const std::string loadedSource = lutSourcePath(std::filesystem::path(path).filename().string());
+    if (!loadedSource.empty()) {
+        auto readAll = [](const std::string& file, std::string& out) {
+            std::ifstream in(file, std::ios::binary);
+            if (!in) return false;
+            out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            return !in.bad();
+        };
+        std::string loadedBytes, newBytes;
+        if (!readAll(loadedSource, loadedBytes)) return LutLoadOutcome::DifferentAlreadyLoaded;
+        if (!readAll(path, newBytes)) return LutLoadOutcome::Failed;
+        return loadedBytes == newBytes ? LutLoadOutcome::SameAlreadyLoaded : LutLoadOutcome::DifferentAlreadyLoaded;
+    }
+    const size_t before = lutManager.getAllNames().size();
+    lutManager.loadLUT(path);
+    return lutManager.getAllNames().size() > before ? LutLoadOutcome::Loaded : LutLoadOutcome::Failed;
+}
+
+bool isInstallLutPath(const std::string& path) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const std::string file = fs::weakly_canonical(fs::path(path), ec).string();
+    if (ec) return false;
+    std::vector<std::string> dirs;
+    if (!sett.lutPath.empty()) dirs.push_back(sett.lutPath);
+    dirs.push_back(::getApplicationDataPath() + "FX/");
+    dirs.push_back("FX/");
+    for (const std::string& d : dirs) {
+        std::error_code dec;
+        std::string dir = fs::weakly_canonical(fs::path(d), dec).string();
+        if (dec || dir.empty()) continue;
+        if (dir.back() != '/') dir += '/';
+        if (file.compare(0, dir.size(), dir) == 0) return true;
+    }
+    return false;
+}
+
+void reloadReviewFromDisk(const std::string& mediaPath) {
+    // Plates borrow pointers into the review: move it out first, republish
+    // (which loads the sidecar afresh for any plate showing this media), and
+    // only then let the old copy go.
+    std::vector<std::unique_ptr<gfcReview>> stale;
+    for (auto it = g_noteReviews.begin(); it != g_noteReviews.end();) {
+        if ((*it)->mediaPath == mediaPath) {
+            stale.push_back(std::move(*it));
+            it = g_noteReviews.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    syncPlateNotesImpl();
+}
+
+std::vector<std::string> getSearchPaths() { return sett.searchPaths; }
+
+bool getSearchPathsRecursive() { return sett.searchPathsRecursive; }
+
+void setSearchPaths(const std::vector<std::string>& paths, bool recursive, bool enabled) {
+    sett.searchPaths = paths;
+    sett.searchPathsRecursive = recursive;
+    sett.useSearchPaths = enabled;
+}
+
+bool isFxLoaded(const std::string& fxName) {
+    return fxManager.getFXIndexByName(fxName) >= 0;
+}
+
+std::string appVersion() { return JEFE_VERSION; }
 
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,
