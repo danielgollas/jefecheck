@@ -268,6 +268,7 @@ PREFS_FORMATS_APPLY_ORIENTATION = "preferences.formats.applyorientation.check"
 # Preferences → Search Paths panel widgets (JEF-16 Task 4).
 PREFS_SEARCH_ENABLE = "preferences.search.enable.check"
 PREFS_SEARCH_RECURSIVE = "preferences.search.recursive.check"
+PREFS_SEARCH_FINGERPRINT_RELINK = "preferences.search.fingerprintRelink.check"
 PREFS_SEARCH_PATHS_LIST = "preferences.search.paths.list"
 PREFS_SEARCH_ADD = "preferences.search.add.button"
 PREFS_SEARCH_REMOVE = "preferences.search.remove.button"
