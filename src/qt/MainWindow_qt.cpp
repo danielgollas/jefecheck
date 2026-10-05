@@ -2597,8 +2597,12 @@ bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia
         }
         em.width = probe.width;
         em.height = probe.height;
+        // An already-stored fingerprint is always packaged (never dropped);
+        // a missing one is only computed (and saved back) when the
+        // preference is on -- off, export is cheap and never reads pixels
+        // for this.
         em.fingerprint = jefe::qt::reviewFingerprint(m.mediaPath);
-        if (em.fingerprint.empty()) {
+        if (em.fingerprint.empty() && jefe::qt::getRelinkByFingerprint()) {
             em.fingerprint = gfcMediaFingerprint::compute(em.frames, &err);
             if (em.fingerprint.empty()) {
                 say(QString::fromStdString(err));
@@ -2696,6 +2700,12 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
         return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
     };
     if (!viewport_) { printf("PACKAGE-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
+
+    // JEF-39: relinkByFingerprint now defaults off; the checks below still
+    // expect export to compute and store a fingerprint, so turn it on for
+    // them explicitly. The preference-off path gets its own check further
+    // down, around the "no fingerprint" fixture.
+    jefe::qt::setRelinkByFingerprint(true);
 
     const QString work = QDir::tempPath() + "/jefecheck_packagetest_" +
                          QString::number(QDateTime::currentMSecsSinceEpoch());
@@ -2864,6 +2874,38 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     check(openReviewPackage(withMedia, false, &stats, &msg) && stats.lutsNotLoaded.size() == 1,
           "a different LUT already loaded under the same name is reported as not loaded");
 
+    // JEF-39: with the preference off, exporting a media whose sidecar has
+    // no fingerprint writes no sidecar beside it, and the manifest's
+    // fingerprint for it is empty.
+    {
+        jefe::qt::setRelinkByFingerprint(false);
+        const QString noFpDir = work + "/nofp";
+        QDir().mkpath(noFpDir);
+        const QString noFpMedia = noFpDir + "/" + QFileInfo(imagePath).fileName();
+        check(QFile::copy(imagePath, noFpMedia), "no-fingerprint fixture copied");
+        const std::string noFpKey = gfcNoteStore::normalisePath(noFpMedia.toStdString());
+        const std::string noFpSidecar = gfcNoteStore::sidecarPathFor(noFpKey);
+        check(!QFile::exists(QString::fromStdString(noFpSidecar)), "no sidecar exists yet for the no-fingerprint fixture");
+        loadFileIntoPlate(0, noFpMedia);
+        jefe::qt::setActivePlate(0);
+        PackageStats noFpStats;
+        QString noFpMsg;
+        const QString noFpPkg = work + "/nofingerprint.jcreview";
+        check(exportReviewPackage(noFpPkg, true, &noFpStats, &noFpMsg),
+              "a media with no existing fingerprint is exported with the preference off");
+        gfcTar::Reader noFpReader;
+        std::string noFpErr, noFpManifestBytes;
+        jefe::qt::package::Manifest noFpManifest;
+        QString noFpMerr;
+        check(noFpReader.open(noFpPkg.toStdString(), &noFpErr) && !noFpReader.entries().empty() &&
+              noFpReader.readBytes(noFpReader.entries()[0], noFpManifestBytes, &noFpErr) &&
+              jefe::qt::package::manifestFromJson(QByteArray::fromStdString(noFpManifestBytes), noFpManifest, &noFpMerr) &&
+              noFpManifest.media.size() == 1 && noFpManifest.media[0].fingerprint.empty(),
+              "the manifest's fingerprint for it is empty");
+        check(!QFile::exists(QString::fromStdString(noFpSidecar)), "no sidecar is written beside it");
+        jefe::qt::setRelinkByFingerprint(true);   // restore: unrelated checks below don't exercise this preference
+    }
+
     const QByteArray packageBytes = readBytes(withMedia);
     const QString truncated = work + "/truncated.jcreview";
     {
@@ -2906,6 +2948,7 @@ bool MainWindow_Qt::openReviewPackage(const QString& packagePath, bool interacti
     services.reloadReview = [](const std::string& mediaPath) { jefe::qt::reloadReviewFromDisk(mediaPath); };
     services.searchPaths = jefe::qt::getSearchPaths();
     services.searchRecursive = jefe::qt::getSearchPathsRecursive();
+    services.fingerprintRelink = jefe::qt::getRelinkByFingerprint();
     services.interactive = interactive;
     services.locate = [this](const pkg::ManifestMedia& media) {
         const QString name = QString::fromStdString(std::filesystem::path(media.originalPath).filename().string());
@@ -2997,34 +3040,78 @@ int MainWindow_Qt::runHeadlessRelinkTest(const QString& imagePath) {
 
     const QString work = QDir::tempPath() + "/jefecheck_relinktest_" +
                          QString::number(QDateTime::currentMSecsSinceEpoch());
-    const QString media = makePackageFixture(imagePath, work);
-    if (media.isEmpty()) { printf("RELINK-TEST FAIL fixture\n"); fflush(stdout); return 2; }
-    loadFileIntoPlate(0, media);
-    jefe::qt::setActivePlate(0);
 
-    PackageStats stats;
-    QString msg;
-    const QString lean = work + "/lean.jcreview";
-    check(exportReviewPackage(lean, false, &stats, &msg), "package without media exported");
+    // Pass 1, mode=fingerprint (relinkByFingerprint on): the media is moved
+    // AND renamed, so the always-on file-name match (resolveMedia step 3)
+    // cannot find it -- only the fingerprint search (step 4, gated on this
+    // preference) can.
+    {
+        const QString media = makePackageFixture(imagePath, work);
+        if (media.isEmpty()) { printf("RELINK-TEST FAIL fixture\n"); fflush(stdout); return 2; }
+        loadFileIntoPlate(0, media);
+        jefe::qt::setActivePlate(0);
+        jefe::qt::setRelinkByFingerprint(true);
 
-    const QString movedDir = work + "/moved/deep";
-    QDir().mkpath(movedDir);
-    const QString moved = movedDir + "/" + QFileInfo(media).fileName();
-    check(QFile::rename(media, moved), "the media is moved away from its recorded path");
-    // "use search paths" off: the fingerprint relink must not depend on it.
-    jefe::qt::setSearchPaths({(work + "/moved").toStdString()}, true, false);
+        PackageStats stats;
+        QString msg;
+        const QString lean = work + "/lean.jcreview";
+        check(exportReviewPackage(lean, false, &stats, &msg), "pass 1: package without media exported");
 
-    check(openReviewPackage(lean, false, &stats, &msg), "the package opens");
-    printf("RELINK-TEST open: %s resolved=%d missing=%d\n", qPrintable(msg), stats.resolved, stats.missing);
-    check(stats.resolved == 1 && stats.missing == 0, "the media is resolved by fingerprint");
-    check(QFileInfo(QString::fromStdString(jefe::qt::getTrackParams(0).filename)).canonicalFilePath() ==
-          QFileInfo(moved).canonicalFilePath(),
-          "the track loads the moved media");
-    gfcReview relinked;
-    check(gfcNoteStore::load(gfcNoteStore::normalisePath(moved.toStdString()), relinked) &&
-          relinked.revisions.size() == 1,
-          "the notes follow the media");
-    if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
+        const QString movedDir = work + "/moved/deep";
+        QDir().mkpath(movedDir);
+        const QString moved = movedDir + "/renamed_" + QFileInfo(media).fileName();
+        check(QFile::rename(media, moved), "pass 1: the media is moved AND renamed away from its recorded path");
+        // "use search paths" off: the fingerprint relink must not depend on it.
+        jefe::qt::setSearchPaths({(work + "/moved").toStdString()}, true, false);
+
+        check(openReviewPackage(lean, false, &stats, &msg), "pass 1: the package opens");
+        printf("RELINK-TEST pass 1 mode=fingerprint open: %s resolved=%d missing=%d\n",
+               qPrintable(msg), stats.resolved, stats.missing);
+        check(stats.resolved == 1 && stats.missing == 0, "pass 1: the renamed media is resolved by fingerprint");
+        check(QFileInfo(QString::fromStdString(jefe::qt::getTrackParams(0).filename)).canonicalFilePath() ==
+              QFileInfo(moved).canonicalFilePath(),
+              "pass 1: the track loads the moved, renamed media");
+        gfcReview relinked;
+        check(gfcNoteStore::load(gfcNoteStore::normalisePath(moved.toStdString()), relinked) &&
+              relinked.revisions.size() == 1,
+              "pass 1: the notes follow the media");
+        if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
+    }
+
+    // Pass 2, mode=name (relinkByFingerprint off): the media keeps its
+    // recorded name and is only moved, so the cheap, always-on file-name
+    // match resolves it without the preference.
+    {
+        const QString media = makePackageFixture(imagePath, work + "/pass2");
+        if (media.isEmpty()) { printf("RELINK-TEST FAIL fixture (pass 2)\n"); fflush(stdout); return 2; }
+        loadFileIntoPlate(0, media);
+        jefe::qt::setActivePlate(0);
+        jefe::qt::setRelinkByFingerprint(false);
+
+        PackageStats stats;
+        QString msg;
+        const QString lean = work + "/pass2/lean.jcreview";
+        check(exportReviewPackage(lean, false, &stats, &msg), "pass 2: package without media exported");
+
+        const QString movedDir = work + "/pass2/moved/deep";
+        QDir().mkpath(movedDir);
+        const QString moved = movedDir + "/" + QFileInfo(media).fileName();   // same name, only moved
+        check(QFile::rename(media, moved), "pass 2: the media is moved, keeping its recorded name");
+        jefe::qt::setSearchPaths({(work + "/pass2/moved").toStdString()}, true, false);
+
+        check(openReviewPackage(lean, false, &stats, &msg), "pass 2: the package opens");
+        printf("RELINK-TEST pass 2 mode=name open: %s resolved=%d missing=%d\n",
+               qPrintable(msg), stats.resolved, stats.missing);
+        check(stats.resolved == 1 && stats.missing == 0, "pass 2: the moved media is found by name with the preference off");
+        check(QFileInfo(QString::fromStdString(jefe::qt::getTrackParams(0).filename)).canonicalFilePath() ==
+              QFileInfo(moved).canonicalFilePath(),
+              "pass 2: the track loads the moved media");
+        gfcReview relinked;
+        check(gfcNoteStore::load(gfcNoteStore::normalisePath(moved.toStdString()), relinked) &&
+              relinked.revisions.size() == 1,
+              "pass 2: the notes follow the media");
+        if (!stats.extractDir.isEmpty()) QDir(stats.extractDir).removeRecursively();
+    }
 
     printf("RELINK-TEST: %s\n", failures == 0 ? "PASS" : "FAIL");
     fflush(stdout);

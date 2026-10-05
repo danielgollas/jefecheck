@@ -27,6 +27,15 @@
 #include "../gfcreview.h"
 #include "../gfcrevision.h"
 
+// Test-fixture only: packageOpenSelfTest's fingerprint-relink checks need a
+// real, OIIO-decodable image so gfcMediaFingerprint::probe/compute actually
+// succeed (the plain-text fixtures used elsewhere in this file deliberately
+// fail to open, to test probing counts, not matches). No production code
+// path in this file touches OIIO directly -- only gfcMediaFingerprint does --
+// mirroring the same self-test-only use in gfcMediaFingerprint.cpp.
+#include <OpenImageIO/imageio.h>
+#include <vector>
+
 namespace jefe::qt::package {
 
 namespace {
@@ -372,6 +381,24 @@ void writeText(const std::string& path, const std::string& data) {
     out.write(data.data(), static_cast<std::streamsize>(data.size()));
 }
 
+// A tiny real, OIIO-decodable image (see the include comment above): unlike
+// writeText's fixtures, this lets gfcMediaFingerprint::probe/compute
+// actually open and read the frame, so a fingerprint-relink self-test can
+// exercise a genuine match, not just a probe attempt.
+bool writeRealFrame(const std::filesystem::path& path) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::create_directories(path.parent_path(), ec);
+    constexpr int w = 4, h = 4;
+    std::vector<float> px(static_cast<size_t>(w) * h * 3, 0.5f);
+    auto out = OIIO::ImageOutput::create(path.string());
+    if (!out) return false;
+    const OIIO::ImageSpec spec(w, h, 3, OIIO::TypeDesc::FLOAT);
+    if (!out->open(path.string(), spec)) return false;
+    const bool wrote = out->write_image(OIIO::TypeDesc::FLOAT, px.data());
+    return out->close() && wrote;
+}
+
 Exporter::State runToEnd(Exporter& exporter, QString* err) {
     Exporter::State state = Exporter::State::Running;
     while ((state = exporter.step(err)) == Exporter::State::Running) {}
@@ -483,7 +510,9 @@ bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, con
 }
 
 // Frames of the media, in order: packaged (only when every packaged frame is
-// present) -> original path (when absolute) -> fingerprint search ->
+// present) -> original path (when absolute) -> a cheap file-name match under
+// the search roots -> a fingerprint search under the same roots (only when
+// services.fingerprintRelink is set and the media carries a fingerprint) ->
 // interactive locate. Empty when unresolved.
 std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncluded,
                                       const std::filesystem::path& extractDir, const OpenServices& services,
@@ -513,7 +542,9 @@ std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncl
         if (!frames.empty()) return frames;
     }
 
-    std::vector<std::string> frames = findByFingerprint(media, search);
+    std::vector<std::string> frames = findByName(media, search);
+    const bool fingerprintEligible = services.fingerprintRelink && !media.fingerprint.empty();
+    if (frames.empty() && fingerprintEligible) frames = findByFingerprint(media, search);
     if (!frames.empty() || !services.interactive || !services.locate) return frames;
 
     const std::string chosen = services.locate(media);
@@ -521,7 +552,11 @@ std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncl
     auto sequences = gfcMediaFingerprint::sequencesIn(fs::path(chosen).parent_path().string(), false);
     const auto found = sequences.find(gfcNoteStore::normalisePath(chosen));
     if (found == sequences.end()) return {};
-    if (gfcMediaFingerprint::compute(found->second, nullptr) == media.fingerprint ||
+    // When there is nothing to compare against (the fingerprint step was
+    // disabled above, or the media never carried a fingerprint), the user's
+    // choice is accepted outright -- a mismatch prompt would be comparing
+    // against nothing.
+    if (!fingerprintEligible || gfcMediaFingerprint::compute(found->second, nullptr) == media.fingerprint ||
         (services.confirmMismatch && services.confirmMismatch(media, chosen))) {
         return found->second;
     }
@@ -604,6 +639,20 @@ std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std
                                            bool recursive) {
     SequenceSearch search(roots, recursive);
     return findByFingerprint(media, search);
+}
+
+std::vector<std::string> findByName(const ManifestMedia& media, SequenceSearch& search) {
+    namespace fs = std::filesystem;
+    if (media.frames.empty()) return {};
+    const std::string wantedName = lowerAscii(fs::path(media.originalPath).filename().string());
+    for (size_t r = 0; r < search.rootCount(); ++r) {
+        for (const auto& [key, frames] : search.root(r)) {
+            if (frames.size() != media.frames.size()) continue;
+            if (lowerAscii(fs::path(key).filename().string()) != wantedName) continue;
+            return frames;
+        }
+    }
+    return {};
 }
 
 std::vector<std::string> findByFingerprint(const ManifestMedia& media, SequenceSearch& search) {
@@ -1651,6 +1700,94 @@ int packageOpenSelfTest() {
         check(openPackage(twoLean.outPath, cache, searching, twoResult, &err) && twoResult.missing == 2 &&
               searchRootWalks == 1,
               "two unresolved media under one search root walk it once");
+    }
+
+    // JEF-39: fingerprint relink becomes optional (OpenServices.fingerprintRelink,
+    // default false); a cheap, always-on file-name + frame-count match
+    // (findByName) runs in its place. A lean package whose media is never
+    // created at its recorded original path, so resolution can only come
+    // from the search roots below.
+    {
+        const std::string jefOriginal = (dir / "jef39_src" / "jf010.0001.exr").string();   // never created
+        ExportInput jefLean;
+        jefLean.outPath = (dir / "jef39.jcreview").string();
+        jefLean.includeMedia = false;
+        jefLean.appVersion = "1.7.0";
+        jefLean.createdIso = "2026-09-14T20:10:00Z";
+        jefLean.sessionXml = std::string("<?xml version=\"1.0\"?>\n<root><plates/><tracks>") +
+                             "<track trackID=\"0\" filename=\"" + jefOriginal + "\"/></tracks><playlist/></root>\n";
+
+        // writeRealFrame always writes the same deterministic pixels, so a
+        // copy staged here and the "moved"/"renamed" fixtures below are
+        // byte-identical -- the manifest's fingerprint, computed once from
+        // this staged copy, genuinely matches either of them.
+        const fs::path staged = dir / "jef39_stage" / "stage.exr";
+        check(writeRealFrame(staged), "fingerprint-relink fixture image written");
+        ExportMedia jefMedia;
+        jefMedia.mediaPath = gfcNoteStore::normalisePath(jefOriginal);
+        jefMedia.frames = {jefOriginal};
+        jefMedia.notesXml = "<jefecheckNotes version=\"1\"/>";
+        std::string fpErr;
+        jefMedia.fingerprint = gfcMediaFingerprint::compute({staged.string()}, &fpErr);
+        jefMedia.width = 4;
+        jefMedia.height = 4;
+        jefLean.media.push_back(jefMedia);
+        check(!jefMedia.fingerprint.empty() && exportAll(jefLean, &err), "fingerprint-relink lean fixture exported");
+
+        // 1) fingerprintRelink = false: the media moved to another directory
+        // under a search root, same file name -- resolves, and no
+        // fingerprint is computed at all.
+        const fs::path sameNameRoot = dir / "jef39_sameroot";
+        check(writeRealFrame(sameNameRoot / "jf010.0001.exr"), "same-name moved fixture written");
+        OpenServices sameNameServices = services;
+        sameNameServices.fingerprintRelink = false;
+        sameNameServices.searchPaths = {sameNameRoot.string()};
+        sameNameServices.searchRecursive = false;
+        OpenResult sameNameResult;
+        err.clear();
+        candidateProbes = 0;
+        check(openPackage(jefLean.outPath, cache, sameNameServices, sameNameResult, &err) &&
+              sameNameResult.resolved == 1 && sameNameResult.missing == 0 && candidateProbes == 0,
+              "fingerprintRelink off: media moved under a search root, same file name, resolves with no fingerprint computed");
+
+        // 2) fingerprintRelink = false: the media renamed under a search
+        // root stays missing, and the session keeps the original path.
+        const fs::path renamedRoot = dir / "jef39_renamedroot";
+        check(writeRealFrame(renamedRoot / "renamed010.0001.exr"), "renamed fixture written");
+        OpenServices renamedOffServices = services;
+        renamedOffServices.fingerprintRelink = false;
+        renamedOffServices.searchPaths = {renamedRoot.string()};
+        renamedOffServices.searchRecursive = false;
+        OpenResult renamedOffResult;
+        err.clear();
+        check(openPackage(jefLean.outPath, cache, renamedOffServices, renamedOffResult, &err) &&
+              renamedOffResult.resolved == 0 && renamedOffResult.missing == 1 &&
+              readText(renamedOffResult.sessionPath).find("filename=\"" + jefOriginal + "\"") != std::string::npos,
+              "fingerprintRelink off: renamed media under a search root stays missing, session keeps the original path");
+
+        // 3) fingerprintRelink = true: that same renamed media resolves,
+        // and candidateProbes is greater than zero.
+        OpenServices renamedOnServices = renamedOffServices;
+        renamedOnServices.fingerprintRelink = true;
+        OpenResult renamedOnResult;
+        err.clear();
+        candidateProbes = 0;
+        check(openPackage(jefLean.outPath, cache, renamedOnServices, renamedOnResult, &err) &&
+              renamedOnResult.resolved == 1 && renamedOnResult.missing == 0 && candidateProbes > 0,
+              "fingerprintRelink on: the renamed media resolves via the fingerprint search, which probes candidates");
+
+        // 4) a name match whose frame count differs from the manifest is
+        // not accepted.
+        const fs::path frameCountRoot = dir / "jef39_framecountroot";
+        fs::create_directories(frameCountRoot, ec);
+        writeText((frameCountRoot / "jf010.0001.exr").string(), "frame one");
+        writeText((frameCountRoot / "jf010.0002.exr").string(), "frame two");   // two frames; the manifest says one
+        SequenceSearch frameCountSearch({frameCountRoot.string()}, false);
+        ManifestMedia frameCountMedia;
+        frameCountMedia.originalPath = jefOriginal;
+        frameCountMedia.frames = {"jf010.0001.exr"};
+        check(findByName(frameCountMedia, frameCountSearch).empty(),
+              "a name match whose frame count differs from the manifest is not accepted");
     }
 
     fs::remove_all(dir, ec);
