@@ -57,6 +57,7 @@ void loadPreferences() {
     // Search Paths (JEF-16 Task 4).
     sett.useSearchPaths       = s.value("Search/useSearchPaths", sett.useSearchPaths).toBool();
     sett.searchPathsRecursive = s.value("Search/recursive",      sett.searchPathsRecursive).toBool();
+    sett.relinkByFingerprint  = s.value("Search/relinkByFingerprint", sett.relinkByFingerprint).toBool();
     {
         QStringList defaultPaths;
         for (const auto& p : sett.searchPaths) defaultPaths << QString::fromStdString(p);
@@ -148,6 +149,7 @@ void writePreferences() {
     // Search Paths (JEF-16 Task 4).
     s.setValue("Search/useSearchPaths", sett.useSearchPaths);
     s.setValue("Search/recursive",      sett.searchPathsRecursive);
+    s.setValue("Search/relinkByFingerprint", sett.relinkByFingerprint);
     {
         QStringList paths;
         for (const auto& p : sett.searchPaths) paths << QString::fromStdString(p);

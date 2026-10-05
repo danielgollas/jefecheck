@@ -124,6 +124,10 @@ struct OpenServices {
     /** Preferences -> Search Paths, used whether or not "use search paths" is ticked. */
     std::vector<std::string> searchPaths;
     bool searchRecursive = false;
+    /** Preferences -> Search Paths -> "Also match moved media by fingerprint". The
+        cheap file-name match (resolveMedia step 3) always runs regardless; this only
+        gates the pixel-reading fingerprint search (step 4). Default off. */
+    bool fingerprintRelink = false;
     /** When false, nothing prompts: unresolved media count as missing. */
     bool interactive = false;
     /** Returns a chosen frame file of the media, or "" to skip it. */
@@ -178,14 +182,27 @@ std::vector<std::string> findByFingerprint(const ManifestMedia& media, const std
                                            bool recursive);
 
 /**
+ * The frames of the first sequence under the search roots (each walked
+ * lazily, at most once, sharing @a search with findByFingerprint) whose
+ * normalised pattern's file name equals the manifest originalPath's file
+ * name, case-insensitively, and whose frame count equals the manifest's. No
+ * pixels are read -- a cheap stand-in for findByFingerprint, tried first.
+ * Root order, then each root's index order, decides between equal
+ * candidates. Empty when nothing matches.
+ */
+std::vector<std::string> findByName(const ManifestMedia& media, SequenceSearch& search);
+
+/**
  * Validates the manifest, extracts into <cacheRoot>/<id> (id = SHA-1 of the
  * package's absolute path, size, modification time and manifest bytes;
  * reused once it holds a .complete marker AND every file the manifest names
  * -- a partial or damaged cache is repaired by re-extracting the archive's
  * entries over the directory rather than discarding it first, so files
  * that aren't part of the package, such as a reviewer's own sidecar, are
- * left alone), resolves every media (packaged -> original path ->
- * fingerprint search -> services.locate), and writes the session with media
+ * left alone), resolves every media (packaged -> original path -> a cheap
+ * file-name match under the search roots -> a fingerprint search under the
+ * same roots, only when services.fingerprintRelink is set and the media
+ * carries a fingerprint -> services.locate), and writes the session with media
  * paths rewritten to the resolved frames. Only once that rewritten session
  * is written and verified are packaged LUTs loaded (failures recorded in
  * lutsNotLoaded) and each media's notes union-merged into the sidecar

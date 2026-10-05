@@ -693,6 +693,19 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     connect(recursive, &QCheckBox::toggled, page, [](bool on){ sett.searchPathsRecursive = on; });
     form->addRow(recursive);
 
+    // Review-package relink (see ReviewPackage_qt.h resolveMedia): off by
+    // default, the cheap file-name match inside these search paths already
+    // finds most moved media. On, the slower fingerprint search (reads
+    // pixels of candidate sequences) also runs for media whose name changed.
+    auto* fingerprintRelink = new QCheckBox("Also match moved media by fingerprint (slower)", page);
+    fingerprintRelink->setChecked(sett.relinkByFingerprint);
+    fingerprintRelink->setObjectName("preferences.search.fingerprintRelink.check");
+    fingerprintRelink->setToolTip(QStringLiteral(
+        "Off: moved footage is found by its file name inside the search paths. "
+        "On: JefeCheck also reads pixels from candidate sequences to recognise footage that was renamed."));
+    connect(fingerprintRelink, &QCheckBox::toggled, page, [](bool on){ sett.relinkByFingerprint = on; });
+    form->addRow(fingerprintRelink);
+
     auto* list = new QListWidget(page);
     list->setObjectName("preferences.search.paths.list");
     list->setToolTip(QStringLiteral("Folders searched (in order) to relocate missing sequence files."));
