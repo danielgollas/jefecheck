@@ -3350,6 +3350,10 @@ void setSearchPaths(const std::vector<std::string>& paths, bool recursive, bool 
     sett.useSearchPaths = enabled;
 }
 
+bool getRelinkByFingerprint() { return sett.relinkByFingerprint; }
+
+void setRelinkByFingerprint(bool on) { sett.relinkByFingerprint = on; }
+
 bool isFxLoaded(const std::string& fxName) {
     return fxManager.getFXIndexByName(fxName) >= 0;
 }

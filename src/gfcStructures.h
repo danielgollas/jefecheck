@@ -284,6 +284,7 @@ public:
         vsync=1;
         searchPathsRecursive=false;
         useSearchPaths=false;
+        relinkByFingerprint=false;
 		
 
 
@@ -321,6 +322,7 @@ public:
     std::vector<std::string> searchPaths;
     bool searchPathsRecursive;
     bool useSearchPaths;
+    bool relinkByFingerprint;   // review-package relink: also match moved media by reading pixels (default off; see ReviewPackage_qt.h)
 
     int loopPriority; //0 == give loop priority to minimum length track, 1 means to the maximum length track.
     int filterMin; //filtering modes for minificaion and maxification

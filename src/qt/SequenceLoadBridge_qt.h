@@ -1387,6 +1387,9 @@ std::vector<std::string> getSearchPaths();
 bool getSearchPathsRecursive();
 /** Sets the search paths for this run (not persisted); @a enabled is "use search paths". */
 void setSearchPaths(const std::vector<std::string>& paths, bool recursive, bool enabled);
+/** Review-package relink: whether the (slower) fingerprint step also runs. Default off. */
+bool getRelinkByFingerprint();
+void setRelinkByFingerprint(bool on);
 
 /** Whether an FX with this name is loaded. */
 bool isFxLoaded(const std::string& fxName);
