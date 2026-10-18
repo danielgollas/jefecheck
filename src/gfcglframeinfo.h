@@ -3,6 +3,7 @@
 #define GFCGLFRAMEINFO_H
 
 #include <glad/glad.h>
+#include "gfcIOSurface.h"
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>
@@ -36,6 +37,10 @@ public:
     // The rectangle of plane 0 (luma pixels) that the output picture covers:
     // scale and crop are applied by the conversion pass. srcW/srcH 0 = whole plane.
     int srcX = 0, srcY = 0, srcW = 0, srcH = 0;
+    // macOS: an IOSurface holding the same pixels (owned by the loader), or
+    // null. When set, generateTexture binds it instead of uploading.
+    void* ioSurface;
+    gfcSurface::Layout ioSurfaceLayout;
 };
 
 #endif

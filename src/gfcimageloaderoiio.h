@@ -28,6 +28,8 @@ public:
     virtual std::vector<std::string> getChannelNames();
 
 private:
+    void copyToSurface();
+
     GFL_BITMAP *theBitmap;
     gfcLoadParams params;
 };

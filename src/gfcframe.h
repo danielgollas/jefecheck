@@ -121,6 +121,7 @@ public:
         skipped=false;
         theImageLoader=NULL;
         textureID=defaultTexture;
+        ioSurface=nullptr;
         indexNumber=0;
         forceGFLLoader=false;
     }
@@ -132,6 +133,10 @@ public:
     gfcImageLoader* theImageLoader;
 
     GLuint textureID;
+    // macOS: the IOSurface backing textureID, or null when the texture was
+    // uploaded. The texture does not keep the surface alive, so the frame
+    // holds a reference until deleteTexture(). Copied along with textureID.
+    void* ioSurface;
 
     bool loaded;
     bool skipped;

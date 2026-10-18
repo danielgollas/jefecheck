@@ -177,8 +177,9 @@ static QString resolveCCTestFile(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve --video-colour-test <dir> / --video-perf-test <movie>: headless
-// movie colour (bars vs RGB truth) and decode+upload throughput harnesses.
+// Resolve --video-colour-test <dir> / --video-perf-test <movie> /
+// --upload-bench <dir>: headless movie colour (bars vs RGB truth),
+// decode+upload throughput, and per-bit-depth upload timing harnesses.
 static QString resolveArgValue(int argc, char* argv[], const char* flag) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], flag) == 0) {
@@ -1881,6 +1882,15 @@ int main(int argc, char* argv[]) {
     if (!videoPerfMovie.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, videoPerfMovie]() {
             const int code = window.runHeadlessVideoPerfTest(videoPerfMovie);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    const QString uploadBenchDir = resolveArgValue(argc, argv, "--upload-bench");
+    if (!uploadBenchDir.isEmpty()) {
+        QTimer::singleShot(3000, &window, [&window, uploadBenchDir]() {
+            const int code = window.runHeadlessUploadBench(uploadBenchDir);
             fflush(stdout);
             std::_Exit(code);
         });
