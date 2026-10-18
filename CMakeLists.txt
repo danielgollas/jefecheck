@@ -44,6 +44,12 @@ endif()
 if(WIN32)
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
 endif()
+# IOSurface-backed textures: the real implementation on macOS, stubs elsewhere.
+if(APPLE)
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcIOSurface_stub")
+else()
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcIOSurface_mac")
+endif()
 
 file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
 list(APPEND JEFECHECK_SOURCES ${JEFECHECK_QT_SOURCES})
@@ -240,7 +246,12 @@ if(APPLE)
         "-framework IOKit"
         "-framework CoreFoundation"
         "-framework Foundation"
+        "-framework IOSurface"
+        "-framework OpenGL"
     )
+    # Apple GL headers in gfcIOSurface_mac.cpp (CGLTexImageIOSurface2D).
+    set_source_files_properties(src/gfcIOSurface_mac.cpp PROPERTIES
+        COMPILE_DEFINITIONS "GL_SILENCE_DEPRECATION")
 
     # Build a proper .app bundle. CFBundleName and CFBundleIdentifier
     # flow into the AXApplication root's title and identifier, which is

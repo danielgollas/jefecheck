@@ -6,6 +6,8 @@ gfcGLFrameInfo::gfcGLFrameInfo() {
     target=GL_TEXTURE_RECTANGLE_ARB;
     dataType=GL_UNSIGNED_BYTE;
     dataPointer=0;
+    ioSurface=nullptr;
+    ioSurfaceLayout=gfcSurface::Layout::BGRA8;
 }
 
 

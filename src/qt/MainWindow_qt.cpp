@@ -1608,6 +1608,15 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
     return pass ? 0 : 1;
 }
 
+int MainWindow_Qt::runHeadlessUploadBench(const QString& dir) {
+    if (!viewport_) { printf("UPLOAD-BENCH FAIL no viewport\n"); fflush(stdout); return 2; }
+    viewport_->makeCurrent();
+    const int code = jefe::qt::runUploadBench(dir.toStdString());
+    viewport_->doneCurrent();
+    fflush(stdout);
+    return code;
+}
+
 int MainWindow_Qt::runHeadlessCCTest(const QString& imagePath) {
     // Proves that rendered frames carry the super-shader colour pipeline
     // (gamma/exposure/BCS + LUT). This would FAIL before the fix that applies

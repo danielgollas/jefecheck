@@ -729,6 +729,21 @@ New `.cpp` files are picked up by CMake's `file(GLOB src/qt/*.cpp)` — re-run `
 
 **Flags:** `--export-package <out> [--no-media]`, `--open-package <file>` (keeps running), `--package-test <image>`, `--relink-test <image>`, `--package-dialog-test <image>`. `--notes-test` runs the pure suites: NOTE-MODEL, NOTE-STORE, NOTE-OVERLAY, NOTE-STAMP, NOTE-SUMMARY, NOTE-SUMMARY-PDF, NOTE-SHA1, NOTE-TAR, NOTE-FINGERPRINT, NOTE-SESSIONPATHS, NOTE-MERGE, NOTE-PACKAGE, NOTE-PACKAGE-OPEN. Give every GL test a fresh `--config-dir` (it also isolates the package cache).
 
+## 38. Frame upload on macOS: native formats and IOSurface
+
+**Half mode keeps HDR.** `GFC_16HALF` (the default bit depth) reads `HALF` from OIIO and uploads `GL_RGBA`/`GL_HALF_FLOAT_ARB` into `GL_RGBA16F_ARB`. It used to read `UINT16`, which clipped every value above 1.0. `GFC_16BPC` stores **RGBA** order (`GL_RGBA`/`GL_UNSIGNED_SHORT` into `GL_RGBA16`); 8-bit stays BGRA. Apple's GL runs on Metal and converts any non-native layout (16-bit BGRA, integer data into a float texture) on the CPU, on the GL thread. Keep upload formats Metal-native.
+
+**IOSurface zero-copy** (`src/gfcIOSurface.h`, `gfcIOSurface_mac.cpp`, stubs in `gfcIOSurface_stub.cpp` off Apple):
+- The decode thread copies the finished bitmap into an IOSurface (`gfcImageLoaderOIIO::copyToSurface`, 8-bit/16-bit/half only). `gfcGLFrameInfo::ioSurface` carries it to the GL thread.
+- `gfcFrame::generateTexture` binds it with `CGLTexImageIOSurface2D` on the rectangle target, falling back to `glTexImage2D` if the driver refuses. GL-thread cost per UHD frame drops from about 4–6 ms (22–26 ms before the native-format fix) to 0.1 ms.
+- **The texture does not retain the surface.** `gfcFrame::ioSurface` holds a reference, released in `deleteTexture()` after `glDeleteTextures`. It is a raw handle copied along with `textureID`, under the same rules.
+- `gfcSurface::release` returns the last reference to a pool (keyed by size and pixel format, 512 MiB cap). `create` reuses a pooled surface only when `IOSurfaceIsInUse` is false.
+- **`glGetTexImage` returns nothing for IOSurface textures.** Use `gfcSurface::readBack`, which draws into a float FBO.
+- `gfcIOSurface_mac.cpp` must not include glad: it uses Apple's GL headers, built with `GL_SILENCE_DEPRECATION`.
+- Switches: `JEFECHECK_NO_IOSURFACE=1` (upload path), `JEFECHECK_NO_IOSURFACE_POOL=1` (no reuse).
+
+**Bench:** `--upload-bench <dir>` (`jefe::qt::runUploadBench`) runs `gfcSurface::selfTest` (known pixels per layout, drawn and compared), then loads every file at 8-bit, 16-bit and half. It times decode and upload with `glFinish`, reports the IOSurface and pool counts, and fails if half-float textures don't exceed 1.0 or any depth's texture or thumbnail colours differ from 8-bit (catches an R/B swap). Benchmark a **Release** build: an empty `CMAKE_BUILD_TYPE` is 5–10× slower.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.

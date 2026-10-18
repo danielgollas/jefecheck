@@ -1,4 +1,5 @@
 #include "gfcimageloaderoiio.h"
+#include "gfcIOSurface.h"
 #include "UIConstants.h"
 #include "gfcStructures.h"
 extern gfcSettings sett;
@@ -196,12 +197,16 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         outH = spec.full_height;
     }
 
-    // Determine bit depth from the requested compression mode
+    // Determine bit depth from the requested compression mode. Half mode
+    // reads HALF, not UINT16: converting float pixels to UINT16 clamps them to
+    // 0..1, which threw away every highlight above 1.0 before it reached the
+    // half-float texture meant to hold it.
     int bitsPerComponent = 8;
     OIIO::TypeDesc readType = OIIO::TypeDesc::UINT8;
-    if (params.compressed == GFC_16BPC || params.compressed == GFC_16HALF) {
+    const bool halfFloat = params.compressed == GFC_16HALF;
+    if (params.compressed == GFC_16BPC || halfFloat) {
         bitsPerComponent = 16;
-        readType = OIIO::TypeDesc::UINT16;
+        readType = halfFloat ? OIIO::TypeDesc::HALF : OIIO::TypeDesc::UINT16;
     }
 
     originalBitDepth = spec.format.size() * 8;
@@ -246,7 +251,10 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         }
     }
 
-    // Allocate output bitmap (always BGRA), sized to the display window so
+    // Allocate the output bitmap: BGRA for 8-bit, RGBA for 16-bit. Those are
+    // the orders Metal stores natively (BGRA8Unorm, RGBA16Unorm/RGBA16Float),
+    // so Apple's GL uploads them without converting each pixel on the main
+    // thread. Sized to the display window so
     // an EXR data window smaller/offset from the display window is padded
     // into the full frame (unless the user opted to ignore the display
     // window, in which case outW/outH == width/height, see above).
@@ -272,7 +280,7 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     inp->read_image(0, 0, chBegin, chBegin + srcChannels, readType, imgBuf.data());
 
-    // Convert to BGRA, compositing the data window into the (possibly
+    // Convert to BGRA (8-bit) or RGBA (16-bit), compositing the data window into the (possibly
     // larger/offset) display window at (x + dispDX, y + dispDY). In the
     // common case (no distinct display window, or the user asked to ignore
     // it) dispDX == dispDY == 0 and outW/outH == width/height, so this is
@@ -285,6 +293,9 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         unsigned char *dst = theBitmap->Data + (size_t)dy * theBitmap->BytesPerLine;
 
         if (bitsPerComponent == 16) {
+            // RGBA order (see the allocation above). Alpha defaults to 1.0:
+            // 0x3C00 as a half, 0xFFFF as a normalised 16-bit integer.
+            const unsigned short opaque = halfFloat ? 0x3C00 : 0xFFFF;
             unsigned short *src16 = (unsigned short*)src;
             unsigned short *dst16 = (unsigned short*)dst;
             for (int x = 0; x < width; x++) {
@@ -295,10 +306,10 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
                 unsigned short r = src16[si + 0];
                 unsigned short g = (srcChannels > 1) ? src16[si + 1] : r;
                 unsigned short b = (srcChannels > 2) ? src16[si + 2] : r;
-                unsigned short a = (srcChannels > 3) ? src16[si + 3] : 0xFFFF;
-                dst16[di + 0] = b;
+                unsigned short a = (srcChannels > 3) ? src16[si + 3] : opaque;
+                dst16[di + 0] = r;
                 dst16[di + 1] = g;
-                dst16[di + 2] = r;
+                dst16[di + 2] = b;
                 dst16[di + 3] = a;
             }
         } else {
@@ -341,7 +352,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         OIIO::ImageSpec srcSpec(theBitmap->Width, theBitmap->Height,
                                 theBitmap->ComponentsPerPixel,
                                 theBitmap->BitsPerComponent == 8  ? OIIO::TypeDesc::UINT8 :
-                                theBitmap->BitsPerComponent == 16 ? OIIO::TypeDesc::UINT16 :
+                                theBitmap->BitsPerComponent == 16 ? (halfFloat ? OIIO::TypeDesc::HALF
+                                                                               : OIIO::TypeDesc::UINT16) :
                                                                     OIIO::TypeDesc::FLOAT);
         OIIO::ImageBuf src(srcSpec, theBitmap->Data);
 
@@ -424,10 +436,14 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         frameInfo.internalFormat = GL_RGBA4;
         break;
     case GFC_16HALF:
-    case GFC_16BPC:
-        frameInfo.format = GL_BGRA;
-        frameInfo.dataType = GL_UNSIGNED_SHORT;
+        frameInfo.format = GL_RGBA;
+        frameInfo.dataType = GL_HALF_FLOAT_ARB;
         frameInfo.internalFormat = GL_RGBA16F_ARB;
+        break;
+    case GFC_16BPC:
+        frameInfo.format = GL_RGBA;
+        frameInfo.dataType = GL_UNSIGNED_SHORT;
+        frameInfo.internalFormat = GL_RGBA16;
         break;
     case GFC_S3TCDX1:
         frameInfo.format = GL_BGRA;
@@ -441,6 +457,12 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         frameInfo.internalFormat = GL_RGBA;
         break;
     }
+
+    // On macOS, also hand the pixels over in an IOSurface: the GL thread then
+    // binds it as the texture's storage instead of uploading (CPU and GPU
+    // share memory on Apple silicon). The copy happens here, on the decode
+    // thread. theBitmap stays for the thumbnail and the glTexImage2D fallback.
+    copyToSurface();
 
     // Build channel name list for the dropdown
     channelNames.clear();
@@ -515,6 +537,46 @@ void* gfcImageLoaderOIIO::getPixelPointer() {
 void gfcImageLoaderOIIO::releaseMemory() {
     delete theBitmap;
     theBitmap = nullptr;
+    gfcSurface::release(frameInfo.ioSurface);
+    frameInfo.ioSurface = nullptr;
+}
+
+void gfcImageLoaderOIIO::copyToSurface() {
+    gfcSurface::release(frameInfo.ioSurface);
+    frameInfo.ioSurface = nullptr;
+    if (!gfcSurface::available() || !theBitmap || !theBitmap->Data) return;
+
+    gfcSurface::Layout layout;
+    size_t pixelBytes;
+    switch (params.compressed) {
+    case GFC_8BPC:   layout = gfcSurface::Layout::BGRA8;    pixelBytes = 4; break;
+    case GFC_16BPC:  layout = gfcSurface::Layout::RGBA16;   pixelBytes = 8; break;
+    case GFC_16HALF: layout = gfcSurface::Layout::RGBAHalf; pixelBytes = 8; break;
+    default: return;   // 4-bit and S3TC keep the upload path
+    }
+    const int w = theBitmap->Width, h = theBitmap->Height;
+    const size_t rowBytes = (size_t)w * pixelBytes;
+    if (theBitmap->ComponentsPerPixel != 4 || (size_t)theBitmap->BytesPerLine < rowBytes) return;
+
+    void* surface = gfcSurface::create(w, h, layout);
+    if (!surface) return;
+    size_t pitch = 0;
+    unsigned char* dst = (unsigned char*)gfcSurface::lockForWriting(surface, &pitch);
+    if (!dst || pitch < rowBytes) {
+        if (dst) gfcSurface::unlock(surface);
+        gfcSurface::release(surface);
+        return;
+    }
+    const unsigned char* src = theBitmap->Data;
+    if (pitch == rowBytes && (size_t)theBitmap->BytesPerLine == rowBytes) {
+        memcpy(dst, src, rowBytes * h);
+    } else {
+        for (int y = 0; y < h; ++y)
+            memcpy(dst + pitch * y, src + (size_t)theBitmap->BytesPerLine * y, rowBytes);
+    }
+    gfcSurface::unlock(surface);
+    frameInfo.ioSurface = surface;
+    frameInfo.ioSurfaceLayout = layout;
 }
 
 std::vector<std::string> gfcImageLoaderOIIO::getChannelNames() {

@@ -1,3 +1,4 @@
+#include <cmath>
 #include "gfcframe.h"
 
 
@@ -184,6 +185,19 @@ std::vector< std::string > gfcFrame::getChannelNames()
 	return channelNames;
 }
 
+namespace {
+// IEEE 754 binary16 to float, for the half-float thumbnail path.
+float halfToFloat(unsigned short h)
+{
+	const unsigned sign = (h >> 15) & 1u, exp = (h >> 10) & 0x1Fu, mant = h & 0x3FFu;
+	float v;
+	if (exp == 0)       v = std::ldexp((float)mant, -24);                  // subnormal
+	else if (exp == 31) v = mant ? NAN : INFINITY;
+	else                v = std::ldexp((float)(mant | 0x400u), (int)exp - 25);
+	return sign ? -v : v;
+}
+}
+
 GLuint gfcFrame::generateTexture(bool captureThumbnail)
 {
 	//printf ( " Inside gfcFrame::generateTexture\n" );
@@ -220,9 +234,20 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 	glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 	glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
 	while (glGetError() != GL_NO_ERROR) {} // clear stale errors
-	glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
-	GLenum glErr = glGetError();
-	if (glErr != GL_NO_ERROR) printf("generateTexture: glTexImage2D error: 0x%x\n", glErr);
+	// macOS: the decode thread left the pixels in an IOSurface; make it the
+	// texture's storage (no copy). Otherwise, or if the driver refuses the
+	// layout, upload as usual.
+	const bool bound = info.ioSurface && info.target == GL_TEXTURE_RECTANGLE_ARB
+		&& gfcSurface::bindToTexture(info.ioSurface, sizeX, sizeY, info.ioSurfaceLayout);
+	if (bound) {
+		ioSurface = info.ioSurface;   // the loader releases its own reference below
+		gfcSurface::retain(ioSurface);
+	} else {
+		while (glGetError() != GL_NO_ERROR) {}
+		glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
+		GLenum glErr = glGetError();
+		if (glErr != GL_NO_ERROR) printf("generateTexture: glTexImage2D error: 0x%x\n", glErr);
+	}
 	/*
 	glFinish();
 	timer.stop();
@@ -231,9 +256,11 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 
 	// Capture a downsampled RGBA8 thumbnail for the timeline filmstrip
 	// while the decoder's CPU buffer is still alive (releaseMemory frees
-	// it just below). Source is BGRA, 8- or 16-bit per info.dataType.
+	// it just below). The source is BGRA or RGBA (info.format) with 8-bit,
+	// 16-bit or half-float components (info.dataType).
 	if (captureThumbnail && info.dataPointer && sizeX > 0 && sizeY > 0
-	    && (info.dataType == GL_UNSIGNED_BYTE || info.dataType == GL_UNSIGNED_SHORT)) {
+	    && (info.dataType == GL_UNSIGNED_BYTE || info.dataType == GL_UNSIGNED_SHORT
+	        || info.dataType == GL_HALF_FLOAT_ARB)) {
 		const int srcW = sizeX, srcH = sizeY;
 		const int dstH = 48;
 		int dstW = (int)((double)dstH * srcW / srcH + 0.5);
@@ -242,28 +269,25 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 		thumbnail.w = dstW;
 		thumbnail.h = dstH;
 		thumbnail.rgba.assign((size_t)dstW * dstH * 4, 0);
-		const bool sixteen = (info.dataType == GL_UNSIGNED_SHORT);
+		const bool bgra = (info.format == GL_BGRA);
 		const unsigned char*  s8  = (const unsigned char*)info.dataPointer;
 		const unsigned short* s16 = (const unsigned short*)info.dataPointer;
+		auto to8 = [&](size_t i) -> unsigned char {
+			if (info.dataType == GL_UNSIGNED_BYTE) return s8[i];
+			if (info.dataType == GL_UNSIGNED_SHORT) return (unsigned char)(s16[i] >> 8);
+			const float v = halfToFloat(s16[i]);   // display range only: clamp to 0..1
+			return (unsigned char)(v <= 0.0f ? 0 : v >= 1.0f ? 255 : (int)(v * 255.0f + 0.5f));
+		};
 		for (int y = 0; y < dstH; ++y) {
 			const int sy = y * srcH / dstH;
 			for (int x = 0; x < dstW; ++x) {
 				const int sx = x * srcW / dstW;
-				const size_t si = ((size_t)sy * srcW + sx) * 4; // BGRA, 4 comps
-				unsigned char b, g, r, a;
-				if (sixteen) {
-					b = (unsigned char)(s16[si+0] >> 8);
-					g = (unsigned char)(s16[si+1] >> 8);
-					r = (unsigned char)(s16[si+2] >> 8);
-					a = (unsigned char)(s16[si+3] >> 8);
-				} else {
-					b = s8[si+0]; g = s8[si+1]; r = s8[si+2]; a = s8[si+3];
-				}
+				const size_t si = ((size_t)sy * srcW + sx) * 4; // 4 comps
 				const size_t di = ((size_t)y * dstW + x) * 4;
-				thumbnail.rgba[di+0] = r;  // BGRA -> RGBA
-				thumbnail.rgba[di+1] = g;
-				thumbnail.rgba[di+2] = b;
-				thumbnail.rgba[di+3] = a;
+				thumbnail.rgba[di+0] = to8(si + (bgra ? 2 : 0));
+				thumbnail.rgba[di+1] = to8(si + 1);
+				thumbnail.rgba[di+2] = to8(si + (bgra ? 0 : 2));
+				thumbnail.rgba[di+3] = to8(si + 3);
 			}
 		}
 	}
@@ -310,6 +334,8 @@ void gfcFrame::releaseMemory()
 void gfcFrame::deleteTexture()
 {
     glDeleteTextures(1,&textureID);
+    gfcSurface::release(ioSurface);   // only after the texture using it is gone
+    ioSurface=nullptr;
 }
 
 void gfcFrame::clearFrame()

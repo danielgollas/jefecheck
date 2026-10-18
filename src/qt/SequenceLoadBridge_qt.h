@@ -1433,6 +1433,14 @@ bool notesVisible();
 void setNotesVisible(bool visible);
 void toggleNotesVisible();
 
+/** Decode-and-upload benchmark (--upload-bench <dir>): loads every image in
+    @a dir at each bit depth (8-bit, 16-bit, half), timing the decode and the
+    GL upload separately, and reads the first half-float texture back to check
+    that values above 1.0 survive. The GL context must be current. Prints
+    UPLOAD-BENCH lines; returns 0 when the half-float texture keeps HDR values
+    (the footage must contain some), 2 otherwise. */
+int runUploadBench(const std::string& dir);
+
 }  // namespace jefe::qt
 
 #endif

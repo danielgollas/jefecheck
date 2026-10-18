@@ -195,6 +195,9 @@ public:
     // regression where renders dropped the super-shader (CC + LUT).
     int runHeadlessCCTest(const QString& imagePath);
 
+    // Decode/upload benchmark (--upload-bench <dir>): see jefe::qt::runUploadBench.
+    int runHeadlessUploadBench(const QString& dir);
+
     // Headless multiplate FX state-leak probe (--fx-multitest <image>). Loads
     // the image into plates 0 and 1, side-by-side (FRAMINGDOUBLE), grabs the
     // on-screen framebuffer, then adds an FX to plate 0 ONLY and grabs again.

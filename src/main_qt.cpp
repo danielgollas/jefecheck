@@ -171,6 +171,16 @@ static QString resolveCCTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// Resolve --upload-bench <dir>: time decode and GL upload at each bit depth.
+static QString resolveUploadBenchDir(int argc, char* argv[]) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--upload-bench") == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
 // Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe:
 // load the image into plates 0 and 1 side-by-side, grab the framebuffer, add
 // an FX to plate 0 only, grab again, and report left/right half brightness.
@@ -1755,6 +1765,15 @@ int main(int argc, char* argv[]) {
     if (!ccTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, ccTestFile]() {
             const int code = window.runHeadlessCCTest(ccTestFile);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    const QString uploadBenchDir = resolveUploadBenchDir(argc, argv);
+    if (!uploadBenchDir.isEmpty()) {
+        QTimer::singleShot(3000, &window, [&window, uploadBenchDir]() {
+            const int code = window.runHeadlessUploadBench(uploadBenchDir);
             fflush(stdout);
             std::_Exit(code);
         });
