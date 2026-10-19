@@ -361,13 +361,19 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
                                 srcSpec.nchannels, srcSpec.format);
         OIIO::ImageBuf dst(dstSpec);
 
-        // OIIO 3.x KWArgs form — pass the filter name as a string.
-        bool ok = OIIO::ImageBufAlgo::resize(
-            dst, src, {{ "filtername", filterName }});
+        // OIIO 3.x takes KWArgs; 2.x (Ubuntu 24.04 ships 2.4) takes the
+        // filter name positionally and finds the KWArgs form ambiguous.
+        auto resizeWith = [&](const char* name) {
+#if OIIO_VERSION_MAJOR >= 3
+            return OIIO::ImageBufAlgo::resize(dst, src, {{ "filtername", name }});
+#else
+            return OIIO::ImageBufAlgo::resize(dst, src, name);
+#endif
+        };
+        bool ok = resizeWith(filterName);
         if (!ok) {
             // Fall back to box (nearest) if the filter name was rejected.
-            ok = OIIO::ImageBufAlgo::resize(
-                dst, src, {{ "filtername", "box" }});
+            ok = resizeWith("box");
         }
 
         if (ok) {
