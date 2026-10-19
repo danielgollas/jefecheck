@@ -9,6 +9,7 @@ gfcGLFrameInfo::gfcGLFrameInfo() {
     dataPointer=0;
     ioSurface=nullptr;
     ioSurfaceLayout=gfcSurface::Layout::BGRA8;
+    staging=nullptr;
 }
 
 
