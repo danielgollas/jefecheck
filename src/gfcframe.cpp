@@ -224,30 +224,53 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 	gfcTimer timer("texGenTimer");
 	timer.start();
 	*/
+	gfcUpload::service();   // recycle staging buffers, grow the pool on demand
 	glEnable(info.target);
-	glGenTextures ( 1,&textureID );
-	//printf("Texture ID: %i\n",textureID);
-	glBindTexture(info.target, textureID);
-	glTexParameterf ( info.target, GL_TEXTURE_WRAP_S, GL_CLAMP );
-	glTexParameterf ( info.target, GL_TEXTURE_WRAP_T, GL_CLAMP );
-	glTexParameterf ( info.target, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	// Refill a pooled texture of the same size and format when one is waiting
+	// (IOSurface textures get their storage from the surface instead).
+	const GLuint reused = info.ioSurface ? 0
+		: gfcUpload::takeTexture(info.target, info.internalFormat, sizeX, sizeY);
+	if (reused) {
+		textureID = reused;   // bound, parameters already set
+	} else {
+		glGenTextures ( 1,&textureID );
+		glBindTexture(info.target, textureID);
+		glTexParameterf ( info.target, GL_TEXTURE_WRAP_S, GL_CLAMP );
+		glTexParameterf ( info.target, GL_TEXTURE_WRAP_T, GL_CLAMP );
+		glTexParameterf ( info.target, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		gfcUpload::noteTextureCreated();
+	}
 	glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
 	while (glGetError() != GL_NO_ERROR) {} // clear stale errors
 	// macOS: the decode thread left the pixels in an IOSurface; make it the
 	// texture's storage (no copy). Otherwise, or if the driver refuses the
-	// layout, upload as usual.
+	// layout, upload: from the staging buffer the decode thread filled when
+	// there is one (the GPU pulls it, no CPU copy here), else from the bitmap.
 	const bool bound = info.ioSurface && info.target == GL_TEXTURE_RECTANGLE_ARB
 		&& gfcSurface::bindToTexture(info.ioSurface, sizeX, sizeY, info.ioSurfaceLayout);
+	bool uploaded = bound;
 	if (bound) {
 		ioSurface = info.ioSurface;   // the loader releases its own reference below
 		gfcSurface::retain(ioSurface);
 	} else {
-		while (glGetError() != GL_NO_ERROR) {}
-		glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
+		const bool staged = info.staging
+			&& gfcUpload::upload(info.staging, info.target, info.internalFormat, sizeX, sizeY,
+			                     info.format, info.dataType, !reused);
+		if (!staged && reused)
+			glTexSubImage2D ( info.target,0,0,0,sizeX,sizeY,info.format,info.dataType,info.dataPointer);
+		else if (!staged)
+			glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
 		GLenum glErr = glGetError();
-		if (glErr != GL_NO_ERROR) printf("generateTexture: glTexImage2D error: 0x%x\n", glErr);
+		if (glErr != GL_NO_ERROR) printf("generateTexture: texture upload error: 0x%x\n", glErr);
+		uploaded = glErr == GL_NO_ERROR;
 	}
+	// Remember what the texture holds so deleteTexture can pool it. A texture
+	// whose upload failed may have no storage: never pool that one.
+	textureTarget = info.target;
+	textureFormat = info.internalFormat;
+	textureW = (uploaded && !bound) ? sizeX : 0;
+	textureH = (uploaded && !bound) ? sizeY : 0;
 	/*
 	glFinish();
 	timer.stop();
@@ -333,9 +356,17 @@ void gfcFrame::releaseMemory()
  */
 void gfcFrame::deleteTexture()
 {
-    glDeleteTextures(1,&textureID);
+    if (textureID != defaultTexture) {
+        if (textureW > 0 && textureH > 0)
+            gfcUpload::giveTexture(textureID, textureTarget, textureFormat, textureW, textureH);
+        else
+            glDeleteTextures(1,&textureID);
+    }
     gfcSurface::release(ioSurface);   // only after the texture using it is gone
     ioSurface=nullptr;
+    // Forget the name, so a second call never frees or pools it twice.
+    textureID=defaultTexture;
+    textureW=textureH=0;
 }
 
 void gfcFrame::clearFrame()

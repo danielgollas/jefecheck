@@ -742,7 +742,24 @@ New `.cpp` files are picked up by CMake's `file(GLOB src/qt/*.cpp)` — re-run `
 - `gfcIOSurface_mac.cpp` must not include glad: it uses Apple's GL headers, built with `GL_SILENCE_DEPRECATION`.
 - Switches: `JEFECHECK_NO_IOSURFACE=1` (upload path), `JEFECHECK_NO_IOSURFACE_POOL=1` (no reuse).
 
+**Staging buffers and texture pool** (`src/gfcUploadPool.{h,cpp}`, every platform; the path for Windows/Linux and for macOS with IOSurface off):
+- If no IOSurface was made, the decode thread copies the frame into a mapped pixel-unpack buffer (`gfcUpload::acquire`, `gfcImageLoaderOIIO::copyToStaging`). `generateTexture` then calls `gfcUpload::upload`, which fills the texture from that buffer (`glTexImage2D`/`glTexSubImage2D` with a null offset), so the GL thread does no CPU copy.
+- **Two levels, chosen on the first `service()`:**
+  - *persistent* (`ARB_buffer_storage` + sync): buffers are mapped once for life, and a fence per upload says when one can be reused;
+  - *classic* (GL 2.1): the GL thread unmaps a buffer to upload from it, then orphans it with `glBufferData(NULL)` and maps it again right away.
+- **Growth:** the pool grows on the GL thread from the decode thread's misses, capped at 512 MiB. The first frames of a new size take the old path.
+- **Never leave `GL_PIXEL_UNPACK_BUFFER` bound.** Every other upload passes a client pointer.
+- **Returning buffers:** the loader's `releaseMemory` returns a buffer that was never uploaded (`abandon`); `stopLoading` reaches it through `releaseMemory` on queued frames.
+- **Texture pool:** `gfcFrame::deleteTexture` gives uncompressed rectangle textures back to a pool (512 MiB). `generateTexture` takes one of the same size and format and refills it with `glTexSubImage2D`.
+  - `deleteTexture` now resets `textureID` to `defaultTexture`, so a second call can't pool the same name twice.
+  - IOSurface textures, S3TC textures and failed uploads are never pooled. `textureW/H` is 0 for them.
+- **Switches:** `JEFECHECK_NO_PBO=1`, `JEFECHECK_NO_TEXTURE_POOL=1`, and `JEFECHECK_FORCE_CLASSIC_PBO=1` (tests the classic level on a driver that has persistent mapping).
+- **Testing status:** macOS GL 2.1 only reaches *classic*. The *persistent* level passes on Mesa llvmpipe (GL 4.5 compat); it has not run on a real Windows/Linux GPU yet.
+- **Mesa bench:** `scripts/mesa_upload_bench.sh <jefecheck>` runs the bench under Xvfb on llvmpipe at the persistent, classic and off levels, and fails if any run doesn't pass or picks the wrong level. CI runs it in `.github/workflows/mesa-bench.yml`. It checks correctness only; llvmpipe renders on the CPU, so its timings mean nothing. Locally: an `ubuntu:24.04` container with `--platform linux/amd64` (vendored RakNet's `FileList.cpp` includes the x86-only `sys/io.h`, so ARM Linux doesn't build).
+
 **Bench:** `--upload-bench <dir>` (`jefe::qt::runUploadBench`) runs `gfcSurface::selfTest` (known pixels per layout, drawn and compared), then loads every file at 8-bit, 16-bit and half. It times decode and upload with `glFinish`, reports the IOSurface and pool counts, and fails if half-float textures don't exceed 1.0 or any depth's texture or thumbnail colours differ from 8-bit (catches an R/B swap). Benchmark a **Release** build: an empty `CMAKE_BUILD_TYPE` is 5–10× slower.
+
+**Headless render tests and the Load Window:** with a fresh `--config-dir`, the Load Window opens at startup. Its empty track-A filename box clears the `--open-file` preview when the window loses focus (`TrackStrip_Qt::onFilenameChanged` fires on focus-out), so `--render-test` then writes nothing, depending on what else has focus. To avoid it, seed the config with `[%General]` / `openLoadWindowAtStartup=0`. QSettings writes a group named `General` as `[%General]`; a plain `[General]` section means top-level keys.
 
 ## See also
 

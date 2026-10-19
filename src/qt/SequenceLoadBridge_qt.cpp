@@ -28,6 +28,8 @@
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
 #include "../ui/IApplication.h"
+#include "gfcUploadPool.h"
+#include "gfcIOSurface.h"
 #include "gfcplategui_qt.h"
 #include "gfcsequencegui_qt.h"
 
@@ -3717,11 +3719,13 @@ int runUploadBench(const std::string& dir) {
     // depth must agree with 8-bit, which catches a swapped R/B channel order.
     struct Means { double texR = 0, texB = 0, thumbR = 0, thumbB = 0; };
     std::vector<std::pair<const char*, Means>> means;
+    bool lastFramesOk = true;
     for (const Mode& mode : modes) {
         std::vector<double> decodeMs, uploadMs;
         double bytes = 0;
         const long boundBefore = gfcSurface::boundCount();
         const gfcSurface::PoolStats poolBefore = gfcSurface::poolStats();
+        const gfcUpload::Stats uploadBefore = gfcUpload::stats();
         for (size_t i = 0; i < files.size(); ++i) {
             gfcFrame frame;
             gfcLoadParams params;
@@ -3742,8 +3746,11 @@ int runUploadBench(const std::string& dir) {
             uploadMs.push_back(std::chrono::duration<double, std::milli>(t3 - t2).count());
             bytes += double(frame.sizeX) * frame.sizeY * 4 * (mode.value == GFC_8BPC ? 1 : 2);
 
-            if (i == 0) {
-                // Read the texture back as float: what the shaders will see.
+            // Read the texture back as float: what the shaders will see. The
+            // first frame of a mode always takes a fresh texture; the last one
+            // comes through the pools (staging buffer, reused texture), so
+            // both are checked.
+            auto readTexture = [&frame](float& maxV, double& r, double& b) {
                 std::vector<float> px(size_t(frame.sizeX) * frame.sizeY * 4);
                 if (frame.ioSurface) {
                     gfcSurface::readBack(frame.textureID, frame.sizeX, frame.sizeY, px.data());
@@ -3751,15 +3758,20 @@ int runUploadBench(const std::string& dir) {
                     glBindTexture(GL_TEXTURE_RECTANGLE_ARB, frame.textureID);
                     glGetTexImage(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, GL_FLOAT, px.data());
                 }
-                float maxV = 0;
-                Means m;
+                maxV = 0;
+                r = b = 0;
                 for (size_t k = 0; k < px.size(); k += 4) {
                     maxV = std::max({maxV, px[k], px[k + 1], px[k + 2]});
-                    m.texR += std::clamp(px[k], 0.0f, 1.0f);
-                    m.texB += std::clamp(px[k + 2], 0.0f, 1.0f);
+                    r += std::clamp(px[k], 0.0f, 1.0f);
+                    b += std::clamp(px[k + 2], 0.0f, 1.0f);
                 }
-                m.texR /= double(px.size() / 4);
-                m.texB /= double(px.size() / 4);
+                r /= double(px.size() / 4);
+                b /= double(px.size() / 4);
+            };
+            if (i == 0) {
+                float maxV = 0;
+                Means m;
+                readTexture(maxV, m.texR, m.texB);
                 const auto& th = frame.thumbnail.rgba;
                 for (size_t k = 0; k + 3 < th.size(); k += 4) {
                     m.thumbR += th[k] / 255.0;
@@ -3773,6 +3785,16 @@ int runUploadBench(const std::string& dir) {
                 std::printf("UPLOAD-BENCH %-5s %dx%d texture max=%.3f\n", mode.name, frame.sizeX, frame.sizeY,
                             maxV);
                 if (mode.value == GFC_16HALF) halfMax = maxV;
+            } else if (i + 1 == files.size()) {
+                float maxV = 0;
+                double r = 0, b = 0;
+                readTexture(maxV, r, b);
+                const Means& first = means.back().second;
+                const bool same = std::abs(r - first.texR) < 0.01 && std::abs(b - first.texB) < 0.01
+                                  && (mode.value != GFC_16HALF || maxV > 1.0f);
+                std::printf("UPLOAD-BENCH %s %-5s last frame matches the first (R=%.3f B=%.3f max=%.3f)\n",
+                            same ? "ok  " : "FAIL", mode.name, r, b, maxV);
+                lastFramesOk = lastFramesOk && same;
             }
             frame.deleteTexture();
         }
@@ -3789,6 +3811,11 @@ int runUploadBench(const std::string& dir) {
                     mode.name, files.size(), median(decodeMs), median(uploadMs),
                     uploadTotal > 0 ? bytes / 1e6 / (uploadTotal / 1000.0) : 0.0, bound, files.size(),
                     pool.created - poolBefore.created, pool.reused - poolBefore.reused);
+        const gfcUpload::Stats up = gfcUpload::stats();
+        std::printf("UPLOAD-BENCH %-5s staging=%s staged=%ld/%zu misses=%ld textures reused=%ld new=%ld\n",
+                    mode.name, up.level, up.stagedUploads - uploadBefore.stagedUploads, files.size(),
+                    up.stagingMisses - uploadBefore.stagingMisses, up.texturesReused - uploadBefore.texturesReused,
+                    up.texturesCreated - uploadBefore.texturesCreated);
     }
     bool orderOk = !means.empty();
     for (const auto& [name, m] : means) {
@@ -3802,7 +3829,7 @@ int runUploadBench(const std::string& dir) {
     const bool surfacesOk = !gfcSurface::available() || surfaceLayouts == 3;
     std::printf("UPLOAD-BENCH %s IOSurface layouts working: %d/3%s\n", surfacesOk ? "ok  " : "FAIL",
                 surfaceLayouts, gfcSurface::available() ? "" : " (disabled)");
-    const bool hdrKept = halfMax > 1.0f && orderOk && surfacesOk;
+    const bool hdrKept = halfMax > 1.0f && orderOk && surfacesOk && lastFramesOk;
     std::printf("UPLOAD-BENCH %s half-float textures keep values above 1.0 (max=%.3f)\n",
                 halfMax > 1.0f ? "ok  " : "FAIL", halfMax);
     std::printf("UPLOAD-BENCH: %s\n", hdrKept ? "PASS" : "FAIL");

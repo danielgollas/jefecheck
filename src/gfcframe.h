@@ -120,6 +120,9 @@ public:
         theImageLoader=NULL;
         textureID=defaultTexture;
         ioSurface=nullptr;
+        textureTarget=0;
+        textureFormat=0;
+        textureW=textureH=0;
         indexNumber=0;
         forceGFLLoader=false;
     }
@@ -135,6 +138,12 @@ public:
     // uploaded. The texture does not keep the surface alive, so the frame
     // holds a reference until deleteTexture(). Copied along with textureID.
     void* ioSurface;
+    // What textureID holds, for the texture pool: set by generateTexture
+    // (size 0 = don't pool: IOSurface-backed, or the upload failed).
+    GLenum textureTarget;
+    GLint textureFormat;
+    int textureW;
+    int textureH;
 
     bool loaded;
     bool skipped;

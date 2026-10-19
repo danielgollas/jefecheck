@@ -1,5 +1,6 @@
 #include "gfcimageloaderoiio.h"
 #include "gfcIOSurface.h"
+#include "gfcUploadPool.h"
 #include "UIConstants.h"
 #include "gfcStructures.h"
 extern gfcSettings sett;
@@ -464,11 +465,12 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         break;
     }
 
-    // On macOS, also hand the pixels over in an IOSurface: the GL thread then
-    // binds it as the texture's storage instead of uploading (CPU and GPU
-    // share memory on Apple silicon). The copy happens here, on the decode
-    // thread. theBitmap stays for the thumbnail and the glTexImage2D fallback.
-    copyToSurface();
+    // Hand the pixels to the GPU side from here, on the decode thread, so the
+    // GL thread copies nothing: on macOS an IOSurface the texture uses as its
+    // storage (CPU and GPU share memory on Apple silicon); elsewhere, or if
+    // that fails, a mapped staging buffer the GL thread transfers from.
+    // theBitmap stays for the thumbnail and the glTexImage2D fallback.
+    if (!copyToSurface()) copyToStaging();
 
     // Build channel name list for the dropdown
     channelNames.clear();
@@ -545,44 +547,70 @@ void gfcImageLoaderOIIO::releaseMemory() {
     theBitmap = nullptr;
     gfcSurface::release(frameInfo.ioSurface);
     frameInfo.ioSurface = nullptr;
+    gfcUpload::abandon(frameInfo.staging);   // no-op once it was uploaded
+    frameInfo.staging = nullptr;
 }
 
-void gfcImageLoaderOIIO::copyToSurface() {
-    gfcSurface::release(frameInfo.ioSurface);
-    frameInfo.ioSurface = nullptr;
-    if (!gfcSurface::available() || !theBitmap || !theBitmap->Data) return;
-
-    gfcSurface::Layout layout;
+size_t gfcImageLoaderOIIO::handOffRowBytes() const {
+    if (!theBitmap || !theBitmap->Data || theBitmap->ComponentsPerPixel != 4) return 0;
     size_t pixelBytes;
     switch (params.compressed) {
-    case GFC_8BPC:   layout = gfcSurface::Layout::BGRA8;    pixelBytes = 4; break;
-    case GFC_16BPC:  layout = gfcSurface::Layout::RGBA16;   pixelBytes = 8; break;
-    case GFC_16HALF: layout = gfcSurface::Layout::RGBAHalf; pixelBytes = 8; break;
-    default: return;   // 4-bit and S3TC keep the upload path
+    case GFC_8BPC:   pixelBytes = 4; break;
+    case GFC_16BPC:
+    case GFC_16HALF: pixelBytes = 8; break;
+    default: return 0;   // 4-bit and S3TC keep the upload path
     }
-    const int w = theBitmap->Width, h = theBitmap->Height;
-    const size_t rowBytes = (size_t)w * pixelBytes;
-    if (theBitmap->ComponentsPerPixel != 4 || (size_t)theBitmap->BytesPerLine < rowBytes) return;
+    const size_t rowBytes = (size_t)theBitmap->Width * pixelBytes;
+    return (size_t)theBitmap->BytesPerLine >= rowBytes ? rowBytes : 0;
+}
 
-    void* surface = gfcSurface::create(w, h, layout);
-    if (!surface) return;
-    size_t pitch = 0;
-    unsigned char* dst = (unsigned char*)gfcSurface::lockForWriting(surface, &pitch);
-    if (!dst || pitch < rowBytes) {
-        if (dst) gfcSurface::unlock(surface);
-        gfcSurface::release(surface);
-        return;
-    }
+void gfcImageLoaderOIIO::copyRows(unsigned char* dst, size_t pitch, size_t rowBytes) const {
     const unsigned char* src = theBitmap->Data;
+    const int h = theBitmap->Height;
     if (pitch == rowBytes && (size_t)theBitmap->BytesPerLine == rowBytes) {
         memcpy(dst, src, rowBytes * h);
     } else {
         for (int y = 0; y < h; ++y)
             memcpy(dst + pitch * y, src + (size_t)theBitmap->BytesPerLine * y, rowBytes);
     }
+}
+
+bool gfcImageLoaderOIIO::copyToSurface() {
+    gfcSurface::release(frameInfo.ioSurface);
+    frameInfo.ioSurface = nullptr;
+    const size_t rowBytes = handOffRowBytes();
+    if (!gfcSurface::available() || !rowBytes) return false;
+
+    const gfcSurface::Layout layout = params.compressed == GFC_8BPC  ? gfcSurface::Layout::BGRA8
+                                    : params.compressed == GFC_16BPC ? gfcSurface::Layout::RGBA16
+                                                                     : gfcSurface::Layout::RGBAHalf;
+    void* surface = gfcSurface::create(theBitmap->Width, theBitmap->Height, layout);
+    if (!surface) return false;
+    size_t pitch = 0;
+    unsigned char* dst = (unsigned char*)gfcSurface::lockForWriting(surface, &pitch);
+    if (!dst || pitch < rowBytes) {
+        if (dst) gfcSurface::unlock(surface);
+        gfcSurface::release(surface);
+        return false;
+    }
+    copyRows(dst, pitch, rowBytes);
     gfcSurface::unlock(surface);
     frameInfo.ioSurface = surface;
     frameInfo.ioSurfaceLayout = layout;
+    return true;
+}
+
+bool gfcImageLoaderOIIO::copyToStaging() {
+    gfcUpload::abandon(frameInfo.staging);
+    frameInfo.staging = nullptr;
+    const size_t rowBytes = handOffRowBytes();
+    if (!rowBytes) return false;
+    void* dst = nullptr;
+    gfcUpload::Staging* staging = gfcUpload::acquire(rowBytes * theBitmap->Height, &dst);
+    if (!staging) return false;
+    copyRows((unsigned char*)dst, rowBytes, rowBytes);   // tightly packed rows
+    frameInfo.staging = staging;
+    return true;
 }
 
 std::vector<std::string> gfcImageLoaderOIIO::getChannelNames() {

@@ -27,7 +27,10 @@ public:
     virtual std::vector<std::string> getChannelNames();
 
 private:
-    void copyToSurface();
+    size_t handOffRowBytes() const;
+    void copyRows(unsigned char* dst, size_t pitch, size_t rowBytes) const;
+    bool copyToSurface();
+    bool copyToStaging();
 
     GFL_BITMAP *theBitmap;
     gfcLoadParams params;
