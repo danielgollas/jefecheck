@@ -1,0 +1,72 @@
+name: Upload bench (Mesa)
+
+# Runs --upload-bench on Mesa's llvmpipe software renderer, which has the
+# ARB_buffer_storage path macOS can't reach. Checks correctness only:
+# llvmpipe renders on the CPU, so the timings are meaningless.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/gfcUploadPool.*'
+      - 'src/gfcframe.*'
+      - 'src/gfcglframeinfo.*'
+      - 'src/gfcimageloaderoiio.*'
+      - 'src/gfcIOSurface*'
+      - 'src/qt/SequenceLoadBridge_qt.cpp'
+      - 'scripts/mesa_upload_bench.sh'
+      - '.github/workflows/mesa-bench.yml'
+  push:
+    paths:
+      - 'src/gfcUploadPool.*'
+      - 'src/gfcframe.*'
+      - 'src/gfcglframeinfo.*'
+      - 'src/gfcimageloaderoiio.*'
+      - 'src/gfcIOSurface*'
+      - 'src/qt/SequenceLoadBridge_qt.cpp'
+      - 'scripts/mesa_upload_bench.sh'
+      - '.github/workflows/mesa-bench.yml'
+
+jobs:
+  upload-bench-mesa:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            qt6-base-dev \
+            qt6-base-private-dev \
+            libqt6opengl6-dev \
+            libopenimageio-dev \
+            openimageio-tools \
+            libopencv-dev \
+            libopenexr-dev \
+            libimath-dev \
+            libcurl4-openssl-dev \
+            zlib1g-dev \
+            libgl-dev \
+            libglu1-mesa-dev \
+            libfreetype6-dev \
+            libssl-dev \
+            xvfb \
+            xauth \
+            libgl1-mesa-dri \
+            mesa-utils
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Show the GL renderer
+        run: LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a glxinfo | grep -E "OpenGL (renderer|version)|ARB_buffer_storage"
+
+      - name: Upload bench
+        run: scripts/mesa_upload_bench.sh build/jefecheck
