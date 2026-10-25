@@ -57,6 +57,7 @@
 #include "qt/SequenceLoadBridge_qt.h"
 #include "qt/ReviewSummaryPdf_qt.h"
 #include "qt/ReviewPackage_qt.h"
+#include "qt/KeyCache_qt.h"
 
 extern gfcSettings sett;
 
@@ -647,6 +648,7 @@ int main(int argc, char* argv[]) {
         const int mergeFail = noteMergeSelfTest();
         const int packageFail = jefe::qt::package::packageSelfTest();
         const int packageOpenFail = jefe::qt::package::packageOpenSelfTest();
+        const int keyCacheFail = jefe::qt::keycache::selfTest();
         // The self-tests print via std::printf but do not flush; std::_Exit
         // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
         // stdout not a tty) would silently drop all three lines.
@@ -654,7 +656,8 @@ int main(int argc, char* argv[]) {
         std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
                     stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
                     tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0 &&
-                    mergeFail == 0 && packageFail == 0 && packageOpenFail == 0) ? 0 : 2);
+                    mergeFail == 0 && packageFail == 0 && packageOpenFail == 0 &&
+                    keyCacheFail == 0) ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
