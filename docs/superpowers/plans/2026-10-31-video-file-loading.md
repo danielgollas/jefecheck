@@ -357,13 +357,13 @@ Shader maths (codes `c = texel × codeScale`, `codeScale = 65535` for 16-bit upl
 - Modify: `src/gfcPlaybackManager.h:62,86`, `src/gfcPlaybackManager.cpp:27-36,440-455,666-690`, `src/gfcSequence.cpp:1559-1590` (`startLoading`), `src/gfcSessionManager.cpp:69,168`, `src/qt/SequenceLoadBridge_qt.h` (near line 132), `src/qt/SequenceLoadBridge_qt.cpp:510-516`, `src/qt/MainWindow_qt.h`, `src/qt/MainWindow_qt.cpp:138-160,455-470`, `src/gfcMovieSelfTests.cpp`
 
 **Interfaces:**
-- Produces (`gfcPlaybackManager`): `void setTargetRate(int num, int den);` (reduces, sets `targetFPS = float(num)/den`, `timePerFrame = double(den)/num`, pushes to the GUI box) `void getTargetRate(int& num, int& den) const;` `static void rationalFromFPS(float fps, int& num, int& den);` (within 0.001 of 23.976→24000/1001, 29.97→30000/1001, 47.952→48000/1001, 59.94→60000/1001; otherwise `round(fps*1000)/1000` reduced); `setTargetFPS(float)` now also sets the rational through `rationalFromFPS`. Session: `settings` node gains `targetFPSNum`/`targetFPSDen`; load prefers them when present (fallback `targetFPS`). `gfcSequence::startLoading(gfcLoadParams)` with `isMovie()` and `params.loadFromTimeline == 0` calls `playbackManager.setTargetRate(info.rateNum, info.rateDen)` (decision: a fresh load only; alt-click/in-point reloads keep the user's rate). Bridge: `void getTargetRate(int& num, int& den);` `std::string activeTrackSourceTimecode();` (empty unless the active plate's track is a movie: `gfcFormatTimecode(gfcFramesToTimecode(startFrames + frame - 1 - offset, num, den, drop))` where `startFrames` parses `movieInfo()->startTimecode`, `00:00:00:00` when empty; empty when the mapped index is outside `[0, frameCount)`) `bool activeTrackIsVariableRate();`. MainWindow: `timecodeStatusLabel_` (`objectName "status.timecode"`) between the track and loaded labels, text `TC 01:00:02:13` plus ` · VFR (avg 29.97)` when variable, refreshed in the 60 Hz branch, cache-gated.
+- Produces (`gfcPlaybackManager`): `void setTargetRate(int num, int den);` (reduces, sets `targetFPS = float(num)/den`, `timePerFrame = double(den)/num`, pushes to the GUI box) `void getTargetRate(int& num, int& den) const;` `static void rationalFromFPS(float fps, int& num, int& den);` (within 0.005 of 23.976→24000/1001, 29.97→30000/1001, 47.952→48000/1001, 59.94→60000/1001 — so a typed `23.98`/`29.97`/`59.94` maps to the NTSC rational; otherwise `round(fps*1000)/1000` reduced). FPS box (`TimelinePanel_qt.cpp:536-540`, `transport.fps.spin`): `setDecimals(3)`, width wide enough for `119.880`; `setTargetRate` pushes `num/den` rounded to 3 decimals (`23.976`, `29.970`), with signals blocked so the push does not round-trip through `setTargetFPS`; a user-typed value goes through `rationalFromFPS`; `setTargetFPS(float)` now also sets the rational through `rationalFromFPS`. Session: `settings` node gains `targetFPSNum`/`targetFPSDen`; load prefers them when present (fallback `targetFPS`). `gfcSequence::startLoading(gfcLoadParams)` with `isMovie()` and `params.loadFromTimeline == 0` calls `playbackManager.setTargetRate(info.rateNum, info.rateDen)` (decision: a fresh load only; alt-click/in-point reloads keep the user's rate). Bridge: `void getTargetRate(int& num, int& den);` `std::string activeTrackSourceTimecode();` (empty unless the active plate's track is a movie: `gfcFormatTimecode(gfcFramesToTimecode(startFrames + frame - 1 - offset, num, den, drop))` where `startFrames` parses `movieInfo()->startTimecode`, `00:00:00:00` when empty; empty when the mapped index is outside `[0, frameCount)`) `bool activeTrackIsVariableRate();`. MainWindow: `timecodeStatusLabel_` (`objectName "status.timecode"`) between the track and loaded labels, text `TC 01:00:02:13` plus ` · VFR (avg 29.97)` when variable, refreshed in the 60 Hz branch, cache-gated.
 
 - [ ] **Step 1: Write the failing test** — `movieRateSelfTest` (MOVIE-RATE) in `gfcMovieSelfTests.cpp` (may include the managers):
 
 ```cpp
 int n,d; gfcPlaybackManager::rationalFromFPS(23.976f,n,d); check(n==24000&&d==1001,"23.976 -> 24000/1001");
-gfcPlaybackManager::rationalFromFPS(29.97f,n,d); check(n==30000&&d==1001,"29.97"); gfcPlaybackManager::rationalFromFPS(25.0f,n,d); check(n==25&&d==1,"25");
+gfcPlaybackManager::rationalFromFPS(29.97f,n,d); check(n==30000&&d==1001,"29.97"); gfcPlaybackManager::rationalFromFPS(23.98f,n,d); check(n==24000&&d==1001,"a typed 23.98 is NTSC 24000/1001"); gfcPlaybackManager::rationalFromFPS(25.0f,n,d); check(n==25&&d==1,"25");
 playbackManager.setTargetRate(24000,1001); playbackManager.getTargetRate(n,d); check(n==24000&&d==1001 && std::fabs(playbackManager.getTargetFPS()-23.976f)<0.001f, "rate held exactly");
 gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(dir+"/prores422hq_23976.mov"); seq->myGUI->setCompression(GFC_8BPC);
 playbackManager.setTargetFPS(30.0f); trackManager.startLoadingSequence(0); trackManager.stopLoadingSequence(0);
@@ -382,7 +382,7 @@ check(readFile(sess).find("targetFPSNum=\"24000\"")!=std::string::npos, "session
 
 - [ ] **Step 3: Implement** the rational members, `startLoading` hook, session keys, bridge accessors and the status-bar label.
 
-- [ ] **Step 4: Run** — Run: `cmake --build /Volumes/Archive/jefecheck-builds/video -j8 && /Volumes/Archive/jefecheck-builds/video/jefecheck.app/Contents/MacOS/jefecheck --video-load-test` — Expected: `MOVIE-RATE: pass=11 fail=0`.
+- [ ] **Step 4: Run** — Run: `cmake --build /Volumes/Archive/jefecheck-builds/video -j8 && /Volumes/Archive/jefecheck-builds/video/jefecheck.app/Contents/MacOS/jefecheck --video-load-test` — Expected: `MOVIE-RATE: pass=12 fail=0`.
 
 - [ ] **Step 5: Commit** — `git add src/gfcPlaybackManager.h src/gfcPlaybackManager.cpp src/gfcSequence.cpp src/gfcSessionManager.cpp src/qt/SequenceLoadBridge_qt.h src/qt/SequenceLoadBridge_qt.cpp src/qt/MainWindow_qt.h src/qt/MainWindow_qt.cpp src/gfcMovieSelfTests.cpp && git commit -m "feat: exact rational playback rate set by movie loads; source timecode in the status bar"`
 
@@ -495,7 +495,7 @@ check(pk.peaks.size()==10 && pk.peaks[1]>0.89f && pk.peaks[0]==0.f && pk.version
 class gfcAudioEngine;
 class gfcAudioOutput { public: virtual ~gfcAudioOutput(){}; virtual bool open(gfcAudioEngine* source)=0; virtual void close()=0;
                        virtual bool isOpen() const=0; virtual int64_t playedSamples() const=0; };
-struct gfcAudioTransport { int startFrame=1; int startLimit=1; int endLimit=1; int loopMode=0; /* LOOPMODEONCE_ID/LOOPMODELOOP_ID */ };
+struct gfcAudioTransport { int startFrame=1; int startLimit=1; int endLimit=1; int loopMode=0; int direction=1; /* LOOPMODEONCE_ID/LOOPMODELOOP_ID/LOOPMODEBOUNCE_ID; direction from advanceFrame */ };
 class gfcAudioEngine {
 public:
     static constexpr int kRate=48000, kChannels=2, kFadeSamples=144;        // 3 ms fades (decision)
@@ -504,7 +504,7 @@ public:
     void clearTrack(int track); void setTrackOffset(int track, int offset);
     void setTrackMuted(int track, bool muted); bool trackMuted(int track) const; bool trackHasAudio(int track) const;
     void setPlayerRate(int num, int den);
-    bool canLead() const;        // forward ONCE/LOOP intended, and some unmuted track with audio whose rate == player rate (reduced equality)
+    bool canLead() const;        // forward ONCE/LOOP, or BOUNCE on a forward pass, and some unmuted track with audio whose rate == player rate (reduced equality)
     void startLeading(const gfcAudioTransport& t); void updateTransport(const gfcAudioTransport& t); void stopLeading();
     bool isLeading() const; int leaderFrame() const;                        // frame whose slice is at the output's playedSamples()
     void playSlice(int frame);   // follow mode / step / scrub: start this frame's slices now (cuts a playing slice with a fade-out); a slice requested while a newer one is pending replaces it
@@ -513,7 +513,7 @@ public:
 };
 class gfcFakeAudioOutput : public gfcAudioOutput { public: void pump(int frames, std::vector<float>* captured=nullptr); /* calls render, advances playedSamples */ };
 ```
-  `gfcPlaybackManager` gains `static int advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit);` (the exact switch at `gfcPlaybackManager.cpp:154-199`, now also used by `update()`), and the engine uses it to walk frames while leading. Slice rules (decisions): a track's slice for timeline frame `F` is movie frame `i = F − offset − 1` when `0 ≤ i < frameCount` (otherwise silence — hold modes never repeat audio), samples `[frameStartSample(i), frameStartSample(i+1))` at the track's rational; on-screen duration of a frame = `frameStartSample(1, playerNum, playerDen)` samples; a slice longer than the on-screen duration is cut there with a fade-out, a shorter one is followed by silence; fade-in on any slice not contiguous (same track, next sample) with the previously rendered one, fade-out on any slice whose successor is not contiguous; leading = the engine advances its own frame after each on-screen duration, logs `(startSample, frame)` into a ring so `leaderFrame()` maps `playedSamples()` back; reverse never leads and renders nothing.
+  `gfcPlaybackManager` gains `static int advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit);` (the exact switch at `gfcPlaybackManager.cpp:154-199`, now also used by `update()`), and the engine uses it to walk frames while leading. Slice rules (decisions): a track's slice for timeline frame `F` is movie frame `i = F − offset − 1` when `0 ≤ i < frameCount` (otherwise silence — hold modes never repeat audio), samples `[frameStartSample(i), frameStartSample(i+1))` at the track's rational; on-screen duration of a frame = `frameStartSample(1, playerNum, playerDen)` samples; a slice longer than the on-screen duration is cut there with a fade-out, a shorter one is followed by silence; fade-in on any slice not contiguous (same track, next sample) with the previously rendered one, fade-out on any slice whose successor is not contiguous; leading = the engine advances its own frame after each on-screen duration, logs `(startSample, frame)` into a ring so `leaderFrame()` maps `playedSamples()` back; reverse never leads and renders nothing. BOUNCE (ping-pong): the engine leads on each forward pass; when `advanceFrame` turns the direction to -1 it renders nothing (fade-out on the last forward slice) and keeps walking frames silently, and resumes sound with a fade-in when the next forward pass begins — decision, matching "reverse playback is silent".
 
 - [ ] **Step 1: Write the failing tests** — `audioEngineSelfTest` (AUDIO-ENGINE) and `audioSyncSelfTest` (AUDIO-SYNC):
 
@@ -587,6 +587,8 @@ std::vector<float> cap; playbackManager.setCurrentFrame(25); out.pump(3000,&cap)
 playbackManager.setTargetFPS(25.0f); playbackManager.startPlayFwd(); check(!audioEngine.isLeading(), "off-rate: FPS pacing leads");
 std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update(); check(playbackManager.getCurrentFrame()>=26, "timer pacing still advances");
 playbackManager.pause(); playbackManager.startPlayRev(); check(!audioEngine.isLeading(), "reverse never leads"); playbackManager.pause();
+// BOUNCE: forward passes have sound, backward passes are silent (fake output, range 1..4 at 24000/1001)
+{ gfcAudioEngine e; gfcFakeAudioOutput o; e.setOutput(&o); /* clip = tone on every frame */ gfcAudioTransport t{1,1,4,LOOPMODEBOUNCE_ID,1}; e.startLeading(t); std::vector<float> cap; o.pump(2002*4,&cap); check(rms(cap)>0.1f, "bounce forward pass is audible"); cap.clear(); o.pump(2002*3,&cap); check(rms(cap)<1e-4f, "bounce backward pass is silent"); cap.clear(); o.pump(2002*2,&cap); check(rms(cap)>0.1f, "bounce sound resumes on the next forward pass"); }
 audioEngine.setOutput(nullptr); playbackManager.setTargetRate(24000,1001); playbackManager.startPlayFwd(); check(!audioEngine.isLeading(), "no device: pacing leads");
 std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update(); check(playbackManager.getCurrentFrame()>=2, "no device: playback still advances"); playbackManager.pause();
 ```
@@ -595,7 +597,7 @@ std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.upda
 
 - [ ] **Step 3: Implement** `AudioOutput_qt`, the playback-manager hooks, the sequence→engine wiring and bridge init/shutdown.
 
-- [ ] **Step 4: Run** — same command — Expected: `AUDIO-PLAYBACK: pass=10 fail=0`.
+- [ ] **Step 4: Run** — same command — Expected: `AUDIO-PLAYBACK: pass=13 fail=0`.
 
 - [ ] **Step 5: Manual check** — Run: `/Volumes/Archive/jefecheck-builds/video/jefecheck.app/Contents/MacOS/jefecheck --open-file <dir>/flashbeep_23976.mov` — Expected: Space plays with the beep on the white frames; Left/Right click one frame of sound without clicks; scrubbing the timeline chatters without lagging; changing the FPS box to 48 gives half-length clicks; `--open-file <dir>/flashbeep_25.mov` as a second track under the 23.976 player plays slices while track A stays continuous.
 
