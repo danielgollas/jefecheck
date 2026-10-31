@@ -123,3 +123,13 @@ Installed upstream (`uv sync`, Python 3.13) and keyed a synthetic 2048x1152 gree
 - `--backend mlx` needs a separate third-party package (`corridorkey-mlx`); upstream's Apple Silicon default is torch on MPS.
 - The automatic hint generators are not options here: GVM and VideoMaMa want ~80 GB and 24 GB. BiRefNet is the light one; JefeCheck's annotation strokes are the real answer.
 - Hints should be **coarse, blurred and eroded** — the model fills detail in but is poor at subtracting an over-expanded mask. Rasterise strokes generously blurred, never tight.
+
+## Open review findings (2026-10-31, branch parked)
+
+Review of the cache (`src/qt/KeyCache_qt.{h,cpp}`, commit 14a65a0). Nothing calls the cache yet; fix these before any writer lands. The Debug build of this branch never finished, so `NOTE-KEYCACHE` has not been run.
+
+1. **The cache id misses pixel-changing flags.** `KeyParams` has no `despeckle`, and nothing for `--tile`, `--gpu-post` or `--hann_chunk`/`--hann_stride`. Toggling despeckle would serve the old matte. Add each flag to `KeyParams` and `cacheId`, with a `differs(...)` self-test case each; consider a version token in the hashed material.
+2. **Per-frame cache, windowed model.** v2 keys over 80-frame windows, so frame N depends on its neighbours in the job. Keying 1–100 and then 50–60 writes two different results for frame 55 to one file; the last write wins. Decision needed: put the window and the job's anchor frame in the id, or key on a fixed window grid aligned to absolute frame numbers. Measure how much the window moves the result first.
+3. **`hasFrame` only rejects empty files.** An interrupted writer leaves a truncated, non-empty EXR that stays a hit forever. Writers must save to `<frame>.exr.part` and rename into place (a `commitFrame` helper); keep the size check as a backstop. `directoryBytes` also counts empty `.exr` files as frames, disagreeing with `hasFrame`.
+4. **The hashed material is not injective.** String fields are only `|`-separated (length-prefix them). `std::to_string(refiner)` keeps 6 decimals and follows the user's locale (`1,000000` vs `1.000000`); use `std::to_chars` or hash refiner quantised to the UI step.
+5. **Scan errors are swallowed.** A failed directory scan returns a partial list, so `clear()` can report success with entries left and `totalBytes` under-reports; bytes removed by a partly failed `remove_all` are not counted. Treat a missing root as zero with no error, but report a real scan failure through `err`.
