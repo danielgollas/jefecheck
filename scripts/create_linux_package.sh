@@ -26,7 +26,38 @@ else
         "https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_VERSION}/ffmpeg-linux-x64"
 fi
 chmod +x "$PACKAGE/bin/ffmpeg"
-cp packaging/ffmpeg-NOTICE.txt "$PACKAGE/" 2>/dev/null || true
+cp packaging/ffmpeg-NOTICE.txt "$PACKAGE/"
+
+# The FFmpeg libraries (movie reading and sound) and Qt Multimedia are not
+# bundled: the package depends on the distribution's packages. DEPENDENCIES
+# names them (Ubuntu 24.04); install.sh checks for them.
+cat > "$PACKAGE/DEPENDENCIES" << DEPS
+Runtime packages (Ubuntu 24.04):
+  libavformat60 libavcodec60 libavutil58 libswresample4 libswscale7 libqt6multimedia6
+
+Install with:
+  sudo apt install libavformat60 libavcodec60 libavutil58 libswresample4 libswscale7 libqt6multimedia6
+DEPS
+
+# Record the FFmpeg libraries this build linked: the distribution package
+# versions (which identify the source package and its configure line) and,
+# when the ffmpeg program from the same packages is installed, its -version.
+{
+    echo "FFmpeg libraries this build was linked against (not bundled)"
+    echo
+    if command -v dpkg-query >/dev/null 2>&1; then
+        dpkg-query -W -f '${Package} ${Version}\n' libavformat60 libavcodec60 libavutil58 libswresample4 libswscale7 libqt6multimedia6 2>/dev/null || true
+    fi
+    if command -v pkg-config >/dev/null 2>&1; then
+        for l in libavformat libavcodec libavutil libswresample libswscale; do
+            echo "$l $(pkg-config --modversion "$l" 2>/dev/null || echo unknown)"
+        done
+    fi
+    if [ -x /usr/bin/ffmpeg ]; then
+        echo
+        /usr/bin/ffmpeg -hide_banner -version
+    fi
+} > "$PACKAGE/ffmpeg-libs-VERSION.txt"
 
 tar czf "${PACKAGE}.tar.gz" "$PACKAGE"
 

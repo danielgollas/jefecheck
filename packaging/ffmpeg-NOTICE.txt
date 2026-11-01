@@ -28,11 +28,20 @@ JefeCheck uses FFmpeg (https://ffmpeg.org) in two separate ways.
    JEFECHECK_FFMPEG environment variable.
 
 Version and configure line of the linked libraries
-   Nothing in the build records these yet. TODO (Task 14): record the
-   libav* versions and the FFmpeg configure line of each release build
-   alongside the release artifacts. Until then, the shipped version is the
-   one the platform package named above provided at build time
-   (`ffmpeg -version` / `ffmpeg -buildconf` for that package shows it).
+   Each release package records them, at packaging time, in the file
+   ffmpeg-libs-VERSION.txt next to this notice:
+     - macOS:   JefeCheck.app/Contents/Resources/ffmpeg-libs-VERSION.txt
+                (output of the Homebrew package's `ffmpeg -version`, which
+                prints the version, the configure line and every libav*
+                version, plus the list of dylibs bundled in
+                Contents/Frameworks/)
+     - Windows: ffmpeg-libs-VERSION.txt next to jefecheck.exe (output of
+                MSYS2's `ffmpeg.exe -version`)
+     - Linux:   ffmpeg-libs-VERSION.txt in the package directory (the
+                distribution package versions and libav* versions the
+                build linked against; the libraries themselves come from
+                your distribution, so `ffmpeg -version` there, or the
+                distribution's source package, gives their configure line)
 
 Corresponding source
    - FFmpeg: the release tarball for the matching version at
