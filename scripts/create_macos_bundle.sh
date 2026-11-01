@@ -27,7 +27,7 @@ cp packaging/macos/JefeCheck.icns "$APP/Contents/Resources/"
 
 # Bundle a static FFmpeg (video export) into Resources/, where
 # VideoEncoder_Qt::findFfmpeg() looks first. GPL static build — compatible
-# with this GPL v2 app. Set JEFECHECK_FFMPEG_BIN to use a local binary
+# with this GPL v2-or-later app. Set JEFECHECK_FFMPEG_BIN to use a local binary
 # instead of downloading (offline/dev packaging).
 FFMPEG_VERSION="b6.1.1"
 if [ -n "${JEFECHECK_FFMPEG_BIN:-}" ] && [ -f "$JEFECHECK_FFMPEG_BIN" ]; then

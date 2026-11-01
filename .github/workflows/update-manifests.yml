@@ -70,8 +70,8 @@ jobs:
           PublisherSupportUrl: https://github.com/danielgollas/jefecheck/issues
           PackageName: JefeCheck
           PackageUrl: https://github.com/danielgollas/jefecheck
-          License: GPL-2.0
-          LicenseUrl: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+          License: GPL-2.0-or-later
+          LicenseUrl: https://github.com/danielgollas/jefecheck/blob/main/LICENSE
           ShortDescription: Video frame processing and playback for color correction
           Description: |-
             JefeCheck is a video frame processing and playback application for color correction,
