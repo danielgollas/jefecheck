@@ -259,6 +259,15 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
                                      : std::llround(i.durationSeconds * num / den);
     i.codecName = avcodec_get_name(st->codecpar->codec_id);
 
+    // Start timecode: the first "timecode" tag over the format metadata, then
+    // every stream's metadata (a mov tmcd track surfaces on its own stream).
+    {
+        const AVDictionaryEntry* tag = av_dict_get(d.fmt->metadata, "timecode", nullptr, 0);
+        for (unsigned k = 0; !tag && k < d.fmt->nb_streams; ++k)
+            tag = av_dict_get(d.fmt->streams[k]->metadata, "timecode", nullptr, 0);
+        if (tag && tag->value) i.startTimecode = tag->value;
+    }
+
     const int astream = av_find_best_stream(d.fmt, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
     if (astream >= 0) {
         const AVCodecParameters* ap = d.fmt->streams[astream]->codecpar;

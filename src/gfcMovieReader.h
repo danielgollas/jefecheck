@@ -14,7 +14,7 @@ struct gfcMovieInfo {
     int width = 0, height = 0; int64_t frameCount = 0;
     int rateNum = 0, rateDen = 1; bool variableRate = false;
     int bitDepth = 8; int subX = 1, subY = 1; bool hasAlpha = false; bool planarYuv = false;
-    std::string pixFmt, codecName, startTimecode;        // startTimecode filled in Task 3
+    std::string pixFmt, codecName, startTimecode;
     gfcYuvMatrix matrix = gfcYuvMatrix::Unspecified; gfcYuvRange range = gfcYuvRange::Unspecified;
     gfcChromaSiting siting = gfcChromaSiting::Left;
     bool hasAudio = false; int audioSampleRate = 0, audioChannels = 0; double durationSeconds = 0;
