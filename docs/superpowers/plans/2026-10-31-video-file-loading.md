@@ -25,7 +25,7 @@
 - macOS GL is 2.1 via Metal translation: ARB shader functions only (`glCreateShaderObjectARB` …), `GL_TEXTURE_RECTANGLE_ARB`, EXT framebuffers; initialise every GL handle to 0.
 - Build: CMake finds libav and `Qt6::Multimedia` on macOS (Homebrew), Ubuntu 24.04 (apt, FFmpeg 6.1 → libavcodec 60) and MSYS2 mingw64; libav code must compile against both FFmpeg 6.1 (libavcodec 60, Ubuntu 24.04) and FFmpeg 8.0 (libavcodec 62, Homebrew): use `avcodec_send_packet`/`receive_frame`, `AVChannelLayout`, `swr_alloc_set_opts2`, `avcodec_free_context`, `frame->flags & AV_FRAME_FLAG_KEY`, `frame->duration`, `codecpar->coded_side_data`; never use the APIs removed in 8.0 (`avcodec_close`, `AVFrame::key_frame`/`pkt_duration`/`pkt_pos`/`interlaced_frame`, `AVStream::side_data`/`av_stream_get_side_data`, `AVCodecContext::ticks_per_frame`/`reordered_opaque`) and Qt 6.4 (`QAudioSink::start(QIODevice*)`, not the 6.11 callback API). CI installs the new packages; release packaging bundles libav dylibs on macOS, DLLs + the Qt multimedia plugin on Windows, and declares Linux package dependencies.
 - Licensing: JefeCheck becomes **"GPL v2 or later"** (LICENSE/README/CLAUDE.md/About/CLA wording, SPDX headers on project-own sources); `THIRD_PARTY_LICENSES` gains FFmpeg (linked) and corrects RakNet to "v2 or later"; distributed binaries are noted as effectively GPLv3. Export keeps the FFmpeg CLI.
-- Headless suites run with an offscreen GL context (`jefe::qt::setupOffscreenTestGL()`, made current by the `--video-load-test` aggregator) and with `sett.maximumFramesInQueue = 0` set by any suite that waits on the loader thread (otherwise the loader blocks after 5 frames, since only the GL main thread drains the queue); the aggregator removes the recovery session it causes.
+- Headless suites run with an offscreen GL context (`jefe::qt::setupOffscreenTestGL()`, made current by the `--video-load-test` aggregator) and any suite that waits on the loader thread sets `sett.maximumFramesInQueue = 100000` and restores it afterwards (the default 5 blocks the loader, since only the GL main thread drains the queue; **0 does not mean unlimited** despite the comment at `gfcStructures.h:319` — the live wait at `gfcSequence.cpp:978-981` blocks after one frame); the aggregator removes the recovery session it causes.
 - Verification: headless self-tests only (`NAME: pass=N fail=N` lines, exit 0/2); test media is generated with the ffmpeg CLI at test time into a temp dir, never committed.
 - Performance target: one real 4K ProRes 4444 track decodes + uploads at ≥ 24 fps on the M3 and plays at full rate once loaded; measure on real footage.
 - Build tree: `/Volumes/Archive/jefecheck-builds/video`. Every shell command in this plan is a single line.
@@ -581,7 +581,7 @@ check(!n.canLead() && !n.isLeading(), "no device: cannot lead, every call is a s
 
 ```cpp
 gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(dir+"/flashbeep_23976.mov"); seq->myGUI->setCompression(GFC_8BPC);
-sett.maximumFramesInQueue=0; trackManager.startLoadingSequence(0); waitUntil([&]{ return seq->audioClip() && seq->audioClip()->endSample()>=2002*48; }, 10000); trackManager.stopLoadingSequence(0);
+const int savedQueueCap=sett.maximumFramesInQueue; sett.maximumFramesInQueue=100000; trackManager.startLoadingSequence(0); waitUntil([&]{ return seq->audioClip() && seq->audioClip()->endSample()>=2002*48; }, 10000); trackManager.stopLoadingSequence(0); sett.maximumFramesInQueue=savedQueueCap;
 int n,d; playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "movie rate");
 playbackManager.setCurrentFrame(1); playbackManager.startPlayFwd(); check(audioEngine.isLeading(), "forward play leads with audio");
 out.pump(2002*10); playbackManager.update(); check(playbackManager.getCurrentFrame()==11, "picture follows the audio clock");
@@ -621,7 +621,7 @@ std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.upda
 
 ```cpp
 gfcSequence* seq=trackManager.getSequence(1); seq->myGUI->setFilename(dir+"/flashbeep_25.mov"); seq->myGUI->setCompression(GFC_8BPC);
-sett.maximumFramesInQueue=0; trackManager.startLoadingSequence(1); waitUntil([&]{ return seq->audioPeaksVersion()>0; }, 10000); trackManager.stopLoadingSequence(1);
+const int savedQueueCap=sett.maximumFramesInQueue; sett.maximumFramesInQueue=100000; trackManager.startLoadingSequence(1); waitUntil([&]{ return seq->audioPeaksVersion()>0; }, 10000); trackManager.stopLoadingSequence(1); sett.maximumFramesInQueue=savedQueueCap;
 check(jefe::qt::getTrackAudioState(1).hasAudio && !jefe::qt::getTrackAudioState(1).muted, "track with audio, unmuted");
 check(!jefe::qt::getTrackAudioState(2).hasAudio, "empty track has no audio");
 jefe::qt::setTrackMuted(1,true); check(jefe::qt::getTrackAudioState(1).muted && audioEngine.trackMuted(1) && jefe::qt::getTrackTimelineState(1).muted, "mute reaches the engine and the timeline state");
