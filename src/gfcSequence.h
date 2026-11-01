@@ -301,6 +301,8 @@ public:
     // Movies: the track holds one open reader shared by every frame's load
     // (opened when the GUI filename is a .mov/.mp4, dropped by clearSequence).
     bool isMovie() const;
+    // The loader's reader (the one that decodes sound), or null. For self-tests.
+    std::shared_ptr<gfcMovieReader> loaderMovieReader() const { return currentMovieReader(); }
     // Stream facts of the open movie, or null for an image sequence (or a
     // movie that could not be opened). Valid until the track is reloaded/cleared.
     const gfcMovieInfo* movieInfo() const;
@@ -395,6 +397,14 @@ public:
     // loadPreview may replace it on the main thread.
     mutable std::mutex movieReaderMutex_;
     std::shared_ptr<gfcMovieReader> movieReader_;
+    // Forced loads (renders, review thumbnails, evicted frames) read through
+    // a reader of their own, sound off, opened on first use: a seek on the
+    // loader's reader would discard sound the loader has not taken yet, and
+    // sound decoded there with no consumer would pile up. Dropped whenever
+    // movieReader_ changes (clearSequence, reload). Guarded by movieReaderMutex_.
+    std::shared_ptr<gfcMovieReader> forcedReader_;
+    std::string forcedReaderPath_;
+    std::shared_ptr<gfcMovieReader> forcedMovieReader(const std::string& path);
     void openMovieReaderFor(const std::string& path, bool withAudio = false);
     // Guards audioClip_ (the pointer; the clip itself is thread-safe) and audioPeaks_.
     mutable std::mutex audioMutex_;
@@ -403,6 +413,7 @@ public:
     bool audioMuted_ = false;
     void resetAudio(int64_t startSample, bool withClip);
     void appendMovieAudio(gfcMovieReader& reader, const std::shared_ptr<gfcAudioClip>& clip);
+    void publishAudioPeaks(const std::shared_ptr<gfcAudioClip>& clip);
     // The [startFrame, endFrame] frame-entry range loadSequence() will load.
     void loadFrameRange(int& startFrame, int& endFrame) const;
     std::shared_ptr<gfcMovieReader> currentMovieReader() const;

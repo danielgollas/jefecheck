@@ -1056,6 +1056,8 @@ int isSupportedType(std::string theFilename)
 		extensionMap["bmp"]=1;
 		extensionMap["rgb"]=1;
 		extensionMap["sgi"]=1;
+		extensionMap["mov"]=1;   // movies (gfcIsMovieFile): one clip per file
+		extensionMap["mp4"]=1;
 		
 		mapInitialized=1;
 	}

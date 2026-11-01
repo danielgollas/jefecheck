@@ -20,3 +20,4 @@ int audioSyncSelfTest(const std::string& mediaDir);
 int audioWalkSelfTest(const std::string& mediaDir);
 int audioPlaybackSelfTest(const std::string& mediaDir);
 int muteBridgeSelfTest(const std::string& mediaDir);
+int audioForcedLoadSelfTest(const std::string& mediaDir);

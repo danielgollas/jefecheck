@@ -2124,7 +2124,7 @@ WaveformPeaks getTrackWaveform(int trackIdx) {
     WaveformPeaks w;
     auto* seq = trackManager.getSequence(trackIdx);
     if (!seq || !seq->hasAudio()) return w;
-    const gfcAudioPeaks snap = seq->audioPeaksSnapshot();
+    gfcAudioPeaks snap = seq->audioPeaksSnapshot();
     const gfcMovieInfo* info = seq->movieInfo();   // raw pointer into the reader: copy now
     if (!info || info->rateNum <= 0 || info->rateDen <= 0) return w;
     w.rateNum = info->rateNum; w.rateDen = info->rateDen;
@@ -2133,7 +2133,7 @@ WaveformPeaks getTrackWaveform(int trackIdx) {
     w.binsPerSecond = snap.binsPerSecond;
     w.firstSample = snap.firstSample;
     w.offset = seq->getOffset();
-    w.peaks = snap.peaks;
+    w.peaks = std::move(snap.peaks);
     return w;
 }
 

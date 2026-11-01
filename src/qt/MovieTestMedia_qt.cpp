@@ -135,6 +135,14 @@ bool generate(const QString& dir, QString* err) {
         QStringList{"-y", "-f", "lavfi", "-i", kTestsrc2.arg("30000/1001"), "-frames:v", "10",
          "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv422p10le",
          "-c:v", "prores_ks", "-profile:v", "3", "-timecode", "00:59:59;28"} + kTag709 + QStringList{out("df_2997.mov")},
+        // A real timestamp gap: input frame 10 is dropped and the rest keep
+        // their times (pts 9 -> 11), so decoding forward meets a jump.
+        {"-y", "-f", "lavfi", "-i", kTestsrc2.arg("25"), "-frames:v", "120",
+         "-vf", "select='not(eq(n\\,10))',scale=out_color_matrix=bt709:out_range=tv,format=yuv422p10le",
+         "-fps_mode", "passthrough", "-c:v", "prores_ks", "-profile:v", "0", out("gap_25.mov")},
+        // Sound only (a podcast-style .mp4): no video stream at all.
+        {"-y", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "2", "-c:a", "aac",
+         out("audio_only.mp4")},
         {"-y", "-f", "lavfi", "-i", kTestsrc2.arg("24"),
          "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-frames:v", "48",
          "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p", "-c:v", "libx264",

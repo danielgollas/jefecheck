@@ -42,9 +42,21 @@ struct gfcAudioPeaks {
     int binsPerSecond = 100;
     int64_t firstSample = 0;
     std::vector<float> peaks;
-    uint64_t version = 0;          // bumped by every accumulate(); reset() keeps it
+    // Grows on the first accumulate() after a reset, then at most once per
+    // second of accumulated audio, and on publish(); reset() keeps it.
+    uint64_t version = 0;
     int64_t framesAccumulated = 0; // frames seen since reset (last bin may be partial)
 
     void reset(int64_t firstSample);
     void accumulate(const float* interleaved, int64_t frames);
+    void publish();  // bumps version, e.g. when loading stops with a partial second
 };
+
+// Appends `frames` stereo frames whose first sample sits at movie-time index
+// `first` to `clip`, keeping it contiguous: what overlaps the clip's end is
+// dropped, a hole before `first` is filled with silence, and nothing is
+// written at or past `limit` (the movie's last sample), so a bad timestamp
+// cannot fill memory with silence. `peaks` (optional) accumulates what was
+// appended. Returns the frames appended, silence included.
+int64_t gfcAppendAudioAt(gfcAudioClip& clip, int64_t first, const float* data, int64_t frames, int64_t limit,
+                         gfcAudioPeaks* peaks);

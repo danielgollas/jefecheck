@@ -35,6 +35,7 @@ extern gfcTrackManager trackManager;
 
 extern gfcSettings sett;
 void findSequence(std::vector<std::string>& refFiles, std::string inputFilename, std::string& label, int& startNum, int& endNum);
+int isSupportedType(std::string theFilename);  // gfcStructures.cpp
 
 int movieKindsSelfTest(const std::string&) {
     int pass = 0, fail = 0;
@@ -99,6 +100,13 @@ int movieReaderSelfTest(const std::string& dir) {
     err.clear();
     check(!gfcMovieReader::probe(dir+"/empty.mov", i, &err) && !err.empty(), "empty file errors");
     gfcMovieReader t; check(t.open(dir+"/truncated.mov", &err), "truncated opens"); int got=0; gfcMovieFrame tf; for (int k=0;k<48;++k){ if(!t.readFrame(k,tf,&err)) break; ++got; } check(got>0 && got<48, "truncated decodes some frames then stops cleanly");
+    // gap_25.mov lacks source frame 10 (pts jumps 9 -> 11): asking for 10
+    // yields 11, and every later sequential read keeps its true index/picture.
+    { gfcMovieReader g; gfcMovieFrame gf; std::vector<uint8_t> s11, s30; int64_t at10=-1, at11=-1, at30=-1; bool ok=g.open(dir+"/gap_25.mov", &err);
+      for (int k=0; ok && k<=40; ++k) { ok=g.readFrame(k, gf, &err); if (k==10) at10=gf.index; if (k==11) { at11=gf.index; s11=bytesOf(gf); } if (k==30) { at30=gf.index; s30=bytesOf(gf); } }
+      check(ok && at10==11 && at11==11 && at30==30, "after a timestamp gap, reads report the real frame index");
+      gfcMovieReader g2; gfcMovieFrame j11, j30;
+      check(g2.open(dir+"/gap_25.mov", &err) && g2.readFrame(30, j30, &err) && g2.readFrame(11, j11, &err) && !s30.empty() && bytesOf(j30)==s30 && bytesOf(j11)==s11, "frames after the gap match their random-access decode"); }
     std::printf("MOVIE-READER: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
@@ -120,6 +128,9 @@ int movieNumberingSelfTest(const std::string& dir) {
     std::filesystem::create_directories(dir+"/moved"); std::filesystem::copy_file(dir+"/a_002.mov", dir+"/moved/a_002.mov");
     sett.useSearchPaths=true; sett.searchPaths={dir+"/moved"}; findSequence(files, dir+"/gone/a_002.mov", label, s, e); sett.useSearchPaths=false; sett.searchPaths.clear();
     check(files.size()==48 && files[0]==dir+"/moved/a_002.mov", "a moved movie is found through search paths");
+    // A folder holding only movies (as dropped on a playlist card) resolves to one of them, any case.
+    std::filesystem::create_directories(dir+"/moviesonly/sub"); std::filesystem::copy_file(dir+"/h264_25.mp4", dir+"/moviesonly/sub/CLIP.MP4");
+    check(getFirstSequenceInDirectory(dir+"/moviesonly")==dir+"/moviesonly/sub/CLIP.MP4" && isSupportedType("x/a.mov") && isSupportedType("x/a.Mp4"), "a folder of movies yields its first movie");
     std::printf("MOVIE-NUMBERING: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
@@ -136,8 +147,15 @@ int movieLoaderSelfTest(const std::string& dir) {
     p.compressed=GFC_8BPC; p.scale=50; gfcFrame g; check(g.loadFrame(p)==0 && g.sizeX==160 && g.sizeY==90 && g.bpc==8, "8-bit at 50% scale");
     p.fileName=dir+"/empty.mov"; gfcFrame e; check(e.loadFrame(p)!=0 && !e.loaded && !e.loadErrorString.empty(), "empty movie reports an error");
     p.fileName=dir+"/truncated.mov"; p.movieFrameIndex=47; gfcFrame t; check(t.loadFrame(p)!=0 && !t.loaded, "frame past the truncation fails without crashing");
+    p.fileName=dir+"/audio_only.mp4"; p.movieFrameIndex=0; gfcFrame ao; check(ao.loadFrame(p)!=0 && !ao.loaded && !ao.loadErrorString.empty(), "an audio-only mp4 reports an error");
+    { gfcMovieInfo ai; std::string aerr; check(!gfcMovieReader::probe(dir+"/audio_only.mp4", ai, &aerr) && aerr.find("no video stream")!=std::string::npos, "probe says there is no video stream"); }
+    { const int savedQueue=sett.maximumFramesInQueue; sett.maximumFramesInQueue=100000;
+      gfcSequence* seq=trackManager.getSequence(3); seq->myGUI->setFilename(dir+"/audio_only.mp4"); seq->myGUI->setCompression(GFC_8BPC); seq->loadPreview();
+      trackManager.startLoadingSequence(3); std::this_thread::sleep_for(std::chrono::milliseconds(200)); trackManager.generateTextures(); trackManager.stopLoadingSequence(3);
+      check(!seq->isMovie() && !seq->hasAudio() && seq->getRangeEnd()<=0 && !seq->getFrame(1, false).loaded, "an audio-only track stays empty: no frames, no clip");
+      seq->unloadAndClear(); seq->myGUI->setFilename(""); sett.maximumFramesInQueue=savedQueue; }
     p.fileName=dir+"/h264_25.mp4"; p.movieFrameIndex=-1; p.fromFrame=3; gfcFrame h; check(h.loadFrame(p)==0 && h.theImageLoader && static_cast<gfcImageLoaderMovie*>(h.theImageLoader)->movieFrame().index==2, "index defaults to fromFrame-1");
-    for (gfcFrame* fr : {&f, &g, &e, &t, &h}) fr->clearFrame();
+    for (gfcFrame* fr : {&f, &g, &e, &t, &h, &ao}) fr->clearFrame();
     std::printf("MOVIE-LOADER: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
@@ -249,6 +267,16 @@ int audioClipSelfTest(const std::string& dir) {
     std::vector<float> z(100*2); check(clip.read(-50, 100, z.data())==50 && z[0]==0.f, "reads before the start are zero-filled");
     gfcAudioPeaks pk; pk.reset(0); std::vector<float> sig(4800*2, 0.f); sig[2*480]=0.9f; pk.accumulate(sig.data(), 4800);
     check(pk.peaks.size()==10 && pk.peaks[1]>0.89f && pk.peaks[0]==0.f && pk.version==1, "10 ms bins, abs peak");
+    // The version (what makes the timeline copy the peaks) moves at most once per second of audio.
+    { gfcAudioPeaks v; v.reset(0); std::vector<float> blk(480*2, 0.1f); for (int k=0;k<300;++k) v.accumulate(blk.data(), 480);
+      const uint64_t afterThree=v.version; v.publish();  // 300 x 10 ms = 3 s: first block + 3 second marks
+      check(v.peaks.size()==300 && afterThree==4 && v.version==5, "peaks version: 4 bumps over 300 blocks (not 300), publish bumps"); }
+    // Silence fill before a late audio block is capped at the movie's end.
+    { gfcAudioClip c; c.reset(0); std::vector<float> blk(1000*2, 0.5f); const int64_t limit=48000*2;
+      check(gfcAppendAudioAt(c, 1000, blk.data(), 1000, limit, nullptr)==2000 && c.endSample()==2000, "a hole is filled with silence");
+      check(gfcAppendAudioAt(c, int64_t(1)<<40, blk.data(), 1000, limit, nullptr)==0 && c.endSample()==2000, "audio stamped far past the movie's end adds nothing");
+      check(gfcAppendAudioAt(c, 1500, blk.data(), 1000, limit, nullptr)==500 && c.endSample()==2500, "overlap with the clip's end is dropped");
+      c.reset(limit); check(gfcAppendAudioAt(c, limit+10, blk.data(), 1000, limit, nullptr)==0 && c.endSample()==limit, "a clip already at the movie's end takes nothing"); }
     std::printf("AUDIO-CLIP: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
@@ -592,9 +620,71 @@ int muteBridgeSelfTest(const std::string& dir) {
     auto wf=jefe::qt::getTrackWaveform(1); check(wf.present && wf.binsPerSecond==100 && !wf.peaks.empty() && wf.rateNum==25 && wf.rateDen==1, "waveform peaks available");
     check(wf.peaks.size()>50 && wf.peaks[0]>0.5f && wf.peaks[50]<0.05f, "beep in the first bins, silence at 0.5 s");
     const std::string sess=dir+"/mute.jcs"; jefe::qt::saveSession(sess); jefe::qt::setTrackMuted(1,false); jefe::qt::loadSession(sess);
+    // Finish the restore as the app does, so the session's pending rate is
+    // consumed here and not by whatever loads tracks next.
+    sett.maximumFramesInQueue=100000; jefe::qt::startLoadingAllTracks(); for (int t=0;t<4;++t) trackManager.stopLoadingSequence(t); sett.maximumFramesInQueue=savedQueueCap;
+    { playbackManager.setTargetRate(30,1); sett.maximumFramesInQueue=100000; jefe::qt::startLoadingAllTracks(); for (int t=0;t<4;++t) trackManager.stopLoadingSequence(t); sett.maximumFramesInQueue=savedQueueCap;
+      int rn=0, rd=1; playbackManager.getTargetRate(rn,rd); check(!(rn==30 && rd==1), "the restore's rate hold is consumed: a later Load All takes the movie's rate"); }
     check(jefe::qt::getTrackAudioState(1).muted, "mute persists in a saved session");
     check(readFile(sess).find("muted=\"1\"")!=std::string::npos, "session stores muted");
     jefe::qt::setTrackMuted(1,false);
     std::printf("MUTE-BRIDGE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// Forced loads (renders, review thumbnails, frames past the memory limit) use
+// a reader of their own: they never touch the loader's reader, so its sound
+// is neither discarded by their seeks nor left queued with no consumer.
+int audioForcedLoadSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto waitUntil = [](auto pred, int ms) {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (!pred() && std::chrono::steady_clock::now() < until) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        return pred();
+    };
+    // mono441_24.mp4 carries a continuous 440 Hz tone, so any silent stretch shows.
+    const std::string movie=dir+"/mono441_24.mp4";
+    gfcAudioClip ref; int rn=0, rd=1; const int64_t frames=decodeMovieAudioAndLuma(movie, ref, nullptr, rn, rd);
+    auto rmsOf = [&](const gfcAudioClip& c, int64_t k) {
+        const int64_t a=gfcAudioClip::frameStartSample(k,rn,rd), b=gfcAudioClip::frameStartSample(k+1,rn,rd);
+        std::vector<float> s(size_t(b-a)*2); c.read(a, b-a, s.data()); double e=0; for (float v : s) e+=double(v)*v; return std::sqrt(e/double(s.size()));
+    };
+    check(frames==48 && rn==24 && rd==1 && rmsOf(ref,20)>0.05, "reference tone decodes");
+
+    // A small queue cap holds the loader a few frames in (the GUI tick is what
+    // drains the queue); four ticks move frames 0..3 into the track.
+    const int savedQueue=sett.maximumFramesInQueue; sett.maximumFramesInQueue=6;
+    gfcSequence* seq=trackManager.getSequence(2); seq->myGUI->setFilename(movie); seq->myGUI->setCompression(GFC_8BPC); seq->loadPreview();
+    trackManager.startLoadingSequence(2);
+    const std::shared_ptr<gfcMovieReader> loader=seq->loaderMovieReader();
+    auto heldAt = [&]{ int64_t last=-1; return waitUntil([&]{ auto c=seq->audioClip(); if (!c) return false; const int64_t e=c->endSample(); const bool still=(e==last && e>0); last=e; std::this_thread::sleep_for(std::chrono::milliseconds(40)); return still; }, 5000) ? last : int64_t(-1); };
+    heldAt(); for (int k=0;k<4;++k) trackManager.generateTextures();
+    const int64_t heldEnd=heldAt();
+    check(loader && heldEnd>0 && heldEnd<gfcAudioClip::frameStartSample(40,rn,rd) && seq->getRangeEnd()>=3, "the loader is held mid-pass with frames 0..3 uploaded");
+    // An evicted frame keeps its load params, so a render of it is a forced load
+    // while the loader is still running.
+    check(seq->freeFrames(2), "evict frames 0 and 1");
+    gfcFrame f0=seq->forceLoad(0); const bool f0ok=f0.loaded; seq->cleanForcedLoad();
+    gfcFrame f1=seq->forceLoad(1); const bool f1ok=f1.loaded; seq->cleanForcedLoad();
+    check(f0ok && f1ok, "forced loads of evicted frames decode");
+    check(loader && loader->queuedAudioFrames()==0, "forced loads leave no sound queued in the loader's reader");
+    sett.maximumFramesInQueue=100000;
+    const bool done=waitUntil([&]{ trackManager.generateTextures(); auto c=seq->audioClip(); return c && c->endSample()>=gfcAudioClip::frameStartSample(47,rn,rd); }, 10000);
+    trackManager.stopLoadingSequence(2);
+    std::shared_ptr<gfcAudioClip> clip=seq->audioClip();
+    int silent=0; double worst=1.0;
+    for (int64_t k=1; clip && k<46; ++k) { const double r=rmsOf(*clip,k), want=rmsOf(ref,k); worst=std::min(worst, want>0 ? r/want : 1.0); if (r < 0.5*want) ++silent; }
+    if (silent) std::printf("  %d frames quieter than half the source (worst ratio %.3f)\n", silent, worst);
+    check(done && clip && silent==0, "the track's sound has no silent stretch where the source has tone");
+    check(loader && loader->queuedAudioFrames()==0, "the loader's reader is drained after the load");
+    // After the load (renders over evicted frames): still nothing queued.
+    seq->freeFrames(3); gfcFrame g=seq->forceLoad(2); seq->cleanForcedLoad();
+    check(g.loaded && loader && loader->queuedAudioFrames()==0, "a forced load after the load queues no sound");
+    sett.maximumFramesInQueue=savedQueue;
+    seq->unloadAndClear();
+    std::printf("AUDIO-FORCED-LOAD: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

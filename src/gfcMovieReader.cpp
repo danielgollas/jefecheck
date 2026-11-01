@@ -337,8 +337,12 @@ struct gfcMovieReader::Impl {
             const int64_t idx = frameIndexOf(f.get(), expected);
             expected = idx + 1;
             if (idx >= index) {
+                // After a timestamp gap the frame found can be later than the
+                // one asked for: record (and report) its real index, so the
+                // next sequential read continues from it instead of shifting
+                // every later frame by the gap.
                 last = std::move(f);
-                lastIndex = index;
+                lastIndex = idx;
                 return true;
             }
         }
@@ -508,6 +512,11 @@ void gfcMovieReader::testFailAudioDecoderOpen(bool fail) { gTestFailAudioOpen = 
 void gfcMovieReader::setAudioEnabled(bool on) {
     std::lock_guard<std::mutex> lock(d_->m);
     d_->audioEnabled = on;
+}
+
+int64_t gfcMovieReader::queuedAudioFrames() const {
+    std::lock_guard<std::mutex> lock(d_->m);
+    return int64_t(d_->fifo.size() / gfcAudioClip::kChannels);
 }
 
 bool gfcMovieReader::takeAudio(std::vector<float>& interleaved, int64_t& firstSample) {

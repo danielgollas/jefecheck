@@ -7,7 +7,9 @@
 #include "gfcMovieReader.h"
 
 namespace {
-int dropPerMinute(int nominal) { return 2 * (nominal / 30); }
+// SMPTE drop-frame exists only for the 30- and 60-nominal (NTSC) rates; any
+// other rate drops nothing even when its timecode is marked drop-frame.
+int dropPerMinute(int nominal) { return (nominal == 30 || nominal == 60) ? 2 * (nominal / 30) : 0; }
 }
 
 bool gfcParseTimecode(const std::string& s, gfcTimecode& out) {
@@ -85,6 +87,9 @@ int timecodeSelfTest(const std::string& dir) {
     check(gfcFormatTimecode(gfcFramesToTimecode(d0+1800,30000,1001,true))=="01:01:00;02", "df +1800 skips 2");
     check(gfcFormatTimecode(gfcFramesToTimecode(d0+17982,30000,1001,true))=="01:10:00;00", "df tenth minute not dropped");
     check(gfcTimecodeToFrames(gfcFramesToTimecode(123456,60000,1001,true),60000,1001)==123456, "df 59.94 round trip");
+    gfcTimecode d50; gfcParseTimecode("01:00:00;00", d50);
+    check(gfcTimecodeToFrames(d50,50,1)==int64_t(3600)*50 && gfcFormatTimecode(gfcFramesToTimecode(1800*50+50*60,50,1,true))=="00:31:00;00", "drop flag at 50 fps drops nothing");
+    check(gfcTimecodeToFrames(d50,25,1)==int64_t(3600)*25 && gfcTimecodeToFrames(d50,24000,1001)==int64_t(3600)*24, "drop flag at 25 and 23.976 drops nothing");
     gfcMovieInfo i; std::string err;
     check(gfcMovieReader::probe(dir+"/prores422hq_23976.mov", i, &err) && i.startTimecode=="01:00:00:00", "tmcd start timecode read");
     check(gfcMovieReader::probe(dir+"/df_2997.mov", i, &err) && i.startTimecode=="00:59:59;28", "drop-frame tmcd read");

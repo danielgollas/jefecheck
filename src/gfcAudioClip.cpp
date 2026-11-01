@@ -90,6 +90,38 @@ void gfcAudioPeaks::accumulate(const float* interleaved, int64_t frames) {
         const float v = std::max(std::fabs(interleaved[2 * k]), std::fabs(interleaved[2 * k + 1]));
         if (v > peaks[bin]) peaks[bin] = v;
     }
+    // Readers copy the whole vector when the version moves, so it moves at
+    // most once per second of new audio (plus the first block after a reset);
+    // the holder calls publish() when loading stops to show the tail.
+    const int64_t before = framesAccumulated;
     framesAccumulated += frames;
-    ++version;
+    if (before == 0 || before / gfcAudioClip::kRate != framesAccumulated / gfcAudioClip::kRate) ++version;
+}
+
+void gfcAudioPeaks::publish() { ++version; }
+
+int64_t gfcAppendAudioAt(gfcAudioClip& clip, int64_t first, const float* data, int64_t frames, int64_t limit,
+                         gfcAudioPeaks* peaks) {
+    if (!data || frames <= 0) return 0;
+    const int64_t end = clip.endSample();
+    if (first + frames <= end || end >= limit || first >= limit) return 0;
+    if (first < end) {
+        data += (end - first) * gfcAudioClip::kChannels;
+        frames -= end - first;
+        first = end;
+    }
+    int64_t appended = 0;
+    if (first > end) {
+        static const std::vector<float> silence(size_t(gfcAudioClip::kRate) * gfcAudioClip::kChannels, 0.f);
+        for (int64_t gap = first - end; gap > 0;) {
+            const int64_t n = std::min<int64_t>(gap, gfcAudioClip::kRate);
+            clip.append(silence.data(), n);
+            if (peaks) peaks->accumulate(silence.data(), n);
+            gap -= n;
+            appended += n;
+        }
+    }
+    clip.append(data, frames);
+    if (peaks) peaks->accumulate(data, frames);
+    return appended + frames;
 }
