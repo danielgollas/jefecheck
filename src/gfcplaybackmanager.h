@@ -43,6 +43,9 @@ public:
     /// Exact rational rate (e.g. 24000/1001). Reduces, sets targetFPS and timePerFrame.
     void setTargetRate(int num, int den);
     void getTargetRate(int& num, int& den) const;
+    /// While true, a movie load does not replace the player's rate (session restore keeps the session's saved rate).
+    void setKeepRateOnLoad(bool keep) { keepRateOnLoad=keep; }
+    bool getKeepRateOnLoad() const { return keepRateOnLoad; }
     /// Maps a float fps to a rational: NTSC rates within 0.005 snap to n*1000/1001, otherwise round(fps*1000)/1000 reduced.
     static void rationalFromFPS(float fps, int& num, int& den);
     void setPlaybackMode(int mode);
@@ -90,6 +93,7 @@ private: //private made public while debugging
     gfcPlaybackGUI* myGUI;
     float targetFPS;
     int targetRateNum=24, targetRateDen=1;
+    bool keepRateOnLoad=false;
     int currentFrame;
     int currentDirection;
     double timeStep; ///elapsed time since last update in seconds

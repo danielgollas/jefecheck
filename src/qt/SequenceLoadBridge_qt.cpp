@@ -1995,11 +1995,15 @@ void unloadAndClearTrack(int trackIdx) {
     plateManager.setChanged();
 }
 
+namespace { bool gSessionRatePending = false; }  // a restored session's rate must survive the track loads that follow it
+
 int startLoadingAllTracks() {
     // Loading tracks directly (Load Window "Load All", Open Session) is not a
     // playlist load — disarm auto-advance so it can't hijack this content.
     gCurrentContentFromPlaylist = false;
     int started = 0;
+    playbackManager.setKeepRateOnLoad(gSessionRatePending);
+    gSessionRatePending = false;
     for (int i = 0; i < 4; ++i) {
         auto* seq = trackManager.getSequence(i);
         if (!seq || !seq->myGUI) continue;
@@ -2009,6 +2013,7 @@ int startLoadingAllTracks() {
         trackManager.startLoadingSequence(i);
         ++started;
     }
+    playbackManager.setKeepRateOnLoad(false);
     return started;
 }
 
@@ -2178,6 +2183,7 @@ bool saveSession(const std::string& path) {
 
 bool loadSession(const std::string& path) {
     if (path.empty()) return false;
+    gSessionRatePending = true;
     sessionManager.loadSession(path);   // caller made GL context current
     plateManager.setChanged();
     return true;
@@ -2187,6 +2193,7 @@ bool getHasRecoverableSession() { return sessionManager.checkCrashedSession(); }
 
 bool loadRecoverySession() {
     if (!sessionManager.checkCrashedSession()) return false;
+    gSessionRatePending = true;
     // Load but leave the file in place (loadCrashedSession deletes; we want it
     // to also serve "reopen last session").
     sessionManager.loadSession(recoveryPath());

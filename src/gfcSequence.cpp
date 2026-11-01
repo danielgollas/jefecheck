@@ -1642,7 +1642,7 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 
 	// A fresh load of a movie sets the player's rate to the movie's exact
 	// rational (most recent wins). Reloads from a timeline point keep the user's rate.
-	if (pparams.loadFromTimeline==0 && isMovie()) {
+	if (pparams.loadFromTimeline==0 && !playbackManager.getKeepRateOnLoad() && isMovie()) {
 		int rateNum=0, rateDen=1;
 		if (const gfcMovieInfo* info=movieInfo()) { rateNum=info->rateNum; rateDen=info->rateDen; }
 		if (rateNum>0 && rateDen>0) playbackManager.setTargetRate(rateNum,rateDen);

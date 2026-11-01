@@ -154,6 +154,13 @@ int movieRateSelfTest(const std::string& dir) {
     const std::string sess=dir+"/rate.jcs"; jefe::qt::saveSession(sess); playbackManager.setTargetFPS(24.0f); jefe::qt::loadSession(sess);
     playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "session round-trips the rational");
     check(readFile(sess).find("targetFPSNum=\"24000\"")!=std::string::npos, "session stores num/den");
+    // A session restore keeps the session's saved rate even though it contains a movie at another rate.
+    playbackManager.setTargetRate(30,1); jefe::qt::saveSession(sess); playbackManager.setTargetFPS(24.0f);
+    jefe::qt::loadSession(sess); jefe::qt::startLoadingAllTracks(); trackManager.stopLoadingSequence(0);
+    playbackManager.getTargetRate(n,d); check(n==30&&d==1, "session restore keeps the saved rate, not the movie's");
+    // a fresh load afterwards still takes the movie's rate
+    jefe::qt::startLoadingAllTracks(); trackManager.stopLoadingSequence(0); playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "a fresh load after a restore sets the movie's rate");
+    playbackManager.setTargetFPS(24.0f); seq->setOffset(0);
     sett.maximumFramesInQueue = savedQueue;
     std::printf("MOVIE-RATE: pass=%d fail=%d\n", pass, fail);
     return fail;
