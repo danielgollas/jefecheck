@@ -60,6 +60,9 @@ public:
     // first sample's index in the movie's own 48 kHz timeline (sample 0 = the
     // first video frame). False when the FIFO is empty.
     bool takeAudio(std::vector<float>& interleaved, int64_t& firstSample);
+    // Self-test hook: while set, opening an audio decoder fails after its
+    // context is allocated (the "sound cannot be decoded" path).
+    static void testFailAudioDecoderOpen(bool fail);
 
     // YUV->BGRA with the file's matrix/range (untagged = Rec.709 video range).
     // bitsPerComponent 8 -> BGRA, 16 -> BGRA64LE; out is outW*outH pixels.

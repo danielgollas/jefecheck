@@ -288,6 +288,21 @@ int audioSequenceSelfTest(const std::string& dir) {
     check(filled10 && clip10->startSample()==gfcAudioClip::frameStartSample(10,24000,1001) && rmsAt(*clip10,24)>0.3 && rmsAt(*clip10,12)<0.01 && rmsAt(*clip10,9)==0.0, "a load from frame 10 starts its clip at frame 10's sample, aligned");
     check(clip && rmsAt(*clip,0)>0.3 && seq->audioPeaksVersion()>v0 && seq->audioPeaksSnapshot().firstSample==clip10->startSample(), "a reload makes a new clip; the old one stays intact");
 
+    // Sound that cannot be decoded (decoder context allocated, open fails):
+    // the movie still opens and plays, and reports no audio.
+    gfcMovieReader::testFailAudioDecoderOpen(true);
+    { gfcMovieReader r; std::string err; gfcMovieFrame f; r.setAudioEnabled(true);
+      std::vector<float> a; int64_t first=0;
+      const bool ok=r.open(dir+"/flashbeep_23976.mov", &err) && r.readFrame(0,f,&err) && r.readFrame(30,f,&err) && f.index==30;
+      check(ok && !r.info().hasAudio && !r.takeAudio(a, first), "undecodable audio: the reader opens, decodes video, reports no audio"); }
+    seq->myGUI->setFilename(dir+"/flashbeep_23976.mov"); seq->loadPreview();
+    // The clip is decided synchronously in initializeSequence, before the loader thread runs.
+    trackManager.startLoadingSequence(0);
+    const bool movieNoClip=seq->isMovie() && !seq->hasAudio() && !seq->audioClip();
+    trackManager.stopLoadingSequence(0);
+    gfcMovieReader::testFailAudioDecoderOpen(false);
+    check(movieNoClip, "undecodable audio: the track loads as a movie with no clip");
+
     seq->myGUI->setFilename(dir+"/prores422hq_23976.mov"); seq->loadPreview(); trackManager.startLoadingSequence(0); trackManager.stopLoadingSequence(0);
     check(!seq->hasAudio() && !seq->audioClip(), "a silent movie has no clip");
     sett.maximumFramesInQueue = savedQueue;

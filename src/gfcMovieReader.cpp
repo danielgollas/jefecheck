@@ -4,6 +4,7 @@
 #include <cmath>
 #include <algorithm>
 #include <climits>
+#include <atomic>
 #include <deque>
 #include <filesystem>
 #include <list>
@@ -64,6 +65,8 @@ gfcChromaSiting sitingOf(AVChromaLocation loc) {
         default: return gfcChromaSiting::Left;  // left is also the MPEG-2/H.264 default
     }
 }
+
+std::atomic<bool> gTestFailAudioOpen{false};
 
 struct FrameDeleter {
     void operator()(AVFrame* f) const { av_frame_free(&f); }
@@ -292,17 +295,30 @@ struct gfcMovieReader::Impl {
         if (n > 0) audioEnd += n;
     }
 
+    // On failure every audio member is freed again: an allocated but unopened
+    // AVCodecContext must never reach avcodec_flush_buffers (its internal state
+    // only exists after a successful avcodec_open2), so adec is non-null only
+    // when it is open.
     bool openAudio() {
         astream = av_find_best_stream(fmt, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
         if (astream < 0) return false;
         const AVCodecParameters* par = fmt->streams[astream]->codecpar;
         const AVCodec* codec = avcodec_find_decoder(par->codec_id);
-        if (!codec) return false;
-        adec = avcodec_alloc_context3(codec);
+        AVCodecContext* ctx = codec ? avcodec_alloc_context3(codec) : nullptr;
         aframe = av_frame_alloc();
-        if (!adec || !aframe || avcodec_parameters_to_context(adec, par) < 0) return false;
-        adec->pkt_timebase = fmt->streams[astream]->time_base;
-        return avcodec_open2(adec, codec, nullptr) >= 0;
+        bool ok = ctx && aframe && avcodec_parameters_to_context(ctx, par) >= 0;
+        if (ok) {
+            ctx->pkt_timebase = fmt->streams[astream]->time_base;
+            ok = !gTestFailAudioOpen.load() && avcodec_open2(ctx, codec, nullptr) >= 0;
+        }
+        if (!ok) {
+            avcodec_free_context(&ctx);
+            av_frame_free(&aframe);
+            astream = -1;
+            return false;
+        }
+        adec = ctx;
+        return true;
     }
 
     int64_t frameIndexOf(const AVFrame* f, int64_t fallback) const {
@@ -402,7 +418,8 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
     d.startPts = st->start_time != AV_NOPTS_VALUE ? st->start_time : 0;
     d.videoStartSample = av_rescale_q(d.startPts, st->time_base, AVRational{1, gfcAudioClip::kRate});
     // Sound is optional: a movie whose audio cannot be decoded still plays.
-    if (d.audioEnabled && !d.openAudio()) d.releaseAudio();
+    const bool audioUndecodable = d.audioEnabled && !d.openAudio();
+    if (audioUndecodable) d.releaseAudio();
 
     gfcMovieInfo& i = d.info;
     i.width = st->codecpar->width;
@@ -434,6 +451,9 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
         i.audioSampleRate = ap->sample_rate;
         i.audioChannels = ap->ch_layout.nb_channels;
     }
+    // An audio stream that cannot be decoded reports as no audio, so the
+    // track gets no clip and the picture plays on.
+    if (audioUndecodable) i.hasAudio = false;
 
     // Pixel format and colour tags come from the first decoded frame: ProRes
     // carries them only in the frame header, not in the container.
@@ -481,6 +501,8 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
     d.fillFrame(out);
     return true;
 }
+
+void gfcMovieReader::testFailAudioDecoderOpen(bool fail) { gTestFailAudioOpen = fail; }
 
 void gfcMovieReader::setAudioEnabled(bool on) {
     std::lock_guard<std::mutex> lock(d_->m);
