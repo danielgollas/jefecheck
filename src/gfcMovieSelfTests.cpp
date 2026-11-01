@@ -13,6 +13,16 @@
 #include "gfcMediaFingerprint.h"
 #include "qt/SequenceLoadBridge_qt.h"
 #include <filesystem>
+#include <cmath>
+#include <fstream>
+#include <sstream>
+#include "gfcplaybackmanager.h"
+#include "gfctrackmanager.h"
+#include "gfcSequence.h"
+#include "gfcsequencegui.h"
+
+extern gfcPlaybackManager playbackManager;
+extern gfcTrackManager trackManager;
 
 extern gfcSettings sett;
 void findSequence(std::vector<std::string>& refFiles, std::string inputFilename, std::string& label, int& startNum, int& endNum);
@@ -120,5 +130,31 @@ int movieLoaderSelfTest(const std::string& dir) {
     p.fileName=dir+"/h264_25.mp4"; p.movieFrameIndex=-1; p.fromFrame=3; gfcFrame h; check(h.loadFrame(p)==0 && h.theImageLoader && static_cast<gfcImageLoaderMovie*>(h.theImageLoader)->movieFrame().index==2, "index defaults to fromFrame-1");
     for (gfcFrame* fr : {&f, &g, &e, &t, &h}) fr->clearFrame();
     std::printf("MOVIE-LOADER: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int movieRateSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto readFile = [](const std::string& path) { std::ifstream in(path); std::stringstream ss; ss << in.rdbuf(); return ss.str(); };
+    const int savedQueue = sett.maximumFramesInQueue; sett.maximumFramesInQueue = 100000;
+    int n,d; gfcPlaybackManager::rationalFromFPS(23.976f,n,d); check(n==24000&&d==1001,"23.976 -> 24000/1001");
+    gfcPlaybackManager::rationalFromFPS(29.97f,n,d); check(n==30000&&d==1001,"29.97"); gfcPlaybackManager::rationalFromFPS(23.98f,n,d); check(n==24000&&d==1001,"a typed 23.98 is NTSC 24000/1001"); gfcPlaybackManager::rationalFromFPS(25.0f,n,d); check(n==25&&d==1,"25");
+    playbackManager.setTargetRate(24000,1001); playbackManager.getTargetRate(n,d); check(n==24000&&d==1001 && std::fabs(playbackManager.getTargetFPS()-23.976f)<0.001f, "rate held exactly");
+    gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(dir+"/prores422hq_23976.mov"); seq->myGUI->setCompression(GFC_8BPC);
+    playbackManager.setTargetFPS(30.0f); trackManager.startLoadingSequence(0); trackManager.stopLoadingSequence(0);
+    playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "loading a movie sets the player's rate to its rational");
+    playbackManager.setTargetFPS(30.0f); trackManager.startLoadingSequenceAt(0, 10); trackManager.stopLoadingSequence(0); playbackManager.getTargetRate(n,d); check(n==30&&d==1, "an alt-click reload keeps the user's rate");
+    playbackManager.setTargetRate(24000,1001); playbackManager.setCurrentFrame(25);
+    check(jefe::qt::activeTrackSourceTimecode()=="01:00:01:00", "source TC for frame 25 = start + 24 frames at the exact rate");
+    seq->setOffset(10); check(jefe::qt::activeTrackSourceTimecode()=="01:00:00:14", "offset shifts the mapping"); seq->setOffset(0);
+    check(!jefe::qt::activeTrackIsVariableRate(), "CFR clip");
+    const std::string sess=dir+"/rate.jcs"; jefe::qt::saveSession(sess); playbackManager.setTargetFPS(24.0f); jefe::qt::loadSession(sess);
+    playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "session round-trips the rational");
+    check(readFile(sess).find("targetFPSNum=\"24000\"")!=std::string::npos, "session stores num/den");
+    sett.maximumFramesInQueue = savedQueue;
+    std::printf("MOVIE-RATE: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

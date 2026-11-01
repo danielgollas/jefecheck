@@ -32,6 +32,8 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
+#include "gfcplaybackmanager.h"
+extern gfcPlaybackManager playbackManager;
 
 #include "gfcmemorymanager.h"
 extern gfcMemoryManager memoryManager;
@@ -1637,6 +1639,14 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 	stopLoading();
 
 	initializeSequence ( pparams );
+
+	// A fresh load of a movie sets the player's rate to the movie's exact
+	// rational (most recent wins). Reloads from a timeline point keep the user's rate.
+	if (pparams.loadFromTimeline==0 && isMovie()) {
+		int rateNum=0, rateDen=1;
+		if (const gfcMovieInfo* info=movieInfo()) { rateNum=info->rateNum; rateDen=info->rateDen; }
+		if (rateNum>0 && rateDen>0) playbackManager.setTargetRate(rateNum,rateDen);
+	}
 
 	/*if (abortButton)
 	abortButton->activate();*/

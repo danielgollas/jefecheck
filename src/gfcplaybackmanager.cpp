@@ -1,5 +1,7 @@
 #include "gfcplaybackmanager.h"
 #include <chrono>
+#include <cmath>
+#include <numeric>
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "qt/gfcplaybackgui_qt.h"
@@ -439,8 +441,9 @@ void gfcPlaybackManager::setPlaybackMode(int mode) {
 
 void gfcPlaybackManager::setTargetFPS() {
     //this->setTargetFPS(myGUI->getTargetFPS());
-    this->targetFPS=myGUI->getTargetFPS();
-    this->timePerFrame=1.0/targetFPS;
+    { int n,d; rationalFromFPS(myGUI->getTargetFPS(),n,d); targetRateNum=n; targetRateDen=d; }
+    this->targetFPS=float(targetRateNum)/float(targetRateDen);
+    this->timePerFrame=double(targetRateDen)/double(targetRateNum);
     // printf("TargetFPS: %f (%Lf/frame)",targetFPS,timePerFrame);
     //this->myGUI->setTargetFPS(targetFPS);
     updateTimeCode();
@@ -448,11 +451,47 @@ void gfcPlaybackManager::setTargetFPS() {
 }
 
 void gfcPlaybackManager::setTargetFPS(float fps) {
-    this->targetFPS=fps;
-    this->timePerFrame=1.0/targetFPS;
+    if (fps>0.0f) {
+        int n,d;
+        rationalFromFPS(fps,n,d);
+        targetRateNum=n; targetRateDen=d;
+        this->targetFPS=float(n)/float(d);
+        this->timePerFrame=double(d)/double(n);
+    } else {
+        this->targetFPS=fps;
+        this->timePerFrame=1.0/targetFPS;
+    }
     this->myGUI->setTargetFPS(targetFPS);
     updateTimeCode();
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
+}
+
+void gfcPlaybackManager::setTargetRate(int num, int den) {
+    if (num<=0 || den<=0) return;
+    const int g=std::gcd(num,den);
+    targetRateNum=num/g; targetRateDen=den/g;
+    this->targetFPS=float(targetRateNum)/float(targetRateDen);
+    this->timePerFrame=double(targetRateDen)/double(targetRateNum);
+    if (myGUI) this->myGUI->setTargetFPS(targetFPS);
+    updateTimeCode();
+    networkManager.notifyEvent(GFCNETEVENT_OTHER);
+}
+
+void gfcPlaybackManager::getTargetRate(int& num, int& den) const {
+    num=targetRateNum; den=targetRateDen;
+}
+
+void gfcPlaybackManager::rationalFromFPS(float fps, int& num, int& den) {
+    static const int ntsc[]={24,30,48,60};
+    for (int base : ntsc) {
+        const double v=double(base)*1000.0/1001.0;
+        if (std::fabs(double(fps)-v)<0.005) { num=base*1000; den=1001; return; }
+    }
+    long long n=std::llround(double(fps)*1000.0);
+    if (n<=0) { num=24; den=1; return; }
+    long long d=1000;
+    const long long g=std::gcd(n,d);
+    num=int(n/g); den=int(d/g);
 }
 
 int gfcPlaybackManager::getEndLimit() {

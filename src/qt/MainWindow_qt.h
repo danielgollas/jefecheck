@@ -311,6 +311,7 @@ private:
     NotesPanel_Qt* notesPanelWidget_ = nullptr;
     QLabel* layoutStatusLabel_ = nullptr;
     QLabel* trackStatusLabel_ = nullptr;
+    QLabel* timecodeStatusLabel_ = nullptr;
     QLabel* loadedStatusLabel_ = nullptr;
     QLabel* startupStatusLabel_ = nullptr;
     QTimer* playbackTimer_ = nullptr;

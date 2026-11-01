@@ -131,6 +131,17 @@ void setLoopMode(int mode);     // 0 once, 1 loop, 2 bounce
 int  getLoopMode();
 void setTargetFPS(float fps);
 float getTargetFPS();
+// Exact rational player rate (e.g. 24000/1001); setTargetFPS maps through
+// gfcPlaybackManager::rationalFromFPS.
+void getTargetRate(int& num, int& den);
+// Source timecode of the active plate's track at the current frame
+// ("HH:MM:SS:FF", ';' before FF when drop-frame). Empty unless that track is a
+// movie and the frame maps inside it.
+std::string activeTrackSourceTimecode();
+// True when the active plate's track is a movie with variable frame rate.
+bool activeTrackIsVariableRate();
+// Average rate of the active plate's movie (0 when not a movie).
+float activeTrackMovieAverageFPS();
 // The on-screen "fps:" readout: an EMA of the real frame-advance interval
 // (reports the target exactly while within 2% of it).
 float getMeasuredFPS();

@@ -153,6 +153,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     trackStatusLabel_->setObjectName("statusbar.track.label");
     statusBar()->addPermanentWidget(trackStatusLabel_);
 
+    // Source timecode of the active plate's movie at the current frame
+    // ("TC 01:00:02:13"); hidden-empty for image sequences. Sits between the
+    // track and loaded labels.
+    timecodeStatusLabel_ = new QLabel(this);
+    timecodeStatusLabel_->setObjectName("status.timecode");
+    statusBar()->addPermanentWidget(timecodeStatusLabel_);
+
     // "Loaded: <basename>" or "Loaded: -" for the active plate's
     // sequence. Refreshed each tick (cheap — two field reads off
     // gfcSequence). Permanent so the transient status-bar message
@@ -482,6 +489,18 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             if (trackStatusLabel_->text() != label) {
                 trackStatusLabel_->setText(label);
             }
+        }
+        if (timecodeStatusLabel_) {
+            QString label;
+            const std::string tc = jefe::qt::activeTrackSourceTimecode();
+            if (!tc.empty()) {
+                label = QStringLiteral("TC %1").arg(QString::fromStdString(tc));
+                if (jefe::qt::activeTrackIsVariableRate())
+                    label += QStringLiteral(" \u00b7 VFR (avg %1)")
+                                 .arg((double)jefe::qt::activeTrackMovieAverageFPS(), 0, 'f', 2);
+            }
+            if (timecodeStatusLabel_->text() != label)
+                timecodeStatusLabel_->setText(label);
         }
         // Active-plate "Loaded:" readout. Reading through the bridge
         // so the value reflects gfcSequence's actual loaded state, not

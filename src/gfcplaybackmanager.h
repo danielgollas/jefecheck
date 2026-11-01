@@ -40,6 +40,11 @@ public:
     void setNotifyNetwork(bool value);
     void setTargetFPS();
     void setTargetFPS(float fps);
+    /// Exact rational rate (e.g. 24000/1001). Reduces, sets targetFPS and timePerFrame.
+    void setTargetRate(int num, int den);
+    void getTargetRate(int& num, int& den) const;
+    /// Maps a float fps to a rational: NTSC rates within 0.005 snap to n*1000/1001, otherwise round(fps*1000)/1000 reduced.
+    static void rationalFromFPS(float fps, int& num, int& den);
     void setPlaybackMode(int mode);
     void setCurrentFrame(int frame);
     void setDirection(int direction);
@@ -84,6 +89,7 @@ private: //private made public while debugging
     void sendPlayPauseMessage();
     gfcPlaybackGUI* myGUI;
     float targetFPS;
+    int targetRateNum=24, targetRateDen=1;
     int currentFrame;
     int currentDirection;
     double timeStep; ///elapsed time since last update in seconds

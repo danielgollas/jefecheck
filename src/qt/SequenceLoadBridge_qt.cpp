@@ -26,6 +26,8 @@
 #include "../gfcpickmanager.h"
 #include "../xmlParser.h"
 #include "../gfcSequence.h"
+#include "../gfcMovieReader.h"
+#include "../gfcTimecode.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
 #include "../ui/IApplication.h"
@@ -514,6 +516,55 @@ void setTargetFPS(float fps) {
 
 float getTargetFPS() {
     return playbackManager.getTargetFPS();
+}
+
+void getTargetRate(int& num, int& den) {
+    playbackManager.getTargetRate(num, den);
+}
+
+namespace {
+// Copies what the status bar needs out of the active plate's movie. movieInfo()
+// points into a reader this sequence does not own, so nothing is kept.
+struct ActiveMovie { bool valid=false; int num=0, den=1; bool vfr=false; int64_t frameCount=0; std::string startTc; int offset=0; };
+ActiveMovie activeMovie() {
+    ActiveMovie m;
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return m;
+    const int track = plateManager.getTrackOnPlate(q);
+    if (track < 0) return m;
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq || !seq->isMovie()) return m;
+    const gfcMovieInfo* info = seq->movieInfo();
+    if (!info || info->rateNum <= 0 || info->rateDen <= 0) return m;
+    m.valid = true; m.num = info->rateNum; m.den = info->rateDen; m.vfr = info->variableRate;
+    m.frameCount = info->frameCount; m.startTc = info->startTimecode; m.offset = seq->getOffset();
+    return m;
+}
+}  // namespace
+
+std::string activeTrackSourceTimecode() {
+    const ActiveMovie m = activeMovie();
+    if (!m.valid) return {};
+    const int64_t idx = (int64_t)playbackManager.getCurrentFrame() - 1 - m.offset;
+    if (idx < 0 || idx >= m.frameCount) return {};
+    gfcTimecode start;
+    int64_t startFrames = 0;
+    bool drop = false;
+    if (!m.startTc.empty() && gfcParseTimecode(m.startTc, start)) {
+        startFrames = gfcTimecodeToFrames(start, m.num, m.den);
+        drop = start.drop;
+    }
+    return gfcFormatTimecode(gfcFramesToTimecode(startFrames + idx, m.num, m.den, drop));
+}
+
+bool activeTrackIsVariableRate() {
+    const ActiveMovie m = activeMovie();
+    return m.valid && m.vfr;
+}
+
+float activeTrackMovieAverageFPS() {
+    const ActiveMovie m = activeMovie();
+    return m.valid ? (float)m.num / (float)m.den : 0.0f;
 }
 
 int getCurrentFrame() {

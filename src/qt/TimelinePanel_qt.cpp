@@ -535,9 +535,9 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     transport->addWidget(makeSmallLabel("FPS"));
     fpsSpin_ = new QDoubleSpinBox(this);
     fpsSpin_->setRange(1.0, 120.0);
-    fpsSpin_->setDecimals(2);
+    fpsSpin_->setDecimals(3);
     fpsSpin_->setValue(24.0);
-    fpsSpin_->setFixedWidth(56);
+    fpsSpin_->setFixedWidth(68);
     fpsSpin_->setAlignment(Qt::AlignRight);
     fpsSpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
     fpsSpin_->setObjectName("transport.fps.spin");
