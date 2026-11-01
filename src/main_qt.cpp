@@ -59,6 +59,7 @@
 #include "qt/ReviewSummaryPdf_qt.h"
 #include "qt/ReviewPackage_qt.h"
 #include "qt/MovieTestMedia_qt.h"
+#include "qt/VideoEncoder_qt.h"
 
 extern gfcSettings sett;
 
@@ -680,12 +681,19 @@ int main(int argc, char* argv[]) {
         // Test clips are generated fresh with the ffmpeg CLI (never committed).
         const QString mediaQDir = QDir(QDir::tempPath()).filePath(
             QStringLiteral("jefe_video_test_%1").arg(QCoreApplication::applicationPid()));
+        // Only a missing ffmpeg is a skip; any other generation failure (bad
+        // command, missing encoder, unwritable dir) fails the gate.
+        if (VideoEncoder_Qt::findFfmpeg().isEmpty()) {
+            printf("VIDEO-LOAD-TEST SKIP: ffmpeg not found\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
         QString mediaErr;
         if (!jefe::qt::testmedia::generate(mediaQDir, &mediaErr)) {
             QDir(mediaQDir).removeRecursively();
-            printf("VIDEO-LOAD-TEST SKIP: %s\n", mediaErr.toLocal8Bit().constData());
+            printf("VIDEO-LOAD-TEST FAIL: %s\n", mediaErr.toLocal8Bit().constData());
             fflush(stdout);
-            std::_Exit(3);
+            std::_Exit(2);
         }
         const std::string mediaDir = mediaQDir.toStdString();
         bool allZero = true;
