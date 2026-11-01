@@ -6,6 +6,7 @@
 #ifndef JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 #define JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
@@ -1022,8 +1023,30 @@ struct TrackTimelineState {
     int         numFrames        = 0;
     int         firstLoadedFrame = 1;
     int         loadedCount      = 0;
+    bool        hasAudio         = false;
+    bool        muted            = false;
+    uint64_t    audioPeaksVersion = 0;
     std::string label;
 };
+
+// Per-track sound state / mute (timeline speaker toggle). Mute is saved with the session.
+struct TrackAudioState { bool hasAudio = false; bool muted = false; };
+TrackAudioState getTrackAudioState(int trackIdx);
+void setTrackMuted(int trackIdx, bool muted);
+
+// Waveform peak summary (10 ms bins, abs peak of the stereo mix), copied out.
+// rateNum/rateDen is the movie's rate; offset the track's frame offset.
+struct WaveformPeaks {
+    bool present = false;
+    uint64_t version = 0;
+    int binsPerSecond = 100;
+    int64_t firstSample = 0;
+    int rateNum = 24, rateDen = 1;
+    int offset = 0;
+    std::vector<float> peaks;
+};
+// Copies the whole peaks vector: call only when audioPeaksVersion changed, and cache.
+WaveformPeaks getTrackWaveform(int trackIdx);
 
 TrackTimelineState getTrackTimelineState(int trackIdx);
 

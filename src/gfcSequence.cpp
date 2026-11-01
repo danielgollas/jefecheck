@@ -921,6 +921,12 @@ gfcAudioPeaks gfcSequence::audioPeaksSnapshot() const
 	return audioPeaks_;
 }
 
+void gfcSequence::setAudioMuted(bool muted)
+{
+	audioMuted_=muted;
+	if (gfcAudioEngineAlive()) audioEngine.setTrackMuted(trackID-'A', muted);
+}
+
 uint64_t gfcSequence::audioPeaksVersion() const
 {
 	std::lock_guard<std::mutex> lock(audioMutex_);
@@ -1752,6 +1758,7 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 		else
 			audioEngine.clearTrack(trackID-'A');
 		audioEngine.setTrackOffset(trackID-'A', frameOffset);
+		audioEngine.setTrackMuted(trackID-'A', audioMuted_);
 	}
 
 	// A fresh load of a movie sets the player's rate to the movie's exact
@@ -2414,6 +2421,7 @@ void gfcSequence::saveTrackSessionParameters(XMLNode & trackNode) {
 	saveSetting("offset",getOffset(),trackNode);
 	saveSetting("holdMode",getHoldMode(),trackNode);
 	saveSetting("holdFrame",this->holdFrameCurrent,trackNode);
+	saveSetting("muted",audioMuted_?1:0,trackNode);
 
 }
 
@@ -2434,6 +2442,8 @@ void gfcSequence::loadTrackSessionParameters(XMLNode & trackNode) {
 		readAttributeFromNode<int>("holdFrame",trackNode,0));
 
 
+
+	setAudioMuted(readAttributeFromNode<int>("muted",trackNode,0)!=0);
 
 	this->loadPreview();
 	//set the from and to limits at the end, after loading the preview, also the AOI

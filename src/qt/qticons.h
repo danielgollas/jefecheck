@@ -59,6 +59,8 @@ QIcon save();                // floppy disk
 QIcon check();               // ✓ (apply)
 QIcon send();                // paper plane
 QIcon recent();              // clock
+QIcon speaker();             // speaker with sound waves
+QIcon speakerMuted();        // speaker with a cross
 
 } // namespace qticons
 } // namespace jefe

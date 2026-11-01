@@ -311,6 +311,9 @@ public:
     std::shared_ptr<gfcAudioClip> audioClip() const;
     gfcAudioPeaks audioPeaksSnapshot() const;
     uint64_t audioPeaksVersion() const;
+    // Per-track mute (saved with the session); mirrored to audioEngine.
+    void setAudioMuted(bool muted);
+    bool audioMuted() const { return audioMuted_; }
     double getPreviewElapsedSecs() const;  // last loadPreview() wall-clock time
     
     gfcSequenceGUI* myGUI;
@@ -396,6 +399,7 @@ public:
     mutable std::mutex audioMutex_;
     std::shared_ptr<gfcAudioClip> audioClip_;
     gfcAudioPeaks audioPeaks_;
+    bool audioMuted_ = false;
     void resetAudio(int64_t startSample, bool withClip);
     void appendMovieAudio(gfcMovieReader& reader, const std::shared_ptr<gfcAudioClip>& clip);
     // The [startFrame, endFrame] frame-entry range loadSequence() will load.

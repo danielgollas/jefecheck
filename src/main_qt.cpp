@@ -744,6 +744,7 @@ int main(int argc, char* argv[]) {
         allZero &= (audioSyncSelfTest(mediaDir) == 0);
         allZero &= (audioWalkSelfTest(mediaDir) == 0);
         allZero &= (audioPlaybackSelfTest(mediaDir) == 0);
+        allZero &= (muteBridgeSelfTest(mediaDir) == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("VIDEO-LOAD-TEST media: %s\n", mediaDir.c_str());

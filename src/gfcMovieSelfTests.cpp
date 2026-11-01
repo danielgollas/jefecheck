@@ -569,3 +569,31 @@ int audioPlaybackSelfTest(const std::string& dir) {
     std::printf("AUDIO-PLAYBACK: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
+
+int muteBridgeSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto waitUntil = [](auto pred, int ms) {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (!pred() && std::chrono::steady_clock::now() < until) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        return pred();
+    };
+    auto readFile = [](const std::string& p) { std::ifstream f(p); std::stringstream ss; ss << f.rdbuf(); return ss.str(); };
+
+    gfcSequence* seq=trackManager.getSequence(1); seq->myGUI->setFilename(dir+"/flashbeep_25.mov"); seq->myGUI->setCompression(GFC_8BPC); seq->loadPreview();
+    const int savedQueueCap=sett.maximumFramesInQueue; sett.maximumFramesInQueue=100000; trackManager.startLoadingSequence(1);
+    waitUntil([&]{ trackManager.generateTextures(); return seq->audioPeaksSnapshot().peaks.size()>=60; }, 10000); trackManager.stopLoadingSequence(1); sett.maximumFramesInQueue=savedQueueCap;
+    check(jefe::qt::getTrackAudioState(1).hasAudio && !jefe::qt::getTrackAudioState(1).muted, "track with audio, unmuted");
+    check(!jefe::qt::getTrackAudioState(2).hasAudio, "empty track has no audio");
+    jefe::qt::setTrackMuted(1,true); check(jefe::qt::getTrackAudioState(1).muted && audioEngine.trackMuted(1) && jefe::qt::getTrackTimelineState(1).muted, "mute reaches the engine and the timeline state");
+    auto wf=jefe::qt::getTrackWaveform(1); check(wf.present && wf.binsPerSecond==100 && !wf.peaks.empty() && wf.rateNum==25 && wf.rateDen==1, "waveform peaks available");
+    check(wf.peaks.size()>50 && wf.peaks[0]>0.5f && wf.peaks[50]<0.05f, "beep in the first bins, silence at 0.5 s");
+    const std::string sess=dir+"/mute.jcs"; jefe::qt::saveSession(sess); jefe::qt::setTrackMuted(1,false); jefe::qt::loadSession(sess);
+    check(jefe::qt::getTrackAudioState(1).muted, "mute persists in a saved session");
+    check(readFile(sess).find("muted=\"1\"")!=std::string::npos, "session stores muted");
+    jefe::qt::setTrackMuted(1,false);
+    std::printf("MUTE-BRIDGE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}

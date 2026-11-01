@@ -2091,6 +2091,9 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
     // decoded run. (Precise fill positioning for alt-click load-from-X
     // is a deferred refinement noted in the spec.)
     s.firstLoadedFrame = s.rangeStart;
+    s.hasAudio = seq->hasAudio();
+    s.muted = seq->audioMuted();
+    s.audioPeaksVersion = s.hasAudio ? seq->audioPeaksVersion() : 0;
     if (seq->myGUI && !seq->myGUI->getFilename().empty()) {
         namespace fs = std::filesystem;
         s.label = fs::path(seq->filenameGeneric.empty()
@@ -2098,6 +2101,39 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
                                : seq->filenameGeneric).filename().string();
     }
     return s;
+}
+
+TrackAudioState getTrackAudioState(int trackIdx) {
+    TrackAudioState a;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return a;
+    a.hasAudio = seq->hasAudio();
+    a.muted = seq->audioMuted();
+    return a;
+}
+
+void setTrackMuted(int trackIdx, bool muted) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return;
+    seq->setAudioMuted(muted);
+    plateManager.setChanged();
+}
+
+WaveformPeaks getTrackWaveform(int trackIdx) {
+    WaveformPeaks w;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->hasAudio()) return w;
+    const gfcAudioPeaks snap = seq->audioPeaksSnapshot();
+    const gfcMovieInfo* info = seq->movieInfo();   // raw pointer into the reader: copy now
+    if (!info || info->rateNum <= 0 || info->rateDen <= 0) return w;
+    w.rateNum = info->rateNum; w.rateDen = info->rateDen;
+    w.present = true;
+    w.version = snap.version;
+    w.binsPerSecond = snap.binsPerSecond;
+    w.firstSample = snap.firstSample;
+    w.offset = seq->getOffset();
+    w.peaks = snap.peaks;
+    return w;
 }
 
 int getTrackOffset(int trackIdx) {
