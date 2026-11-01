@@ -405,6 +405,16 @@ int audioEngineSelfTest(const std::string& dir) {
     // mixing: two tracks, sum and clamp
     e.setTrackClip(1, clipA, 24000, 1001, 240); e.setPlayerRate(24000,1001); cap.clear(); e.playSlice(25); out.pump(2002,&cap);
     float peak=0; for (float v: cap) peak=std::max(peak,std::fabs(v)); check(peak<=1.0f && peak>0.95f, "two 0.8 beeps sum then clamp to 1.0");
+    // A clip the engine drops is destroyed after the engine mutex is released
+    // (render() must never wait on freeing a long clip): clearTrack, and a
+    // setTrackClip that replaces the clip with one rejected for a bad rate.
+    { int freedUnlocked = 0, freed = 0;
+      auto tracked = [&]{ return std::shared_ptr<gfcAudioClip>(new gfcAudioClip, [&](gfcAudioClip* c){ ++freed; freedUnlocked += e.testMutexFreeFromOtherThread() ? 1 : 0; delete c; }); };
+      e.setTrackClip(2, tracked(), 24000, 1001, 240); e.clearTrack(2);
+      check(freed==1 && freedUnlocked==1 && !e.trackHasAudio(2), "clearTrack frees the clip outside the engine lock");
+      freed = freedUnlocked = 0;
+      e.setTrackClip(2, tracked(), 24000, 1001, 240); e.setTrackClip(2, tracked(), 0, 1001, 240);
+      check(freed==2 && freedUnlocked==2 && !e.trackHasAudio(2), "a replaced clip and a rejected (bad-rate) clip are both freed outside the lock"); }
     // null output: every call is safe
     gfcAudioEngine n; n.setOutput(nullptr); n.setTrackClip(0, clipA, 24000,1001,240); n.setPlayerRate(24000,1001); n.playSlice(25); n.startLeading(t);
     check(!n.canLead() && !n.isLeading(), "no device: cannot lead, every call is a safe no-op");

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 
 #include "UIConstants.h"
 #include "gfcplaybackmanager.h"   // advanceFrame (pulls in glad: keep it out of the header)
@@ -25,7 +26,11 @@ void gfcAudioEngine::setOutput(gfcAudioOutput* out) {
 
 void gfcAudioEngine::setTrackClip(int track, std::shared_ptr<gfcAudioClip> clip, int rateNum, int rateDen, int64_t frameCount) {
     if (track < 0 || track >= kMaxTracks) return;
-    std::shared_ptr<gfcAudioClip> old;   // released after the lock, on this thread
+    // Every clip the track lets go of lands in one of these and is destroyed
+    // after the lock is released (freeing a long clip's chunks takes time, and
+    // render() must never wait on it). Each holder is empty when it is assigned,
+    // so no move-assignment can release a clip while the lock is held.
+    std::shared_ptr<gfcAudioClip> replaced, rejected;
     {
         std::lock_guard<std::mutex> lock(m_);
         Track& tr = tracks_[track];
@@ -33,17 +38,25 @@ void gfcAudioEngine::setTrackClip(int track, std::shared_ptr<gfcAudioClip> clip,
             // Voices point into the old clip: stop them before it can go away.
             tr.voice = Voice(); tr.tail = Voice();
             tr.seamValid = false;
-            old = std::move(tr.clip);
+            replaced = std::move(tr.clip);
             tr.clip = std::move(clip);
         }
         if (!tr.clip || rateNum <= 0 || rateDen <= 0 || frameCount <= 0) {
             tr.voice = Voice(); tr.tail = Voice(); tr.seamValid = false;
-            old = std::move(tr.clip); tr.clip.reset();
+            rejected = std::move(tr.clip);   // leaves tr.clip empty
             tr.rateNum = 0; tr.rateDen = 1; tr.frameCount = 0;
-            return;
+        } else {
+            tr.rateNum = rateNum; tr.rateDen = rateDen; tr.frameCount = frameCount;
         }
-        tr.rateNum = rateNum; tr.rateDen = rateDen; tr.frameCount = frameCount;
-    }
+    }   // lock released here; `rejected`, `replaced` and `clip` are destroyed after it
+}
+
+bool gfcAudioEngine::testMutexFreeFromOtherThread() const {
+    // try_lock from a second thread is well-defined even when this thread
+    // holds the mutex (it just fails), unlike a same-thread try_lock.
+    bool free = false;
+    std::thread([&] { if (m_.try_lock()) { free = true; m_.unlock(); } }).join();
+    return free;
 }
 
 void gfcAudioEngine::clearTrack(int track) { setTrackClip(track, nullptr, 0, 1, 0); }

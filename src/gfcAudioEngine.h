@@ -102,6 +102,9 @@ public:
 
     // Self-test view of the leading log, oldest first (allocates; GUI side).
     std::vector<gfcAudioLogEntry> renderLogSnapshot() const;
+    // Self-test hook: true when no thread holds the engine mutex (probed from a
+    // second thread). Used to prove clips are never destroyed under the lock.
+    bool testMutexFreeFromOtherThread() const;
 
 private:
     struct Voice {
