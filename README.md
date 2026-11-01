@@ -10,6 +10,7 @@ Professional video frame processing and playback application for color correctio
 ## Features
 
 - Real-time playback of image sequences (DPX, EXR, and common formats via OpenImageIO)
+- Movies (`.mov` / `.mp4`: ProRes 422/HQ/4444/XQ, H.264, H.265) load like a sequence, with sound — see [Movies](#movies)
 - Up to 4 simultaneous video tracks/plates with multi-plate layouts (1×1, 2×1, 1×2, 2×2)
 - Per-plate color correction (gamma/exposure/brightness/contrast/saturation, RGBA masks)
 - 1D and 3D LUT (Look-Up Table) support for color grading, with an interactive LUT inspector
@@ -22,14 +23,16 @@ Professional video frame processing and playback application for color correctio
 
 ## Building from Source
 
-C++20, CMake. Qt 6, OpenImageIO, OpenEXR/Imath, FreeType, libcurl, zlib are required.
-A static **FFmpeg** for video export is fetched and bundled by the build automatically
-(disable with `-DJEFECHECK_BUNDLE_FFMPEG=OFF`).
+C++20, CMake. Qt 6 (with Qt Multimedia), OpenImageIO, OpenEXR/Imath, FreeType, libcurl,
+zlib and the FFmpeg libraries (libavformat, libavcodec, libavutil, libswresample,
+libswscale; FFmpeg 6.1 or newer) are required. A static **FFmpeg** command-line tool for
+video export is fetched and bundled by the build automatically (disable with
+`-DJEFECHECK_BUNDLE_FFMPEG=OFF`).
 
 ### macOS
 
 ```bash
-brew install qt openimageio openexr curl zlib cmake freetype
+brew install qt openimageio openexr curl zlib cmake freetype ffmpeg
 cmake -B build && cmake --build build
 ```
 
@@ -38,14 +41,16 @@ cmake -B build && cmake --build build
 ```bash
 sudo apt install cmake build-essential qt6-base-dev qt6-base-private-dev libqt6opengl6-dev \
   libopenimageio-dev openimageio-tools libopenexr-dev libimath-dev \
-  libcurl4-openssl-dev zlib1g-dev libgl-dev libglu1-mesa-dev libfreetype6-dev
+  libcurl4-openssl-dev zlib1g-dev libgl-dev libglu1-mesa-dev libfreetype6-dev \
+  libavformat-dev libavcodec-dev libavutil-dev libswresample-dev libswscale-dev qt6-multimedia-dev
 cmake -B build && cmake --build build -j$(nproc)
 ```
 
 ### Windows (MSYS2 / MinGW)
 
 Use MSYS2 with `mingw-w64-x86_64-qt6-base`, `mingw-w64-x86_64-qt6-tools`,
-`mingw-w64-x86_64-openimageio`, and `mingw-w64-x86_64-freetype` (see
+`mingw-w64-x86_64-qt6-multimedia`, `mingw-w64-x86_64-openimageio`,
+`mingw-w64-x86_64-ffmpeg`, and `mingw-w64-x86_64-freetype` (see
 `.github/workflows/build.yml`), then `cmake -B build && cmake --build build`.
 
 ## Usage
@@ -78,6 +83,32 @@ jefecheck -r 24 /path/to/seq_a.0001.exr /path/to/seq_b.0001.exr
 # Load with a LUT applied
 jefecheck -l grade.cube /path/to/sequence.0001.dpx
 ```
+
+## Movies
+
+Open a `.mov` or `.mp4` (ProRes 422/HQ/4444/XQ, H.264, H.265) the same way as a
+sequence: Quick Load (`Ctrl+O`), the Load Sequence Manager (`Ctrl+L`), drag and drop, or
+the command line. A movie is one track entry that behaves like a sequence (range, trims,
+scale, bit depth, hold, offset, filmstrip, notes); the timeline counts its frames 1…n.
+Frames are decoded into memory, never extracted to disk. Numbers in a movie's name are
+never read as frame numbers: `shot_v003.mov` is one clip, and `a_001.mov` / `a_002.mov`
+are two.
+
+- **Colour:** YUV is converted with the file's own matrix (Rec.709/601/2020) and range;
+  untagged files are treated as Rec.709 video range. 10/12-bit sources keep their
+  precision on a 16-bit track.
+- **Frame rate:** loading a movie sets the player's rate to the movie's exact rate
+  (e.g. 23.976 = 24000/1001); the most recent load wins and a restored session keeps
+  its saved rate. Other tracks play one frame per timeline frame at that rate. The
+  status bar shows the movie's source timecode (drop-frame as `;`), and variable-rate
+  files play at their average rate with a "VFR" note.
+- **Sound:** every track with audio plays, mixed. Mute a track with the speaker on its
+  timeline lane (or its right-click menu); mute is saved with the session. At the movie's
+  own rate the sound leads and the picture keeps up; stepping, scrubbing and off-rate
+  playback play each frame's own slice at normal pitch; reverse is silent.
+- **Limits:** a movie loads what fits in memory, like a sequence. Heavy 4K ProRes 4444
+  (around 1 Gb/s) can load slower than real time; it plays at full rate once loaded.
+  There is no hardware decoding yet, no MXF, and exports carry no sound.
 
 ## Contributing
 

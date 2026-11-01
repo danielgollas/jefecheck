@@ -120,11 +120,14 @@ jobs:
           # Qt Multimedia backends (ffmpegmediaplugin / windowsmediaplugin) are
           # loaded from <exe dir>/multimedia/; copy them and the DLLs they need.
           cp -r /mingw64/share/qt6/plugins/multimedia "$PACKAGE/"
-          for p in "$PACKAGE"/multimedia/*.dll; do ldd "$p" | grep mingw | awk '{print $3}' | xargs -I{} cp -n {} "$PACKAGE/"; done
+          # Plain cp (idempotent): "cp -n" exits 1 on an existing file with
+          # coreutils >= 9.2, which xargs turns into 123 and fails the step.
+          # A plugin with no MinGW deps makes grep exit 1; that is not an error.
+          for p in "$PACKAGE"/multimedia/*.dll; do ldd "$p" | { grep mingw || true; } | awk '{print $3}' | xargs -r -I{} cp {} "$PACKAGE/"; done
           # Record the shipped FFmpeg version and configure line (same MSYS2 package as the DLLs)
           /mingw64/bin/ffmpeg.exe -hide_banner -version > "$PACKAGE/ffmpeg-libs-VERSION.txt"
           # Fail the job when the libav DLLs, Qt Multimedia or its plugins are missing
-          ls "$PACKAGE"/avcodec-*.dll "$PACKAGE"/Qt6Multimedia.dll "$PACKAGE"/multimedia/*.dll
+          ls "$PACKAGE"/avcodec-*.dll "$PACKAGE"/Qt6Multimedia.dll "$PACKAGE"/multimedia/*.dll || exit 1
           # MSYS2 ships zip; use it instead of 7z which isn't installed by default
           zip -r jefecheck-windows-x64.zip "$PACKAGE"
 
