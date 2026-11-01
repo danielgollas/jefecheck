@@ -22,7 +22,8 @@ jobs:
             libopenimageio-dev openimageio-tools libopencv-dev \
             libopenexr-dev libilmbase-dev libimath-dev \
             libcurl4-openssl-dev zlib1g-dev \
-            libgl-dev libglu1-mesa-dev libfreetype6-dev
+            libgl-dev libglu1-mesa-dev libfreetype6-dev \
+            libavformat-dev libavcodec-dev libavutil-dev libswresample-dev libswscale-dev qt6-multimedia-dev
 
       - name: Build
         run: |
@@ -47,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: brew install qt openimageio openexr curl zlib cmake freetype
+        run: brew install qt openimageio openexr curl zlib cmake freetype ffmpeg
 
       - name: Build
         run: |
@@ -92,6 +93,8 @@ jobs:
             mingw-w64-x86_64-zlib
             mingw-w64-x86_64-fmt
             mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-ffmpeg
+            mingw-w64-x86_64-qt6-multimedia
             zip
 
       - name: Build

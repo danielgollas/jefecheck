@@ -45,6 +45,7 @@
 #include "gfcMediaFingerprint.h"
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
+#include "gfcMovieSelfTests.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
@@ -199,6 +200,14 @@ static bool hasAspectTest(int argc, char* argv[]) {
 static bool hasNotesTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--notes-test") == 0) return true;
+    return false;
+}
+
+// --video-load-test : headless movie-loading suites (needs an offscreen GL
+// context). Later tasks append suites to the aggregator in main().
+static bool hasVideoLoadTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--video-load-test") == 0) return true;
     return false;
 }
 
@@ -655,6 +664,25 @@ int main(int argc, char* argv[]) {
                     stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
                     tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0 &&
                     mergeFail == 0 && packageFail == 0 && packageOpenFail == 0) ? 0 : 2);
+    }
+
+    // Headless movie-loading suites (--video-load-test). Loading tracks and
+    // sessions touches GL, so an offscreen context is required; track loads
+    // also write a crash-recovery session, which is removed before exiting.
+    if (hasVideoLoadTest(argc, argv)) {
+        jefe::qt::initializeRenderingChain();
+        if (!jefe::qt::setupOffscreenTestGL()) {
+            printf("VIDEO-LOAD-TEST SKIP: no offscreen GL\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        const std::string mediaDir;
+        bool allZero = true;
+        allZero &= (movieKindsSelfTest(mediaDir) == 0);
+        allZero &= (movieLibavSelfTest(mediaDir) == 0);
+        jefe::qt::removeRecoverySession();
+        std::fflush(stdout);
+        std::_Exit(allZero ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
