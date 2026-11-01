@@ -23,8 +23,9 @@
 - Waveform: thin strip under the lane's filmstrip from a background-computed peak summary; dims when muted; lanes stay one painted widget with no forced extra height (developer_notes §14–15).
 - TU separation (developer_notes §1): libav and Qt Multimedia includes stay out of glad translation units; Qt UI reaches movie/audio state only through `jefe::qt::*` bridge accessors in `SequenceLoadBridge_qt.h`. libav headers are confined to `src/gfcMovieReader.cpp` (pimpl); Qt Multimedia to `src/qt/AudioOutput_qt.cpp`.
 - macOS GL is 2.1 via Metal translation: ARB shader functions only (`glCreateShaderObjectARB` …), `GL_TEXTURE_RECTANGLE_ARB`, EXT framebuffers; initialise every GL handle to 0.
-- Build: CMake finds libav and `Qt6::Multimedia` on macOS (Homebrew), Ubuntu 24.04 (apt, FFmpeg 6.1 → libavcodec 60) and MSYS2 mingw64; use only APIs present in FFmpeg 6.1 (`avcodec_send_packet`/`receive_frame`, `AVChannelLayout`, `swr_alloc_set_opts2`) and Qt 6.4 (`QAudioSink::start(QIODevice*)`, not the 6.11 callback API). CI installs the new packages; release packaging bundles libav dylibs on macOS, DLLs + the Qt multimedia plugin on Windows, and declares Linux package dependencies.
+- Build: CMake finds libav and `Qt6::Multimedia` on macOS (Homebrew), Ubuntu 24.04 (apt, FFmpeg 6.1 → libavcodec 60) and MSYS2 mingw64; libav code must compile against both FFmpeg 6.1 (libavcodec 60, Ubuntu 24.04) and FFmpeg 8.0 (libavcodec 62, Homebrew): use `avcodec_send_packet`/`receive_frame`, `AVChannelLayout`, `swr_alloc_set_opts2`, `avcodec_free_context`, `frame->flags & AV_FRAME_FLAG_KEY`, `frame->duration`, `codecpar->coded_side_data`; never use the APIs removed in 8.0 (`avcodec_close`, `AVFrame::key_frame`/`pkt_duration`/`pkt_pos`/`interlaced_frame`, `AVStream::side_data`/`av_stream_get_side_data`, `AVCodecContext::ticks_per_frame`/`reordered_opaque`) and Qt 6.4 (`QAudioSink::start(QIODevice*)`, not the 6.11 callback API). CI installs the new packages; release packaging bundles libav dylibs on macOS, DLLs + the Qt multimedia plugin on Windows, and declares Linux package dependencies.
 - Licensing: JefeCheck becomes **"GPL v2 or later"** (LICENSE/README/CLAUDE.md/About/CLA wording, SPDX headers on project-own sources); `THIRD_PARTY_LICENSES` gains FFmpeg (linked) and corrects RakNet to "v2 or later"; distributed binaries are noted as effectively GPLv3. Export keeps the FFmpeg CLI.
+- Headless suites run with an offscreen GL context (`jefe::qt::setupOffscreenTestGL()`, made current by the `--video-load-test` aggregator) and with `sett.maximumFramesInQueue = 0` set by any suite that waits on the loader thread (otherwise the loader blocks after 5 frames, since only the GL main thread drains the queue); the aggregator removes the recovery session it causes.
 - Verification: headless self-tests only (`NAME: pass=N fail=N` lines, exit 0/2); test media is generated with the ffmpeg CLI at test time into a temp dir, never committed.
 - Performance target: one real 4K ProRes 4444 track decodes + uploads at ≥ 24 fps on the M3 and plays at full rate once loaded; measure on real footage.
 - Build tree: `/Volumes/Archive/jefecheck-builds/video`. Every shell command in this plan is a single line.
@@ -62,7 +63,7 @@
 | `CMakeLists.txt`, `.github/workflows/{build,release}.yml`, `scripts/*.sh`, `packaging/*` | Link, CI packages, bundling. |
 | `LICENSE`, `README.md`, `CLA.md`, `CLAUDE.md`, `developer_notes.md`, `THIRD_PARTY_LICENSES`, `packaging/ffmpeg-NOTICE.txt` | Licensing and documentation. |
 
-Test convention used below: each suite is `int <name>SelfTest(const std::string& mediaDir)` using the project's `check(cond, "msg")` lambda, printing `<SUITE>: pass=N fail=N`, returning the fail count. `--video-load-test` runs every suite and exits 0 only when all pass (mirrors `--notes-test`, `src/main_qt.cpp:632-655`). Helpers named in the test snippets but not in any interface (`readFile`, `waitUntil(pred, ms)`, `nonZero`, `countZeroCrossings(buf, from, to)`, `bytesOf`) are file-local lambdas in `src/gfcMovieSelfTests.cpp`. Setting `JEFE_KEEP_TEST_MEDIA=1` makes the aggregator keep the generated media directory and print its path (`VIDEO-LOAD-TEST media: <dir>`); the manual checks below refer to it as `<dir>`.
+Test convention used below: each suite is `int <name>SelfTest(const std::string& mediaDir)` using the project's `check(cond, "msg")` lambda, printing `<SUITE>: pass=N fail=N`, returning the fail count. `--video-load-test` runs every suite and exits 0 only when all pass (mirrors `--notes-test`, `src/main_qt.cpp:632-655`). Helpers named in the test snippets but not in any interface (`readFile`, `waitUntil(pred, ms)`, `rms(const std::vector<float>&)`, `nonZero`, `countZeroCrossings(buf, from, to)`, `bytesOf`) are file-local lambdas in `src/gfcMovieSelfTests.cpp`. Setting `JEFE_KEEP_TEST_MEDIA=1` makes the aggregator keep the generated media directory and print its path (`VIDEO-LOAD-TEST media: <dir>`); the manual checks below refer to it as `<dir>`.
 
 ---
 
@@ -93,7 +94,7 @@ check(gfcMovieReader::libavVersionString().rfind("libavcodec ", 0) == 0, "libav 
 
 - [ ] **Step 5: Add `src/gfcMediaKinds.h`, `gfcMovieReader.{h,cpp}` (version only) and the self-test TU** — `gfcMovieReader.cpp` includes `<libavcodec/avcodec.h>` inside `extern "C"` and implements `libavVersionString()` as `"libavcodec " + std::to_string(LIBAVCODEC_VERSION_MAJOR) + "." + …`. `src/gfcMovieSelfTests.h` declares only `int …SelfTest(const std::string& mediaDir);` functions (no manager includes, so `main_qt.cpp` can include it).
 
-- [ ] **Step 6: Add the `--video-load-test` aggregator** to `src/main_qt.cpp` next to `--notes-test`: `hasVideoLoadTest(argc, argv)`; after `applyDarkTheme`, call `jefe::qt::initializeRenderingChain()`, run each suite with `mediaDir` = `""` for now, `fflush(stdout)`, `std::_Exit(allZero ? 0 : 2)`.
+- [ ] **Step 6: Add the `--video-load-test` aggregator** to `src/main_qt.cpp` next to `--notes-test`: `hasVideoLoadTest(argc, argv)`; after `applyDarkTheme`, call `jefe::qt::initializeRenderingChain()`, then `jefe::qt::setupOffscreenTestGL()` (as `--remote-test`/`--asset-test` do, `main_qt.cpp:714/739`; on failure print `VIDEO-LOAD-TEST SKIP: no offscreen GL` and `std::_Exit(3)`) — loading tracks and sessions touches GL and segfaults without it; run each suite with `mediaDir` = `""` for now, call `jefe::qt::removeRecoverySession()` (track loads write a crash-recovery session into the real app-data dir via `writeCrashSession`), `fflush(stdout)`, `std::_Exit(allZero ? 0 : 2)`.
 
 - [ ] **Step 7: CI packages** — `build.yml` and `release.yml`: Ubuntu adds `libavformat-dev libavcodec-dev libavutil-dev libswresample-dev libswscale-dev qt6-multimedia-dev`; macOS `brew install` adds `ffmpeg`; MSYS2 adds `mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-qt6-multimedia`.
 
@@ -179,12 +180,12 @@ gfcMovieReader t; check(t.open(dir+"/truncated.mov", &err), "truncated opens"); 
   - `bars_709tv.mov`: same bars source, `-vf scale=out_color_matrix=bt709:out_range=tv,format=yuv422p10le -c:v prores_ks -profile:v 3`
   - `bars_601full.mp4`: bars source, `-vf scale=out_color_matrix=bt601:out_range=pc,format=yuv420p -c:v libx264 -g 4 -colorspace smpte170m -color_primaries smpte170m -color_trc smpte170m -color_range pc`
   - `bars_untagged.mp4`: bars source, `-vf scale=out_color_matrix=bt709:out_range=tv,format=yuv420p -c:v libx264 -g 4 -bsf:v h264_metadata=colour_primaries=2:transfer_characteristics=2:matrix_coefficients=2:video_full_range_flag=0` (verified: ffprobe reports `color_space=unknown`; `-colorspace unknown` alone does not strip the tag)
-  - `bars_709tv_odd.mp4`: bars at `size=321x181`, 709/tv libx264 yuv420p, 8 frames
+  - `bars_709tv_odd.mp4`: bars at `size=321x181`, `-c:v mpeg4 -q:v 2 -pix_fmt yuv420p`, untagged (so it also exercises the 709/tv default), 8 frames — libx264/libx265 refuse odd sizes, and `h264_videotoolbox` silently crops to 320x180, so do not use them
   - `flashbeep_23976.mov`: `-f lavfi -i color=c=black:size=320x180:rate=24000/1001,drawbox=w=iw:h=ih:color=white:t=fill:enable='eq(mod(n\,24)\,0)',format=yuv422p10le -f lavfi -i aevalsrc='if(lt(mod(floor(t*24000/1001+0.0001)\,24)\,1)\,0.8*sin(2*PI*1000*t)\,0)':s=48000:c=stereo -t 10 -c:v prores_ks -profile:v 3 -c:a pcm_s16le -timecode 01:00:00:00`
   - `flashbeep_25.mov`: same with `rate=25`, `mod(n\,25)`, `floor(t*25+0.0001)\,25`
   - `df_2997.mov`: `testsrc2=size=320x180:rate=30000/1001,format=rgb24 -frames:v 10 … prores_ks -profile:v 3 -timecode 00:59:59;28`
   - `mono441_24.mp4`: `testsrc2 rate=24 -frames:v 48` + `-f lavfi -i sine=frequency=440:sample_rate=44100 -ac 1 -c:a aac -shortest`, libx264 yuv420p
-  - `truncated.mov`: first half of `prores422hq_23976.mov`'s bytes; `empty.mov`: 0 bytes.
+  - `truncated.mov`: first `-i prores422hq_23976.mov -c copy -movflags +faststart` to a temp copy, then the first half of THAT copy's bytes (a plain half file has no `moov` and does not open; the faststart half probes 48 frames and decodes ~23 before failing); `empty.mov`: 0 bytes.
 
 - [ ] **Step 4: Implement `gfcMovieReader`** (pimpl `struct gfcMovieReader::Impl` in the `.cpp` holding `AVFormatContext*`, `AVCodecContext*`, video stream index, `SwsContext*` cache, `std::mutex`, `lastIndex`). Decisions: `thread_count = 0`, `thread_type = FF_THREAD_SLICE | FF_THREAD_FRAME`; decoder setup in one function `openDecoder()` (the future `hwaccel` seam: `hw_device_ctx` + `get_format` go there, `av_hwframe_transfer_data` in `decodeNext()`); `frameCount = st->nb_frames` if > 0 else `llround(duration_seconds * num / den)`; `rate` = `st->avg_frame_rate` reduced (`av_reduce`), `variableRate = (st->r_frame_rate != st->avg_frame_rate)`; tags read from the first decoded `AVFrame` (`colorspace`, `color_range`, `chroma_location`), falling back to `codecpar` when the frame says unspecified (verified: ProRes carries tags only in the frame header); `readFrame(i)`: if `i == lastIndex+1` decode next, else `av_seek_frame(ts(i), AVSEEK_FLAG_BACKWARD)` + `avcodec_flush_buffers` + decode forward until `pts >= ts(i)`; at EOF send a null packet and drain; `gfcMovieFrame::owner` keeps the `AVFrame` alive (zero copy, freed by the shared_ptr deleter); `convertToBGRA` uses `sws_getCachedContext` with `sws_setColorspaceDetails` set from matrix/range, output `AV_PIX_FMT_BGRA` or `AV_PIX_FMT_BGRA64LE`.
 
@@ -339,7 +340,7 @@ Shader maths (codes `c = texel × codeScale`, `codeScale = 65535` for 16-bit upl
 ```
   The 601 and full-range clips pass only if the tags are honoured (they were encoded with those matrices/ranges); the untagged clip passes only through the 709/video default.
 
-- [ ] **Step 2: Run to verify it fails** — Run: `cmake --build /Volumes/Archive/jefecheck-builds/video -j8 && /Volumes/Archive/jefecheck-builds/video/jefecheck.app/Contents/MacOS/jefecheck --config-dir /tmp/jefe_vct_cfg --video-colour-test /tmp/jefe_vct` — Expected: `VIDEO-COLOUR-TEST FAIL` (swscale 8-bit path: the 16-bit precision check fails; the odd clip renders) — or a compile error before the harness exists.
+- [ ] **Step 2: Run to verify it fails** — Run: `cmake --build /Volumes/Archive/jefecheck-builds/video -j8 && /Volumes/Archive/jefecheck-builds/video/jefecheck.app/Contents/MacOS/jefecheck --config-dir /tmp/jefe_vct_cfg --video-colour-test /tmp/jefe_vct` — Expected: `VIDEO-COLOUR-TEST FAIL`, or a PASS — Task 5's CPU path already converts 16-bit tracks to BGRA64, so the harness may pass before the GPU path exists; that is acceptable, it is a regression gate, not proof of the GPU path (the odd clip renders either way) — or a compile error before the harness exists.
 
 - [ ] **Step 3: Implement `gfcYuvConverter`, the `gfcGLFrameInfo` fields, the planar fill in `gfcImageLoaderMovie::load`, and the `generateTexture` branch** (release the loader after conversion exactly as today; plane textures and the FBO are per-context statics released by `gfcYuvConverterRelease()`).
 
@@ -394,7 +395,7 @@ check(readFile(sess).find("targetFPSNum=\"24000\"")!=std::string::npos, "session
 - Modify: `src/gfcMediaFingerprint.cpp:65-110`, `src/gfcNoteStamp.h`, `src/gfcNoteStamp.cpp`, `src/qt/SequenceLoadBridge_qt.cpp:3363-3460` (`stampNotesIntoExr`), `src/gfcMovieSelfTests.cpp`
 
 **Interfaces:**
-- Consumes: `gfcMovieReader::probe`/`readFrame`/`convertToBGRA`, `jefe::qt::listSequenceFrames` (Task 4), the package exporter/opener (`jefe::qt::package::exportPackage`/`openPackage` as used by `--package-test`, `MainWindow_qt.cpp:2580-2640`).
+- Consumes: `gfcMovieReader::probe`/`readFrame`/`convertToBGRA`, `jefe::qt::listSequenceFrames` (Task 4), the package exporter/opener: `jefe::qt::package::Exporter` (`begin(const ExportInput&, QString*)`, then `step(QString*)` until `State::Done`, `ReviewPackage_qt.h:85-116`) and `openPackage(path, cacheRoot, OpenServices, OpenResult&, QString*)`.
 - Produces: `gfcMediaFingerprint::probe(moviePath)` → width/height from the movie, `channels = {"R","G","B"}` (+`"A"` when `hasAlpha`); `compute({moviePath})` → `"fp1:" + sha1("jefecheck-fp1", w, h, nch, names, n=1, fileSize, bytes[0,64 KiB), bytes[mid−32 KiB, mid+32 KiB), bytes[size−64 KiB, size))` — container bytes, so it is stable across platforms and FFmpeg versions (decision). `gfcNoteStamp::stampPixels(int width, int height, const float* rgb, const std::string& outExr, const gfcReview&, const Options&, std::string* err)` (writes a half-float RGB EXR plus the header/layer `stamp` writes); `stamp(inExr, …)` becomes "read `inExr` then `stampPixels`". `stampNotesIntoExr`: when the active track `isMovie()`, decode the displayed frame (`convertToBGRA(…, 16, w, h)` → float RGB) and call `stampPixels` instead of reading `sourcePath`.
 
 - [ ] **Step 1: Write the failing test** — `movieFingerprintSelfTest` (MOVIE-FINGERPRINT) and `movieStampSelfTest` (MOVIE-STAMP):
@@ -406,7 +407,9 @@ const std::string fa=gfcMediaFingerprint::compute({dir+"/a_001.mov"}, &err), fb=
 check(fa.rfind("fp1:",0)==0 && fa.size()==44 && fa==fb && fa!=fh, "same bytes same fp1; different movie differs");
 check(gfcMediaFingerprint::compute({dir+"/empty.mov"}, &err).empty() && !err.empty(), "empty movie errors");
 // package round trip: a session with the movie on track A, export with media, open, assert one copy and a rewritten path
-// (reuse the --package-test flow: jefe::qt::package::exportPackage / openPackage)
+// build ExportInput by hand (no window): outPath, includeMedia=true, sessionXml = readFile of a jefe::qt::saveSession to a temp .jcs,
+// media = one ExportMedia for the movie with its fp1, empty luts, appVersion, createdIso; run Exporter begin/step to Done;
+// open with OpenServices{interactive=false}; manifest = result.manifest, openedSessionXml = readFile(result.sessionPath)
 check(manifest.media.size()==1 && manifest.media[0].frames.size()==1 && manifest.media[0].frames[0]=="shot_v003.mov", "package lists the movie once");
 check(std::filesystem::exists(cache+"/media/000/shot_v003.mov") && openedSessionXml.find("media/000/shot_v003.mov")!=std::string::npos, "the movie file is copied and relinked");
 // MOVIE-STAMP
@@ -449,7 +452,7 @@ struct gfcAudioPeaks {         // abs-peak of the stereo mix per 10 ms bin, buil
     void reset(int64_t firstSample); void accumulate(const float* interleaved, int64_t frames);
 };
 ```
-  `gfcMovieReader`: `void setAudioEnabled(bool on);` (default off; when on, `open()` also opens the audio decoder and a `SwrContext` to 48 kHz stereo float, and `readFrame` decodes every audio packet it demuxes into an internal FIFO; a seek clears the FIFO and resets `firstSample` from the audio PTS) `bool takeAudio(std::vector<float>& interleaved, int64_t& firstSample);` (drains the FIFO; `firstSample` is the first sample's movie-time index; false when empty). `gfcSequence`: `std::shared_ptr<gfcAudioClip> audioClip_`, `gfcAudioPeaks audioPeaks_` (+ mutex), `bool hasAudio() const`, `std::shared_ptr<gfcAudioClip> audioClip() const`, `gfcAudioPeaks audioPeaksSnapshot() const`, `uint64_t audioPeaksVersion() const`; `initializeSequence` resets clip and peaks (`reset(frameStartSample(startFrame…))`), the loader loop after each `loadFrame` calls `takeAudio` and appends to both (append order == decode order, so a pass from frame F gives one contiguous buffer starting at F's sample).
+  `gfcMovieReader`: `void setAudioEnabled(bool on);` (default off; when on, `open()` also opens the audio decoder and a `SwrContext` to 48 kHz stereo float, and `readFrame(i)` decodes every audio packet it demuxes into an internal FIFO, and keeps demuxing (queueing any video packets it meets for later reads) until the FIFO covers `frameStartSample(i+1)` or EOF, so frame i's whole slice is available when frame i is loaded; a seek clears the FIFO and resets `firstSample` from the audio PTS) `bool takeAudio(std::vector<float>& interleaved, int64_t& firstSample);` (drains the FIFO; `firstSample` is the first sample's movie-time index; false when empty). `gfcSequence`: `std::shared_ptr<gfcAudioClip> audioClip_`, `gfcAudioPeaks audioPeaks_` (+ mutex), `bool hasAudio() const`, `std::shared_ptr<gfcAudioClip> audioClip() const`, `gfcAudioPeaks audioPeaksSnapshot() const`, `uint64_t audioPeaksVersion() const`; `initializeSequence` resets clip and peaks (`reset(frameStartSample(startFrame…))`), the loader loop after each `loadFrame` calls `takeAudio` and appends to both (append order == decode order, so a pass from frame F gives one contiguous buffer starting at F's sample).
 
 - [ ] **Step 1: Write the failing test** — `audioClipSelfTest` (AUDIO-CLIP):
 
@@ -484,7 +487,7 @@ check(pk.peaks.size()==10 && pk.peaks[1]>0.89f && pk.peaks[0]==0.f && pk.version
 ### Task 10: Audio engine core (pure): slices, fades, leading clock, off-rate
 
 **Files:**
-- Create: `src/gfcAudioEngine.h`, `src/gfcAudioEngine.cpp`
+- Create: `src/gfcAudioEngine.h`, `src/gfcAudioEngine.cpp` — `gfcAudioEngine.h` includes only `<memory>`, `<vector>`, `<cstdint>`, `<mutex>`/`<atomic>` and `gfcAudioClip.h`, and takes the loop mode as a plain `int`; `gfcPlaybackManager.h` (which pulls in glad through `gfcStructures.h`) is included only in `gfcAudioEngine.cpp`, so `AudioOutput_qt.cpp` stays a non-glad TU
 - Modify: `src/gfcPlaybackManager.h`, `src/gfcPlaybackManager.cpp:150-200` (extract the advance rule), `src/gfcMovieSelfTests.cpp`
 
 **Interfaces:**
@@ -578,7 +581,7 @@ check(!n.canLead() && !n.isLeading(), "no device: cannot lead, every call is a s
 
 ```cpp
 gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(dir+"/flashbeep_23976.mov"); seq->myGUI->setCompression(GFC_8BPC);
-trackManager.startLoadingSequence(0); waitUntil([&]{ return seq->audioClip() && seq->audioClip()->endSample()>=2002*48; }, 10000); trackManager.stopLoadingSequence(0);
+sett.maximumFramesInQueue=0; trackManager.startLoadingSequence(0); waitUntil([&]{ return seq->audioClip() && seq->audioClip()->endSample()>=2002*48; }, 10000); trackManager.stopLoadingSequence(0);
 int n,d; playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "movie rate");
 playbackManager.setCurrentFrame(1); playbackManager.startPlayFwd(); check(audioEngine.isLeading(), "forward play leads with audio");
 out.pump(2002*10); playbackManager.update(); check(playbackManager.getCurrentFrame()==11, "picture follows the audio clock");
@@ -588,7 +591,7 @@ playbackManager.setTargetFPS(25.0f); playbackManager.startPlayFwd(); check(!audi
 std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update(); check(playbackManager.getCurrentFrame()>=26, "timer pacing still advances");
 playbackManager.pause(); playbackManager.startPlayRev(); check(!audioEngine.isLeading(), "reverse never leads"); playbackManager.pause();
 // BOUNCE: forward passes have sound, backward passes are silent (fake output, range 1..4 at 24000/1001)
-{ gfcAudioEngine e; gfcFakeAudioOutput o; e.setOutput(&o); /* clip = tone on every frame */ gfcAudioTransport t{1,1,4,LOOPMODEBOUNCE_ID,1}; e.startLeading(t); std::vector<float> cap; o.pump(2002*4,&cap); check(rms(cap)>0.1f, "bounce forward pass is audible"); cap.clear(); o.pump(2002*3,&cap); check(rms(cap)<1e-4f, "bounce backward pass is silent"); cap.clear(); o.pump(2002*2,&cap); check(rms(cap)>0.1f, "bounce sound resumes on the next forward pass"); }
+{ auto tone=std::make_shared<gfcAudioClip>(); /* 1 kHz, amplitude 0.8, stereo, samples [0, 2002*8) via the clip's append API from Task 9 */ gfcAudioEngine e; gfcFakeAudioOutput o; e.setOutput(&o); e.setTrackClip(0, tone, 24000, 1001, 8); e.setPlayerRate(24000,1001); o.open(&e); check(e.canLead(), "bounce fixture can lead"); gfcAudioTransport t{1,1,4,LOOPMODEBOUNCE_ID,1}; e.startLeading(t); std::vector<float> cap; o.pump(2002*4,&cap); check(rms(cap)>0.1f, "bounce forward pass is audible"); cap.clear(); o.pump(2002*3,&cap); check(rms(cap)<1e-4f, "bounce backward pass is silent"); cap.clear(); o.pump(2002*2,&cap); check(rms(cap)>0.1f, "bounce sound resumes on the next forward pass"); }
 audioEngine.setOutput(nullptr); playbackManager.setTargetRate(24000,1001); playbackManager.startPlayFwd(); check(!audioEngine.isLeading(), "no device: pacing leads");
 std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update(); check(playbackManager.getCurrentFrame()>=2, "no device: playback still advances"); playbackManager.pause();
 ```
@@ -597,7 +600,7 @@ std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.upda
 
 - [ ] **Step 3: Implement** `AudioOutput_qt`, the playback-manager hooks, the sequence→engine wiring and bridge init/shutdown.
 
-- [ ] **Step 4: Run** — same command — Expected: `AUDIO-PLAYBACK: pass=13 fail=0`.
+- [ ] **Step 4: Run** — same command — Expected: `AUDIO-PLAYBACK: pass=14 fail=0`.
 
 - [ ] **Step 5: Manual check** — Run: `/Volumes/Archive/jefecheck-builds/video/jefecheck.app/Contents/MacOS/jefecheck --open-file <dir>/flashbeep_23976.mov` — Expected: Space plays with the beep on the white frames; Left/Right click one frame of sound without clicks; scrubbing the timeline chatters without lagging; changing the FPS box to 48 gives half-length clicks; `--open-file <dir>/flashbeep_25.mov` as a second track under the 23.976 player plays slices while track A stays continuous.
 
@@ -618,7 +621,7 @@ std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.upda
 
 ```cpp
 gfcSequence* seq=trackManager.getSequence(1); seq->myGUI->setFilename(dir+"/flashbeep_25.mov"); seq->myGUI->setCompression(GFC_8BPC);
-trackManager.startLoadingSequence(1); waitUntil([&]{ return seq->audioPeaksVersion()>0; }, 10000); trackManager.stopLoadingSequence(1);
+sett.maximumFramesInQueue=0; trackManager.startLoadingSequence(1); waitUntil([&]{ return seq->audioPeaksVersion()>0; }, 10000); trackManager.stopLoadingSequence(1);
 check(jefe::qt::getTrackAudioState(1).hasAudio && !jefe::qt::getTrackAudioState(1).muted, "track with audio, unmuted");
 check(!jefe::qt::getTrackAudioState(2).hasAudio, "empty track has no audio");
 jefe::qt::setTrackMuted(1,true); check(jefe::qt::getTrackAudioState(1).muted && audioEngine.trackMuted(1) && jefe::qt::getTrackTimelineState(1).muted, "mute reaches the engine and the timeline state");
@@ -656,7 +659,7 @@ check(readFile(sess).find("muted=\"1\"")!=std::string::npos, "session stores mut
 
 - [ ] **Step 3: Update the wording** in README, CLA, CLAUDE.md (overview, dependency table: FFmpeg row → "Movie reading (libav*, linked) + export CLI; GPL v2 or later / bundled GPLv3", RakNet row → "GPL v2 or later", remove "**not linked**" from §18–20 pointers and the Image I/O list gains `gfcMovieReader`/`gfcImageLoaderMovie`), THIRD_PARTY_LICENSES, ffmpeg-NOTICE.txt (add the linked libraries), the About text, and `developer_notes.md` **§38 Movie loading and audio** covering: reader/pimpl and the hwaccel seam, N-copies numbering bypass, GPU conversion at upload (+ why the decode filter does not apply to movies), tag precedence frame → codecpar → 709/tv, rational rate and where it is set, audio engine slice model and leading rules, Qt Multimedia buffer/format fallbacks and the miniaudio escape hatch, the self-test flags, and the licensing change.
 
-- [ ] **Step 4: Verify the build still passes and grep** — Run: `cmake --build /Volumes/Archive/jefecheck-builds/video -j8 && grep -rn "not linked\|under GPL v2\b" README.md CLAUDE.md CLA.md src/qt/MainWindow_qt.cpp packaging/ffmpeg-NOTICE.txt; echo grep-exit=$?` — Expected: build OK and `grep-exit=1` (no stale wording).
+- [ ] **Step 4: Verify the build still passes and grep** — Run: `cmake --build /Volumes/Archive/jefecheck-builds/video -j8 && grep -rn "not linked\|GPL v2\.\|License v2\.0" README.md CLAUDE.md CLA.md src/qt/MainWindow_qt.cpp packaging/ffmpeg-NOTICE.txt; echo grep-exit=$?` — Expected: build OK and `grep-exit=1` (no stale wording).
 
 - [ ] **Step 5: Commit** — `git add -A LICENSE README.md CLA.md CLAUDE.md THIRD_PARTY_LICENSES packaging/ffmpeg-NOTICE.txt developer_notes.md scripts/add_spdx_headers.sh src && git commit -m "docs: relicense to GPL v2 or later; document movie loading, audio and FFmpeg linking"`
 
