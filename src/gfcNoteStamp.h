@@ -57,6 +57,14 @@ namespace gfcNoteStamp
 	bool stamp(const std::string& inExr, const std::string& outExr,
 	           const gfcReview& review, const Options& opt, std::string* err);
 
+	/**
+	 * As stamp(), for pixels that are not in an EXR (a decoded movie frame):
+	 * `rgb` is width*height*3 floats, top row first. Writes a half-float RGB
+	 * EXR plus the same header attribute and notes layer stamp() writes.
+	 */
+	bool stampPixels(int width, int height, const float* rgb, const std::string& outExr,
+	                 const gfcReview& review, const Options& opt, std::string* err);
+
 	/** Reads jefecheck:notes back out of an EXR. Empty when absent. */
 	std::string readEmbeddedJson(const std::string& exrPath);
 

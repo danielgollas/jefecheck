@@ -1,5 +1,6 @@
 #include "gfcMediaFingerprint.h"
 #include "gfcMediaKinds.h"
+#include "gfcMovieReader.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -29,6 +30,44 @@ namespace
 			bytes[7 - i] = static_cast<unsigned char>(static_cast<uint64_t>(v) >> (8 * i));
 		}
 		sha.update(bytes, 8);
+	}
+
+	// Container bytes of a movie: head, middle and tail windows. Hashing the file
+	// (not decoded pixels) keeps the value identical across platforms and FFmpeg
+	// versions.
+	bool hashMovieBytes(gfcSha1& sha, const std::string& path, std::string* err)
+	{
+		namespace fs = std::filesystem;
+		std::error_code ec;
+		const uint64_t size = fs::file_size(path, ec);
+		std::FILE* f = ec ? nullptr : std::fopen(path.c_str(), "rb");
+		if (!f)
+		{
+			setErr(err, "cannot open " + path);
+			return false;
+		}
+		putInt(sha, static_cast<int64_t>(size));
+		const uint64_t head = 64 * 1024, half = 32 * 1024;
+		const uint64_t mid = size / 2;
+		const uint64_t windows[3][2] = {
+			{0, std::min(head, size)},
+			{mid > half ? mid - half : 0, std::min(mid + half, size)},
+			{size > head ? size - head : 0, size}};
+		std::vector<unsigned char> buf;
+		for (const auto& w : windows)
+		{
+			buf.resize(static_cast<size_t>(w[1] - w[0]));
+			if (!buf.empty() &&
+				(fseeko(f, static_cast<off_t>(w[0]), SEEK_SET) != 0 || std::fread(buf.data(), 1, buf.size(), f) != buf.size()))
+			{
+				std::fclose(f);
+				setErr(err, "cannot read " + path);
+				return false;
+			}
+			sha.update(buf.data(), buf.size());
+		}
+		std::fclose(f);
+		return true;
 	}
 
 	// Every 16th row and column of channels 0..2, as native float bytes (all
@@ -65,6 +104,21 @@ namespace
 
 bool gfcMediaFingerprint::probe(const std::string& framePath, Probe& out, std::string* err)
 {
+	if (gfcIsMovieFile(framePath))
+	{
+		gfcMovieInfo info;
+		std::string merr;
+		if (!gfcMovieReader::probe(framePath, info, &merr))
+		{
+			setErr(err, "cannot open " + framePath + (merr.empty() ? "" : ": " + merr));
+			return false;
+		}
+		out.width = info.width;
+		out.height = info.height;
+		out.channels = {"R", "G", "B"};
+		if (info.hasAlpha) out.channels.push_back("A");
+		return true;
+	}
 	auto in = OIIO::ImageInput::open(framePath);
 	if (!in)
 	{
@@ -98,8 +152,14 @@ std::string gfcMediaFingerprint::compute(const std::vector<std::string>& framePa
 		sha.update(name);
 		putInt(sha, 0);   // separator: names cannot run together
 	}
-	const size_t n = framePaths.size();
+	const bool movie = gfcIsMovieFile(framePaths.front());
+	const size_t n = movie ? 1 : framePaths.size();   // a movie is one file however many frames it has
 	putInt(sha, static_cast<int64_t>(n));
+	if (movie)
+	{
+		if (!hashMovieBytes(sha, framePaths.front(), err)) return {};
+		return "fp1:" + sha.hexDigest();
+	}
 
 	std::vector<size_t> samples = {0, n / 2, n - 1};
 	samples.erase(std::unique(samples.begin(), samples.end()), samples.end());

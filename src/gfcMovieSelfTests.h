@@ -9,3 +9,5 @@ int movieReaderSelfTest(const std::string& mediaDir);
 int movieNumberingSelfTest(const std::string& mediaDir);
 int movieLoaderSelfTest(const std::string& mediaDir);
 int movieRateSelfTest(const std::string& mediaDir);
+int movieFingerprintSelfTest(const std::string& mediaDir);
+int movieStampSelfTest(const std::string& mediaDir);

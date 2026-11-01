@@ -3493,7 +3493,33 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
     }
     result.noteCount = (int)notes.size();
 
-    if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
+    // A movie frame is decoded here (the same picture the plate shows, at the
+    // track's bit depth) and stamped from pixels instead of read from an EXR.
+    const bool movie = seq->isMovie();
+    std::vector<float> movieRgb;
+    if (movie) {
+        const int64_t index = int64_t(frame) - 1 - int64_t(seq->frameOffset);
+        gfcMovieReader reader;
+        std::string merr;
+        gfcMovieFrame decoded;
+        std::vector<uint8_t> bgra;
+        if (!reader.open(result.sourcePath, &merr) || !reader.readFrame(index, decoded, &merr) ||
+            !reader.convertToBGRA(decoded, 16, decoded.width, decoded.height, bgra, &merr)) {
+            return fail("cannot decode frame " + std::to_string(frame) + " of " + result.sourcePath +
+                        (merr.empty() ? "" : ": " + merr));
+        }
+        result.width = decoded.width;
+        result.height = decoded.height;
+        const size_t px = size_t(result.width) * size_t(result.height);
+        if (bgra.size() < px * 8) return fail("cannot decode frame " + std::to_string(frame));
+        movieRgb.resize(px * 3);
+        const uint16_t* src16 = reinterpret_cast<const uint16_t*>(bgra.data());
+        for (size_t p = 0; p < px; ++p) {
+            movieRgb[p * 3 + 0] = src16[p * 4 + 2] / 65535.0f;   // BGRA -> RGB
+            movieRgb[p * 3 + 1] = src16[p * 4 + 1] / 65535.0f;
+            movieRgb[p * 3 + 2] = src16[p * 4 + 0] / 65535.0f;
+        }
+    } else if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
         return fail("cannot read " + result.sourcePath);
     }
 
@@ -3516,7 +3542,10 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
         }
     }
 
-    if (!gfcNoteStamp::stamp(result.sourcePath, outExr, *review, opt, &err)) {
+    const bool stamped = movie
+        ? gfcNoteStamp::stampPixels(result.width, result.height, movieRgb.data(), outExr, *review, opt, &err)
+        : gfcNoteStamp::stamp(result.sourcePath, outExr, *review, opt, &err);
+    if (!stamped) {
         return fail(err);
     }
     return true;

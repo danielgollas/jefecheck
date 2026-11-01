@@ -20,6 +20,9 @@
 #include "gfctrackmanager.h"
 #include "gfcSequence.h"
 #include "gfcsequencegui.h"
+#include "gfcNoteStamp.h"
+#include "gfcreview.h"
+#include "qt/ReviewPackage_qt.h"
 
 extern gfcPlaybackManager playbackManager;
 extern gfcTrackManager trackManager;
@@ -163,5 +166,55 @@ int movieRateSelfTest(const std::string& dir) {
     playbackManager.setTargetFPS(24.0f); seq->setOffset(0);
     sett.maximumFramesInQueue = savedQueue;
     std::printf("MOVIE-RATE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int movieFingerprintSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto readFile = [](const std::string& path) { std::ifstream in(path); std::stringstream ss; ss << in.rdbuf(); return ss.str(); };
+    namespace fs = std::filesystem;
+    const int savedQueue = sett.maximumFramesInQueue; sett.maximumFramesInQueue = 100000;
+    std::string err; gfcMediaFingerprint::Probe p;
+    check(gfcMediaFingerprint::probe(dir+"/h264_25.mp4", p, &err) && p.width==320 && p.height==180 && p.channels==std::vector<std::string>{"R","G","B"}, "movie probe");
+    const std::string fa=gfcMediaFingerprint::compute({dir+"/a_001.mov"}, &err), fb=gfcMediaFingerprint::compute({dir+"/a_002.mov"}, &err), fh=gfcMediaFingerprint::compute({dir+"/h264_25.mp4"}, &err);
+    check(fa.rfind("fp1:",0)==0 && fa.size()==44 && fa==fb && fa!=fh, "same bytes same fp1; different movie differs");
+    err.clear();
+    check(gfcMediaFingerprint::compute({dir+"/empty.mov"}, &err).empty() && !err.empty(), "empty movie errors");
+
+    // Package round trip: shot_v003.mov on track A, exported with media, opened.
+    const std::string movie=dir+"/shot_v003.mov";
+    gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(movie); seq->myGUI->setCompression(GFC_8BPC);
+    trackManager.startLoadingSequence(0); trackManager.stopLoadingSequence(0);
+    const std::string sess=dir+"/pkg.jcs"; jefe::qt::saveSession(sess);
+    gfcReview review; review.mediaPath=movie;
+    jefe::qt::package::ExportInput in;
+    in.outPath=dir+"/movie.jcreview"; in.includeMedia=true; in.sessionXml=readFile(sess); in.appVersion="test"; in.createdIso="2026-10-31T00:00:00Z";
+    jefe::qt::package::ExportMedia em; em.mediaPath=movie; em.frames={movie}; em.notesXml=gfcNoteStore::toXmlString(review); em.fingerprint=gfcMediaFingerprint::compute(em.frames,&err); em.width=p.width; em.height=p.height;
+    in.media.push_back(em);
+    QString qerr; jefe::qt::package::Exporter ex; bool exported=ex.begin(in,&qerr);
+    if (exported) { jefe::qt::package::Exporter::State st; while ((st=ex.step(&qerr))==jefe::qt::package::Exporter::State::Running) {} exported=(st==jefe::qt::package::Exporter::State::Done); }
+    jefe::qt::package::OpenServices svc; svc.interactive=false; jefe::qt::package::OpenResult res;
+    const bool opened=exported && jefe::qt::package::openPackage(in.outPath, dir+"/pkgcache", svc, res, &qerr);
+    if (!opened) std::printf("  package: %s\n", qerr.toStdString().c_str());
+    check(opened && res.manifest.media.size()==1 && res.manifest.media[0].frames.size()==1 && res.manifest.media[0].frames[0]=="shot_v003.mov", "package lists the movie once");
+    check(opened && fs::exists(res.extractDir+"/media/000/shot_v003.mov") && readFile(res.sessionPath).find("media/000/shot_v003.mov")!=std::string::npos, "the movie file is copied and relinked");
+    sett.maximumFramesInQueue = savedQueue;
+    std::printf("MOVIE-FINGERPRINT: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int movieStampSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    std::string err;
+    std::vector<float> rgb(320*180*3, 0.25f); gfcReview review; gfcNoteStamp::Options opt;
+    check(gfcNoteStamp::stampPixels(320,180,rgb.data(), dir+"/stamp.exr", review, opt, &err), "stampPixels writes");
+    int w=0,h=0; check(gfcNoteStamp::imageSize(dir+"/stamp.exr",&w,&h) && w==320 && h==180, "stamped EXR has the frame size");
+    std::printf("MOVIE-STAMP: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
