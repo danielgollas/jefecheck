@@ -57,6 +57,7 @@
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
 #include "qt/SequenceLoadBridge_qt.h"
+#include "qt/AudioOutput_qt.h"
 #include "qt/ReviewSummaryPdf_qt.h"
 #include "qt/ReviewPackage_qt.h"
 #include "qt/MovieTestMedia_qt.h"
@@ -724,6 +725,8 @@ int main(int argc, char* argv[]) {
         allZero &= (audioEngineSelfTest(mediaDir) == 0);
         allZero &= (audioSyncSelfTest(mediaDir) == 0);
         allZero &= (audioWalkSelfTest(mediaDir) == 0);
+        allZero &= (audioPlaybackSelfTest(mediaDir) == 0);
+        allZero &= (jefe::qt::audio::deviceSelfTest() == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("VIDEO-LOAD-TEST media: %s\n", mediaDir.c_str());

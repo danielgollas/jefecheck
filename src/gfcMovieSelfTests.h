@@ -17,3 +17,4 @@ int playbackAdvanceSelfTest(const std::string& mediaDir);
 int audioEngineSelfTest(const std::string& mediaDir);
 int audioSyncSelfTest(const std::string& mediaDir);
 int audioWalkSelfTest(const std::string& mediaDir);
+int audioPlaybackSelfTest(const std::string& mediaDir);

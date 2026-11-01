@@ -9,6 +9,7 @@
 #include "gfcSequence.h"
 #include "gfcMediaKinds.h"
 #include "gfcMovieReader.h"
+#include "gfcAudioEngine.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <string.h>
@@ -1437,6 +1438,7 @@ int gfcSequence::clearSequence() {
 	maxFramesToLoad=0;
 	openMovieReaderFor("");
 	resetAudio(0, false);
+	if (gfcAudioEngineAlive()) audioEngine.clearTrack(trackID-'A');   // skipped during static teardown
 
 	rangeBegin=rangeEnd=0;
 	//
@@ -1678,6 +1680,7 @@ char * gfcSequence::getFilenameatFrame ( int frameNo ) {
 
 void gfcSequence::setOffset(int offset) {
 	frameOffset=offset;
+	audioEngine.setTrackOffset(trackID-'A', offset);   // sound shifts with the picture
 	myGUI->setOffset(offset);
 	networkManager.notifyEvent(GFCNETEVENT_OTHER);
 	plateManager.setChanged();
@@ -1737,6 +1740,19 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 	stopLoading();
 
 	initializeSequence ( pparams );
+
+	// This load's sound (a fresh clip, filled by the loader thread) replaces the
+	// track's in the mixer; a sequence or a silent movie clears it. Frame entry i
+	// is movie frame i, so the engine's frame count is the entry count.
+	{
+		const std::shared_ptr<gfcAudioClip> clip=audioClip();
+		const gfcMovieInfo* info=movieInfo();
+		if (clip && info && info->rateNum>0 && info->rateDen>0)
+			audioEngine.setTrackClip(trackID-'A', clip, info->rateNum, info->rateDen, int64_t(files.size()));
+		else
+			audioEngine.clearTrack(trackID-'A');
+		audioEngine.setTrackOffset(trackID-'A', frameOffset);
+	}
 
 	// A fresh load of a movie sets the player's rate to the movie's exact
 	// rational (most recent wins). Reloads from a timeline point keep the user's rate.

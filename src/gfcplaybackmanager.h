@@ -51,7 +51,8 @@ public:
     /// One playback step from `cur` under loop `mode` (LOOPMODEONCE_ID/LOOPMODELOOP_ID/LOOPMODEBOUNCE_ID); BOUNCE flips `direction` at a limit.
     static int advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit);
     void setPlaybackMode(int mode);
-    void setCurrentFrame(int frame);
+    /// `audible`: when paused, plays this frame's slice of sound (a seek); false for renders.
+    void setCurrentFrame(int frame, bool audible=true);
     void setDirection(int direction);
     void setToFrame(int frame);
     void setFromFrame(int frame);
@@ -89,6 +90,14 @@ public:
 private: //private made public while debugging
 
     inline void updateTimestep();
+    // Movie sound (audioEngine): the engine's clock leads native-rate forward
+    // play; otherwise FPS pacing leads and each forward frame plays its slice.
+    void audioSyncTransport();      // player rate + limits/mode, sent when they change
+    bool audioTryLead();            // starts leading at currentFrame when the engine can
+    void audioStop();               // stops leading and slices
+    void audioSeek();               // currentFrame moved by the user
+    void recordAdvanceForFPS(int frames);   // measured-FPS readout
+    int audioSentStart=-1, audioSentEnd=-1, audioSentMode=-1, audioSentDir=0;
 	gfcTimer timer;
     bool allowNetworkMessages;
     void sendPlayPauseMessage();

@@ -729,6 +729,19 @@ New `.cpp` files are picked up by CMake's `file(GLOB src/qt/*.cpp)` — re-run `
 
 **Flags:** `--export-package <out> [--no-media]`, `--open-package <file>` (keeps running), `--package-test <image>`, `--relink-test <image>`, `--package-dialog-test <image>`. `--notes-test` runs the pure suites: NOTE-MODEL, NOTE-STORE, NOTE-OVERLAY, NOTE-STAMP, NOTE-SUMMARY, NOTE-SUMMARY-PDF, NOTE-SHA1, NOTE-TAR, NOTE-FINGERPRINT, NOTE-SESSIONPATHS, NOTE-MERGE, NOTE-PACKAGE, NOTE-PACKAGE-OPEN. Give every GL test a fresh `--config-dir` (it also isolates the package cache).
 
+## 38. Movie loading and audio
+
+*(Started by the audio-output work; the full section — reader, colour, numbering, rate, licensing — lands with the licensing/docs pass.)*
+
+**Audio output (`src/qt/AudioOutput_qt.cpp`, the only Qt Multimedia TU).** `QAudioSink` in pull mode (`start(QIODevice*)`, the Qt 6.4 API, not the 6.11 callback API) on the default device, fed by `audioEngine.renderFor(this, …)`.
+- **Format fallback (decision):** 48000 Hz / 2 ch / `Float`; else 48000 / 2 / `Int16` (converted in `readData`); else the device's `preferredFormat()` — its rate through a linear resampler from the engine's 48 kHz, its channel count through a stereo map (mono = (L+R)/2, extra channels silent), its sample type converted.
+- **Buffer:** 40 ms (`setBufferSize(rate*0.04*bytesPerFrame)`, 15360 bytes for 48 kHz stereo float). Measured on an M3 MacBook Air (built-in speakers): step-slice latency to "device processed" 38–44 ms, so Qt Multimedia stays; the escape hatch, if a platform exceeds 60 ms, is a miniaudio-backed `gfcAudioOutput` behind the same `AudioOutput_qt.h`.
+- **Threading:** the sink, the pull `QIODevice` and a 2 ms clock-poll timer live on a dedicated `jefe-audio` `QThread`, so GUI stalls do not starve the device and opening never blocks the GUI (`open()` returns at once; `isOpen()` turns true when the sink has started). `playedSamples()` (from `processedUSecs()`) and `isOpen()` read atomics only, because the engine calls `playedSamples()` under its mutex.
+- **Device changes:** `QMediaDevices::audioOutputsChanged` (on the GUI thread, handled on the audio thread) follows the default device; samples the old sink held count as played so the engine's clock stays aligned. With no device the output stays closed, `canLead()` is false and playback keeps FPS pacing (§13).
+- **Lifetime:** `initializeRenderingChain()` creates and installs it; `beginBridgeShutdown()` (aboutToQuit) and an `atexit` hook (headless paths that `exit()`) stop the thread before globals tear down. `gfcSequence`'s destructor skips `audioEngine` once `gfcAudioEngineAlive()` is false.
+
+**Playback integration (`gfcplaybackmanager.cpp`).** Forward play asks the engine to lead (`audioTryLead`); while it leads, `update()` shows `leaderFrame()` and keeps the engine's loop limits current (they move while tracks load). It falls back to FPS pacing when the engine can no longer lead (rate changed, all native tracks muted, device lost) and re-acquires on the next forward frame. In pacing mode every forward frame plays its slice; pause/reverse stop sound; a paused seek/step/scrub plays one slice; a seek while leading restarts the walk at the new frame. Renders (`gfcPlateManager::renderPlate`) seek with `setCurrentFrame(i, false)` so they stay silent. Self-tests: AUDIO-PLAYBACK (fake device), AUDIO-DEVICE (real default device, quiet tone; skipped without one).
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.

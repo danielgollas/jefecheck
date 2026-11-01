@@ -524,3 +524,45 @@ int audioWalkSelfTest(const std::string&) {
     std::printf("AUDIO-WALK: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
+
+// The real playback manager with the app's engine on a fake device: the audio
+// clock leads native-rate forward play, pacing leads otherwise (off-rate,
+// reverse, no device), and a seek plays exactly one slice.
+int audioPlaybackSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto waitUntil = [](auto pred, int ms) {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (!pred() && std::chrono::steady_clock::now() < until) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        return pred();
+    };
+    auto nonZero = [&](const std::vector<float>& v) { int64_t n = 0; for (size_t i = 0; i < v.size(); i += 2) if (std::fabs(v[i]) > 1e-6f) n = int64_t(i/2) + 1; return n; };
+    auto rms = [](const std::vector<float>& v) { double e = 0; for (float x : v) e += double(x)*x; return v.empty() ? 0.f : float(std::sqrt(e / double(v.size()))); };
+
+    gfcFakeAudioOutput out; audioEngine.setOutput(&out); out.open(&audioEngine);
+    gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(dir+"/flashbeep_23976.mov"); seq->myGUI->setCompression(GFC_8BPC); seq->loadPreview();
+    const int savedQueueCap=sett.maximumFramesInQueue; sett.maximumFramesInQueue=100000; trackManager.startLoadingSequence(0);
+    // Upload frames as the GUI tick does, so the loaded range (the loop limits) covers frames 1..40+.
+    waitUntil([&]{ trackManager.generateTextures(); return seq->audioClip() && seq->audioClip()->endSample()>=2002*48 && seq->getRangeEnd()>=40; }, 10000); trackManager.stopLoadingSequence(0); sett.maximumFramesInQueue=savedQueueCap;
+    int n,d; playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "movie rate");
+    playbackManager.setCurrentFrame(1); playbackManager.startPlayFwd(); check(audioEngine.isLeading(), "forward play leads with audio");
+    out.pump(2002*10); playbackManager.update(); check(playbackManager.getCurrentFrame()==11, "picture follows the audio clock");
+    playbackManager.pause(); check(!audioEngine.isLeading(), "pause stops leading");
+    std::vector<float> cap; playbackManager.setCurrentFrame(25); out.pump(3000,&cap); check(nonZero(cap)==2002, "seek plays one slice");
+    playbackManager.setTargetFPS(25.0f); playbackManager.startPlayFwd(); check(!audioEngine.isLeading(), "off-rate: FPS pacing leads");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update(); check(playbackManager.getCurrentFrame()>=26, "timer pacing still advances");
+    playbackManager.pause(); playbackManager.startPlayRev(); check(!audioEngine.isLeading(), "reverse never leads"); playbackManager.pause();
+    // BOUNCE: forward passes have sound, backward passes are silent (fake output, range 1..4 at 24000/1001)
+    { auto tone=std::make_shared<gfcAudioClip>(); tone->reset(0);
+      { std::vector<float> s(size_t(2002*8)*2); for (int i=0;i<2002*8;++i) s[size_t(2*i)]=s[size_t(2*i+1)]=0.8f*float(std::sin(2.0*M_PI*1000.0*i/48000.0)); tone->append(s.data(), 2002*8); }
+      gfcAudioEngine e; gfcFakeAudioOutput o; e.setOutput(&o); e.setTrackClip(0, tone, 24000, 1001, 8); e.setPlayerRate(24000,1001); o.open(&e); check(e.canLead(), "bounce fixture can lead");
+      gfcAudioTransport t{1,1,4,LOOPMODEBOUNCE_ID,1}; e.startLeading(t); std::vector<float> c; o.pump(2002*4,&c); check(rms(c)>0.1f, "bounce forward pass is audible");
+      c.clear(); o.pump(2002*3,&c); check(rms(c)<1e-4f, "bounce backward pass is silent");
+      c.clear(); o.pump(2002*2,&c); check(rms(c)>0.1f, "bounce sound resumes on the next forward pass"); }
+    audioEngine.setOutput(nullptr); playbackManager.setTargetRate(24000,1001); playbackManager.startPlayFwd(); check(!audioEngine.isLeading(), "no device: pacing leads");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update(); check(playbackManager.getCurrentFrame()>=2, "no device: playback still advances"); playbackManager.pause();
+    std::printf("AUDIO-PLAYBACK: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}

@@ -99,6 +99,10 @@ public:
     // Called by the output: mixes `frames` stereo frames (sum, clamp [-1,1]).
     // Never allocates.
     void render(float* interleaved, int frames);
+    // render() for a device that may have been replaced: mixes only while `out`
+    // is the engine's output (setOutput), otherwise writes silence and returns
+    // false, so a replaced device never advances the engine's walk.
+    bool renderFor(const gfcAudioOutput* out, float* interleaved, int frames);
 
     // Self-test view of the leading log, oldest first (allocates; GUI side).
     std::vector<gfcAudioLogEntry> renderLogSnapshot() const;
@@ -132,6 +136,7 @@ private:
     void startSlices(int frame);
     void beginLeadFrame(int frame);
     void mixVoice(Voice& v, float* out, int frames);
+    void renderLocked(float* interleaved, int frames);   // m_ held, buffer zeroed
 
     mutable std::mutex m_;
     gfcAudioOutput* out_ = nullptr;
@@ -150,6 +155,12 @@ private:
 
     std::vector<float> scratch_;             // kScratchFrames stereo frames
 };
+
+// The app's one engine (defined in gfcAudioEngine.cpp). gfcAudioEngineAlive()
+// is false before it is constructed and after it is destroyed, so code that
+// runs during static teardown (gfcSequence's destructor) can skip it.
+extern gfcAudioEngine audioEngine;
+bool gfcAudioEngineAlive();
 
 // Device-free output for the self-tests: pump() pulls `frames` from the engine.
 class gfcFakeAudioOutput : public gfcAudioOutput {

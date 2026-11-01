@@ -33,6 +33,8 @@
 #include "../ui/IApplication.h"
 #include "gfcplategui_qt.h"
 #include "gfcsequencegui_qt.h"
+#include "AudioOutput_qt.h"
+#include "../gfcAudioEngine.h"
 
 #include <algorithm>
 #include <atomic>
@@ -93,8 +95,21 @@ bool cloudConnectInFlight() {
     return gCloudConnectInFlight.load(std::memory_order_acquire);
 }
 
+// The app's audio device (Qt Multimedia lives in AudioOutput_qt.cpp).
+static gfcAudioOutput* gAudioOutput = nullptr;
+
+// Stops the audio thread before globals tear down (it renders from
+// audioEngine, and must not run while the process unmaps on exit).
+static void shutdownAudioOutput() {
+    if (!gAudioOutput) return;
+    audioEngine.setOutput(nullptr);
+    jefe::qt::audio::destroyOutput(gAudioOutput);
+    gAudioOutput = nullptr;
+}
+
 void beginBridgeShutdown() {
     gBridgeShuttingDown.store(true, std::memory_order_release);
+    shutdownAudioOutput();
 }
 
 int getDefaultTextureFormat() {
@@ -149,6 +164,19 @@ void initializeRenderingChain() {
     pickManager.registerDrawee(&plateManager);
     pickManager.registerNotifee(&plateManager);
     plateManager.registerPlatesAsPickNotifees();
+
+    // Movie sound. Opening is asynchronous (the sink starts on its own
+    // thread); until it does, or with no device at all, the engine cannot
+    // lead and playback keeps FPS pacing.
+    if (!gAudioOutput) {
+        gAudioOutput = jefe::qt::audio::createOutput();
+        audioEngine.setOutput(gAudioOutput);
+        if (!gAudioOutput->open(&audioEngine))
+            std::printf("Audio: no output device; movies play silently\n");
+        // Paths that std::exit() without aboutToQuit (headless tests) still stop
+        // the thread first; registered after the globals, so it runs before them.
+        std::atexit(shutdownAudioOutput);
+    }
 }
 
 namespace {

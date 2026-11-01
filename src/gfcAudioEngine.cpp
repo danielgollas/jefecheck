@@ -8,7 +8,16 @@
 #include "UIConstants.h"
 #include "gfcplaybackmanager.h"   // advanceFrame (pulls in glad: keep it out of the header)
 
+gfcAudioEngine audioEngine;
+
 namespace {
+// Constructed after audioEngine and destroyed before it (same TU, reverse order).
+bool gEngineAlive = false;
+struct EngineAliveSentinel {
+    EngineAliveSentinel() { gEngineAlive = true; }
+    ~EngineAliveSentinel() { gEngineAlive = false; }
+} gEngineAliveSentinel;
+
 inline int64_t fss(int64_t index, int num, int den) { return gfcAudioClip::frameStartSample(index, num, den); }
 }
 
@@ -294,10 +303,25 @@ void gfcAudioEngine::mixVoice(Voice& v, float* out, int frames) {
     if (v.played >= v.playLen) v.active = false;
 }
 
+bool gfcAudioEngineAlive() { return gEngineAlive; }
+
+bool gfcAudioEngine::renderFor(const gfcAudioOutput* out, float* interleaved, int frames) {
+    if (!interleaved || frames <= 0) return false;
+    std::memset(interleaved, 0, size_t(frames) * kChannels * sizeof(float));
+    std::lock_guard<std::mutex> lock(m_);
+    if (out != out_) return false;
+    renderLocked(interleaved, frames);
+    return true;
+}
+
 void gfcAudioEngine::render(float* interleaved, int frames) {
     if (!interleaved || frames <= 0) return;
     std::memset(interleaved, 0, size_t(frames) * kChannels * sizeof(float));
     std::lock_guard<std::mutex> lock(m_);
+    renderLocked(interleaved, frames);
+}
+
+void gfcAudioEngine::renderLocked(float* interleaved, int frames) {
 
     if (hasPending_ && !leading_) { hasPending_ = false; startSlices(pendingFrame_); }
     if (leading_ && leadStartPending_) { leadStartPending_ = false; beginLeadFrame(leadFrame_); }

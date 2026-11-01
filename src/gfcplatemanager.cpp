@@ -1630,7 +1630,7 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
     for ( int i=params.from; i<=params.to;i++ ) {
 
         ptrToPlate->forRender=true;
-        playbackManager.setCurrentFrame(i);
+        playbackManager.setCurrentFrame(i, /*audible=*/false);
         params.frame=i;
         params.filename=CreateRenderFilename ( params );
 

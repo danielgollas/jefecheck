@@ -20,6 +20,8 @@ namespace jefe::qt {
 // Wires up gfcPlateGUI_Qt and gfcSequenceGUI_Qt instances on every
 // plate / sequence and constructs the gfcPlateManagerGUI_Qt. Safe to
 // call once at app startup; calling again would leak the previous GUIs.
+// Also creates the audio output (jefe::qt::audio) and installs it on
+// audioEngine; it opens asynchronously on its own thread.
 void initializeRenderingChain();
 
 // Default texture format (bit depth) used by the Qt drag-drop / Cmd+O
@@ -457,6 +459,8 @@ bool cloudConnectInFlight();
 
 // Latches an app-shutdown flag (wire to QCoreApplication::aboutToQuit) so a
 // detached cloud-connect worker won't touch networkManager as globals tear down.
+// Also closes and destroys the audio output, so its thread stops rendering
+// from audioEngine before static teardown.
 void beginBridgeShutdown();
 
 void disconnectRemote();
