@@ -184,6 +184,10 @@ int movieFingerprintSelfTest(const std::string& dir) {
     err.clear();
     check(gfcMediaFingerprint::compute({dir+"/empty.mov"}, &err).empty() && !err.empty(), "empty movie errors");
 
+    { const std::uint64_t G=1ull<<30, size=5*G; std::uint64_t w[3][2]; gfcMediaFingerprint::movieHashWindows(size, w);
+      check(w[0][0]==0 && w[0][1]==65536 && w[1][0]==size/2-32768 && w[1][1]==size/2+32768 && w[2][0]==size-65536 && w[2][1]==size && w[1][0]>(1ull<<31) && w[2][0]>(1ull<<31), "hash windows of a 5 GiB file are exact and above 2^31");
+      gfcMediaFingerprint::movieHashWindows(100, w); check(w[0][1]==100 && w[1][0]==0 && w[1][1]==100 && w[2][0]==0 && w[2][1]==100, "hash windows clamp for a tiny file"); }
+
     // Package round trip: shot_v003.mov on track A, exported with media, opened.
     const std::string movie=dir+"/shot_v003.mov";
     gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(movie); seq->myGUI->setCompression(GFC_8BPC);

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <system_error>
 
@@ -34,39 +35,37 @@ namespace
 
 	// Container bytes of a movie: head, middle and tail windows. Hashing the file
 	// (not decoded pixels) keeps the value identical across platforms and FFmpeg
-	// versions.
+	// versions. Offsets are 64-bit throughout (ifstream/streamoff), never off_t.
 	bool hashMovieBytes(gfcSha1& sha, const std::string& path, std::string* err)
 	{
 		namespace fs = std::filesystem;
 		std::error_code ec;
-		const uint64_t size = fs::file_size(path, ec);
-		std::FILE* f = ec ? nullptr : std::fopen(path.c_str(), "rb");
-		if (!f)
+		const std::uintmax_t size = fs::file_size(path, ec);
+		std::ifstream f(path, std::ios::binary);
+		if (ec || !f)
 		{
 			setErr(err, "cannot open " + path);
 			return false;
 		}
 		putInt(sha, static_cast<int64_t>(size));
-		const uint64_t head = 64 * 1024, half = 32 * 1024;
-		const uint64_t mid = size / 2;
-		const uint64_t windows[3][2] = {
-			{0, std::min(head, size)},
-			{mid > half ? mid - half : 0, std::min(mid + half, size)},
-			{size > head ? size - head : 0, size}};
+		std::uint64_t windows[3][2];
+		gfcMediaFingerprint::movieHashWindows(size, windows);
 		std::vector<unsigned char> buf;
 		for (const auto& w : windows)
 		{
 			buf.resize(static_cast<size_t>(w[1] - w[0]));
-			if (!buf.empty() &&
-				(fseeko(f, static_cast<off_t>(w[0]), SEEK_SET) != 0 || std::fread(buf.data(), 1, buf.size(), f) != buf.size()))
+			if (!buf.empty())
 			{
-				std::fclose(f);
-				setErr(err, "cannot read " + path);
-				return false;
+				f.seekg(static_cast<std::streamoff>(w[0]), std::ios::beg);
+				f.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(buf.size()));
+				if (!f || static_cast<size_t>(f.gcount()) != buf.size())
+				{
+					setErr(err, "cannot read " + path);
+					return false;
+				}
 			}
 			sha.update(buf.data(), buf.size());
 		}
-		std::fclose(f);
 		return true;
 	}
 
@@ -100,6 +99,14 @@ namespace
 		}
 		return true;
 	}
+}
+
+void gfcMediaFingerprint::movieHashWindows(std::uint64_t size, std::uint64_t out[3][2])
+{
+	const std::uint64_t head = 64 * 1024, half = 32 * 1024, mid = size / 2;
+	out[0][0] = 0;                              out[0][1] = std::min(head, size);
+	out[1][0] = mid > half ? mid - half : 0;    out[1][1] = std::min(mid + half, size);
+	out[2][0] = size > head ? size - head : 0;  out[2][1] = size;
 }
 
 bool gfcMediaFingerprint::probe(const std::string& framePath, Probe& out, std::string* err)
