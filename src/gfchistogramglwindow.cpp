@@ -10,7 +10,7 @@ int gfcHistogramGLWindow::drawContent()
 		
 	currentHistogram->drawForPicking=this->drawForPicking;
 	currentHistogram->draw(caching);
-	
+	return 1;
 }
 
 int gfcHistogramGLWindow::draw(gfcHistogram *theHist, int pcaching)

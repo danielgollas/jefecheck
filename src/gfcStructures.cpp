@@ -474,6 +474,7 @@ std::string GetExtension ( const std::string& filename ) {
 		// if(filename.size()>filename.substr(filename.rfind("\\")).size())
 #endif
         return filename.substr ( filename.rfind ( "." ) +1 );
+    return std::string();
 }
 
 std::string GetFilenameNoFilePrefix ( const std::string& filename ) {

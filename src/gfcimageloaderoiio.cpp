@@ -350,6 +350,7 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
                                 srcSpec.nchannels, srcSpec.format);
         OIIO::ImageBuf dst(dstSpec);
 
+#if OIIO_VERSION_MAJOR >= 3
         // OIIO 3.x KWArgs form — pass the filter name as a string.
         bool ok = OIIO::ImageBufAlgo::resize(
             dst, src, {{ "filtername", filterName }});
@@ -358,6 +359,13 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
             ok = OIIO::ImageBufAlgo::resize(
                 dst, src, {{ "filtername", "box" }});
         }
+#else
+        // OIIO 2.x (Ubuntu 24.04 ships 2.4) has no KWArgs overload; the
+        // filter name is a positional string_view.
+        bool ok = OIIO::ImageBufAlgo::resize(dst, src, filterName);
+        if (!ok)
+            ok = OIIO::ImageBufAlgo::resize(dst, src, "box");
+#endif
 
         if (ok) {
             // Copy resized pixels back into a freshly-allocated GFL buffer.

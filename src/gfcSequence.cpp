@@ -849,6 +849,7 @@ int gfcSequence::generateTextures ( int howMany ) {
 
 
 
+	return 0;
 }
 
 void gfcSequence::prepareSequenceFiles()
@@ -1576,6 +1577,7 @@ gfcFrame gfcSequence::getFrame ( int frameNo,bool pforceLoad ) {
 
 			}
 	}
+	return emptyFrame;
 }
 
 
@@ -1683,6 +1685,8 @@ char * gfcSequence::getFilenameatFrame ( int frameNo ) {
 		}
 
 	}
+	tmp[0] = '\0';
+	return tmp;
 }
 
 void gfcSequence::setOffset(int offset) {
