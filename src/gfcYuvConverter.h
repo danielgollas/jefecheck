@@ -24,6 +24,11 @@ GLuint gfcYuvConvertToTexture(const gfcGLFrameInfo& info, int srcX, int srcY, in
 // filmstrip thumbnails and as the upload fallback. rgba is resized.
 bool gfcYuvConvertToRGBA8(const gfcGLFrameInfo& info, int dstW, int dstH, std::vector<unsigned char>& rgba);
 
+// The same maths again, as unclamped float RGBA (what an RGBA16F texture
+// holds before its half-float rounding). Used by Stamp Notes on movies so the
+// stamped EXR carries the picture the plate shows. rgba is resized.
+bool gfcYuvConvertToRGBAF(const gfcGLFrameInfo& info, int dstW, int dstH, std::vector<float>& rgba);
+
 // Frees the plane textures, framebuffer and programs. Call with the context
 // they were created in current. They are created in whichever context first
 // converts a frame; the app converts in the viewport context only.

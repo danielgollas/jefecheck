@@ -28,6 +28,8 @@
 #include "../xmlParser.h"
 #include "../gfcSequence.h"
 #include "../gfcMovieReader.h"
+#include "../gfcimageloadermovie.h"
+#include "../gfcYuvConverter.h"
 #include "../gfcTimecode.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
@@ -3493,6 +3495,44 @@ bool isFxLoaded(const std::string& fxName) {
 
 std::string appVersion() { return JEFE_VERSION; }
 
+bool decodeMovieFrameRGB(const std::string& path, int64_t index, int& w, int& h,
+                         std::vector<float>& rgb, std::string* err) {
+    auto fail = [&](const std::string& why) { if (err) *err = why; return false; };
+    gfcLoadParams p;
+    p.fileName = path;
+    p.movieFrameIndex = index;
+    p.scale = 100;
+    p.crop = false;
+    p.compressed = GFC_16BPC;   // planes at full precision, like a 16-bit track
+    gfcImageLoaderMovie loader;
+    if (loader.load(p) != 0) return fail(loader.loadErrorString);
+    const gfcGLFrameInfo info = loader.getFrameInfo();
+    w = loader.sizeX;
+    h = loader.sizeY;
+    const size_t px = size_t(w) * size_t(h);
+    rgb.resize(px * 3);
+    if (info.planarYuv) {
+        std::vector<float> rgba;
+        if (!gfcYuvConvertToRGBAF(info, w, h, rgba) || rgba.size() < px * 4) return fail("colour conversion failed");
+        for (size_t i = 0; i < px; ++i) {
+            rgb[i * 3 + 0] = rgba[i * 4 + 0];
+            rgb[i * 3 + 1] = rgba[i * 4 + 1];
+            rgb[i * 3 + 2] = rgba[i * 4 + 2];
+        }
+        return true;
+    }
+    // Semi-planar/packed layouts are uploaded from this BGRA64 copy, so the
+    // stamp takes the same pixels.
+    const uint16_t* src16 = static_cast<const uint16_t*>(loader.getPixelPointer());
+    if (!src16 || px == 0) return fail("no pixels decoded");
+    for (size_t i = 0; i < px; ++i) {
+        rgb[i * 3 + 0] = src16[i * 4 + 2] / 65535.0f;   // BGRA -> RGB
+        rgb[i * 3 + 1] = src16[i * 4 + 1] / 65535.0f;
+        rgb[i * 3 + 2] = src16[i * 4 + 0] / 65535.0f;
+    }
+    return true;
+}
+
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,
                        NoteStampResult& result) {
@@ -3561,31 +3601,17 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
     }
     result.noteCount = (int)notes.size();
 
-    // A movie frame is decoded here (the same picture the plate shows, at the
-    // track's bit depth) and stamped from pixels instead of read from an EXR.
+    // A movie frame is decoded here and stamped from pixels instead of read
+    // from an EXR: the CPU twin of the GPU upload pass, so the stamp carries
+    // the picture a 16-bit track shows (decodeMovieFrameRGB).
     const bool movie = seq->isMovie();
     std::vector<float> movieRgb;
     if (movie) {
         const int64_t index = int64_t(frame) - 1 - int64_t(seq->frameOffset);
-        gfcMovieReader reader;
         std::string merr;
-        gfcMovieFrame decoded;
-        std::vector<uint8_t> bgra;
-        if (!reader.open(result.sourcePath, &merr) || !reader.readFrame(index, decoded, &merr) ||
-            !reader.convertToBGRA(decoded, 16, decoded.width, decoded.height, bgra, &merr)) {
+        if (!decodeMovieFrameRGB(result.sourcePath, index, result.width, result.height, movieRgb, &merr)) {
             return fail("cannot decode frame " + std::to_string(frame) + " of " + result.sourcePath +
                         (merr.empty() ? "" : ": " + merr));
-        }
-        result.width = decoded.width;
-        result.height = decoded.height;
-        const size_t px = size_t(result.width) * size_t(result.height);
-        if (bgra.size() < px * 8) return fail("cannot decode frame " + std::to_string(frame));
-        movieRgb.resize(px * 3);
-        const uint16_t* src16 = reinterpret_cast<const uint16_t*>(bgra.data());
-        for (size_t p = 0; p < px; ++p) {
-            movieRgb[p * 3 + 0] = src16[p * 4 + 2] / 65535.0f;   // BGRA -> RGB
-            movieRgb[p * 3 + 1] = src16[p * 4 + 1] / 65535.0f;
-            movieRgb[p * 3 + 2] = src16[p * 4 + 0] / 65535.0f;
         }
     } else if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
         return fail("cannot read " + result.sourcePath);

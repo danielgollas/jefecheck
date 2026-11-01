@@ -1450,6 +1450,16 @@ std::string appVersion();
  */
 void addDemoNotes(int plateIdx);
 
+/**
+ * Decodes frame `index` (0-based) of a movie to float RGB (w*h*3, unclamped)
+ * with the same YUV->RGB maths as the GPU upload pass (file matrix/range,
+ * chroma siting, nearest luma), i.e. the picture a 16-bit track shows. Used
+ * by Stamp Notes on movies; non-planar layouts go through the same CPU
+ * conversion their upload uses. Opens a reader of its own (sound off).
+ */
+bool decodeMovieFrameRGB(const std::string& path, int64_t index, int& w, int& h,
+                         std::vector<float>& rgb, std::string* err);
+
 /** Outcome of stampNotesIntoExr(), so the caller can report it plainly. */
 struct NoteStampResult {
     std::string sourcePath;   // the frame file on disk the stamp copied from

@@ -352,14 +352,18 @@ GLuint gfcYuvConvertToTexture(const gfcGLFrameInfo& info, int srcX, int srcY, in
     return out;
 }
 
-bool gfcYuvConvertToRGBA8(const gfcGLFrameInfo& info, int dstW, int dstH, std::vector<unsigned char>& rgba) {
+namespace {
+
+// The CPU twin of the shader: nearest luma on the destination grid, bilinear
+// chroma at the same siting, unclamped. emit(pixelIndex, r, g, b, a).
+template <class Emit>
+bool convertOnCpu(const gfcGLFrameInfo& info, int dstW, int dstH, Emit emit) {
     if (!planesUsable(info) || dstW <= 0 || dstH <= 0) return false;
     int sx0 = info.srcX, sy0 = info.srcY, sw = info.srcW, sh = info.srcH;
     resolveSrcRect(info, sx0, sy0, sw, sh);
     const YuvMaths m = mathsFor(info);
     const bool sixteen = info.bitDepth > 8;
     const bool alpha = info.hasAlpha && info.planeCount == 4;
-    rgba.assign(size_t(dstW) * size_t(dstH) * 4, 0);
     for (int y = 0; y < dstH; ++y) {
         const int sy = sy0 + int((long long)y * sh / dstH);
         const float t = float(sy) + 0.5f;
@@ -371,14 +375,37 @@ bool gfcYuvConvertToRGBA8(const gfcGLFrameInfo& info, int dstW, int dstH, std::v
             const float yv = (code(info.planes[0], sixteen, sx, sy) - m.yOff) / m.yScale;
             const float cb = (bilinear(info.planes[1], sixteen, cs, ct) - m.cOff) / m.cScale;
             const float cr = (bilinear(info.planes[2], sixteen, cs, ct) - m.cOff) / m.cScale;
-            unsigned char* o = &rgba[(size_t(y) * dstW + x) * 4];
-            o[0] = to8(yv + m.rCr * cr);
-            o[1] = to8(yv - m.gCb * cb - m.gCr * cr);
-            o[2] = to8(yv + m.bCb * cb);
-            o[3] = alpha ? to8(code(info.planes[3], sixteen, sx, sy) / m.alphaScale) : 255;
+            emit(size_t(y) * size_t(dstW) + size_t(x), yv + m.rCr * cr, yv - m.gCb * cb - m.gCr * cr, yv + m.bCb * cb,
+                 alpha ? code(info.planes[3], sixteen, sx, sy) / m.alphaScale : 1.0f);
         }
     }
     return true;
+}
+
+}  // namespace
+
+bool gfcYuvConvertToRGBA8(const gfcGLFrameInfo& info, int dstW, int dstH, std::vector<unsigned char>& rgba) {
+    if (!planesUsable(info) || dstW <= 0 || dstH <= 0) return false;
+    rgba.assign(size_t(dstW) * size_t(dstH) * 4, 0);
+    return convertOnCpu(info, dstW, dstH, [&](size_t i, float r, float g, float b, float a) {
+        unsigned char* o = &rgba[i * 4];
+        o[0] = to8(r);
+        o[1] = to8(g);
+        o[2] = to8(b);
+        o[3] = to8(a);
+    });
+}
+
+bool gfcYuvConvertToRGBAF(const gfcGLFrameInfo& info, int dstW, int dstH, std::vector<float>& rgba) {
+    if (!planesUsable(info) || dstW <= 0 || dstH <= 0) return false;
+    rgba.assign(size_t(dstW) * size_t(dstH) * 4, 0.0f);
+    return convertOnCpu(info, dstW, dstH, [&](size_t i, float r, float g, float b, float a) {
+        float* o = &rgba[i * 4];
+        o[0] = r;
+        o[1] = g;
+        o[2] = b;
+        o[3] = a;
+    });
 }
 
 void gfcYuvConverterRelease() {

@@ -243,6 +243,47 @@ int movieStampSelfTest(const std::string& dir) {
     std::vector<float> rgb(320*180*3, 0.25f); gfcReview review; gfcNoteStamp::Options opt;
     check(gfcNoteStamp::stampPixels(320,180,rgb.data(), dir+"/stamp.exr", review, opt, &err), "stampPixels writes");
     int w=0,h=0; check(gfcNoteStamp::imageSize(dir+"/stamp.exr",&w,&h) && w==320 && h==180, "stamped EXR has the frame size");
+    // The pixels Stamp Notes writes for a movie frame equal the GPU upload's
+    // RGBA16F texture. Tolerance: one half-float step (the 16-bit track's own
+    // storage) plus the GPU sampler's precision where it blends two chroma
+    // samples: Apple's sampler filters R16 at about half-float precision, so
+    // up to two fp16 steps at 0.5 (2^-11 each) through the largest matrix
+    // coefficient (Rec.709 B = y + 1.8556 cb), about 0.0018 -- measured
+    // ~0.001 at 4:2:2 bar edges (one 10-bit code); 4:4:4 and co-sited samples
+    // only differ by the half-float step. The swscale conversion the stamp
+    // used before is measured against the same texture for contrast.
+    auto gpuMatchesStamp = [&](const std::string& movie, int64_t index, double& worstSteps, double& worstSws) {
+        int sw=0, sh=0; std::vector<float> cpu; std::string e;
+        if (!jefe::qt::decodeMovieFrameRGB(movie, index, sw, sh, cpu, &e)) { std::printf("  stamp decode: %s\n", e.c_str()); return false; }
+        gfcLoadParams p; p.fileName=movie; p.movieFrameIndex=index; p.scale=100; p.compressed=GFC_16BPC;
+        gfcFrame f; if (f.loadFrame(p)!=0 || !f.loaded) return false;
+        f.generateTexture();
+        if (!f.textureID || f.sizeX!=sw || f.sizeY!=sh) { f.clearFrame(); return false; }
+        std::vector<float> gpu(size_t(sw)*sh*4);
+        glBindTexture(GL_TEXTURE_RECTANGLE_ARB, f.textureID); glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glGetTexImage(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, GL_FLOAT, gpu.data()); glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
+        f.clearFrame();
+        auto halfStep = [](double v) { int ex=0; std::frexp(std::max(std::fabs(v), 6.1035e-5), &ex); return std::ldexp(1.0, ex-11); };
+        bool ok=true; worstSteps=0;   // worst |diff| in 16-bit codes
+        for (size_t i=0; i<size_t(sw)*sh; ++i) for (int c=0;c<3;++c) {
+            const double v=cpu[i*3+c], g=gpu[i*4+c], d=std::fabs(v-g);
+            worstSteps=std::max(worstSteps, d*65535.0);
+            if (d > halfStep(v) + 2.0*1.8556/2048.0 + 1.0/65535.0) ok=false;
+        }
+        gfcMovieReader r; gfcMovieFrame mf; std::vector<uint8_t> bgra; worstSws=-1;
+        if (r.open(movie, &e) && r.readFrame(index, mf, &e) && r.convertToBGRA(mf, 16, sw, sh, bgra, &e)) {
+            const uint16_t* b16=reinterpret_cast<const uint16_t*>(bgra.data()); worstSws=0;
+            for (size_t i=0; i<size_t(sw)*sh; ++i) for (int c=0;c<3;++c) {
+                const double v=b16[i*4+(2-c)]/65535.0, g=std::clamp(double(gpu[i*4+c]), 0.0, 1.0);
+                worstSws=std::max(worstSws, std::fabs(v-g)*65535.0);
+            }
+        }
+        return ok;
+    };
+    double s422=0, w422=0, s4444=0, w4444=0;
+    check(gpuMatchesStamp(dir+"/bars_709tv.mov", 3, s422, w422), "stamped 709 422 10-bit bars equal the GPU render");
+    check(gpuMatchesStamp(dir+"/prores4444_24.mov", 5, s4444, w4444), "stamped 4444 12-bit frame equals the GPU render");
+    std::printf("  stamp vs GPU texture, worst |diff| in 16-bit codes: 422 %.1f (swscale was %.1f), 4444 %.1f (swscale was %.1f)\n", s422, w422, s4444, w4444);
     std::printf("MOVIE-STAMP: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
