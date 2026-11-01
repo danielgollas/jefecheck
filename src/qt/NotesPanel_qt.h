@@ -54,6 +54,7 @@ private slots:
 
 private:
     void rebuildColorSwatch();
+    void syncToolButtons();       // checked = armed && that tool is active
     void updateActionButtons();   // lock/unlock + remove enabled state
 
     QLabel* statusLabel_ = nullptr;
