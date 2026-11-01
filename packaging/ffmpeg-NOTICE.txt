@@ -12,8 +12,10 @@ JefeCheck uses FFmpeg (https://ffmpeg.org) in two separate ways.
      - Windows: MSYS2 "mingw-w64-x86_64-ffmpeg" (DLLs shipped with the app)
      - Linux:   the distribution's libav* packages (the Linux package
                 depends on them; they are not bundled)
-   These FFmpeg builds are GPL builds (--enable-version3), so distributed
-   JefeCheck binaries are effectively under the GNU GPL version 3.
+   These FFmpeg builds are GPL builds, and the Homebrew build is also
+   configured with --enable-version3 (each package's configure line is in
+   ffmpeg-libs-VERSION.txt, below), so distributed JefeCheck binaries are
+   effectively under the GNU GPL version 3.
    FFmpeg is licensed under the GPL version 2 or later; JefeCheck is
    distributed under the GPL version 2 or (at your option) any later
    version.
