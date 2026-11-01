@@ -93,25 +93,30 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolRow->addWidget(toolText_);
     layout->addLayout(toolRow);
 
+    // Not exclusive: an exclusive group cannot be clicked back to "no tool",
+    // which left the pencil armed with no way to return to panning except
+    // Escape. Exclusivity is kept by syncToolButtons() instead.
     auto* toolGroup = new QButtonGroup(this);
-    toolGroup->setExclusive(true);
+    toolGroup->setExclusive(false);
     toolGroup->addButton(toolFreehand_, jefe::qt::NOTETOOL_FREEHAND);
     toolGroup->addButton(toolArrow_,    jefe::qt::NOTETOOL_ARROW);
     toolGroup->addButton(toolBox_,      jefe::qt::NOTETOOL_BOX);
     toolGroup->addButton(toolText_,     jefe::qt::NOTETOOL_TEXT);
     connect(toolGroup, &QButtonGroup::idClicked, this,
-            [](int id) {
-                jefe::qt::setActiveNoteTool(id);
-                // Picking a tool arms drawing on the viewport. Until this,
-                // the tool buttons set state nothing read.
-                jefe::qt::setNoteDrawingArmed(true);
+            [this](int id) {
+                // Clicking the armed tool puts the pencil down (back to
+                // click-and-drag panning); clicking any other tool picks it
+                // up and arms drawing on the viewport.
+                if (jefe::qt::noteDrawingArmed() && jefe::qt::activeNoteTool() == id) {
+                    jefe::qt::setNoteDrawingArmed(false);
+                } else {
+                    jefe::qt::setActiveNoteTool(id);
+                    jefe::qt::setNoteDrawingArmed(true);
+                }
+                syncToolButtons();
+                emit viewportRepaintRequested();   // a cancelled stroke disappears
             });
-    switch (jefe::qt::activeNoteTool()) {
-        case jefe::qt::NOTETOOL_ARROW: toolArrow_->setChecked(true); break;
-        case jefe::qt::NOTETOOL_BOX:   toolBox_->setChecked(true); break;
-        case jefe::qt::NOTETOOL_TEXT:  toolText_->setChecked(true); break;
-        default:                       toolFreehand_->setChecked(true); break;
-    }
+    syncToolButtons();
 
     // Colour + size, on one row.
     auto* styleRow = new QHBoxLayout();
@@ -175,7 +180,19 @@ void NotesPanel_Qt::rebuildColorSwatch() {
             .arg(c.name()));
 }
 
+void NotesPanel_Qt::syncToolButtons() {
+    // A tool button is lit only while drawing is armed with that tool, so
+    // the dock never shows a pencil in hand while the viewport pans.
+    const bool armed = jefe::qt::noteDrawingArmed();
+    const int tool = jefe::qt::activeNoteTool();
+    toolFreehand_->setChecked(armed && tool == jefe::qt::NOTETOOL_FREEHAND);
+    toolArrow_->setChecked(armed && tool == jefe::qt::NOTETOOL_ARROW);
+    toolBox_->setChecked(armed && tool == jefe::qt::NOTETOOL_BOX);
+    toolText_->setChecked(armed && tool == jefe::qt::NOTETOOL_TEXT);
+}
+
 void NotesPanel_Qt::refresh() {
+    syncToolButtons();   // Escape on the viewport disarms, then emits plateStateChanged
     const int plate = jefe::qt::getActivePlate();
     const bool hasMedia = plate >= 0 && jefe::qt::notesAvailableForPlate(plate);
 
