@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Tiny shim between the Qt UI and the rendering chain's manager
 // singletons. Lives in its own TU because the manager headers pull glad,
 // and Qt's QOpenGLWidget headers pull system OpenGL — the two refuse to
@@ -6,6 +7,7 @@
 #ifndef JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 #define JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
@@ -20,7 +22,12 @@ namespace jefe::qt {
 // Wires up gfcPlateGUI_Qt and gfcSequenceGUI_Qt instances on every
 // plate / sequence and constructs the gfcPlateManagerGUI_Qt. Safe to
 // call once at app startup; calling again would leak the previous GUIs.
+// Also creates the audio output (jefe::qt::audio) and installs it on
+// audioEngine; it opens asynchronously on its own thread.
 void initializeRenderingChain();
+// Call before initializeRenderingChain() to skip creating the audio output
+// (headless suites that install a fake device). Default: enabled.
+void setAudioOutputEnabled(bool enabled);
 
 // Default texture format (bit depth) used by the Qt drag-drop / Cmd+O
 // load path. Mirrors gfcSettings::defaultTextureFormat. The Qt status
@@ -131,6 +138,20 @@ void setLoopMode(int mode);     // 0 once, 1 loop, 2 bounce
 int  getLoopMode();
 void setTargetFPS(float fps);
 float getTargetFPS();
+// Exact rational player rate (e.g. 24000/1001); setTargetFPS maps through
+// gfcPlaybackManager::rationalFromFPS.
+void getTargetRate(int& num, int& den);
+// Source timecode of the active plate's track at the current frame
+// ("HH:MM:SS:FF", ';' before FF when drop-frame). Empty unless that track is a
+// movie and the frame maps inside it.
+std::string activeTrackSourceTimecode();
+// True when the active plate's track is a movie with variable frame rate.
+bool activeTrackIsVariableRate();
+// Average rate of the active plate's movie (0 when not a movie).
+float activeTrackMovieAverageFPS();
+// The on-screen "fps:" readout: an EMA of the real frame-advance interval
+// (reports the target exactly while within 2% of it).
+float getMeasuredFPS();
 int  getCurrentFrame();
 int  getFromFrame();
 int  getToFrame();
@@ -443,6 +464,8 @@ bool cloudConnectInFlight();
 
 // Latches an app-shutdown flag (wire to QCoreApplication::aboutToQuit) so a
 // detached cloud-connect worker won't touch networkManager as globals tear down.
+// Also closes and destroys the audio output, so its thread stops rendering
+// from audioEngine before static teardown.
 void beginBridgeShutdown();
 
 void disconnectRemote();
@@ -1001,8 +1024,30 @@ struct TrackTimelineState {
     int         numFrames        = 0;
     int         firstLoadedFrame = 1;
     int         loadedCount      = 0;
+    bool        hasAudio         = false;
+    bool        muted            = false;
+    uint64_t    audioPeaksVersion = 0;
     std::string label;
 };
+
+// Per-track sound state / mute (timeline speaker toggle). Mute is saved with the session.
+struct TrackAudioState { bool hasAudio = false; bool muted = false; };
+TrackAudioState getTrackAudioState(int trackIdx);
+void setTrackMuted(int trackIdx, bool muted);
+
+// Waveform peak summary (10 ms bins, abs peak of the stereo mix), copied out.
+// rateNum/rateDen is the movie's rate; offset the track's frame offset.
+struct WaveformPeaks {
+    bool present = false;
+    uint64_t version = 0;
+    int binsPerSecond = 100;
+    int64_t firstSample = 0;
+    int rateNum = 24, rateDen = 1;
+    int offset = 0;
+    std::vector<float> peaks;
+};
+// Copies the whole peaks vector: call only when audioPeaksVersion changed, and cache.
+WaveformPeaks getTrackWaveform(int trackIdx);
 
 TrackTimelineState getTrackTimelineState(int trackIdx);
 
@@ -1404,6 +1449,16 @@ std::string appVersion();
  * what makes it usable as a visual regression shot rather than a picture.
  */
 void addDemoNotes(int plateIdx);
+
+/**
+ * Decodes frame `index` (0-based) of a movie to float RGB (w*h*3, unclamped)
+ * with the same YUV->RGB maths as the GPU upload pass (file matrix/range,
+ * chroma siting, nearest luma), i.e. the picture a 16-bit track shows. Used
+ * by Stamp Notes on movies; non-planar layouts go through the same CPU
+ * conversion their upload uses. Opens a reader of its own (sound off).
+ */
+bool decodeMovieFrameRGB(const std::string& path, int64_t index, int& w, int& h,
+                         std::vector<float>& rgb, std::string* err);
 
 /** Outcome of stampNotesIntoExr(), so the caller can report it plainly. */
 struct NoteStampResult {

@@ -25,6 +25,16 @@ OR
 
 Drag and drop a single file or folder into a track in the main window.
 
+### How to Load a Movie (.mov / .mp4)
+
+JefeCheck plays ProRes (422, HQ, 4444, XQ), H.264 and H.265 movies in `.mov` and `.mp4` files.
+
+1. Load the movie exactly like an image sequence: Browse to it in the Load Window, Quick Load it (`Ctrl+O`), or drag and drop it onto a viewport or a track.
+2. The movie becomes one track. Range, scale, bit depth, crop, hold, offset and notes all work as they do for a sequence, and the timeline counts its frames from 1.
+3. The player's frame rate is set to the movie's own rate (for example 23.976). If you load several movies, the last one loaded sets the rate; other tracks play one frame per timeline frame at that rate.
+
+> **Note:** A movie is decoded into memory, so, like a sequence, only what fits in RAM is loaded. Very heavy 4K ProRes 4444 may load slower than real time; once it is loaded it plays at full speed. Numbers in a movie's file name are never treated as frame numbers.
+
 ### How to Load Only a Certain Range of an Image Sequence
 
 1. Follow steps 1 through 3 of [How to Load an Image Sequence into Track X](#how-to-load-an-image-sequence-into-track-x)
@@ -142,6 +152,14 @@ Toggle through the RGBA channels by pressing the RGB button, or use shortcut key
 - Click on the play/pause, rewind, fast forward, back one frame and forward one frame buttons.
 - Scrub the timeline by clicking and dragging the current frame notch on the timeline or `Shift+Click` and dragging on the viewport.
 - Click on the Playback Mode Radio Buttons to control if you want to play the sequence once (Once) (shortcut `8`), Loop it (Loop) (shortcut `9`), or play it back and forth (Swing) (shortcut `10`).
+
+### How to Hear or Mute a Movie's Sound
+
+Every loaded movie with sound plays at the same time, mixed together. Click the speaker icon on a track's lane in the timeline to mute or unmute that track (or right-click the lane and choose **Mute audio**). Muting is saved with the session, and the lane's waveform dims while muted.
+
+- At the movie's own frame rate the sound leads and the picture keeps up with it.
+- Stepping, scrubbing, or playing at another frame rate plays each frame's own slice of sound at normal pitch.
+- Playing in reverse is silent.
 
 ### How to Offset a Track on the Timeline
 

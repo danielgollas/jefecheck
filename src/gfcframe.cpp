@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcframe.h"
+#include "gfcYuvConverter.h"
+#include "gfcMediaKinds.h"
 
 
 #include <iostream>
@@ -80,7 +83,11 @@ int gfcFrame::whatLoaderToUse ( std::string name )
 {
 
 	//return TEST_GLOBAL_loaderToUse;
-	
+
+	// Movies first: forcing the image loader cannot read a .mov anyway.
+	if (gfcIsMovieFile(name))
+		return GFCLOADER_MOVIE;
+
 	if(forceGFLLoader || name.find(".")==std::string::npos){ //if we are forcing or file has no extension use gfl
 		
 		return GFCLOADER_GFL;
@@ -135,6 +142,10 @@ int gfcFrame::loadFrame ( gfcLoadParams params )
 		case GFCLOADER_GFL:
 		case GFCLOADER_FIL:
 			theImageLoader=new gfcImageLoaderOIIO();
+			break;
+
+		case GFCLOADER_MOVIE:
+			theImageLoader=new gfcImageLoaderMovie();
 			break;
 	}
 
@@ -211,61 +222,105 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 	timer.start();
 	*/
 	glEnable(info.target);
-	glGenTextures ( 1,&textureID );
-	//printf("Texture ID: %i\n",textureID);
-	glBindTexture(info.target, textureID);
-	glTexParameterf ( info.target, GL_TEXTURE_WRAP_S, GL_CLAMP );
-	glTexParameterf ( info.target, GL_TEXTURE_WRAP_T, GL_CLAMP );
-	glTexParameterf ( info.target, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
-	while (glGetError() != GL_NO_ERROR) {} // clear stale errors
-	glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
-	GLenum glErr = glGetError();
-	if (glErr != GL_NO_ERROR) printf("generateTexture: glTexImage2D error: 0x%x\n", glErr);
-	/*
-	glFinish();
-	timer.stop();
-	timer.print();
-	*/
+	if (info.planarYuv)
+	{
+		// Movies: YUV planes -> RGB on the GPU with the file's matrix/range,
+		// straight into the ordinary resident RGBA / RGBA16F texture, so the
+		// super-shader, FX, render read-back and thumbnails all see one RGB.
+		textureID = gfcYuvConvertToTexture(info, info.srcX, info.srcY, info.srcW, info.srcH,
+		                                   sizeX, sizeY, info.internalFormat);
+		if (textureID == 0)
+		{
+			// GPU pass unavailable: same maths on the CPU, uploaded as RGBA8.
+			printf("generateTexture: GPU YUV conversion failed, using the CPU path for %s\n", fileName.c_str());
+			std::vector<unsigned char> rgba;
+			glGenTextures ( 1,&textureID );
+			glBindTexture(info.target, textureID);
+			glTexParameterf ( info.target, GL_TEXTURE_WRAP_S, GL_CLAMP );
+			glTexParameterf ( info.target, GL_TEXTURE_WRAP_T, GL_CLAMP );
+			glTexParameterf ( info.target, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+			glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+			if (gfcYuvConvertToRGBA8(info, sizeX, sizeY, rgba))
+				glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba.data());
+		}
+		else
+		{
+			glBindTexture(info.target, textureID);
+		}
+		glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
 
-	// Capture a downsampled RGBA8 thumbnail for the timeline filmstrip
-	// while the decoder's CPU buffer is still alive (releaseMemory frees
-	// it just below). Source is BGRA, 8- or 16-bit per info.dataType.
-	if (captureThumbnail && info.dataPointer && sizeX > 0 && sizeY > 0
-	    && (info.dataType == GL_UNSIGNED_BYTE || info.dataType == GL_UNSIGNED_SHORT)) {
-		const int srcW = sizeX, srcH = sizeY;
-		const int dstH = 48;
-		int dstW = (int)((double)dstH * srcW / srcH + 0.5);
-		if (dstW < 1) dstW = 1;
-		if (dstW > 96) dstW = 96;
-		thumbnail.w = dstW;
-		thumbnail.h = dstH;
-		thumbnail.rgba.assign((size_t)dstW * dstH * 4, 0);
-		const bool sixteen = (info.dataType == GL_UNSIGNED_SHORT);
-		const unsigned char*  s8  = (const unsigned char*)info.dataPointer;
-		const unsigned short* s16 = (const unsigned short*)info.dataPointer;
-		for (int y = 0; y < dstH; ++y) {
-			const int sy = y * srcH / dstH;
-			for (int x = 0; x < dstW; ++x) {
-				const int sx = x * srcW / dstW;
-				const size_t si = ((size_t)sy * srcW + sx) * 4; // BGRA, 4 comps
-				unsigned char b, g, r, a;
-				if (sixteen) {
-					b = (unsigned char)(s16[si+0] >> 8);
-					g = (unsigned char)(s16[si+1] >> 8);
-					r = (unsigned char)(s16[si+2] >> 8);
-					a = (unsigned char)(s16[si+3] >> 8);
-				} else {
-					b = s8[si+0]; g = s8[si+1]; r = s8[si+2]; a = s8[si+3];
-				}
-				const size_t di = ((size_t)y * dstW + x) * 4;
-				thumbnail.rgba[di+0] = r;  // BGRA -> RGBA
-				thumbnail.rgba[di+1] = g;
-				thumbnail.rgba[di+2] = b;
-				thumbnail.rgba[di+3] = a;
+		// Filmstrip thumbnail from the planes with the same maths (nearest
+		// on the same grid as the BGRA path below).
+		if (captureThumbnail && sizeX > 0 && sizeY > 0) {
+			const int dstH = 48;
+			int dstW = (int)((double)dstH * sizeX / sizeY + 0.5);
+			if (dstW < 1) dstW = 1;
+			if (dstW > 96) dstW = 96;
+			if (gfcYuvConvertToRGBA8(info, dstW, dstH, thumbnail.rgba)) {
+				thumbnail.w = dstW;
+				thumbnail.h = dstH;
 			}
 		}
+	}
+	else
+	{
+		glGenTextures ( 1,&textureID );
+		//printf("Texture ID: %i\n",textureID);
+		glBindTexture(info.target, textureID);
+		glTexParameterf ( info.target, GL_TEXTURE_WRAP_S, GL_CLAMP );
+		glTexParameterf ( info.target, GL_TEXTURE_WRAP_T, GL_CLAMP );
+		glTexParameterf ( info.target, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		glTexParameterf ( info.target, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
+		while (glGetError() != GL_NO_ERROR) {} // clear stale errors
+		glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
+		GLenum glErr = glGetError();
+		if (glErr != GL_NO_ERROR) printf("generateTexture: glTexImage2D error: 0x%x\n", glErr);
+		/*
+		glFinish();
+		timer.stop();
+		timer.print();
+		*/
+
+		// Capture a downsampled RGBA8 thumbnail for the timeline filmstrip
+		// while the decoder's CPU buffer is still alive (releaseMemory frees
+		// it just below). Source is BGRA, 8- or 16-bit per info.dataType.
+		if (captureThumbnail && info.dataPointer && sizeX > 0 && sizeY > 0
+		    && (info.dataType == GL_UNSIGNED_BYTE || info.dataType == GL_UNSIGNED_SHORT)) {
+			const int srcW = sizeX, srcH = sizeY;
+			const int dstH = 48;
+			int dstW = (int)((double)dstH * srcW / srcH + 0.5);
+			if (dstW < 1) dstW = 1;
+			if (dstW > 96) dstW = 96;
+			thumbnail.w = dstW;
+			thumbnail.h = dstH;
+			thumbnail.rgba.assign((size_t)dstW * dstH * 4, 0);
+			const bool sixteen = (info.dataType == GL_UNSIGNED_SHORT);
+			const unsigned char*  s8  = (const unsigned char*)info.dataPointer;
+			const unsigned short* s16 = (const unsigned short*)info.dataPointer;
+			for (int y = 0; y < dstH; ++y) {
+				const int sy = y * srcH / dstH;
+				for (int x = 0; x < dstW; ++x) {
+					const int sx = x * srcW / dstW;
+					const size_t si = ((size_t)sy * srcW + sx) * 4; // BGRA, 4 comps
+					unsigned char b, g, r, a;
+					if (sixteen) {
+						b = (unsigned char)(s16[si+0] >> 8);
+						g = (unsigned char)(s16[si+1] >> 8);
+						r = (unsigned char)(s16[si+2] >> 8);
+						a = (unsigned char)(s16[si+3] >> 8);
+					} else {
+						b = s8[si+0]; g = s8[si+1]; r = s8[si+2]; a = s8[si+3];
+					}
+					const size_t di = ((size_t)y * dstW + x) * 4;
+					thumbnail.rgba[di+0] = r;  // BGRA -> RGBA
+					thumbnail.rgba[di+1] = g;
+					thumbnail.rgba[di+2] = b;
+					thumbnail.rgba[di+3] = a;
+				}
+			}
+		}
+
 	}
 
 	//3. check for glErrors.

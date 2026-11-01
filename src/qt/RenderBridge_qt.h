@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // IGLViewportListener that drives the JefeCheck rendering chain. Each
 // paintGL call invokes plateManager.draw() (and friends) with the current
 // viewport size. Lives behind the same interface FLTK's GlViewport uses,

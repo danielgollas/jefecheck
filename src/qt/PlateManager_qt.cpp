@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "PlateManager_qt.h"
 #include "PlateCard_qt.h"
 #include "SequenceLoadBridge_qt.h"

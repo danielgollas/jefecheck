@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // ---------------------------------------------------------------------------
 // One-shot loopback listener for the OAuth redirect (JEF-31).

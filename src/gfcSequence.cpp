@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 
 // gfcSequence.cpp: implementation of the gfcSequence class.
@@ -7,6 +8,9 @@
 #include <glad/glad.h>
 #include <functional>
 #include "gfcSequence.h"
+#include "gfcMediaKinds.h"
+#include "gfcMovieReader.h"
+#include "gfcAudioEngine.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <string.h>
@@ -30,6 +34,8 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 
 #include "gfctrackmanager.h"
 extern gfcTrackManager trackManager;
+#include "gfcplaybackmanager.h"
+extern gfcPlaybackManager playbackManager;
 
 #include "gfcmemorymanager.h"
 extern gfcMemoryManager memoryManager;
@@ -118,6 +124,21 @@ void findSequence (std::vector<std::string> &refFiles, std::string inputFilename
 	else
 	{
 		theFilename=inputFilename;
+	}
+
+	// A movie is always one clip: never parse digits in its name as a frame number.
+	// N copies of the path keep frames.size()/getNumFrames/framePathAt working untouched.
+	if (gfcIsMovieFile(theFilename))
+	{
+		gfcMovieInfo info;
+		int64_t n = 1;
+		if (gfcMovieReader::probe(theFilename, info, nullptr) && info.frameCount > 0)
+			n = info.frameCount;
+		refFiles.assign(static_cast<size_t>(n), theFilename);
+		label = theFilename;
+		startNum = 1;
+		endNum = static_cast<int>(n);
+		return;
 	}
 
 	//printf("theFilename:%s\n",theFilename.c_str());
@@ -828,6 +849,7 @@ int gfcSequence::generateTextures ( int howMany ) {
 
 
 
+	return 0;
 }
 
 void gfcSequence::prepareSequenceFiles()
@@ -840,6 +862,166 @@ void gfcSequence::prepareSequenceFiles()
 	{
 		findSequenceFiles(files,false);
 	}
+	// files[0] is the resolved path (search paths included); open the movie
+	// once here so every frame of this load shares the reader.
+	if (!files.empty() && gfcIsMovieFile(myGUI->getFilename()))
+		openMovieReaderFor(files[0], true);
+	else
+		openMovieReaderFor("");
+}
+
+void gfcSequence::openMovieReaderFor(const std::string& path, bool withAudio)
+{
+	std::shared_ptr<gfcMovieReader> reader;
+	if (!path.empty()) {
+		reader = std::make_shared<gfcMovieReader>();
+		// Only the load path decodes sound; the reader skips it when the
+		// file has no audio stream, so this is setAudioEnabled(hasAudio).
+		reader->setAudioEnabled(withAudio);
+		std::string err;
+		if (!reader->open(path, &err)) {
+			printf("Track %c: cannot open movie %s: %s\n", trackID, path.c_str(), err.c_str());
+			reader.reset();
+		}
+	}
+	std::lock_guard<std::mutex> lock(movieReaderMutex_);
+	movieReader_ = std::move(reader);
+	forcedReader_.reset();
+	forcedReaderPath_.clear();
+}
+
+std::shared_ptr<gfcMovieReader> gfcSequence::forcedMovieReader(const std::string& path)
+{
+	{
+		std::lock_guard<std::mutex> lock(movieReaderMutex_);
+		if (!movieReader_ || path.empty()) return nullptr;
+		if (forcedReader_ && forcedReaderPath_ == path) return forcedReader_;
+	}
+	// Opened outside the lock: the loader thread may be asking for its reader.
+	auto reader = std::make_shared<gfcMovieReader>();   // sound stays off
+	std::string err;
+	if (!reader->open(path, &err)) {
+		printf("Track %c: cannot open movie %s for a forced load: %s\n", trackID, path.c_str(), err.c_str());
+		return nullptr;
+	}
+	std::lock_guard<std::mutex> lock(movieReaderMutex_);
+	if (!movieReader_) return nullptr;   // cleared meanwhile
+	forcedReader_ = reader;
+	forcedReaderPath_ = path;
+	return reader;
+}
+
+std::shared_ptr<gfcMovieReader> gfcSequence::currentMovieReader() const
+{
+	std::lock_guard<std::mutex> lock(movieReaderMutex_);
+	return movieReader_;
+}
+
+bool gfcSequence::isMovie() const
+{
+	return currentMovieReader() != nullptr;
+}
+
+const gfcMovieInfo* gfcSequence::movieInfo() const
+{
+	std::shared_ptr<gfcMovieReader> reader = currentMovieReader();
+	return reader ? &reader->info() : nullptr;
+}
+
+bool gfcSequence::hasAudio() const
+{
+	std::lock_guard<std::mutex> lock(audioMutex_);
+	return audioClip_ != nullptr;
+}
+
+std::shared_ptr<gfcAudioClip> gfcSequence::audioClip() const
+{
+	std::lock_guard<std::mutex> lock(audioMutex_);
+	return audioClip_;
+}
+
+gfcAudioPeaks gfcSequence::audioPeaksSnapshot() const
+{
+	std::lock_guard<std::mutex> lock(audioMutex_);
+	return audioPeaks_;
+}
+
+void gfcSequence::setAudioMuted(bool muted)
+{
+	audioMuted_=muted;
+	if (gfcAudioEngineAlive()) audioEngine.setTrackMuted(trackID-'A', muted);
+}
+
+uint64_t gfcSequence::audioPeaksVersion() const
+{
+	std::lock_guard<std::mutex> lock(audioMutex_);
+	return audioPeaks_.version;
+}
+
+// A fresh clip per load, so a mixer still holding the previous one never sees
+// it change under it. The peaks version only grows.
+void gfcSequence::resetAudio(int64_t startSample, bool withClip)
+{
+	std::lock_guard<std::mutex> lock(audioMutex_);
+	if (withClip) {
+		audioClip_ = std::make_shared<gfcAudioClip>();
+		audioClip_->reset(startSample);
+	} else {
+		audioClip_.reset();
+	}
+	audioPeaks_.reset(startSample);
+	++audioPeaks_.version;
+}
+
+// Moves what the reader decoded into the clip, kept contiguous from the clip's
+// start: audio before the clip's end (decoded again after a seek) is dropped,
+// and a hole before the next decoded sample is filled with silence so every
+// sample stays at its movie-time index. Nothing lands past the movie's last
+// frame, so a bad audio timestamp cannot fill memory with silence.
+void gfcSequence::appendMovieAudio(gfcMovieReader& reader, const std::shared_ptr<gfcAudioClip>& clip)
+{
+	const gfcMovieInfo& info = reader.info();
+	const int64_t movieEnd = (info.rateNum > 0 && info.rateDen > 0)
+		? gfcAudioClip::frameStartSample(info.frameCount, info.rateNum, info.rateDen) : 0;
+	std::vector<float> audio;
+	int64_t first = 0;
+	while (reader.takeAudio(audio, first)) {
+		std::lock_guard<std::mutex> lock(audioMutex_);
+		const bool current = (audioClip_ == clip);  // peaks belong to the newest load only
+		gfcAppendAudioAt(*clip, first, audio.data(), int64_t(audio.size() / gfcAudioClip::kChannels), movieEnd,
+		                 current ? &audioPeaks_ : nullptr);
+	}
+}
+
+// Shows the waveform's last partial second (the version otherwise moves at
+// most once per second of audio) once this load stops, whatever the reason.
+void gfcSequence::publishAudioPeaks(const std::shared_ptr<gfcAudioClip>& clip)
+{
+	std::lock_guard<std::mutex> lock(audioMutex_);
+	if (clip && audioClip_ == clip) audioPeaks_.publish();
+}
+
+void gfcSequence::loadFrameRange(int& startFrame, int& endFrame) const
+{
+	if (params.loadFromTimeline==0)
+		startFrame=params.fromFrame-firstFrame;
+	else
+		startFrame=params.loadFromTimeline;
+	if ( startFrame<0 )
+		startFrame=0;
+
+	const int framesSize=frames.size();
+	endFrame=params.toFrame-firstFrame;
+	if ( endFrame>framesSize )
+		endFrame=framesSize;
+	if (endFrame<0)
+		endFrame=0;
+
+	if (startFrame>endFrame)
+		startFrame=endFrame;
+
+	if (endFrame>=(int)files.size())
+		endFrame=files.size()-1;
 }
 
 int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
@@ -869,6 +1051,16 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 		frames[i].fileName=files[i];
 	}
 
+	// The clip starts at the first frame this pass loads (frame entry i is
+	// movie frame i), in the movie's own 48 kHz timeline.
+	{
+		const std::shared_ptr<gfcMovieReader> reader=currentMovieReader();
+		const bool withClip=reader && reader->info().hasAudio;
+		int startFrame=0, endFrame=0;
+		loadFrameRange(startFrame, endFrame);
+		resetAudio(withClip ? gfcAudioClip::frameStartSample(startFrame, reader->info().rateNum, reader->info().rateDen) : 0, withClip);
+	}
+
 	loadingCanceled=false;
 	return 0;
 }
@@ -888,27 +1080,10 @@ int gfcSequence::loadSequence() {
 		//printf ( "Regular loading\n" );
 		//printf ( "First Frame=%i\n",firstFrame );
 		int startFrame;
-		if (params.loadFromTimeline==0) {
-			startFrame=params.fromFrame-firstFrame;
+		if (params.loadFromTimeline==0)
 			networkManager.sendSystemChatMessage(filenameGeneric,GFCNETMESSAGETYPE_LOAD);
-		} else {
-			startFrame=params.loadFromTimeline;
-		}
-		if ( startFrame<0 )
-			startFrame=0;
-
-		endFrame=params.toFrame-firstFrame;
+		loadFrameRange(startFrame, endFrame);
 		framesSize=frames.size();
-		if ( endFrame>framesSize )
-			endFrame=framesSize;
-		if (endFrame<0)
-			endFrame=0;
-
-		if (startFrame>endFrame)
-			startFrame=endFrame;
-
-		if (endFrame>=files.size())
-			endFrame=files.size()-1;
 		/* if ( mainWindowExists ) {
 		mw.timeLine->maximum ( mw.vp->getMaxTrackLenght() );
 		mw.playUpToInput->value ( mw.vp->getMaxTrackLenght() );
@@ -925,6 +1100,8 @@ int gfcSequence::loadSequence() {
 		//load each of the frames we have to load
 		bool continueLoading=true;
 		withinMemoryLimits=true;
+		const std::shared_ptr<gfcMovieReader> movieReader=currentMovieReader();
+		const std::shared_ptr<gfcAudioClip> movieAudio=movieReader ? audioClip() : nullptr;
 		printf("***Track %c: Loading from %i to %i\n",trackID,startFrame,endFrame);
 		for ( int i=startFrame;i<=endFrame;i++ ) {
 
@@ -944,6 +1121,10 @@ int gfcSequence::loadSequence() {
 				tmpParams.forceGFLLoading=forceGFLLoading;
 				//printf("%i\n",i);
 				tmpParams.fileName=files[i];
+				if (movieReader) {
+					tmpParams.movieFrameIndex=i;
+					tmpParams.movieReader=movieReader;
+				}
 				//printf ( "%c-%i: Loading: %s\n",trackID,i, GetFilenameNoPath(tmpParams.fileName).c_str() );
 				gfcFrame tmpFrame;
 
@@ -952,6 +1133,10 @@ int gfcSequence::loadSequence() {
 					//printf("saving saved params in tmpFrame (%i) sizeof: %i\n",i,sizeof(tmpParams));
 				} else {
 					int loadResult=tmpFrame.loadFrame ( tmpParams );
+					// Decode order == append order: frame i's slice is in the
+					// reader's FIFO once frame i has loaded.
+					if (movieAudio)
+						appendMovieAudio(*movieReader, movieAudio);
 					if (loadResult==GFCFRAME_LOADERROR_NO_MORE_MEMORY)
 					{
 						printf("No more memory while loading frame, stopping sequence load\n");
@@ -1010,6 +1195,7 @@ int gfcSequence::loadSequence() {
 
 			}
 		} //end of mutex scope
+		if (movieAudio) publishAudioPeaks(movieAudio);
 
 	}
 
@@ -1276,6 +1462,9 @@ int gfcSequence::clearSequence() {
 		myGUI->setTrackRange(0,0);
 	}
 	maxFramesToLoad=0;
+	openMovieReaderFor("");
+	resetAudio(0, false);
+	if (gfcAudioEngineAlive()) audioEngine.clearTrack(trackID-'A');   // skipped during static teardown
 
 	rangeBegin=rangeEnd=0;
 	//
@@ -1316,6 +1505,13 @@ gfcFrame gfcSequence::forceLoad ( int frame ) {
 
 	forcedFrame=frames[frame];
 	printf("Forced loading: %s\n",forcedFrame.savedParams.fileName.c_str());
+	// Movies: never through the loader's reader (it decodes the track's sound).
+	if (forcedFrame.savedParams.movieReader) {
+		if (std::shared_ptr<gfcMovieReader> r=forcedMovieReader(forcedFrame.savedParams.fileName))
+			forcedFrame.savedParams.movieReader=r;
+		else
+			forcedFrame.savedParams.movieReader.reset();   // the loader opens its own
+	}
 	forcedFrame.loadFrame();
 	forcedFrame.generateTexture();
 
@@ -1406,6 +1602,7 @@ gfcFrame gfcSequence::getFrame ( int frameNo,bool pforceLoad ) {
 
 			}
 	}
+	return emptyFrame;
 }
 
 
@@ -1513,10 +1710,13 @@ char * gfcSequence::getFilenameatFrame ( int frameNo ) {
 		}
 
 	}
+	tmp[0] = '\0';
+	return tmp;
 }
 
 void gfcSequence::setOffset(int offset) {
 	frameOffset=offset;
+	if (gfcAudioEngineAlive()) audioEngine.setTrackOffset(trackID-'A', offset);   // sound shifts with the picture
 	myGUI->setOffset(offset);
 	networkManager.notifyEvent(GFCNETEVENT_OTHER);
 	plateManager.setChanged();
@@ -1576,6 +1776,28 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 	stopLoading();
 
 	initializeSequence ( pparams );
+
+	// This load's sound (a fresh clip, filled by the loader thread) replaces the
+	// track's in the mixer; a sequence or a silent movie clears it. Frame entry i
+	// is movie frame i, so the engine's frame count is the entry count.
+	if (gfcAudioEngineAlive()) {
+		const std::shared_ptr<gfcAudioClip> clip=audioClip();
+		const gfcMovieInfo* info=movieInfo();
+		if (clip && info && info->rateNum>0 && info->rateDen>0)
+			audioEngine.setTrackClip(trackID-'A', clip, info->rateNum, info->rateDen, int64_t(files.size()));
+		else
+			audioEngine.clearTrack(trackID-'A');
+		audioEngine.setTrackOffset(trackID-'A', frameOffset);
+		audioEngine.setTrackMuted(trackID-'A', audioMuted_);
+	}
+
+	// A fresh load of a movie sets the player's rate to the movie's exact
+	// rational (most recent wins). Reloads from a timeline point keep the user's rate.
+	if (pparams.loadFromTimeline==0 && !playbackManager.getKeepRateOnLoad() && isMovie()) {
+		int rateNum=0, rateDen=1;
+		if (const gfcMovieInfo* info=movieInfo()) { rateNum=info->rateNum; rateDen=info->rateDen; }
+		if (rateNum>0 && rateDen>0) playbackManager.setTargetRate(rateNum,rateDen);
+	}
 
 	/*if (abortButton)
 	abortButton->activate();*/
@@ -1696,6 +1918,14 @@ std::string gfcSequence::loadPreview() {
 
 	params.aoi.set(-1,-1,-1,-1);//this is to avoid the preview frame from being cropped.
 	params.forceGFLLoading=forceGFLLoading;
+	if (gfcIsMovieFile(params.fileName)) {
+		// previewFiles[0] is the search-path-resolved movie.
+		openMovieReaderFor(previewFiles.empty() ? params.fileName : previewFiles[0]);
+		params.movieFrameIndex=0;
+		params.movieReader=currentMovieReader();
+		if (!previewFiles.empty())
+			params.fileName=previewFiles[0];
+	}
 	previewTimer.start();
 
 	//     currentChannelName=params.channel==-1;
@@ -2221,6 +2451,7 @@ void gfcSequence::saveTrackSessionParameters(XMLNode & trackNode) {
 	saveSetting("offset",getOffset(),trackNode);
 	saveSetting("holdMode",getHoldMode(),trackNode);
 	saveSetting("holdFrame",this->holdFrameCurrent,trackNode);
+	saveSetting("muted",audioMuted_?1:0,trackNode);
 
 }
 
@@ -2241,6 +2472,8 @@ void gfcSequence::loadTrackSessionParameters(XMLNode & trackNode) {
 		readAttributeFromNode<int>("holdFrame",trackNode,0));
 
 
+
+	setAudioMuted(readAttributeFromNode<int>("muted",trackNode,0)!=0);
 
 	this->loadPreview();
 	//set the from and to limits at the end, after loading the preview, also the AOI

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // JEF-24 Task 3: WebRtcTransport — HOST role over libdatachannel.
 // See gfcWebRtcTransport.h for the offerer/answerer convention and the
 // no-envelope-byte contract. The whole TU is guarded so a build without

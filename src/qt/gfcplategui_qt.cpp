@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcplategui_qt.h"
 
 #include <cstdarg>

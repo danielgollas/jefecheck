@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCFRAME_H
 #define GFCFRAME_H
 
@@ -22,12 +23,13 @@
 #include "gfcpixelbuffer.h"
 #include "gfcimageloaderdpx.h"
 #include "gfcimageloaderoiio.h"
+#include "gfcimageloadermovie.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
 */
 
-enum loaders{GFCLOADER_EXR,GFCLOADER_GFL,GFCLOADER_OTHER, GFCLOADER_DPX, GFCLOADER_FIL};
+enum loaders{GFCLOADER_EXR,GFCLOADER_GFL,GFCLOADER_OTHER, GFCLOADER_DPX, GFCLOADER_FIL, GFCLOADER_MOVIE};
 
 enum frameloaderrors{
 	GFCFRAME_LOADERROR_NO_ERROR=0,

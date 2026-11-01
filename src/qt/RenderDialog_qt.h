@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // File → Render… dialog for the Qt port. PR-39a ships a minimal
 // modal dialog covering quadrant / format / range / scale / output
 // path / prefix / postfix / padding, plus a Render button that calls

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "TrackStrip_qt.h"
 #include "qticons.h"
 
@@ -302,7 +303,10 @@ void TrackStrip_Qt::onBrowse() {
     const QString path = QFileDialog::getOpenFileName(
         this, tr("Choose sequence frame for Track %1").arg(QChar('A' + trackIdx_)),
         QString(),
-        tr("Images (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp)"));
+        tr("Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4);;"
+           "Movies (*.mov *.mp4);;"
+           "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp);;"
+           "All files (*)"));
     if (path.isEmpty()) return;
     displayPath_ = path;
     filename_->setText(path);

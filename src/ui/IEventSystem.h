@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Abstract event-system facade. Replaces 150+ Fl::event_* call sites.
 // Backend implementations: src/gfcui_fltk.cpp (FLTK), src/qt/IEventSystem_qt.cpp (Qt).
 #ifndef JEFECHECK_UI_IEVENTSYSTEM_H

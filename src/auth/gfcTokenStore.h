@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // ---------------------------------------------------------------------------
 // Refresh-token storage for desktop sign-in (JEF-31).

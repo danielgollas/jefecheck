@@ -185,6 +185,20 @@ The **Add to Playlist** button adds the current setup to the playlist. To displa
 
 ---
 
+### Movies
+
+Besides image sequences, JefeCheck loads movie files: `.mov` and `.mp4` containing ProRes (422, 422 HQ, 4444, 4444 XQ), H.264 or H.265. You load a movie exactly like a sequence — Browse to it in the Load Window, Quick Load it, drag it onto a viewport or a track, or name it on the command line — and it lands in a track as a single entry that behaves like a sequence. The range controls, scale, bit depth, crop, hold modes, offsets, the filmstrip and notes all work the same way, and the timeline numbers the movie's frames from 1. The frames are decoded into memory; nothing is ever extracted to disk. Numbers in a movie's name are never read as frame numbers, so `shot_v003.mov` is one clip and `a_001.mov` and `a_002.mov` are never joined into a sequence.
+
+**Colour.** The picture is converted from YUV with the file's own matrix (Rec.709, Rec.601 or Rec.2020) and range (video or full). A file that does not say is treated as Rec.709, video range. Code values are shown straight, as with any other image, and 10- and 12-bit sources keep their precision when the track is loaded at 16 bits.
+
+**Frame rate and timecode.** JefeCheck plays at one rate, the one in the FPS box. Loading a movie sets it to the movie's exact rate (23.976 is held as 24000/1001, not rounded); when you load several movies the most recent one wins, and opening a saved session keeps the session's rate. Other tracks keep playing one of their frames per timeline frame at that rate. The status bar shows the active movie's source timecode, with drop-frame timecode shown with a `;`. A variable-frame-rate file is played as if it were constant at its average rate, and the status bar says so.
+
+**Sound.** Every track with sound plays at the same time, mixed together. To mute a track, click the speaker on its lane in the timeline (or right-click the lane and choose **Mute audio**); the lane's waveform dims, and the mute is saved with the session. When you play forward at the movie's own rate the sound leads and the picture follows it, dropping a frame rather than letting the sound stutter. When you step, scrub, or play at any other rate, each frame you see plays its own slice of sound at normal pitch — cut short when playing faster, followed by silence when playing slower, never stretched. Reverse playback is silent. Offsets, ranges and looping apply to the sound as they do to the picture; a held frame does not repeat its sound.
+
+**Limits.** Like a sequence, a movie loads only what fits in memory. Very heavy 4K ProRes 4444 (around 1 Gb/s) can load slower than real time on current machines; once loaded it plays at full rate. There is no hardware decoding yet, MXF files are not supported, and rendered output carries no sound.
+
+---
+
 ### The Main Window
 
 The **Main Window** is where almost everything else in JefeCheck really happens. It is basically divided in three: the **Menu Bar**, the **Viewports Area**, and the **Control Bar**.

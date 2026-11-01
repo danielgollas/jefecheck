@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // JEF-24 Task 2: local WebSocket signaling stub. See gfcSignaling.h for the
 // message schema and threading contract.
 #include "gfcSignaling.h"

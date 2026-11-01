@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Preferences dialog for the Qt build. A sidebar list selects a page; each
 // page binds widgets to the global `sett` (gfcSettings). Persistence is Qt
 // QSettings via jefe::qt::writePreferences() (Done); Cancel reverts from a

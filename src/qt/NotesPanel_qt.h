@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Notes dock for the Qt port (JEF-39 Task 6) -- lists the revisions and
 // notes drawn on the active plate's footage, a tool/colour/size picker for
 // a future drawing hook, click-to-jump-to-frame, and a "Lock Round" button
@@ -54,6 +55,7 @@ private slots:
 
 private:
     void rebuildColorSwatch();
+    void syncToolButtons();       // checked = armed && that tool is active
     void updateActionButtons();   // lock/unlock + remove enabled state
 
     QLabel* statusLabel_ = nullptr;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "RemotePanel_qt.h"
 #include "qticons.h"
 #include "CollapsibleSection_qt.h"

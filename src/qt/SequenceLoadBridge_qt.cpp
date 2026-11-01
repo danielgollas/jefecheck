@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Implementation lives in a Qt-free TU so it can pull the manager
 // headers (which include glad) without colliding with Qt's QOpenGLWidget
 // system-OpenGL include path.
@@ -20,16 +21,23 @@
 #include "../gfcReviewSummary.h"
 #include "../gfcnote.h"
 #include "../gfcNoteStore.h"
+#include "../gfcMediaKinds.h"
 #include "../gfcNoteOverlay.h"
 #include "../gfcNoteStamp.h"
 #include "../gfcpickmanager.h"
 #include "../xmlParser.h"
 #include "../gfcSequence.h"
+#include "../gfcMovieReader.h"
+#include "../gfcimageloadermovie.h"
+#include "../gfcYuvConverter.h"
+#include "../gfcTimecode.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
 #include "../ui/IApplication.h"
 #include "gfcplategui_qt.h"
 #include "gfcsequencegui_qt.h"
+#include "AudioOutput_qt.h"
+#include "../gfcAudioEngine.h"
 
 #include <algorithm>
 #include <atomic>
@@ -90,8 +98,24 @@ bool cloudConnectInFlight() {
     return gCloudConnectInFlight.load(std::memory_order_acquire);
 }
 
+// The app's audio device (Qt Multimedia lives in AudioOutput_qt.cpp).
+static gfcAudioOutput* gAudioOutput = nullptr;
+static bool gAudioOutputEnabled = true;
+
+void setAudioOutputEnabled(bool enabled) { gAudioOutputEnabled = enabled; }
+
+// Stops the audio thread before globals tear down (it renders from
+// audioEngine, and must not run while the process unmaps on exit).
+static void shutdownAudioOutput() {
+    if (!gAudioOutput) return;
+    audioEngine.setOutput(nullptr);
+    jefe::qt::audio::destroyOutput(gAudioOutput);
+    gAudioOutput = nullptr;
+}
+
 void beginBridgeShutdown() {
     gBridgeShuttingDown.store(true, std::memory_order_release);
+    shutdownAudioOutput();
 }
 
 int getDefaultTextureFormat() {
@@ -146,6 +170,19 @@ void initializeRenderingChain() {
     pickManager.registerDrawee(&plateManager);
     pickManager.registerNotifee(&plateManager);
     plateManager.registerPlatesAsPickNotifees();
+
+    // Movie sound. Opening is asynchronous (the sink starts on its own
+    // thread); until it does, or with no device at all, the engine cannot
+    // lead and playback keeps FPS pacing.
+    if (!gAudioOutput && gAudioOutputEnabled) {
+        gAudioOutput = jefe::qt::audio::createOutput();
+        audioEngine.setOutput(gAudioOutput);
+        if (!gAudioOutput->open(&audioEngine))
+            std::printf("Audio: no output device; movies play silently\n");
+        // Paths that std::exit() without aboutToQuit (headless tests) still stop
+        // the thread first; registered after the globals, so it runs before them.
+        std::atexit(shutdownAudioOutput);
+    }
 }
 
 namespace {
@@ -515,6 +552,55 @@ float getTargetFPS() {
     return playbackManager.getTargetFPS();
 }
 
+void getTargetRate(int& num, int& den) {
+    playbackManager.getTargetRate(num, den);
+}
+
+namespace {
+// Copies what the status bar needs out of the active plate's movie. movieInfo()
+// points into a reader this sequence does not own, so nothing is kept.
+struct ActiveMovie { bool valid=false; int num=0, den=1; bool vfr=false; int64_t frameCount=0; std::string startTc; int offset=0; };
+ActiveMovie activeMovie() {
+    ActiveMovie m;
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return m;
+    const int track = plateManager.getTrackOnPlate(q);
+    if (track < 0) return m;
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq || !seq->isMovie()) return m;
+    const gfcMovieInfo* info = seq->movieInfo();
+    if (!info || info->rateNum <= 0 || info->rateDen <= 0) return m;
+    m.valid = true; m.num = info->rateNum; m.den = info->rateDen; m.vfr = info->variableRate;
+    m.frameCount = info->frameCount; m.startTc = info->startTimecode; m.offset = seq->getOffset();
+    return m;
+}
+}  // namespace
+
+std::string activeTrackSourceTimecode() {
+    const ActiveMovie m = activeMovie();
+    if (!m.valid) return {};
+    const int64_t idx = (int64_t)playbackManager.getCurrentFrame() - 1 - m.offset;
+    if (idx < 0 || idx >= m.frameCount) return {};
+    gfcTimecode start;
+    int64_t startFrames = 0;
+    bool drop = false;
+    if (!m.startTc.empty() && gfcParseTimecode(m.startTc, start)) {
+        startFrames = gfcTimecodeToFrames(start, m.num, m.den);
+        drop = start.drop;
+    }
+    return gfcFormatTimecode(gfcFramesToTimecode(startFrames + idx, m.num, m.den, drop));
+}
+
+bool activeTrackIsVariableRate() {
+    const ActiveMovie m = activeMovie();
+    return m.valid && m.vfr;
+}
+
+float activeTrackMovieAverageFPS() {
+    const ActiveMovie m = activeMovie();
+    return m.valid ? (float)m.num / (float)m.den : 0.0f;
+}
+
 int getCurrentFrame() {
     return playbackManager.getCurrentFrame();
 }
@@ -545,6 +631,10 @@ void setOutPoint(int frame) {
 
 bool isPlaying() {
     return playbackManager.isPlaying() != 0;
+}
+
+float getMeasuredFPS() {
+    return playbackManager.getCurrentFPS();
 }
 
 void autoloadLUTs(const std::string& path) {
@@ -1939,11 +2029,15 @@ void unloadAndClearTrack(int trackIdx) {
     plateManager.setChanged();
 }
 
+namespace { bool gSessionRatePending = false; }  // a restored session's rate must survive the track loads that follow it
+
 int startLoadingAllTracks() {
     // Loading tracks directly (Load Window "Load All", Open Session) is not a
     // playlist load — disarm auto-advance so it can't hijack this content.
     gCurrentContentFromPlaylist = false;
     int started = 0;
+    playbackManager.setKeepRateOnLoad(gSessionRatePending);
+    gSessionRatePending = false;
     for (int i = 0; i < 4; ++i) {
         auto* seq = trackManager.getSequence(i);
         if (!seq || !seq->myGUI) continue;
@@ -1953,6 +2047,7 @@ int startLoadingAllTracks() {
         trackManager.startLoadingSequence(i);
         ++started;
     }
+    playbackManager.setKeepRateOnLoad(false);
     return started;
 }
 
@@ -1999,6 +2094,9 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
     // decoded run. (Precise fill positioning for alt-click load-from-X
     // is a deferred refinement noted in the spec.)
     s.firstLoadedFrame = s.rangeStart;
+    s.hasAudio = seq->hasAudio();
+    s.muted = seq->audioMuted();
+    s.audioPeaksVersion = s.hasAudio ? seq->audioPeaksVersion() : 0;
     if (seq->myGUI && !seq->myGUI->getFilename().empty()) {
         namespace fs = std::filesystem;
         s.label = fs::path(seq->filenameGeneric.empty()
@@ -2006,6 +2104,39 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
                                : seq->filenameGeneric).filename().string();
     }
     return s;
+}
+
+TrackAudioState getTrackAudioState(int trackIdx) {
+    TrackAudioState a;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return a;
+    a.hasAudio = seq->hasAudio();
+    a.muted = seq->audioMuted();
+    return a;
+}
+
+void setTrackMuted(int trackIdx, bool muted) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return;
+    seq->setAudioMuted(muted);
+    plateManager.setChanged();
+}
+
+WaveformPeaks getTrackWaveform(int trackIdx) {
+    WaveformPeaks w;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->hasAudio()) return w;
+    gfcAudioPeaks snap = seq->audioPeaksSnapshot();
+    const gfcMovieInfo* info = seq->movieInfo();   // raw pointer into the reader: copy now
+    if (!info || info->rateNum <= 0 || info->rateDen <= 0) return w;
+    w.rateNum = info->rateNum; w.rateDen = info->rateDen;
+    w.present = true;
+    w.version = snap.version;
+    w.binsPerSecond = snap.binsPerSecond;
+    w.firstSample = snap.firstSample;
+    w.offset = seq->getOffset();
+    w.peaks = std::move(snap.peaks);
+    return w;
 }
 
 int getTrackOffset(int trackIdx) {
@@ -2122,6 +2253,7 @@ bool saveSession(const std::string& path) {
 
 bool loadSession(const std::string& path) {
     if (path.empty()) return false;
+    gSessionRatePending = true;
     sessionManager.loadSession(path);   // caller made GL context current
     plateManager.setChanged();
     return true;
@@ -2131,6 +2263,7 @@ bool getHasRecoverableSession() { return sessionManager.checkCrashedSession(); }
 
 bool loadRecoverySession() {
     if (!sessionManager.checkCrashedSession()) return false;
+    gSessionRatePending = true;
     // Load but leave the file in place (loadCrashedSession deletes; we want it
     // to also serve "reopen last session").
     sessionManager.loadSession(recoveryPath());
@@ -3260,6 +3393,8 @@ std::vector<std::string> listSequenceFrames(const std::string& anyFramePath) {
     int startNum = 0;
     int endNum = 0;
     ::findSequence(files, anyFramePath, label, startNum, endNum);
+    // A movie is one file; findSequence pads it to frameCount copies.
+    if (gfcIsMovieFile(anyFramePath) && files.size() > 1) files.resize(1);
     return files;
 }
 
@@ -3360,6 +3495,44 @@ bool isFxLoaded(const std::string& fxName) {
 
 std::string appVersion() { return JEFE_VERSION; }
 
+bool decodeMovieFrameRGB(const std::string& path, int64_t index, int& w, int& h,
+                         std::vector<float>& rgb, std::string* err) {
+    auto fail = [&](const std::string& why) { if (err) *err = why; return false; };
+    gfcLoadParams p;
+    p.fileName = path;
+    p.movieFrameIndex = index;
+    p.scale = 100;
+    p.crop = false;
+    p.compressed = GFC_16BPC;   // planes at full precision, like a 16-bit track
+    gfcImageLoaderMovie loader;
+    if (loader.load(p) != 0) return fail(loader.loadErrorString);
+    const gfcGLFrameInfo info = loader.getFrameInfo();
+    w = loader.sizeX;
+    h = loader.sizeY;
+    const size_t px = size_t(w) * size_t(h);
+    rgb.resize(px * 3);
+    if (info.planarYuv) {
+        std::vector<float> rgba;
+        if (!gfcYuvConvertToRGBAF(info, w, h, rgba) || rgba.size() < px * 4) return fail("colour conversion failed");
+        for (size_t i = 0; i < px; ++i) {
+            rgb[i * 3 + 0] = rgba[i * 4 + 0];
+            rgb[i * 3 + 1] = rgba[i * 4 + 1];
+            rgb[i * 3 + 2] = rgba[i * 4 + 2];
+        }
+        return true;
+    }
+    // Semi-planar/packed layouts are uploaded from this BGRA64 copy, so the
+    // stamp takes the same pixels.
+    const uint16_t* src16 = static_cast<const uint16_t*>(loader.getPixelPointer());
+    if (!src16 || px == 0) return fail("no pixels decoded");
+    for (size_t i = 0; i < px; ++i) {
+        rgb[i * 3 + 0] = src16[i * 4 + 2] / 65535.0f;   // BGRA -> RGB
+        rgb[i * 3 + 1] = src16[i * 4 + 1] / 65535.0f;
+        rgb[i * 3 + 2] = src16[i * 4 + 0] / 65535.0f;
+    }
+    return true;
+}
+
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,
                        NoteStampResult& result) {
@@ -3428,7 +3601,19 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
     }
     result.noteCount = (int)notes.size();
 
-    if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
+    // A movie frame is decoded here and stamped from pixels instead of read
+    // from an EXR: the CPU twin of the GPU upload pass, so the stamp carries
+    // the picture a 16-bit track shows (decodeMovieFrameRGB).
+    const bool movie = seq->isMovie();
+    std::vector<float> movieRgb;
+    if (movie) {
+        const int64_t index = int64_t(frame) - 1 - int64_t(seq->frameOffset);
+        std::string merr;
+        if (!decodeMovieFrameRGB(result.sourcePath, index, result.width, result.height, movieRgb, &merr)) {
+            return fail("cannot decode frame " + std::to_string(frame) + " of " + result.sourcePath +
+                        (merr.empty() ? "" : ": " + merr));
+        }
+    } else if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
         return fail("cannot read " + result.sourcePath);
     }
 
@@ -3451,7 +3636,10 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
         }
     }
 
-    if (!gfcNoteStamp::stamp(result.sourcePath, outExr, *review, opt, &err)) {
+    const bool stamped = movie
+        ? gfcNoteStamp::stampPixels(result.width, result.height, movieRgb.data(), outExr, *review, opt, &err)
+        : gfcNoteStamp::stamp(result.sourcePath, outExr, *review, opt, &err);
+    if (!stamped) {
         return fail(err);
     }
     return true;

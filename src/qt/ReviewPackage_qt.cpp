@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "ReviewPackage_qt.h"
 
 #include <QDateTime>
@@ -372,6 +373,10 @@ void Exporter::failWith(const std::string& message, QString* err) {
 
 namespace {
 std::string readText(const std::string& path) {
+    // libstdc++ throws from filebuf::underflow when the path is a directory
+    // (libc++ just reads nothing), so only regular files are read.
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) return {};
     std::ifstream in(path, std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }

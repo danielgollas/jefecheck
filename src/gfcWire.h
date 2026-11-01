@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // jefe::wire — small, versioned, explicitly little-endian wire format.
 //
 // Replaces RakNet::BitStream/StringCompressor at message read/write sites

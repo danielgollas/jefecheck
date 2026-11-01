@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCSEQUENCEGUI_QT_H
 #define GFCSEQUENCEGUI_QT_H
 

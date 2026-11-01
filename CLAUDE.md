@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. Originally written 2006-2014, modernized for open-source release in 2026 under GPL v2.
+JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. Originally written 2006-2014, modernized for open-source release in 2026 under the GNU General Public License, version 2 or (at your option) any later version (distributed binaries are effectively GPLv3; project-own sources carry `// SPDX-License-Identifier: GPL-2.0-or-later`).
 
 **GitHub:** github.com/danielgollas/jefecheck
 **Version:** 1.7.0
@@ -66,6 +66,7 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 
 ### Image I/O
 - **gfcImageLoaderOIIO** — OpenImageIO for all general formats (JPEG, PNG, TIFF, EXR with multi-layer support)
+- **gfcMovieReader / gfcImageLoaderMovie** — `.mov`/`.mp4` (ProRes, H.264, H.265) via linked libav* (pimpl; libav headers only in `gfcMovieReader.cpp`); GPU YUV→RGB at upload; sound via `gfcAudioEngine` + Qt Multimedia. See `developer_notes.md` §38.
 - **gfcImageLoaderDPX** — Custom DPX parser (kept for potential performance, uses `gfcpixelbuffer.h` for bitmap ops)
 - **gfcpixelbuffer.h** — Drop-in replacement for removed GFL SDK types (`GFL_BITMAP`, `GFL_COLOR`, `gflResize`, `gflCrop`, etc.)
 - Custom EXR loader disabled — OIIO handles EXR natively
@@ -96,6 +97,10 @@ The Qt build's load flow has two paths:
 
 OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so the Preferences → Engine → Default decode filter setting (`nearest` / `triangle` / `mitchell` / `lanczos3`, default `lanczos3`) actually controls scale quality.
 
+### Movie loading (`gfcMovieReader`, `gfcAudioEngine`)
+
+`.mov`/`.mp4` load like a sequence (one `sequencesIn` entry, timeline 1…n) with sound; libav* is **linked for reading**, export still shells out to the FFmpeg CLI. The rate is held as a rational and a movie load sets it. Headless: `--video-load-test`, `--audio-device-test`, `--video-colour-test <dir>`, `--video-perf-test <movie>`. See `developer_notes.md` §38.
+
 ### Render & export (`RenderDialog_Qt`, `gfcImageSaverOIIO`, `VideoEncoder_Qt`)
 
 The Render dialog (File → Render…, F6) renders the active plate's frame range and writes:
@@ -104,7 +109,7 @@ The Render dialog (File → Render…, F6) renders the active plate's frame rang
 
 Controls: output **resolution** (`gfcRenderParams.outWidth/outHeight` size the FBO; 0 = source), per-format quality (JPEG quality/progressive/subsampling, PNG level, TIFF/EXR compression, EXR depth, **8/16-bit** PNG/TIFF, video CRF-vs-bitrate + preset). **16-bit / EXR renders use a float (`RGBA16F`) FBO** for real precision (8-bit renders keep the 8-bit FBO). The render is incremental (`QTimer::singleShot(0)` per frame — responsive + cancellable) with a progress bar and a "Show in folder" status link.
 
-FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a GPL static build into the bundle); resolved at runtime via `$JEFECHECK_FFMPEG` → QSettings → bundled → PATH. Headless verification: `--render-test` / `--video-test` / `--playlist-test` / `--fx-test` / `--cc-test` (renders a frame, applies exposure+gamma, re-renders, asserts the output changed — proves the super-shader reaches renders). See `developer_notes.md` §18–21, §30.
+Export uses the FFmpeg **CLI** (movie reading links libav*, §38). FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a GPL static build into the bundle); resolved at runtime via `$JEFECHECK_FFMPEG` → QSettings → bundled → PATH. Headless verification: `--render-test` / `--video-test` / `--playlist-test` / `--fx-test` / `--cc-test` (renders a frame, applies exposure+gamma, re-renders, asserts the output changed — proves the super-shader reaches renders). See `developer_notes.md` §18–21, §30.
 
 ## Key Dependencies
 
@@ -116,11 +121,11 @@ FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a
 | GLAD | OpenGL loading (compatibility profile 3.3) | Public domain |
 | CLI11 | CLI argument parsing | BSD |
 | OpenEXR / Imath | EXR support (via OIIO) | BSD |
-| RakNet | Networking (vendored in src/) | GPL v2 |
+| RakNet | Networking (vendored in src/) | GPL v2 or later |
 | libcurl | HTTP | MIT |
 | zlib | Compression | zlib |
 | xmlParser | XML parsing (vendored in src/) | BSD |
-| FFmpeg | Video export (H.264/H.265/ProRes) — invoked as a CLI subprocess, **not linked**; bundled per-platform | GPL (bundled static build) |
+| FFmpeg | Movie reading (libav*, linked) + export CLI (H.264/H.265/ProRes); bundled per-platform | GPL v2 or later / bundled GPLv3 |
 
 **Removed dependencies:** FLTK 1.4 (replaced by Qt6 in PR-43f), GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
 
@@ -177,6 +182,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 - §5–6 **macOS drag-perf playbook** (QueuedConnection, targeted signals, cache-gated writes, 60Hz throttle; AppKit a11y cascade fires per write).
 - §8 CBArgs enum (`LOOPMODEONCE_ID` = positional 22/23/24, translate at the bridge) · §11 plate-card orientation-aware fixed-size layout · §12 AspectCropCombo is a `QToolButton` (aspect vs crop orthogonal).
 - §13 **playback FPS pacing** (seed `targetFPS` in ctor; `steady_clock`; on-screen FPS is an EMA indicator) · §18–20 **render/export** (OIIO saver; viewport via `parentWidget()`; float FBO for 16-bit/EXR; FFmpeg CLI not libav*; incremental, never a `QThread`) · §21 **pick subsystem** (GL color-pick pass, GL context current).
+- §38 **movie loading and audio** (libav* pimpl, GPU YUV→RGB at upload, rational rate, audio clock/slices, self-test flags, GPL v2-or-later relicence).
 - §26 **remote-session runtime** (pump always-on outside `needsPlaybackTick`; TU-safe getters for status/participants/chat/errors; `remoteDialog_` modeless lazy-created; chat+pointer overlay in `paintGL`; `--remote-test` two-process harness).
 
 ### Image Loading Flow

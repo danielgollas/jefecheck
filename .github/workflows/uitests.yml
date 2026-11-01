@@ -12,7 +12,7 @@ jobs:
 
       - name: Install Qt + native deps
         run: |
-          brew install --quiet qt openimageio openexr curl zlib cmake freetype
+          brew install --quiet qt openimageio openexr curl zlib cmake freetype ffmpeg
 
       - name: Install Appium + mac2 driver
         run: |

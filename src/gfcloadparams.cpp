@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcloadparams.h"
 
 gfcLoadParams::gfcLoadParams()
@@ -16,6 +17,7 @@ gfcLoadParams::gfcLoadParams()
 	filterType=0;
 	channelName="";
 	crop=false;
+	movieFrameIndex=-1;
 	//gammaLUT=NULL;
 }
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // JEF-27 Task 1: cloud-coordinator signaling client (JEF-25 protocol).
 //
 // jefe::net::CoordinatorSignaling wraps a single rtc::WebSocket dialled to the

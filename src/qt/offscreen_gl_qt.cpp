@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Offscreen OpenGL context bring-up for the headless --asset-test harness
 // (JEF-28 Task 2). Loading a LUT or FX creates GL objects (LUT: glTexImage3D;
 // FX: ARB shader objects), which need a *current* GL context with GLAD

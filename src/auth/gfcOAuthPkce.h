@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // ---------------------------------------------------------------------------
 // PKCE codec for desktop Google sign-in (JEF-31).

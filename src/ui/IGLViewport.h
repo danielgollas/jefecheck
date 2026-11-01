@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Abstract OpenGL viewport. Replaces direct use of Fl_Gl_Window in JefeCheck.
 // Backend implementations:
 //   - src/GlViewport.cpp wraps Fl_Gl_Window (currently inherits — Phase 0D unwraps).

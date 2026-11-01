@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Windows Credential Manager backend for the refresh token (JEF-31).
 //
 // wincred.h ships with the Windows SDK, so this adds no dependency. Credentials

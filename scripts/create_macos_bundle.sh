@@ -27,7 +27,7 @@ cp packaging/macos/JefeCheck.icns "$APP/Contents/Resources/"
 
 # Bundle a static FFmpeg (video export) into Resources/, where
 # VideoEncoder_Qt::findFfmpeg() looks first. GPL static build — compatible
-# with this GPL v2 app. Set JEFECHECK_FFMPEG_BIN to use a local binary
+# with this GPL v2-or-later app. Set JEFECHECK_FFMPEG_BIN to use a local binary
 # instead of downloading (offline/dev packaging).
 FFMPEG_VERSION="b6.1.1"
 if [ -n "${JEFECHECK_FFMPEG_BIN:-}" ] && [ -f "$JEFECHECK_FFMPEG_BIN" ]; then
@@ -37,7 +37,12 @@ else
         "https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_VERSION}/ffmpeg-darwin-arm64"
 fi
 chmod +x "$APP/Contents/Resources/ffmpeg"
-cp packaging/ffmpeg-NOTICE.txt "$APP/Contents/Resources/" 2>/dev/null || true
+cp packaging/ffmpeg-NOTICE.txt "$APP/Contents/Resources/"
+
+# Bundle the linked FFmpeg libraries (movie reading and sound) into
+# Contents/Frameworks/ and record their version + configure line in
+# Resources/ffmpeg-libs-VERSION.txt. Qt and OpenImageIO are not bundled yet.
+bash "$(dirname "$0")/bundle_macos_libav.sh" "$APP"
 
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>

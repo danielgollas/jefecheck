@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCNOTETEXT_H
 #define GFCNOTETEXT_H
 

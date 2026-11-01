@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPLAYBACKMANAGER_H
 #define GFCPLAYBACKMANAGER_H
 #include "gfcplaybackgui.h"
@@ -40,8 +41,19 @@ public:
     void setNotifyNetwork(bool value);
     void setTargetFPS();
     void setTargetFPS(float fps);
+    /// Exact rational rate (e.g. 24000/1001). Reduces, sets targetFPS and timePerFrame.
+    void setTargetRate(int num, int den);
+    void getTargetRate(int& num, int& den) const;
+    /// While true, a movie load does not replace the player's rate (session restore keeps the session's saved rate).
+    void setKeepRateOnLoad(bool keep) { keepRateOnLoad=keep; }
+    bool getKeepRateOnLoad() const { return keepRateOnLoad; }
+    /// Maps a float fps to a rational: NTSC rates within 0.005 snap to n*1000/1001, otherwise round(fps*1000)/1000 reduced.
+    static void rationalFromFPS(float fps, int& num, int& den);
+    /// One playback step from `cur` under loop `mode` (LOOPMODEONCE_ID/LOOPMODELOOP_ID/LOOPMODEBOUNCE_ID); BOUNCE flips `direction` at a limit.
+    static int advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit);
     void setPlaybackMode(int mode);
-    void setCurrentFrame(int frame);
+    /// `audible`: when paused, plays this frame's slice of sound (a seek); false for renders.
+    void setCurrentFrame(int frame, bool audible=true);
     void setDirection(int direction);
     void setToFrame(int frame);
     void setFromFrame(int frame);
@@ -79,11 +91,21 @@ public:
 private: //private made public while debugging
 
     inline void updateTimestep();
+    // Movie sound (audioEngine): the engine's clock leads native-rate forward
+    // play; otherwise FPS pacing leads and each forward frame plays its slice.
+    void audioSyncTransport();      // player rate + limits/mode, sent when they change
+    bool audioTryLead();            // starts leading at currentFrame when the engine can
+    void audioStop();               // stops leading and slices
+    void audioSeek();               // currentFrame moved by the user
+    void recordAdvanceForFPS(int frames);   // measured-FPS readout
+    int audioSentStart=-1, audioSentEnd=-1, audioSentMode=-1, audioSentDir=0;
 	gfcTimer timer;
     bool allowNetworkMessages;
     void sendPlayPauseMessage();
     gfcPlaybackGUI* myGUI;
     float targetFPS;
+    int targetRateNum=24, targetRateDen=1;
+    bool keepRateOnLoad=false;
     int currentFrame;
     int currentDirection;
     double timeStep; ///elapsed time since last update in seconds

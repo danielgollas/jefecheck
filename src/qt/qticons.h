@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // qticons.h — shared programmatic icon factory (JEF-19).
 //
 // JefeCheck ships no icon asset files and uses no Qt resource (.qrc) or
@@ -59,6 +60,8 @@ QIcon save();                // floppy disk
 QIcon check();               // ✓ (apply)
 QIcon send();                // paper plane
 QIcon recent();              // clock
+QIcon speaker();             // speaker with sound waves
+QIcon speakerMuted();        // speaker with a cross
 
 } // namespace qticons
 } // namespace jefe

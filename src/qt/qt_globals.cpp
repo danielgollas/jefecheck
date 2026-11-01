@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt-build globals.
 //
 // In the FLTK build these instances live at the bottom of main.cpp.

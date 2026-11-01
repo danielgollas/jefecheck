@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // In-panel LUT preview: a 2D curve for 1D LUTs (QPainter) and an interactive
 // 3D cube inspector for 3D LUTs (QOpenGLWidget). Fed Qt-safe sample data via
 // jefe::qt::getLutPreview so it never includes trilerp.h/glad (TU separation,

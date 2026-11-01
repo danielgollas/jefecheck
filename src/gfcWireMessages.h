@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // jefe::wire message codecs (JEF-23).
 //
 // One encode/decode pair per struct-based network message. The field ORDER

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcStructures.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
@@ -473,6 +474,7 @@ std::string GetExtension ( const std::string& filename ) {
 		// if(filename.size()>filename.substr(filename.rfind("\\")).size())
 #endif
         return filename.substr ( filename.rfind ( "." ) +1 );
+    return std::string();
 }
 
 std::string GetFilenameNoFilePrefix ( const std::string& filename ) {
@@ -1054,6 +1056,8 @@ int isSupportedType(std::string theFilename)
 		extensionMap["bmp"]=1;
 		extensionMap["rgb"]=1;
 		extensionMap["sgi"]=1;
+		extensionMap["mov"]=1;   // movies (gfcIsMovieFile): one clip per file
+		extensionMap["mp4"]=1;
 		
 		mapInitialized=1;
 	}

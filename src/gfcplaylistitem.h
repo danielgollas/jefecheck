@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPLAYLISTITEM_H
 #define GFCPLAYLISTITEM_H
 

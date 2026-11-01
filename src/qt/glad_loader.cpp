@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Loads GLAD function pointers without dragging Qt's OpenGL headers into the
 // same translation unit. macOS's OpenGL.framework + Qt's QOpenGLWidget chain
 // pull in <OpenGL/glext.h>, which collides with glad's redefinition of the

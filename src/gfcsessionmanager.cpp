@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcsessionmanager.h"
 
 #include <stdio.h> //for remove
@@ -66,7 +67,14 @@ void gfcSessionManager::loadSession(std::string filename)
     sett.filterMin=sett.filterMax=readAttributeFromNode<int>("filtering",settingsNode,0)+GL_NEAREST;
     playbackManager.setPlaybackMode(readAttributeFromNode<int>("loopMode",settingsNode,0)+LOOPMODEONCE_ID);
     playbackManager.setLoopPriority(readAttributeFromNode<int>("loopPriority",settingsNode,0));
-    playbackManager.setTargetFPS(readAttributeFromNode<float>("targetFPS",settingsNode,0));
+    {
+        const int rateNum=readAttributeFromNode<int>("targetFPSNum",settingsNode,0);
+        const int rateDen=readAttributeFromNode<int>("targetFPSDen",settingsNode,0);
+        if (rateNum>0 && rateDen>0)
+            playbackManager.setTargetRate(rateNum,rateDen); //exact rational wins when present; old sessions fall back to the float
+        else
+            playbackManager.setTargetFPS(readAttributeFromNode<float>("targetFPS",settingsNode,0));
+    }
     playbackManager.setFromFrame(readAttributeFromNode<int>("from",settingsNode,1));
     playbackManager.setToFrame(readAttributeFromNode<int>("to",settingsNode,1));
 
@@ -166,6 +174,12 @@ if ( filename.empty() ) {
     saveSetting("loopMode",playbackManager.getPlaybackMode()-LOOPMODEONCE_ID,settingsNode);
     saveSetting("loopPriority",playbackManager.getLoopPriority(),settingsNode);
     saveSetting("targetFPS",playbackManager.getTargetFPS(),settingsNode);
+    {
+        int rateNum=24,rateDen=1;
+        playbackManager.getTargetRate(rateNum,rateDen);
+        saveSetting("targetFPSNum",rateNum,settingsNode);
+        saveSetting("targetFPSDen",rateDen,settingsNode);
+    }
     saveSetting("from",playbackManager.getFromFrame(),settingsNode);
     saveSetting("to",playbackManager.getToFrame(),settingsNode);
     

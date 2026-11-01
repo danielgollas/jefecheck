@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Minimal Qt entry point for the USE_QT build. This is intentionally tiny —
 // just enough to prove the toolchain end-to-end (QApplication + a main window
 // + GlViewport_Qt + IApplication_Qt). The full feature port lives in later
@@ -45,6 +46,8 @@
 #include "gfcMediaFingerprint.h"
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
+#include "gfcMovieSelfTests.h"
+#include "gfcTimecode.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
@@ -55,8 +58,11 @@
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
 #include "qt/SequenceLoadBridge_qt.h"
+#include "qt/AudioOutput_qt.h"
 #include "qt/ReviewSummaryPdf_qt.h"
 #include "qt/ReviewPackage_qt.h"
+#include "qt/MovieTestMedia_qt.h"
+#include "qt/VideoEncoder_qt.h"
 
 extern gfcSettings sett;
 
@@ -171,6 +177,17 @@ static QString resolveCCTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// Resolve --video-colour-test <dir> / --video-perf-test <movie>: headless
+// movie colour (bars vs RGB truth) and decode+upload throughput harnesses.
+static QString resolveArgValue(int argc, char* argv[], const char* flag) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], flag) == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
 // Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe:
 // load the image into plates 0 and 1 side-by-side, grab the framebuffer, add
 // an FX to plate 0 only, grab again, and report left/right half brightness.
@@ -199,6 +216,24 @@ static bool hasAspectTest(int argc, char* argv[]) {
 static bool hasNotesTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--notes-test") == 0) return true;
+    return false;
+}
+
+// --video-load-test : headless movie-loading suites (needs an offscreen GL
+// context). Later tasks append suites to the aggregator in main().
+static bool hasVideoLoadTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--video-load-test") == 0) return true;
+    return false;
+}
+
+// --audio-device-test : opens the real default audio output (quiet tone) and
+// measures its clock and step-slice latency. Exit 0 pass, 2 fail, 3 skip (no
+// output device). Kept out of --video-load-test: it depends on hardware and
+// wall-clock timing.
+static bool hasAudioDeviceTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--audio-device-test") == 0) return true;
     return false;
 }
 
@@ -655,6 +690,70 @@ int main(int argc, char* argv[]) {
                     stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
                     tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0 &&
                     mergeFail == 0 && packageFail == 0 && packageOpenFail == 0) ? 0 : 2);
+    }
+
+    // Headless movie-loading suites (--video-load-test). Loading tracks and
+    // sessions touches GL, so an offscreen context is required; track loads
+    // also write a crash-recovery session, which is removed before exiting.
+    if (hasAudioDeviceTest(argc, argv)) {
+        const int r = jefe::qt::audio::deviceSelfTest();
+        std::fflush(stdout);
+        std::_Exit(r < 0 ? 3 : (r == 0 ? 0 : 2));
+    }
+
+    if (hasVideoLoadTest(argc, argv)) {
+        // The suites use a fake device; never open (or sound) the real one.
+        jefe::qt::setAudioOutputEnabled(false);
+        jefe::qt::initializeRenderingChain();
+        if (!jefe::qt::setupOffscreenTestGL()) {
+            printf("VIDEO-LOAD-TEST SKIP: no offscreen GL\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        // Test clips are generated fresh with the ffmpeg CLI (never committed).
+        const QString mediaQDir = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("jefe_video_test_%1").arg(QCoreApplication::applicationPid()));
+        // Only a missing ffmpeg is a skip; any other generation failure (bad
+        // command, missing encoder, unwritable dir) fails the gate.
+        if (VideoEncoder_Qt::findFfmpeg().isEmpty()) {
+            printf("VIDEO-LOAD-TEST SKIP: ffmpeg not found\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        QString mediaErr;
+        if (!jefe::qt::testmedia::generate(mediaQDir, &mediaErr)) {
+            QDir(mediaQDir).removeRecursively();
+            printf("VIDEO-LOAD-TEST FAIL: %s\n", mediaErr.toLocal8Bit().constData());
+            fflush(stdout);
+            std::_Exit(2);
+        }
+        const std::string mediaDir = mediaQDir.toStdString();
+        bool allZero = true;
+        allZero &= (movieKindsSelfTest(mediaDir) == 0);
+        allZero &= (movieLibavSelfTest(mediaDir) == 0);
+        allZero &= (movieReaderSelfTest(mediaDir) == 0);
+        allZero &= (timecodeSelfTest(mediaDir) == 0);
+        allZero &= (movieNumberingSelfTest(mediaDir) == 0);
+        allZero &= (movieLoaderSelfTest(mediaDir) == 0);
+        allZero &= (movieRateSelfTest(mediaDir) == 0);
+        allZero &= (movieFingerprintSelfTest(mediaDir) == 0);
+        allZero &= (movieStampSelfTest(mediaDir) == 0);
+        allZero &= (audioClipSelfTest(mediaDir) == 0);
+        allZero &= (audioSequenceSelfTest(mediaDir) == 0);
+        allZero &= (playbackAdvanceSelfTest(mediaDir) == 0);
+        allZero &= (audioEngineSelfTest(mediaDir) == 0);
+        allZero &= (audioSyncSelfTest(mediaDir) == 0);
+        allZero &= (audioWalkSelfTest(mediaDir) == 0);
+        allZero &= (audioPlaybackSelfTest(mediaDir) == 0);
+        allZero &= (audioForcedLoadSelfTest(mediaDir) == 0);
+        allZero &= (muteBridgeSelfTest(mediaDir) == 0);
+        jefe::qt::removeRecoverySession();
+        if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
+            printf("VIDEO-LOAD-TEST media: %s\n", mediaDir.c_str());
+        else
+            QDir(mediaQDir).removeRecursively();
+        std::fflush(stdout);
+        std::_Exit(allZero ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
@@ -1755,6 +1854,33 @@ int main(int argc, char* argv[]) {
     if (!ccTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, ccTestFile]() {
             const int code = window.runHeadlessCCTest(ccTestFile);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless movie colour proof (--video-colour-test <dir>): generated SMPTE
+    // bars clips are loaded, rendered and compared with their RGB truth. The
+    // loader thread must not block on the default 5-frame queue cap while the
+    // harness waits (0 does not mean unlimited), so lift it for the run.
+    const QString videoColourDir = resolveArgValue(argc, argv, "--video-colour-test");
+    if (!videoColourDir.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, videoColourDir]() {
+            const int savedQueue = sett.maximumFramesInQueue;
+            sett.maximumFramesInQueue = 100000;
+            const int code = window.runHeadlessVideoColourTest(videoColourDir);
+            sett.maximumFramesInQueue = savedQueue;
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless movie throughput (--video-perf-test <movie>): runs with the
+    // user's real queue cap, as an interactive load would.
+    const QString videoPerfMovie = resolveArgValue(argc, argv, "--video-perf-test");
+    if (!videoPerfMovie.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, videoPerfMovie]() {
+            const int code = window.runHeadlessVideoPerfTest(videoPerfMovie);
             fflush(stdout);
             std::_Exit(code);
         });

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // JEF-24 Task 2: headless loopback self-test for the signaling stub
 // (--signal-test). Kept in its own TU so the rtc lifecycle bracketing
 // (Preload/Cleanup) and <chrono>/<condition_variable> live away from the
