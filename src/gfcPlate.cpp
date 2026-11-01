@@ -5,6 +5,7 @@
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
 #include "gfcSequence.h"
+#include "gfcIOSurface.h"
 #include "gfcfx.h"
 #include <string>
 #include "platefxparams.h"
@@ -2448,7 +2449,7 @@ void gfcPlate::drawTextureRectangleWarning() {
 
 }
 
-int gfcPlate::getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result, GLuint readFormat) {
+int gfcPlate::getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result, GLuint readFormat, bool surfaceBacked) {
 
     //get the texture's pixels into the
     //pixelRGBA8Bit * thePixels=new pixelRGBA8Bit[sizeX*sizeY];
@@ -2465,7 +2466,21 @@ int gfcPlate::getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gf
 
 
     glBindTexture ( GL_TEXTURE_RECTANGLE_ARB,theTexture );
-    glGetTexImage ( GL_TEXTURE_RECTANGLE_ARB,0,GL_RGBA,readFormat,thePixelsc );
+    if (surfaceBacked) {
+        // glGetTexImage returns nothing for an IOSurface-backed texture:
+        // draw it into a float FBO instead and bring it to 8 bits.
+        std::vector<float> rgba((size_t)sizeX * sizeY * 4);
+        if (!gfcSurface::readBack(theTexture, sizeX, sizeY, rgba.data())) {
+            delete [] thePixelsc;
+            return 1;
+        }
+        for (size_t i = 0; i < rgba.size(); ++i) {
+            const float v = rgba[i];
+            thePixelsc[i] = (unsigned char)(v <= 0.0f ? 0 : v >= 1.0f ? 255 : (int)(v * 255.0f + 0.5f));
+        }
+    } else {
+        glGetTexImage ( GL_TEXTURE_RECTANGLE_ARB,0,GL_RGBA,readFormat,thePixelsc );
+    }
     //printf("The error should follow\n");
     glPrintError();
     result.quality=histogramQuality;
@@ -2504,20 +2519,23 @@ if(histogramWindow.visible()){
                 if (histogramCache.count(currentFrame)==0) { //this means this frame has not been cached, get a new histogram.and that we are not picking, we should never cache a frame that was rendered from picking!
 
                     //TODO: Get the texture ID from the frame or from the FBOs depending on the FX stack state.
+                    int readFailed = 0;
                     switch ( drawingChoice ) {
                     case 0:
 						//printf("Getting histogram texture from textureID=%i (%ix%i)\n",theFrame.textureID, theFrame.sizeX, theFrame.sizeY);
-                        getHistogramFromTexture(theFrame.textureID, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE);
+                        readFailed = getHistogramFromTexture(theFrame.textureID, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE,
+                                                             theFrame.ioSurface != nullptr);
                         break;
                     case 1:
 						//printf("Getting histogram texture from fbo8bitTexture=%i (%ix%i)\n",fbo8bitTexture, theFrame.sizeX, theFrame.sizeY);
-                        getHistogramFromTexture(fbo8bitTexture, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE);
+                        readFailed = getHistogramFromTexture(fbo8bitTexture, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE);
                         break;
                     }
                     //printf("caching histogram %i\n",currentFrame);
-                    caching=1;
-
-                    histogramCache[currentFrame]=theHist;
+                    // A read that failed has nothing worth keeping: try again next draw.
+                    caching = !readFailed;
+                    if (caching)
+                        histogramCache[currentFrame]=theHist;
                 } else {
                     //printf("drawing cached histogram %i\n",currentFrame);
                     theHist=histogramCache[currentFrame];

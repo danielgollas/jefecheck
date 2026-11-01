@@ -369,11 +369,11 @@ bool gfcSequence::freeFrames ( int numFrames ) {
 
 		int lastLoaded=loadedFrames.front();
 		loadedFrames.pop();
-		for ( int j=0;j<sett.numOfPartitions;j++ )
-			glDeleteTextures ( 1,&frames[lastLoaded].textureID );
-
 		if ( frames.size() <=lastLoaded ) //return failure if last loaded is out of range of the frame vector, very unlikely
 			return false;
+		// Through deleteTexture, so the name is forgotten (a later clearFrame
+		// must not pool or free it again) and the IOSurface is released.
+		frames[lastLoaded].deleteTexture();
 		frames[lastLoaded].loaded=false;
 	}
 	return true; //return true if succesfull
@@ -1501,9 +1501,15 @@ void gfcSequence::loadForStreaming() { //this function should be called from an 
 gfcFrame gfcSequence::forceLoad ( int frame ) {
 	//the frame parameter should already consider offset. The function does not check for range.
 
-	//clear the previous frame.
+	// A forced frame lives until the next forceLoad or cleanForcedLoad. The
+	// same frame asked for twice in one draw (a plate and an FX input reading
+	// the same track) is served from the one already loaded.
+	if (forcedFrame.loaded && forcedFrameIndex == frame)
+		return forcedFrame;
+	cleanForcedLoad();
 
 	forcedFrame=frames[frame];
+	forcedFrameIndex=frame;
 	printf("Forced loading: %s\n",forcedFrame.savedParams.fileName.c_str());
 	// Movies: never through the loader's reader (it decodes the track's sound).
 	if (forcedFrame.savedParams.movieReader) {
@@ -1521,11 +1527,12 @@ gfcFrame gfcSequence::forceLoad ( int frame ) {
 
 void gfcSequence::cleanForcedLoad() {
 	if ( forcedFrame.loaded ) {
-		if ( forcedFrame.textureID )
-			glDeleteTextures ( 1,&forcedFrame.textureID );
-
+		// deleteTexture also drops the frame's IOSurface reference (or pools
+		// the texture), which a bare glDeleteTextures leaked per forced load.
+		forcedFrame.deleteTexture();
 		forcedFrame.loaded=false;
 	}
+	forcedFrameIndex=-1;
 }
 
 Rectang gfcSequence::getFrameSizeAt ( int frameNo ) {

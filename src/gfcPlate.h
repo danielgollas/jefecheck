@@ -378,7 +378,10 @@ private:
     bool multiFormatFBOSupported;
     std::map<int, gfcHistogram> histogramCache; //this map stores the histogramCache, and links each frame in the timeline to a cache.
     int histogramQuality;
-    int getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result,GLuint readFormat);
+    // surfaceBacked: the texture's storage is an IOSurface, which glGetTexImage
+    // cannot read (developer_notes §39). Returns non-zero when nothing was read.
+    int getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result,GLuint readFormat,
+                                bool surfaceBacked = false);
     void updateHistogram();
     void startViewport();
     void endViewport();

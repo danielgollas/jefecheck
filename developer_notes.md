@@ -787,7 +787,8 @@ At ~1 Gb/s the decoder alone clears 24 fps, so decode is not the ceiling; the sh
 - `gfcFrame::generateTexture` binds it with `CGLTexImageIOSurface2D` on the rectangle target, falling back to `glTexImage2D` if the driver refuses. GL-thread cost per UHD frame drops from about 4–6 ms (22–26 ms before the native-format fix) to 0.1 ms.
 - **The texture does not retain the surface.** `gfcFrame::ioSurface` holds a reference, released in `deleteTexture()` after `glDeleteTextures`. It is a raw handle copied along with `textureID`, under the same rules.
 - `gfcSurface::release` returns the last reference to a pool (keyed by size and pixel format, 512 MiB cap). `create` reuses a pooled surface only when `IOSurfaceIsInUse` is false. Pooled surfaces unused for 2 s are freed (`gfcSurface::trimIdle`, see *Idle trim* below).
-- **`glGetTexImage` returns nothing for IOSurface textures.** Use `gfcSurface::readBack`, which draws into a float FBO.
+- **`glGetTexImage` returns nothing for IOSurface textures.** Use `gfcSurface::readBack`, which draws into a float FBO. The histogram does (`gfcPlate::getHistogramFromTexture`, `surfaceBacked` when `gfcFrame::ioSurface` is set).
+- **Free a frame's texture only through `gfcFrame::deleteTexture()`.** It pools or deletes the name, releases the surface and forgets both; a bare `glDeleteTextures` leaks the surface and leaves a name the pool may later take from a live frame. `cleanForcedLoad`, `forceLoad` (which now frees the previous forced frame first) and `freeFrames` all go through it.
 - `gfcIOSurface_mac.cpp` must not include glad: it uses Apple's GL headers, built with `GL_SILENCE_DEPRECATION`.
 - Switches: `JEFECHECK_NO_IOSURFACE=1` (upload path), `JEFECHECK_NO_IOSURFACE_POOL=1` (no reuse).
 

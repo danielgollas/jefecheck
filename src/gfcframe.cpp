@@ -317,9 +317,19 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 				const size_t pixelBytes = info.dataType == GL_UNSIGNED_BYTE ? 4 : 8;
 				glPixelStorei(GL_UNPACK_ROW_LENGTH, (GLint)(surfacePitch / pixelBytes));
 			}
-			if (!staged && !pixels)
+			// Nothing to upload from (a staged upload that failed after the
+			// loader freed its copy). A texture from the pool still holds the
+			// frame it last showed: blank it rather than show the wrong frame.
+			std::vector<unsigned char> blank;
+			if (!staged && !pixels) {
 				printf("generateTexture: no pixels to upload for %s\n", fileName.c_str());
-			else if (!staged && reused)
+				if (reused) {
+					blank.assign((size_t)sizeX * sizeY * (info.dataType == GL_UNSIGNED_BYTE ? 4 : 8), 0);
+					pixels = blank.data();
+				}
+			}
+			if (!staged && !pixels) {
+			} else if (!staged && reused)
 				glTexSubImage2D ( info.target,0,0,0,sizeX,sizeY,info.format,info.dataType,pixels);
 			else if (!staged)
 				glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,pixels);

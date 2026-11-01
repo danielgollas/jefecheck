@@ -136,6 +136,20 @@ void makeFree(Staging* s) {
     s->freeSince = Clock::now();
 }
 
+// GL thread, g_mutex held. Frees buffers whose transfer the GPU has finished
+// (persistent level; classic buffers are re-mapped as soon as they are uploaded).
+void retireFinished() {
+    for (Staging* s : g_staging) {
+        if (s->state != Staging::State::InFlight || !s->fence) continue;
+        const GLenum r = glClientWaitSync(s->fence, 0, 0);
+        if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) {
+            glDeleteSync(s->fence);
+            s->fence = nullptr;
+            makeFree(s);
+        }
+    }
+}
+
 // GL thread, g_mutex held. Only Free buffers are destroyed.
 void destroyStaging(size_t index) {
     Staging* s = g_staging[index];
@@ -180,17 +194,7 @@ void service() {
     if (level == Level::Off) return;
 
     std::lock_guard<std::mutex> lock(g_mutex);
-    // Retire buffers whose transfer the GPU has finished (persistent level;
-    // classic buffers are re-mapped as soon as they are uploaded).
-    for (Staging* s : g_staging) {
-        if (s->state != Staging::State::InFlight || !s->fence) continue;
-        const GLenum r = glClientWaitSync(s->fence, 0, 0);
-        if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) {
-            glDeleteSync(s->fence);
-            s->fence = nullptr;
-            makeFree(s);
-        }
-    }
+    retireFinished();
     // Grow for the sizes the decode thread missed, making room by dropping
     // free buffers of other sizes (a new sequence replaces the old one).
     for (auto& [bytes, count] : g_wanted) {
@@ -223,6 +227,9 @@ void trimIdle(double idleSeconds) {
     }
     if (g_level.load() == Level::Off) return;
     std::lock_guard<std::mutex> lock(g_mutex);
+    // The last uploads of a load are still InFlight until a fence check sees
+    // them done; with no further uploads, only this call retires them.
+    retireFinished();
     for (size_t i = 0; i < g_staging.size();) {
         if (g_staging[i]->state == Staging::State::Free && g_staging[i]->freeSince < cutoff)
             destroyStaging(i);

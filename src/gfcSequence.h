@@ -424,6 +424,7 @@ public:
     std::vector<int> luts;
 #include "gfcframe.h"
     gfcFrame forcedFrame;
+    int forcedFrameIndex = -1;   // which frames[] entry forcedFrame holds, -1 none
     void cleanForcedLoad();
     
     bool forceGFLLoading;
