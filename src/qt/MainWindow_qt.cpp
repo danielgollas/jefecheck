@@ -61,6 +61,8 @@
 #include <functional>
 #include <memory>
 #include <set>
+#include <cmath>
+#include <cstdint>
 
 #include "../gfcReviewSummary.h"
 #include "../gfcNoteStore.h"
@@ -1785,6 +1787,55 @@ std::vector<char> interiorMask(const Rgb16Image& t) {
     return m;
 }
 
+// Reference RGB for a 10/12-bit planar clip known to be encoded Rec.709
+// video range with co-sited chroma, computed in double precision straight
+// from the decoder's planes (written independently of gfcYuvConverter, with
+// the encoding facts fixed rather than read from the file's tags).
+Rgb16Image decodedReference709Video(const QString& path, int64_t index, QString& err) {
+    Rgb16Image out;
+    gfcMovieReader reader;
+    std::string e;
+    gfcMovieFrame f;
+    if (!reader.open(path.toStdString(), &e) || !reader.readFrame(index, f, &e)) {
+        err = QString::fromStdString(e);
+        return out;
+    }
+    if (!f.planarYuv || f.planeCount < 3 || f.bitDepth <= 8) { err = "not planar high-bit-depth YUV"; return out; }
+    const int subX = std::max(1, reader.info().subX), subY = std::max(1, reader.info().subY);
+    auto sample = [&](int p, int x, int y) {
+        const gfcMoviePlane& pl = f.plane[p];
+        x = std::clamp(x, 0, pl.width - 1);
+        y = std::clamp(y, 0, pl.height - 1);
+        return double(reinterpret_cast<const uint16_t*>(pl.data + size_t(y) * pl.strideBytes)[x]);
+    };
+    auto chroma = [&](int p, double cs, double ct) {  // bilinear, texel centres at i + 0.5
+        const double fs = cs - 0.5, ft = ct - 0.5;
+        const int x0 = int(std::floor(fs)), y0 = int(std::floor(ft));
+        const double ax = fs - x0, ay = ft - y0;
+        return (sample(p, x0, y0) * (1 - ax) + sample(p, x0 + 1, y0) * ax) * (1 - ay) +
+               (sample(p, x0, y0 + 1) * (1 - ax) + sample(p, x0 + 1, y0 + 1) * ax) * ay;
+    };
+    const double k = double(1 << (f.bitDepth - 8));
+    const double kr = 0.2126, kb = 0.0722, kg = 1.0 - kr - kb;
+    out.w = f.width;
+    out.h = f.height;
+    out.px.resize(size_t(out.w) * out.h * 3);
+    for (int y = 0; y < out.h; ++y)
+        for (int x = 0; x < out.w; ++x) {
+            const double s = x + 0.5, t = y + 0.5;
+            const double cs = (s - 0.5) / subX + 0.5;  // horizontally co-sited
+            const double ct = t / subY;                // vertically centred
+            const double Y = (sample(0, x, y) - 16 * k) / (219 * k);
+            const double cb = (chroma(1, cs, ct) - 128 * k) / (224 * k);
+            const double cr = (chroma(2, cs, ct) - 128 * k) / (224 * k);
+            const double rgb[3] = {Y + 2 * (1 - kr) * cr, Y - 2 * (1 - kb) * kb / kg * cb - 2 * (1 - kr) * kr / kg * cr,
+                                   Y + 2 * (1 - kb) * cb};
+            for (int c = 0; c < 3; ++c)
+                out.px[(size_t(y) * out.w + x) * 3 + c] = quint16(std::lround(std::clamp(rgb[c], 0.0, 1.0) * 65535.0));
+        }
+    return out;
+}
+
 }  // namespace
 
 int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
@@ -1861,6 +1912,40 @@ int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
         int maxD = 0;
         double sumD = 0;
         long long n = 0;
+        // 16-bit: compare with the clip's own decoded planes converted here,
+        // so ProRes compression loss (which varies with the ffmpeg that made
+        // the clip) cancels out and the limit measures the GPU path alone.
+        Rgb16Image ref;
+        if (ok && clip.sixteen) {
+            QString refErr;
+            ref = decodedReference709Video(path, 2, refErr);  // timeline frame 3
+            if (ref.w != got.w || ref.h != got.h) {
+                printf("  %s: FAIL no decoded-plane reference (%s)\n", clip.name, refErr.toLocal8Bit().constData());
+                ok = false;
+            } else {
+                // Sanity that the clip really is the bars: encoder loss on the
+                // interiors (max reported only; it moves with the encoder).
+                const std::vector<char> m = interiorMask(truth);
+                int encMax = 0;
+                double encSum = 0;
+                long long encN = 0;
+                for (int y = 0; y < truth.h; ++y)
+                    for (int x = 0; x < truth.w; ++x) {
+                        if (!m[size_t(y) * truth.w + x]) continue;
+                        for (int c = 0; c < 3; ++c) {
+                            const int d = std::abs(int(ref.at(x, y, c)) - int(truth.at(x, y, c)));
+                            encMax = std::max(encMax, d);
+                            encSum += d;
+                            ++encN;
+                        }
+                    }
+                const double encMean = encN ? encSum / double(encN) : 1e9;
+                const bool encOk = encMean <= 64.0;
+                printf("  %s: %s encoded clip vs RGB truth: mean |d| %.3f (<= 64.0), max |d| %d (not gated)\n",
+                       clip.name, encOk ? "ok" : "FAIL", encMean, encMax);
+                ok = encOk;
+            }
+        }
         if (ok) {
             const std::vector<char> mask = interiorMask(truth);
             for (int y = 0; y < truth.h; ++y)
@@ -1868,7 +1953,7 @@ int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
                     if (!mask[size_t(y) * truth.w + x]) continue;
                     for (int c = 0; c < 3; ++c) {
                         const int d = clip.sixteen
-                                          ? std::abs(int(got.at(x, y, c)) - int(truth.at(x, y, c)))
+                                          ? std::abs(int(got.at(x, y, c)) - int(ref.at(x, y, c)))
                                           : std::abs(int(got.at(x, y, c) >> 8) - int(truth.at(x, y, c) >> 8));
                         maxD = std::max(maxD, d);
                         sumD += d;
@@ -1887,8 +1972,15 @@ int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
                 // The grey ramp rows: truth rows with many distinct grey
                 // levels. The render must keep more than 16 distinct values
                 // there, and values an 8-bit path cannot produce (v % 257 != 0).
-                std::set<int> distinct;
+                // Those alone miss an 8-bit texture behind the 16F render FBO
+                // (half-float read-back lands off the grid), so the ramp must
+                // also keep >= 75% of the decoded reference's distinct levels
+                // and stay within mean |d| 32 of it (8-bit storage measured
+                // 97 of ~199 levels).
+                std::set<int> distinct, refDistinct;
                 int offGrid = 0;
+                double rampSum = 0;
+                long long rampN = 0;
                 for (int y = 0; y < truth.h; ++y) {
                     std::set<int> rowLevels;
                     for (int x = 0; x < truth.w; ++x)
@@ -1900,11 +1992,20 @@ int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
                         if (t0 <= 0 || t0 >= 65535 || truth.at(x, y, 1) != t0) continue;
                         const int v = got.at(x, y, 1);
                         if (distinct.insert(v).second && v % 257 != 0) ++offGrid;
+                        refDistinct.insert(ref.at(x, y, 1));
+                        for (int c = 0; c < 3; ++c) {
+                            rampSum += std::abs(int(got.at(x, y, c)) - int(ref.at(x, y, c)));
+                            ++rampN;
+                        }
                     }
                 }
-                const bool precise = distinct.size() > 16 && offGrid > 16;
-                printf("  %s: %s ramp has %d distinct values, %d not on the 8-bit grid (> 16 each)\n",
-                       clip.name, precise ? "ok" : "FAIL", int(distinct.size()), offGrid);
+                const double rampMean = rampN ? rampSum / double(rampN) : 1e9;
+                const bool precise = distinct.size() > 16 && offGrid > 16 &&
+                                     distinct.size() * 4 >= refDistinct.size() * 3 && rampMean <= 32.0;
+                printf("  %s: %s ramp has %d distinct values (reference %d, need >= 75%%), %d not on the 8-bit grid "
+                       "(> 16), mean |d| %.3f vs reference (<= 32)\n",
+                       clip.name, precise ? "ok" : "FAIL", int(distinct.size()), int(refDistinct.size()), offGrid,
+                       rampMean);
                 ok = ok && precise;
             } else {
                 // Filmstrip thumbnail vs the 8-bit render at the thumbnail's
