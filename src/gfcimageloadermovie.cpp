@@ -55,36 +55,52 @@ int gfcImageLoaderMovie::load(gfcLoadParams params) {
     const float scale = (params.scale > 0) ? params.scale : 100.0f;
     const int outW = std::max(1, (int)std::lround(decoded.width * scale / 100.0f));
     const int outH = std::max(1, (int)std::lround(decoded.height * scale / 100.0f));
-    if (!reader->convertToBGRA(decoded, bits, outW, outH, pixels_, &err)) {
-        loadErrorString = "Movie: cannot convert frame " + std::to_string(index + 1) + ": " + err;
-        std::printf("%s\n", loadErrorString.c_str());
-        pixels_.clear();
-        return -1;
+
+    // The crop AOI is in scaled pixels, clamped to the image (gflCrop does not).
+    int cx = 0, cy = 0, w = outW, h = outH;
+    if (params.crop && params.aoi.w > 0 && params.aoi.h > 0) {
+        const int x0 = std::clamp(params.aoi.x, 0, outW - 1);
+        const int y0 = std::clamp(params.aoi.y, 0, outH - 1);
+        const int cw = std::min(params.aoi.w, outW - x0);
+        const int ch = std::min(params.aoi.h, outH - y0);
+        if (cw > 0 && ch > 0) { cx = x0; cy = y0; w = cw; h = ch; }
     }
 
-    // Keep the frame's description but let the decoder's buffer go: the BGRA
-    // copy is what gets uploaded in this colour path.
-    frame_ = decoded;
-    frame_.owner.reset();
-    for (gfcMoviePlane& pl : frame_.plane) pl = gfcMoviePlane();
-    frame_.planeCount = 0;
+    // Planar YUV (3 planes, or 4 with alpha; little-endian samples) goes to
+    // the GPU as planes and is converted to RGB at upload with the file's
+    // matrix/range (gfcYuvConverter). The decoder's frame is kept, not copied.
+    // Anything else (semi-planar, packed, big-endian, 4-bit/S3TC tracks) is
+    // converted to BGRA here.
+    const bool bigEndian = info.pixFmt.size() > 2 && info.pixFmt.compare(info.pixFmt.size() - 2, 2, "be") == 0;
+    const bool gpuDepth = params.compressed == GFC_8BPC || params.compressed == GFC_16BPC ||
+                          params.compressed == GFC_16HALF;
+    planar_ = decoded.planarYuv && (decoded.planeCount == 3 || decoded.planeCount == 4) && !bigEndian &&
+              gpuDepth && decoded.bitDepth >= 8 && decoded.bitDepth <= 16;
 
-    int w = outW, h = outH;
     const int bytesPerPixel = 4 * (bits / 8);
-    if (params.crop && params.aoi.w > 0 && params.aoi.h > 0) {
-        const int cx = std::clamp(params.aoi.x, 0, w - 1);
-        const int cy = std::clamp(params.aoi.y, 0, h - 1);
-        const int cw = std::min(params.aoi.w, w - cx);
-        const int ch = std::min(params.aoi.h, h - cy);
-        if (cw > 0 && ch > 0 && (cw != w || ch != h)) {
-            std::vector<uint8_t> cropped((size_t)cw * ch * bytesPerPixel);
-            for (int y = 0; y < ch; ++y)
-                std::memcpy(cropped.data() + (size_t)y * cw * bytesPerPixel,
-                            pixels_.data() + ((size_t)(y + cy) * w + cx) * bytesPerPixel,
-                            (size_t)cw * bytesPerPixel);
+    if (planar_) {
+        frame_ = decoded;
+    } else {
+        if (!reader->convertToBGRA(decoded, bits, outW, outH, pixels_, &err)) {
+            loadErrorString = "Movie: cannot convert frame " + std::to_string(index + 1) + ": " + err;
+            std::printf("%s\n", loadErrorString.c_str());
+            pixels_.clear();
+            return -1;
+        }
+        // Keep the frame's description but let the decoder's buffer go: the
+        // BGRA copy is what gets uploaded in this colour path.
+        frame_ = decoded;
+        frame_.owner.reset();
+        for (gfcMoviePlane& pl : frame_.plane) pl = gfcMoviePlane();
+        frame_.planeCount = 0;
+
+        if (w != outW || h != outH) {
+            std::vector<uint8_t> cropped((size_t)w * h * bytesPerPixel);
+            for (int y = 0; y < h; ++y)
+                std::memcpy(cropped.data() + (size_t)y * w * bytesPerPixel,
+                            pixels_.data() + ((size_t)(y + cy) * outW + cx) * bytesPerPixel,
+                            (size_t)w * bytesPerPixel);
             pixels_.swap(cropped);
-            w = cw;
-            h = ch;
         }
     }
 
@@ -111,9 +127,34 @@ int gfcImageLoaderMovie::load(gfcLoadParams params) {
     metaData.insert({"FrameCount", std::to_string(info.frameCount)});
     if (!info.startTimecode.empty()) metaData.insert({"StartTimecode", info.startTimecode});
 
+    frameInfo = gfcGLFrameInfo();
     frameInfo.target = GL_TEXTURE_RECTANGLE_ARB;
     frameInfo.format = GL_BGRA;
-    frameInfo.dataPointer = pixels_.data();
+    frameInfo.dataPointer = planar_ ? nullptr : pixels_.data();
+    if (planar_) {
+        frameInfo.planarYuv = true;
+        frameInfo.planeCount = frame_.planeCount;
+        for (int p = 0; p < frame_.planeCount; ++p) {
+            frameInfo.planes[p].data = frame_.plane[p].data;
+            frameInfo.planes[p].width = frame_.plane[p].width;
+            frameInfo.planes[p].height = frame_.plane[p].height;
+            frameInfo.planes[p].strideBytes = frame_.plane[p].strideBytes;
+        }
+        frameInfo.bitDepth = frame_.bitDepth;
+        frameInfo.subX = std::max(1, info.subX);
+        frameInfo.subY = std::max(1, info.subY);
+        frameInfo.matrix = int(info.matrix);
+        frameInfo.range = int(info.range);
+        frameInfo.siting = int(info.siting);
+        frameInfo.hasAlpha = info.hasAlpha && frame_.planeCount == 4;
+        // Output pixels (cx, cy, w, h) of the outW x outH scaled picture, in
+        // source luma pixels.
+        const double fx = double(decoded.width) / outW, fy = double(decoded.height) / outH;
+        frameInfo.srcX = (int)std::lround(cx * fx);
+        frameInfo.srcY = (int)std::lround(cy * fy);
+        frameInfo.srcW = std::max(1, (int)std::lround(w * fx));
+        frameInfo.srcH = std::max(1, (int)std::lround(h * fy));
+    }
     switch (params.compressed) {
     case GFC_16HALF:
     case GFC_16BPC:
@@ -160,6 +201,14 @@ void* gfcImageLoaderMovie::getPixelPointer() {
 void gfcImageLoaderMovie::releaseMemory() {
     std::vector<uint8_t>().swap(pixels_);
     frameInfo.dataPointer = nullptr;
+    // Drop the decoder's frame; keep the description (index, size, depth).
+    frame_.owner.reset();
+    for (gfcMoviePlane& pl : frame_.plane) pl = gfcMoviePlane();
+    frame_.planeCount = 0;
+    for (gfcGLFrameInfo::Plane& pl : frameInfo.planes) pl = gfcGLFrameInfo::Plane();
+    frameInfo.planeCount = 0;
+    frameInfo.planarYuv = false;
+    planar_ = false;
 }
 
 std::vector<std::string> gfcImageLoaderMovie::getChannelNames() {

@@ -131,6 +131,9 @@ void setLoopMode(int mode);     // 0 once, 1 loop, 2 bounce
 int  getLoopMode();
 void setTargetFPS(float fps);
 float getTargetFPS();
+// The on-screen "fps:" readout: an EMA of the real frame-advance interval
+// (reports the target exactly while within 2% of it).
+float getMeasuredFPS();
 int  getCurrentFrame();
 int  getFromFrame();
 int  getToFrame();

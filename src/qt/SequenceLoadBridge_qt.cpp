@@ -548,6 +548,10 @@ bool isPlaying() {
     return playbackManager.isPlaying() != 0;
 }
 
+float getMeasuredFPS() {
+    return playbackManager.getCurrentFPS();
+}
+
 void autoloadLUTs(const std::string& path) {
     // FLTK's loadLUTsFromPath uses fl_filename_list and is gated to the
     // FLTK build. The Qt build uses std::filesystem instead so we don't

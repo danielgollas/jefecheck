@@ -175,6 +175,17 @@ static QString resolveCCTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// Resolve --video-colour-test <dir> / --video-perf-test <movie>: headless
+// movie colour (bars vs RGB truth) and decode+upload throughput harnesses.
+static QString resolveArgValue(int argc, char* argv[], const char* flag) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], flag) == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
 // Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe:
 // load the image into plates 0 and 1 side-by-side, grab the framebuffer, add
 // an FX to plate 0 only, grab again, and report left/right half brightness.
@@ -1811,6 +1822,33 @@ int main(int argc, char* argv[]) {
     if (!ccTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, ccTestFile]() {
             const int code = window.runHeadlessCCTest(ccTestFile);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless movie colour proof (--video-colour-test <dir>): generated SMPTE
+    // bars clips are loaded, rendered and compared with their RGB truth. The
+    // loader thread must not block on the default 5-frame queue cap while the
+    // harness waits (0 does not mean unlimited), so lift it for the run.
+    const QString videoColourDir = resolveArgValue(argc, argv, "--video-colour-test");
+    if (!videoColourDir.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, videoColourDir]() {
+            const int savedQueue = sett.maximumFramesInQueue;
+            sett.maximumFramesInQueue = 100000;
+            const int code = window.runHeadlessVideoColourTest(videoColourDir);
+            sett.maximumFramesInQueue = savedQueue;
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless movie throughput (--video-perf-test <movie>): runs with the
+    // user's real queue cap, as an interactive load would.
+    const QString videoPerfMovie = resolveArgValue(argc, argv, "--video-perf-test");
+    if (!videoPerfMovie.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, videoPerfMovie]() {
+            const int code = window.runHeadlessVideoPerfTest(videoPerfMovie);
             fflush(stdout);
             std::_Exit(code);
         });

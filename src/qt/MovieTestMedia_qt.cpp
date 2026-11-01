@@ -90,22 +90,35 @@ bool generate(const QString& dir, QString* err) {
          "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",
          "-c:v", "libx264", "-g", "12", "-colorspace", "bt709", "-color_primaries", "bt709",
          "-color_trc", "bt709", "-color_range", "tv", out("h264_25.mp4")},
-        {"-y", "-f", "lavfi", "-i", bars, "-frames:v", "8", "-pix_fmt", "rgb48be",
+        // Colour-test bars (--video-colour-test). The truth is the exact 8-bit
+        // RGB the clips were made from (a 16-bit truth from swscale is itself
+        // off by ~0.4 code). Chroma is box-filtered (flags=area) so it does not
+        // bleed past the bar edges, and the H.264/odd clips are lossless, so a
+        // correct decode lands within rounding of the truth.
+        {"-y", "-f", "lavfi", "-i", bars, "-frames:v", "8", "-pix_fmt", "rgb24",
          d.filePath("bars_truth.%04d.png")},
         QStringList{"-y", "-f", "lavfi", "-i", bars, "-frames:v", "8",
-         "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv422p10le",
+         "-vf", "scale=out_color_matrix=bt709:out_range=tv:flags=area,format=yuv422p10le",
          "-c:v", "prores_ks", "-profile:v", "3"} + kTag709 + QStringList{out("bars_709tv.mov")},
         {"-y", "-f", "lavfi", "-i", bars, "-frames:v", "8",
-         "-vf", "scale=out_color_matrix=bt601:out_range=pc,format=yuv420p",
-         "-c:v", "libx264", "-g", "4", "-colorspace", "smpte170m", "-color_primaries", "smpte170m",
+         "-vf", "scale=out_color_matrix=bt601:out_range=pc:flags=area,format=yuv420p",
+         "-c:v", "libx264", "-qp", "0", "-g", "4", "-colorspace", "smpte170m", "-color_primaries", "smpte170m",
          "-color_trc", "smpte170m", "-color_range", "pc", out("bars_601full.mp4")},
         {"-y", "-f", "lavfi", "-i", bars, "-frames:v", "8",
-         "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",
-         "-c:v", "libx264", "-g", "4",
+         "-vf", "scale=out_color_matrix=bt709:out_range=tv:flags=area,format=yuv420p",
+         "-c:v", "libx264", "-qp", "0", "-g", "4",
          "-bsf:v", "h264_metadata=colour_primaries=2:transfer_characteristics=2:matrix_coefficients=2:video_full_range_flag=0",
          out("bars_untagged.mp4")},
-        {"-y", "-f", "lavfi", "-i", kBars.arg("321x181"), "-frames:v", "8",
-         "-c:v", "mpeg4", "-q:v", "2", "-pix_fmt", "yuv420p", out("bars_709tv_odd.mp4")},
+        // Odd-sized phone-style frame, 4:2:0 with ceil(w/2) x ceil(h/2) chroma:
+        // made at 322x182 and cropped exactly in YUV, so its chroma keeps the
+        // 2:1 grid real encoders use (swscale resampling straight to 321x181
+        // drifts the chroma grid). Lossless VP9, since H.264/HEVC cannot code
+        // odd 4:2:0 sizes; Rec.709 video range, untagged.
+        {"-y", "-f", "lavfi", "-i", kBars.arg("322x182"), "-frames:v", "8", "-vf", "crop=321:181:0:0",
+         "-pix_fmt", "rgb24", d.filePath("bars_odd_truth.%04d.png")},
+        {"-y", "-f", "lavfi", "-i", kBars.arg("322x182"), "-frames:v", "8",
+         "-vf", "scale=out_color_matrix=bt709:out_range=tv:flags=area,format=yuv420p,crop=321:181:0:0:exact=1",
+         "-c:v", "libvpx-vp9", "-lossless", "1", out("bars_709tv_odd.mp4")},
         {"-y", "-f", "lavfi",
          "-i", "color=c=black:size=320x180:rate=24000/1001,drawbox=w=iw:h=ih:color=white:t=fill:enable='eq(mod(n\\,24)\\,0)',format=yuv422p10le",
          "-f", "lavfi",

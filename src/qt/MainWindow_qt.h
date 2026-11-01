@@ -195,6 +195,21 @@ public:
     // regression where renders dropped the super-shader (CC + LUT).
     int runHeadlessCCTest(const QString& imagePath);
 
+    // Headless movie colour proof (--video-colour-test <dir>). Generates the
+    // SMPTE-bars test clips into dir, loads each into plate 0, renders frame 3
+    // and compares it with the bars' RGB truth on the bars' interiors: the
+    // 10-bit ProRes clip at 16 bits, the 601/full, untagged and odd-sized
+    // clips at 8 bits, plus the filmstrip thumbnail and 16-bit ramp precision.
+    // Prints VIDEO-COLOUR-TEST PASS|FAIL; returns 0 on pass, 2 on fail.
+    int runHeadlessVideoColourTest(const QString& dir);
+
+    // Headless movie throughput (--video-perf-test <movie>). Loads the movie
+    // into plate 0 at the default depth, times decode+upload until every frame
+    // is resident (or loading stops at the memory limit), then plays 5 s and
+    // reads the measured FPS. PASS when load >= 24 fps and playback is within
+    // 2% of the target rate; returns 0 on pass, 2 on fail.
+    int runHeadlessVideoPerfTest(const QString& movie);
+
     // Headless multiplate FX state-leak probe (--fx-multitest <image>). Loads
     // the image into plates 0 and 1, side-by-side (FRAMINGDOUBLE), grabs the
     // on-screen framebuffer, then adds an FX to plate 0 ONLY and grabs again.
