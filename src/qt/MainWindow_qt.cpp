@@ -536,8 +536,10 @@ void MainWindow_Qt::buildMenuBar() {
             lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
         }
         const QString filter = tr(
-            "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff "
-            "*.tga *.bmp);;All files (*)");
+            "Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4);;"
+            "Movies (*.mov *.mp4);;"
+            "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp);;"
+            "All files (*)");
         const QString chosen = QFileDialog::getOpenFileName(
             this, tr("Load Sequence"), lastDir, filter);
         if (chosen.isEmpty()) return;
@@ -3248,13 +3250,14 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
             "*.tif", "*.TIF", "*.tiff", "*.TIFF",
             "*.tga", "*.TGA",
             "*.bmp", "*.BMP",
+            "*.mov", "*.MOV", "*.mp4", "*.MP4",
         };
         QDir dir(resolved);
         const QStringList entries =
             dir.entryList(kImageFilters, QDir::Files, QDir::Name);
         if (entries.isEmpty()) {
             statusBar()->showMessage(
-                QString("No image files in %1").arg(resolved), 5000);
+                QString("No image or movie files in %1").arg(resolved), 5000);
             return;
         }
         resolved = dir.absoluteFilePath(entries.first());

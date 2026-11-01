@@ -1,4 +1,5 @@
 #include "gfcframe.h"
+#include "gfcMediaKinds.h"
 
 
 #include <iostream>
@@ -80,7 +81,11 @@ int gfcFrame::whatLoaderToUse ( std::string name )
 {
 
 	//return TEST_GLOBAL_loaderToUse;
-	
+
+	// Movies first: forcing the image loader cannot read a .mov anyway.
+	if (gfcIsMovieFile(name))
+		return GFCLOADER_MOVIE;
+
 	if(forceGFLLoader || name.find(".")==std::string::npos){ //if we are forcing or file has no extension use gfl
 		
 		return GFCLOADER_GFL;
@@ -135,6 +140,10 @@ int gfcFrame::loadFrame ( gfcLoadParams params )
 		case GFCLOADER_GFL:
 		case GFCLOADER_FIL:
 			theImageLoader=new gfcImageLoaderOIIO();
+			break;
+
+		case GFCLOADER_MOVIE:
+			theImageLoader=new gfcImageLoaderMovie();
 			break;
 	}
 

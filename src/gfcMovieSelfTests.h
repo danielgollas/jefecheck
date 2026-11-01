@@ -7,3 +7,4 @@ int movieKindsSelfTest(const std::string& mediaDir);
 int movieLibavSelfTest(const std::string& mediaDir);
 int movieReaderSelfTest(const std::string& mediaDir);
 int movieNumberingSelfTest(const std::string& mediaDir);
+int movieLoaderSelfTest(const std::string& mediaDir);

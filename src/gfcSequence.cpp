@@ -857,6 +857,44 @@ void gfcSequence::prepareSequenceFiles()
 	{
 		findSequenceFiles(files,false);
 	}
+	// files[0] is the resolved path (search paths included); open the movie
+	// once here so every frame of this load shares the reader.
+	if (!files.empty() && gfcIsMovieFile(myGUI->getFilename()))
+		openMovieReaderFor(files[0]);
+	else
+		openMovieReaderFor("");
+}
+
+void gfcSequence::openMovieReaderFor(const std::string& path)
+{
+	std::shared_ptr<gfcMovieReader> reader;
+	if (!path.empty()) {
+		reader = std::make_shared<gfcMovieReader>();
+		std::string err;
+		if (!reader->open(path, &err)) {
+			printf("Track %c: cannot open movie %s: %s\n", trackID, path.c_str(), err.c_str());
+			reader.reset();
+		}
+	}
+	std::lock_guard<std::mutex> lock(movieReaderMutex_);
+	movieReader_ = std::move(reader);
+}
+
+std::shared_ptr<gfcMovieReader> gfcSequence::currentMovieReader() const
+{
+	std::lock_guard<std::mutex> lock(movieReaderMutex_);
+	return movieReader_;
+}
+
+bool gfcSequence::isMovie() const
+{
+	return currentMovieReader() != nullptr;
+}
+
+const gfcMovieInfo* gfcSequence::movieInfo() const
+{
+	std::shared_ptr<gfcMovieReader> reader = currentMovieReader();
+	return reader ? &reader->info() : nullptr;
 }
 
 int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
@@ -942,6 +980,7 @@ int gfcSequence::loadSequence() {
 		//load each of the frames we have to load
 		bool continueLoading=true;
 		withinMemoryLimits=true;
+		const std::shared_ptr<gfcMovieReader> movieReader=currentMovieReader();
 		printf("***Track %c: Loading from %i to %i\n",trackID,startFrame,endFrame);
 		for ( int i=startFrame;i<=endFrame;i++ ) {
 
@@ -961,6 +1000,10 @@ int gfcSequence::loadSequence() {
 				tmpParams.forceGFLLoading=forceGFLLoading;
 				//printf("%i\n",i);
 				tmpParams.fileName=files[i];
+				if (movieReader) {
+					tmpParams.movieFrameIndex=i;
+					tmpParams.movieReader=movieReader;
+				}
 				//printf ( "%c-%i: Loading: %s\n",trackID,i, GetFilenameNoPath(tmpParams.fileName).c_str() );
 				gfcFrame tmpFrame;
 
@@ -1293,6 +1336,7 @@ int gfcSequence::clearSequence() {
 		myGUI->setTrackRange(0,0);
 	}
 	maxFramesToLoad=0;
+	openMovieReaderFor("");
 
 	rangeBegin=rangeEnd=0;
 	//
@@ -1713,6 +1757,14 @@ std::string gfcSequence::loadPreview() {
 
 	params.aoi.set(-1,-1,-1,-1);//this is to avoid the preview frame from being cropped.
 	params.forceGFLLoading=forceGFLLoading;
+	if (gfcIsMovieFile(params.fileName)) {
+		// previewFiles[0] is the search-path-resolved movie.
+		openMovieReaderFor(previewFiles.empty() ? params.fileName : previewFiles[0]);
+		params.movieFrameIndex=0;
+		params.movieReader=currentMovieReader();
+		if (!previewFiles.empty())
+			params.fileName=previewFiles[0];
+	}
 	previewTimer.start();
 
 	//     currentChannelName=params.channel==-1;

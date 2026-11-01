@@ -29,6 +29,8 @@ class TrackWidget;
 #include <vector>
 #include "gfcStructures.h"
 #include "gfcloadparams.h"
+#include "gfcMovieReader.h"
+#include <memory>
 #include "gfcimageloader.h"
 #include "gfcframe.h"
 
@@ -293,6 +295,13 @@ public:
     void updateTrackWidget();
     std::string loadPreview();
     gfcFrame getPreviewFrame();
+
+    // Movies: the track holds one open reader shared by every frame's load
+    // (opened when the GUI filename is a .mov/.mp4, dropped by clearSequence).
+    bool isMovie() const;
+    // Stream facts of the open movie, or null for an image sequence (or a
+    // movie that could not be opened). Valid until the track is reloaded/cleared.
+    const gfcMovieInfo* movieInfo() const;
     double getPreviewElapsedSecs() const;  // last loadPreview() wall-clock time
     
     gfcSequenceGUI* myGUI;
@@ -369,6 +378,12 @@ public:
     Rectang *taoi;
     std::mutex rawQueueMutex;
     bool loadingCanceled;
+    // Guards movieReader_ itself (the reader is internally thread-safe):
+    // loadPreview may replace it on the main thread.
+    mutable std::mutex movieReaderMutex_;
+    std::shared_ptr<gfcMovieReader> movieReader_;
+    void openMovieReaderFor(const std::string& path);
+    std::shared_ptr<gfcMovieReader> currentMovieReader() const;
     int rangeBegin;
     int rangeEnd;
     int maxFramesToLoad; //how many frames should be loaded for this sequence, assigned dynamicaly depending on how many tracks are being loaded and how many fit in ram.

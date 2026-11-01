@@ -6,6 +6,8 @@
 
 #include "gfcMediaKinds.h"
 #include "gfcMovieReader.h"
+#include "gfcframe.h"
+#include "gfcimageloadermovie.h"
 #include "gfcStructures.h"
 #include "gfcNoteStore.h"
 #include "gfcMediaFingerprint.h"
@@ -100,5 +102,23 @@ int movieNumberingSelfTest(const std::string& dir) {
     sett.useSearchPaths=true; sett.searchPaths={dir+"/moved"}; findSequence(files, dir+"/gone/a_002.mov", label, s, e); sett.useSearchPaths=false; sett.searchPaths.clear();
     check(files.size()==48 && files[0]==dir+"/moved/a_002.mov", "a moved movie is found through search paths");
     std::printf("MOVIE-NUMBERING: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int movieLoaderSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    gfcLoadParams p; p.fileName=dir+"/prores422hq_23976.mov"; p.fromFrame=1; p.toFrame=48; p.scale=100; p.compressed=GFC_16HALF; p.movieFrameIndex=7;
+    gfcFrame f; check(f.loadFrame(p)==0 && f.loaded && f.sizeX==320 && f.sizeY==180 && f.bpc==16 && f.originalBitDepth==10, "16-bit movie frame loads");
+    check(f.whatLoaderToUse(p.fileName)==GFCLOADER_MOVIE, "dispatch");
+    gfcGLFrameInfo gi=f.theImageLoader->getFrameInfo(); check(gi.dataType==GL_UNSIGNED_SHORT && gi.internalFormat==GL_RGBA16F_ARB && gi.target==GL_TEXTURE_RECTANGLE_ARB, "16F upload info");
+    p.compressed=GFC_8BPC; p.scale=50; gfcFrame g; check(g.loadFrame(p)==0 && g.sizeX==160 && g.sizeY==90 && g.bpc==8, "8-bit at 50% scale");
+    p.fileName=dir+"/empty.mov"; gfcFrame e; check(e.loadFrame(p)!=0 && !e.loaded && !e.loadErrorString.empty(), "empty movie reports an error");
+    p.fileName=dir+"/truncated.mov"; p.movieFrameIndex=47; gfcFrame t; check(t.loadFrame(p)!=0 && !t.loaded, "frame past the truncation fails without crashing");
+    p.fileName=dir+"/h264_25.mp4"; p.movieFrameIndex=-1; p.fromFrame=3; gfcFrame h; check(h.loadFrame(p)==0 && h.theImageLoader && static_cast<gfcImageLoaderMovie*>(h.theImageLoader)->movieFrame().index==2, "index defaults to fromFrame-1");
+    for (gfcFrame* fr : {&f, &g, &e, &t, &h}) fr->clearFrame();
+    std::printf("MOVIE-LOADER: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

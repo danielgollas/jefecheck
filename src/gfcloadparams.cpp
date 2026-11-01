@@ -16,6 +16,7 @@ gfcLoadParams::gfcLoadParams()
 	filterType=0;
 	channelName="";
 	crop=false;
+	movieFrameIndex=-1;
 	//gammaLUT=NULL;
 }
 
