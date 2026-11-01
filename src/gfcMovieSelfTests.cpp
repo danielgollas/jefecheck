@@ -561,8 +561,11 @@ int audioPlaybackSelfTest(const std::string& dir) {
       gfcAudioTransport t{1,1,4,LOOPMODEBOUNCE_ID,1}; e.startLeading(t); std::vector<float> c; o.pump(2002*4,&c); check(rms(c)>0.1f, "bounce forward pass is audible");
       c.clear(); o.pump(2002*3,&c); check(rms(c)<1e-4f, "bounce backward pass is silent");
       c.clear(); o.pump(2002*2,&c); check(rms(c)>0.1f, "bounce sound resumes on the next forward pass"); }
-    audioEngine.setOutput(nullptr); playbackManager.setTargetRate(24000,1001); playbackManager.startPlayFwd(); check(!audioEngine.isLeading(), "no device: pacing leads");
-    std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update(); check(playbackManager.getCurrentFrame()>=2, "no device: playback still advances"); playbackManager.pause();
+    // No device: FPS pacing must still move the picture from a known frame.
+    audioEngine.setOutput(nullptr); playbackManager.setTargetRate(24000,1001); playbackManager.setCurrentFrame(1);
+    const int noDevFrom=playbackManager.getCurrentFrame(); playbackManager.startPlayFwd(); check(!audioEngine.isLeading(), "no device: pacing leads");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50)); playbackManager.update();
+    check(noDevFrom==1 && playbackManager.getCurrentFrame()>noDevFrom && !audioEngine.isLeading(), "no device: playback still advances"); playbackManager.pause();
     std::printf("AUDIO-PLAYBACK: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

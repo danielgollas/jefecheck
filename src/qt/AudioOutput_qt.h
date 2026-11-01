@@ -16,10 +16,10 @@ gfcAudioOutput* createOutput();
 // Closes (waits for the audio thread to stop) and deletes. Null is fine.
 void destroyOutput(gfcAudioOutput* out);
 
-// Headless check of a real device (--video-load-test): opens the default
+// Headless check of a real device (--audio-device-test): opens the default
 // output, checks its clock runs at wall-clock speed, leads a quiet tone, and
-// measures step-slice latency. Prints "AUDIO-DEVICE: pass=N fail=N" (skips
-// with pass=0 when there is no output device). Returns the failure count.
+// measures step-slice latency. Prints "AUDIO-DEVICE: pass=N fail=N". Returns
+// the failure count, or -1 (skip) when there is no output device.
 int deviceSelfTest();
 
 }  // namespace jefe::qt::audio

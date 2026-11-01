@@ -315,9 +315,8 @@ int deviceSelfTest() {
         return pred();
     };
     if (QMediaDevices::defaultAudioOutput().isNull()) {
-        std::printf("  note: no audio output device; skipped\n");
-        std::printf("AUDIO-DEVICE: pass=0 fail=0\n");
-        return 0;
+        std::printf("AUDIO-DEVICE SKIP: no audio output device\n");
+        return -1;
     }
     // A very quiet 1 kHz tone (-60 dBFS): audible output is detected, not heard.
     auto tone = std::make_shared<gfcAudioClip>(); tone->reset(0);
@@ -325,7 +324,10 @@ int deviceSelfTest() {
       for (int i = 0; i < n; ++i) s[size_t(2*i)] = s[size_t(2*i+1)] = 0.001f * float(std::sin(2.0 * M_PI * 1000.0 * i / 48000.0));
       tone->append(s.data(), n); }
     // Converted pass: 44.1 kHz int16 through the resampler, a short check.
-    {
+    QAudioFormat forced; forced.setSampleRate(44100); forced.setChannelCount(2); forced.setSampleFormat(QAudioFormat::Int16);
+    if (!QMediaDevices::defaultAudioOutput().isFormatSupported(forced)) {
+        std::printf("  note: the device does not accept 44.1 kHz int16; converted-path check skipped\n");
+    } else {
         gForceFormat.store(true);
         gfcAudioEngine e; e.setTrackClip(0, tone, 24000, 1001, 96); e.setPlayerRate(24000, 1001);
         auto* out = static_cast<QtAudioOutput*>(createOutput());
@@ -335,6 +337,7 @@ int deviceSelfTest() {
         if (opened) {
             std::printf("  converted: %s\n", out->worker()->formatInfo().c_str());
             spinUntil([&] { return out->playedSamples() > 0; }, 1000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));   // let the start-up burst settle
             const int64_t p0 = out->playedSamples(); const auto t0 = clock::now();
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
             const double ratio = double(out->playedSamples() - p0) / kEngineRate / (msSince(t0) / 1000.0);
@@ -361,6 +364,7 @@ int deviceSelfTest() {
         std::printf("  device: %s (open took %.0f ms, off the GUI thread)\n", out->worker()->formatInfo().c_str(), openMs);
         // Clock: playedSamples() advances at wall-clock speed.
         spinUntil([&] { return out->playedSamples() > 0; }, 1000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));   // let the start-up burst settle
         const int64_t p0 = out->playedSamples(); const auto t0 = clock::now();
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         const double ratio = double(out->playedSamples() - p0) / kEngineRate / (msSince(t0) / 1000.0);

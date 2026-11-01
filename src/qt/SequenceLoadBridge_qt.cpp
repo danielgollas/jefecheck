@@ -97,6 +97,9 @@ bool cloudConnectInFlight() {
 
 // The app's audio device (Qt Multimedia lives in AudioOutput_qt.cpp).
 static gfcAudioOutput* gAudioOutput = nullptr;
+static bool gAudioOutputEnabled = true;
+
+void setAudioOutputEnabled(bool enabled) { gAudioOutputEnabled = enabled; }
 
 // Stops the audio thread before globals tear down (it renders from
 // audioEngine, and must not run while the process unmaps on exit).
@@ -168,7 +171,7 @@ void initializeRenderingChain() {
     // Movie sound. Opening is asynchronous (the sink starts on its own
     // thread); until it does, or with no device at all, the engine cannot
     // lead and playback keeps FPS pacing.
-    if (!gAudioOutput) {
+    if (!gAudioOutput && gAudioOutputEnabled) {
         gAudioOutput = jefe::qt::audio::createOutput();
         audioEngine.setOutput(gAudioOutput);
         if (!gAudioOutput->open(&audioEngine))

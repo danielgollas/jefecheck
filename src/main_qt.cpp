@@ -226,6 +226,16 @@ static bool hasVideoLoadTest(int argc, char* argv[]) {
     return false;
 }
 
+// --audio-device-test : opens the real default audio output (quiet tone) and
+// measures its clock and step-slice latency. Exit 0 pass, 2 fail, 3 skip (no
+// output device). Kept out of --video-load-test: it depends on hardware and
+// wall-clock timing.
+static bool hasAudioDeviceTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--audio-device-test") == 0) return true;
+    return false;
+}
+
 // --wire-test : headless jefe::wire round-trip/bounds-safety self-test
 // (JEF-23). Pure data, no Qt/GL/rendering-chain dependency at all — takes
 // no argument. Dispatched at the very top of main(), before QApplication
@@ -684,7 +694,15 @@ int main(int argc, char* argv[]) {
     // Headless movie-loading suites (--video-load-test). Loading tracks and
     // sessions touches GL, so an offscreen context is required; track loads
     // also write a crash-recovery session, which is removed before exiting.
+    if (hasAudioDeviceTest(argc, argv)) {
+        const int r = jefe::qt::audio::deviceSelfTest();
+        std::fflush(stdout);
+        std::_Exit(r < 0 ? 3 : (r == 0 ? 0 : 2));
+    }
+
     if (hasVideoLoadTest(argc, argv)) {
+        // The suites use a fake device; never open (or sound) the real one.
+        jefe::qt::setAudioOutputEnabled(false);
         jefe::qt::initializeRenderingChain();
         if (!jefe::qt::setupOffscreenTestGL()) {
             printf("VIDEO-LOAD-TEST SKIP: no offscreen GL\n");
@@ -726,7 +744,6 @@ int main(int argc, char* argv[]) {
         allZero &= (audioSyncSelfTest(mediaDir) == 0);
         allZero &= (audioWalkSelfTest(mediaDir) == 0);
         allZero &= (audioPlaybackSelfTest(mediaDir) == 0);
-        allZero &= (jefe::qt::audio::deviceSelfTest() == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("VIDEO-LOAD-TEST media: %s\n", mediaDir.c_str());

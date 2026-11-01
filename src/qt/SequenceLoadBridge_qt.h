@@ -23,6 +23,9 @@ namespace jefe::qt {
 // Also creates the audio output (jefe::qt::audio) and installs it on
 // audioEngine; it opens asynchronously on its own thread.
 void initializeRenderingChain();
+// Call before initializeRenderingChain() to skip creating the audio output
+// (headless suites that install a fake device). Default: enabled.
+void setAudioOutputEnabled(bool enabled);
 
 // Default texture format (bit depth) used by the Qt drag-drop / Cmd+O
 // load path. Mirrors gfcSettings::defaultTextureFormat. The Qt status
