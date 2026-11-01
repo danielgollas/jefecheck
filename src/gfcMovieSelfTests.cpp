@@ -6,6 +6,14 @@
 
 #include "gfcMediaKinds.h"
 #include "gfcMovieReader.h"
+#include "gfcStructures.h"
+#include "gfcNoteStore.h"
+#include "gfcMediaFingerprint.h"
+#include "qt/SequenceLoadBridge_qt.h"
+#include <filesystem>
+
+extern gfcSettings sett;
+void findSequence(std::vector<std::string>& refFiles, std::string inputFilename, std::string& label, int& startNum, int& endNum);
 
 int movieKindsSelfTest(const std::string&) {
     int pass = 0, fail = 0;
@@ -71,5 +79,26 @@ int movieReaderSelfTest(const std::string& dir) {
     check(!gfcMovieReader::probe(dir+"/empty.mov", i, &err) && !err.empty(), "empty file errors");
     gfcMovieReader t; check(t.open(dir+"/truncated.mov", &err), "truncated opens"); int got=0; gfcMovieFrame tf; for (int k=0;k<48;++k){ if(!t.readFrame(k,tf,&err)) break; ++got; } check(got>0 && got<48, "truncated decodes some frames then stops cleanly");
     std::printf("MOVIE-READER: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int movieNumberingSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    std::vector<std::string> files; std::string label; int s = 0, e = 0;
+    findSequence(files, dir+"/shot_v003.mov", label, s, e);
+    check(files.size()==48 && s==1 && e==48 && label==dir+"/shot_v003.mov" && files[0]==files[47], "shot_v003.mov is 48 frames of one file, not frame 3");
+    findSequence(files, dir+"/a_001.mov", label, s, e);
+    check(files.size()==48 && files[0]==dir+"/a_001.mov", "a_001.mov and a_002.mov are never joined");
+    check(gfcNoteStore::normalisePath(dir+"/a.001.mov")==dir+"/a.001.mov", "normalisePath leaves a movie alone");
+    auto seqs = gfcMediaFingerprint::sequencesIn(dir, false);
+    check(seqs.count(dir+"/a_001.mov")==1 && seqs.at(dir+"/a_001.mov").size()==1 && seqs.count(dir+"/a_002.mov")==1, "sequencesIn lists each movie once");
+    check(jefe::qt::listSequenceFrames(dir+"/shot_v003.mov").size()==1, "listSequenceFrames returns the single file");
+    std::filesystem::create_directories(dir+"/moved"); std::filesystem::copy_file(dir+"/a_002.mov", dir+"/moved/a_002.mov");
+    sett.useSearchPaths=true; sett.searchPaths={dir+"/moved"}; findSequence(files, dir+"/gone/a_002.mov", label, s, e); sett.useSearchPaths=false; sett.searchPaths.clear();
+    check(files.size()==48 && files[0]==dir+"/moved/a_002.mov", "a moved movie is found through search paths");
+    std::printf("MOVIE-NUMBERING: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

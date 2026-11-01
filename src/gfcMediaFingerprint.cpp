@@ -1,4 +1,5 @@
 #include "gfcMediaFingerprint.h"
+#include "gfcMediaKinds.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -120,7 +121,8 @@ std::map<std::string, std::vector<std::string>> gfcMediaFingerprint::sequencesIn
 		const std::string ext = entry.path().extension().string();
 		if (ext == ".jnotes" || ext == ".jcs" || ext == ".jcreview" || ext == ".partial") return;
 		const std::string path = entry.path().string();
-		out[gfcNoteStore::normalisePath(path)].push_back(path);
+		// A movie is one entry keyed by its own path (normalisePath leaves it alone).
+		out[gfcIsMovieFile(path) ? path : gfcNoteStore::normalisePath(path)].push_back(path);
 	};
 
 	// One directory at a time: skip_permission_denied only papers over

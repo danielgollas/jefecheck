@@ -7,6 +7,8 @@
 #include <glad/glad.h>
 #include <functional>
 #include "gfcSequence.h"
+#include "gfcMediaKinds.h"
+#include "gfcMovieReader.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include <string.h>
@@ -118,6 +120,21 @@ void findSequence (std::vector<std::string> &refFiles, std::string inputFilename
 	else
 	{
 		theFilename=inputFilename;
+	}
+
+	// A movie is always one clip: never parse digits in its name as a frame number.
+	// N copies of the path keep frames.size()/getNumFrames/framePathAt working untouched.
+	if (gfcIsMovieFile(theFilename))
+	{
+		gfcMovieInfo info;
+		int64_t n = 1;
+		if (gfcMovieReader::probe(theFilename, info, nullptr) && info.frameCount > 0)
+			n = info.frameCount;
+		refFiles.assign(static_cast<size_t>(n), theFilename);
+		label = theFilename;
+		startNum = 1;
+		endNum = static_cast<int>(n);
+		return;
 	}
 
 	//printf("theFilename:%s\n",theFilename.c_str());

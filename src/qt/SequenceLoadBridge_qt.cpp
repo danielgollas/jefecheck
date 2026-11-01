@@ -20,6 +20,7 @@
 #include "../gfcReviewSummary.h"
 #include "../gfcnote.h"
 #include "../gfcNoteStore.h"
+#include "../gfcMediaKinds.h"
 #include "../gfcNoteOverlay.h"
 #include "../gfcNoteStamp.h"
 #include "../gfcpickmanager.h"
@@ -3260,6 +3261,8 @@ std::vector<std::string> listSequenceFrames(const std::string& anyFramePath) {
     int startNum = 0;
     int endNum = 0;
     ::findSequence(files, anyFramePath, label, startNum, endNum);
+    // A movie is one file; findSequence pads it to frameCount copies.
+    if (gfcIsMovieFile(anyFramePath) && files.size() > 1) files.resize(1);
     return files;
 }
 
