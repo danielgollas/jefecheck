@@ -58,6 +58,7 @@
 #include "qt/SequenceLoadBridge_qt.h"
 #include "qt/ReviewSummaryPdf_qt.h"
 #include "qt/ReviewPackage_qt.h"
+#include "qt/MovieTestMedia_qt.h"
 
 extern gfcSettings sett;
 
@@ -676,11 +677,26 @@ int main(int argc, char* argv[]) {
             fflush(stdout);
             std::_Exit(3);
         }
-        const std::string mediaDir;
+        // Test clips are generated fresh with the ffmpeg CLI (never committed).
+        const QString mediaQDir = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("jefe_video_test_%1").arg(QCoreApplication::applicationPid()));
+        QString mediaErr;
+        if (!jefe::qt::testmedia::generate(mediaQDir, &mediaErr)) {
+            QDir(mediaQDir).removeRecursively();
+            printf("VIDEO-LOAD-TEST SKIP: %s\n", mediaErr.toLocal8Bit().constData());
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        const std::string mediaDir = mediaQDir.toStdString();
         bool allZero = true;
         allZero &= (movieKindsSelfTest(mediaDir) == 0);
         allZero &= (movieLibavSelfTest(mediaDir) == 0);
+        allZero &= (movieReaderSelfTest(mediaDir) == 0);
         jefe::qt::removeRecoverySession();
+        if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
+            printf("VIDEO-LOAD-TEST media: %s\n", mediaDir.c_str());
+        else
+            QDir(mediaQDir).removeRecursively();
         std::fflush(stdout);
         std::_Exit(allZero ? 0 : 2);
     }
