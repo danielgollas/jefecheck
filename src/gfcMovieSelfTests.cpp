@@ -6,6 +6,7 @@
 
 #include "gfcMediaKinds.h"
 #include "gfcMovieReader.h"
+#include "gfcAudioClip.h"
 #include "gfcframe.h"
 #include "gfcimageloadermovie.h"
 #include "gfcStructures.h"
@@ -13,6 +14,8 @@
 #include "gfcMediaFingerprint.h"
 #include "qt/SequenceLoadBridge_qt.h"
 #include <filesystem>
+#include <chrono>
+#include <thread>
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -220,5 +223,74 @@ int movieStampSelfTest(const std::string& dir) {
     check(gfcNoteStamp::stampPixels(320,180,rgb.data(), dir+"/stamp.exr", review, opt, &err), "stampPixels writes");
     int w=0,h=0; check(gfcNoteStamp::imageSize(dir+"/stamp.exr",&w,&h) && w==320 && h==180, "stamped EXR has the frame size");
     std::printf("MOVIE-STAMP: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int audioClipSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    check(gfcAudioClip::frameStartSample(1,24000,1001)==2002 && gfcAudioClip::frameStartSample(1000,24000,1001)==2002000, "23.976: 2002 samples per frame, exact");
+    check(gfcAudioClip::frameStartSample(1,30000,1001)==1601 && gfcAudioClip::frameStartSample(2,30000,1001)==3203 && gfcAudioClip::frameStartSample(3,30000,1001)==4804, "29.97 floor math 1601/1602");
+    check(gfcAudioClip::frameStartSample(1,25,1)==1920 && gfcAudioClip::frameStartSample(1,24,1)==2000, "25 and 24");
+    gfcMovieReader r; std::string err; r.setAudioEnabled(true); check(r.open(dir+"/flashbeep_23976.mov", &err) && r.info().hasAudio && r.info().audioSampleRate==48000 && r.info().audioChannels==2, "audio stream opens");
+    gfcAudioClip clip; clip.reset(0); gfcMovieFrame f; std::vector<float> a; int64_t first=-1;
+    for (int k=0;k<48;++k){ r.readFrame(k,f,&err); while (r.takeAudio(a, first)) { if (clip.endSample()==clip.startSample()) clip.reset(first); clip.append(a.data(), (int64_t)a.size()/2); } }
+    check(clip.startSample()==0 && clip.endSample()>=gfcAudioClip::frameStartSample(48,24000,1001), "audio covers the decoded frames");
+    auto rms=[&](int64_t frame){ std::vector<float> s(2002*2); clip.read(gfcAudioClip::frameStartSample(frame,24000,1001), 2002, s.data()); double e=0; for(float v:s) e+=v*v; return std::sqrt(e/s.size()); };
+    check(rms(0)>0.3 && rms(24)>0.3 && rms(1)<0.01 && rms(23)<0.01 && rms(25)<0.01, "beep lands in frames 0 and 24 only");
+    gfcMovieReader m; m.setAudioEnabled(true); check(m.open(dir+"/mono441_24.mp4",&err) && m.info().audioChannels==1 && m.info().audioSampleRate==44100, "mono 44.1k source");
+    gfcAudioClip mc; mc.reset(0); for (int k=0;k<48;++k){ m.readFrame(k,f,&err); while (m.takeAudio(a,first)) mc.append(a.data(), (int64_t)a.size()/2); }
+    check(mc.endSample()>=48*2000-2000 && mc.endSample()<=48*2000+4096, "resampled to 48k stereo: ~2000 samples per frame");
+    std::vector<float> z(100*2); check(clip.read(-50, 100, z.data())==50 && z[0]==0.f, "reads before the start are zero-filled");
+    gfcAudioPeaks pk; pk.reset(0); std::vector<float> sig(4800*2, 0.f); sig[2*480]=0.9f; pk.accumulate(sig.data(), 4800);
+    check(pk.peaks.size()==10 && pk.peaks[1]>0.89f && pk.peaks[0]==0.f && pk.version==1, "10 ms bins, abs peak");
+    std::printf("AUDIO-CLIP: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// The loader thread fills a track's clip and peaks as a movie loads.
+int audioSequenceSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto waitUntil = [](auto pred, int ms) {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (!pred() && std::chrono::steady_clock::now() < until) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        return pred();
+    };
+    auto rmsAt = [](const gfcAudioClip& c, int64_t frame) {
+        std::vector<float> s(2002*2); c.read(gfcAudioClip::frameStartSample(frame,24000,1001), 2002, s.data());
+        double e=0; for (float v : s) e+=v*v; return std::sqrt(e/s.size());
+    };
+    const int savedQueue = sett.maximumFramesInQueue; sett.maximumFramesInQueue = 100000;
+    gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setCompression(GFC_8BPC);
+
+    seq->myGUI->setFilename(dir+"/flashbeep_23976.mov"); seq->loadPreview(); trackManager.startLoadingSequence(0);
+    const int64_t want=gfcAudioClip::frameStartSample(200,24000,1001);
+    const bool filled=waitUntil([&]{ auto c=seq->audioClip(); return c && c->endSample()>=want; }, 20000);
+    trackManager.stopLoadingSequence(0);
+    std::shared_ptr<gfcAudioClip> clip=seq->audioClip();
+    check(seq->hasAudio() && clip && filled, "the loader fills the track's clip");
+    check(clip && clip->startSample()==0 && rmsAt(*clip,0)>0.3 && rmsAt(*clip,24)>0.3 && rmsAt(*clip,12)<0.01 && rmsAt(*clip,25)<0.01, "beeps at frames 0 and 24 in the track clip");
+    const gfcAudioPeaks pk=seq->audioPeaksSnapshot();
+    float beep=0; for (size_t b=100; b<104 && b<pk.peaks.size(); ++b) beep=std::max(beep, pk.peaks[b]);
+    check(pk.firstSample==0 && pk.peaks.size()>=size_t(want/480) && beep>0.7f && pk.peaks[50]<0.01f && seq->audioPeaksVersion()==pk.version && pk.version>0, "peaks follow the clip in 10 ms bins");
+
+    const uint64_t v0=seq->audioPeaksVersion();
+    trackManager.startLoadingSequenceAt(0, 10);
+    const int64_t want10=gfcAudioClip::frameStartSample(30,24000,1001);
+    const bool filled10=waitUntil([&]{ auto c=seq->audioClip(); return c && c!=clip && c->endSample()>=want10; }, 20000);
+    trackManager.stopLoadingSequence(0);
+    std::shared_ptr<gfcAudioClip> clip10=seq->audioClip();
+    check(filled10 && clip10->startSample()==gfcAudioClip::frameStartSample(10,24000,1001) && rmsAt(*clip10,24)>0.3 && rmsAt(*clip10,12)<0.01 && rmsAt(*clip10,9)==0.0, "a load from frame 10 starts its clip at frame 10's sample, aligned");
+    check(clip && rmsAt(*clip,0)>0.3 && seq->audioPeaksVersion()>v0 && seq->audioPeaksSnapshot().firstSample==clip10->startSample(), "a reload makes a new clip; the old one stays intact");
+
+    seq->myGUI->setFilename(dir+"/prores422hq_23976.mov"); seq->loadPreview(); trackManager.startLoadingSequence(0); trackManager.stopLoadingSequence(0);
+    check(!seq->hasAudio() && !seq->audioClip(), "a silent movie has no clip");
+    sett.maximumFramesInQueue = savedQueue;
+    std::printf("AUDIO-SEQUENCE: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

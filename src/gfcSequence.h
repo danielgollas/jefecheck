@@ -30,6 +30,7 @@ class TrackWidget;
 #include "gfcStructures.h"
 #include "gfcloadparams.h"
 #include "gfcMovieReader.h"
+#include "gfcAudioClip.h"
 #include <memory>
 #include "gfcimageloader.h"
 #include "gfcframe.h"
@@ -302,6 +303,14 @@ public:
     // Stream facts of the open movie, or null for an image sequence (or a
     // movie that could not be opened). Valid until the track is reloaded/cleared.
     const gfcMovieInfo* movieInfo() const;
+
+    // Movie sound: the loader thread decodes it into audioClip_ (48 kHz stereo,
+    // movie-time sample indices) as frames load, plus a peak summary for the
+    // timeline waveform. Null clip / false for image sequences and silent movies.
+    bool hasAudio() const;
+    std::shared_ptr<gfcAudioClip> audioClip() const;
+    gfcAudioPeaks audioPeaksSnapshot() const;
+    uint64_t audioPeaksVersion() const;
     double getPreviewElapsedSecs() const;  // last loadPreview() wall-clock time
     
     gfcSequenceGUI* myGUI;
@@ -382,7 +391,15 @@ public:
     // loadPreview may replace it on the main thread.
     mutable std::mutex movieReaderMutex_;
     std::shared_ptr<gfcMovieReader> movieReader_;
-    void openMovieReaderFor(const std::string& path);
+    void openMovieReaderFor(const std::string& path, bool withAudio = false);
+    // Guards audioClip_ (the pointer; the clip itself is thread-safe) and audioPeaks_.
+    mutable std::mutex audioMutex_;
+    std::shared_ptr<gfcAudioClip> audioClip_;
+    gfcAudioPeaks audioPeaks_;
+    void resetAudio(int64_t startSample, bool withClip);
+    void appendMovieAudio(gfcMovieReader& reader, const std::shared_ptr<gfcAudioClip>& clip);
+    // The [startFrame, endFrame] frame-entry range loadSequence() will load.
+    void loadFrameRange(int& startFrame, int& endFrame) const;
     std::shared_ptr<gfcMovieReader> currentMovieReader() const;
     int rangeBegin;
     int rangeEnd;

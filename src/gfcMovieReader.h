@@ -48,6 +48,19 @@ public:
     // anything else seeks to the preceding keyframe. Thread-safe.
     bool readFrame(int64_t index, gfcMovieFrame& out, std::string* err);
 
+    // Sound (default off; takes effect at the next open()). When on and the
+    // file has an audio stream, open() also opens its decoder and a resampler
+    // to 48 kHz stereo float, and readFrame(i) decodes every audio packet it
+    // demuxes into an internal FIFO, demuxing on (queueing the video packets it
+    // meets for later reads) until the FIFO covers frameStartSample(i+1) or the
+    // end of the file. A seek empties the FIFO; its position restarts from the
+    // audio timestamps.
+    void setAudioEnabled(bool on);
+    // Drains the FIFO into `interleaved` (stereo float). `firstSample` is the
+    // first sample's index in the movie's own 48 kHz timeline (sample 0 = the
+    // first video frame). False when the FIFO is empty.
+    bool takeAudio(std::vector<float>& interleaved, int64_t& firstSample);
+
     // YUV->BGRA with the file's matrix/range (untagged = Rec.709 video range).
     // bitsPerComponent 8 -> BGRA, 16 -> BGRA64LE; out is outW*outH pixels.
     bool convertToBGRA(const gfcMovieFrame& in, int bitsPerComponent, int outW, int outH,

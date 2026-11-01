@@ -1,8 +1,10 @@
 #include "gfcMovieReader.h"
+#include "gfcAudioClip.h"
 
 #include <cmath>
 #include <algorithm>
 #include <climits>
+#include <deque>
 #include <filesystem>
 #include <list>
 #include <mutex>
@@ -12,7 +14,9 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
+#include <libavutil/channel_layout.h>
 #include <libavutil/pixdesc.h>
+#include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 }
 
@@ -81,9 +85,47 @@ struct gfcMovieReader::Impl {
     gfcMovieInfo info;
     std::mutex m;
 
+    // Sound. audioEnabled survives release(); the rest is per open file.
+    bool audioEnabled = false;
+    int astream = -1;
+    AVCodecContext* adec = nullptr;
+    AVFrame* aframe = nullptr;
+    SwrContext* swr = nullptr;
+    std::deque<AVPacket*> videoQueue;  // video packets demuxed while filling audio
+    bool demuxEof = false;             // av_read_frame has reported the end
+    bool audioEof = false;             // audio decoder and resampler drained
+    bool audioPosKnown = false;        // audioEnd valid (set by the first frame after open/seek)
+    int64_t audioEnd = 0;              // movie-time 48 kHz index one past the newest sample
+    int64_t videoStartSample = 0;      // the first video frame's time at 48 kHz
+    std::vector<float> fifo;           // stereo float, ends at audioEnd
+
     ~Impl() { release(); }
 
+    void clearVideoQueue() {
+        for (AVPacket* q : videoQueue) av_packet_free(&q);
+        videoQueue.clear();
+    }
+
+    void resetAudioState() {
+        clearVideoQueue();
+        demuxEof = false;
+        audioEof = false;
+        audioPosKnown = false;
+        audioEnd = 0;
+        fifo.clear();
+        if (adec) avcodec_flush_buffers(adec);
+        swr_free(&swr);  // rebuilt from the next decoded frame
+    }
+
+    void releaseAudio() {
+        resetAudioState();
+        av_frame_free(&aframe);
+        avcodec_free_context(&adec);
+        astream = -1;
+    }
+
     void release() {
+        releaseAudio();
         last.reset();
         lastIndex = -1;
         eofSent = false;
@@ -134,20 +176,133 @@ struct gfcMovieReader::Impl {
             if (ret == AVERROR_EOF) { setErr(err, "end of stream"); return false; }
             if (ret != AVERROR(EAGAIN)) { setErr(err, "decode error: " + avErr(ret)); return false; }
             if (eofSent) { setErr(err, "end of stream"); return false; }
-            ret = av_read_frame(fmt, pkt);
-            if (ret < 0) {
+            if (!nextVideoPacket()) {
                 // End of file or unreadable data: drain what the decoder holds.
                 avcodec_send_packet(dec, nullptr);
                 eofSent = true;
                 continue;
             }
-            if (pkt->stream_index == vstream) ret = avcodec_send_packet(dec, pkt);
+            ret = avcodec_send_packet(dec, pkt);
             av_packet_unref(pkt);
             if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_INVALIDDATA) {
                 setErr(err, "decode error: " + avErr(ret));
                 return false;
             }
         }
+    }
+
+    // The next video packet into `pkt`: queued ones first (in demux order),
+    // then from the file, decoding any audio packets met on the way. False at
+    // the end of the file.
+    bool nextVideoPacket() {
+        if (!videoQueue.empty()) {
+            AVPacket* q = videoQueue.front();
+            videoQueue.pop_front();
+            av_packet_move_ref(pkt, q);
+            av_packet_free(&q);
+            return true;
+        }
+        for (;;) {
+            if (demuxEof) return false;
+            if (av_read_frame(fmt, pkt) < 0) { onDemuxEof(); return false; }
+            if (pkt->stream_index == vstream) return true;
+            if (adec && pkt->stream_index == astream) decodeAudioPacket(pkt);
+            av_packet_unref(pkt);
+        }
+    }
+
+    void onDemuxEof() {
+        demuxEof = true;
+        if (!adec || audioEof) return;
+        decodeAudioPacket(nullptr);  // drain the decoder
+        if (swr) convertAudio(nullptr);  // and the resampler's tail
+        audioEof = true;
+    }
+
+    // Demuxes until the FIFO reaches `target` (a 48 kHz movie-time index) or
+    // the file ends; video packets met are queued for the picture decoder.
+    // Gives up once the queued picture runs kAudioLookahead past the target, so
+    // audio that ends early (or a gap in it) never queues the rest of the file.
+    static constexpr int64_t kAudioLookahead = 2 * gfcAudioClip::kRate;
+    void pumpAudio(int64_t target) {
+        if (!adec) return;
+        const AVRational vtb = stream()->time_base;
+        while (!audioEof && !(audioPosKnown && audioEnd >= target)) {
+            if (demuxEof) { onDemuxEof(); break; }
+            if (av_read_frame(fmt, pkt) < 0) { onDemuxEof(); break; }
+            if (pkt->stream_index == vstream) {
+                const int64_t ts = pkt->dts != AV_NOPTS_VALUE ? pkt->dts : pkt->pts;
+                AVPacket* q = av_packet_alloc();
+                if (!q) { av_packet_unref(pkt); break; }
+                av_packet_move_ref(q, pkt);
+                videoQueue.push_back(q);
+                if (ts != AV_NOPTS_VALUE &&
+                    av_rescale_q(ts, vtb, AVRational{1, gfcAudioClip::kRate}) - videoStartSample > target + kAudioLookahead)
+                    break;
+                continue;
+            }
+            if (pkt->stream_index == astream) decodeAudioPacket(pkt);
+            av_packet_unref(pkt);
+        }
+    }
+
+    // Sends one packet (null = drain) and converts every frame it yields.
+    // Corrupt audio is skipped; the picture never fails because of sound.
+    void decodeAudioPacket(const AVPacket* p) {
+        if (avcodec_send_packet(adec, p) < 0 && p) return;
+        while (avcodec_receive_frame(adec, aframe) == 0) {
+            convertAudio(aframe);
+            av_frame_unref(aframe);
+        }
+    }
+
+    // Resamples a decoded frame (null = flush) into the FIFO at 48 kHz stereo
+    // float; libswresample downmixes and converts the rate.
+    void convertAudio(const AVFrame* f) {
+        if (f && !swr) {
+            AVChannelLayout in{};
+            if (f->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC || f->ch_layout.nb_channels <= 0)
+                av_channel_layout_default(&in, std::max(1, f->ch_layout.nb_channels));
+            else if (av_channel_layout_copy(&in, &f->ch_layout) < 0)
+                return;
+            AVChannelLayout stereo = AV_CHANNEL_LAYOUT_STEREO;
+            const int ret = swr_alloc_set_opts2(&swr, &stereo, AV_SAMPLE_FMT_FLT, gfcAudioClip::kRate, &in,
+                                                AVSampleFormat(f->format), f->sample_rate, 0, nullptr);
+            av_channel_layout_uninit(&in);
+            if (ret < 0 || swr_init(swr) < 0) { swr_free(&swr); return; }
+        }
+        if (!swr) return;
+        if (f && !audioPosKnown) {
+            const int64_t pts = f->best_effort_timestamp != AV_NOPTS_VALUE ? f->best_effort_timestamp : f->pts;
+            audioEnd = pts == AV_NOPTS_VALUE
+                           ? 0
+                           : av_rescale_q(pts, fmt->streams[astream]->time_base, AVRational{1, gfcAudioClip::kRate}) -
+                                 videoStartSample;
+            audioPosKnown = true;
+        }
+        const int inSamples = f ? f->nb_samples : 0;
+        const int cap = swr_get_out_samples(swr, inSamples);
+        if (cap <= 0) return;
+        const size_t old = fifo.size();
+        fifo.resize(old + size_t(cap) * gfcAudioClip::kChannels);
+        uint8_t* outPtr = reinterpret_cast<uint8_t*>(fifo.data() + old);
+        const int n = swr_convert(swr, &outPtr, cap, f ? const_cast<const uint8_t**>(f->extended_data) : nullptr,
+                                  inSamples);
+        fifo.resize(old + size_t(std::max(n, 0)) * gfcAudioClip::kChannels);
+        if (n > 0) audioEnd += n;
+    }
+
+    bool openAudio() {
+        astream = av_find_best_stream(fmt, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+        if (astream < 0) return false;
+        const AVCodecParameters* par = fmt->streams[astream]->codecpar;
+        const AVCodec* codec = avcodec_find_decoder(par->codec_id);
+        if (!codec) return false;
+        adec = avcodec_alloc_context3(codec);
+        aframe = av_frame_alloc();
+        if (!adec || !aframe || avcodec_parameters_to_context(adec, par) < 0) return false;
+        adec->pkt_timebase = fmt->streams[astream]->time_base;
+        return avcodec_open2(adec, codec, nullptr) >= 0;
     }
 
     int64_t frameIndexOf(const AVFrame* f, int64_t fallback) const {
@@ -178,6 +333,7 @@ struct gfcMovieReader::Impl {
         if (ret < 0) { setErr(err, "seek failed: " + avErr(ret)); return false; }
         avcodec_flush_buffers(dec);
         eofSent = false;
+        resetAudioState();
         // Unknown position until the first frame arrives; decodeUntil reads pts.
         lastIndex = -1;
         return true;
@@ -244,6 +400,9 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
     av_reduce(&num, &den, avg.num, avg.den, INT_MAX);
     d.rate = AVRational{num, den};
     d.startPts = st->start_time != AV_NOPTS_VALUE ? st->start_time : 0;
+    d.videoStartSample = av_rescale_q(d.startPts, st->time_base, AVRational{1, gfcAudioClip::kRate});
+    // Sound is optional: a movie whose audio cannot be decoded still plays.
+    if (d.audioEnabled && !d.openAudio()) d.releaseAudio();
 
     gfcMovieInfo& i = d.info;
     i.width = st->codecpar->width;
@@ -318,7 +477,23 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
             return false;
         }
     }
+    d.pumpAudio(gfcAudioClip::frameStartSample(index + 1, d.info.rateNum, d.info.rateDen));
     d.fillFrame(out);
+    return true;
+}
+
+void gfcMovieReader::setAudioEnabled(bool on) {
+    std::lock_guard<std::mutex> lock(d_->m);
+    d_->audioEnabled = on;
+}
+
+bool gfcMovieReader::takeAudio(std::vector<float>& interleaved, int64_t& firstSample) {
+    std::lock_guard<std::mutex> lock(d_->m);
+    Impl& d = *d_;
+    if (d.fifo.empty()) return false;
+    firstSample = d.audioEnd - int64_t(d.fifo.size() / gfcAudioClip::kChannels);
+    interleaved.swap(d.fifo);
+    d.fifo.clear();
     return true;
 }
 

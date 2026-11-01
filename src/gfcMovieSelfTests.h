@@ -11,3 +11,5 @@ int movieLoaderSelfTest(const std::string& mediaDir);
 int movieRateSelfTest(const std::string& mediaDir);
 int movieFingerprintSelfTest(const std::string& mediaDir);
 int movieStampSelfTest(const std::string& mediaDir);
+int audioClipSelfTest(const std::string& mediaDir);
+int audioSequenceSelfTest(const std::string& mediaDir);
