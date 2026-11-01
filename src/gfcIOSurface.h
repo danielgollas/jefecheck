@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCIOSURFACE_H
 #define GFCIOSURFACE_H
 
@@ -38,6 +39,11 @@ void* create(int width, int height, Layout layout);
 void* lockForWriting(void* surface, size_t* bytesPerRow);
 void unlock(void* surface);
 
+/** Read-only counterparts, for uploading from the surface when a context
+    refuses to bind it. Pair every successful lock with unlockForReading(). */
+const void* lockForReading(void* surface, size_t* bytesPerRow);
+void unlockForReading(void* surface);
+
 /** Adds / drops one reference. Null is ignored. Dropping the last reference
     returns the surface to a pool (up to 512 MiB) that create() reuses for
     the same size and layout once the GPU is done with it. */
@@ -54,6 +60,10 @@ PoolStats poolStats();
 
 /** Frees every pooled surface. */
 void drainPool();
+
+/** Frees pooled surfaces that have waited longer than @a idleSeconds, so
+    the pool holds memory only while frames are flowing. Any thread. */
+void trimIdle(double idleSeconds);
 
 /** Makes the texture bound to GL_TEXTURE_RECTANGLE_ARB on the current CGL
     context use @a surface as its storage (CGLTexImageIOSurface2D). The

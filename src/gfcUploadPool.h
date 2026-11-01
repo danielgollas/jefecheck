@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCUPLOADPOOL_H
 #define GFCUPLOADPOOL_H
 
@@ -23,27 +24,36 @@
 
 namespace gfcUpload {
 
-struct Staging;   // one pooled buffer
+/** One acquire() of a pooled buffer. A buffer goes back to the pool and is
+    handed out again, so callers keep the ticket, never the buffer: a ticket
+    that was already uploaded or abandoned matches nothing and is ignored.
+    0 means "no buffer". */
+using Ticket = unsigned long long;
 
-/** Decode thread: a mapped buffer of exactly @a bytes, or nullptr when none
-    is free (the pool then grows on the GL thread's next service()). Writes
-    go to @a *data. Hand the result to upload() or give it back with
-    abandon(). */
-Staging* acquire(size_t bytes, void** data);
+/** Decode thread: a mapped buffer of exactly @a bytes, or 0 when none is
+    free (the pool then grows on the GL thread's next service()). Writes go
+    to @a *data. Hand the ticket to upload() or give it back with
+    abandon(); each ticket is used once. */
+Ticket acquire(size_t bytes, void** data);
 
 /** Any thread: returns a buffer that was acquired but never uploaded.
-    Ignored for one upload() already consumed. Null is ignored. */
-void abandon(Staging* staging);
+    A ticket upload() or abandon() already used, or 0, is ignored. */
+void abandon(Ticket ticket);
 
 /** GL thread: retires buffers the GPU has finished with and creates the
     buffers acquire() asked for. Cheap; called before every upload. */
 void service();
 
-/** GL thread: fills the texture bound to @a target (w x h) from @a staging.
+/** GL thread: frees staging buffers and pooled textures nobody has used for
+    @a idleSeconds, so the pools hold memory only while frames are flowing.
+    Cheap when there is nothing to free; call it from a regular tick. */
+void trimIdle(double idleSeconds);
+
+/** GL thread: fills the texture bound to @a target (w x h) from @a ticket's buffer.
     @a allocate: true for a texture with no storage yet (glTexImage2D),
     false to refill (glTexSubImage2D). Consumes the buffer either way;
     returns false (texture untouched) if the buffer could not be used. */
-bool upload(Staging* staging, unsigned target, int internalFormat, int width, int height,
+bool upload(Ticket ticket, unsigned target, int internalFormat, int width, int height,
             unsigned format, unsigned type, bool allocate);
 
 /** GL thread: a pooled texture with this target, format and size, already

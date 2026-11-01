@@ -6,6 +6,9 @@
 #include "gfcIOSurface.h"
 #include "gfcUploadPool.h"
 
+#include <cstddef>
+#include <vector>
+
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>
 */
@@ -43,8 +46,22 @@ public:
     void* ioSurface;
     gfcSurface::Layout ioSurfaceLayout;
     // Otherwise, a mapped staging buffer (PBO) holding the same pixels, tightly
-    // packed (owned by the loader until uploaded), or null.
-    gfcUpload::Staging* staging;
+    // packed (owned by the loader until uploaded), or 0.
+    gfcUpload::Ticket staging;
+    // Once the pixels are in a surface or staging buffer the loader frees its
+    // own copy (dataPointer becomes null), so the filmstrip thumbnail is made
+    // beforehand, on the decode thread. Empty when there is none.
+    std::vector<unsigned char> thumbnailRGBA;
+    int thumbnailW = 0, thumbnailH = 0;
 };
+
+/** Downsamples a 4-component image to the filmstrip thumbnail (RGBA8, 48 px
+    high, at most 96 wide, nearest). @a format is GL_BGRA or GL_RGBA, @a type
+    GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT or GL_HALF_FLOAT_ARB (clamped to the
+    display range). Returns false, leaving @a rgba untouched, for any other
+    layout or an empty image. */
+bool gfcMakeThumbnail(const void* pixels, int width, int height, size_t bytesPerLine,
+                      GLenum format, GLenum type,
+                      std::vector<unsigned char>& rgba, int& thumbW, int& thumbH);
 
 #endif

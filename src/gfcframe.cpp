@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <cmath>
 #include "gfcframe.h"
 #include "gfcYuvConverter.h"
 #include "gfcMediaKinds.h"
@@ -186,6 +185,10 @@ int gfcFrame::loadFrame ( gfcLoadParams params )
 	metaData=theImageLoader->metaData;
 	compressed=params.compressed;
 	//printf("gfcFrame loaded %s: %ix%ix%ix%i\n",fileName.c_str(),sizeX,sizeY,channels,bpc);
+
+	// Every loaded frame becomes a texture (generateTexture), so the pixels
+	// go to their upload source now, still on the decode thread.
+	theImageLoader->prepareUpload();
 	
 	//4. Return
 	return result;
@@ -196,18 +199,6 @@ std::vector< std::string > gfcFrame::getChannelNames()
 	return channelNames;
 }
 
-namespace {
-// IEEE 754 binary16 to float, for the half-float thumbnail path.
-float halfToFloat(unsigned short h)
-{
-	const unsigned sign = (h >> 15) & 1u, exp = (h >> 10) & 0x1Fu, mant = h & 0x3FFu;
-	float v;
-	if (exp == 0)       v = std::ldexp((float)mant, -24);                  // subnormal
-	else if (exp == 31) v = mant ? NAN : INFINITY;
-	else                v = std::ldexp((float)(mant | 0x400u), (int)exp - 25);
-	return sign ? -v : v;
-}
-}
 
 GLuint gfcFrame::generateTexture(bool captureThumbnail)
 {
@@ -314,13 +305,31 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 			const bool staged = info.staging
 				&& gfcUpload::upload(info.staging, info.target, info.internalFormat, sizeX, sizeY,
 				                     info.format, info.dataType, !reused);
-			if (!staged && reused)
-				glTexSubImage2D ( info.target,0,0,0,sizeX,sizeY,info.format,info.dataType,info.dataPointer);
+			// The loader keeps no CPU copy once it filled a surface or a
+			// staging buffer: a surface the context would not bind is
+			// uploaded from the surface's own memory instead.
+			const void* pixels = info.dataPointer;
+			size_t surfacePitch = 0;
+			const void* surfacePixels = (!staged && !pixels && info.ioSurface)
+				? gfcSurface::lockForReading(info.ioSurface, &surfacePitch) : nullptr;
+			if (surfacePixels) {
+				pixels = surfacePixels;
+				const size_t pixelBytes = info.dataType == GL_UNSIGNED_BYTE ? 4 : 8;
+				glPixelStorei(GL_UNPACK_ROW_LENGTH, (GLint)(surfacePitch / pixelBytes));
+			}
+			if (!staged && !pixels)
+				printf("generateTexture: no pixels to upload for %s\n", fileName.c_str());
+			else if (!staged && reused)
+				glTexSubImage2D ( info.target,0,0,0,sizeX,sizeY,info.format,info.dataType,pixels);
 			else if (!staged)
-				glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,info.dataPointer);
+				glTexImage2D ( info.target,0,info.internalFormat,sizeX,sizeY,0,info.format,info.dataType,pixels);
+			if (surfacePixels) {
+				glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+				gfcSurface::unlockForReading(info.ioSurface);
+			}
 			GLenum glErr = glGetError();
 			if (glErr != GL_NO_ERROR) printf("generateTexture: texture upload error: 0x%x\n", glErr);
-			uploaded = glErr == GL_NO_ERROR;
+			uploaded = glErr == GL_NO_ERROR && (staged || pixels);
 		}
 		// Remember what the texture holds so deleteTexture can pool it. A texture
 		// whose upload failed may have no storage: never pool that one.
@@ -334,41 +343,17 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 		timer.print();
 		*/
 
-		// Capture a downsampled RGBA8 thumbnail for the timeline filmstrip
-		// while the decoder's CPU buffer is still alive (releaseMemory frees
-		// it just below). The source is BGRA or RGBA (info.format) with 8-bit,
-		// 16-bit or half-float components (info.dataType).
-		if (captureThumbnail && info.dataPointer && sizeX > 0 && sizeY > 0
-		    && (info.dataType == GL_UNSIGNED_BYTE || info.dataType == GL_UNSIGNED_SHORT
-		        || info.dataType == GL_HALF_FLOAT_ARB)) {
-			const int srcW = sizeX, srcH = sizeY;
-			const int dstH = 48;
-			int dstW = (int)((double)dstH * srcW / srcH + 0.5);
-			if (dstW < 1) dstW = 1;
-			if (dstW > 96) dstW = 96;
-			thumbnail.w = dstW;
-			thumbnail.h = dstH;
-			thumbnail.rgba.assign((size_t)dstW * dstH * 4, 0);
-			const bool bgra = (info.format == GL_BGRA);
-			const unsigned char*  s8  = (const unsigned char*)info.dataPointer;
-			const unsigned short* s16 = (const unsigned short*)info.dataPointer;
-			auto to8 = [&](size_t i) -> unsigned char {
-				if (info.dataType == GL_UNSIGNED_BYTE) return s8[i];
-				if (info.dataType == GL_UNSIGNED_SHORT) return (unsigned char)(s16[i] >> 8);
-				const float v = halfToFloat(s16[i]);   // display range only: clamp to 0..1
-				return (unsigned char)(v <= 0.0f ? 0 : v >= 1.0f ? 255 : (int)(v * 255.0f + 0.5f));
-			};
-			for (int y = 0; y < dstH; ++y) {
-				const int sy = y * srcH / dstH;
-				for (int x = 0; x < dstW; ++x) {
-					const int sx = x * srcW / dstW;
-					const size_t si = ((size_t)sy * srcW + sx) * 4; // 4 comps
-					const size_t di = ((size_t)y * dstW + x) * 4;
-					thumbnail.rgba[di+0] = to8(si + (bgra ? 2 : 0));
-					thumbnail.rgba[di+1] = to8(si + 1);
-					thumbnail.rgba[di+2] = to8(si + (bgra ? 0 : 2));
-					thumbnail.rgba[di+3] = to8(si + 3);
-				}
+		// Filmstrip thumbnail: made by the loader on the decode thread when it
+		// handed the pixels off, else from the CPU copy still held here.
+		if (captureThumbnail) {
+			if (!info.thumbnailRGBA.empty()) {
+				thumbnail.rgba = info.thumbnailRGBA;
+				thumbnail.w = info.thumbnailW;
+				thumbnail.h = info.thumbnailH;
+			} else {
+				gfcMakeThumbnail(info.dataPointer, sizeX, sizeY, (size_t)sizeX * 4
+				                     * (info.dataType == GL_UNSIGNED_BYTE ? 1 : 2),
+				                 info.format, info.dataType, thumbnail.rgba, thumbnail.w, thumbnail.h);
 			}
 		}
 	}

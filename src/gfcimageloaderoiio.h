@@ -25,6 +25,7 @@ public:
     virtual int peek(gfcLoadParams params, gfcPeekInfo *results);
     virtual void* getPixelPointer();
     virtual void releaseMemory();
+    virtual void prepareUpload();
     virtual std::vector<std::string> getChannelNames();
 
 private:

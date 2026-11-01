@@ -466,13 +466,6 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         break;
     }
 
-    // Hand the pixels to the GPU side from here, on the decode thread, so the
-    // GL thread copies nothing: on macOS an IOSurface the texture uses as its
-    // storage (CPU and GPU share memory on Apple silicon); elsewhere, or if
-    // that fails, a mapped staging buffer the GL thread transfers from.
-    // theBitmap stays for the thumbnail and the glTexImage2D fallback.
-    if (!copyToSurface()) copyToStaging();
-
     // Build channel name list for the dropdown
     channelNames.clear();
     for (auto &l : layers) {
@@ -549,7 +542,28 @@ void gfcImageLoaderOIIO::releaseMemory() {
     gfcSurface::release(frameInfo.ioSurface);
     frameInfo.ioSurface = nullptr;
     gfcUpload::abandon(frameInfo.staging);   // no-op once it was uploaded
-    frameInfo.staging = nullptr;
+    frameInfo.staging = 0;
+    frameInfo.thumbnailRGBA.clear();
+    frameInfo.thumbnailRGBA.shrink_to_fit();
+    frameInfo.thumbnailW = frameInfo.thumbnailH = 0;
+}
+
+void gfcImageLoaderOIIO::prepareUpload() {
+    // Hand the pixels to the GPU side from here, on the decode thread, so the
+    // GL thread copies nothing: on macOS an IOSurface the texture uses as its
+    // storage (CPU and GPU share memory on Apple silicon); elsewhere, or if
+    // that fails, a mapped staging buffer the GL thread transfers from.
+    if (!theBitmap || !(copyToSurface() || copyToStaging())) return;
+    // The frame now waits in the upload queue with one copy of its pixels,
+    // not two: make the thumbnail while the bitmap exists, then free it.
+    frameInfo.thumbnailRGBA.clear();
+    frameInfo.thumbnailW = frameInfo.thumbnailH = 0;
+    gfcMakeThumbnail(theBitmap->Data, theBitmap->Width, theBitmap->Height, theBitmap->BytesPerLine,
+                     frameInfo.format, frameInfo.dataType,
+                     frameInfo.thumbnailRGBA, frameInfo.thumbnailW, frameInfo.thumbnailH);
+    delete theBitmap;
+    theBitmap = nullptr;
+    frameInfo.dataPointer = nullptr;
 }
 
 size_t gfcImageLoaderOIIO::handOffRowBytes() const {
@@ -603,11 +617,11 @@ bool gfcImageLoaderOIIO::copyToSurface() {
 
 bool gfcImageLoaderOIIO::copyToStaging() {
     gfcUpload::abandon(frameInfo.staging);
-    frameInfo.staging = nullptr;
+    frameInfo.staging = 0;
     const size_t rowBytes = handOffRowBytes();
     if (!rowBytes) return false;
     void* dst = nullptr;
-    gfcUpload::Staging* staging = gfcUpload::acquire(rowBytes * theBitmap->Height, &dst);
+    const gfcUpload::Ticket staging = gfcUpload::acquire(rowBytes * theBitmap->Height, &dst);
     if (!staging) return false;
     copyRows((unsigned char*)dst, rowBytes, rowBytes);   // tightly packed rows
     frameInfo.staging = staging;

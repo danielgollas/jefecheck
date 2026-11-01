@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // IOSurface-backed textures on macOS. See gfcIOSurface.h.
 //
 // This file must not include glad: it uses Apple's OpenGL headers for
@@ -13,6 +14,7 @@
 #include <OpenGL/glext.h>
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <vector>
 #include <cstdlib>
@@ -130,6 +132,7 @@ struct Pooled {
     int width, height;
     OSType pixelFormat;
     size_t bytes;
+    std::chrono::steady_clock::time_point pooledAt;
 };
 constexpr size_t kPoolCapBytes = size_t(512) << 20;
 std::mutex g_poolMutex;
@@ -214,6 +217,18 @@ void unlock(void* surface) {
     if (surface) IOSurfaceUnlock(static_cast<IOSurfaceRef>(surface), 0, nullptr);
 }
 
+const void* lockForReading(void* surface, size_t* bytesPerRow) {
+    if (!surface) return nullptr;
+    IOSurfaceRef s = static_cast<IOSurfaceRef>(surface);
+    if (IOSurfaceLock(s, kIOSurfaceLockReadOnly, nullptr) != kIOReturnSuccess) return nullptr;
+    if (bytesPerRow) *bytesPerRow = IOSurfaceGetBytesPerRow(s);
+    return IOSurfaceGetBaseAddress(s);
+}
+
+void unlockForReading(void* surface) {
+    if (surface) IOSurfaceUnlock(static_cast<IOSurfaceRef>(surface), kIOSurfaceLockReadOnly, nullptr);
+}
+
 void retain(void* surface) {
     if (surface) CFRetain(static_cast<CFTypeRef>(surface));
 }
@@ -234,7 +249,8 @@ void release(void* surface) {
                     g_pool.erase(g_pool.begin());
                 }
                 g_pool.push_back({s, (int)IOSurfaceGetWidth(s), (int)IOSurfaceGetHeight(s),
-                                  IOSurfaceGetPixelFormat(s), bytes});
+                                  IOSurfaceGetPixelFormat(s), bytes,
+                                  std::chrono::steady_clock::now()});
                 g_poolBytes += bytes;
                 return;
             }
@@ -253,6 +269,19 @@ void drainPool() {
     for (const Pooled& p : g_pool) CFRelease(p.surface);
     g_pool.clear();
     g_poolBytes = 0;
+}
+
+void trimIdle(double idleSeconds) {
+    const auto cutoff = std::chrono::steady_clock::now()
+        - std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+              std::chrono::duration<double>(idleSeconds));
+    std::lock_guard<std::mutex> lock(g_poolMutex);
+    // Released surfaces are appended, so the oldest lead.
+    while (!g_pool.empty() && g_pool.front().pooledAt < cutoff) {
+        g_poolBytes -= g_pool.front().bytes;
+        CFRelease(g_pool.front().surface);
+        g_pool.erase(g_pool.begin());
+    }
 }
 
 bool bindToTexture(void* surface, int width, int height, Layout layout) {

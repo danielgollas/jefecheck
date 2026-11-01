@@ -96,6 +96,12 @@ bool tickPlayback();
 bool tickPlaybackTiming();
 bool hasPendingTextureUploads();
 void uploadPendingTextures();
+// The upload pools (staging buffers, pooled textures, IOSurfaces) free what
+// has sat unused for 2 s. uploadPoolsNeedTrim() is cheap and true at most
+// once a second while any pool holds memory; trimUploadPools() then needs
+// the viewport's GL context current.
+bool uploadPoolsNeedTrim();
+void trimUploadPools();
 
 // Cheap predicate — true when the playback engine is actively playing
 // OR when at least one track has frames waiting in its rawFrames queue

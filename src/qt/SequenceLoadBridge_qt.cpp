@@ -48,6 +48,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -445,6 +446,24 @@ void uploadPendingTextures() {
     // rawFrames queue and upload it via glTexImage2D. Caller MUST make the
     // viewport's GL context current first (uploads run on this thread).
     trackManager.generateTextures();
+}
+
+bool uploadPoolsNeedTrim() {
+    static auto lastCheck = std::chrono::steady_clock::time_point{};
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastCheck < std::chrono::seconds(1)) return false;
+    lastCheck = now;
+    const gfcUpload::Stats up = gfcUpload::stats();
+    return up.stagingBytes > 0 || up.pooledTextureBytes > 0 || gfcSurface::poolStats().pooledBytes > 0;
+}
+
+void trimUploadPools() {
+    // Long enough to bridge the gap between a sequence being cleared and the
+    // next one loading (or a playlist advance), short enough that an idle
+    // player gives the memory back.
+    constexpr double kIdleSeconds = 2.0;
+    gfcUpload::trimIdle(kIdleSeconds);
+    gfcSurface::trimIdle(kIdleSeconds);
 }
 
 gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate) {
@@ -3908,6 +3927,7 @@ int runUploadBench(const std::string& dir) {
     struct Means { double texR = 0, texB = 0, thumbR = 0, thumbB = 0; };
     std::vector<std::pair<const char*, Means>> means;
     bool lastFramesOk = true;
+    long handedOff = 0, doubleHeld = 0;   // frames waiting with pixels in two places
     for (const Mode& mode : modes) {
         std::vector<double> decodeMs, uploadMs;
         double bytes = 0;
@@ -3925,6 +3945,13 @@ int runUploadBench(const std::string& dir) {
                 return 2;
             }
             const auto t1 = clock::now();
+            {
+                const gfcGLFrameInfo fi = frame.theImageLoader->getFrameInfo();
+                if (fi.ioSurface || fi.staging) {
+                    ++handedOff;
+                    if (frame.theImageLoader->getPixelPointer()) ++doubleHeld;
+                }
+            }
             glFinish();
             const auto t2 = clock::now();
             frame.generateTexture(i == 0);   // thumbnail on the first frame only
@@ -4014,14 +4041,47 @@ int runUploadBench(const std::string& dir) {
                     ok ? "ok  " : "FAIL", name, m.texR, m.texB, m.thumbR, m.thumbB);
         orderOk = orderOk && ok;
     }
+    const bool singleCopy = doubleHeld == 0;
+    std::printf("UPLOAD-BENCH %s frames handed to a surface or staging buffer keep no CPU copy (%ld of %ld did)\n",
+                singleCopy ? "ok  " : "FAIL", doubleHeld, handedOff);
+
+    // A ticket is good for one use: abandoning a stale one must not free the
+    // buffer it once named after that buffer went to another acquire().
+    bool ticketsOk = true;
+    if (std::strcmp(gfcUpload::stats().level, "off") != 0) {
+        constexpr size_t kProbeBytes = 4096 * 3;   // no frame uses this size
+        void* data = nullptr;
+        gfcUpload::Ticket first = gfcUpload::acquire(kProbeBytes, &data);
+        if (!first) { gfcUpload::service(); first = gfcUpload::acquire(kProbeBytes, &data); }
+        gfcUpload::abandon(first);
+        const gfcUpload::Ticket second = gfcUpload::acquire(kProbeBytes, &data);
+        gfcUpload::abandon(first);   // stale: must leave `second` holding the buffer
+        const gfcUpload::Ticket third = gfcUpload::acquire(kProbeBytes, &data);
+        ticketsOk = first && second && second != first && !third;
+        gfcUpload::abandon(third);
+        gfcUpload::abandon(second);
+        std::printf("UPLOAD-BENCH %s a stale staging ticket cannot release a buffer someone else holds\n",
+                    ticketsOk ? "ok  " : "FAIL");
+    }
+
+    // Idle pools give their memory back.
+    gfcUpload::trimIdle(0.0);
+    gfcSurface::trimIdle(0.0);
+    const gfcUpload::Stats afterTrim = gfcUpload::stats();
+    const size_t surfaceBytes = gfcSurface::poolStats().pooledBytes;
+    const bool trimOk = afterTrim.stagingBytes == 0 && afterTrim.pooledTextureBytes == 0 && surfaceBytes == 0;
+    std::printf("UPLOAD-BENCH %s idle pools are freed (staging %zu, textures %zu, surfaces %zu bytes left)\n",
+                trimOk ? "ok  " : "FAIL", afterTrim.stagingBytes, afterTrim.pooledTextureBytes, surfaceBytes);
+
     const bool surfacesOk = !gfcSurface::available() || surfaceLayouts == 3;
     std::printf("UPLOAD-BENCH %s IOSurface layouts working: %d/3%s\n", surfacesOk ? "ok  " : "FAIL",
                 surfaceLayouts, gfcSurface::available() ? "" : " (disabled)");
-    const bool hdrKept = halfMax > 1.0f && orderOk && surfacesOk && lastFramesOk;
     std::printf("UPLOAD-BENCH %s half-float textures keep values above 1.0 (max=%.3f)\n",
                 halfMax > 1.0f ? "ok  " : "FAIL", halfMax);
-    std::printf("UPLOAD-BENCH: %s\n", hdrKept ? "PASS" : "FAIL");
-    return hdrKept ? 0 : 2;
+    const bool pass = halfMax > 1.0f && orderOk && surfacesOk && lastFramesOk
+                      && singleCopy && ticketsOk && trimOk;
+    std::printf("UPLOAD-BENCH: %s\n", pass ? "PASS" : "FAIL");
+    return pass ? 0 : 2;
 }
 
 }  // namespace jefe::qt

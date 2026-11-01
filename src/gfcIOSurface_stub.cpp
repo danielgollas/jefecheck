@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // IOSurface stubs for platforms without it: every call reports "unavailable",
 // so callers keep the glTexImage2D path. See gfcIOSurface.h.
 
@@ -9,12 +10,15 @@ bool available() { return false; }
 void* create(int, int, Layout) { return nullptr; }
 void* lockForWriting(void*, size_t*) { return nullptr; }
 void unlock(void*) {}
+const void* lockForReading(void*, size_t*) { return nullptr; }
+void unlockForReading(void*) {}
 void retain(void*) {}
 void release(void*) {}
 bool bindToTexture(void*, int, int, Layout) { return false; }
 bool readBack(unsigned, int, int, float*) { return false; }
 PoolStats poolStats() { return {0, 0, 0, 0}; }
 void drainPool() {}
+void trimIdle(double) {}
 long boundCount() { return 0; }
 int selfTest() { return 0; }
 

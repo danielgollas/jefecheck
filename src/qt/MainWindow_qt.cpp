@@ -426,6 +426,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                 wantRepaint = true;
             }
         } else if (jefe::qt::consumePlateChanged()) {
+
             // Stopped and nothing animating, but a bare setChanged() landed
             // (any state edit whose call site didn't force its own repaint —
             // e.g. a mirrored remote change that isn't an animation). Honor the
@@ -433,6 +434,14 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             // local interaction. Drained here exactly once (tickPlaybackTiming
             // drains it in the needsTick branch instead).
             wantRepaint = true;
+        }
+
+        // Give back upload-pool memory nothing has used for a while; runs
+        // when stopped too, which is when the pools sit idle.
+        if (jefe::qt::uploadPoolsNeedTrim()) {
+            viewport_->makeCurrent();
+            jefe::qt::trimUploadPools();
+            viewport_->doneCurrent();
         }
 
         // ~60Hz coalescing repaint flush. Keeps at most one update() in

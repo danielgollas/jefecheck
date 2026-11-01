@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Staging-buffer and texture pools for frame upload. See gfcUploadPool.h.
 
 #include "gfcUploadPool.h"
@@ -5,6 +6,7 @@
 #include <glad/glad.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +25,8 @@ enum class Level { Unknown, Off, Classic, Persistent };
 constexpr size_t kStagingCapBytes = size_t(512) << 20;
 constexpr size_t kTextureCapBytes = size_t(512) << 20;
 
+using Clock = std::chrono::steady_clock;
+
 bool envSet(const char* name) {
     const char* v = std::getenv(name);
     return v && *v && std::strcmp(v, "0") != 0;
@@ -36,14 +40,17 @@ struct Staging {
     size_t bytes = 0;
     void* data = nullptr;     // mapped address while Free/Held
     State state = State::Free;
+    Ticket ticket = 0;        // the acquire() that holds it, while Held
     GLsync fence = nullptr;   // persistent level, while InFlight
+    Clock::time_point freeSince = Clock::now();
 };
 
 namespace {
 
 std::atomic<Level> g_level{Level::Unknown};
-std::mutex g_mutex;                    // guards g_staging, g_wanted
+std::mutex g_mutex;                    // guards g_staging, g_wanted, g_nextTicket
 std::vector<Staging*> g_staging;
+Ticket g_nextTicket = 0;
 std::map<size_t, int> g_wanted;        // bytes -> acquire() misses since service()
 size_t g_stagingBytes = 0;
 
@@ -53,6 +60,7 @@ struct PooledTexture {
     GLint internalFormat;
     int width, height;
     size_t bytes;
+    Clock::time_point pooledAt;
 };
 std::vector<PooledTexture> g_textures;  // GL thread only
 size_t g_textureBytes = 0;
@@ -111,6 +119,23 @@ Staging* createStaging(size_t bytes, Level level) {
     return s;
 }
 
+// g_mutex held. The Held buffer @a ticket names, or nullptr: a ticket that
+// was uploaded or abandoned matches nothing, even after its buffer has gone
+// back to the pool and been handed to another acquire().
+Staging* findHeld(Ticket ticket) {
+    if (!ticket) return nullptr;
+    for (Staging* s : g_staging)
+        if (s->state == Staging::State::Held && s->ticket == ticket) return s;
+    return nullptr;
+}
+
+// g_mutex held.
+void makeFree(Staging* s) {
+    s->state = Staging::State::Free;
+    s->ticket = 0;
+    s->freeSince = Clock::now();
+}
+
 // GL thread, g_mutex held. Only Free buffers are destroyed.
 void destroyStaging(size_t index) {
     Staging* s = g_staging[index];
@@ -122,26 +147,26 @@ void destroyStaging(size_t index) {
 
 }  // namespace
 
-Staging* acquire(size_t bytes, void** data) {
+Ticket acquire(size_t bytes, void** data) {
     const Level level = g_level.load();
-    if (level == Level::Off || bytes == 0) return nullptr;
+    if (level == Level::Off || bytes == 0) return 0;
     std::lock_guard<std::mutex> lock(g_mutex);
     for (Staging* s : g_staging) {
         if (s->state == Staging::State::Free && s->bytes == bytes && s->data) {
             s->state = Staging::State::Held;
+            s->ticket = ++g_nextTicket;
             *data = s->data;
-            return s;
+            return s->ticket;
         }
     }
     ++g_wanted[bytes];
     ++g_stagingMisses;
-    return nullptr;
+    return 0;
 }
 
-void abandon(Staging* s) {
-    if (!s) return;
+void abandon(Ticket ticket) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (s->state == Staging::State::Held) s->state = Staging::State::Free;
+    if (Staging* s = findHeld(ticket)) makeFree(s);
 }
 
 void service() {
@@ -163,7 +188,7 @@ void service() {
         if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) {
             glDeleteSync(s->fence);
             s->fence = nullptr;
-            s->state = Staging::State::Free;
+            makeFree(s);
         }
     }
     // Grow for the sizes the decode thread missed, making room by dropping
@@ -187,12 +212,32 @@ void service() {
     g_wanted.clear();
 }
 
-bool upload(Staging* s, unsigned target, int internalFormat, int width, int height,
+void trimIdle(double idleSeconds) {
+    const auto cutoff = Clock::now() - std::chrono::duration_cast<Clock::duration>(
+                                           std::chrono::duration<double>(idleSeconds));
+    // Pooled textures are appended as they are returned, so the oldest lead.
+    while (!g_textures.empty() && g_textures.front().pooledAt < cutoff) {
+        glDeleteTextures(1, &g_textures.front().id);
+        g_textureBytes -= g_textures.front().bytes;
+        g_textures.erase(g_textures.begin());
+    }
+    if (g_level.load() == Level::Off) return;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (size_t i = 0; i < g_staging.size();) {
+        if (g_staging[i]->state == Staging::State::Free && g_staging[i]->freeSince < cutoff)
+            destroyStaging(i);
+        else
+            ++i;
+    }
+}
+
+bool upload(Ticket ticket, unsigned target, int internalFormat, int width, int height,
             unsigned format, unsigned type, bool allocate) {
-    if (!s) return false;
+    if (!ticket) return false;
     const Level level = g_level.load();
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (s->state != Staging::State::Held) return false;
+    Staging* s = findHeld(ticket);
+    if (!s) return false;
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, s->buffer);
     bool ok = true;
@@ -207,11 +252,12 @@ bool upload(Staging* s, unsigned target, int internalFormat, int width, int heig
     if (level == Level::Persistent) {
         s->fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         s->state = Staging::State::InFlight;
+        s->ticket = 0;
     } else {
         // Re-map for the next frame now; a failed map leaves it unusable
         // (acquire skips buffers without data) until the pool drops it.
         remapClassic(s);
-        s->state = Staging::State::Free;
+        makeFree(s);
     }
     // Everything else uploads from client memory: never leave this bound.
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
@@ -261,7 +307,7 @@ void giveTexture(unsigned texture, unsigned target, int internalFormat, int widt
         g_textureBytes -= g_textures.front().bytes;
         g_textures.erase(g_textures.begin());
     }
-    g_textures.push_back({texture, target, internalFormat, width, height, bytes});
+    g_textures.push_back({texture, target, internalFormat, width, height, bytes, Clock::now()});
     g_textureBytes += bytes;
 }
 
