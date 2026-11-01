@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Cocoa-backed implementation of the bundle Resources lookup.
 //
 // Two strategies, in order:

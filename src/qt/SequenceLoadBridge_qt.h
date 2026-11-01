@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Tiny shim between the Qt UI and the rendering chain's manager
 // singletons. Lives in its own TU because the manager headers pull glad,
 // and Qt's QOpenGLWidget headers pull system OpenGL — the two refuse to

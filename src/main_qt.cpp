@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Minimal Qt entry point for the USE_QT build. This is intentionally tiny —
 // just enough to prove the toolchain end-to-end (QApplication + a main window
 // + GlViewport_Qt + IApplication_Qt). The full feature port lives in later

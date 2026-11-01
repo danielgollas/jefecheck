@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcsessionmanager.h"
 
 #include <stdio.h> //for remove

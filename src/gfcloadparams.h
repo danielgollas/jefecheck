@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCLOADPARAMS_H
 #define GFCLOADPARAMS_H
 

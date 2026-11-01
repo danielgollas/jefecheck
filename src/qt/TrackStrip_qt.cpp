@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "TrackStrip_qt.h"
 #include "qticons.h"
 

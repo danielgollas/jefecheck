@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Review summary PDF (docs/superpowers/specs/2026-09-14-review-summary-export-design.md).
 // QtGui only — no glad, no managers (developer_notes.md §1).
 #ifndef JEFECHECK_QT_REVIEW_SUMMARY_PDF_H

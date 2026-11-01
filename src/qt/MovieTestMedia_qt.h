@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Test media for the --video-load-test suites, generated at test time with the
 // ffmpeg CLI (never committed). QtCore only - no glad, no managers
 // (developer_notes.md section 1).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Adapted from Qt's flowlayout example (BSD 3-Clause, Qt Company).
 // Reflows children left-to-right, wrapping to the next row when the
 // available width is exceeded. Used by LoadWindowDialog_Qt so the four

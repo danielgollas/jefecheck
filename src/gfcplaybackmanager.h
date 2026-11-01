@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPLAYBACKMANAGER_H
 #define GFCPLAYBACKMANAGER_H
 #include "gfcplaybackgui.h"

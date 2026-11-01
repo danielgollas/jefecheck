@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Playlist dock for the Qt port. PR-40 ships a `QDockWidget` hosting
 // a `QListWidget` of playlist entries plus add / remove / up / down /
 // clear buttons. Double-clicking an entry calls

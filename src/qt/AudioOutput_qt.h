@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // The app's audio device: a gfcAudioOutput backed by Qt Multimedia's
 // QAudioSink (pull mode). No Qt Multimedia types here, so any TU may include

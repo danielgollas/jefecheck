@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt implementation of IGLViewport, backed by QOpenGLWidget. Forwards
 // initializeGL / resizeGL / paintGL to a registered IGLViewportListener
 // — the JefeCheck rendering chain (gfcPlateManager, gfcNetworkManager,

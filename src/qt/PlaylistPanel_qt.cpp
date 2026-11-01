@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "PlaylistPanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "qticons.h"

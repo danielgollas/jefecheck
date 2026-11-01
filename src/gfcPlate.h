@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPLATE_H
 #define GFCPLATE_H
 //#pragma once

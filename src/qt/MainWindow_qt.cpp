@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "MainWindow_qt.h"
 
 #include "FXLutPanel_qt.h"
@@ -897,7 +898,7 @@ void MainWindow_Qt::buildMenuBar() {
                    "<p>Professional video frame review and color correction.</p>"
                    "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
                    "Originally written 2006-2014, modernized 2026 for "
-                   "open-source release under GPL v2.</p>"
+                   "open-source release under GPL v2 or later.</p>"
                    "<p><a href='https://github.com/danielgollas/jefecheck'>"
                    "github.com/danielgollas/jefecheck</a></p>"
                    "<p style='font-size:small;color:gray'>Built %2 %3</p>")

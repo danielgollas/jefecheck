@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Captures GL state for the "Host System Specs" dialog. Pure glad —
 // no Qt headers in this TU (the macOS OpenGL framework headers
 // QOpenGLWidget pulls in conflict with glad's symbol redefinitions).

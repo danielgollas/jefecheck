@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Self-test for jefe::wire (JEF-23). No framework — simple assert-count
 // pattern, mirrors the style of the other --*-test harnesses in main_qt.cpp.
 // Invoked via --wire-test, before any GUI/GL setup. Primitives are pure

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPLAYBACKGUI_H
 #define GFCPLAYBACKGUI_H
 

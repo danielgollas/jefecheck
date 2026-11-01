@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // Mixes the tracks' movie sound into one 48 kHz stereo float stream for one
 // output device. Device-free: an output (QAudioSink in the app, a fake in the

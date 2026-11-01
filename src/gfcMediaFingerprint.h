@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCMEDIAFINGERPRINT_H
 #define GFCMEDIAFINGERPRINT_H
 

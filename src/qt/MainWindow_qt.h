@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // JefeCheck's Qt shell window. Single QMainWindow with:
 //   - Native menu bar (macOS pulls into system menu bar by default)
 //   - Central GlViewport_Qt

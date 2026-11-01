@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // A track's decoded movie sound, held at one fixed format (48 kHz, stereo,
 // float32 interleaved) so slice lengths are exact whatever the source was.

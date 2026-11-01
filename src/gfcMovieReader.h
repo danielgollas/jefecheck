@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // Movie decoding via libav*. libav headers are confined to gfcMovieReader.cpp
 // (developer_notes §1), so this header stays include-safe everywhere.

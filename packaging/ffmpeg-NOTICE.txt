@@ -3,15 +3,20 @@ FFmpeg
 
 This distribution bundles a static build of FFmpeg (https://ffmpeg.org),
 used by JefeCheck's video-export feature to encode rendered image
-sequences into H.264 / H.265 / ProRes files.
+sequences into H.264 / H.265 / ProRes files (run as a separate process).
+
+JefeCheck also LINKS the FFmpeg libraries libavformat, libavcodec,
+libavutil, libswresample and libswscale to read .mov/.mp4 movies and their
+sound. Packaged builds use a GPLv3 FFmpeg (--enable-version3), so
+distributed JefeCheck binaries are effectively under GPLv3.
 
 The bundled binary is a GPL build obtained from:
   https://github.com/eugeneware/ffmpeg-static  (release b6.1.1)
 
 FFmpeg is free software licensed under the GNU General Public License
 version 2 or later (GPL builds enable GPL-only components such as x264 /
-x265). JefeCheck is likewise distributed under the GNU GPL v2, so this
-combination is license-compatible.
+x265). JefeCheck is distributed under the GNU GPL, version 2 or (at your
+option) any later version, so this combination is license-compatible.
 
 FFmpeg source and license texts are available at https://ffmpeg.org and
 in the upstream ffmpeg-static release. FFmpeg is a trademark of Fabrice

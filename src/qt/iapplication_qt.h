@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt backend for jefe::ui::IApplication. Wraps QApplication / QTimer.
 // Singleton, registered in main_qt.cpp.
 #ifndef IAPPLICATION_QT_H

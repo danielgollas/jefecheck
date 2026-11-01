@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcframe.h"
 #include "gfcYuvConverter.h"
 #include "gfcMediaKinds.h"

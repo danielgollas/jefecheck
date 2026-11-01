@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPLATEGUI_H
 #define GFCPLATEGUI_H
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // qticons.cpp — programmatic icon factory (JEF-19). See qticons.h.
 #include "qticons.h"
 

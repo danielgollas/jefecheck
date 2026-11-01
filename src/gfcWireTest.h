@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Declaration for the jefe::wire self-test (JEF-23), implemented in
 // gfcWireTest.cpp. Kept separate from gfcWire.h so pulling in the wire
 // primitives never drags in the test's <cstdio>/<cmath> includes.

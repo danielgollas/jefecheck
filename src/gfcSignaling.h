@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // JEF-24 Task 2: local WebSocket signaling stub for the WebRTC transport.
 //
 // jefe::net::SignalingServer wraps rtc::WebSocketServer; jefe::net::

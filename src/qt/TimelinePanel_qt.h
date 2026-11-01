@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Timeline + transport dock content. Top row is the transport bar
 // (rewind / step-back / play-pause / step-fwd / fast-fwd / loop mode /
 // frame counter / in / out / FPS). Bottom is a custom scrubber widget

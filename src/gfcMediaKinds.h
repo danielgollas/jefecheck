@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // Classifies a path by its container extension. Movies (.mov/.mp4) are one
 // entry in a track's sequence list and are never frame-numbered.

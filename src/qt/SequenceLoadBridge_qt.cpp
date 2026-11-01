@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Implementation lives in a Qt-free TU so it can pull the manager
 // headers (which include glad) without colliding with Qt's QOpenGLWidget
 // system-OpenGL include path.

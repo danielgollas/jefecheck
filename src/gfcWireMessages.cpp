@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // jefe::wire message codecs (JEF-23). See gfcWireMessages.h for the codec
 // contract; each codec's field sequence cites its legacy BitStream pair.
 

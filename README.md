@@ -85,4 +85,4 @@ Contributions are welcome. Please review the [CLA](CLA.md) before submitting a p
 
 ## License
 
-This project is licensed under the [GNU General Public License v2.0](LICENSE).
+This project is licensed under the [GNU General Public License, version 2 or (at your option) any later version](LICENSE) (GPL v2 or later). Because the bundled FFmpeg is a GPLv3 build, distributed binaries are effectively under GPLv3.

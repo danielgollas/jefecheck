@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // SMPTE timecode: parse, format and frame-count math, including drop-frame.
 // Pure functions; no libav or Qt.

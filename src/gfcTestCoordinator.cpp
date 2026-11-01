@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // JEF-27 Task 3: test-double coordinator. See gfcTestCoordinator.h for the full
 // JEF-25 contract + ordering guarantee. Built only when JEFECHECK_WEBRTC is on
 // (it needs rtc::WebSocketServer); a no-WebRTC build compiles to an empty TU.

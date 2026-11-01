@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcmemorymanager.h"
 #include <fstream>
 #include <string.h>
