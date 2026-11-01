@@ -720,6 +720,10 @@ int main(int argc, char* argv[]) {
         allZero &= (movieStampSelfTest(mediaDir) == 0);
         allZero &= (audioClipSelfTest(mediaDir) == 0);
         allZero &= (audioSequenceSelfTest(mediaDir) == 0);
+        allZero &= (playbackAdvanceSelfTest(mediaDir) == 0);
+        allZero &= (audioEngineSelfTest(mediaDir) == 0);
+        allZero &= (audioSyncSelfTest(mediaDir) == 0);
+        allZero &= (audioWalkSelfTest(mediaDir) == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("VIDEO-LOAD-TEST media: %s\n", mediaDir.c_str());

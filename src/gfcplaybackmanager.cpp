@@ -153,52 +153,13 @@ void gfcPlaybackManager::update() {
 			plateManager.setChanged();
 			
 
-            switch ( playbackMode ) {
-            case LOOPMODEONCE_ID: {
-                if (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit) {
-                    //advance a frame in the direction
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                } else {
-                    if (currentFrame<=startLimit) {
-                        currentFrame=startLimit;
-
-                    } else if (currentFrame>=endLimit) {
-                        currentFrame=endLimit;
-                    }
-                }
+            // ONCE holds at a limit without counting a frame; every other move counts.
+            {
+                const bool counted = playbackMode != LOOPMODEONCE_ID ||
+                    (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit);
+                currentFrame = advanceFrame(currentFrame, currentDirection, playbackMode, startLimit, endLimit);
+                if (counted) fpsCount++;
             }
-            break;
-            case LOOPMODELOOP_ID: {
-                if (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit) {
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                } else {
-                    if (currentFrame>=endLimit) {
-                        currentFrame=startLimit;
-                        fpsCount++;
-                    } else {
-                        if (currentFrame<=startLimit) {
-                            currentFrame=endLimit;
-                            fpsCount++;
-                        }
-                    }
-                }
-            }
-            break;
-            case LOOPMODEBOUNCE_ID: {
-                if (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit) {
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                } else {
-                    currentDirection=-currentDirection;
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                }
-            }
-            break;
-            }
-
            			
 			boundCurrentFrameToLimits();
 			
@@ -802,4 +763,50 @@ int gfcPlaybackManager::getLoopPriority()
 float gfcPlaybackManager::getTargetFPS()
 {
 	return targetFPS;
+}
+
+// The frame after `cur` for one playback step. BOUNCE flips `direction` at a
+// limit; ONCE clamps to the limits and holds. Shared by update() and the audio
+// engine's leading clock, so both walk frames identically.
+int gfcPlaybackManager::advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit) {
+    switch ( mode ) {
+    case LOOPMODEONCE_ID: {
+        if (cur+direction<=endLimit && cur+direction>=startLimit) {
+            //advance a frame in the direction
+            cur+=direction;
+        } else {
+            if (cur<=startLimit) {
+                cur=startLimit;
+
+            } else if (cur>=endLimit) {
+                cur=endLimit;
+            }
+        }
+    }
+    break;
+    case LOOPMODELOOP_ID: {
+        if (cur+direction<=endLimit && cur+direction>=startLimit) {
+            cur+=direction;
+        } else {
+            if (cur>=endLimit) {
+                cur=startLimit;
+            } else {
+                if (cur<=startLimit) {
+                    cur=endLimit;
+                }
+            }
+        }
+    }
+    break;
+    case LOOPMODEBOUNCE_ID: {
+        if (cur+direction<=endLimit && cur+direction>=startLimit) {
+            cur+=direction;
+        } else {
+            direction=-direction;
+            cur+=direction;
+        }
+    }
+    break;
+    }
+    return cur;
 }

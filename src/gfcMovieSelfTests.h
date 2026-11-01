@@ -13,3 +13,7 @@ int movieFingerprintSelfTest(const std::string& mediaDir);
 int movieStampSelfTest(const std::string& mediaDir);
 int audioClipSelfTest(const std::string& mediaDir);
 int audioSequenceSelfTest(const std::string& mediaDir);
+int playbackAdvanceSelfTest(const std::string& mediaDir);
+int audioEngineSelfTest(const std::string& mediaDir);
+int audioSyncSelfTest(const std::string& mediaDir);
+int audioWalkSelfTest(const std::string& mediaDir);

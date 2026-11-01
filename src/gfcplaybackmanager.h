@@ -48,6 +48,8 @@ public:
     bool getKeepRateOnLoad() const { return keepRateOnLoad; }
     /// Maps a float fps to a rational: NTSC rates within 0.005 snap to n*1000/1001, otherwise round(fps*1000)/1000 reduced.
     static void rationalFromFPS(float fps, int& num, int& den);
+    /// One playback step from `cur` under loop `mode` (LOOPMODEONCE_ID/LOOPMODELOOP_ID/LOOPMODEBOUNCE_ID); BOUNCE flips `direction` at a limit.
+    static int advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit);
     void setPlaybackMode(int mode);
     void setCurrentFrame(int frame);
     void setDirection(int direction);

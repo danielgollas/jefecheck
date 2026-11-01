@@ -7,6 +7,8 @@
 #include "gfcMediaKinds.h"
 #include "gfcMovieReader.h"
 #include "gfcAudioClip.h"
+#include "gfcAudioEngine.h"
+#include "UIConstants.h"
 #include "gfcframe.h"
 #include "gfcimageloadermovie.h"
 #include "gfcStructures.h"
@@ -307,5 +309,208 @@ int audioSequenceSelfTest(const std::string& dir) {
     check(!seq->hasAudio() && !seq->audioClip(), "a silent movie has no clip");
     sett.maximumFramesInQueue = savedQueue;
     std::printf("AUDIO-SEQUENCE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// Decodes a whole movie with the reader: its 48 kHz sound into `clip` and each
+// frame's mean luma (BGRA CPU path) into `luma`. Returns the frame count.
+static int64_t decodeMovieAudioAndLuma(const std::string& path, gfcAudioClip& clip, std::vector<double>* luma,
+                                       int& rateNum, int& rateDen) {
+    gfcMovieReader r; std::string err; r.setAudioEnabled(true);
+    if (!r.open(path, &err)) return 0;
+    const int64_t n = r.info().frameCount; rateNum = r.info().rateNum; rateDen = r.info().rateDen;
+    clip.reset(0); bool first = true; gfcMovieFrame f; std::vector<float> a; int64_t firstSample = 0; std::vector<uint8_t> bgra;
+    for (int64_t k = 0; k < n; ++k) {
+        if (!r.readFrame(k, f, &err)) return k;
+        if (luma) {
+            double sum = 0;
+            if (r.convertToBGRA(f, 8, f.width, f.height, bgra, &err))
+                for (size_t p = 0; p + 3 < bgra.size(); p += 4) sum += 0.0722*bgra[p] + 0.7152*bgra[p+1] + 0.2126*bgra[p+2];
+            luma->push_back(bgra.empty() ? 0.0 : sum / (255.0 * double(bgra.size() / 4)));
+        }
+        while (r.takeAudio(a, firstSample)) { if (first) { clip.reset(firstSample); first = false; } clip.append(a.data(), (int64_t)a.size()/2); }
+    }
+    return n;
+}
+
+// The extracted frame-advance rule keeps update()'s behaviour.
+int playbackAdvanceSelfTest(const std::string&) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    int d = 1;
+    check(gfcPlaybackManager::advanceFrame(5, d, LOOPMODEONCE_ID, 1, 10) == 6 && d == 1, "once: forward step");
+    d = 1; check(gfcPlaybackManager::advanceFrame(10, d, LOOPMODEONCE_ID, 1, 10) == 10 && d == 1, "once: holds at the end");
+    d = -1; check(gfcPlaybackManager::advanceFrame(1, d, LOOPMODEONCE_ID, 1, 10) == 1 && d == -1, "once: holds at the start in reverse");
+    d = 1; check(gfcPlaybackManager::advanceFrame(10, d, LOOPMODELOOP_ID, 1, 10) == 1 && d == 1, "loop: wraps forward");
+    d = -1; check(gfcPlaybackManager::advanceFrame(1, d, LOOPMODELOOP_ID, 1, 10) == 10 && d == -1, "loop: wraps in reverse");
+    d = 1; check(gfcPlaybackManager::advanceFrame(10, d, LOOPMODEBOUNCE_ID, 1, 10) == 9 && d == -1, "bounce: turns at the end");
+    d = -1; check(gfcPlaybackManager::advanceFrame(1, d, LOOPMODEBOUNCE_ID, 1, 10) == 2 && d == 1, "bounce: turns at the start");
+    d = -1; check(gfcPlaybackManager::advanceFrame(5, d, LOOPMODELOOP_ID, 1, 10) == 4, "loop: reverse step");
+    std::printf("PLAYBACK-ADVANCE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int audioEngineSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto nonZero = [&](const std::vector<float>& v) { int64_t n = 0; for (size_t i = 0; i < v.size(); i += 2) if (std::fabs(v[i]) > 1e-6f) n = int64_t(i/2) + 1; return n; };
+    // Sign changes of the left channel over stereo frames [from, to); exact zeros carry the previous sign.
+    auto countZeroCrossings = [](const std::vector<float>& v, int from, int to) {
+        int n = 0, sign = 0;
+        for (int i = from; i < to && size_t(2*i) < v.size(); ++i) {
+            const float s = v[size_t(2*i)];
+            const int sg = s > 0.f ? 1 : (s < 0.f ? -1 : 0);
+            if (sg != 0) { if (sign != 0 && sg != sign) ++n; sign = sg; }
+        }
+        return n;
+    };
+    auto clipA = std::make_shared<gfcAudioClip>(); int rn = 0, rd = 1;
+    const int64_t framesA = decodeMovieAudioAndLuma(dir+"/flashbeep_23976.mov", *clipA, nullptr, rn, rd);
+    if (framesA != 240) std::printf("  note: flashbeep_23976 decoded %lld frames\n", (long long)framesA);
+
+    gfcAudioEngine e; gfcFakeAudioOutput out; e.setOutput(&out); out.open(&e);
+    e.setTrackClip(0, clipA, 24000, 1001, 240); e.setPlayerRate(24000,1001);
+    // step slice: exactly one frame, faded
+    std::vector<float> cap; e.playSlice(25); out.pump(4000, &cap);                      // frame 25 = movie index 24 (beep)
+    check(nonZero(cap)==2002, "one frame's samples (2002) then silence");
+    bool ramp=true; for (int i=0;i<144;++i) ramp &= std::fabs(cap[2*i]) <= 0.8f*(i+1)/144.0f + 1e-3f; check(ramp, "3 ms fade-in envelope");
+    check(std::fabs(cap[2*2001])<0.02f, "fade-out reaches ~0 at the slice end");
+    // fast scrub drops the late one: two requests before any pump -> only the last plays
+    cap.clear(); e.playSlice(49); e.playSlice(73); out.pump(4000,&cap); check(nonZero(cap)==2002, "only the newest pending slice plays");
+    // muted -> zeros
+    e.setTrackMuted(0,true); cap.clear(); e.playSlice(25); out.pump(4000,&cap); check(nonZero(cap)==0, "muted track renders silence"); e.setTrackMuted(0,false);
+    // off-rate: 2x -> cut to 1001 samples; 0.5x -> 2002 then 2002 of silence; pitch unchanged (1 kHz = 48 samples/period)
+    e.setPlayerRate(48000,1001); cap.clear(); e.playSlice(25); out.pump(1001,&cap); e.playSlice(26); out.pump(3000,&cap);
+    check(nonZero(cap)<=1001+144 && countZeroCrossings(cap,0,900)>=35 && countZeroCrossings(cap,0,900)<=40, "2x: cut at 1001 samples, unchanged pitch");
+    e.setPlayerRate(12000,1001); cap.clear(); e.playSlice(25); out.pump(4004,&cap); check(nonZero(cap)==2002, "0.5x: full slice then silence until the next frame");
+    // leading: contiguous, no fades between frames, leaderFrame follows playedSamples, loop wraps
+    e.setPlayerRate(24000,1001); check(e.canLead(), "native-rate unmuted track can lead");
+    gfcAudioTransport t{1,1,48,LOOPMODELOOP_ID}; e.startLeading(t); cap.clear(); out.pump(2002*10+1000,&cap);
+    check(e.isLeading() && e.leaderFrame()==11, "after 10.5 frames of samples the leader is on frame 11");
+    // After the first slice's fade-in the output is the clip sample for sample,
+    // straight across all ten frame boundaries (incl. the beep->silence cut at
+    // frame 1|2, where any fade-out would show): no fades between contiguous frames.
+    { const int n = 2002*10+1000; std::vector<float> ref(size_t(2*n)); clipA->read(0, n, ref.data()); float worst=0;
+      for (int i=gfcAudioEngine::kFadeSamples; i<n && size_t(2*i+1)<cap.size(); ++i)
+          worst=std::max({worst, std::fabs(cap[2*i]-ref[2*i]), std::fabs(cap[2*i+1]-ref[2*i+1])});
+      check(cap.size()==size_t(2*n) && worst < 1e-6f, "no fade between contiguous frames"); }
+    out.pump(2002*40, nullptr); check(e.leaderFrame()>=1 && e.leaderFrame()<=48, "loop wraps inside [1,48]");
+    e.stopLeading(); check(!e.isLeading(), "stopped");
+    // reverse never leads; off-rate track never leads
+    e.setPlayerRate(25,1); check(!e.canLead(), "off-rate track cannot lead");
+    // mixing: two tracks, sum and clamp
+    e.setTrackClip(1, clipA, 24000, 1001, 240); e.setPlayerRate(24000,1001); cap.clear(); e.playSlice(25); out.pump(2002,&cap);
+    float peak=0; for (float v: cap) peak=std::max(peak,std::fabs(v)); check(peak<=1.0f && peak>0.95f, "two 0.8 beeps sum then clamp to 1.0");
+    // null output: every call is safe
+    gfcAudioEngine n; n.setOutput(nullptr); n.setTrackClip(0, clipA, 24000,1001,240); n.setPlayerRate(24000,1001); n.playSlice(25); n.startLeading(t);
+    check(!n.canLead() && !n.isLeading(), "no device: cannot lead, every call is a safe no-op");
+    std::printf("AUDIO-ENGINE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// Plays each flash/beep clip whole while the audio leads and checks every
+// logged frame: its slice is loud exactly when its picture is the white flash.
+int audioSyncSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    struct Case { const char* file; int64_t expectFrames; const char* syncMsg; const char* countMsg; };
+    const Case cases[] = {
+        {"/flashbeep_23976.mov", 240, "23.976: every frame's sound matches its picture", "23.976: 240 frames rendered, none twice"},
+        {"/flashbeep_25.mov",    250, "25: every frame's sound matches its picture",     "25: 250 frames rendered, none twice"},
+    };
+    for (const Case& c : cases) {
+        auto clip = std::make_shared<gfcAudioClip>(); std::vector<double> luma; int rn = 0, rd = 1;
+        const int64_t frames = decodeMovieAudioAndLuma(dir + c.file, *clip, &luma, rn, rd);
+        gfcAudioEngine e; gfcFakeAudioOutput out; e.setOutput(&out); out.open(&e);
+        e.setTrackClip(0, clip, rn, rd, frames); e.setPlayerRate(rn, rd);
+        gfcAudioTransport t{1, 1, int(frames), LOOPMODEONCE_ID};
+        e.startLeading(t);
+        std::vector<float> cap;
+        const int64_t total = gfcAudioClip::frameStartSample(frames + 3, rn, rd);
+        for (int64_t done = 0; done < total; done += 512) out.pump(512, &cap);   // device-sized pulls
+        const auto log = e.renderLogSnapshot();
+        int mismatches = 0; bool ordered = !log.empty();
+        const int64_t base = log.empty() ? 0 : log.front().startSample;
+        for (size_t k = 0; k < log.size(); ++k) {
+            const int frame = log[k].frame;
+            ordered &= (frame == int(k) + 1);
+            const int64_t from = log[k].startSample - base;
+            const int64_t len = gfcAudioClip::frameStartSample(frame, rn, rd) - gfcAudioClip::frameStartSample(frame - 1, rn, rd);
+            double en = 0; int64_t cnt = 0;
+            for (int64_t s = from; s < from + len && size_t(2*s+1) < cap.size(); ++s) { en += cap[size_t(2*s)]*cap[size_t(2*s)] + cap[size_t(2*s+1)]*cap[size_t(2*s+1)]; cnt += 2; }
+            const bool loud = cnt > 0 && std::sqrt(en / double(cnt)) > 0.3;
+            const bool white = frame >= 1 && size_t(frame - 1) < luma.size() && luma[size_t(frame - 1)] > 0.5;
+            if (loud != white) { ++mismatches; if (mismatches <= 3) std::printf("  %s frame %d: loud=%d white=%d\n", c.file, frame, int(loud), int(white)); }
+        }
+        check(mismatches == 0 && !log.empty(), c.syncMsg);
+        check(int64_t(log.size()) == c.expectFrames && ordered, c.countMsg);
+    }
+    std::printf("AUDIO-SYNC: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// Leading walk details on a synthetic constant-level clip: BOUNCE return
+// passes are silent and resume with a fade-in, ONCE holds without repeating,
+// offsets shift sound with picture, and 29.97 (1601/1602-sample frames) streams
+// without gaps.
+int audioWalkSelfTest(const std::string&) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto dcClip = [](int64_t frames) {
+        auto c = std::make_shared<gfcAudioClip>(); c->reset(0);
+        std::vector<float> s(size_t(frames) * 2, 0.5f); c->append(s.data(), frames); return c;
+    };
+    auto level = [](const std::vector<float>& v, int64_t from, int64_t len) {
+        double e = 0; int64_t n = 0;
+        for (int64_t s = from; s < from + len && size_t(2*s+1) < v.size(); ++s) { e += std::fabs(v[size_t(2*s)]); ++n; }
+        return n ? e / double(n) : 0.0;
+    };
+    {   // 24/1: 2000 samples per frame, ten frames of 0.5
+        auto clip = dcClip(20000);
+        gfcAudioEngine e; gfcFakeAudioOutput out; e.setOutput(&out); out.open(&e);
+        e.setTrackClip(0, clip, 24, 1, 10); e.setPlayerRate(24, 1);
+        gfcAudioTransport b{1, 1, 5, LOOPMODEBOUNCE_ID};
+        e.startLeading(b); std::vector<float> cap; out.pump(2000 * 12, &cap);
+        const auto log = e.renderLogSnapshot();
+        const int want[] = {1,2,3,4,5,4,3,2,1,2,3,4};
+        bool order = log.size() >= 12; for (size_t k = 0; order && k < 12; ++k) order = log[k].frame == want[k];
+        check(order, "bounce: the walk goes 1..5..1..4");
+        bool ok = true;
+        for (int k = 1; k < 4; ++k) ok &= level(cap, 2000*k, 2000) > 0.49;          // forward frames 2..4 unfaded
+        ok &= cap[2*(2000*5 - 1)] < 0.01f;                                            // frame 5 fades out before the turn
+        for (int k = 5; k < 9; ++k) ok &= level(cap, 2000*k, 2000) == 0.0;           // return pass silent
+        ok &= std::fabs(cap[2*(2000*9)]) < 0.01f && level(cap, 2000*9 + 144, 1856) > 0.49; // resume with a fade-in
+        check(ok, "bounce: forward passes sound, the return pass is silent, resume fades in");
+
+        gfcAudioTransport once{8, 1, 10, LOOPMODEONCE_ID};
+        e.startLeading(once); cap.clear(); out.pump(2000 * 6, &cap);
+        const auto log2 = e.renderLogSnapshot();
+        check(log2.size() == 3 && log2.back().frame == 10 && e.leaderFrame() == 10 && e.isLeading() &&
+              level(cap, 2000*3, 6000) == 0.0, "once: holds on the last frame without repeating its sound");
+        e.stopLeading();
+
+        e.setTrackOffset(0, 2);
+        gfcAudioTransport o{1, 1, 10, LOOPMODELOOP_ID};
+        e.startLeading(o); cap.clear(); out.pump(2000 * 4, &cap); e.stopLeading();
+        check(level(cap, 0, 4000) == 0.0 && level(cap, 4000 + 144, 2000 - 144) > 0.49, "offset 2: frames 1-2 silent, frame 3 plays movie frame 0");
+    }
+    {   // 30000/1001: frames alternate 1601/1602 samples; the stream has no gaps
+        auto clip = dcClip(48000 * 2);
+        gfcAudioEngine e; gfcFakeAudioOutput out; e.setOutput(&out); out.open(&e);
+        e.setTrackClip(0, clip, 30000, 1001, 59); e.setPlayerRate(30000, 1001);
+        gfcAudioTransport t{1, 1, 59, LOOPMODELOOP_ID};
+        e.startLeading(t); std::vector<float> cap; out.pump(48000, &cap);
+        float lo = 1.f; for (int i = 144; i < 48000; ++i) lo = std::min(lo, cap[size_t(2*i)]);
+        check(lo > 0.499f && e.leaderFrame() == 30, "29.97: one second streams seamlessly and lands on frame 30");
+    }
+    std::printf("AUDIO-WALK: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
