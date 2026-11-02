@@ -257,7 +257,7 @@ The Timeline controls from left to right are:
 
   ![Track bar showing loading progress](manual-images/TrackBar.png)
 
-  ![Track loading mode indicator](manual-images/TrackLoadingMode.png) Inside the gray background there is a slightly darker gray area that shows the range of the track we wish to load. Green segments over it show the frames that are in memory right now and ready to show. They move with the playhead: frames ahead of it load and turn green, and when memory is full, frames behind it are unloaded and their green disappears. A frame that is not in memory can still be reached; click it on the timeline and it loads.
+  ![Track loading mode indicator](manual-images/TrackLoadingMode.png) Inside the gray background there is a slightly darker gray area that shows the range of the track we wish to load. Green segments over it show the frames that are in memory right now and ready to show. They move with the playhead: frames ahead of it load and turn green, and when memory is full, frames behind it are unloaded and their green disappears (the few just behind the playhead go last, so stepping back stays instant). A frame that is not in memory can still be reached; click it on the timeline and it loads. A frame that can't be read shows black, and playback carries on past it.
 
 - **The Cancel Loading Button** — Turns red whenever its corresponding track is being loaded, allowing you to cancel the load at any point. When the track is completely loaded or no more frames can fit into memory, loading stops and the button turns gray.
 

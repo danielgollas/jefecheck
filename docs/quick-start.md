@@ -92,7 +92,7 @@ A range or loop that fits in memory loads once and stays loaded, however many ti
 
 ### What the Green Segments Under a Track Mean
 
-The green segments on each track's lane are the frames that are in memory right now. They move with the playhead: frames ahead of it turn green as they load, and when memory is full, frames behind it are unloaded and lose their green. A gap is not an error; clicking a frame in a gap loads it.
+The green segments on each track's lane are the frames that are in memory right now. They move with the playhead: frames ahead of it turn green as they load, and when memory is full, frames behind it are unloaded and lose their green. The frames just behind the playhead are unloaded last, so after playing and pausing, stepping back is instant. A gap is not an error; clicking a frame in a gap loads it. A frame that can't be read shows black, and playback carries on past it.
 
 ---
 
