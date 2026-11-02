@@ -81,6 +81,8 @@ public:
     // Self-test hook: while set, opening an audio decoder fails after its
     // context is allocated (the "sound cannot be decoded" path).
     static void testFailAudioDecoderOpen(bool fail);
+    // Self-test hook: video packets sent to the decoder since open().
+    int64_t videoPacketsSent() const;
 
     // YUV->BGRA with the file's matrix/range (untagged = Rec.709 video range).
     // bitsPerComponent 8 -> BGRA, 16 -> BGRA64LE; out is outW*outH pixels.

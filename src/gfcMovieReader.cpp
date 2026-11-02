@@ -86,7 +86,12 @@ struct gfcMovieReader::Impl {
     bool eofSent = false;
     int64_t lastIndex = -1;
     std::shared_ptr<AVFrame> last;   // most recently decoded frame (index lastIndex)
-    bool intraOnly = false;          // every frame a keyframe (ProRes, DNx): seeks are cheap
+    // Every frame a keyframe (ProRes, DNx). Such a decoder gets slice threads
+    // only (openDecoder), so a seek lands on the frame and the next packet
+    // returns it: seeks are cheap. With frame threads a flushed decoder needs
+    // about one packet per thread before its first frame (~9x the work).
+    bool intraOnly = false;
+    int64_t packetsSent = 0;         // video packets given to the decoder (self-test hook)
     static constexpr int64_t kDecodeOnward = 12;   // longest forward skip decoded through rather than sought
     gfcMovieInfo info;
     std::mutex m;
@@ -137,6 +142,7 @@ struct gfcMovieReader::Impl {
         lastIndex = -1;
         eofSent = false;
         vstream = -1;
+        packetsSent = 0;
         if (sws) { sws_freeContext(sws); sws = nullptr; }
         av_packet_free(&pkt);
         avcodec_free_context(&dec);
@@ -165,13 +171,16 @@ struct gfcMovieReader::Impl {
         if (!dec) { setErr(err, "out of memory"); return false; }
         int ret = avcodec_parameters_to_context(dec, par);
         if (ret < 0) { setErr(err, "decoder parameters: " + avErr(ret)); return false; }
+        const AVCodecDescriptor* cd = avcodec_descriptor_get(par->codec_id);
+        intraOnly = cd && (cd->props & AV_CODEC_PROP_INTRA_ONLY);
         dec->thread_count = 0;
-        dec->thread_type = FF_THREAD_SLICE | FF_THREAD_FRAME;
+        // Intra-only: slice threads only, so a seek costs one frame's decode
+        // (frame threads hold back ~thread_count packets after every flush).
+        // Long-GOP codecs keep frame threads: they decode on rather than seek.
+        dec->thread_type = intraOnly ? FF_THREAD_SLICE : (FF_THREAD_SLICE | FF_THREAD_FRAME);
         dec->pkt_timebase = stream()->time_base;
         ret = avcodec_open2(dec, codec, nullptr);
         if (ret < 0) { setErr(err, "cannot open decoder: " + avErr(ret)); return false; }
-        const AVCodecDescriptor* cd = avcodec_descriptor_get(par->codec_id);
-        intraOnly = cd && (cd->props & AV_CODEC_PROP_INTRA_ONLY);
         return true;
     }
 
@@ -192,6 +201,7 @@ struct gfcMovieReader::Impl {
                 continue;
             }
             ret = avcodec_send_packet(dec, pkt);
+            ++packetsSent;
             av_packet_unref(pkt);
             if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_INVALIDDATA) {
                 setErr(err, "decode error: " + avErr(ret));
@@ -532,6 +542,11 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
 }
 
 void gfcMovieReader::testFailAudioDecoderOpen(bool fail) { gTestFailAudioOpen = fail; }
+
+int64_t gfcMovieReader::videoPacketsSent() const {
+    std::lock_guard<std::mutex> lock(d_->m);
+    return d_->packetsSent;
+}
 
 void gfcMovieReader::setAudioEnabled(bool on) {
     std::lock_guard<std::mutex> lock(d_->m);

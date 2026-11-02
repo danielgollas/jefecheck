@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcMovieSelfTests.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -125,6 +126,25 @@ int movieReaderSelfTest(const std::string& dir) {
         check(same, std::string(clip).find("hevc") != std::string::npos
                     ? "hevc long GOP: skips decoded on (+5, +12) and sought (+13 more) match a fresh random-access read"
                     : "h264 long GOP: skips decoded on (+5, +12) and sought (+13 more) match a fresh random-access read");
+    }
+    // Intra-only (ProRes): a backward read is one seek, and the decoder returns
+    // the sought frame from that one packet (slice threads only; frame threads
+    // would hold back ~thread_count packets after the flush).
+    {   gfcMovieReader seqR, rev; gfcMovieFrame fr;
+        std::vector<std::vector<uint8_t>> want(24);
+        bool ok = seqR.open(dir+"/prores4444_24.mov", &err);
+        for (int k = 0; ok && k < 24; ++k) { ok = seqR.readFrame(k, fr, &err) && fr.index == k; if (ok) want[k] = bytesOf(fr); }
+        ok = ok && rev.open(dir+"/prores4444_24.mov", &err);
+        bool same = ok; int64_t worst = 0;
+        for (int k = 23; ok && k >= 0; --k) {
+            const int64_t before = rev.videoPacketsSent();
+            ok = rev.readFrame(k, fr, &err);
+            worst = std::max(worst, rev.videoPacketsSent() - before);
+            same = same && ok && fr.index == k && !want[k].empty() && bytesOf(fr) == want[k];
+        }
+        std::printf("MOVIE-READER: prores reverse 23..0, at most %lld packets per read\n", (long long)worst);
+        check(same, "prores read backwards 23..0: right index and bytes of a sequential read");
+        check(ok && worst <= 2, "prores backward read: at most 2 packets sent per frame");
     }
     std::printf("MOVIE-READER: pass=%d fail=%d\n", pass, fail);
     return fail;
