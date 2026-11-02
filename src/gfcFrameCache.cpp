@@ -50,6 +50,7 @@ void gfcFrameCache::setTrackGeometry(int track, int offset, int firstIndex, int 
     tr.frameBytes = frameBytes;
     tr.cancelled = false;
     otherFloorCache_ = INT64_MAX;   // a load: the next small-cache sample sets the floor again
+    latencyAvg_.store(0.0, std::memory_order_release);   // a new clip decodes at its own speed
     wake();
 }
 
@@ -124,6 +125,7 @@ void gfcFrameCache::clearTrack(int track) {
                    pending_.end());
     victimsPending_.store(!pending_.empty(), std::memory_order_release);
     otherFloorCache_ = INT64_MAX;   // a clear: likewise
+    latencyAvg_.store(0.0, std::memory_order_release);
     wake();
 }
 
@@ -140,6 +142,10 @@ void gfcFrameCache::setTransport(int playhead, int direction, int loopMode, int 
 
 // Lock-free: the playback tick may call these.
 void gfcFrameCache::retarget(int playhead) {
+    // A jump while not skipping (paused, or Show every frame): the latency
+    // measured before it may be another stretch's (a slow part, a busier
+    // moment); start the estimate over. A seek while Keep time plays keeps it.
+    if (!leadSkip_.load(std::memory_order_acquire)) latencyAvg_.store(0.0, std::memory_order_release);
     playhead_.store(playhead, std::memory_order_release);
     generation_.fetch_add(1, std::memory_order_acq_rel);
     retargets_.fetch_add(1, std::memory_order_relaxed);
@@ -552,7 +558,9 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         if (finishing && mode != Mode::Fill) {
             const int sc = timelineScore(t, p);
             if (sc >= 3 * p.N) unconditional = true;
-            if (p.N > 0) victimCeiling = sc < 0 ? -1 : (sc / p.N) * p.N;
+            // The band's floor; the playhead frame (4N) and its run belong to
+            // the window band [3N, 4N].
+            if (p.N > 0) victimCeiling = sc < 0 ? -1 : (std::min(sc, 3 * p.N) / p.N) * p.N;
         }
         if (mode == Mode::Fill) victimCeiling = INT_MIN;   // no victims: free room only
         if (!admit(t, unconditional, timelineNeedLocked(t, track, bytes), victimCeiling)) {

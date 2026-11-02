@@ -299,6 +299,9 @@ public:
     static void setTestDecodeDelayMs(int ms);
     // Tests: a sleep before every 1 s block on the audio threads (0 = none).
     static void setTestAudioBlockDelayMs(int ms);
+    // Tests: an audio read starting in [fromSample, toSample) fails as a
+    // mid-file read error would (from >= to turns it off).
+    static void setTestAudioReadErrorRange(int64_t fromSample, int64_t toSample);
     // How many times a load was announced to the remote session (LOAD message).
     static long loadAnnouncements();
     // The loader thread's id, or the default id when none is running.

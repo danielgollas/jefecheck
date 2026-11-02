@@ -273,7 +273,6 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
             const QRect bar(xStart, barTop, std::max(xEnd - xStart, 1), barH);
             p.fillRect(bar, QColor(85, 85, 85));
 
-            // Loaded portion (lighter), starting at firstLoadedFrame.
             // Loaded frames: light, desaturated green (à la FLTK's intended
             // loaded-bar color), one rectangle per resident run like a video
             // player's buffer bar.

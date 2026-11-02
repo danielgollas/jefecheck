@@ -177,7 +177,10 @@ struct gfcMovieReader::Impl {
         // Intra-only: slice threads only, so a seek costs one frame's decode
         // (frame threads hold back ~thread_count packets after every flush).
         // Long-GOP codecs keep frame threads: they decode on rather than seek.
-        dec->thread_type = intraOnly ? FF_THREAD_SLICE : (FF_THREAD_SLICE | FF_THREAD_FRAME);
+        // An intra-only decoder without slice threading keeps frame threads
+        // too: slice-only would decode it on one thread.
+        const bool sliceOnly = intraOnly && (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS);
+        dec->thread_type = sliceOnly ? FF_THREAD_SLICE : (FF_THREAD_SLICE | FF_THREAD_FRAME);
         dec->pkt_timebase = stream()->time_base;
         ret = avcodec_open2(dec, codec, nullptr);
         if (ret < 0) { setErr(err, "cannot open decoder: " + avErr(ret)); return false; }

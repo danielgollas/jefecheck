@@ -9,6 +9,7 @@
 #include <functional>
 #include <algorithm>
 #include <atomic>
+#include <limits>
 #include "gfcSequence.h"
 #include "gfcMediaKinds.h"
 #include "gfcMovieReader.h"
@@ -51,6 +52,7 @@ extern gfcMemoryManager memoryManager;
 namespace {
 std::atomic<int> g_testDecodeDelayMs{0};
 std::atomic<int> g_testAudioBlockDelayMs{0};
+std::atomic<int64_t> g_testAudioErrorFrom{0}, g_testAudioErrorTo{0};
 std::atomic<long> g_loadAnnouncements{0};
 }  // namespace
 
@@ -1148,12 +1150,23 @@ void gfcSequence::audioThreadMain(std::shared_ptr<gfcMovieReader> reader, std::s
 		if ( const int delay=g_testAudioBlockDelayMs.load() )
 			std::this_thread::sleep_for(std::chrono::milliseconds(delay));
 		int64_t first=0;
-		const bool read=reader->readAudioUntil(std::min(end, std::max(cursor, hole)+kBlock), &err);
-		if ( !read )
-			printf("Track %c: audio read failed: %s\n", trackID, err.c_str());
+		const int64_t readFrom=std::max(cursor, hole);
+		const bool injected=readFrom>=g_testAudioErrorFrom.load() && readFrom<g_testAudioErrorTo.load();
+		if ( injected )
+			err="test: injected read error";
+		const bool read=!injected && reader->readAudioUntil(std::min(end, readFrom+kBlock), &err);
 		const bool got=read && reader->takeAudio(block, first);
-		if ( !got ) {
-			// The end of the file (or a read error): nothing more past here.
+		if ( !read ) {
+			// A read error mid-file: skip one block past it and carry on (the
+			// next read seeks there), rather than leaving the rest silent until
+			// a jump. The pass back from the start retries it once.
+			const int64_t skipTo=std::min(end, readFrom+kBlock);
+			printf("Track %c: audio read failed at sample %lld: %s; going on from %lld\n", trackID,
+			       (long long)readFrom, err.c_str(), (long long)skipTo);
+			pos=skipTo;
+			cursor=std::numeric_limits<int64_t>::min()/2;   // forces a seek before the next read
+		} else if ( !got ) {
+			// The end of the file: nothing more past here.
 			cursor=end;
 			pos=end;
 		} else {
@@ -1680,7 +1693,6 @@ gfcFrame gfcSequence::forceLoad ( int frame ) {
 
 	forcedFrame=frames[frame];
 	forcedFrameIndex=frame;
-	printf("Forced loading: %s\n",forcedFrame.savedParams.fileName.c_str());
 	// Movies: never through the loader's reader (it decodes the track's sound).
 	if (forcedFrame.savedParams.movieReader) {
 		if (std::shared_ptr<gfcMovieReader> r=forcedMovieReader(forcedFrame.savedParams.fileName))
@@ -2546,6 +2558,11 @@ int gfcSequence::getLoadedFrameCount() {
 
 void gfcSequence::setTestAudioBlockDelayMs(int ms) {
 	g_testAudioBlockDelayMs.store(ms<0?0:ms);
+}
+
+void gfcSequence::setTestAudioReadErrorRange(int64_t fromSample, int64_t toSample) {
+	g_testAudioErrorFrom.store(fromSample);
+	g_testAudioErrorTo.store(toSample);
 }
 
 void gfcSequence::setTestDecodeDelayMs(int ms) {

@@ -450,6 +450,26 @@ int cachePolicySelfTest() {
         check(c.cacheBytes() <= 20 * 1000 + 1000, "finish: at most one frame over the budget");
     }
 
+    {   // Finishing the playhead's own frame (score 4N) takes victims only below
+        // the window band: never a window frame another track still has to finish.
+        gfcFrameCache c; gfcFrameTable t0, t1; t0.reset(240); t1.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t0); c.attachTrack(1, &t1);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTrackGeometry(1, 0, 0, 239, 1000);
+        c.setTestBudget(20 * 1000);
+        c.setTransport(100, +1, LOOPMODEONCE_ID, 100, 240, 24);
+        check(pull(c, 1, 10, 1000) == seq(100, 109) && pull(c, 0, 10, 1000) == seq(100, 109), "playhead finish: both tracks load 100..109");
+        t0.setEvicting(99); t0.setUnloaded(99);   // track 0 lost the playhead frame
+        c.setTestPooledBytes(500);                 // and the pools grew
+        Job j{};
+        const bool got = c.nextJob(0, j, ms(20));
+        check(got && j.timelineFrame == 100, "playhead finish: track 0 gets timeline 100 back");
+        if (got) c.commit(j, 1000, true);
+        const gfcFrameCache::Victims v = c.drainVictims();
+        check(v.frames.empty(), "playhead finish: no window frame is evicted for it");
+    }
+
     {   // A finish refused outside the window unloads the other track's copy.
         gfcFrameCache c; gfcFrameTable t0, t1; t0.reset(240); t1.reset(240);
         c.setTestPooledBytes(0);
@@ -567,6 +587,36 @@ int cachePolicySelfTest() {
         c.setTestBudget(-1);
         const int64_t b = c.budgetBytes();
         check(b > 0 && b != 10 * 1000 && b <= (int64_t)memoryManager.totalBytes(), "budget: -1 restores a positive derived budget");
+    }
+
+    {   // The job latency estimate starts over for a new clip and after a jump
+        // while paused; a jump while Keep time is skipping keeps it.
+        gfcFrameCache c; gfcFrameTable t; t.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTestBudget(100 * 1000);
+        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        auto oneJob = [&] {
+            Job j{};
+            if (!c.nextJob(0, j, ms(20))) return;
+            std::this_thread::sleep_for(ms(30));
+            c.commitUploaded(t, j.sourceIndex, 1000);
+        };
+        oneJob();
+        check(c.jobLatencySeconds() > 0.02, "latency: measured from issue to upload");
+        c.setLeadSkip(true);
+        c.retarget(150);
+        check(c.jobLatencySeconds() > 0.02, "latency: kept over a jump while skipping (playing)");
+        c.setLeadSkip(false);
+        c.retarget(50);
+        check(c.jobLatencySeconds() == 0.0, "latency: reset by a jump while paused");
+        oneJob();
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        check(c.jobLatencySeconds() == 0.0, "latency: reset by a clip load");
+        oneJob();
+        c.clearTrack(0);
+        check(c.jobLatencySeconds() == 0.0, "latency: reset by a clear");
     }
 
     {   // The GL thread's upload commit: lock-free, only from Decoding.
@@ -1758,6 +1808,21 @@ int audioHolesSelfTest(const std::string& dir) {
         check(full, "jump: the clip is backfilled with no hole within 6 s");
         std::shared_ptr<gfcAudioClip> c = a->audioClip();
         check(c && rmsAt(*c, 216) > 0.3 && rmsAt(*c, 24) > 0.3 && rmsAt(*c, 228) < 0.01, "jump: beeps in place after the backfill");
+        clearAllTracks();
+    }
+
+    {   // A read error mid-file (injected for reads starting in 3..4 s): the
+        // thread skips past it and fills the rest instead of going silent.
+        gfcSequence::setTestAudioReadErrorRange(fss(72), fss(96));
+        playbackManager.setCurrentFrame(1);
+        gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
+        const bool rest = pumpUntil([&] { auto c = a->audioClip(); return c && c->covers(fss(120), fss(239) - fss(120)); }, 5000);
+        std::shared_ptr<gfcAudioClip> c = a->audioClip();
+        std::printf("AUDIO-HOLES: read error at 3 s: rest filled=%d, 0..3 s=%d, first hole %lld\n", int(rest),
+                    int(c && c->covers(0, fss(72))), c ? (long long)c->firstHoleFrom(0) : -1LL);
+        check(rest && c && c->covers(0, fss(72)), "read error at 3 s: the sound before it and from 5 s on is filled");
+        check(c && rmsAt(*c, 168) > 0.3, "read error at 3 s: the beep at 7 s is there");
+        gfcSequence::setTestAudioReadErrorRange(0, 0);
         clearAllTracks();
     }
 

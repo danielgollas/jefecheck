@@ -84,7 +84,8 @@ public:
 	// Sends the player transport to the frame cache: always (a load), or only when it changed (force=false).
 	void syncCacheTransport(bool force=true);
 	// A jump: each movie track's audio thread fills the sound at this timeline
-	// frame first when it is not there yet. Atomic stores only.
+	// frame first when it is not there yet. Each track stores its target under
+	// its audio wake mutex (uncontended, jumps only, never the tick) and notifies.
 	void retargetAudio(int timelineFrame);
 	int getMinTrackLength();
 	
