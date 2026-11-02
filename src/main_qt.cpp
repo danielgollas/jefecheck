@@ -743,6 +743,9 @@ int main(int argc, char* argv[]) {
         allZero &= (cacheSettleSelfTest(mediaDir) == 0);
         allZero &= (cacheLeaksSelfTest(mediaDir) == 0);
         allZero &= (cacheHoldSelfTest(mediaDir) == 0);
+        allZero &= (cacheRetargetSelfTest(mediaDir) == 0);
+        allZero &= (cacheDirectionSelfTest(mediaDir) == 0);
+        allZero &= (cacheTracksSelfTest(mediaDir) == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("CACHE-TEST media: %s\n", mediaDir.c_str());

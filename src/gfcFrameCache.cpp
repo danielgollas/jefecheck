@@ -88,7 +88,7 @@ void gfcFrameCache::clearTrack(int track) {
 
 void gfcFrameCache::setTransport(int playhead, int direction, int loopMode, int startLimit, int endLimit, float fps) {
     std::lock_guard<std::mutex> lock(mutex_);
-    direction_ = direction < 0 ? -1 : 1;
+    direction_.store(direction < 0 ? -1 : 1, std::memory_order_release);
     loopMode_ = loopMode;
     startLimit_ = startLimit;
     endLimit_ = endLimit;
@@ -105,7 +105,8 @@ void gfcFrameCache::retarget(int playhead) {
     wake();
 }
 
-void gfcFrameCache::advance(int playhead) {
+void gfcFrameCache::advance(int playhead, int direction) {
+    if (direction != 0) direction_.store(direction < 0 ? -1 : 1, std::memory_order_release);
     playhead_.store(playhead, std::memory_order_release);
     wake();
 }
@@ -211,12 +212,13 @@ size_t gfcFrameCache::costPerTimelineFrame() const {
 // (ONCE at a limit).
 const gfcFrameCache::Walk& gfcFrameCache::walk() const {
     const int ph = playhead_.load(std::memory_order_acquire);
+    const int dir = direction_.load(std::memory_order_acquire);
     Walk& w = walk_;
-    if (w.valid && w.playhead == ph && w.direction == direction_ && w.mode == loopMode_ &&
+    if (w.valid && w.playhead == ph && w.direction == dir && w.mode == loopMode_ &&
         w.start == startLimit_ && w.end == endLimit_)
         return w;
     w.valid = true;
-    w.playhead = ph; w.direction = direction_; w.mode = loopMode_; w.start = startLimit_; w.end = endLimit_;
+    w.playhead = ph; w.direction = dir; w.mode = loopMode_; w.start = startLimit_; w.end = endLimit_;
     const int N = std::max(0, w.end - w.start + 1);
     w.a.assign(N, -1);
     w.b.assign(N, -1);

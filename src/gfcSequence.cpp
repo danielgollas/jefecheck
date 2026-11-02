@@ -1114,8 +1114,11 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 		frameCache.attachTrack(track, &frameTable_);
 		frameCache.setTrackGeometry(track, frameOffset, hasFootage ? startFrame : -1, hasFootage ? endFrame : -1, cacheFrameBytes_);
 	}
+	// The reset cleared the pins: put back the hold mode's.
+	heldPin_=-1;
 	if ( holdFrameMode==2 )
 		pinHoldEdges(true);
+	updateHeldFramePin();
 
 	// The clip starts at the first frame this pass loads (frame entry i is
 	// movie frame i), in the movie's own 48 kHz timeline.
@@ -1499,6 +1502,7 @@ int gfcSequence::clearSequence() {
 	if ( cacheTrack()>=0 )
 		frameCache.clearTrack(cacheTrack());   // also drops victims named on this track
 	frameTable_.reset(0);
+	heldPin_=-1;   // the reset cleared it
 
 	if (myGUI) {
 		myGUI->setLoadedRange(0);
@@ -1742,8 +1746,10 @@ char * gfcSequence::getFilenameatFrame ( int frameNo ) {
 
 void gfcSequence::setOffset(int offset) {
 	frameOffset=offset;
-	if ( cacheTrack()>=0 )
+	if ( cacheTrack()>=0 ) {
 		frameCache.setTrackOffset(cacheTrack(), offset);
+		trackManager.syncCacheTransport();   // the loop limits include the offset
+	}
 	if (gfcAudioEngineAlive()) audioEngine.setTrackOffset(trackID-'A', offset);   // sound shifts with the picture
 	myGUI->setOffset(offset);
 	networkManager.notifyEvent(GFCNETEVENT_OTHER);
@@ -2473,25 +2479,45 @@ void gfcSequence::clearPreviewFrame() {
 	myGUI->setChannelOptions(empty);
 }
 
+void gfcSequence::pinFrame(int index, bool on) {
+	// Through the coordinator, so a waiting loader wakes for it.
+	const int track=cacheTrack();
+	if ( track>=0 )
+		frameCache.pin(track, index, on);
+	else
+		frameTable_.setPinned(index, on);
+}
+
 void gfcSequence::pinHoldEdges(bool on) {
 	if ( frames.empty() )
 		return;
-	// Through the coordinator, so a waiting loader wakes for them.
-	const int track=cacheTrack();
-	if ( track>=0 ) {
-		frameCache.pin(track, rangeBegin, on);
-		frameCache.pin(track, rangeEnd, on);
-	} else {
-		frameTable_.setPinned(rangeBegin, on);
-		frameTable_.setPinned(rangeEnd, on);
-	}
+	pinFrame(rangeBegin, on);
+	pinFrame(rangeEnd, on);
+}
+
+void gfcSequence::updateHeldFramePin() {
+	const int index=holdFrameCurrent-1;
+	const int want=( holdFrameMode==1 && index>=0 && index<(int)frames.size() ) ? index : -1;
+	if ( heldPin_>=0 && heldPin_!=want )
+		pinFrame(heldPin_, false);
+	if ( want>=0 )
+		pinFrame(want, true);
+	heldPin_=want;
 }
 
 void gfcSequence::setHoldMode(int holdMode, int holdFrame) {
 	holdFrameMode=holdMode;
+	holdFrameCurrent=holdFrame-frameOffset;
+	// The pins share one store: unpin first, then pin, so a held frame that is
+	// also a trim edge keeps its pin across a mode change.
+	if ( heldPin_>=0 && !( holdFrameMode==1 && heldPin_==holdFrameCurrent-1 ) ) {
+		pinFrame(heldPin_, false);
+		heldPin_=-1;
+	}
 	// Hold-edge shows the trim edges, so they are never evicted while it is on.
 	pinHoldEdges(holdFrameMode==2);
-	holdFrameCurrent=holdFrame-frameOffset;
+	// Hold-frame shows one frame: it is never evicted while it is held.
+	updateHeldFramePin();
 	if (holdFrameMode==1) {
 		//TODO: Add some visual indication on the GUI's trackwidget to show that we are holding some frame, maybe grayout the progress bar and only show a green slit around the showing frame.
 	}

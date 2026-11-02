@@ -510,12 +510,9 @@ void setPlayDirection(int direction) {
 }
 
 void setInPointAndLoad() {
-    // FLTK's Alt+I: set the in point at the current frame and (re)start all
-    // tracks loading from one frame earlier, so footage is decoded around
-    // the new in point. Async — the per-tick texture drain uploads frames.
-    const int cur = playbackManager.getCurrentFrame();
-    trackManager.startLoadingAllAt(cur - 1);
-    playbackManager.setInPoint(cur);
+    // FLTK's Alt+I: set the in point at the current frame. The frame cache
+    // loads around the playhead inside the new limits, so no reload.
+    playbackManager.setInPoint(playbackManager.getCurrentFrame());
 }
 
 void fastFwdPlayback() {
@@ -2319,6 +2316,8 @@ void writeRecoverySession() {
 
 void removeRecoverySession() { sessionManager.removeCrashSession(); }
 
+std::string recoverySessionPath() { return sessionManager.crashSessionPath(); }
+
 std::vector<std::string> getRecentSessions() { return sett.recentSessions; }
 
 void setRecentSessions(const std::vector<std::string>& paths) {
@@ -3400,16 +3399,10 @@ bool isTrackFrameReady(int track, int frame) {
 bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce) {
     if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
     gfcSequence* seq = trackManager.getSequence(track);
-    if (!seq || seq->isEmpty()) return false;
-    // gfcSequence::startLoading(fromTrack) takes the 0-based position in the
-    // track, offset not applied. 0 means "from the load range's start", which
-    // is the one start the loader thread announces to remote peers.
-    const int index = frame - 1 - seq->getOffset();
-    if (index < 0 || index >= seq->getNumFrames()) return false;
-    if (index == 0 && !allowAnnounce) return false;
-    plateManager.clearAllHistogramCache();
-    seq->startLoading(index);
-    return true;
+    // Every frame of a loaded track can be force-loaded (it keeps its load
+    // parameters), so nothing restarts: the caller's forced load does it.
+    (void)frame; (void)allowAnnounce;
+    return seq && !seq->isEmpty();
 }
 
 void restorePlaylistSelection(int index, bool contentFromPlaylist) {

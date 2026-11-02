@@ -448,6 +448,12 @@ public:
     int rangeEnd;
     // Pins (or unpins) the trim edges in frameTable_ for hold-edge mode.
     void pinHoldEdges(bool on);
+    // Pins (or unpins) one frame, through the coordinator when this is a cache track.
+    void pinFrame(int index, bool on);
+    // Hold mode 1 pins the held frame (holdFrameCurrent-1); the pin moves with
+    // it and goes when the mode is left. heldPin_ is the index pinned, or -1.
+    void updateHeldFramePin();
+    int heldPin_ = -1;
     // Frame i's load parameters (this load's params, file i, the movie reader).
     gfcLoadParams frameLoadParams(int i, const std::shared_ptr<gfcMovieReader>& reader) const;
     // This sequence's track in the frame cache, or -1 (not one of the four tracks).

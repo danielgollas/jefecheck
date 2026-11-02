@@ -86,6 +86,9 @@ public:
     void updateTimelineValueFromGUI();
     void updateCurrentFrameValueFromGUI();
     void updateLoopPriorityFromGUI();
+    /// Sends the transport to the frame cache now, changed or not (a fresh
+    /// load: its limits are new, and nothing else resends them).
+    void cacheResendTransport();
  
       
 private: //private made public while debugging
@@ -99,6 +102,11 @@ private: //private made public while debugging
     void audioSeek();               // currentFrame moved by the user
     void recordAdvanceForFPS(int frames);   // measured-FPS readout
     int audioSentStart=-1, audioSentEnd=-1, audioSentMode=-1, audioSentDir=0;
+    // Frame cache (frameCache): the transport (direction, loop mode, limits,
+    // rate) is sent when it changes; a jump retargets, a playback step advances.
+    void cacheSyncTransport(bool force=false);
+    int cacheSentStart=-1, cacheSentEnd=-1, cacheSentMode=-1, cacheSentDir=0;
+    float cacheSentFPS=-1.0f;
 	gfcTimer timer;
     bool allowNetworkMessages;
     void sendPlayPauseMessage();

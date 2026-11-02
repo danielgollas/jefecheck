@@ -351,14 +351,10 @@ int audioSequenceSelfTest(const std::string& dir) {
     float beep=0; for (size_t b=100; b<104 && b<pk.peaks.size(); ++b) beep=std::max(beep, pk.peaks[b]);
     check(pk.firstSample==0 && pk.peaks.size()>=size_t(want/480) && beep>0.7f && pk.peaks[50]<0.01f && seq->audioPeaksVersion()==pk.version && pk.version>0, "peaks follow the clip in 10 ms bins");
 
-    const uint64_t v0=seq->audioPeaksVersion();
+    const std::thread::id tid=seq->loaderThreadId();
     trackManager.startLoadingSequenceAt(0, 10);
-    const int64_t want10=gfcAudioClip::frameStartSample(30,24000,1001);
-    const bool filled10=waitUntil([&]{ auto c=seq->audioClip(); return c && c!=clip && c->endSample()>=want10; }, 20000);
-    trackManager.stopLoadingSequence(0);
-    std::shared_ptr<gfcAudioClip> clip10=seq->audioClip();
-    check(filled10 && clip10->startSample()==gfcAudioClip::frameStartSample(10,24000,1001) && rmsAt(*clip10,24)>0.3 && rmsAt(*clip10,12)<0.01 && rmsAt(*clip10,9)==0.0, "a load from frame 10 starts its clip at frame 10's sample, aligned");
-    check(clip && rmsAt(*clip,0)>0.3 && seq->audioPeaksVersion()>v0 && seq->audioPeaksSnapshot().firstSample==clip10->startSample(), "a reload makes a new clip; the old one stays intact");
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    check(seq->audioClip()==clip && seq->loaderThreadId()==tid && playbackManager.getCurrentFrame()==11, "a load-from-frame is a jump: same clip, same loader thread, playhead moved");
 
     // Sound that cannot be decoded (decoder context allocated, open fails):
     // the movie still opens and plays, and reports no audio.

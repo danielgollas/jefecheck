@@ -271,10 +271,9 @@ bool gfcTrackManager::timelineFramesResident(int from, int count, int direction)
 
 void gfcTrackManager::syncCacheTransport()
 {
-	// Until playback drives it, the coordinator's transport is set per load:
-	// the playhead, forward, the loop mode, the whole timeline and the rate.
-	frameCache.setTransport(playbackManager.getCurrentFrame(), 1, playbackManager.getPlaybackMode(),
-	                        1, getMaxTrackLength(), playbackManager.getTargetFPS());
+	// A load (or an offset change) moves the loop limits: send the player's
+	// whole transport (playhead, direction, mode, limits, rate) now.
+	playbackManager.cacheResendTransport();
 }
 
 int gfcTrackManager::getMinTrackLength()
@@ -506,32 +505,42 @@ void gfcTrackManager::setRecentBrowsed(std::vector< std::string > precentBrowsed
 	}
 }
 
+// "Load from here" on a loaded track is a jump: the frame cache loads around
+// the playhead, and every frame can be loaded on demand, so the playhead moves
+// to startFrame (0-based; the timeline is 1-based) and nothing restarts. Only
+// an empty track starts a load there.
 void gfcTrackManager::startLoadingSequenceAt(int whichOne, int startFrame)
 {
-	
-	sessionManager.writeCrashSession();
-	if(checkBounds(whichOne,"startLoadingSequenceAt"))
+	if(!checkBounds(whichOne,"startLoadingSequenceAt"))
+		return;
+	if(!sequences[whichOne].isEmpty())
 	{
-		sequences[whichOne].startLoading(startFrame);
-	}
-	else
-	{
+		playbackManager.setCurrentFrame(startFrame+1);
 		return;
 	}
+	sequences[whichOne].startLoading(startFrame);
 	plateManager.clearAllHistogramCache();
-	sessionManager.writeCrashSession();
-	
-	
 }
 
 void gfcTrackManager::startLoadingAllAt(int startFrame)
 {
-	//when we load from the timeline (which is when we call this function), we tell the sequences that the track relative frame to start loading is 0, and give them the timeline relative frame to start loading from. This way, each track knows that it must account for their offset relative to the timeline.
-	plateManager.clearAllHistogramCache();
+	// Loaded tracks jump (see startLoadingSequenceAt). An empty track loads
+	// from the timeline frame: track-relative 0 plus the timeline frame, so
+	// the track accounts for its own offset.
+	bool anyLoaded=false;
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		anyLoaded|=!sequences[i].isEmpty();
+	if(anyLoaded)
+		playbackManager.setCurrentFrame(startFrame+1);
+	bool started=false;
 	for(int i=0;i<GFC_MAX_SEQUENCES;i++){
-		sequences[i].startLoading(0,startFrame); 
+		if(!sequences[i].isEmpty())
+			continue;
+		sequences[i].startLoading(0,startFrame);
+		started=true;
 	}
-	
+	if(started)
+		plateManager.clearAllHistogramCache();
 }
 
 

@@ -19,6 +19,7 @@ public:
     bool checkCrashedSession();
     void loadCrashedSession();
     void removeCrashSession();
+    const std::string& crashSessionPath() const { return crashSessionName; }
     
 private:
     std::string crashSessionName;

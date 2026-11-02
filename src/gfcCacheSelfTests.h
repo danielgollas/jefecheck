@@ -22,3 +22,12 @@ int cacheSettleSelfTest(const std::string& mediaDir);
 int cacheLeaksSelfTest(const std::string& mediaDir);
 // CACHE-HOLD: hold-edge frames outside the window stay resident.
 int cacheHoldSelfTest(const std::string& mediaDir);
+// CACHE-RETARGET: every seek moves the window: random jumps arrive, a seek
+// storm keeps the loader, clip and crash session, and a play-through has every
+// frame resident in turn.
+int cacheRetargetSelfTest(const std::string& mediaDir);
+// CACHE-DIRECTION: reverse once, a bounce that fits, and a loop shrunk then
+// widened.
+int cacheDirectionSelfTest(const std::string& mediaDir);
+// CACHE-TRACKS: three tracks with offsets hold the same timeline frames.
+int cacheTracksSelfTest(const std::string& mediaDir);

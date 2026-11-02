@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <random>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -831,6 +833,308 @@ int cacheHoldSelfTest(const std::string& dir) {
     check(c->residentCount() <= 12 + 2, "hold-edge: the budget still holds (10 frames, the two pins, one over)");
     const gfcFrame f = c->getFrame(200, false);
     check(f.loaded && f.fileName == dir + "/cache_seq.0120.png", "hold-edge: frame 200 shows frame 119");
+
+    // Hold a chosen frame (mode 1): the held frame is pinned like the edges.
+    c->setHoldMode(0);
+    check(!c->frameTable().pinned(0) && !c->frameTable().pinned(119), "hold-edge off: the edges are unpinned");
+    frameCache.retarget(90);
+    pump(500);
+    check(c->frameTable().state(29) != gfcFrameState::Resident, "hold-frame fixture: frame 30 is outside the window");
+    c->setHoldMode(1, 30);
+    check(c->frameTable().pinned(29), "hold-frame: the held frame (timeline 30) is pinned");
+    check(pumpUntil([&] { return c->frameTable().state(29) == gfcFrameState::Resident; }, 3000),
+          "hold-frame: the held frame becomes resident outside the window");
+    frameCache.retarget(100);   // away from it: admissions take victims
+    const bool movedAway = pumpUntil([&] { return c->frameTable().state(99) == gfcFrameState::Resident; }, 3000);
+    pump(500);
+    check(movedAway && c->frameTable().state(29) == gfcFrameState::Resident, "hold-frame: it stays resident after a retarget away");
+    c->setHoldMode(1, 40);
+    check(c->frameTable().pinned(39) && !c->frameTable().pinned(29), "hold-frame: changing the held frame unpins the old one");
+    c->setHoldMode(0);
+    check(!c->frameTable().pinned(39) && !c->frameTable().pinned(29), "hold-frame: leaving hold mode 1 unpins it");
     std::printf("CACHE-HOLD: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- seeks move the window (Task 6) ----
+
+namespace {
+// The transport the suites below change, put back on exit.
+struct PlaybackGuard {
+    int mode = playbackManager.getPlaybackMode();
+    int priority = playbackManager.getLoopPriority();
+    ~PlaybackGuard() {
+        if (playbackManager.isPlaying()) playbackManager.pause();
+        playbackManager.setPlaybackMode(mode);
+        playbackManager.setLoopPriority(priority);
+        playbackManager.setDirection(1);
+        for (int t = 0; t < 4; ++t) trackManager.getSequence(t)->setOffset(0);
+        playbackManager.setCurrentFrame(1);
+    }
+};
+
+// Timeline frames from..to (inclusive) all resident on a track.
+bool timelineRangeResident(gfcSequence* s, int from, int to) {
+    const std::set<int> r = residentTimeline(s);
+    for (int t = from; t <= to; ++t)
+        if (!r.count(t)) return false;
+    return true;
+}
+
+bool anyFailed(gfcSequence* s) {
+    for (int i = 0; i < s->frameTable().size(); ++i)
+        if (s->frameTable().state(i) == gfcFrameState::Failed) return true;
+    return false;
+}
+
+// Size and modification time of a file; {-1, -1} when it does not exist.
+std::pair<long long, long long> fileSignature(const std::string& path) {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec) return {-1, -1};
+    const auto when = std::filesystem::last_write_time(path, ec);
+    if (ec) return {-1, -1};
+    return {(long long)size, (long long)when.time_since_epoch().count()};
+}
+}  // namespace
+
+int cacheRetargetSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    gfcUpload::trimIdle(0); gfcSurface::trimIdle(0);
+    const long tex0 = gfcFrame::liveTextures(), surf0 = gfcSurface::liveSurfaces();
+    const std::string beep = dir + "/cache_beep_24.mp4";
+    const int64_t budget = int64_t(20 * kFrame8);
+    frameCache.setTestBudget(budget);
+    playbackManager.setCurrentFrame(1);
+    gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
+    check(pumpUntil([&] { return a->residentCount() >= 20; }, 10000), "20 frames resident at a 20-frame budget");
+
+    std::mt19937 rng(6);
+    std::uniform_int_distribution<int> anyFrame(1, 240);
+
+    {   // Random jumps: the frame jumped to arrives.
+        int arrived = 0;
+        for (int k = 0; k < 30; ++k) {
+            const int f = anyFrame(rng);
+            playbackManager.setCurrentFrame(f);
+            arrived += pumpUntil([&] { return trackManager.timelineFrameResident(f); }, 1000) ? 1 : 0;
+            pump(300);
+        }
+        std::printf("CACHE-RETARGET: random jumps arrived=%d/30\n", arrived);
+        check(arrived == 30, "random jumps: every jumped-to frame is resident within 1 s");
+    }
+
+    {   // Seek storm: 200 jumps, every tenth a load-from-here (a jump too).
+        const int savedCrash = sett.enableCrashRecoverySession;
+        sett.enableCrashRecoverySession = 1;   // so a crash-session write would show
+        const std::string crash = jefe::qt::recoverySessionPath();
+        const auto sig0 = fileSignature(crash);
+        const std::thread::id tid0 = a->loaderThreadId();
+        const gfcAudioClip* clip0 = a->audioClip().get();
+        const long ann0 = gfcSequence::loadAnnouncements();
+        const uint64_t gen0 = frameCache.generation();
+        const auto t0 = std::chrono::steady_clock::now();
+        bool failed = false;
+        for (int k = 0; k < 200; ++k) {
+            const int f = anyFrame(rng);
+            if (k % 10 == 9) trackManager.startLoadingSequenceAt(0, f - 1);
+            else playbackManager.setCurrentFrame(f);
+            pump(5);
+            failed |= anyFailed(a);
+        }
+        const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        pump(500);
+        failed |= anyFailed(a);
+        std::printf("CACHE-RETARGET: storm %.2f s, generation +%llu\n", secs,
+                    (unsigned long long)(frameCache.generation() - gen0));
+        check(tid0 != std::thread::id() && a->loaderThreadId() == tid0, "storm: the same loader thread (no join)");
+        check(clip0 && a->audioClip().get() == clip0, "storm: the audio clip is never replaced");
+        check(gfcSequence::loadAnnouncements() == ann0, "storm: no load announcements");
+        check(fileSignature(crash) == sig0, "storm: no crash-session write");
+        check(frameCache.generation() - gen0 == 200, "storm: generation grew by exactly 200");
+        check(!failed, "storm: no frame Failed");
+        sett.enableCrashRecoverySession = savedCrash;
+
+        a->unloadAndClear();
+        gfcUpload::trimIdle(0); gfcSurface::trimIdle(0);
+        check(gfcFrame::liveTextures() == tex0 && gfcSurface::liveSurfaces() == surf0,
+              "storm: live textures and surfaces back at the baseline after clear");
+    }
+
+    {   // Sequential play-through: the window follows the playhead.
+        a = loadTrack(0, beep, GFC_8BPC, 100);
+        playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+        playbackManager.setCurrentFrame(1);
+        pumpUntil([&] { return a->residentCount() >= 20; }, 5000);
+        const int64_t bound = budget + 2 * (int64_t)frameCache.costPerTimelineFrame();
+        std::vector<char> seen(240, 0);
+        bool boundOk = true;
+        std::vector<std::pair<int, int>> segs;
+        playbackManager.startPlayFwd();
+        const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        while (std::chrono::steady_clock::now() < end) {
+            jefe::qt::tickPlaybackTiming();
+            trackManager.generateTextures();
+            a->loadedSegments(segs);
+            for (const auto& r : segs)
+                for (int i = r.first; i <= r.second && i < 240; ++i) seen[i] = 1;
+            boundOk &= frameCache.cacheBytes() <= bound;
+            if (playbackManager.getCurrentFrame() == 240) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        const int last = playbackManager.getCurrentFrame();
+        if (playbackManager.isPlaying()) playbackManager.pause();
+        int missed = 0;
+        for (char s : seen) missed += s ? 0 : 1;
+        std::printf("CACHE-RETARGET: play-through reached %d, never resident %d\n", last, missed);
+        check(last == 240, "play-through: playback reaches frame 240");
+        check(missed == 0, "play-through: every frame 1..240 was resident at some point");
+        check(boundOk, "play-through: every sample within budget + 2 frames");
+    }
+
+    std::printf("CACHE-RETARGET: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int cacheDirectionSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    frameCache.setTestBudget(int64_t(20 * kFrame8));
+    playbackManager.setCurrentFrame(1);
+    gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+    pumpUntil([&] { return a->residentCount() >= 20; }, 10000);
+    pump(300);
+
+    {   // Reverse, once: the window lies below the playhead.
+        playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+        playbackManager.setDirection(-1);
+        const std::set<int> before = residentTimeline(a);
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        playbackManager.setCurrentFrame(200);
+        playbackManager.startPlayRev();
+        pump(2000);
+        const std::set<int> after = residentTimeline(a);
+        bool within = !after.empty();
+        size_t fresh = 0;
+        for (int t : after) {
+            within &= t >= 180 && t <= 200;
+            if (!before.count(t)) ++fresh;
+        }
+        const uint64_t admitted = frameCache.stats().admitted - s0.admitted;
+        std::printf("CACHE-DIRECTION: reverse resident=%zu [%d..%d] admitted=%llu fresh=%zu\n", after.size(),
+                    after.empty() ? 0 : *after.begin(), after.empty() ? 0 : *after.rbegin(),
+                    (unsigned long long)admitted, fresh);
+        check(within && after.count(200), "reverse: the resident set is within [180, 200]");
+        check(admitted == fresh, "reverse: every admission after the jump landed in [180, 200]");
+        playbackManager.pause();
+    }
+
+    {   // Bounce inside 230..240: everything fits, nothing is evicted while it plays.
+        playbackManager.setPlaybackMode(LOOPMODEBOUNCE_ID);
+        playbackManager.setInPoint(230);
+        playbackManager.setOutPoint(240);
+        playbackManager.setDirection(1);
+        playbackManager.setCurrentFrame(238);
+        pump(2000);
+        check(timelineRangeResident(a, 230, 240), "bounce: frames 230..240 resident");
+        const uint64_t e0 = frameCache.stats().evicted;
+        int lo = INT_MAX, hi = INT_MIN, turns = 0, lastDir = 1;
+        playbackManager.startPlayFwd();
+        const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < end) {
+            jefe::qt::tickPlaybackTiming();
+            trackManager.generateTextures();
+            const int f = playbackManager.getCurrentFrame();
+            lo = std::min(lo, f); hi = std::max(hi, f);
+            const int d = playbackManager.getPlayPauseInfo().direction;
+            if (d != lastDir) { ++turns; lastDir = d; }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        playbackManager.pause();
+        std::printf("CACHE-DIRECTION: bounce frames %d..%d turns=%d evicted +%llu\n", lo, hi, turns,
+                    (unsigned long long)(frameCache.stats().evicted - e0));
+        check(lo == 230 && hi == 240 && turns >= 3, "bounce: playback went round the range twice");
+        check(frameCache.stats().evicted == e0 && timelineRangeResident(a, 230, 240), "bounce: no evictions while it plays");
+    }
+
+    {   // Shrink the loop to 100..104, then widen it and jump to 150 (forward:
+        // the bounce may have paused heading back down).
+        playbackManager.setPlaybackMode(LOOPMODELOOP_ID);
+        playbackManager.setDirection(1);
+        playbackManager.setInPoint(100);
+        playbackManager.setOutPoint(104);
+        check(pumpUntil([&] { return timelineRangeResident(a, 100, 104); }, 2000), "shrink: frames 100..104 resident");
+        playbackManager.setInPoint(1);
+        playbackManager.setOutPoint(240);
+        playbackManager.setCurrentFrame(150);
+        const bool widened = pumpUntil([&] { return timelineRangeResident(a, 150, 160); }, 2000);
+        if (!widened) {
+            std::printf("CACHE-DIRECTION: widen resident:");
+            for (int t : residentTimeline(a)) std::printf(" %d", t);
+            const gfcFrameCache::Stats st = frameCache.stats();
+            std::printf("\n  playhead=%d in=%d out=%d admitted=%llu evicted=%llu denied=%llu cache=%lld budget=%lld\n",
+                        playbackManager.getCurrentFrame(), playbackManager.getInPoint(), playbackManager.getOutPoint(),
+                        (unsigned long long)st.admitted, (unsigned long long)st.evicted, (unsigned long long)st.denied,
+                        (long long)frameCache.cacheBytes(), (long long)frameCache.budgetBytes());
+        }
+        check(widened, "widen: frames 150..160 resident (100..104 do not starve them)");
+    }
+
+    std::printf("CACHE-DIRECTION: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int cacheTracksSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    frameCache.setTestBudget(int64_t(60 * kFrame8));
+    // The loop spans every track (the shortest track, C, ends at timeline 20).
+    playbackManager.setLoopPriority(GFC_LOOPPRIORITY_LONGEST);
+    playbackManager.setPlaybackMode(LOOPMODELOOP_ID);
+    playbackManager.setDirection(1);
+    playbackManager.setCurrentFrame(60);
+    // Offsets before the loads, so nothing loads at the wrong timeline place.
+    jefe::qt::setTrackOffset(1, 50);
+    jefe::qt::setTrackOffset(2, -100);
+    gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+    gfcSequence* b = loadTrack(1, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+    gfcSequence* c = loadTrack(2, dir + "/cache_seq.0001.png", GFC_8BPC, 100);
+    jefe::qt::setTrackOffset(1, 50);
+    jefe::qt::setTrackOffset(2, -100);
+    playbackManager.setCurrentFrame(60);
+    pump(3000);
+    {
+        const std::set<int> ta = residentTimeline(a), tb = residentTimeline(b);
+        std::printf("CACHE-TRACKS: at 60 A=%zu [%d..%d] B=%zu [%d..%d] C=%d\n", ta.size(),
+                    ta.empty() ? 0 : *ta.begin(), ta.empty() ? 0 : *ta.rbegin(), tb.size(),
+                    tb.empty() ? 0 : *tb.begin(), tb.empty() ? 0 : *tb.rbegin(), c->residentCount());
+        check(ta == tb, "at 60: A and B hold the same timeline frames");
+        check(ta.size() >= 25 && tb.size() >= 25, "at 60: at least 25 frames each");
+        check(c->residentCount() == 0, "at 60: C (no footage from 21 on) holds nothing");
+    }
+    playbackManager.setCurrentFrame(5);
+    const bool both = pumpUntil([&] { return timelineRangeResident(a, 5, 14) && timelineRangeResident(c, 5, 14); }, 2000);
+    check(both, "at 5: A and C hold timeline frames 5..14");
+    bool bNone = true;
+    for (int t : residentTimeline(b)) bNone &= t > 14;
+    check(bNone, "at 5: B holds nothing at 5..14 (its footage starts at 51)");
+
+    std::printf("CACHE-TRACKS: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

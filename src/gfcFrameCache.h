@@ -60,7 +60,9 @@ public:
     void clearTrack(int track);                               // no footage; wakes its loader
     void setTransport(int playhead, int direction, int loopMode, int startLimit, int endLimit, float fps);
     void retarget(int playhead);          // a jump: ++generation, wakes loaders
-    void advance(int playhead);           // a playback step: no generation bump, wakes loaders
+    // A playback step: no generation bump, wakes loaders. direction (+1/-1)
+    // also moves the walk's heading (a BOUNCE turn in the tick); 0 keeps it.
+    void advance(int playhead, int direction = 0);
     // Decode thread: the next frame to decode on this track (already set Decoding
     // with its reservation). False on timeout, cancel, no footage.
     bool nextJob(int track, Job& out, std::chrono::milliseconds wait);
@@ -131,7 +133,8 @@ private:
     std::atomic<uint64_t> generation_{0};
     std::atomic<int> playhead_{1};
     std::array<Track, kMaxTracks> tracks_;
-    int direction_ = 1, loopMode_ = -1, startLimit_ = 1, endLimit_ = 0;
+    std::atomic<int> direction_{1};      // stored lock-free by advance()
+    int loopMode_ = -1, startLimit_ = 1, endLimit_ = 0;
     float fps_ = 24.0f;
     mutable Walk walk_;
     std::vector<Victim> pending_;

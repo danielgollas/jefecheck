@@ -165,7 +165,7 @@ int  getInPoint();
 int  getOutPoint();
 void setInPoint(int frame);
 void setOutPoint(int frame);
-void setInPointAndLoad();   // FLTK Alt+I: set in point + reload tracks there
+void setInPointAndLoad();   // FLTK Alt+I: set the in point at the playhead (the cache loads there; no reload)
 bool isPlaying();
 
 // Histogram overlay (Ctrl+H active quad / Ctrl+Alt+H all plates). Toggles
@@ -1071,10 +1071,10 @@ std::vector<std::pair<int, int>> getTrackLoadedSegments(int trackIdx);
 int  getTrackOffset(int trackIdx);
 void setTrackOffset(int trackIdx, int offset);
 
-// Begin decoding the track's assigned sequence starting at `frame`
-// (timeline coordinates). Wraps trackManager.startLoadingSequenceAt;
-// the loader thread fills rawFrames and the playback tick uploads them,
-// so no GL context is required here. No-op for an empty track.
+// "Load from here" (Alt+click on the timeline): wraps
+// trackManager.startLoadingSequenceAt, which on a loaded track is a jump
+// (the playhead moves there and the frame cache loads around it); no reload.
+// No-op for an empty track.
 void startLoadingTrackAt(int trackIdx, int frame);
 
 // Hold-last-frame mode (right-click popup). gfcSequence::getHoldMode()
@@ -1155,6 +1155,8 @@ bool getHasRecoverableSession();
 bool loadRecoverySession();     // loads it; does NOT delete (caller decides)
 void writeRecoverySession();    // writes it unconditionally
 void removeRecoverySession();
+// The crash-recovery session file sessionManager.writeCrashSession() writes.
+std::string recoverySessionPath();
 // Recent sessions (manager keeps sett.recentSessions, cap 5).
 std::vector<std::string> getRecentSessions();
 void setRecentSessions(const std::vector<std::string>& paths);
@@ -1379,12 +1381,10 @@ bool prepareTrackForRender(int track);
 bool isTrackFrameReady(int track, int frame);
 
 /**
- * Restarts @a track's load at timeline @a frame, so the async loader reaches
- * that frame first. Unlike startLoadingTrackAt() it leaves the crash-recovery
- * session alone. A load from the track's first frame is announced to remote
- * peers (a "loaded" chat line); @a allowAnnounce = false refuses that case.
- * Clearing the track's decoded frames deletes their textures, so the viewport
- * GL context must be current. Returns whether a load was started.
+ * Whether @a track's frame at timeline @a frame can be loaded: true for any
+ * loaded track, since every frame keeps its load parameters and a forced load
+ * decodes it. Nothing restarts (no reload, no announcement, no crash-session
+ * write); @a frame and @a allowAnnounce are kept for the callers.
  */
 bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce);
 
