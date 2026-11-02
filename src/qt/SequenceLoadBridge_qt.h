@@ -474,6 +474,11 @@ bool cloudConnectInFlight();
 // from audioEngine before static teardown.
 void beginBridgeShutdown();
 
+// App quit (wired to QCoreApplication::aboutToQuit in main): joins every
+// track's loader and audio thread before static teardown, and no load starts
+// after it.
+void shutdownTracks();
+
 void disconnectRemote();
 
 // Headless two-process connection smoke-test helpers (--remote-test).

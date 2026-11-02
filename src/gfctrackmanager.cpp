@@ -222,6 +222,12 @@ void gfcTrackManager::stopLoadingAll()
 	}
 }
 
+void gfcTrackManager::shutdown() {
+	gfcSequence::beginShutdown();   // first, so nothing restarts a thread meanwhile
+	frameCache.shutdown();          // the loaders' nextJob returns at once
+	stopLoadingAll();               // joins each loader, then its audio thread
+}
+
 void gfcTrackManager::stopLoadingSequence(int whichOne)
 {
 	if(whichOne>=numOfSequences || whichOne<0)

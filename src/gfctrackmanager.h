@@ -36,6 +36,9 @@ public:
 	void startLoadingSequence(int whichOne);
 	
 	void stopLoadingAll();
+	// App quit: stops and joins every track's loader and audio thread, wakes
+	// the coordinator's waiters, and keeps any load from starting again.
+	void shutdown();
 	void stopLoadingSequence(int whichOne);
 	void startLoadingSequenceAt(int whichOne, int startFrame);
 	

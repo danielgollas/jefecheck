@@ -747,23 +747,28 @@ int main(int argc, char* argv[]) {
             std::_Exit(2);
         }
         const std::string mediaDir = mediaQDir.toStdString();
+        // JEFE_CACHE_SUITES=CACHE-POLICY,CACHE-SETTLE runs only those suites (a
+        // developer's shortcut; the full run is the gate).
+        const QStringList only = QString::fromLocal8Bit(qgetenv("JEFE_CACHE_SUITES")).split(',', Qt::SkipEmptyParts);
+        auto want = [&](const char* name) { return only.isEmpty() || only.contains(QLatin1String(name)); };
         bool allZero = true;
-        allZero &= (memoryMeasureSelfTest(mediaDir) == 0);
-        allZero &= (frameStateSelfTest(mediaDir) == 0);
-        allZero &= (cachePolicySelfTest() == 0);
-        allZero &= (cacheBudgetSelfTest(mediaDir) == 0);
-        allZero &= (cacheSettleSelfTest(mediaDir) == 0);
-        allZero &= (cacheLeaksSelfTest(mediaDir) == 0);
-        allZero &= (cacheHoldSelfTest(mediaDir) == 0);
-        allZero &= (cacheRetargetSelfTest(mediaDir) == 0);
-        allZero &= (cacheDirectionSelfTest(mediaDir) == 0);
-        allZero &= (cacheTracksSelfTest(mediaDir) == 0);
-        allZero &= (cachePrefsSelfTest(mediaDir) == 0);
-        allZero &= (cacheDisplaySelfTest(mediaDir) == 0);
-        allZero &= (cacheRenderSelfTest(mediaDir) == 0);
-        allZero &= (audioHolesSelfTest(mediaDir) == 0);
-        allZero &= (cacheKeepTimeSelfTest(mediaDir) == 0);
-        allZero &= (cacheEveryFrameSelfTest(mediaDir) == 0);
+        if (want("MEMORY-MEASURE")) allZero &= (memoryMeasureSelfTest(mediaDir) == 0);
+        if (want("FRAME-STATE")) allZero &= (frameStateSelfTest(mediaDir) == 0);
+        if (want("CACHE-POLICY")) allZero &= (cachePolicySelfTest() == 0);
+        if (want("CACHE-BUDGET")) allZero &= (cacheBudgetSelfTest(mediaDir) == 0);
+        if (want("CACHE-SETTLE")) allZero &= (cacheSettleSelfTest(mediaDir) == 0);
+        if (want("CACHE-LEAKS")) allZero &= (cacheLeaksSelfTest(mediaDir) == 0);
+        if (want("CACHE-HOLD")) allZero &= (cacheHoldSelfTest(mediaDir) == 0);
+        if (want("CACHE-RETARGET")) allZero &= (cacheRetargetSelfTest(mediaDir) == 0);
+        if (want("CACHE-DIRECTION")) allZero &= (cacheDirectionSelfTest(mediaDir) == 0);
+        if (want("CACHE-TRACKS")) allZero &= (cacheTracksSelfTest(mediaDir) == 0);
+        if (want("CACHE-PREFS")) allZero &= (cachePrefsSelfTest(mediaDir) == 0);
+        if (want("CACHE-DISPLAY")) allZero &= (cacheDisplaySelfTest(mediaDir) == 0);
+        if (want("CACHE-RENDER")) allZero &= (cacheRenderSelfTest(mediaDir) == 0);
+        if (want("AUDIO-HOLES")) allZero &= (audioHolesSelfTest(mediaDir) == 0);
+        if (want("CACHE-KEEPTIME")) allZero &= (cacheKeepTimeSelfTest(mediaDir) == 0);
+        if (want("CACHE-EVERYFRAME")) allZero &= (cacheEveryFrameSelfTest(mediaDir) == 0);
+        if (want("CACHE-SHUTDOWN")) allZero &= (cacheShutdownSelfTest(mediaDir) == 0);   // last: the tracks stay shut down
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("CACHE-TEST media: %s\n", mediaDir.c_str());
@@ -1986,6 +1991,22 @@ int main(int argc, char* argv[]) {
             const int ok = window.runHeadlessVideoTest(videoTestDir);
             fflush(stdout);
             std::_Exit(ok ? 0 : 2);
+        });
+    }
+
+    // Quit: join every track's loader and audio thread while the managers
+    // they use still exist (static teardown follows main's return). Runs after
+    // the window's closeEvent (recovery session, prefs), so nothing restarts them.
+    QObject::connect(&qapp, &QCoreApplication::aboutToQuit, []() { jefe::qt::shutdownTracks(); });
+
+    // --quit-after <ms>: close the window and quit the way a user would
+    // (closeEvent, aboutToQuit, static teardown). For checking a clean exit;
+    // pair it with --config-dir.
+    const QString quitAfter = resolveArgValue(argc, argv, "--quit-after");
+    if (!quitAfter.isEmpty()) {
+        QTimer::singleShot(quitAfter.toInt(), &window, [&window]() {
+            window.close();
+            QCoreApplication::quit();
         });
     }
 

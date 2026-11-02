@@ -793,6 +793,7 @@ gfcSequence::gfcSequence() : isActive ( false )
 }
 
 gfcSequence::~gfcSequence() {
+	stopLoading();   // never tear a track down under its own threads (clearSequence stops them too)
 	clearSequence();
 }
 
@@ -1039,6 +1040,8 @@ void gfcSequence::setAudioTarget(int timelineFrame)
 void gfcSequence::startAudioThread()
 {
 	stopAudioThread();
+	if ( shuttingDown() )
+		return;
 	const std::shared_ptr<gfcAudioClip> clip=audioClip();
 	if ( !audioReader_ || !clip || audioEnd_<=audioBegin_ )
 		return;
@@ -1983,6 +1986,8 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 
 
 	stopLoading();
+	if ( shuttingDown() )
+		return;   // the app is quitting: no new threads
 
 	initializeSequence ( pparams );
 
@@ -2058,7 +2063,7 @@ void gfcSequence::stopLoading() {
 	//wait for the thread to end
 	if ( myThread!=NULL ) {
 		myThread->join();
-		//printf ( "Thread Joined!\n" );
+		delete myThread;
 	}
 	myThread=NULL;
 	stopAudioThread();
@@ -2554,6 +2559,15 @@ long gfcSequence::loadAnnouncements() {
 std::thread::id gfcSequence::loaderThreadId() const {
 	return myThread ? myThread->get_id() : std::thread::id();
 }
+
+bool gfcSequence::threadsRunning() const {
+	return myThread!=nullptr || audioThread_!=nullptr;
+}
+
+namespace { std::atomic<bool> g_sequencesShuttingDown{false}; }
+
+void gfcSequence::beginShutdown() { g_sequencesShuttingDown.store(true); }
+bool gfcSequence::shuttingDown() { return g_sequencesShuttingDown.load(); }
 
 bool gfcSequence::framePending(int timelineFrame) const {
 	int idx = timelineFrame - 1 - frameOffset;

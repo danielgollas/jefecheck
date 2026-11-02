@@ -12,7 +12,10 @@ class gfcPlaybackGUI{
 public:
     gfcPlaybackGUI();
 
-    ~gfcPlaybackGUI();
+    // Virtual: the playback manager deletes its Qt GUI through this base at
+    // quit. Non-virtual, clang calls the abstract base's complete-object
+    // destructor, which it emits as a trap (the app "quit unexpectedly").
+    virtual ~gfcPlaybackGUI();
 
     virtual void assignTimeLineWidget(void* widget)=0;
     virtual void assignCurrentFrameWidget(void* widget)=0;

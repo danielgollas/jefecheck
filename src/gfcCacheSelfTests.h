@@ -52,3 +52,7 @@ int cacheKeepTimeSelfTest(const std::string& mediaDir);
 // CACHE-EVERYFRAME: Show every frame with the same loader: playback slows to
 // it one frame at a time, the sound never leads, every frame shown is resident.
 int cacheEveryFrameSelfTest(const std::string& mediaDir);
+// CACHE-SHUTDOWN: the app's quit path joins every loader and audio thread
+// and wakes the coordinator's waiters; nothing loads after it. Runs last: the
+// tracks stay shut down.
+int cacheShutdownSelfTest(const std::string& mediaDir);

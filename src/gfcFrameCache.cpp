@@ -157,6 +157,12 @@ void gfcFrameCache::cancel(int track) {
     wake();
 }
 
+void gfcFrameCache::shutdown() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    shutdown_.store(true, std::memory_order_release);
+    wake();
+}
+
 void gfcFrameCache::pin(int track, int index, bool on) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!validTrack(track)) return;
@@ -536,6 +542,7 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
 
 bool gfcFrameCache::nextJob(int track, Job& out, std::chrono::milliseconds wait) {
     std::unique_lock<std::mutex> lock(mutex_);
+    if (shutdown_.load(std::memory_order_acquire)) return false;
     const auto deadline = clock_t_::now() + wait;
     auto tablesVersion = [&] {
         uint64_t v = 0;
@@ -545,6 +552,7 @@ bool gfcFrameCache::nextJob(int track, Job& out, std::chrono::milliseconds wait)
     uint64_t lastSeq = ~uint64_t(0), lastVer = ~uint64_t(0);
     clock_t_::time_point lastScan{};
     for (;;) {
+        if (shutdown_.load(std::memory_order_acquire)) return false;
         const uint64_t seq = wakeSeq_.load(std::memory_order_acquire);
         const uint64_t ver = tablesVersion();
         auto now = clock_t_::now();

@@ -122,6 +122,10 @@ void beginBridgeShutdown() {
     shutdownAudioOutput();
 }
 
+void shutdownTracks() {
+    trackManager.shutdown();
+}
+
 int getDefaultTextureFormat() {
     return sett.defaultTextureFormat;
 }

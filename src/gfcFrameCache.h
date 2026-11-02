@@ -88,6 +88,9 @@ public:
     double jobLatencySeconds() const { return latencyAvg_.load(std::memory_order_acquire); }
     int leadSkipFrames() const;           // the current skip (0 when off), for tests
     void cancel(int track);               // makes nextJob return false now and until the next setTrackGeometry
+    // App quit: every nextJob returns false at once, now and from then on
+    // (setTrackGeometry no longer lifts it). Wakes the waiting loaders.
+    void shutdown();
     // GL thread: a drained victim was kept (it is on screen) and put back to
     // Resident; it no longer counts in stats().evicted.
     void evictionCancelled();
@@ -178,6 +181,7 @@ private:
     std::array<std::atomic<const gfcFrameTable*>, kMaxTracks> issuedTable_{};
     std::atomic<double> latencyAvg_{0.0};
     std::atomic<bool> leadSkip_{false};
+    std::atomic<bool> shutdown_{false};   // the app is quitting (shutdown())
 };
 
 extern gfcFrameCache frameCache;   // defined in gfcFrameCache.cpp

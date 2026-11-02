@@ -302,6 +302,12 @@ public:
     static long loadAnnouncements();
     // The loader thread's id, or the default id when none is running.
     std::thread::id loaderThreadId() const;
+    // A loader or audio thread is running on this track.
+    bool threadsRunning() const;
+    // App quit: no track starts a loader or audio thread after this
+    // (gfcTrackManager::shutdown stops the running ones).
+    static void beginShutdown();
+    static bool shuttingDown();
     // Thumbnail for a decoded frame (0-based sequence index), for the
     // timeline filmstrip. Returns an empty thumbnail (w==0) when the
     // index is out of range or that frame hasn't been captured.

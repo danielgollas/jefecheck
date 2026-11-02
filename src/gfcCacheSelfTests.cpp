@@ -1917,3 +1917,73 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
     std::printf("CACHE-EVERYFRAME: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
+
+// ---- app quit (final review C1) ----
+
+int cacheShutdownSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    using ms = std::chrono::milliseconds;
+    using Job = gfcFrameCache::Job;
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+
+    {   // A coordinator's waiter returns on shutdown, and nothing is handed out after it.
+        gfcFrameCache c; gfcFrameTable t; t.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTestBudget(0);
+        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        Job j{};
+        while (c.nextJob(0, j, ms(20))) c.commit(j, 1000, true);   // the minimum ahead, then denied
+        bool got = true;
+        const auto t0 = std::chrono::steady_clock::now();
+        std::thread th([&] { got = c.nextJob(0, j, ms(3000)); });
+        std::this_thread::sleep_for(ms(50));
+        c.shutdown();
+        th.join();
+        const auto took = std::chrono::duration_cast<ms>(std::chrono::steady_clock::now() - t0).count();
+        check(!got && took < 500, "shutdown: a waiting nextJob returns false soon after");
+        c.setTestBudget(1000 * 1000);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        check(!c.nextJob(0, j, ms(50)), "shutdown: setTrackGeometry does not lift it");
+    }
+
+    {   // A movie with sound and an image sequence, playing; then the app's quit path.
+        frameCache.setTestBudget(int64_t(30 * kFrame8));
+        gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+        gfcSequence* b = loadTrack(1, dir + "/cache_seq.0001.png", GFC_8BPC, 100);
+        pumpUntil([&] { return a->residentCount() > 0 && b->residentCount() > 0; }, 5000);
+        playbackManager.setCurrentFrame(1);
+        playbackManager.startPlayFwd();
+        const auto end = std::chrono::steady_clock::now() + ms(500);
+        while (std::chrono::steady_clock::now() < end) {
+            jefe::qt::tickPlaybackTiming();
+            trackManager.generateTextures();
+            std::this_thread::sleep_for(ms(2));
+        }
+        check(a->threadsRunning() && b->threadsRunning(), "fixture: both tracks have their threads while playing");
+        check(a->audioClip() != nullptr, "fixture: the movie has sound (an audio thread)");
+        const auto t0 = std::chrono::steady_clock::now();
+        jefe::qt::shutdownTracks();
+        const auto took = std::chrono::duration_cast<ms>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("CACHE-SHUTDOWN: shutdownTracks took %lld ms\n", (long long)took);
+        bool none = true;
+        for (int k = 0; k < 4; ++k) none &= !trackManager.getSequence(k)->threadsRunning();
+        check(none, "quit: no loader or audio thread left on any track");
+        check(a->loaderThreadId() == std::thread::id() && b->loaderThreadId() == std::thread::id(), "quit: loader thread ids are cleared (joined)");
+        Job j{};
+        const auto s = std::chrono::steady_clock::now();
+        check(!frameCache.nextJob(0, j, ms(500)) && std::chrono::steady_clock::now() - s < ms(100), "quit: nextJob returns false at once");
+        trackManager.startLoadingSequence(0);
+        check(!a->threadsRunning(), "quit: a load asked for after it starts no thread");
+        if (playbackManager.isPlaying()) playbackManager.pause();
+    }
+
+    std::printf("CACHE-SHUTDOWN: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
