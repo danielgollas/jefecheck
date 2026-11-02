@@ -26,6 +26,11 @@ gfcFrameState gfcFrameTable::state(int i) const {
     return inRange(i) ? entries_[i].state : gfcFrameState::Unloaded;
 }
 
+size_t gfcFrameTable::bytes(int i) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return inRange(i) ? entries_[i].bytes : 0;
+}
+
 bool gfcFrameTable::setDecoding(int i, size_t reservedBytes) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!inRange(i) || entries_[i].state != gfcFrameState::Unloaded) return false;

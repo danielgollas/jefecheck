@@ -22,6 +22,7 @@ public:
     void reset(int frameCount);
     int size() const;
     gfcFrameState state(int i) const;
+    size_t bytes(int i) const;   // reserved while Decoding, held while Resident, else 0
 
     // Unloaded -> Decoding, reserving bytes for the decode; false from any other state.
     bool setDecoding(int i, size_t reservedBytes);
