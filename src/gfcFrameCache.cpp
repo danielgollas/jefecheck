@@ -340,8 +340,7 @@ int gfcFrameCache::score(int track, int sourceIndex) const {
     return timelineScore(sourceIndex + 1 + tr.offset, params());
 }
 
-// The bytes timeline frame t still needs: this track's frame plus every other
-// track's frame there that has footage and is not loaded yet (Unloaded).
+// Another track with footage at t holds its frame there (Resident or Decoding).
 bool gfcFrameCache::timelineHeldElsewhereLocked(int t, int track) const {
     for (int k = 0; k < kMaxTracks; ++k) {
         if (k == track) continue;
@@ -355,6 +354,8 @@ bool gfcFrameCache::timelineHeldElsewhereLocked(int t, int track) const {
     return false;
 }
 
+// The bytes timeline frame t still needs: this track's frame plus every other
+// track's frame there that has footage and is not loaded yet (Unloaded).
 size_t gfcFrameCache::timelineNeedLocked(int t, int track, size_t bytes) const {
     size_t need = bytes;
     for (int k = 0; k < kMaxTracks; ++k) {
