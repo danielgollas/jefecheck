@@ -7,6 +7,7 @@
 // Plain C++ (no GL, Qt or libav), so any TU may include it. Every method takes
 // the table's own mutex and is safe from any thread. Indices are 0-based source
 // frame indices; an index out of range is ignored (reads return Unloaded/false).
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -40,15 +41,15 @@ public:
     void setOnScreen(int i);
     int onScreen() const;   // -1 none
 
-    int residentCount() const;       // Resident frames (Evicting ones are already released)
+    int residentCount() const;       // Resident frames (Evicting ones are already released); lock-free
     size_t residentBytes() const;    // bytes of Resident frames
     size_t reservedBytes() const;    // bytes reserved by Decoding frames
     // Moves whenever the set of Resident|Evicting frames may have changed.
-    uint64_t version() const;
+    uint64_t version() const;        // lock-free
     // Inclusive 0-based runs of Resident|Evicting frames, in index order.
     void segments(std::vector<std::pair<int, int>>& out) const;
     // Resident|Evicting ends, -1 when none. Cached per version, so polling them
-    // (the timeline asks every tick) walks the table only after a change.
+    // (the timeline asks every tick) takes no lock and walks nothing between changes.
     int firstResident() const;
     int lastResident() const;
 
@@ -64,11 +65,14 @@ private:
     mutable std::mutex mutex_;
     std::vector<Entry> entries_;
     int onScreen_ = -1;
-    int residentCount_ = 0;
+    // Atomic so the timeline can poll them without the mutex; writers still
+    // change them only while holding mutex_.
+    std::atomic<int> residentCount_{0};
     size_t residentBytes_ = 0;
     size_t reservedBytes_ = 0;
-    uint64_t version_ = 0;
-    mutable uint64_t endsVersion_ = ~uint64_t(0);
-    mutable int first_ = -1;
-    mutable int last_ = -1;
+    std::atomic<uint64_t> version_{0};
+    // The cached ends are atomic too, so a poll between changes takes no lock.
+    mutable std::atomic<uint64_t> endsVersion_{~uint64_t(0)};
+    mutable std::atomic<int> first_{-1};
+    mutable std::atomic<int> last_{-1};
 };

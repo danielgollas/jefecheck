@@ -199,7 +199,7 @@ void TimelineTracks_Qt::refresh() {
         const auto& a = states_[i];
         const auto& b = next[i];
         changed = a.present != b.present || a.rangeStart != b.rangeStart
-               || a.rangeEnd != b.rangeEnd || a.loadedCount != b.loadedCount
+               || a.rangeEnd != b.rangeEnd || a.loadedVersion != b.loadedVersion
                || a.offset != b.offset || a.label != b.label
                || a.hasAudio != b.hasAudio || a.muted != b.muted
                || a.audioPeaksVersion != b.audioPeaksVersion;
@@ -211,6 +211,15 @@ void TimelineTracks_Qt::refresh() {
         if (!next[i].hasAudio) waves_[i] = jefe::qt::WaveformPeaks{};
         else if (!waves_[i].present || waves_[i].version != next[i].audioPeaksVersion)
             waves_[i] = jefe::qt::getTrackWaveform(i);
+    }
+
+    // The segment list is a whole-vector snapshot: take it only when the loaded
+    // set (or the offset that shifts it) moved.
+    for (int i = 0; i < 4; ++i) {
+        if (!next[i].present) segments_[i].clear();
+        else if (states_[i].loadedVersion != next[i].loadedVersion || states_[i].offset != next[i].offset
+                 || !states_[i].present)
+            segments_[i] = jefe::qt::getTrackLoadedSegments(i);
     }
 
     from_ = from; to_ = to; current_ = cur; states_ = next;
@@ -265,14 +274,13 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
             p.fillRect(bar, QColor(85, 85, 85));
 
             // Loaded portion (lighter), starting at firstLoadedFrame.
-            if (s.loadedCount > 0) {
-                const int loadedEndFrame = s.firstLoadedFrame + s.loadedCount - 1;
-                const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
-                const int xL1 = xFromFrameMapped(loadedEndFrame,     width(), from_, to_);
-                const QRect loaded(xL0, barTop, std::max(xL1 - xL0, 1), barH);
-                // Loaded frames: light, desaturated green (à la FLTK's intended
-                // loaded-bar color) so decoded extent reads at a glance.
-                p.fillRect(loaded, QColor(150, 185, 150));
+            // Loaded frames: light, desaturated green (à la FLTK's intended
+            // loaded-bar color), one rectangle per resident run like a video
+            // player's buffer bar.
+            for (const auto& seg : segments_[i]) {
+                const int xL0 = xFromFrameMapped(seg.first,  width(), from_, to_);
+                const int xL1 = xFromFrameMapped(seg.second, width(), from_, to_);
+                p.fillRect(QRect(xL0, barTop, std::max(xL1 - xL0, 1), barH), QColor(150, 185, 150));
             }
 
             // Label (track letter + filename) over the bar.
@@ -390,7 +398,7 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
     if (stripH < 6) return;  // lane too short; nothing legible to draw
 
     const int loadedEndFrame =
-        s.loadedCount > 0 ? s.firstLoadedFrame + s.loadedCount - 1 : s.firstLoadedFrame;
+        segments_[track].empty() ? s.firstLoadedFrame : segments_[track].back().second;
 
     // A thumbnail is always its natural width (stripH × frame aspect) — never
     // squeezed or cropped. The aspect is the same for every frame, so probe
@@ -434,11 +442,11 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
     }
 
     // Thin loaded bar beneath the strip.
-    if (s.loadedCount > 0) {
-        const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
-        const int xL1 = xFromFrameMapped(loadedEndFrame, width(), from_, to_);
-        const QRect bar(xL0, laneY + laneH - barH - 1, std::max(xL1 - xL0, 1), barH);
-        p.fillRect(bar, QColor(150, 185, 150));
+    for (const auto& seg : segments_[track]) {
+        const int xL0 = xFromFrameMapped(seg.first,  width(), from_, to_);
+        const int xL1 = xFromFrameMapped(seg.second, width(), from_, to_);
+        p.fillRect(QRect(xL0, laneY + laneH - barH - 1, std::max(xL1 - xL0, 1), barH),
+                   QColor(150, 185, 150));
     }
 }
 

@@ -102,6 +102,9 @@ private:
     int to_ = 1;
     int current_ = 1;
     std::array<jefe::qt::TrackTimelineState, 4> states_{};
+    // Loaded runs per track (1-based inclusive timeline frames), refetched only
+    // when a track's loadedVersion or offset moves.
+    std::vector<std::pair<int, int>> segments_[4];
 
     // Cached thumbnail pixmaps, keyed by (track << 24) | frameIndex.
     QHash<int, QPixmap> thumbCache_;

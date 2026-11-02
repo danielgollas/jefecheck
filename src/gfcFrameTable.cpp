@@ -100,8 +100,7 @@ int gfcFrameTable::onScreen() const {
 }
 
 int gfcFrameTable::residentCount() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return residentCount_;
+    return residentCount_.load(std::memory_order_acquire);
 }
 
 size_t gfcFrameTable::residentBytes() const {
@@ -115,8 +114,7 @@ size_t gfcFrameTable::reservedBytes() const {
 }
 
 uint64_t gfcFrameTable::version() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return version_;
+    return version_.load(std::memory_order_acquire);
 }
 
 void gfcFrameTable::segments(std::vector<std::pair<int, int>>& out) const {
@@ -133,21 +131,29 @@ void gfcFrameTable::segments(std::vector<std::pair<int, int>>& out) const {
 }
 
 void gfcFrameTable::refreshEnds() const {
-    if (endsVersion_ == version_) return;
-    first_ = last_ = -1;
+    const uint64_t v = version_.load();
+    if (endsVersion_.load() == v) return;
+    int first = -1, last = -1;
     for (int i = 0; i < (int)entries_.size(); ++i)
-        if (hasTexture(entries_[i].state)) { if (first_ < 0) first_ = i; last_ = i; }
-    endsVersion_ = version_;
+        if (hasTexture(entries_[i].state)) { if (first < 0) first = i; last = i; }
+    first_.store(first);
+    last_.store(last);
+    endsVersion_.store(v, std::memory_order_release);
 }
 
 int gfcFrameTable::firstResident() const {
+    // Fast path: the cache is current, no lock.
+    const uint64_t v = version_.load(std::memory_order_acquire);
+    if (endsVersion_.load(std::memory_order_acquire) == v) return first_.load();
     std::lock_guard<std::mutex> lock(mutex_);
     refreshEnds();
-    return first_;
+    return first_.load();
 }
 
 int gfcFrameTable::lastResident() const {
+    const uint64_t v = version_.load(std::memory_order_acquire);
+    if (endsVersion_.load(std::memory_order_acquire) == v) return last_.load();
     std::lock_guard<std::mutex> lock(mutex_);
     refreshEnds();
-    return last_;
+    return last_.load();
 }
