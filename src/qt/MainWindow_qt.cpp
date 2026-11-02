@@ -2754,9 +2754,9 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     const QString seqFirst = writeSequence(work + "/seq", "shot", 6, 210);
     check(saveStrokes(seqFirst, "Lead", {2, 5}), "sequence sidecar saved");
     loadFileIntoPlate(2, seqFirst);
-    // The frame cache loads what the loop needs: under the shortest-track
-    // loop priority that is frame 1 here (the image tracks are one frame).
-    check(pumpUntil([] { return jefe::qt::getTrackTimelineState(2).loadedCount >= 1; }, 5000),
+    // The whole sequence loads: frames outside the shortest-track loop limits
+    // (frame 1 here, the image tracks are one frame) still load when they fit.
+    check(pumpUntil([] { return jefe::qt::getTrackTimelineState(2).loadedCount >= 6; }, 5000),
           "the sequence loads");
 
     // The user's playlist state: the current tracks kept as playlist item 0
@@ -2767,7 +2767,7 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     viewport_->doneCurrent();
     check(pumpUntil([] {
               return jefe::qt::getTrackTimelineState(0).loadedCount >= 1 &&
-                     jefe::qt::getTrackTimelineState(2).loadedCount >= 1;
+                     jefe::qt::getTrackTimelineState(2).loadedCount >= 6;
           }, 5000),
           "the tracks reload from playlist item 0");
 

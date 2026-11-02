@@ -318,9 +318,25 @@ gfcFrameCache::Params gfcFrameCache::params() const {
     return p;
 }
 
+// The playhead outside the limits (the scrubber reaches past a shorter
+// track's end): its own frame and the next M-1 in the play direction, while
+// they are still outside. Returns the step k from the playhead, or -1.
+int gfcFrameCache::playheadRunStep(int t, const Params& p) const {
+    const Walk& w = walk_;
+    const int ph = w.playhead;
+    auto outside = [&](int f) { return p.N == 0 || f < w.start || f > w.end; };
+    if (!outside(ph) || !outside(t)) return -1;
+    if (p.N > 0 && (ph < w.start) != (t < w.start)) return -1;   // the limits lie between them
+    const int k = (t - ph) * w.direction;
+    return k >= 0 && k < p.M ? k : -1;
+}
+
 int gfcFrameCache::timelineScore(int t, const Params& p) const {
     const Walk& w = walk_;
-    if (p.N == 0 || t < w.start || t > w.end) return -1;
+    if (p.N == 0 || t < w.start || t > w.end) {
+        const int k = playheadRunStep(t, p);
+        return k >= 0 ? 3 * p.N + std::max(0, p.N - k) : 0;   // the playhead's run, or the lowest band
+    }
     const int a = w.a[t - w.start], b = w.b[t - w.start];
     const int N = p.N;
     if (a >= 0 && (b < 0 || a <= b)) return a <= p.window ? 3 * N + (N - a) : N + (N - a);
@@ -329,12 +345,12 @@ int gfcFrameCache::timelineScore(int t, const Params& p) const {
         if (a >= 0 && a <= p.window) return N + (N - a);   // the window reaches round the loop
         return N - b;
     }
-    return -1;
+    return 0;   // unreached: the lowest band
 }
 
 bool gfcFrameCache::isCandidate(int t, const Params& p) const {
     const Walk& w = walk_;
-    if (p.N == 0 || t < w.start || t > w.end) return false;
+    if (p.N == 0 || t < w.start || t > w.end) return playheadRunStep(t, p) >= 0;
     const int a = w.a[t - w.start], b = w.b[t - w.start];
     if (a >= 0 && (b < 0 || a <= b)) return a <= p.window;
     return (b >= 0 && b <= p.K) || (a >= 0 && a <= p.window);
@@ -462,15 +478,22 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
     const Params p = params();
     const int size = tr.table->size();
 
+    // Pinned and the playhead's run load even over budget; Fill (the lowest
+    // band) loads only into free room and never evicts.
+    enum class Mode { Normal, Pinned, Fill };
     // 0 = skip, 1 = job, 2 = denied
-    auto attempt = [&](int src, bool pinned) -> int {
+    auto attempt = [&](int src, Mode mode) -> int {
         if (src < tr.first || src > tr.last || src >= size) return 0;
         if (tr.table->state(src) != gfcFrameState::Unloaded) return 0;
         const int t = src + 1 + tr.offset;
-        bool unconditional = pinned;
-        if (!unconditional && p.N > 0 && t >= w.start && t <= w.end) {
-            const int a = w.a[t - w.start], b = w.b[t - w.start];
-            unconditional = a >= 0 && (b < 0 || a <= b) && a < p.M;   // the playhead and M-1 more
+        bool unconditional = mode == Mode::Pinned;
+        if (!unconditional && mode == Mode::Normal) {
+            if (p.N > 0 && t >= w.start && t <= w.end) {
+                const int a = w.a[t - w.start], b = w.b[t - w.start];
+                unconditional = a >= 0 && (b < 0 || a <= b) && a < p.M;   // the playhead and M-1 more
+            } else {
+                unconditional = playheadRunStep(t, p) >= 0;   // the playhead outside the limits
+            }
         }
         const size_t bytes = tr.frameBytes.load(std::memory_order_acquire);
         // Finishing a timeline frame another track already holds. It was
@@ -485,11 +508,12 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         // held on every track or on none.
         const bool finishing = timelineHeldElsewhereLocked(t, track);
         int victimCeiling = INT_MAX;
-        if (finishing) {
+        if (finishing && mode != Mode::Fill) {
             const int sc = timelineScore(t, p);
             if (sc >= 3 * p.N) unconditional = true;
             if (p.N > 0) victimCeiling = sc < 0 ? -1 : (sc / p.N) * p.N;
         }
+        if (mode == Mode::Fill) victimCeiling = INT_MIN;   // no victims: free room only
         if (!admit(t, unconditional, timelineNeedLocked(t, track, bytes), victimCeiling)) {
             if (finishing) dropPartialLocked(t, track);
             ++stats_.denied;
@@ -505,7 +529,14 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
     std::vector<int> pinned;
     tr.table->pinnedIndices(pinned);   // pins set here or straight on the table (hold-edge)
     for (int src : pinned) {
-        if (attempt(src, true) == 1) return Scan::Job;
+        if (attempt(src, Mode::Pinned) == 1) return Scan::Job;
+    }
+    // The playhead outside the limits: its frame and M-1 more on this track,
+    // unconditional like the minimum ahead (the plate is showing it).
+    for (int k = 0; k < p.M; ++k) {
+        const int t = w.playhead + k * w.direction;
+        if (playheadRunStep(t, p) < 0) break;
+        if (attempt(t - 1 - tr.offset, Mode::Normal) == 1) return Scan::Job;
     }
     // Candidates come in falling score order, so the first refusal ends the scan.
     // Keep time with the sound leading: frames nearer than the lead cannot
@@ -514,13 +545,13 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
     for (int t : w.aheadOrder) {
         if (w.a[t - w.start] > p.window) break;
         if (w.a[t - w.start] < lead) continue;
-        const int r = attempt(t - 1 - tr.offset, false);
+        const int r = attempt(t - 1 - tr.offset, Mode::Normal);
         if (r == 1) return Scan::Job;
         if (r == 2) return Scan::Denied;
     }
     for (int t : w.behindOrder) {
         if (w.b[t - w.start] > p.K) break;
-        const int r = attempt(t - 1 - tr.offset, false);
+        const int r = attempt(t - 1 - tr.offset, Mode::Normal);
         if (r == 1) return Scan::Job;
         if (r == 2) return Scan::Denied;
     }
@@ -531,9 +562,40 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         const int a = w.a[t - w.start], b = w.b[t - w.start];
         if (a > p.window) break;
         if (b < 0 || a <= b || b <= p.K) continue;   // ahead or near-behind: tried above
-        const int r = attempt(t - 1 - tr.offset, false);
+        const int r = attempt(t - 1 - tr.offset, Mode::Normal);
         if (r == 1) return Scan::Job;
         if (r == 2) return Scan::Denied;
+    }
+    // The lowest band (Fill): every other frame of this track's footage, into
+    // free room only, so a clip that fits loads entirely (ONCE far behind, a
+    // track past the loop limits) and nothing is ever evicted for it. In
+    // falling score order: ahead past the window, far behind, then outside
+    // the limits nearest the playhead.
+    auto fill = [&](int t) { return attempt(t - 1 - tr.offset, Mode::Fill); };
+    for (int t : w.aheadOrder) {
+        if (w.a[t - w.start] <= p.window) continue;
+        const int r = fill(t);
+        if (r == 1) return Scan::Job;
+        if (r == 2) return Scan::Denied;
+    }
+    for (int t : w.behindOrder) {
+        const int a = w.a[t - w.start];
+        if (w.b[t - w.start] <= p.K || (a >= 0 && a <= p.window)) continue;   // tried above
+        const int r = fill(t);
+        if (r == 1) return Scan::Job;
+        if (r == 2) return Scan::Denied;
+    }
+    const int fs = tr.first + 1 + tr.offset, fe = tr.last + 1 + tr.offset, ph = w.playhead;
+    const int dFrom = ph < fs ? fs - ph : (ph > fe ? ph - fe : 0);
+    const int dTo = std::max(std::abs(ph - fs), std::abs(fe - ph));
+    for (int d = dFrom; d <= dTo; ++d) {
+        for (int side = 0; side < (d == 0 ? 1 : 2); ++side) {
+            const int t = ph + (side == 0 ? d : -d) * w.direction;   // the play direction first
+            if (t < fs || t > fe || (p.N > 0 && t >= w.start && t <= w.end)) continue;
+            const int r = fill(t);
+            if (r == 1) return Scan::Job;
+            if (r == 2) return Scan::Denied;
+        }
     }
     return Scan::Denied;
 }

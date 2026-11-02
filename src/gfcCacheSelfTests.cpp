@@ -578,6 +578,57 @@ int cachePolicySelfTest() {
               "commitUploaded: a frame whose table was reset while it waited is ignored");
     }
 
+    {   // A playhead outside the loop limits (a shorter track sets them): its own
+        // frame and the minimum ahead on this track load anyway, before the window.
+        const int N = 100;
+        gfcFrameCache c; gfcFrameTable t; t.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTestBudget(0);
+        c.setTransport(150, +1, LOOPMODELOOP_ID, 1, 100, 24);
+        const std::vector<int> got = pull(c, 0, 20, 1000);
+        std::printf("CACHE-POLICY: outside the limits got");
+        for (int f : got) std::printf(" %d", f);
+        std::printf("\n");
+        check(got.size() >= (size_t)M && std::vector<int>(got.begin(), got.begin() + M) == seq(150, 150 + M - 1),
+              "outside: the playhead (150) and M-1 ahead load first at budget 0, though outside the limits 1..100");
+        check(c.score(0, 149) >= 3 * N, "outside: the playhead frame scores in the window band");
+        check(c.score(0, 199) == 0, "outside: a frame outside the limits and away from the playhead is in the lowest band");
+    }
+
+    {   // ONCE, mid-clip, a budget that holds the clip: every frame loads, far
+        // behind included, and nothing is evicted.
+        gfcFrameCache c; gfcFrameTable t; t.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTestBudget(300 * 1000);
+        c.setTransport(120, +1, LOOPMODEONCE_ID, 1, 240, 24);
+        pull(c, 0, 400, 1000);
+        check(t.residentCount() == 240, "once fits: all 240 frames resident from a mid-clip playhead");
+        check(c.stats().evicted == 0 && c.drainVictims().frames.empty(), "once fits: nothing evicted");
+        const uint64_t a0 = c.stats().admitted;
+        Job j{};
+        check(!c.nextJob(0, j, ms(50)) && c.stats().admitted == a0, "once fits: then nothing more");
+    }
+
+    {   // The lowest band never evicts: a budget smaller than the clip fills the
+        // window and near-behind, then the far-behind fill is refused, not swapped.
+        gfcFrameCache c; gfcFrameTable t; t.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTestBudget(100 * 1000);
+        c.setTransport(120, +1, LOOPMODEONCE_ID, 1, 240, 24);
+        pull(c, 0, 400, 1000);
+        check(t.residentCount() == 100 && c.stats().evicted == 0, "fill: 100 frames at a 100-frame budget, no evictions");
+        const gfcFrameCache::Stats s0 = c.stats();
+        Job j{};
+        for (int k = 0; k < 5; ++k) c.nextJob(0, j, ms(20));
+        check(c.stats().admitted == s0.admitted && c.stats().evicted == s0.evicted, "fill: settled (no admissions, no evictions)");
+    }
+
     std::printf("CACHE-POLICY: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
@@ -1915,6 +1966,64 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
     gfcSequence::setTestDecodeDelayMs(0);
     sett.lagPolicy = savedLag;
     std::printf("CACHE-EVERYFRAME: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- a playhead outside the loop limits; a clip that fits in ONCE (final review C3) ----
+
+int cacheLimitsSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+
+    {   // A (240 frames) and B (120): the shortest track sets the loop limits to
+        // 1..120. The scrubber still reaches 200, past B's end.
+        frameCache.setTestBudget(int64_t(2 * 40 * kFrame8));
+        playbackManager.setLoopPriority(GFC_LOOPPRIORITY_SHORTEST);
+        playbackManager.setPlaybackMode(LOOPMODELOOP_ID);
+        playbackManager.setCurrentFrame(1);
+        gfcSequence* a = loadTrack(0, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+        gfcSequence* b = loadTrack(1, dir + "/cache_seq.0001.png", GFC_8BPC, 100);
+        pumpUntil([&] { return a->residentCount() >= 30 && b->residentCount() >= 30; }, 8000);
+        pump(500);
+        const int shortestEnd = trackManager.getFirstLastLoaded() + 1;   // getEndLimit() under SHORTEST
+        std::printf("CACHE-LIMITS: shortest track ends at %d\n", shortestEnd);
+        check(shortestEnd == 120, "fixture: the loop limits end at B's last frame (120)");
+        playbackManager.setCurrentFrame(200);
+        const auto t0 = std::chrono::steady_clock::now();
+        const bool in = pumpUntil([&] { return a->frameTable().state(199) == gfcFrameState::Resident; }, 1000);
+        const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("CACHE-LIMITS: A's frame 200 resident=%d after %.3f s\n", int(in), took);
+        check(in, "outside the limits: A's frame at the playhead (200) is resident within 1 s");
+        check(!a->framePending(200) && !b->framePending(200), "outside the limits: nothing pending at 200 on either track");
+        clearAllTracks();
+    }
+
+    {   // ONCE, a clip that fits, the playhead mid-clip: every frame loads, nothing
+        // is evicted, and a paused player then settles.
+        frameCache.setTestBudget(int64_t(1) << 30);
+        playbackManager.setLoopPriority(GFC_LOOPPRIORITY_LONGEST);
+        playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+        playbackManager.setCurrentFrame(120);
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        gfcSequence* a = loadTrack(0, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+        playbackManager.setCurrentFrame(120);
+        const bool all = pumpUntil([&] { return a->residentCount() == 240; }, 20000);
+        std::printf("CACHE-LIMITS: once from 120: resident %d\n", a->residentCount());
+        check(all, "once fits: every frame resident, far behind included (1..95)");
+        check(frameCache.stats().evicted == s0.evicted, "once fits: nothing evicted");
+        pump(300);
+        const gfcFrameCache::Stats s1 = frameCache.stats();
+        pump(2000);
+        const gfcFrameCache::Stats s2 = frameCache.stats();
+        check(s2.admitted == s1.admitted && s2.evicted == s1.evicted, "once fits: paused 2 s, no loads and no evictions");
+    }
+
+    std::printf("CACHE-LIMITS: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
 

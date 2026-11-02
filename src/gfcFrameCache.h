@@ -21,7 +21,12 @@
 //                                              way round: loaded last, after the
 //                                              near-behind frames)
 //   behind, b > K            -> N - b         (far behind, furthest lowest)
-//   outside the limits / unreached -> -1
+//   the playhead outside the limits, its frame and k < M after it in the play
+//   direction (still outside)  -> 3N + max(0, N - k), always admitted
+//   any other footage frame (outside the limits, unreached) -> 0
+// Frames that are not window, near-behind or loop candidates (ahead past the
+// window, far behind, the score-0 band) are "fill": loaded into free room
+// only, never evicting, so a clip that fits loads entirely.
 // Victims are whole timeline frames (every track's frame there), lowest first.
 // Admission is by timeline frame too: a track's frame fits when the cache can
 // also take the other tracks' unloaded frames at that timeline frame, so all
@@ -132,6 +137,9 @@ private:
     const Walk& walk() const;
     Params params() const;
     int timelineScore(int t, const Params& p) const;   // ignores pins / on-screen
+    // t is the playhead's own frame or one of the next M-1 in the play
+    // direction, all outside the limits: the step k from the playhead, else -1.
+    int playheadRunStep(int t, const Params& p) const;
     bool hasFootage(const Track& tr) const { return tr.table && tr.first >= 0 && tr.last >= tr.first; }
     bool isCandidate(int t, const Params& p) const;
     int64_t budgetLocked() const;
