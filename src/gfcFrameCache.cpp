@@ -49,6 +49,7 @@ void gfcFrameCache::setTrackGeometry(int track, int offset, int firstIndex, int 
     tr.last = firstIndex < 0 ? -1 : lastIndex;
     tr.frameBytes = frameBytes;
     tr.cancelled = false;
+    otherFloorCache_ = INT64_MAX;   // a load: the next small-cache sample sets the floor again
     wake();
 }
 
@@ -122,6 +123,7 @@ void gfcFrameCache::clearTrack(int track) {
                                   [track](const Victim& v) { return v.track == track; }),
                    pending_.end());
     victimsPending_.store(!pending_.empty(), std::memory_order_release);
+    otherFloorCache_ = INT64_MAX;   // a clear: likewise
     wake();
 }
 
@@ -208,22 +210,46 @@ int64_t gfcFrameCache::cacheBytesLocked() const {
     return (int64_t)sum;
 }
 
-// budget = limit% x total - (systemUsed - cacheBytes). A used figure of 0 means
-// the system query failed: keep the previous sample.
+// budget = L - max(systemUsed - cacheBytes, otherFloor), at most L, with
+// L = limit% x total. The system figure may not see all of the cache (GPU
+// memory on some machines): then systemUsed - cacheBytes falls as the cache
+// grows and the budget would grow with it. otherFloor, that term sampled
+// while the cache was small, stops it, so the cache stays within
+// L - other. A used figure of 0 means the system query failed: keep the
+// previous sample.
 int64_t gfcFrameCache::budgetLocked() const {
     if (testBudget_ >= 0) return testBudget_;
-    const auto now = clock_t_::now();
-    if (sysSampled_ == clock_t_::time_point{} || now - sysSampled_ >= kSampleEvery) {
-        sysSampled_ = now;
-        const uint64_t used = memoryManager.usedBytes();
-        const uint64_t total = memoryManager.totalBytes();
-        if (used > 0 && total > 0) { sysUsed_ = used; sysTotal_ = total; sysValid_ = true; }
-    }
     const int64_t cache = cacheBytesLocked();
     const int pct = std::clamp(sett.memoryLimitPercent, 1, 100);
+    const auto now = clock_t_::now();
+    if (testUsed_ || sysSampled_ == clock_t_::time_point{} || now - sysSampled_ >= kSampleEvery) {
+        sysSampled_ = now;
+        const uint64_t used = testUsed_ ? testUsed_(cache) : memoryManager.usedBytes();
+        const uint64_t total = testUsed_ ? testTotal_ : memoryManager.totalBytes();
+        if (used > 0 && total > 0) {
+            sysUsed_ = used; sysTotal_ = total; sysValid_ = true;
+            const int64_t limit = (int64_t)((double)total * pct / 100.0);
+            if (cache < limit / 10 && cache <= otherFloorCache_) {
+                otherFloor_ = (int64_t)used - cache;
+                otherFloorCache_ = cache;
+            }
+        }
+    }
     if (!sysValid_) return 0;   // nothing known yet: only the minimum ahead and pins load
     const int64_t limit = (int64_t)((double)sysTotal_ * pct / 100.0);
-    return limit - ((int64_t)sysUsed_ - cache);
+    const int64_t other = std::max<int64_t>((int64_t)sysUsed_ - cache, otherFloor_);
+    return std::min(limit, limit - other);
+}
+
+void gfcFrameCache::setTestSystemMemory(std::function<uint64_t(int64_t)> used, uint64_t totalBytes) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    testUsed_ = std::move(used);
+    testTotal_ = totalBytes;
+    sysSampled_ = {};
+    sysValid_ = false;
+    otherFloor_ = -1;
+    otherFloorCache_ = INT64_MAX;
+    wake();
 }
 
 int64_t gfcFrameCache::budgetBytes() const {
@@ -418,6 +444,11 @@ size_t gfcFrameCache::timelineNeedLocked(int t, int track, size_t bytes) const {
 // cache would go over budget. Only frames scoring strictly below t are taken,
 // and only enough to cover min(shortfall, bytes). An always-admitted frame
 // (pinned, or a < M) loads even when that is not covered.
+// Overshoot bound: the check is against bytes already reserved, so the cache
+// can pass the budget by one frame per track per admission (loaders admitting
+// at once), plus whatever the pools grew by since the admission. With the
+// other-processes floor in budgetLocked that holds even when the system
+// figure does not see the cache.
 bool gfcFrameCache::admit(int t, bool unconditional, size_t bytes, int victimCeiling) {
     const Params p = params();
     const int64_t cache = cacheBytesLocked();

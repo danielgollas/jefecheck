@@ -629,6 +629,32 @@ int cachePolicySelfTest() {
         check(c.stats().admitted == s0.admitted && c.stats().evicted == s0.evicted, "fill: settled (no admissions, no evictions)");
     }
 
+    {   // The derived budget with a fake system memory source. Limit L = 50 % of
+        // 1 MB = 500 000 B, other processes 200 000 B, frames 2 000 B (240 of
+        // them would be 480 000 B). Whether the system figure sees the cache or
+        // not, the cache stays within L - other plus one frame.
+        const int savedPct = sett.memoryLimitPercent;
+        sett.memoryLimitPercent = 50;
+        auto run = [&](bool visible) {
+            gfcFrameCache c; gfcFrameTable t; t.reset(240);
+            c.setTestPooledBytes(0);
+            c.attachTrack(0, &t);
+            c.setTrackGeometry(0, 0, 0, 239, 2000);
+            if (visible) c.setTestSystemMemory([](int64_t cache) { return uint64_t(200000 + cache); }, 1000000);
+            else c.setTestSystemMemory([](int64_t) { return uint64_t(200000); }, 1000000);
+            c.setTransport(1, +1, LOOPMODELOOP_ID, 1, 240, 24);
+            pull(c, 0, 400, 2000);
+            const int64_t bytes = c.cacheBytes();
+            std::printf("CACHE-POLICY: system memory %s the cache: cache %lld B, budget %lld B\n",
+                        visible ? "sees" : "misses", (long long)bytes, (long long)c.budgetBytes());
+            return bytes;
+        };
+        const int64_t hidden = run(false), seen = run(true);
+        check(hidden <= 300000 + 2000, "budget: a cache the system figure misses stays within L - other + one frame");
+        check(seen <= 300000 + 2000 && seen >= 300000 - 2000, "budget: a cache the system figure sees fills to L - other, as before");
+        sett.memoryLimitPercent = savedPct;
+    }
+
     std::printf("CACHE-POLICY: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

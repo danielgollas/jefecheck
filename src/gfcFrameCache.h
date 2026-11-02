@@ -42,6 +42,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <vector>
 
@@ -106,6 +107,9 @@ public:
     void pin(int track, int index, bool on);
     void setTestBudget(int64_t bytes);    // >= 0 replaces the derived budget; -1 restores it
     void setTestPooledBytes(size_t bytes);  // test only: replaces the pools' figure; size_t(-1) restores it
+    // Test only: a fake system memory source, used(cacheBytes) and total,
+    // sampled at every budget computation; an empty function restores the real one.
+    void setTestSystemMemory(std::function<uint64_t(int64_t cacheBytes)> used, uint64_t totalBytes);
     int64_t budgetBytes() const;
     int64_t cacheBytes() const;
     uint64_t generation() const;
@@ -177,6 +181,14 @@ private:
     mutable uint64_t sysUsed_ = 0, sysTotal_ = 0;
     mutable std::chrono::steady_clock::time_point sysSampled_{};
     mutable bool sysValid_ = false;
+    // The other processes' memory (systemUsed - cacheBytes) from the sample
+    // taken with the least cache, below 10 % of the limit, since the last
+    // clip load or clear: a floor for that term, so a cache the system figure
+    // does not see (GPU memory) cannot grow the budget without bound.
+    mutable int64_t otherFloor_ = -1;
+    mutable int64_t otherFloorCache_ = INT64_MAX;
+    std::function<uint64_t(int64_t)> testUsed_;
+    uint64_t testTotal_ = 0;
     Stats stats_{0, 0, 0, 0};
     std::atomic<uint64_t> retargets_{0};
     // Job latency: issue times of the last few jobs per track (the loader runs
