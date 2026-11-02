@@ -1750,6 +1750,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
         endTransform();
 
     }
+    drawLoadingLabel();
+
     //**********DRAW THE LABEL*****************
     drawText();
 
@@ -1897,6 +1899,8 @@ void gfcPlate::draw3Drect(int pcurrentFrame) {
 
     //draw the warning in case we don't support texture rectangles
     drawTextureRectangleWarning();
+
+    drawLoadingLabel();
 
     //**********DRAW THE LABEL*****************
     drawText();
@@ -2569,6 +2573,25 @@ void gfcPlate::drawVectorscope() {
         if (showVectorscope) {
         }
     }
+}
+
+void gfcPlate::drawLoadingLabel() {
+    // A render force-loads its frame, so it never shows the label.
+    if (theFrame.loaded || showPreview || forRender || !theSequence ||
+        !theSequence->framePending(currentFrame))
+        return;
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_TEXTURE_RECTANGLE_ARB);
+    glDisable(GL_TEXTURE_2D);
+    // Same colour as the status text (drawText), feedback-message size.
+    float lr, lg, lb;
+    textRenderer().labelColor(lr, lg, lb);
+    gfc_gl_font(FL_HELVETICA, sett.feedbackMessageSize);
+    textRenderer().setColor(lr, lg, lb, 1.0f);
+    gfc_gl_draw("Loading", rect.x, rect.y, rect.w, rect.h, GFC_ALIGN_CENTER);
+    glPopAttrib();
 }
 
 void gfcPlate::drawText() {

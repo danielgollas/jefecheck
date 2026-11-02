@@ -1211,3 +1211,83 @@ int cachePrefsSelfTest(const std::string& dir) {
     std::printf("CACHE-PREFS: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
+
+// ---- what an unloaded frame shows (Task 8) ----
+
+int cacheDisplaySelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    const int savedLag = sett.lagPolicy;
+    auto stop = [] { if (playbackManager.isPlaying()) playbackManager.pause(); };
+
+    frameCache.setTestBudget(int64_t(10 * kFrame8));
+    sett.lagPolicy = 1;   // Keep time
+    playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+    playbackManager.setCurrentFrame(1);
+    gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+    check(pumpUntil([&] { return a->frameTable().state(0) == gfcFrameState::Resident; }, 5000), "frame 1 resident");
+
+    {   // Keep time: the last drawn frame stays while playing; a jump shows nothing until it loads.
+        const gfcFrame f1 = a->getFrame(1);
+        check(f1.loaded && a->frameTable().onScreen() == 0, "a drawn frame is the on-screen frame");
+        check(a->frameTable().state(149) != gfcFrameState::Resident, "fixture: frame 150 is not resident");
+        playbackManager.startPlayFwd();
+        const gfcFrame held = a->getFrame(150);
+        check(held.loaded && held.indexNumber == 0, "keep time, playing: an unloaded frame shows the last drawn one");
+        stop();
+        check(!a->getFrame(150).loaded, "paused: an unloaded frame is not substituted");
+        playbackManager.setCurrentFrame(200);   // a jump: generation bump
+        check(!a->getFrame(200).loaded && a->framePending(200), "after a jump: nothing shown, the frame is pending");
+        const bool arrived = pumpUntil([&] { return a->getFrame(200).loaded; }, 2000);
+        check(arrived && !a->framePending(200), "the jumped-to frame arrives within 2 s and is no longer pending");
+        check(!a->framePending(500) && !a->framePending(0) && !a->framePending(241), "no footage at the timeline frame: not pending (no Loading label)");
+    }
+
+    {   // Show every frame never substitutes.
+        sett.lagPolicy = 2;
+        check(a->frameTable().state(229) != gfcFrameState::Resident, "fixture: frame 230 is not resident");
+        playbackManager.startPlayFwd();
+        check(!a->getFrame(230).loaded, "show every frame: an unloaded frame is not substituted");
+        stop();
+    }
+
+    {   // Forced loads (render/export) work anywhere and leave the cache alone.
+        check(a->frameTable().state(119) == gfcFrameState::Unloaded, "fixture: frame 120 is unloaded");
+        const gfcFrame forced = a->getFrame(120, true);
+        check(forced.loaded && forced.fileName == a->framePathAt(120), "a forced load returns frame 120");
+        a->cleanForcedLoad();
+        check(a->frameTable().state(119) == gfcFrameState::Unloaded, "a forced load does not touch the frame table");
+        check(a->frameReadyForRender(120) && a->frameReadyForRender(1) && !a->frameReadyForRender(500) && !a->frameReadyForRender(0),
+              "frameReadyForRender: any frame in the clip, nothing outside");
+        check(jefe::qt::isTrackFrameReady(0, 120) && !jefe::qt::isTrackFrameReady(0, 500), "isTrackFrameReady follows");
+    }
+
+    {   // The on-screen frame is never a victim.
+        frameCache.setTestBudget(int64_t(3 * kFrame8));
+        playbackManager.setCurrentFrame(1);
+        check(pumpUntil([&] { return a->frameTable().state(0) == gfcFrameState::Resident; }, 3000), "frame 1 resident again");
+        check(a->getFrame(1).loaded && a->frameTable().onScreen() == 0, "frame 1 drawn");
+        playbackManager.setCurrentFrame(100);
+        const bool moved = pumpUntil([&] { return a->frameTable().state(99) == gfcFrameState::Resident; }, 3000);
+        pump(2000);
+        check(moved && a->frameTable().state(0) == gfcFrameState::Resident, "the on-screen frame survives a window that evicts to move");
+    }
+
+    {   // Hold a chosen frame (mode 1): pending until the held frame is resident.
+        check(a->frameTable().state(59) != gfcFrameState::Resident, "fixture: frame 60 is not resident");
+        a->setHoldMode(1, 60);
+        check(!a->getFrame(100).loaded && a->framePending(100), "hold-frame: the held frame not yet resident is pending");
+        const bool held = pumpUntil([&] { return a->getFrame(100).loaded; }, 3000);
+        check(held && a->getFrame(100).indexNumber == 59 && !a->framePending(100), "hold-frame: the held frame arrives and is not pending");
+        a->setHoldMode(0);
+    }
+
+    sett.lagPolicy = savedLag;
+    std::printf("CACHE-DISPLAY: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}

@@ -389,6 +389,9 @@ private:
     void stopAlphaBackround();
     void endTransform();
     void drawText();
+        // "Loading" at the plate's centre while its frame is pending (not
+        // loaded yet, inside the track's footage). Nothing otherwise.
+        void drawLoadingLabel();
     void drawTextureRectangleWarning();
     void getFrameAndSequence();
     

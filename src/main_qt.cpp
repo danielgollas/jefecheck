@@ -613,10 +613,14 @@ int main(int argc, char* argv[]) {
     // constructed (MainWindow_Qt::restoreLayout creates the first one).
     QString configDir = resolveConfigDir(argc, argv);
     // --cache-test writes preferences (CACHE-PREFS) and sets harness values;
-    // never let that reach the user's real QSettings.
-    if (configDir.isEmpty() && hasCacheTest(argc, argv))
+    // never let that reach the user's real QSettings. The temporary dir is
+    // removed when the cache test exits.
+    QString cacheTestConfigDir;
+    if (configDir.isEmpty() && hasCacheTest(argc, argv)) {
         configDir = QDir(QDir::tempPath()).filePath(
             QStringLiteral("jefe_cache_config_%1").arg(QCoreApplication::applicationPid()));
+        cacheTestConfigDir = configDir;
+    }
     if (!configDir.isEmpty()) {
         QDir().mkpath(configDir);
         QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -722,11 +726,13 @@ int main(int argc, char* argv[]) {
         if (!jefe::qt::setupOffscreenTestGL()) {
             printf("CACHE-TEST SKIP: no offscreen GL\n");
             fflush(stdout);
+            if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
             std::_Exit(3);
         }
         if (VideoEncoder_Qt::findFfmpeg().isEmpty()) {
             printf("CACHE-TEST SKIP: ffmpeg not found\n");
             fflush(stdout);
+            if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
             std::_Exit(3);
         }
         const QString mediaQDir = QDir(QDir::tempPath()).filePath(
@@ -737,6 +743,7 @@ int main(int argc, char* argv[]) {
             QDir(mediaQDir).removeRecursively();
             printf("CACHE-TEST FAIL: %s\n", mediaErr.toLocal8Bit().constData());
             fflush(stdout);
+            if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
             std::_Exit(2);
         }
         const std::string mediaDir = mediaQDir.toStdString();
@@ -752,12 +759,14 @@ int main(int argc, char* argv[]) {
         allZero &= (cacheDirectionSelfTest(mediaDir) == 0);
         allZero &= (cacheTracksSelfTest(mediaDir) == 0);
         allZero &= (cachePrefsSelfTest(mediaDir) == 0);
+        allZero &= (cacheDisplaySelfTest(mediaDir) == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("CACHE-TEST media: %s\n", mediaDir.c_str());
         else
             QDir(mediaQDir).removeRecursively();
         std::fflush(stdout);
+        if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
         std::_Exit(allZero ? 0 : 2);
     }
 

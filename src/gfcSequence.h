@@ -284,8 +284,10 @@ public:
     // GL thread: frees frame index's texture (through gfcFrame::deleteTexture)
     // and its image loader, keeps its thumbnail and load params, marks it Unloaded.
     void evictFrame(int index);
-    // A timeline frame inside the trim range that is not resident (normal
-    // hold-mode mapping): the frame is waiting to be loaded.
+    // The frame getFrame() would show at this timeline frame (hold modes
+    // applied: mode 1 the held frame, mode 2 the trim edge outside the range)
+    // is inside the trim range and not resident: it is waiting to be loaded.
+    // False where the track has no footage (the plate shows plain black).
     bool framePending(int timelineFrame) const;
     // GPU bytes one frame of this load is expected to take: the preview frame's
     // size (after scale, and crop when on) times the bytes per pixel of the
@@ -472,6 +474,12 @@ public:
 #include "gfcframe.h"
     gfcFrame forcedFrame;
     int forcedFrameIndex = -1;   // which frames[] entry forcedFrame holds, -1 none
+    // The last frame getFrame() returned loaded (GL thread only) and the cache
+    // generation it was drawn in. Keep time shows it while the frame due is
+    // not loaded yet; a jump (new generation) stops that.
+    int lastDrawnIndex_ = -1;
+    uint64_t lastDrawnGeneration_ = 0;
+    const gfcFrame& displayFrame(int i, bool forceLoad, const gfcFrame& emptyFrame);
     void cleanForcedLoad();
     
     bool forceGFLLoading;

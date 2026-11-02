@@ -33,3 +33,7 @@ int cacheDirectionSelfTest(const std::string& mediaDir);
 int cacheTracksSelfTest(const std::string& mediaDir);
 // CACHE-PREFS: memory limit and lag policy persist; keepTime() follows sound.
 int cachePrefsSelfTest(const std::string& mediaDir);
+// CACHE-DISPLAY: what a plate shows for an unloaded frame (Keep time holds the
+// last drawn frame, a jump shows nothing and is pending), forced loads, the
+// on-screen pin and the held frame of hold mode 1.
+int cacheDisplaySelfTest(const std::string& mediaDir);

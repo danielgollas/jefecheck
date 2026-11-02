@@ -9,7 +9,7 @@ bool hasTexture(gfcFrameState s) { return s == gfcFrameState::Resident || s == g
 void gfcFrameTable::reset(int frameCount) {
     std::lock_guard<std::mutex> lock(mutex_);
     entries_.assign(frameCount > 0 ? size_t(frameCount) : 0, Entry());
-    onScreen_ = -1;
+    onScreen_.store(-1, std::memory_order_release);
     pinnedCount_ = 0;
     residentCount_ = 0;
     residentBytes_ = 0;
@@ -120,13 +120,13 @@ bool gfcFrameTable::pinned(int i) const {
 }
 
 void gfcFrameTable::setOnScreen(int i) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    onScreen_ = inRange(i) ? i : -1;
+    // Lock-free: the GL thread sets it on every draw. An index past the end
+    // never matches a frame, so no range check (it would need the lock).
+    onScreen_.store(i >= 0 ? i : -1, std::memory_order_release);
 }
 
 int gfcFrameTable::onScreen() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return onScreen_;
+    return onScreen_.load(std::memory_order_acquire);
 }
 
 int gfcFrameTable::residentCount() const {

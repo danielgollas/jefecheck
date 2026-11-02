@@ -7,6 +7,7 @@
 
 #include <glad/glad.h>
 #include <functional>
+#include <algorithm>
 #include <atomic>
 #include "gfcSequence.h"
 #include "gfcMediaKinds.h"
@@ -1097,6 +1098,7 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 	if ( cacheTrack()>=0 )
 		frameCache.clearTrack(cacheTrack());
 	frameTable_.reset(frames.size());
+	lastDrawnIndex_=-1;   // the old load's frame is not this one's
 
 	int startFrame=0, endFrame=0;
 	loadFrameRange(startFrame, endFrame);
@@ -1503,6 +1505,7 @@ int gfcSequence::clearSequence() {
 	if ( cacheTrack()>=0 )
 		frameCache.clearTrack(cacheTrack());   // also drops victims named on this track
 	frameTable_.reset(0);
+	lastDrawnIndex_=-1;
 	heldPin_=-1;   // the reset cleared it
 
 	if (myGUI) {
@@ -1564,6 +1567,27 @@ Rectang gfcSequence::getFrameSizeAt ( int frameNo ) {
 
 }
 
+// What a plate shows for source frame i (GL thread, every draw: atomics only,
+// no lock, no table walk). A loaded frame is shown and becomes the on-screen
+// frame, which the cache never evicts. An unloaded one shows the last drawn
+// frame while playing in Keep time, unless a jump came in between (the cache
+// generation moved); otherwise nothing (black, and the plate labels it
+// "Loading" while framePending()). A forced load (render) never substitutes.
+const gfcFrame& gfcSequence::displayFrame ( int i, bool pforceLoad, const gfcFrame& emptyFrame ) {
+	if ( frames[i].loaded ) {
+		lastDrawnIndex_=i;
+		lastDrawnGeneration_=frameCache.generation();
+		frameTable_.setOnScreen(i);
+		return frames[i];
+	}
+	if ( !pforceLoad && playbackManager.isPlaying() && playbackManager.keepTime()
+	     && lastDrawnIndex_>=0 && lastDrawnIndex_<(int)frames.size()
+	     && frames[lastDrawnIndex_].loaded
+	     && lastDrawnGeneration_==frameCache.generation() )
+		return frames[lastDrawnIndex_];
+	return emptyFrame;
+}
+
 gfcFrame gfcSequence::getFrame ( int frameNo,bool pforceLoad ) {
 	gfcFrame emptyFrame;
 	/*emptyFrame.loaded=false;
@@ -1588,7 +1612,7 @@ gfcFrame gfcSequence::getFrame ( int frameNo,bool pforceLoad ) {
 			if ( pforceLoad && !frames[realFrame].loaded ) {
 				return forceLoad (realFrame);
 			} else
-				return frames[realFrame];
+				return displayFrame ( realFrame, pforceLoad, emptyFrame );
 		}
 		break;
 
@@ -1626,7 +1650,7 @@ gfcFrame gfcSequence::getFrame ( int frameNo,bool pforceLoad ) {
 					if ( pforceLoad && !frames[realFrame].loaded ) {
 						return forceLoad ( realFrame);
 					} else
-						return frames[realFrame];
+						return displayFrame ( realFrame, pforceLoad, emptyFrame );
 				}
 
 			}
@@ -1651,8 +1675,9 @@ bool gfcSequence::frameReadyForRender ( int frameNo ) const {
 	const long idx = ( long ) frameNo - 1 - ( long ) frameOffset;
 	if ( idx < 0 || idx >= ( long ) frames.size() )
 		return false;
-	const gfcFrame &frame = frames[ ( size_t ) idx ];
-	return frame.loaded || !frame.savedParams.fileName.empty();
+	// Every frame keeps its load params (savedParams) from initialisation, so
+	// a forced load can decode any frame of the clip, resident or not.
+	return true;
 }
 
 char * gfcSequence::getFilenameatFrame ( int frameNo ) {
@@ -2366,7 +2391,11 @@ std::thread::id gfcSequence::loaderThreadId() const {
 }
 
 bool gfcSequence::framePending(int timelineFrame) const {
-	const int idx = timelineFrame - 1 - frameOffset;
+	int idx = timelineFrame - 1 - frameOffset;
+	if ( holdFrameMode==1 )
+		idx = holdFrameCurrent - 1;   // the held frame is shown everywhere
+	else if ( holdFrameMode==2 && rangeBegin>=0 && rangeEnd>=rangeBegin )
+		idx = std::clamp ( idx, rangeBegin, rangeEnd );   // the edge is shown outside
 	if ( frames.empty() || idx<rangeBegin || idx>rangeEnd || idx>=(int)frames.size() )
 		return false;
 	const gfcFrameState st = frameTable_.state(idx);
