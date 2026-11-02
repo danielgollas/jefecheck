@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <algorithm>
 #include "PreferencesWindow_qt.h"
 #include "qticons.h"
 
@@ -12,6 +11,7 @@
 #include <QTimer>
 #include <QColorDialog>
 
+#include <algorithm>
 #include <functional>
 #include <QComboBox>
 #include <QDialogButtonBox>

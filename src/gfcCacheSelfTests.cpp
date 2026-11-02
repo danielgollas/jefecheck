@@ -1161,7 +1161,7 @@ int cachePrefsSelfTest(const std::string& dir) {
     const char* kLag = "Engine/lagPolicy";
     QVariant savedMem, savedLag;
     { QSettings s; savedMem = s.value(kMem); savedLag = s.value(kLag); }
-    const int memField = sett.memoryLimitPercent, lagField = sett.lagPolicy;
+    const gfcSettings settSnapshot = sett;
 
     { gfcSettings fresh; check(fresh.memoryLimitPercent == 90 && fresh.lagPolicy == 0, "defaults: 90 % and Automatic"); }
     sett.memoryLimitPercent = 75; sett.lagPolicy = 2;
@@ -1188,13 +1188,22 @@ int cachePrefsSelfTest(const std::string& dir) {
     // Lowering the limit live unloads nothing by itself.
     clearAllTracks();
     loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
-    pump(500);
+    {   // Settle: resident count stable for 600 ms.
+        int last = -1;
+        auto stable = [&] { const int n = trackManager.residentFrameCount();
+                            const bool same = n == last && n > 0; last = n; pump(150); return same; };
+        int ok = 0;
+        for (int i = 0; i < 100 && ok < 4; ++i) ok = stable() ? ok + 1 : 0;
+        check(ok >= 4, "the window settles before the limit is lowered");
+    }
     const int before = trackManager.residentFrameCount();
+    frameCache.setTestBudget(1);   // far below current usage (bytes)
     sett.memoryLimitPercent = 50;
-    pump(500);
-    check(trackManager.residentFrameCount() >= before, "lowering the limit unloads nothing");
+    pump(1000);
+    check(before > 0 && trackManager.residentFrameCount() == before, "lowering the limit unloads nothing");
+    frameCache.setTestBudget(-1);
 
-    sett.memoryLimitPercent = memField; sett.lagPolicy = lagField;
+    sett = settSnapshot;
     clearAllTracks();
     { QSettings s;
       if (savedMem.isValid()) s.setValue(kMem, savedMem); else s.remove(kMem);

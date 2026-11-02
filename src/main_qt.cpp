@@ -611,7 +611,12 @@ int main(int argc, char* argv[]) {
     // Test-mode isolation: redirect QSettings + LUT autoload path into a
     // caller-supplied directory. Must run BEFORE any QSettings is
     // constructed (MainWindow_Qt::restoreLayout creates the first one).
-    const QString configDir = resolveConfigDir(argc, argv);
+    QString configDir = resolveConfigDir(argc, argv);
+    // --cache-test writes preferences (CACHE-PREFS) and sets harness values;
+    // never let that reach the user's real QSettings.
+    if (configDir.isEmpty() && hasCacheTest(argc, argv))
+        configDir = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("jefe_cache_config_%1").arg(QCoreApplication::applicationPid()));
     if (!configDir.isEmpty()) {
         QDir().mkpath(configDir);
         QSettings::setDefaultFormat(QSettings::IniFormat);

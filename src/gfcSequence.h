@@ -339,6 +339,8 @@ public:
     // Movie sound: the loader thread decodes it into audioClip_ (48 kHz stereo,
     // movie-time sample indices) as frames load, plus a peak summary for the
     // timeline waveform. Null clip / false for image sequences and silent movies.
+    // hasAudio() is a lock-free relaxed read of hasAudio_ (set with the clip in
+    // resetAudio), so it is safe from the GL thread while the loader holds audioMutex_.
     bool hasAudio() const;
     std::shared_ptr<gfcAudioClip> audioClip() const;
     gfcAudioPeaks audioPeaksSnapshot() const;
@@ -434,6 +436,7 @@ public:
     // Guards audioClip_ (the pointer; the clip itself is thread-safe) and audioPeaks_.
     mutable std::mutex audioMutex_;
     std::shared_ptr<gfcAudioClip> audioClip_;
+    std::atomic<bool> hasAudio_{false};   // mirrors audioClip_ != nullptr; written under audioMutex_
     gfcAudioPeaks audioPeaks_;
     bool audioMuted_ = false;
     void resetAudio(int64_t startSample, bool withClip);

@@ -967,8 +967,7 @@ const gfcMovieInfo* gfcSequence::movieInfo() const
 
 bool gfcSequence::hasAudio() const
 {
-	std::lock_guard<std::mutex> lock(audioMutex_);
-	return audioClip_ != nullptr;
+	return hasAudio_.load(std::memory_order_relaxed);
 }
 
 std::shared_ptr<gfcAudioClip> gfcSequence::audioClip() const
@@ -1003,8 +1002,10 @@ void gfcSequence::resetAudio(int64_t startSample, bool withClip)
 	if (withClip) {
 		audioClip_ = std::make_shared<gfcAudioClip>();
 		audioClip_->reset(startSample);
+		hasAudio_.store(true, std::memory_order_relaxed);
 	} else {
 		audioClip_.reset();
+		hasAudio_.store(false, std::memory_order_relaxed);
 	}
 	audioPeaks_.reset(startSample);
 	++audioPeaks_.version;
