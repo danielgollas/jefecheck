@@ -859,11 +859,11 @@ int gfcSequence::generateTextures ( int howMany ) {
 			storeFrame(index, tmpRawFrame);
 			// The decode's commit: Resident with the texture's real bytes.
 			const int track=cacheTrack();
+			// Lock-free (table leaf lock + notify): this runs in the playback tick.
 			if ( track>=0 )
-				frameCache.commit(gfcFrameCache::Job{track, index, index+1+frameOffset, frameCache.generation(), 0},
-				                  tmpRawFrame.textureBytes, true);
+				frameCache.commitUploaded(frameTable_, index, tmpRawFrame.textureBytes);
 			else
-				frameTable_.setResident(index, tmpRawFrame.textureBytes);
+				frameTable_.setResidentIfDecoding(index, tmpRawFrame.textureBytes);
 			// The first real upload corrects the coordinator's per-frame estimate.
 			if ( !cacheFrameBytesChecked_ && tmpRawFrame.textureBytes>0 ) {
 				cacheFrameBytesChecked_=true;
@@ -1090,6 +1090,11 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 			frames[i].savedParams=frameLoadParams(i, reader);
 		}
 	}
+	// Victims named before this reset belong to the old load (APPEND/STREAM
+	// reach here without clearSequence): drop them with the track's geometry,
+	// which setTrackGeometry restores below.
+	if ( cacheTrack()>=0 )
+		frameCache.clearTrack(cacheTrack());
 	frameTable_.reset(frames.size());
 
 	int startFrame=0, endFrame=0;
@@ -1848,8 +1853,13 @@ int gfcSequence::getRangeEnd() {
 }
 
 void gfcSequence::stopLoading() {
-	//cancel the loading thread
-	loadingCanceled=true;
+	//cancel the loading thread. Set under rawQueueMutex, so a loader between
+	//its queue-size check and cond.wait() can't miss the notify (the join
+	//below would then wait forever: loaders never finish on their own).
+	{
+		std::lock_guard<std::mutex> lock ( rawQueueMutex );
+		loadingCanceled=true;
+	}
 	if ( cacheTrack()>=0 )
 		frameCache.cancel(cacheTrack());   // wakes it out of nextJob
 	cond.notify_all(); //in case it was waiting for the queue count to go down.

@@ -333,7 +333,9 @@ void gfcTrackManager::generateTextures()
 	if(frameCache.hasVictims()){
 		const gfcFrameCache::Victims v=frameCache.drainVictims();
 		for(const gfcFrameCache::Victim& x : v.frames)
-			if(x.track>=0 && x.track<GFC_MAX_SEQUENCES)
+			// Only a frame still Evicting: anything else was reset or reloaded since.
+			if(x.track>=0 && x.track<GFC_MAX_SEQUENCES
+			   && sequences[x.track].frameTable().state(x.sourceIndex)==gfcFrameState::Evicting)
 				sequences[x.track].evictFrame(x.sourceIndex);
 		if(v.trimPools){
 			gfcUpload::trimIdle(0);

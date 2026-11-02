@@ -483,6 +483,19 @@ int cachePolicySelfTest() {
         check(b > 0 && b != 10 * 1000 && b <= (int64_t)memoryManager.totalBytes(), "budget: -1 restores a positive derived budget");
     }
 
+    {   // The GL thread's upload commit: lock-free, only from Decoding.
+        gfcFrameCache c; gfcFrameTable t; t.reset(4);
+        t.setDecoding(1, 100);
+        check(c.commitUploaded(t, 1, 120) && t.state(1) == gfcFrameState::Resident && t.residentBytes() == 120 && t.reservedBytes() == 0,
+              "commitUploaded: Decoding -> Resident with the texture's bytes, reservation released");
+        check(!c.commitUploaded(t, 2, 120) && t.state(2) == gfcFrameState::Unloaded && t.residentBytes() == 120,
+              "commitUploaded: a frame that is not Decoding is left alone");
+        t.setDecoding(3, 100);
+        t.reset(4);
+        check(!c.commitUploaded(t, 3, 50) && t.residentBytes() == 0 && t.residentCount() == 0,
+              "commitUploaded: a frame whose table was reset while it waited is ignored");
+    }
+
     std::printf("CACHE-POLICY: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
@@ -699,8 +712,9 @@ int cacheSettleSelfTest(const std::string& dir) {
         clearAllTracks();
     }
 
-    {   // The whole clip fits the derived budget.
-        frameCache.setTestBudget(-1);
+    {   // The whole clip fits: an explicit 1 GiB budget (240 frames are 55 MB),
+        // so the result doesn't depend on the host's free memory.
+        frameCache.setTestBudget(int64_t(1) << 30);
         const gfcFrameCache::Stats s0 = frameCache.stats();
         gfcSequence* a = loadTrack(0, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
         const bool all = pumpUntil([&] { return a->residentCount() == 240; }, 20000);

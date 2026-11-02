@@ -56,7 +56,7 @@ public:
     // Also lifts a cancel().
     void setTrackGeometry(int track, int offset, int firstIndex, int lastIndex, size_t frameBytes);
     void setTrackOffset(int track, int offset);
-    void setTrackFrameBytes(int track, size_t frameBytes);   // corrected from the first real upload
+    void setTrackFrameBytes(int track, size_t frameBytes);   // corrected from the first real upload; lock-free
     void clearTrack(int track);                               // no footage; wakes its loader
     void setTransport(int playhead, int direction, int loopMode, int startLimit, int endLimit, float fps);
     void retarget(int playhead);          // a jump: ++generation, wakes loaders
@@ -68,6 +68,12 @@ public:
     // when the job is stale (an older generation and no longer a candidate, or
     // the track was cancelled), Failed otherwise (not retried until the table resets).
     void commit(const Job& job, size_t actualBytes, bool decoded);
+    // GL thread, lock-free (the playback tick may call it): a decoded frame
+    // reached the GPU. Decoding -> Resident with the texture's bytes on the
+    // track's table (its own leaf lock), then a notify. A frame that is no
+    // longer Decoding (table reset, load cancelled) is left alone; returns false.
+    // cacheBytes() is derived from the tables, so nothing else needs updating.
+    bool commitUploaded(gfcFrameTable& table, int index, size_t bytes);
     void cancel(int track);               // makes nextJob return false now and until the next setTrackGeometry
     Victims drainVictims();               // GL thread, before uploads: frames marked Evicting since the last drain
     // Lock-free: true when drainVictims() has frames to hand out, so the
@@ -88,7 +94,7 @@ private:
         gfcFrameTable* table = nullptr;
         int offset = 0;
         int first = -1, last = -1;
-        size_t frameBytes = 0;
+        std::atomic<size_t> frameBytes{0};   // stored lock-free by setTrackFrameBytes
         bool cancelled = false;   // pins live on the table (the single pin store)
     };
     // The playback walk from the playhead, cached per transport.

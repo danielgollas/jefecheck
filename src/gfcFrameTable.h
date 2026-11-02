@@ -28,6 +28,10 @@ public:
     bool setDecoding(int i, size_t reservedBytes);
     // -> Resident with these bytes (a Decoding frame's reservation is released). ++version.
     void setResident(int i, size_t bytes);
+    // Decoding -> Resident with these bytes (the reservation is released), as
+    // one step under the table's lock. False (nothing changes) from any other
+    // state: the table was reset or the load cancelled while the frame waited.
+    bool setResidentIfDecoding(int i, size_t bytes);
     // Resident -> Evicting; its bytes are released now, the texture is freed
     // later on the GL thread. False from any other state.
     bool setEvicting(int i);

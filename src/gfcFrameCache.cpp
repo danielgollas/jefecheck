@@ -59,11 +59,17 @@ void gfcFrameCache::setTrackOffset(int track, int offset) {
     wake();
 }
 
+// Lock-free: called from the GL thread on a load's first upload.
 void gfcFrameCache::setTrackFrameBytes(int track, size_t frameBytes) {
-    std::lock_guard<std::mutex> lock(mutex_);
     if (!validTrack(track)) return;
-    tracks_[track].frameBytes = frameBytes;
+    tracks_[track].frameBytes.store(frameBytes, std::memory_order_release);
     wake();
+}
+
+bool gfcFrameCache::commitUploaded(gfcFrameTable& table, int index, size_t bytes) {
+    const bool done = table.setResidentIfDecoding(index, bytes);
+    wake();
+    return done;
 }
 
 void gfcFrameCache::clearTrack(int track) {
@@ -136,7 +142,7 @@ void gfcFrameCache::setTestPooledBytes(size_t bytes) {
 size_t gfcFrameCache::costLocked() const {
     size_t sum = 0;
     for (const Track& tr : tracks_)
-        if (hasFootage(tr)) sum += tr.frameBytes;
+        if (hasFootage(tr)) sum += tr.frameBytes.load(std::memory_order_acquire);
     return sum;
 }
 
@@ -303,7 +309,7 @@ size_t gfcFrameCache::timelineNeedLocked(int t, int track, size_t bytes) const {
         if (!hasFootage(tr) || tr.cancelled) continue;
         const int src = t - 1 - tr.offset;
         if (src < tr.first || src > tr.last) continue;
-        if (tr.table->state(src) == gfcFrameState::Unloaded) need += tr.frameBytes;
+        if (tr.table->state(src) == gfcFrameState::Unloaded) need += tr.frameBytes.load(std::memory_order_acquire);
     }
     return need;
 }
@@ -384,7 +390,7 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
             const int a = w.a[t - w.start], b = w.b[t - w.start];
             unconditional = a >= 0 && (b < 0 || a <= b) && a < p.M;   // the playhead and M-1 more
         }
-        const size_t bytes = tr.frameBytes;
+        const size_t bytes = tr.frameBytes.load(std::memory_order_acquire);
         if (!admit(t, unconditional, timelineNeedLocked(t, track, bytes))) { ++stats_.denied; return 2; }
         if (!tr.table->setDecoding(src, bytes)) return 0;
         out = Job{track, src, t, generation_.load(std::memory_order_acquire), bytes};

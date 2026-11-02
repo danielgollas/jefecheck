@@ -54,6 +54,20 @@ void gfcFrameTable::setResident(int i, size_t bytes) {
     ++version_;
 }
 
+bool gfcFrameTable::setResidentIfDecoding(int i, size_t bytes) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!inRange(i)) return false;
+    Entry& e = entries_[i];
+    if (e.state != gfcFrameState::Decoding) return false;
+    reservedBytes_ -= e.bytes;
+    e.state = gfcFrameState::Resident;
+    e.bytes = bytes;
+    residentBytes_ += bytes;
+    ++residentCount_;
+    ++version_;
+    return true;
+}
+
 bool gfcFrameTable::setEvicting(int i) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!inRange(i) || entries_[i].state != gfcFrameState::Resident) return false;

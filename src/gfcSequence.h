@@ -8,6 +8,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <atomic>
 
 #if !defined(AFX_GFCSEQUENCE_H__B640892A_60B9_471B_86DB_D6EE198B1304__INCLUDED_)
 #define AFX_GFCSEQUENCE_H__B640892A_60B9_471B_86DB_D6EE198B1304__INCLUDED_
@@ -415,7 +416,8 @@ public:
     int tchannel;
     Rectang *taoi;
     std::mutex rawQueueMutex;
-    bool loadingCanceled;
+    // Written by the GL thread (stopLoading, under rawQueueMutex) and the loader.
+    std::atomic<bool> loadingCanceled{false};
     // Guards movieReader_ itself (the reader is internally thread-safe):
     // loadPreview may replace it on the main thread.
     mutable std::mutex movieReaderMutex_;
