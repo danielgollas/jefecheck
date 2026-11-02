@@ -886,3 +886,7 @@ void gfcPlaybackManager::cacheSyncTransport(bool force) {
 void gfcPlaybackManager::cacheResendTransport() {
     cacheSyncTransport(true);
 }
+
+void gfcPlaybackManager::cacheRefreshTransport() {
+    cacheSyncTransport(false);
+}

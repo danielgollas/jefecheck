@@ -2424,11 +2424,9 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     const bool saved = needsPlaylistItem && !remote && jefe::qt::saveSession(restore.toStdString());
 
     // gfcSequence::forceLoad (what a forRender=true frame request falls back
-    // to when a frame hasn't decoded yet) only works once the async loader
-    // thread has reached that frame at least once -- its load params are
-    // recorded then. So the export waits, bounded, draining the GL upload
-    // queue: for a track's first frame before using the track, and for each
-    // frame it renders.
+    // to when a frame is not resident) works for any frame of a track once
+    // the track has its frame list, so the export waits, bounded, only for
+    // that, draining the GL upload queue while it waits.
     //
     // Pumps the Qt event loop between polls (excluding user input, see
     // below) so timers, paints and accessibility keep running instead of
@@ -2461,12 +2459,17 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
         }
         return done();
     };
+    // A track is ready once it has its frame list: every frame keeps its load
+    // parameters and a render force-loads it, resident or not (the rolling
+    // cache may hold none of a track's frames, e.g. outside the loop). One
+    // event-loop turn per track keeps the GUI responsive during the export.
     auto waitForTrackFrame = [&](int track) {
-        return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).loadedCount > 0; }, 5000);
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).numFrames > 0; }, 5000);
     };
-    // Whether @a frame of @a track can be rendered. A frame the loader has not
-    // reached gets the track's load restarted at it, and a wait for it --
-    // except where that restart would be announced to remote peers.
+    // Whether @a frame of @a track can be rendered: any frame inside the
+    // track can (see restartTrackLoadAtFrame); one outside it is refused at
+    // once, without a wait.
     auto frameReady = [&](int track, int frame) {
         if (jefe::qt::isTrackFrameReady(track, frame)) return true;
         bool started = false;
@@ -2751,8 +2754,10 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     const QString seqFirst = writeSequence(work + "/seq", "shot", 6, 210);
     check(saveStrokes(seqFirst, "Lead", {2, 5}), "sequence sidecar saved");
     loadFileIntoPlate(2, seqFirst);
-    check(pumpUntil([] { return jefe::qt::getTrackTimelineState(2).loadedCount >= 6; }, 5000),
-          "the sequence loads all six frames");
+    // The frame cache loads what the loop needs: under the shortest-track
+    // loop priority that is frame 1 here (the image tracks are one frame).
+    check(pumpUntil([] { return jefe::qt::getTrackTimelineState(2).loadedCount >= 1; }, 5000),
+          "the sequence loads");
 
     // The user's playlist state: the current tracks kept as playlist item 0
     // and loaded from it, so item 0 is selected and armed for auto-advance.
@@ -2762,20 +2767,20 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     viewport_->doneCurrent();
     check(pumpUntil([] {
               return jefe::qt::getTrackTimelineState(0).loadedCount >= 1 &&
-                     jefe::qt::getTrackTimelineState(2).loadedCount >= 6;
+                     jefe::qt::getTrackTimelineState(2).loadedCount >= 1;
           }, 5000),
           "the tracks reload from playlist item 0");
 
-    // As if the sequence's loader had been started at frame 4 (Alt+click on
-    // the timeline): frames 1-3 have never been reached, so a forced render of
-    // frame 2 has no load parameters to decode it with.
-    viewport_->makeCurrent();
-    const bool restarted = jefe::qt::restartTrackLoadAtFrame(2, 4, true);
-    viewport_->doneCurrent();
-    check(restarted, "the sequence's load restarts at frame 4");
-    check(pumpUntil([] { return jefe::qt::isTrackFrameReady(2, 6); }, 5000) &&
-          jefe::qt::isTrackFrameReady(2, 5) && !jefe::qt::isTrackFrameReady(2, 2),
-          "fixture: frame 5 is loaded, frame 2 has not been reached");
+    // Frames the rolling cache does not hold still render: every frame keeps
+    // its load parameters. A frame outside the track never does, and the
+    // export must not wait for it.
+    check(jefe::qt::isTrackFrameReady(2, 2) && jefe::qt::restartTrackLoadAtFrame(2, 2, true),
+          "a frame of the sequence can be rendered whether or not it is resident");
+    QElapsedTimer outside;
+    outside.start();
+    check(!jefe::qt::isTrackFrameReady(2, 9) && !jefe::qt::restartTrackLoadAtFrame(2, 9, true) &&
+              outside.elapsed() < 100,
+          "a frame outside the sequence is refused at once");
 
     // What the export must put back: a frame other than the first, an in/out
     // range inside the sequence, the playlist selection, Recent Sessions and
@@ -2829,12 +2834,22 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     });
 
     setUserState();
+    // As if the cache had evicted everything: the export waits for each
+    // track's first frame to come back (pumping events, which is where the
+    // re-entrant export lands), and still renders every note's frame.
+    viewport_->makeCurrent();
+    int evicted = 0;
+    for (int t = 0; t < 3; ++t) evicted += jefe::qt::evictTrackFrames(t);
+    viewport_->doneCurrent();
+    check(evicted >= 3 && jefe::qt::getTrackTimelineState(0).loadedCount == 0 &&
+              jefe::qt::getTrackTimelineState(2).loadedCount == 0,
+          "fixture: every track's frames evicted");
     check(exportReviewSummary(pdf, &stats, &msg), "PDF summary exported");
     printf("SUMMARY-TEST pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg), stats.thumbs, stats.thumbFail);
     // Two entries on the image (all frames, frame 1) and frames 2 and 5 of the
-    // sequence -- frame 2 only renders once the export has loaded it.
+    // sequence, none of them resident when the export started.
     check(stats.thumbs == 4 && stats.thumbFail == 0,
-          "one thumbnail per frame entry, including a frame the loader had not reached; none failed");
+          "one thumbnail per frame entry, including frames that were not resident; none failed");
     const QByteArray pdfBytes = readBytes(pdf);
     check(pdfBytes.startsWith("%PDF-") && pdfBytes.trimmed().endsWith("%%EOF"), "PDF file is complete");
     check(!QFile::exists(pdf + ".partial"), "no partial PDF left");

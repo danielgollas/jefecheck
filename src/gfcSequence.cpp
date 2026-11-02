@@ -1748,7 +1748,7 @@ void gfcSequence::setOffset(int offset) {
 	frameOffset=offset;
 	if ( cacheTrack()>=0 ) {
 		frameCache.setTrackOffset(cacheTrack(), offset);
-		trackManager.syncCacheTransport();   // the loop limits include the offset
+		trackManager.syncCacheTransport(false);   // the loop limits include the offset: sent only if they moved
 	}
 	if (gfcAudioEngineAlive()) audioEngine.setTrackOffset(trackID-'A', offset);   // sound shifts with the picture
 	myGUI->setOffset(offset);

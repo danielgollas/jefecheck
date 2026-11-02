@@ -3400,9 +3400,23 @@ bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce) {
     if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
     gfcSequence* seq = trackManager.getSequence(track);
     // Every frame of a loaded track can be force-loaded (it keeps its load
-    // parameters), so nothing restarts: the caller's forced load does it.
-    (void)frame; (void)allowAnnounce;
-    return seq && !seq->isEmpty();
+    // parameters), so nothing restarts: the caller's forced load does it. A
+    // frame outside the track never can, so the caller does not wait for it.
+    (void)allowAnnounce;
+    return seq && !seq->isEmpty() && seq->frameReadyForRender(frame);
+}
+
+int evictTrackFrames(int track) {
+    if (track < 0 || track >= GFC_MAX_SEQUENCES) return 0;
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq) return 0;
+    int freed = 0;
+    for (int i = 0; i < seq->frameTable().size(); ++i) {
+        if (seq->frameTable().state(i) != gfcFrameState::Resident) continue;
+        seq->evictFrame(i);
+        ++freed;
+    }
+    return freed;
 }
 
 void restorePlaylistSelection(int index, bool contentFromPlaylist) {

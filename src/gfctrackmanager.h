@@ -77,7 +77,8 @@ public:
 	// The same for count frames from `from`, stepping by direction (+1/-1).
 	bool timelineFramesResident(int from, int count, int direction) const;
 	// Hands the coordinator the playhead, loop mode, limits and rate for a load.
-	void syncCacheTransport();
+	// Sends the player transport to the frame cache: always (a load), or only when it changed (force=false).
+	void syncCacheTransport(bool force=true);
 	int getMinTrackLength();
 	
 	void saveTrackSessionParameters(XMLNode &tracksNode);

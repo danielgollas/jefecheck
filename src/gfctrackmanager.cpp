@@ -269,11 +269,15 @@ bool gfcTrackManager::timelineFramesResident(int from, int count, int direction)
 	return true;
 }
 
-void gfcTrackManager::syncCacheTransport()
+void gfcTrackManager::syncCacheTransport(bool force)
 {
-	// A load (or an offset change) moves the loop limits: send the player's
-	// whole transport (playhead, direction, mode, limits, rate) now.
-	playbackManager.cacheResendTransport();
+	// A load moves the loop limits: send the player's whole transport
+	// (playhead, direction, mode, limits, rate) now. An offset change sends
+	// it only when the limits actually moved.
+	if(force)
+		playbackManager.cacheResendTransport();
+	else
+		playbackManager.cacheRefreshTransport();
 }
 
 int gfcTrackManager::getMinTrackLength()

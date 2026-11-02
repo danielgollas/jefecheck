@@ -863,12 +863,16 @@ namespace {
 struct PlaybackGuard {
     int mode = playbackManager.getPlaybackMode();
     int priority = playbackManager.getLoopPriority();
+    int in = playbackManager.getInPoint(), out = playbackManager.getOutPoint();
     ~PlaybackGuard() {
         if (playbackManager.isPlaying()) playbackManager.pause();
         playbackManager.setPlaybackMode(mode);
         playbackManager.setLoopPriority(priority);
         playbackManager.setDirection(1);
         for (int t = 0; t < 4; ++t) trackManager.getSequence(t)->setOffset(0);
+        // Out first: setOutPoint pulls a later in point down to it.
+        playbackManager.setOutPoint(out);
+        playbackManager.setInPoint(in);
         playbackManager.setCurrentFrame(1);
     }
 };
@@ -953,6 +957,7 @@ int cacheRetargetSelfTest(const std::string& dir) {
         failed |= anyFailed(a);
         std::printf("CACHE-RETARGET: storm %.2f s, generation +%llu\n", secs,
                     (unsigned long long)(frameCache.generation() - gen0));
+        check(secs < 2.0, "storm: 200 jumps within 2 s (no jump blocks)");
         check(tid0 != std::thread::id() && a->loaderThreadId() == tid0, "storm: the same loader thread (no join)");
         check(clip0 && a->audioClip().get() == clip0, "storm: the audio clip is never replaced");
         check(gfcSequence::loadAnnouncements() == ann0, "storm: no load announcements");

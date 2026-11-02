@@ -1382,11 +1382,19 @@ bool isTrackFrameReady(int track, int frame);
 
 /**
  * Whether @a track's frame at timeline @a frame can be loaded: true for any
- * loaded track, since every frame keeps its load parameters and a forced load
- * decodes it. Nothing restarts (no reload, no announcement, no crash-session
- * write); @a frame and @a allowAnnounce are kept for the callers.
+ * frame inside a loaded track, since every frame keeps its load parameters
+ * and a forced load decodes it; false outside the track. Nothing restarts
+ * (no reload, no announcement, no crash-session write); @a allowAnnounce is
+ * kept for the callers.
  */
 bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce);
+
+/**
+ * Frees every resident frame of @a track, as the rolling cache does when it
+ * evicts; returns how many. The frame cache loads them back around the
+ * playhead. Deletes textures, so the viewport GL context must be current.
+ */
+int evictTrackFrames(int track);
 
 /**
  * Puts back a playlist selection read earlier with getSelectedPlaylistItem()

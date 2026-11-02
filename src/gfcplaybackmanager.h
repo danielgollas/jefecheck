@@ -89,6 +89,8 @@ public:
     /// Sends the transport to the frame cache now, changed or not (a fresh
     /// load: its limits are new, and nothing else resends them).
     void cacheResendTransport();
+    /// Sends it only when direction, mode, limits or rate changed since the last send.
+    void cacheRefreshTransport();
  
       
 private: //private made public while debugging
