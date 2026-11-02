@@ -37,3 +37,7 @@ int cachePrefsSelfTest(const std::string& mediaDir);
 // last drawn frame, a jump shows nothing and is pending), forced loads, the
 // on-screen pin and the held frame of hold mode 1.
 int cacheDisplaySelfTest(const std::string& mediaDir);
+// CACHE-RENDER: rendering 30 frames far from a settled window (budget 10
+// frames, previews off) through the real plate path writes 30 non-black
+// pictures and leaves the cache, the on-screen pin and the playhead as they were.
+int cacheRenderSelfTest(const std::string& mediaDir);

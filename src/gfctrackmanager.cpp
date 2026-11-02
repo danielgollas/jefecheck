@@ -335,11 +335,20 @@ void gfcTrackManager::generateTextures()
 	// one atomic load when there is nothing to free.
 	if(frameCache.hasVictims()){
 		const gfcFrameCache::Victims v=frameCache.drainVictims();
-		for(const gfcFrameCache::Victim& x : v.frames)
+		for(const gfcFrameCache::Victim& x : v.frames){
 			// Only a frame still Evicting: anything else was reset or reloaded since.
-			if(x.track>=0 && x.track<GFC_MAX_SEQUENCES
-			   && sequences[x.track].frameTable().state(x.sourceIndex)==gfcFrameState::Evicting)
-				sequences[x.track].evictFrame(x.sourceIndex);
+			if(x.track<0 || x.track>=GFC_MAX_SEQUENCES
+			   || sequences[x.track].frameTable().state(x.sourceIndex)!=gfcFrameState::Evicting)
+				continue;
+			// A draw may have put it on screen after the cache named it: keep it.
+			gfcFrameTable& table=sequences[x.track].frameTable();
+			if(table.onScreen()==x.sourceIndex){
+				if(table.setResidentFromEvicting(x.sourceIndex))
+					frameCache.evictionCancelled();
+				continue;
+			}
+			sequences[x.track].evictFrame(x.sourceIndex);
+		}
 		if(v.trimPools){
 			gfcUpload::trimIdle(0);
 			gfcSurface::trimIdle(0);

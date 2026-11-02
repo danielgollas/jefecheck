@@ -481,6 +481,11 @@ void gfcFrameCache::commit(const Job& job, size_t actualBytes, bool decoded) {
     wake();
 }
 
+void gfcFrameCache::evictionCancelled() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (stats_.evicted > 0) --stats_.evicted;
+}
+
 gfcFrameCache::Victims gfcFrameCache::drainVictims() {
     std::lock_guard<std::mutex> lock(mutex_);
     Victims v;

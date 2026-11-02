@@ -54,6 +54,10 @@ public:
     void setPlaybackMode(int mode);
     /// `audible`: when paused, plays this frame's slice of sound (a seek); false for renders.
     void setCurrentFrame(int frame, bool audible=true);
+    /// Renders only: moves the frame the plates draw (and its timecode) without
+    /// a seek — no cache retarget, no sound, no network message, no timeline
+    /// update. The renderer puts the old frame back the same way when done.
+    void setRenderFrame(int frame);
     void setDirection(int direction);
     void setToFrame(int frame);
     void setFromFrame(int frame);

@@ -35,6 +35,10 @@ public:
     // Resident -> Evicting; its bytes are released now, the texture is freed
     // later on the GL thread. False from any other state.
     bool setEvicting(int i);
+    // Evicting -> Resident with the bytes it held before setEvicting (the GL
+    // thread found the victim on screen when it came to free it). ++version.
+    // False from any other state.
+    bool setResidentFromEvicting(int i);
     // -> Unloaded from any state. ++version if it was Resident or Evicting.
     void setUnloaded(int i);
     // Decoding -> Failed (the decode did not produce a frame). Ignored otherwise.
@@ -46,6 +50,11 @@ public:
     // Pinned frames in index order (cheap when none are pinned).
     void pinnedIndices(std::vector<int>& out) const;
     // Lock-free (atomic), so the GL thread can set it on every draw.
+    // Lifetime: set whenever a plate draws a loaded frame of this sequence
+    // (never by a render's forced load), cleared only by reset(). It is not
+    // cleared when the plate then shows nothing (a jump to an unloaded frame)
+    // or when the plate switches to another track, so a stale pin can outlive
+    // what is on screen; it costs at most one frame per track.
     void setOnScreen(int i);
     int onScreen() const;   // -1 none
 
@@ -66,6 +75,7 @@ private:
         gfcFrameState state = gfcFrameState::Unloaded;
         bool pinned = false;
         size_t bytes = 0;   // reserved while Decoding, held while Resident
+        size_t evictedBytes = 0;   // what it held when it became Evicting
     };
     bool inRange(int i) const { return i >= 0 && i < (int)entries_.size(); }
     void refreshEnds() const;   // mutex_ held

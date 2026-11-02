@@ -77,6 +77,9 @@ public:
     // cacheBytes() is derived from the tables, so nothing else needs updating.
     bool commitUploaded(gfcFrameTable& table, int index, size_t bytes);
     void cancel(int track);               // makes nextJob return false now and until the next setTrackGeometry
+    // GL thread: a drained victim was kept (it is on screen) and put back to
+    // Resident; it no longer counts in stats().evicted.
+    void evictionCancelled();
     Victims drainVictims();               // GL thread, before uploads: frames marked Evicting since the last drain
     // Lock-free: true when drainVictims() has frames to hand out, so the
     // playback tick drains only when there is something to free.

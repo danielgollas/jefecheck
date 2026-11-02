@@ -498,6 +498,11 @@ int gfcPlaybackManager::getStartLimit() {
         return inPoint;//return from;
 }
 
+void gfcPlaybackManager::setRenderFrame(int frame) {
+    this->currentFrame=frame;
+    updateTimeCode();
+}
+
 void gfcPlaybackManager::setCurrentFrame(int frame, bool audible) {
 	
     this->currentFrame=frame;

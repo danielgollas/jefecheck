@@ -2585,12 +2585,21 @@ void gfcPlate::drawLoadingLabel() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_TEXTURE_RECTANGLE_ARB);
     glDisable(GL_TEXTURE_2D);
-    // Same colour as the status text (drawText), feedback-message size.
+    // Same colour as the status text (drawText), feedback-message size. The
+    // renderer's size, weight and colour are put back for whoever draws next.
+    GfcTextRenderer& tr = textRenderer();
+    const float oldSize = tr.size();
+    const bool oldBold = tr.bold();
+    float oR, oG, oB, oA;
+    tr.color(oR, oG, oB, oA);
     float lr, lg, lb;
-    textRenderer().labelColor(lr, lg, lb);
+    tr.labelColor(lr, lg, lb);
     gfc_gl_font(FL_HELVETICA, sett.feedbackMessageSize);
-    textRenderer().setColor(lr, lg, lb, 1.0f);
+    tr.setColor(lr, lg, lb, 1.0f);
     gfc_gl_draw("Loading", rect.x, rect.y, rect.w, rect.h, GFC_ALIGN_CENTER);
+    tr.setSize(oldSize);
+    tr.setBold(oldBold);
+    tr.setColor(oR, oG, oB, oA);
     glPopAttrib();
 }
 

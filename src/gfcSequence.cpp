@@ -1572,12 +1572,15 @@ Rectang gfcSequence::getFrameSizeAt ( int frameNo ) {
 // frame, which the cache never evicts. An unloaded one shows the last drawn
 // frame while playing in Keep time, unless a jump came in between (the cache
 // generation moved); otherwise nothing (black, and the plate labels it
-// "Loading" while framePending()). A forced load (render) never substitutes.
+// "Loading" while framePending()). A forced load (render) never substitutes
+// and never moves the on-screen pin or the last drawn frame.
 const gfcFrame& gfcSequence::displayFrame ( int i, bool pforceLoad, const gfcFrame& emptyFrame ) {
 	if ( frames[i].loaded ) {
-		lastDrawnIndex_=i;
-		lastDrawnGeneration_=frameCache.generation();
-		frameTable_.setOnScreen(i);
+		if ( !pforceLoad ) {   // a render is not what the plate shows
+			lastDrawnIndex_=i;
+			lastDrawnGeneration_=frameCache.generation();
+			frameTable_.setOnScreen(i);
+		}
 		return frames[i];
 	}
 	if ( !pforceLoad && playbackManager.isPlaying() && playbackManager.keepTime()
@@ -1622,8 +1625,12 @@ gfcFrame gfcSequence::getFrame ( int frameNo,bool pforceLoad ) {
 				{
 
 					//printf("Returning texID: %i\n",frames[holdFrameCurrent].textureID[slice]);
-					if ( holdFrameCurrent-1>=0 && holdFrameCurrent-1<frames.size() )
-						return frames[holdFrameCurrent-1];
+					if ( holdFrameCurrent-1>=0 && holdFrameCurrent-1<frames.size() ) {
+						const int h=holdFrameCurrent-1;
+						if ( pforceLoad && !frames[h].loaded )
+							return forceLoad ( h );   // a render decodes the held frame
+						return frames[h];
+					}
 					else
 						return emptyFrame;
 					//return frames[frameNo-1-frameOffset].loaded?frames[frameNo-1-frameOffset].textureID[slice]:0;

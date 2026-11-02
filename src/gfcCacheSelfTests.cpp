@@ -29,6 +29,9 @@
 #include "gfcframe.h"
 #include "qt/qt_prefs_persist.h"
 #include <QSettings>
+#include <QCoreApplication>
+#include <QDir>
+#include <QImage>
 #include <QVariant>
 #include <set>
 #include <string>
@@ -1246,6 +1249,16 @@ int cacheDisplaySelfTest(const std::string& dir) {
         const bool arrived = pumpUntil([&] { return a->getFrame(200).loaded; }, 2000);
         check(arrived && !a->framePending(200), "the jumped-to frame arrives within 2 s and is no longer pending");
         check(!a->framePending(500) && !a->framePending(0) && !a->framePending(241), "no footage at the timeline frame: not pending (no Loading label)");
+        // A render reading a resident frame does not move the pin or the last drawn frame.
+        const bool next = pumpUntil([&] { return a->frameTable().state(200) == gfcFrameState::Resident; }, 2000);
+        const int pin = a->frameTable().onScreen();
+        const gfcFrame r = a->getFrame(201, true);
+        check(next && pin == 199 && r.loaded && r.indexNumber == 200 && a->frameTable().onScreen() == 199,
+              "a forced read of a resident frame leaves the on-screen pin alone");
+        playbackManager.startPlayFwd();
+        const gfcFrame h = a->getFrame(150);
+        check(h.loaded && h.indexNumber == 199, "keep time still holds the frame the plate drew, not the rendered one");
+        stop();
     }
 
     {   // Show every frame never substitutes.
@@ -1281,13 +1294,148 @@ int cacheDisplaySelfTest(const std::string& dir) {
     {   // Hold a chosen frame (mode 1): pending until the held frame is resident.
         check(a->frameTable().state(59) != gfcFrameState::Resident, "fixture: frame 60 is not resident");
         a->setHoldMode(1, 60);
+        const gfcFrame forcedHeld = a->getFrame(100, true);
+        check(forcedHeld.loaded && forcedHeld.fileName == a->framePathAt(60), "hold-frame: a render force-loads the held frame");
+        a->cleanForcedLoad();
         check(!a->getFrame(100).loaded && a->framePending(100), "hold-frame: the held frame not yet resident is pending");
         const bool held = pumpUntil([&] { return a->getFrame(100).loaded; }, 3000);
         check(held && a->getFrame(100).indexNumber == 59 && !a->framePending(100), "hold-frame: the held frame arrives and is not pending");
         a->setHoldMode(0);
     }
 
+    {   // A victim found on screen when the GL thread drains it goes back to Resident.
+        gfcFrameTable t; t.reset(4);
+        t.setResident(2, 100);
+        const uint64_t v0 = t.version();
+        check(t.setEvicting(2) && t.residentBytes() == 0 && t.residentCount() == 0, "fixture: frame 2 Evicting, its bytes released");
+        check(t.setResidentFromEvicting(2) && t.state(2) == gfcFrameState::Resident && t.residentBytes() == 100 &&
+              t.residentCount() == 1 && t.bytes(2) == 100 && t.version() != v0,
+              "setResidentFromEvicting: Resident again with its old bytes");
+        check(!t.setResidentFromEvicting(2) && !t.setResidentFromEvicting(1) && t.residentBytes() == 100,
+              "setResidentFromEvicting: ignored unless Evicting");
+    }
+
     sett.lagPolicy = savedLag;
     std::printf("CACHE-DISPLAY: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- renders through the cache (Task 8 fix round 1) ----
+
+namespace {
+// Mean of R, G and B over the image, 0..255; -1 when it cannot be read.
+double meanLevel(const QString& path) {
+    QImage img(path);
+    if (img.isNull()) return -1.0;
+    img = img.convertToFormat(QImage::Format_RGB32);
+    double sum = 0;
+    for (int y = 0; y < img.height(); ++y) {
+        const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
+        for (int x = 0; x < img.width(); ++x) sum += qRed(row[x]) + qGreen(row[x]) + qBlue(row[x]);
+    }
+    const double n = double(img.width()) * img.height() * 3;
+    return n > 0 ? sum / n : -1.0;
+}
+}  // namespace
+
+int cacheRenderSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    jefe::qt::setAllPlatesShowPreview(false);
+
+    const int64_t budget = int64_t(10 * kFrame8);
+    frameCache.setTestBudget(budget);
+    playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+    playbackManager.setCurrentFrame(200);
+    gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+    check(pumpUntil([&] { return timelineRangeResident(a, 200, 205); }, 10000), "the window settles at 200");
+    {   // Settled: the resident set is stable for 600 ms.
+        int same = 0; uint64_t v = a->loadedVersion();
+        for (int i = 0; i < 100 && same < 4; ++i) { pump(150); const uint64_t n = a->loadedVersion(); same = n == v ? same + 1 : 0; v = n; }
+    }
+    check(a->getFrame(200).loaded, "the plate's frame at 200 is drawn");
+    const int pin0 = a->frameTable().onScreen();
+    std::vector<gfcFrameState> before(240);
+    for (int i = 0; i < 240; ++i) before[i] = a->frameTable().state(i);
+    const uint64_t gen0 = frameCache.generation();
+    const gfcFrameCache::Stats s0 = frameCache.stats();
+
+    const QString outDir = QDir(QDir::tempPath()).filePath(
+        QStringLiteral("jefe_cache_render_%1").arg(QCoreApplication::applicationPid()));
+    QDir(outDir).removeRecursively();
+    QDir().mkpath(outDir);
+    constexpr int kN = 30;
+    jefe::qt::RenderParams p;
+    p.quadrant = 0;
+    p.format = 5;   // PNG
+    p.formatString = "png";
+    p.from = 1;
+    p.to = kN;
+    p.padding = 4;
+    p.scale = 1.0f;
+    p.path = outDir.toStdString();
+    p.prefix = "cache_render_";
+    const int64_t bound = budget + (int64_t)kFrame8;
+    bool boundOk = true;
+    size_t maxResident = 0;
+    // The dialog renders a frame per event-loop turn, and the app's tick runs
+    // in between: pump the GL half of the tick after every frame.
+    const int rendered = jefe::qt::triggerSyncRender(p, [&](int, int) {
+        trackManager.generateTextures();
+        const size_t rb = a->frameTable().residentBytes();
+        maxResident = std::max(maxResident, rb);
+        boundOk &= (int64_t)rb <= bound;
+    });
+    pump(1000, [&] {
+        const size_t rb = a->frameTable().residentBytes();
+        maxResident = std::max(maxResident, rb);
+        boundOk &= (int64_t)rb <= bound;
+    });
+    std::printf("CACHE-RENDER: rendered=%d maxResidentBytes=%zu bound=%lld\n", rendered, maxResident, (long long)bound);
+    check(rendered == kN, "30 frames rendered");
+
+    int readable = 0, black = 0;
+    double first = -1, last = -1;
+    for (int f = 1; f <= kN; ++f) {
+        p.from = p.to = f;
+        const QString path = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        const double m = meanLevel(path);
+        if (m >= 0) ++readable;
+        if (m >= 0 && m < 10.0) { ++black; std::printf("  frame %d mean level %.1f\n", f, m); }
+        if (f == 1) first = m;
+        if (f == kN) last = m;
+    }
+    {   // Frames 1 and 30 are different pictures (testsrc2 moves), so the render did not repeat one frame.
+        p.from = p.to = 1;
+        const QImage i1(QString::fromStdString(jefe::qt::previewRenderFilename(p)));
+        p.from = p.to = kN;
+        const QImage iN(QString::fromStdString(jefe::qt::previewRenderFilename(p)));
+        check(!i1.isNull() && !iN.isNull() && i1 != iN, "frames 1 and 30 differ");
+    }
+    std::printf("CACHE-RENDER: readable=%d black=%d level1=%.1f level30=%.1f\n", readable, black, first, last);
+    check(readable == kN && black == 0, "every rendered frame has a picture (none black)");
+
+    bool same = true, outsideUnloaded = true;
+    for (int i = 0; i < 240; ++i) {
+        const gfcFrameState st = a->frameTable().state(i);
+        same &= st == before[i];
+        if (before[i] == gfcFrameState::Unloaded) outsideUnloaded &= st == gfcFrameState::Unloaded;
+    }
+    check(outsideUnloaded, "every frame outside the window is still Unloaded");
+    check(same, "the resident set is the same before and after");
+    check(a->frameTable().onScreen() == pin0 && pin0 == 199, "the on-screen pin is the same before and after");
+    check(frameCache.generation() == gen0, "the render did not retarget the cache");
+    check(frameCache.stats().evicted == s0.evicted && frameCache.stats().admitted == s0.admitted, "the render loaded and evicted nothing through the cache");
+    check(playbackManager.getCurrentFrame() == 200, "the playhead is back at 200");
+    check(boundOk, "resident bytes stayed within budget + one frame");
+
+    QDir(outDir).removeRecursively();
+    jefe::qt::setAllPlatesShowPreview(false);
+    std::printf("CACHE-RENDER: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

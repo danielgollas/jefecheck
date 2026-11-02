@@ -74,8 +74,22 @@ bool gfcFrameTable::setEvicting(int i) {
     Entry& e = entries_[i];
     residentBytes_ -= e.bytes;
     --residentCount_;
+    e.evictedBytes = e.bytes;
     e.bytes = 0;
     e.state = gfcFrameState::Evicting;
+    return true;
+}
+
+bool gfcFrameTable::setResidentFromEvicting(int i) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!inRange(i) || entries_[i].state != gfcFrameState::Evicting) return false;
+    Entry& e = entries_[i];
+    e.state = gfcFrameState::Resident;
+    e.bytes = e.evictedBytes;
+    e.evictedBytes = 0;
+    residentBytes_ += e.bytes;
+    ++residentCount_;
+    ++version_;
     return true;
 }
 
