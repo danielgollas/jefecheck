@@ -2109,12 +2109,10 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
     s.rangeStart = seq->getRangeStart() + 1;   // offset already folded in
     s.rangeEnd   = seq->getRangeEnd() + 1;
     s.numFrames  = seq->getNumFrames();
-    s.loadedCount = seq->getLoadedFrameCount();
-    // v1: anchor the loaded fill at the sequence's range start. Loading
-    // is sequential, so [rangeStart, rangeStart + loadedCount) is the
-    // decoded run. (Precise fill positioning for alt-click load-from-X
-    // is a deferred refinement noted in the spec.)
-    s.firstLoadedFrame = s.rangeStart;
+    s.loadedCount = seq->residentCount();
+    s.loadedVersion = seq->loadedVersion();
+    const int firstResident = seq->frameTable().firstResident();
+    s.firstLoadedFrame = firstResident >= 0 ? firstResident + 1 + s.offset : s.rangeStart;
     s.hasAudio = seq->hasAudio();
     s.muted = seq->audioMuted();
     s.audioPeaksVersion = s.hasAudio ? seq->audioPeaksVersion() : 0;
@@ -2125,6 +2123,16 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
                                : seq->filenameGeneric).filename().string();
     }
     return s;
+}
+
+std::vector<std::pair<int, int>> getTrackLoadedSegments(int trackIdx) {
+    std::vector<std::pair<int, int>> segs;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return segs;
+    seq->loadedSegments(segs);
+    const int shift = 1 + seq->getOffset();   // 0-based source index -> 1-based timeline
+    for (auto& r : segs) { r.first += shift; r.second += shift; }
+    return segs;
 }
 
 TrackAudioState getTrackAudioState(int trackIdx) {

@@ -125,6 +125,7 @@ public:
         textureTarget=0;
         textureFormat=0;
         textureW=textureH=0;
+        textureBytes=0;
         indexNumber=0;
         forceGFLLoader=false;
     }
@@ -146,6 +147,9 @@ public:
     GLint textureFormat;
     int textureW;
     int textureH;
+    // GPU bytes textureID holds (sizeX*sizeY at internalFormat), for the cache's
+    // budget. Set by generateTexture, 0 when nothing was uploaded.
+    size_t textureBytes;
 
     bool loaded;
     bool skipped;

@@ -5,3 +5,6 @@
 #include <string>
 
 int memoryMeasureSelfTest(const std::string& mediaDir);
+// FRAME-STATE: gfcFrameTable transitions, a sequence's resident set after a
+// load and an eviction, hold-edge pins, and the bridge's timeline segments.
+int frameStateSelfTest(const std::string& mediaDir);

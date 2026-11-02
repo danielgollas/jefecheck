@@ -737,6 +737,7 @@ int main(int argc, char* argv[]) {
         const std::string mediaDir = mediaQDir.toStdString();
         bool allZero = true;
         allZero &= (memoryMeasureSelfTest(mediaDir) == 0);
+        allZero &= (frameStateSelfTest(mediaDir) == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("CACHE-TEST media: %s\n", mediaDir.c_str());

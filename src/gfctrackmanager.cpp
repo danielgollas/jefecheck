@@ -320,7 +320,7 @@ int gfcTrackManager::getTrackIDfromWidget(void* widget)
 }
 
 /**
- * Identifies the track that has the earliest first loaded frame. This includes the offset, so a track that started loading the 10th frame but is offset by -5 will have the earliest loaded frame than a track that started loading on frame 6 ie.
+ * Identifies the track whose trim range starts earliest on the timeline (gfcSequence::getRangeStart: the footage, not what is resident). Includes the offset, so a track trimmed to start at its 10th frame but offset by -5 starts before one trimmed to start at frame 6.
  * @return The timeline position of the earliest loaded frame in the tracks.
  */
 int gfcTrackManager::getFirstFirstLoaded()
@@ -337,7 +337,7 @@ int gfcTrackManager::getFirstFirstLoaded()
 }
 
 /**
- * Identifies the track that has the latest first loaded frame. That means, the track whos start is the farthest along the timeline, including the offset.
+ * Identifies the track whose trim range starts latest on the timeline, including the offset.
  * @return The timeline position of the latest first loaded frame in the tracks.
  */
 int gfcTrackManager::getLastFirstLoaded()
@@ -353,7 +353,7 @@ int gfcTrackManager::getLastFirstLoaded()
 }
 
 /**
- * Identifies the track that has the earliest last loaded frame. That means, the track who's end (loaded end, not total frames end) is the earliest on the timeline.
+ * Identifies the track whose trim range ends earliest on the timeline (the trim end, not the last resident frame), including the offset.
  * @return The timeline position of the earliest last loaded frame in the tracks.
  */
 int gfcTrackManager::getFirstLastLoaded()
@@ -369,7 +369,7 @@ int gfcTrackManager::getFirstLastLoaded()
 }
 
 /**
- * Identifies the track that has the last last loaded frame. That means, the track who's end (loaded end, not total frames end) is the latest on the timeline.
+ * Identifies the track whose trim range ends latest on the timeline (the trim end, not the last resident frame), including the offset.
  * @return The timeline position of the last last loaded frame in the tracks.
  */
 int gfcTrackManager::getLastLastLoaded()

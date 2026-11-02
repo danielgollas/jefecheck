@@ -200,6 +200,31 @@ std::vector< std::string > gfcFrame::getChannelNames()
 }
 
 
+namespace {
+// Bytes per texel of an internal format, for gfcFrame::textureBytes. DXT1 is
+// half a byte; formats not listed count as 4 (the drivers' usual RGBA8 storage).
+size_t textureBytesFor(GLint internalFormat, int w, int h)
+{
+	const size_t px = (size_t)(w > 0 ? w : 0) * (size_t)(h > 0 ? h : 0);
+	switch (internalFormat) {
+	case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
+	case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT: return px / 2;
+	case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
+	case GL_LUMINANCE8:
+	case GL_LUMINANCE4:  return px;
+	case GL_RGBA4:
+	case GL_RGB4:
+	case GL_LUMINANCE16F_ARB: return px * 2;
+	case GL_RGBA16:
+	case GL_RGBA16F_ARB:
+	case GL_RGB16F_ARB:  return px * 8;
+	case GL_RGBA32F_ARB:
+	case GL_RGB32F_ARB:  return px * 16;
+	default:             return px * 4;
+	}
+}
+}  // namespace
+
 GLuint gfcFrame::generateTexture(bool captureThumbnail)
 {
 	//printf ( " Inside gfcFrame::generateTexture\n" );
@@ -258,6 +283,7 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 		textureTarget = info.target;
 		textureFormat = info.internalFormat;
 		textureW = textureH = 0;
+		textureBytes = textureID ? textureBytesFor(info.internalFormat, sizeX, sizeY) : 0;
 
 		// Filmstrip thumbnail from the planes with the same maths (nearest
 		// on the same grid as the BGRA path below).
@@ -347,6 +373,7 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 		textureFormat = info.internalFormat;
 		textureW = (uploaded && !bound) ? sizeX : 0;
 		textureH = (uploaded && !bound) ? sizeY : 0;
+		textureBytes = uploaded ? textureBytesFor(info.internalFormat, sizeX, sizeY) : 0;
 		/*
 		glFinish();
 		timer.stop();
@@ -420,6 +447,7 @@ void gfcFrame::deleteTexture()
     // Forget the name, so a second call never frees or pools it twice.
     textureID=defaultTexture;
     textureW=textureH=0;
+    textureBytes=0;
 }
 
 void gfcFrame::clearFrame()

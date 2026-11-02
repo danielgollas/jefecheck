@@ -615,7 +615,7 @@ int audioPlaybackSelfTest(const std::string& dir) {
     gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(dir+"/flashbeep_23976.mov"); seq->myGUI->setCompression(GFC_8BPC); seq->loadPreview();
     const int savedQueueCap=sett.maximumFramesInQueue; sett.maximumFramesInQueue=100000; trackManager.startLoadingSequence(0);
     // Upload frames as the GUI tick does, so the loaded range (the loop limits) covers frames 1..40+.
-    waitUntil([&]{ trackManager.generateTextures(); return seq->audioClip() && seq->audioClip()->endSample()>=2002*48 && seq->getRangeEnd()>=40; }, 10000); trackManager.stopLoadingSequence(0); sett.maximumFramesInQueue=savedQueueCap;
+    waitUntil([&]{ trackManager.generateTextures(); return seq->audioClip() && seq->audioClip()->endSample()>=2002*48 && seq->getLoadedFrameCount()>=41; }, 10000); trackManager.stopLoadingSequence(0); sett.maximumFramesInQueue=savedQueueCap;
     int n,d; playbackManager.getTargetRate(n,d); check(n==24000&&d==1001, "movie rate");
     playbackManager.setCurrentFrame(1); playbackManager.startPlayFwd(); check(audioEngine.isLeading(), "forward play leads with audio");
     out.pump(2002*10); playbackManager.update(); check(playbackManager.getCurrentFrame()==11, "picture follows the audio clock");
@@ -704,7 +704,7 @@ int audioForcedLoadSelfTest(const std::string& dir) {
     auto heldAt = [&]{ int64_t last=-1; return waitUntil([&]{ auto c=seq->audioClip(); if (!c) return false; const int64_t e=c->endSample(); const bool still=(e==last && e>0); last=e; std::this_thread::sleep_for(std::chrono::milliseconds(40)); return still; }, 5000) ? last : int64_t(-1); };
     heldAt(); for (int k=0;k<4;++k) trackManager.generateTextures();
     const int64_t heldEnd=heldAt();
-    check(loader && heldEnd>0 && heldEnd<gfcAudioClip::frameStartSample(40,rn,rd) && seq->getRangeEnd()>=3, "the loader is held mid-pass with frames 0..3 uploaded");
+    check(loader && heldEnd>0 && heldEnd<gfcAudioClip::frameStartSample(40,rn,rd) && seq->getLoadedFrameCount()>=4, "the loader is held mid-pass with frames 0..3 uploaded");
     // An evicted frame keeps its load params, so a render of it is a forced load
     // while the loader is still running.
     check(seq->freeFrames(2), "evict frames 0 and 1");

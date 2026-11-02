@@ -35,6 +35,7 @@ class TrackWidget;
 #include <memory>
 #include "gfcimageloader.h"
 #include "gfcframe.h"
+#include "gfcFrameTable.h"
 
 #include "gfcNetworkStructures.h"
 
@@ -179,8 +180,9 @@ private:
     std::vector<gfcFrame> frames;
     std::queue<gfcFrame> rawFrames;
 	std::condition_variable cond; //this condition is used to wait for the queue to go to the correct level.
-	
-    std::queue<int> loadedFrames;
+
+    // Per-frame cache state (0-based source indices), one entry per frames[].
+    gfcFrameTable frameTable_;
     gfcFrame previewFrame;
     gfcTimer previewTimer;
     gfcRectang aoi;
@@ -263,13 +265,32 @@ public:
     int loadSequence();
     int initializeSequence(gfcLoadParams params);
     int generateTextures(int howMany=1);
+    // The trim range set by initializeSequence (loadFrameRange), offset
+    // applied: the footage the track plays, not what is resident.
     int getRangeStart();
     int getRangeEnd();
     int getNumFrames();
-    // Number of frames decoded into this sequence so far. Mirrors the
-    // value FLTK fed the track-widget progress bar (loadedFrames.size()).
-    // Used by the Qt track timeline to draw the loaded-vs-unloaded fill.
+    // Number of frames resident (uploaded) right now; same as residentCount().
     int getLoadedFrameCount();
+
+    // Rolling-cache bookkeeping. Indices are 0-based source frames.
+    gfcFrameTable& frameTable() { return frameTable_; }
+    int residentCount() const { return frameTable_.residentCount(); }
+    // Moves whenever the resident set may have changed (timeline redraws on it).
+    uint64_t loadedVersion() const { return frameTable_.version(); }
+    // Inclusive runs of resident frames, 0-based source indices.
+    void loadedSegments(std::vector<std::pair<int,int>>& out) const { frameTable_.segments(out); }
+    // GL thread: frees frame index's texture (through gfcFrame::deleteTexture)
+    // and its image loader, keeps its thumbnail and load params, marks it Unloaded.
+    void evictFrame(int index);
+    // A timeline frame inside the trim range that is not resident (normal
+    // hold-mode mapping): the frame is waiting to be loaded.
+    bool framePending(int timelineFrame) const;
+    // GPU bytes one frame of this load is expected to take: the preview frame's
+    // size (after scale, and crop when on) times the bytes per pixel of the
+    // load's bit depth. 0 without a preview.
+    size_t estimatedFrameBytes() const;
+    int trackIndex() const { return trackID - 'A'; }
     // Thumbnail for a decoded frame (0-based sequence index), for the
     // timeline filmstrip. Returns an empty thumbnail (w==0) when the
     // index is out of range or that frame hasn't been captured.
@@ -279,6 +300,7 @@ public:
     void startLoading(int fromTrack=0,int fromTimeLine=0);
     void clearRawQueue();
     void stopLoading();
+    // No frames: nothing has been initialised for loading (frames.empty()).
     bool isEmpty();
     // True when the loader thread has decoded frames waiting to be
     // uploaded to GL by generateTextures(). The Qt 60Hz tick uses this
@@ -362,20 +384,15 @@ public:
     //now it's a global for each sequence std::mutex rawMutex; //mutex for the raw sequence, controls access to the raw queue for loading and generating textures.
     bool generateTexture(RawFrame *pRawFrame=NULL, gfcFrame *pFrame=NULL); //locks the raw frame queue, checks if it's empty, if not, pops first element and generates glTexture.
     
-    //Hard drive streaming variables
-    std::vector<GLuint> cacheTextures; //stores x number amount of cache textures, these textures are used to do a glTexSubImage upload.
-    bool streaming; //determines if this is a streaming track.
-    void loadForStreaming();
-    std::thread* StreamingThread;
-    void (*StreamingThreadStarterFunc)(void);
-    
      void setOffset(int offset);
      void setHoldMode(int holdMode, int holdFrame=0);
      int getHoldMode();
      int getOffset();
      void setVisibleFromAndTo(int visibleFrom, int visibleTo); ///sets the GUIs tracks widget to the correct visible range.
      
-    bool freeFrames(int numFrames); //removes the first numFrames frames from the loadedFrames queue.
+    // GL thread: evicts the first numFrames resident frames in index order.
+    // False when fewer than numFrames were resident.
+    bool freeFrames(int numFrames);
     //thread variables start with "t"
     std::string tfileName;
     int tscale;
@@ -417,10 +434,12 @@ public:
     // The [startFrame, endFrame] frame-entry range loadSequence() will load.
     void loadFrameRange(int& startFrame, int& endFrame) const;
     std::shared_ptr<gfcMovieReader> currentMovieReader() const;
+    // The trim range [rangeBegin, rangeEnd] (0-based, no offset) from
+    // loadFrameRange(), set by initializeSequence and cleared by clearSequence.
     int rangeBegin;
     int rangeEnd;
-    int maxFramesToLoad; //how many frames should be loaded for this sequence, assigned dynamicaly depending on how many tracks are being loaded and how many fit in ram.
-    bool maxFramesReached();
+    // Pins (or unpins) the trim edges in frameTable_ for hold-edge mode.
+    void pinHoldEdges(bool on);
     std::vector<int> luts;
 #include "gfcframe.h"
     gfcFrame forcedFrame;

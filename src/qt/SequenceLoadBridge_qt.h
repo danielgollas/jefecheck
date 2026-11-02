@@ -1020,8 +1020,11 @@ TrackParams getTrackParams(int trackIdx);
 // in global-timeline coordinates (offset already folded in), so the
 // widget can map them straight through the same x<->frame transform the
 // scrubber uses. `present` is false for an empty track (draw a
-// placeholder lane). `loadedCount` frames starting at `firstLoadedFrame`
-// are decoded; the rest of [rangeStart, rangeEnd] is not-yet-loaded.
+// placeholder lane). [rangeStart, rangeEnd] is the trim range; the
+// resident frames may have holes: `loadedCount` is how many are resident,
+// `firstLoadedFrame` where the first resident run starts (rangeStart when
+// none), and getTrackLoadedSegments() returns the runs themselves.
+// `loadedVersion` moves whenever the resident set may have changed.
 struct TrackTimelineState {
     bool        present          = false;
     int         rangeStart       = 1;
@@ -1033,6 +1036,7 @@ struct TrackTimelineState {
     bool        hasAudio         = false;
     bool        muted            = false;
     uint64_t    audioPeaksVersion = 0;
+    uint64_t    loadedVersion    = 0;
     std::string label;
 };
 
@@ -1056,6 +1060,10 @@ struct WaveformPeaks {
 WaveformPeaks getTrackWaveform(int trackIdx);
 
 TrackTimelineState getTrackTimelineState(int trackIdx);
+// The track's resident runs as inclusive 1-based timeline frames (offset
+// folded in), in order. Walks the frame table: call it only when
+// TrackTimelineState::loadedVersion changed.
+std::vector<std::pair<int, int>> getTrackLoadedSegments(int trackIdx);
 
 // Frame offset of a track on the global timeline. setTrackOffset shifts
 // the whole sequence left/right (drag / "Set offset..." popup) and flags

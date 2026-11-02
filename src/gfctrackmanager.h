@@ -73,7 +73,9 @@ public:
 	void saveTrackSessionParameters(XMLNode &tracksNode);
 	void loadTrackSessionParameters(XMLNode &tracksNode);
 	
-	//auxiliary functions used by the playbackManager to determine loops
+	//auxiliary functions used by the playbackManager to determine loops. They
+	//read each non-empty track's trim range (getRangeStart/End, offset applied),
+	//not its resident frames, so the loop limits do not move as frames are evicted.
 	int getFirstFirstLoaded();
 	int getLastFirstLoaded();
 	int getFirstLastLoaded();
