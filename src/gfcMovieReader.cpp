@@ -406,6 +406,13 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
 
     int ret = avformat_open_input(&d.fmt, path.c_str(), nullptr, nullptr);
     if (ret < 0) { d.fmt = nullptr; return fail("cannot open " + path + ": " + avErr(ret)); }
+    // Audio only: the demuxer skips every non-audio stream from here on, so
+    // the stream probe below does not decode picture (it can cost hundreds of
+    // ms on 4K ProRes 4444); the container header still gives the video rate.
+    if (d.audioOnly)
+        for (unsigned k = 0; k < d.fmt->nb_streams; ++k)
+            if (d.fmt->streams[k]->codecpar->codec_type != AVMEDIA_TYPE_AUDIO)
+                d.fmt->streams[k]->discard = AVDISCARD_ALL;
     ret = avformat_find_stream_info(d.fmt, nullptr);
     if (ret < 0) return fail("cannot read stream info: " + avErr(ret));
     d.vstream = av_find_best_stream(d.fmt, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);

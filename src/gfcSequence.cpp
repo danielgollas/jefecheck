@@ -50,6 +50,7 @@ extern gfcMemoryManager memoryManager;
 
 namespace {
 std::atomic<int> g_testDecodeDelayMs{0};
+std::atomic<int> g_testAudioBlockDelayMs{0};
 std::atomic<long> g_loadAnnouncements{0};
 }  // namespace
 
@@ -1026,7 +1027,13 @@ void gfcSequence::setAudioTarget(int timelineFrame)
 	if ( !hasAudio_.load(std::memory_order_relaxed) || audioRateNum_<=0 || audioRateDen_<=0 )
 		return;
 	const int64_t source=int64_t(timelineFrame)-1-frameOffset;
-	audioTarget_.store(gfcAudioClip::frameStartSample(source, audioRateNum_, audioRateDen_));
+	{
+		// Stored under the wake mutex so an idle thread between its check and
+		// its wait cannot miss it. Uncontended; jumps only, never the tick.
+		std::lock_guard<std::mutex> lock(audioWakeMutex_);
+		audioTarget_.store(gfcAudioClip::frameStartSample(source, audioRateNum_, audioRateDen_));
+	}
+	audioWake_.notify_all();
 }
 
 void gfcSequence::startAudioThread()
@@ -1044,7 +1051,11 @@ void gfcSequence::startAudioThread()
 // copy), so the join cannot deadlock; a block is one second of audio.
 void gfcSequence::stopAudioThread()
 {
-	audioCanceled_.store(true);
+	{
+		std::lock_guard<std::mutex> lock(audioWakeMutex_);
+		audioCanceled_.store(true);
+	}
+	audioWake_.notify_all();
 	if ( audioThread_ ) {
 		audioThread_->join();
 		delete audioThread_;
@@ -1102,7 +1113,11 @@ void gfcSequence::audioThreadMain(std::shared_ptr<gfcMovieReader> reader, std::s
 			}
 		}
 		if ( idle ) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+			// Woken by a jump (setAudioTarget) or the cancel; the timeout is a safety net.
+			std::unique_lock<std::mutex> lock(audioWakeMutex_);
+			audioWake_.wait_for(lock, std::chrono::milliseconds(500), [&] {
+				return audioCanceled_.load() || audioTarget_.load()!=seenTarget;
+			});
 			continue;
 		}
 		const int64_t hole=holeFrom(pos);
@@ -1127,9 +1142,13 @@ void gfcSequence::audioThreadMain(std::shared_ptr<gfcMovieReader> reader, std::s
 			cursor=gfcAudioClip::frameStartSample(f, rateNum, rateDen);
 			keepFrom=std::max(begin, cursor);
 		}
+		if ( const int delay=g_testAudioBlockDelayMs.load() )
+			std::this_thread::sleep_for(std::chrono::milliseconds(delay));
 		int64_t first=0;
-		const bool got=reader->readAudioUntil(std::min(end, std::max(cursor, hole)+kBlock), &err)
-		               && reader->takeAudio(block, first);
+		const bool read=reader->readAudioUntil(std::min(end, std::max(cursor, hole)+kBlock), &err);
+		if ( !read )
+			printf("Track %c: audio read failed: %s\n", trackID, err.c_str());
+		const bool got=read && reader->takeAudio(block, first);
 		if ( !got ) {
 			// The end of the file (or a read error): nothing more past here.
 			cursor=end;
@@ -2027,6 +2046,12 @@ void gfcSequence::stopLoading() {
 		std::lock_guard<std::mutex> lock ( rawQueueMutex );
 		loadingCanceled=true;
 	}
+	// The audio thread winds down in parallel; it is joined after the loader.
+	{
+		std::lock_guard<std::mutex> lock ( audioWakeMutex_ );
+		audioCanceled_.store(true);
+	}
+	audioWake_.notify_all();
 	if ( cacheTrack()>=0 )
 		frameCache.cancel(cacheTrack());   // wakes it out of nextJob
 	cond.notify_all(); //in case it was waiting for the queue count to go down.
@@ -2512,6 +2537,10 @@ int gfcSequence::getNumFrames() {
 
 int gfcSequence::getLoadedFrameCount() {
 	return residentCount();
+}
+
+void gfcSequence::setTestAudioBlockDelayMs(int ms) {
+	g_testAudioBlockDelayMs.store(ms<0?0:ms);
 }
 
 void gfcSequence::setTestDecodeDelayMs(int ms) {

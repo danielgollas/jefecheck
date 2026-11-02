@@ -1448,6 +1448,14 @@ int audioHolesSelfTest(const std::string& dir) {
         if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
     };
     auto fss = [](int64_t frame) { return gfcAudioClip::frameStartSample(frame, 24, 1); };
+    // The first sample after `from` (within 1 s) louder than 0.05: a beep's onset.
+    auto onsetAfter = [](const gfcAudioClip& c, int64_t from) -> int64_t {
+        std::vector<float> s(48000 * 2);
+        c.read(from, 48000, s.data());
+        for (int64_t k = 0; k < 48000; ++k)
+            if (std::fabs(s[2 * k]) > 0.05f || std::fabs(s[2 * k + 1]) > 0.05f) return from + k;
+        return -1;
+    };
     auto rmsAt = [&](const gfcAudioClip& c, int64_t frame) {
         std::vector<float> s(2000 * 2);
         c.read(fss(frame), 2000, s.data());
@@ -1504,6 +1512,7 @@ int audioHolesSelfTest(const std::string& dir) {
     playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
     playbackManager.setCurrentFrame(1);
 
+    int64_t straightOnset = -1;   // the beep at 9 s in a clip filled straight through
     {   // Sound completes although the picture never does.
         gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
         const bool full = pumpUntil([&] { auto c = a->audioClip(); return c && c->endSample() >= fss(239) && c->firstHoleFrom(0) == -1; }, 6000);
@@ -1516,6 +1525,7 @@ int audioHolesSelfTest(const std::string& dir) {
             quiet &= rmsAt(*c, 24 * k + 12) < 0.01;
         }
         check(beeps && quiet, "beeps at every second, silence between, across unloaded picture");
+        straightOnset = c ? onsetAfter(*c, fss(216) - 2000) : -1;
         a->forceLoad(100); a->cleanForcedLoad();
         a->forceLoad(5); a->cleanForcedLoad();
         const std::shared_ptr<gfcMovieReader> loader = a->loaderMovieReader();
@@ -1528,13 +1538,31 @@ int audioHolesSelfTest(const std::string& dir) {
         clearAllTracks();
     }
 
-    {   // A jump past the fill point: sound arrives there first.
+    {   // A jump past the fill point: sound arrives there first. Each 1 s audio
+        // block takes 250 ms, so a straight fill would reach the jump only after
+        // ~2.3 s, covering 3 s after ~0.75 s: arriving with 3 s still missing proves
+        // the target was filled first.
+        gfcSequence::setTestAudioBlockDelayMs(250);
         playbackManager.setCurrentFrame(1);
         gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
-        playbackManager.setCurrentFrame(220);
-        const int64_t at = fss(219);
-        const bool there = pumpUntil([&] { auto c = a->audioClip(); return c && c->covers(at, fss(239) - at); }, 1500);   // the source's sound ends just short of frame 240
-        check(there, "jump to 220: its sound is there within 1.5 s");
+        playbackManager.setCurrentFrame(212);   // source frame 211; the beep at frame 216 is filled after the seek
+        const int64_t at = fss(211);
+        bool earlyHole = false;
+        const auto jumpedAt = std::chrono::steady_clock::now();
+        const bool there = pumpUntil([&] {
+            auto c = a->audioClip();
+            if (!c || !c->covers(at, fss(239) - at)) return false;   // the source's sound ends just short of frame 240
+            earlyHole = !c->covers(fss(72), 1);
+            return true;
+        }, 2000);   // the jump takes ~3-5 blocks (0.8-1.2 s); a straight fill has 3 s covered long before it reaches 211
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - jumpedAt).count();
+        std::printf("AUDIO-HOLES: jump there=%d earlyHole=%d after %.0f ms\n", int(there), int(earlyHole), ms);
+        check(there && earlyHole, "jump to 212: its sound is there within 2 s while 3 s is still a hole (filled first)");
+        const int64_t jumpOnset = [&] { auto c = a->audioClip(); return c ? onsetAfter(*c, fss(216) - 2000) : -1; }();
+        std::printf("AUDIO-HOLES: beep onset straight=%lld jump=%lld\n", (long long)straightOnset, (long long)jumpOnset);
+        check(straightOnset > 0 && jumpOnset > 0 && std::llabs(jumpOnset - straightOnset) <= 2,
+              "jump: the beep onset after a seek is sample-accurate (within 2 samples of a straight fill)");
+        gfcSequence::setTestAudioBlockDelayMs(0);
         const bool full = pumpUntil([&] { auto c = a->audioClip(); return c && c->endSample() >= fss(239) && c->firstHoleFrom(0) == -1; }, 6000);
         check(full, "jump: the clip is backfilled with no hole within 6 s");
         std::shared_ptr<gfcAudioClip> c = a->audioClip();

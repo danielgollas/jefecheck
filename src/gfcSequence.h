@@ -296,6 +296,8 @@ public:
     int trackIndex() const { return trackID - 'A'; }
     // Tests: a sleep before every decode on the loader threads (0 = none).
     static void setTestDecodeDelayMs(int ms);
+    // Tests: a sleep before every 1 s block on the audio threads (0 = none).
+    static void setTestAudioBlockDelayMs(int ms);
     // How many times a load was announced to the remote session (LOAD message).
     static long loadAnnouncements();
     // The loader thread's id, or the default id when none is running.
@@ -455,6 +457,9 @@ public:
     std::shared_ptr<gfcMovieReader> audioReader_;
     std::atomic<int64_t> audioTarget_{-1};
     std::atomic<bool> audioCanceled_{false};
+    // Wakes an idle audio thread on a jump or a cancel (both written under it).
+    std::mutex audioWakeMutex_;
+    std::condition_variable audioWake_;
     int audioRateNum_ = 0, audioRateDen_ = 1;
     int64_t audioBegin_ = 0, audioEnd_ = 0;   // the clip's fill range [begin, end), movie-time samples
     void startAudioThread();
