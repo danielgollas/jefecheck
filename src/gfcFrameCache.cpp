@@ -221,7 +221,8 @@ int64_t gfcFrameCache::cacheBytesLocked() const {
 // memory on some machines): then systemUsed - cacheBytes falls as the cache
 // grows and the budget would grow with it. otherFloor, that term sampled
 // while the cache was small, stops it, so the cache stays within
-// L - other. A used figure of 0 means the system query failed: keep the
+// L - other. The floor never exceeds the latest system figure, so it falls
+// when another app frees memory. A used figure of 0 means the system query failed: keep the
 // previous sample.
 int64_t gfcFrameCache::budgetLocked() const {
     if (testBudget_ >= 0) return testBudget_;
@@ -239,6 +240,10 @@ int64_t gfcFrameCache::budgetLocked() const {
                 otherFloor_ = (int64_t)used - cache;
                 otherFloorCache_ = cache;
             }
+            // Other processes never use more than the whole system figure, so
+            // the floor can always drop to it: an app that quits after the
+            // floor was sampled gives its memory back without a reload.
+            if (otherFloor_ > (int64_t)used) otherFloor_ = (int64_t)used;
         }
     }
     if (!sysValid_) return 0;   // nothing known yet: only the minimum ahead and pins load

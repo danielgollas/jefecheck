@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <random>
 #include <thread>
 #include <utility>
@@ -706,6 +707,31 @@ int cachePolicySelfTest() {
         const int64_t hidden = run(false), seen = run(true);
         check(hidden <= 300000 + 2000, "budget: a cache the system figure misses stays within L - other + one frame");
         check(seen <= 300000 + 2000 && seen >= 300000 - 2000, "budget: a cache the system figure sees fills to L - other, as before");
+
+        // Another app holds 450 000 B when the clip loads (over the limit), then
+        // quits: the budget grows back to L - 200 000 without a reload.
+        auto regrow = [&](bool visible) {
+            auto other = std::make_shared<int64_t>(450000);
+            gfcFrameCache c; gfcFrameTable t; t.reset(240);
+            c.setTestPooledBytes(0);
+            c.attachTrack(0, &t);
+            c.setTrackGeometry(0, 0, 0, 239, 2000);
+            c.setTestSystemMemory([other, visible](int64_t cache) { return uint64_t(*other + (visible ? cache : 0)); }, 1000000);
+            c.setTransport(1, +1, LOOPMODELOOP_ID, 1, 240, 24);
+            pull(c, 0, 400, 2000);
+            *other = 200000;
+            pull(c, 0, 400, 2000);
+            const int64_t bytes = c.cacheBytes();
+            std::printf("CACHE-POLICY: other app quit, system memory %s the cache: cache %lld B\n",
+                        visible ? "sees" : "misses", (long long)bytes);
+            return bytes;
+        };
+        const int64_t hiddenRegrow = regrow(false), seenRegrow = regrow(true);
+        check(hiddenRegrow >= 300000 - 2000 && hiddenRegrow <= 300000 + 2000, "budget: grows back when another app frees memory (system misses the cache)");
+        // When the system figure sees the cache, the floor can only drop to
+        // other + the cache at the moment the app quit (here the 50 000 B
+        // minimum), so the budget grows back to within that of L - other.
+        check(seenRegrow >= 250000 - 2000 && seenRegrow <= 300000 + 2000, "budget: grows back when another app frees memory (system sees the cache)");
         sett.memoryLimitPercent = savedPct;
     }
 
