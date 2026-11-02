@@ -136,8 +136,12 @@ private:
     size_t costLocked() const;
     enum class Scan { Job, Denied, None };
     Scan scan(int track, Job& out);
-    bool admit(int timelineFrame, bool unconditional, size_t bytes);
+    // slack: bytes the cache may go over the budget without naming victims
+    // (one frame, to finish a timeline frame another track already holds).
+    bool admit(int timelineFrame, bool unconditional, size_t bytes, size_t slack = 0);
     size_t timelineNeedLocked(int timelineFrame, int track, size_t bytes) const;
+    // Another track holds (Resident or Decoding) its frame at this timeline frame.
+    bool timelineHeldElsewhereLocked(int timelineFrame, int track) const;
     void wake();
     int leadSkipLocked(const Params& p) const;   // frames skipped ahead (0 when off)
     void noteIssued(int track, int index);       // mutex_ held: a job handed out

@@ -428,6 +428,26 @@ int cachePolicySelfTest() {
         check(!c.drainVictims().trimPools, "mixed: no trim at exactly costPerTimelineFrame");
     }
 
+    {   // A timeline frame one track holds is finished on the others even when the
+        // pools grew in between (no lower victims left): the tracks stay identical.
+        gfcFrameCache c; gfcFrameTable t0, t1; t0.reset(240); t1.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t0); c.attachTrack(1, &t1);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTrackGeometry(1, 0, 0, 239, 1000);
+        c.setTestBudget(20 * 1000);
+        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        check(pull(c, 1, 10, 1000) == seq(100, 109), "finish: track 1 loads 100..109");
+        check(pull(c, 0, 9, 1000) == seq(100, 108), "finish: track 0 loads 100..108");
+        c.setTestPooledBytes(500);   // a staging buffer appeared
+        Job j{};
+        const bool got = c.nextJob(0, j, ms(20));
+        check(got && j.timelineFrame == 109, "finish: track 0 still gets timeline 109, which track 1 holds");
+        if (got) c.commit(j, 1000, true);
+        check(!c.nextJob(0, j, ms(20)) && !c.nextJob(1, j, ms(20)), "finish: nothing further is admitted over the budget");
+        check(c.cacheBytes() <= 20 * 1000 + 1000, "finish: at most one frame over the budget");
+    }
+
     {   // One for one: far over budget, an always-admitted frame frees about one frame, not every lower one.
         gfcFrameCache c; gfcFrameTable t; t.reset(240);
         c.setTestPooledBytes(0);
