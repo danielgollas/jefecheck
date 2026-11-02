@@ -80,6 +80,9 @@ public:
 	// Hands the coordinator the playhead, loop mode, limits and rate for a load.
 	// Sends the player transport to the frame cache: always (a load), or only when it changed (force=false).
 	void syncCacheTransport(bool force=true);
+	// A jump: each movie track's audio thread fills the sound at this timeline
+	// frame first when it is not there yet. Atomic stores only.
+	void retargetAudio(int timelineFrame);
 	int getMinTrackLength();
 	
 	void saveTrackSessionParameters(XMLNode &tracksNode);

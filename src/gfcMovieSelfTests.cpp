@@ -312,9 +312,9 @@ int audioClipSelfTest(const std::string& dir) {
     { gfcAudioPeaks v; v.reset(0); std::vector<float> blk(480*2, 0.1f); for (int k=0;k<300;++k) v.accumulate(blk.data(), 480);
       const uint64_t afterThree=v.version; v.publish();  // 300 x 10 ms = 3 s: first block + 3 second marks
       check(v.peaks.size()==300 && afterThree==4 && v.version==5, "peaks version: 4 bumps over 300 blocks (not 300), publish bumps"); }
-    // Silence fill before a late audio block is capped at the movie's end.
+    // A late audio block lands in place; nothing past the movie's end.
     { gfcAudioClip c; c.reset(0); std::vector<float> blk(1000*2, 0.5f); const int64_t limit=48000*2;
-      check(gfcAppendAudioAt(c, 1000, blk.data(), 1000, limit, nullptr)==2000 && c.endSample()==2000, "a hole is filled with silence");
+      check(gfcAppendAudioAt(c, 1000, blk.data(), 1000, limit, nullptr)==1000 && c.endSample()==2000 && !c.covers(0,1000) && c.covers(1000,1000), "a block lands at its own position; the hole before it stays a hole");
       check(gfcAppendAudioAt(c, int64_t(1)<<40, blk.data(), 1000, limit, nullptr)==0 && c.endSample()==2000, "audio stamped far past the movie's end adds nothing");
       check(gfcAppendAudioAt(c, 1500, blk.data(), 1000, limit, nullptr)==500 && c.endSample()==2500, "overlap with the clip's end is dropped");
       c.reset(limit); check(gfcAppendAudioAt(c, limit+10, blk.data(), 1000, limit, nullptr)==0 && c.endSample()==limit, "a clip already at the movie's end takes nothing"); }
@@ -345,7 +345,7 @@ int audioSequenceSelfTest(const std::string& dir) {
     const bool filled=waitUntil([&]{ auto c=seq->audioClip(); return c && c->endSample()>=want; }, 20000);
     trackManager.stopLoadingSequence(0);
     std::shared_ptr<gfcAudioClip> clip=seq->audioClip();
-    check(seq->hasAudio() && clip && filled, "the loader fills the track's clip");
+    check(seq->hasAudio() && clip && filled, "the audio thread fills the track's clip");
     check(clip && clip->startSample()==0 && rmsAt(*clip,0)>0.3 && rmsAt(*clip,24)>0.3 && rmsAt(*clip,12)<0.01 && rmsAt(*clip,25)<0.01, "beeps at frames 0 and 24 in the track clip");
     const gfcAudioPeaks pk=seq->audioPeaksSnapshot();
     float beep=0; for (size_t b=100; b<104 && b<pk.peaks.size(); ++b) beep=std::max(beep, pk.peaks[b]);
@@ -700,7 +700,7 @@ int audioForcedLoadSelfTest(const std::string& dir) {
     auto heldAt = [&]{ int64_t last=-1; return waitUntil([&]{ auto c=seq->audioClip(); if (!c) return false; const int64_t e=c->endSample(); const bool still=(e==last && e>0); last=e; std::this_thread::sleep_for(std::chrono::milliseconds(40)); return still; }, 5000) ? last : int64_t(-1); };
     heldAt(); for (int k=0;k<4;++k) trackManager.generateTextures();
     const int64_t heldEnd=heldAt();
-    check(loader && heldEnd>0 && heldEnd<gfcAudioClip::frameStartSample(40,rn,rd) && seq->getLoadedFrameCount()>=4, "the loader is held mid-pass with frames 0..3 uploaded");
+    check(loader && seq->getLoadedFrameCount()>=4, "the loader is held mid-pass with frames 0..3 uploaded");
     // An evicted frame keeps its load params, so a render of it is a forced load
     // while the loader is still running.
     check(seq->freeFrames(2), "evict frames 0 and 1");

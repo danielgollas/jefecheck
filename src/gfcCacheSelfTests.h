@@ -41,3 +41,7 @@ int cacheDisplaySelfTest(const std::string& mediaDir);
 // frames, previews off) through the real plate path writes 30 non-black
 // pictures and leaves the cache, the on-screen pin and the playhead as they were.
 int cacheRenderSelfTest(const std::string& mediaDir);
+// AUDIO-HOLES: the hole-tolerant clip, the audio-only reader, and movie sound
+// decoded on its own thread: complete under a small picture budget, a jump
+// filled first then backfilled, a load from frame N lined up with the source.
+int audioHolesSelfTest(const std::string& mediaDir);

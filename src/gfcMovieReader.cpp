@@ -91,6 +91,7 @@ struct gfcMovieReader::Impl {
 
     // Sound. audioEnabled survives release(); the rest is per open file.
     bool audioEnabled = false;
+    bool audioOnly = false;            // survives release() too
     int astream = -1;
     AVCodecContext* adec = nullptr;
     AVFrame* aframe = nullptr;
@@ -409,7 +410,7 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
     if (ret < 0) return fail("cannot read stream info: " + avErr(ret));
     d.vstream = av_find_best_stream(d.fmt, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
     if (d.vstream < 0) return fail("no video stream in " + path);
-    if (!d.openDecoder(err)) { d.release(); return false; }
+    if (!d.audioOnly && !d.openDecoder(err)) { d.release(); return false; }
     d.pkt = av_packet_alloc();
     if (!d.pkt) return fail("out of memory");
 
@@ -423,8 +424,12 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
     d.startPts = st->start_time != AV_NOPTS_VALUE ? st->start_time : 0;
     d.videoStartSample = av_rescale_q(d.startPts, st->time_base, AVRational{1, gfcAudioClip::kRate});
     // Sound is optional: a movie whose audio cannot be decoded still plays.
-    const bool audioUndecodable = d.audioEnabled && !d.openAudio();
+    const bool audioUndecodable = (d.audioEnabled || d.audioOnly) && !d.openAudio();
     if (audioUndecodable) d.releaseAudio();
+    // Audio only: the demuxer skips every other stream's packets.
+    if (d.audioOnly)
+        for (unsigned k = 0; k < d.fmt->nb_streams; ++k)
+            if (int(k) != d.astream) d.fmt->streams[k]->discard = AVDISCARD_ALL;
 
     gfcMovieInfo& i = d.info;
     i.width = st->codecpar->width;
@@ -460,6 +465,8 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
     // track gets no clip and the picture plays on.
     if (audioUndecodable) i.hasAudio = false;
 
+    if (d.audioOnly) return true;  // no picture: the pixel facts stay at their defaults
+
     // Pixel format and colour tags come from the first decoded frame: ProRes
     // carries them only in the frame header, not in the container.
     std::string decErr;
@@ -490,6 +497,7 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
     std::lock_guard<std::mutex> lock(d_->m);
     Impl& d = *d_;
     if (!d.fmt) { setErr(err, "movie not open"); return false; }
+    if (!d.dec) { setErr(err, "audio-only reader"); return false; }
     if (index < 0 || index >= d.info.frameCount) {
         setErr(err, "frame " + std::to_string(index) + " out of range");
         return false;
@@ -512,6 +520,54 @@ void gfcMovieReader::testFailAudioDecoderOpen(bool fail) { gTestFailAudioOpen = 
 void gfcMovieReader::setAudioEnabled(bool on) {
     std::lock_guard<std::mutex> lock(d_->m);
     d_->audioEnabled = on;
+}
+
+void gfcMovieReader::setAudioOnly(bool on) {
+    std::lock_guard<std::mutex> lock(d_->m);
+    d_->audioOnly = on;
+}
+
+bool gfcMovieReader::readAudioUntil(int64_t sampleEnd, std::string* err) {
+    std::lock_guard<std::mutex> lock(d_->m);
+    Impl& d = *d_;
+    if (!d.fmt) { setErr(err, "movie not open"); return false; }
+    if (!d.adec) { setErr(err, "no audio decoder"); return false; }
+    while (!d.audioEof && !(d.audioPosKnown && d.audioEnd >= sampleEnd)) {
+        if (d.demuxEof) { d.onDemuxEof(); break; }
+        const int ret = av_read_frame(d.fmt, d.pkt);
+        if (ret < 0) {
+            d.onDemuxEof();
+            if (ret != AVERROR_EOF) { setErr(err, "read error: " + avErr(ret)); return false; }
+            break;
+        }
+        if (d.pkt->stream_index == d.astream) d.decodeAudioPacket(d.pkt);
+        av_packet_unref(d.pkt);  // video and every other stream: dropped
+    }
+    return true;
+}
+
+bool gfcMovieReader::seekAudio(int64_t frameIndex, std::string* err) {
+    std::lock_guard<std::mutex> lock(d_->m);
+    Impl& d = *d_;
+    if (!d.fmt) { setErr(err, "movie not open"); return false; }
+    if (!d.adec) { setErr(err, "no audio decoder"); return false; }
+    // AAC and friends overlap frames: the first frame decoded after a flush
+    // is a warm-up, so start a little early and let the caller drop it.
+    constexpr int64_t kPreRoll = 4096;
+    const int64_t sample =
+        std::max<int64_t>(0, gfcAudioClip::frameStartSample(frameIndex, d.info.rateNum, d.info.rateDen) - kPreRoll);
+    const AVRational atb = d.fmt->streams[d.astream]->time_base;
+    const int64_t ts = av_rescale_q(sample + d.videoStartSample, AVRational{1, gfcAudioClip::kRate}, atb);
+    const int ret = av_seek_frame(d.fmt, d.astream, ts, AVSEEK_FLAG_BACKWARD);
+    if (ret < 0) { setErr(err, "audio seek failed: " + avErr(ret)); return false; }
+    if (d.dec) {  // a full reader: its picture position is gone too
+        avcodec_flush_buffers(d.dec);
+        d.eofSent = false;
+        d.last.reset();
+        d.lastIndex = -1;
+    }
+    d.resetAudioState();
+    return true;
 }
 
 int64_t gfcMovieReader::queuedAudioFrames() const {

@@ -509,6 +509,7 @@ void gfcPlaybackManager::setCurrentFrame(int frame, bool audible) {
     // A jump: the frame cache's window moves here (new generation, no reload).
     cacheSyncTransport();
     frameCache.retarget(frame);
+    trackManager.retargetAudio(frame);   // and the sound fills from here first
     this->myGUI->setTimelineValue(frame);
     this->myGUI->setCurrentFrame(frame);
     if (audible) audioSeek();
@@ -645,6 +646,7 @@ void gfcPlaybackManager::setDirection(int direction) {
 void gfcPlaybackManager::updateTimelineValueFromGUI() {
     currentFrame=myGUI->getTimeLineValue();
     frameCache.retarget(currentFrame);   // a timeline click is a jump
+    trackManager.retargetAudio(currentFrame);   // and the sound fills from here first
 	
     myGUI->setCurrentFrame(currentFrame);
     audioSeek();
@@ -660,6 +662,7 @@ void gfcPlaybackManager::updateTimelineValueFromGUI() {
 void gfcPlaybackManager::updateCurrentFrameValueFromGUI() {
     currentFrame=myGUI->getCurrentFrame();
     frameCache.retarget(currentFrame);   // a typed frame is a jump
+    trackManager.retargetAudio(currentFrame);   // and the sound fills from here first
     myGUI->setTimelineValue(currentFrame);
     audioSeek();
     updateTimeCode();

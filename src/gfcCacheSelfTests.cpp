@@ -27,6 +27,8 @@
 #include "gfcIOSurface.h"
 #include "gfcUploadPool.h"
 #include "gfcframe.h"
+#include "gfcMovieReader.h"
+#include "gfcAudioClip.h"
 #include "qt/qt_prefs_persist.h"
 #include <QSettings>
 #include <QCoreApplication>
@@ -1437,5 +1439,126 @@ int cacheRenderSelfTest(const std::string& dir) {
     QDir(outDir).removeRecursively();
     jefe::qt::setAllPlatesShowPreview(false);
     std::printf("CACHE-RENDER: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int audioHolesSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    auto fss = [](int64_t frame) { return gfcAudioClip::frameStartSample(frame, 24, 1); };
+    auto rmsAt = [&](const gfcAudioClip& c, int64_t frame) {
+        std::vector<float> s(2000 * 2);
+        c.read(fss(frame), 2000, s.data());
+        double e = 0;
+        for (float v : s) e += double(v) * v;
+        return std::sqrt(e / double(s.size()));
+    };
+
+    {   // The clip: written anywhere, holes read as silence.
+        gfcAudioClip c;
+        c.reset(0);
+        std::vector<float> half(48000 * 2, 0.5f);
+        c.writeAt(96000, half.data(), 48000);
+        c.writeAt(0, half.data(), 48000);
+        check(c.covers(0, 48000) && !c.covers(48000, 48000) && c.covers(96000, 48000), "clip: written ranges covered, the gap is not");
+        check(c.firstHoleFrom(0) == 48000 && c.firstHoleFrom(96000) == -1, "clip: firstHoleFrom finds the gap");
+        check(c.startSample() == 0 && c.endSample() == 144000, "clip: start 0, end 144000");
+        std::vector<float> out(16000 * 2, 1.f);
+        c.read(40000, 16000, out.data());
+        check(out[0] == 0.5f && out[2 * 7999] == 0.5f && out[2 * 8000] == 0.f && out[2 * 15999 + 1] == 0.f, "clip: a read across the hole gives zeros there");
+        gfcAudioClip e;
+        e.reset(1000);
+        e.append(half.data(), 100);
+        check(e.startSample() == 1000 && e.endSample() == 1100 && e.covers(1000, 100), "clip: append on an empty clip lands at its reset start");
+        gfcAudioPeaks pk;
+        pk.reset(0);
+        std::vector<float> sig(480 * 2, 0.f);
+        sig[0] = 0.9f;
+        pk.accumulateAt(4800, sig.data(), 480);
+        check(pk.peaks.size() == 11 && pk.peaks[10] > 0.89f && pk.peaks[0] == 0.f, "peaks: accumulateAt writes the bin at its absolute position");
+    }
+
+    const std::string beep = dir + "/cache_beep_24.mp4";
+    {   // The audio-only reader.
+        gfcMovieReader r;
+        std::string err;
+        r.setAudioOnly(true);
+        const bool opened = r.open(beep, &err);
+        check(opened && r.info().hasAudio && r.info().frameCount == 240, "reader: audio-only open");
+        std::vector<float> a;
+        int64_t first = -1;
+        const bool got = opened && r.readAudioUntil(fss(48), &err) && r.takeAudio(a, first);
+        check(got && int64_t(a.size() / 2) >= 96000 && first <= 0, "reader: readAudioUntil covers 2 s from the start");
+        const bool sought = opened && r.seekAudio(200, &err) && r.readAudioUntil(fss(210), &err) && r.takeAudio(a, first);
+        check(sought && first <= fss(200) && first + int64_t(a.size() / 2) >= fss(210), "reader: seekAudio lands at or before frame 200");
+        gfcMovieFrame f;
+        check(!r.readFrame(0, f, &err), "reader: audio-only reads no picture");
+    }
+
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    frameCache.setTestBudget(int64_t(10 * kFrame8));
+    playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+    playbackManager.setCurrentFrame(1);
+
+    {   // Sound completes although the picture never does.
+        gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
+        const bool full = pumpUntil([&] { auto c = a->audioClip(); return c && c->endSample() >= fss(239) && c->firstHoleFrom(0) == -1; }, 6000);
+        std::shared_ptr<gfcAudioClip> c = a->audioClip();
+        std::printf("AUDIO-HOLES: full=%d resident=%d end=%lld\n", int(full), a->residentCount(), c ? (long long)c->endSample() : -1LL);
+        check(full && a->residentCount() <= 12, "the clip fills completely while the picture holds ~10 frames");
+        bool beeps = c != nullptr, quiet = c != nullptr;
+        for (int k = 0; c && k < 10; ++k) {
+            beeps &= rmsAt(*c, 24 * k) > 0.3;
+            quiet &= rmsAt(*c, 24 * k + 12) < 0.01;
+        }
+        check(beeps && quiet, "beeps at every second, silence between, across unloaded picture");
+        a->forceLoad(100); a->cleanForcedLoad();
+        a->forceLoad(5); a->cleanForcedLoad();
+        const std::shared_ptr<gfcMovieReader> loader = a->loaderMovieReader();
+        check(loader && loader->queuedAudioFrames() == 0, "forced loads leave nothing queued in the loader's reader");
+        pump(100);
+        const gfcAudioPeaks pk = a->audioPeaksSnapshot();
+        float b = 0;
+        for (size_t i = 100; i < 104 && i < pk.peaks.size(); ++i) b = std::max(b, pk.peaks[i]);
+        check(pk.peaks.size() >= 995 && b > 0.7f && pk.firstSample == 0, "peaks span the clip with the beep at bin 100");
+        clearAllTracks();
+    }
+
+    {   // A jump past the fill point: sound arrives there first.
+        playbackManager.setCurrentFrame(1);
+        gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
+        playbackManager.setCurrentFrame(220);
+        const int64_t at = fss(219);
+        const bool there = pumpUntil([&] { auto c = a->audioClip(); return c && c->covers(at, fss(239) - at); }, 1500);   // the source's sound ends just short of frame 240
+        check(there, "jump to 220: its sound is there within 1.5 s");
+        const bool full = pumpUntil([&] { auto c = a->audioClip(); return c && c->endSample() >= fss(239) && c->firstHoleFrom(0) == -1; }, 6000);
+        check(full, "jump: the clip is backfilled with no hole within 6 s");
+        std::shared_ptr<gfcAudioClip> c = a->audioClip();
+        check(c && rmsAt(*c, 216) > 0.3 && rmsAt(*c, 24) > 0.3 && rmsAt(*c, 228) < 0.01, "jump: beeps in place after the backfill");
+        clearAllTracks();
+    }
+
+    {   // A load into an empty track from frame 100: samples line up with the source.
+        playbackManager.setCurrentFrame(1);
+        gfcSequence* s = trackManager.getSequence(0);
+        s->myGUI->setFilename(beep);
+        s->myGUI->setCompression(GFC_8BPC);
+        s->myGUI->setScale("100");
+        s->loadPreview();
+        trackManager.startLoadingSequenceAt(0, 100);
+        const bool full = pumpUntil([&] { auto c = s->audioClip(); return c && c->endSample() >= fss(239) && c->firstHoleFrom(fss(100)) == -1; }, 6000);
+        std::shared_ptr<gfcAudioClip> c = s->audioClip();
+        check(full && c && c->startSample() == fss(100), "load from 100: the clip starts at frame 100's sample and fills");
+        check(c && rmsAt(*c, 120) > 0.3 && rmsAt(*c, 144) > 0.3 && rmsAt(*c, 216) > 0.3 && rmsAt(*c, 108) < 0.01 && rmsAt(*c, 132) < 0.01,
+              "load from 100: beeps at the source's 1 s positions");
+        check(c && rmsAt(*c, 96) == 0.0, "load from 100: nothing before the clip's start");
+        clearAllTracks();
+    }
+
+    std::printf("AUDIO-HOLES: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

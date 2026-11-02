@@ -7,58 +7,154 @@
 
 void gfcAudioClip::reset(int64_t startSample) {
     std::lock_guard<std::mutex> lock(m_);
-    start_ = startSample;
-    length_ = 0;
+    resetStart_ = startSample;
+    filled_.clear();
     chunks_.clear();
+}
+
+// Copies into the chunk slots, allocating (zeroed) the ones first touched.
+// Negative samples are dropped: the clip holds movie time from sample 0.
+void gfcAudioClip::writeLocked(int64_t sample, const float* interleaved, int64_t frames) {
+    if (sample < 0) {
+        if (sample + frames <= 0) return;
+        interleaved += (-sample) * kChannels;
+        frames += sample;
+        sample = 0;
+    }
+    while (frames > 0) {
+        const int64_t chunk = sample / kChunkFrames;
+        const int64_t offset = sample % kChunkFrames;
+        if (chunk >= int64_t(chunks_.size())) chunks_.resize(size_t(chunk) + 1);
+        std::unique_ptr<float[]>& slot = chunks_[size_t(chunk)];
+        if (!slot) slot.reset(new float[size_t(kChunkFrames) * kChannels]());
+        const int64_t n = std::min(frames, kChunkFrames - offset);
+        std::memcpy(slot.get() + offset * kChannels, interleaved, size_t(n) * kChannels * sizeof(float));
+        interleaved += n * kChannels;
+        frames -= n;
+        sample += n;
+    }
+}
+
+// Adds [from, to) to the written ranges, merging neighbours.
+void gfcAudioClip::markLocked(int64_t from, int64_t to) {
+    from = std::max<int64_t>(from, 0);
+    if (to <= from) return;
+    auto it = filled_.upper_bound(from);
+    if (it != filled_.begin()) {
+        auto prev = std::prev(it);
+        if (prev->second >= from) {
+            from = prev->first;
+            to = std::max(to, prev->second);
+            it = filled_.erase(prev);
+        }
+    }
+    while (it != filled_.end() && it->first <= to) {
+        to = std::max(to, it->second);
+        it = filled_.erase(it);
+    }
+    filled_.emplace(from, to);
+}
+
+bool gfcAudioClip::coversLocked(int64_t from, int64_t to) const {
+    if (to <= from) return true;
+    auto it = filled_.upper_bound(from);
+    if (it == filled_.begin()) return false;
+    --it;
+    return it->first <= from && it->second >= to;
+}
+
+void gfcAudioClip::writeAt(int64_t sample, const float* interleaved, int64_t frames) {
+    if (!interleaved || frames <= 0) return;
+    std::lock_guard<std::mutex> lock(m_);
+    writeLocked(sample, interleaved, frames);
+    markLocked(sample, sample + frames);
+}
+
+int64_t gfcAudioClip::fillHoles(int64_t sample, const float* interleaved, int64_t frames,
+                                std::vector<std::pair<int64_t, int64_t>>* written) {
+    if (!interleaved || frames <= 0) return 0;
+    std::lock_guard<std::mutex> lock(m_);
+    const int64_t lo = std::max<int64_t>(sample, 0), hi = sample + frames;
+    // The holes of [lo, hi): the gaps between the written ranges that overlap it.
+    std::vector<std::pair<int64_t, int64_t>> holes;
+    int64_t pos = lo;
+    auto it = filled_.upper_bound(lo);
+    if (it != filled_.begin()) {
+        auto prev = std::prev(it);
+        if (prev->second > pos) pos = prev->second;
+    }
+    for (; pos < hi; ++it) {
+        const int64_t next = it == filled_.end() ? hi : std::min(hi, it->first);
+        if (next > pos) holes.emplace_back(pos, next);
+        if (it == filled_.end()) break;
+        pos = std::max(pos, it->second);
+    }
+    int64_t total = 0;
+    for (const auto& h : holes) {
+        writeLocked(h.first, interleaved + (h.first - sample) * kChannels, h.second - h.first);
+        markLocked(h.first, h.second);
+        total += h.second - h.first;
+    }
+    if (written) *written = std::move(holes);
+    return total;
 }
 
 void gfcAudioClip::append(const float* interleaved, int64_t frames) {
     if (!interleaved || frames <= 0) return;
     std::lock_guard<std::mutex> lock(m_);
-    while (frames > 0) {
-        const int64_t chunk = length_ / kChunkFrames;
-        const int64_t offset = length_ % kChunkFrames;
-        if (chunk >= int64_t(chunks_.size()))
-            chunks_.emplace_back(new float[size_t(kChunkFrames) * kChannels]);
-        const int64_t n = std::min(frames, kChunkFrames - offset);
-        std::memcpy(chunks_[size_t(chunk)].get() + offset * kChannels, interleaved,
-                    size_t(n) * kChannels * sizeof(float));
-        interleaved += n * kChannels;
-        frames -= n;
-        length_ += n;
-    }
+    const int64_t at = filled_.empty() ? resetStart_ : filled_.rbegin()->second;
+    writeLocked(at, interleaved, frames);
+    markLocked(at, at + frames);
+}
+
+bool gfcAudioClip::covers(int64_t fromSample, int64_t frames) const {
+    std::lock_guard<std::mutex> lock(m_);
+    return coversLocked(fromSample, fromSample + std::max<int64_t>(frames, 0));
+}
+
+int64_t gfcAudioClip::firstHoleFrom(int64_t sample) const {
+    std::lock_guard<std::mutex> lock(m_);
+    if (filled_.empty()) return -1;
+    const int64_t end = filled_.rbegin()->second;
+    if (sample >= end) return -1;
+    auto it = filled_.upper_bound(sample);
+    if (it == filled_.begin()) return sample;   // before the first written range
+    --it;
+    if (it->second <= sample) return sample;    // between two ranges
+    return it->second < end ? it->second : -1;  // the end of the range holding `sample`
 }
 
 int64_t gfcAudioClip::startSample() const {
     std::lock_guard<std::mutex> lock(m_);
-    return start_;
+    return filled_.empty() ? resetStart_ : filled_.begin()->first;
 }
 
 int64_t gfcAudioClip::endSample() const {
     std::lock_guard<std::mutex> lock(m_);
-    return start_ + length_;
+    return filled_.empty() ? resetStart_ : filled_.rbegin()->second;
 }
 
 int64_t gfcAudioClip::read(int64_t fromSample, int64_t frames, float* out) const {
     if (!out || frames <= 0) return 0;
     std::fill(out, out + frames * kChannels, 0.f);
     std::lock_guard<std::mutex> lock(m_);
-    // Overlap of [fromSample, fromSample+frames) with the stored range.
-    const int64_t lo = std::max(fromSample, start_);
-    const int64_t hi = std::min(fromSample + frames, start_ + length_);
+    if (filled_.empty()) return 0;
+    const int64_t start = filled_.begin()->first, end = filled_.rbegin()->second;
+    const int64_t lo = std::max(fromSample, start);
+    const int64_t hi = std::min(fromSample + frames, end);
     if (hi <= lo) return 0;
-    int64_t pos = lo - start_;        // index into the stored frames
+    // Unwritten parts of an allocated chunk are zero, and a missing chunk is
+    // skipped, so holes come out silent.
+    int64_t pos = lo;
     float* dst = out + (lo - fromSample) * kChannels;
-    int64_t left = hi - lo;
-    while (left > 0) {
+    while (pos < hi) {
         const int64_t chunk = pos / kChunkFrames;
         const int64_t offset = pos % kChunkFrames;
-        const int64_t n = std::min(left, kChunkFrames - offset);
-        std::memcpy(dst, chunks_[size_t(chunk)].get() + offset * kChannels,
-                    size_t(n) * kChannels * sizeof(float));
+        const int64_t n = std::min(hi - pos, kChunkFrames - offset);
+        if (chunk < int64_t(chunks_.size()) && chunks_[size_t(chunk)])
+            std::memcpy(dst, chunks_[size_t(chunk)].get() + offset * kChannels, size_t(n) * kChannels * sizeof(float));
         dst += n * kChannels;
         pos += n;
-        left -= n;
     }
     return hi - lo;
 }
@@ -98,30 +194,42 @@ void gfcAudioPeaks::accumulate(const float* interleaved, int64_t frames) {
     if (before == 0 || before / gfcAudioClip::kRate != framesAccumulated / gfcAudioClip::kRate) ++version;
 }
 
+void gfcAudioPeaks::accumulateAt(int64_t first, const float* interleaved, int64_t frames) {
+    if (!interleaved || frames <= 0 || binsPerSecond <= 0) return;
+    if (first < firstSample) {
+        const int64_t skip = firstSample - first;
+        if (skip >= frames) return;
+        interleaved += skip * 2;
+        frames -= skip;
+        first = firstSample;
+    }
+    const int64_t perBin = std::max<int64_t>(1, gfcAudioClip::kRate / binsPerSecond);
+    const int64_t base = first - firstSample;
+    const size_t lastBin = size_t((base + frames - 1) / perBin);
+    if (lastBin >= peaks.size()) peaks.resize(lastBin + 1, 0.f);
+    for (int64_t k = 0; k < frames; ++k) {
+        const size_t bin = size_t((base + k) / perBin);
+        const float v = std::max(std::fabs(interleaved[2 * k]), std::fabs(interleaved[2 * k + 1]));
+        if (v > peaks[bin]) peaks[bin] = v;
+    }
+    const int64_t before = framesAccumulated;
+    framesAccumulated += frames;
+    if (before == 0 || before / gfcAudioClip::kRate != framesAccumulated / gfcAudioClip::kRate) ++version;
+}
+
 void gfcAudioPeaks::publish() { ++version; }
 
 int64_t gfcAppendAudioAt(gfcAudioClip& clip, int64_t first, const float* data, int64_t frames, int64_t limit,
-                         gfcAudioPeaks* peaks) {
+                         gfcAudioPeaks* peaks, int64_t floor) {
     if (!data || frames <= 0) return 0;
-    const int64_t end = clip.endSample();
-    if (first + frames <= end || end >= limit || first >= limit) return 0;
-    if (first < end) {
-        data += (end - first) * gfcAudioClip::kChannels;
-        frames -= end - first;
-        first = end;
-    }
-    int64_t appended = 0;
-    if (first > end) {
-        static const std::vector<float> silence(size_t(gfcAudioClip::kRate) * gfcAudioClip::kChannels, 0.f);
-        for (int64_t gap = first - end; gap > 0;) {
-            const int64_t n = std::min<int64_t>(gap, gfcAudioClip::kRate);
-            clip.append(silence.data(), n);
-            if (peaks) peaks->accumulate(silence.data(), n);
-            gap -= n;
-            appended += n;
-        }
-    }
-    clip.append(data, frames);
-    if (peaks) peaks->accumulate(data, frames);
-    return appended + frames;
+    const int64_t lo = std::max<int64_t>({first, floor, 0});
+    const int64_t hi = std::min(first + frames, limit);
+    if (hi <= lo) return 0;
+    const float* from = data + (lo - first) * gfcAudioClip::kChannels;
+    std::vector<std::pair<int64_t, int64_t>> written;
+    const int64_t n = clip.fillHoles(lo, from, hi - lo, peaks ? &written : nullptr);
+    if (peaks)
+        for (const auto& w : written)
+            peaks->accumulateAt(w.first, data + (w.first - first) * gfcAudioClip::kChannels, w.second - w.first);
+    return n;
 }

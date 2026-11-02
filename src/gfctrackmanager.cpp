@@ -269,6 +269,12 @@ bool gfcTrackManager::timelineFramesResident(int from, int count, int direction)
 	return true;
 }
 
+void gfcTrackManager::retargetAudio(int timelineFrame)
+{
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		sequences[i].setAudioTarget(timelineFrame);
+}
+
 void gfcTrackManager::syncCacheTransport(bool force)
 {
 	// A load moves the loop limits: send the player's whole transport

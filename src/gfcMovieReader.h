@@ -57,6 +57,21 @@ public:
     // end of the file. A seek empties the FIFO; its position restarts from the
     // audio timestamps.
     void setAudioEnabled(bool on);
+    // Audio-only mode (default off; takes effect at the next open()): no
+    // video decoder is opened and every stream but the audio one is discarded
+    // at the demuxer, sound is decoded as if setAudioEnabled(true), and
+    // readFrame() returns false. info() keeps the video stream's rate and
+    // frame count; the pixel-format facts stay at their defaults.
+    void setAudioOnly(bool on);
+    // Demuxes forward, decoding the audio into the FIFO until it covers
+    // `sampleEnd` (a movie-time 48 kHz index) or the file ends. Video packets
+    // are dropped, never queued. False only on an error (no audio decoder, a
+    // read error); the end of the file is not one.
+    bool readAudioUntil(int64_t sampleEnd, std::string* err);
+    // Seeks the audio stream to the packet at or before frameStartSample of
+    // `frameIndex` (less a short decoder pre-roll, so the first samples a
+    // caller keeps are not the decoder's warm-up) and empties the FIFO.
+    bool seekAudio(int64_t frameIndex, std::string* err);
     // Drains the FIFO into `interleaved` (stereo float). `firstSample` is the
     // first sample's index in the movie's own 48 kHz timeline (sample 0 = the
     // first video frame). False when the FIFO is empty.

@@ -2548,7 +2548,7 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
                 const QString file = QString::fromStdString(jefe::qt::previewRenderFilename(p));
                 int rendered = 0;
                 viewport_->makeCurrent();
-                quietly([&] { rendered = jefe::qt::triggerSyncRender(p); });   // renders seek the playhead
+                quietly([&] { rendered = jefe::qt::triggerSyncRender(p); });   // renders read their frame without moving the playhead
                 viewport_->doneCurrent();
                 const QImage thumb(file);
                 if (rendered == 1 && !thumb.isNull()) {
