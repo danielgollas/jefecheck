@@ -31,6 +31,7 @@
 // retarget() take no lock (atomic store + notify), so the playback tick may
 // call them.
 #include <array>
+#include <climits>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -136,9 +137,10 @@ private:
     size_t costLocked() const;
     enum class Scan { Job, Denied, None };
     Scan scan(int track, Job& out);
-    // slack: bytes the cache may go over the budget without naming victims
-    // (one frame, to finish a timeline frame another track already holds).
-    bool admit(int timelineFrame, bool unconditional, size_t bytes, size_t slack = 0);
+    // victimCeiling: victims must also score below it (finishing a timeline
+    // frame another track already holds takes victims from lower bands only).
+    bool admit(int timelineFrame, bool unconditional, size_t bytes, int victimCeiling = INT_MAX);
+    void dropPartialLocked(int timelineFrame, int track);   // a refused finish: unload the others' copies
     size_t timelineNeedLocked(int timelineFrame, int track, size_t bytes) const;
     // Another track holds (Resident or Decoding) its frame at this timeline frame.
     bool timelineHeldElsewhereLocked(int timelineFrame, int track) const;

@@ -189,7 +189,10 @@ size_t gfcFrameCache::costLocked() const {
 size_t gfcFrameCache::pooledBytesLocked() const {
     if (testPooled_ != size_t(-1)) return testPooled_;
     const gfcUpload::Stats up = gfcUpload::stats();
-    return up.stagingBytes + up.pooledTextureBytes + gfcSurface::poolStats().pooledBytes;
+    // A staging buffer held by a decoded frame waiting for upload is that
+    // frame's memory, already counted by its Decoding reservation: only the
+    // idle (or still in-flight after upload) buffers are pool bytes.
+    return (up.stagingBytes - up.stagingHeldBytes) + up.pooledTextureBytes + gfcSurface::poolStats().pooledBytes;
 }
 
 int64_t gfcFrameCache::cacheBytesLocked() const {
@@ -354,6 +357,24 @@ bool gfcFrameCache::timelineHeldElsewhereLocked(int t, int track) const {
     return false;
 }
 
+// A finish at t was refused: the other tracks' resident copies there (not
+// pinned, not on screen) become victims, so no track holds t alone.
+void gfcFrameCache::dropPartialLocked(int t, int track) {
+    for (int k = 0; k < kMaxTracks; ++k) {
+        if (k == track) continue;
+        Track& tr = tracks_[k];
+        if (!hasFootage(tr) || tr.cancelled) continue;
+        const int src = t - 1 - tr.offset;
+        if (src < tr.first || src > tr.last) continue;
+        if (src == tr.table->onScreen() || tr.table->pinned(src)) continue;
+        if (tr.table->state(src) == gfcFrameState::Resident && tr.table->setEvicting(src)) {
+            pending_.push_back({k, src});
+            victimsPending_.store(true, std::memory_order_release);
+            ++stats_.evicted;
+        }
+    }
+}
+
 // The bytes timeline frame t still needs: this track's frame plus every other
 // track's frame there that has footage and is not loaded yet (Unloaded).
 size_t gfcFrameCache::timelineNeedLocked(int t, int track, size_t bytes) const {
@@ -375,14 +396,14 @@ size_t gfcFrameCache::timelineNeedLocked(int t, int track, size_t bytes) const {
 // cache would go over budget. Only frames scoring strictly below t are taken,
 // and only enough to cover min(shortfall, bytes). An always-admitted frame
 // (pinned, or a < M) loads even when that is not covered.
-bool gfcFrameCache::admit(int t, bool unconditional, size_t bytes, size_t slack) {
+bool gfcFrameCache::admit(int t, bool unconditional, size_t bytes, int victimCeiling) {
     const Params p = params();
     const int64_t cache = cacheBytesLocked();
     const int64_t budget = budgetLocked();
-    const int64_t shortfall = cache + (int64_t)bytes - budget - (int64_t)slack;
+    const int64_t shortfall = cache + (int64_t)bytes - budget;
     if (shortfall <= 0) return true;
 
-    const int candScore = timelineScore(t, p);
+    const int candScore = std::min(timelineScore(t, p), victimCeiling);   // victims score below this
     struct Group { int score = 0; size_t bytes = 0; std::vector<Victim> frames; };
     std::map<int, Group> groups;   // by timeline frame
     std::vector<std::pair<int, int>> runs;
@@ -446,12 +467,28 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
             unconditional = a >= 0 && (b < 0 || a <= b) && a < p.M;   // the playhead and M-1 more
         }
         const size_t bytes = tr.frameBytes.load(std::memory_order_acquire);
-        // Finishing a timeline frame another track already holds may go one
-        // frame over: that frame was admitted with this track's bytes counted,
-        // and the pools can grow in between (staging buffers on the non-IOSurface
-        // path), which would otherwise leave the tracks holding different sets.
-        const size_t slack = timelineHeldElsewhereLocked(t, track) ? bytes : 0;
-        if (!admit(t, unconditional, timelineNeedLocked(t, track, bytes), slack)) { ++stats_.denied; return 2; }
+        // Finishing a timeline frame another track already holds. It was
+        // admitted with this track's bytes counted, but other admissions or
+        // pool growth may have used that room since. Inside the ahead window
+        // it is always admitted: the window is budget / cost per timeline
+        // frame, so every track's window frames fit and the overshoot stays
+        // about one timeline frame. Victims for a finish come only from lower
+        // bands, so it never takes a same-band frame another track holds and
+        // this one has yet to finish. A finish that is refused outside the
+        // window unloads the other tracks' copies instead: a timeline frame is
+        // held on every track or on none.
+        const bool finishing = timelineHeldElsewhereLocked(t, track);
+        int victimCeiling = INT_MAX;
+        if (finishing) {
+            const int sc = timelineScore(t, p);
+            if (sc >= 3 * p.N) unconditional = true;
+            if (p.N > 0) victimCeiling = sc < 0 ? -1 : (sc / p.N) * p.N;
+        }
+        if (!admit(t, unconditional, timelineNeedLocked(t, track, bytes), victimCeiling)) {
+            if (finishing) dropPartialLocked(t, track);
+            ++stats_.denied;
+            return 2;
+        }
         if (!tr.table->setDecoding(src, bytes)) return 0;
         out = Job{track, src, t, generation_.load(std::memory_order_acquire), bytes};
         noteIssued(track, src);

@@ -76,6 +76,7 @@ struct Stats {
     long texturesCreated;  // giveTexture() never saw these: fresh allocations
     size_t stagingBytes;   // memory held by staging buffers
     size_t pooledTextureBytes;
+    size_t stagingHeldBytes;   // part of stagingBytes held by a decoded frame not yet uploaded
 };
 Stats stats();
 

@@ -323,8 +323,11 @@ void noteTextureCreated() { ++g_texCreated; }
 Stats stats() {
     static const char* names[] = {"unknown", "off", "classic", "persistent"};
     std::lock_guard<std::mutex> lock(g_mutex);
+    size_t held = 0;
+    for (const Staging* s : g_staging)
+        if (s->state == Staging::State::Held) held += s->bytes;
     return {names[static_cast<int>(g_level.load())], g_stagedUploads.load(), g_stagingMisses.load(),
-            g_texReused.load(), g_texCreated.load(), g_stagingBytes, g_textureBytes};
+            g_texReused.load(), g_texCreated.load(), g_stagingBytes, g_textureBytes, held};
 }
 
 }  // namespace gfcUpload

@@ -448,6 +448,57 @@ int cachePolicySelfTest() {
         check(c.cacheBytes() <= 20 * 1000 + 1000, "finish: at most one frame over the budget");
     }
 
+    {   // A finish refused outside the window unloads the other track's copy.
+        gfcFrameCache c; gfcFrameTable t0, t1; t0.reset(240); t1.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t0); c.attachTrack(1, &t1);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTrackGeometry(1, 0, 0, 239, 1000);
+        c.setTestBudget(20 * 1000);
+        c.setTransport(100, +1, LOOPMODELOOP_ID, 91, 109, 24);   // ahead 100..109, behind 91..99
+        check(pull(c, 1, 10, 1000) == seq(100, 109) && pull(c, 0, 10, 1000) == seq(100, 109), "drop: both tracks load 100..109");
+        t1.setDecoding(98, 1000); t1.setResident(98, 1000);   // track 1 alone holds timeline 99
+        Job j{};
+        check(!c.nextJob(0, j, ms(20)), "drop: track 0's finish of 99 is refused (over budget, nothing lower)");
+        const gfcFrameCache::Victims v = c.drainVictims();
+        check(v.frames.size() == 1 && v.frames[0].track == 1 && v.frames[0].sourceIndex == 98 &&
+              t1.state(98) == gfcFrameState::Evicting, "drop: track 1's copy of 99 becomes the victim");
+    }
+
+    {   // Four tracks, pools grown by more than a frame while track 0 lags:
+        // every timeline frame the others hold is still finished on track 0.
+        gfcFrameCache c; gfcFrameTable tt[4];
+        c.setTestPooledBytes(0);
+        for (int k = 0; k < 4; ++k) {
+            tt[k].reset(240);
+            c.attachTrack(k, &tt[k]);
+            c.setTrackGeometry(k, 0, 0, 239, 1000);
+        }
+        c.setTestBudget(40 * 1000);   // 10 timeline frames of 4 tracks
+        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        for (int k = 3; k >= 1; --k) check(pull(c, k, 10, 1000) == seq(100, 109), "four: tracks 3..1 load 100..109");
+        check(pull(c, 0, 6, 1000) == seq(100, 105), "four: track 0 loads 100..105");
+        c.setTestPooledBytes(3500);   // pools grew by three and a half frames
+        {   const std::vector<int> got = pull(c, 0, 10, 1000);
+            std::printf("CACHE-POLICY: four: track 0 then got");
+            for (int f : got) std::printf(" %d", f);
+            std::printf(" (cache %lld, budget %lld)\n", (long long)c.cacheBytes(), (long long)c.budgetBytes());
+            check(got == seq(106, 109), "four: track 0 still finishes 106..109"); }
+        Job j{};
+        bool more = false;
+        for (int k = 0; k < 4; ++k) more |= c.nextJob(k, j, ms(20));
+        check(!more, "four: nothing new is admitted over the budget");
+        bool same = true;
+        for (int i = 0; i < 240; ++i) {
+            const auto s0 = tt[0].state(i);
+            for (int k = 1; k < 4; ++k) same &= tt[k].state(i) == s0;
+        }
+        check(same, "four: all tracks hold the same timeline frames");
+        size_t frames = 0;
+        for (int k = 0; k < 4; ++k) frames += tt[k].residentBytes() + tt[k].reservedBytes();
+        check(frames <= 40 * 1000 + 1000, "four: frame bytes stay within the budget plus one frame");
+    }
+
     {   // One for one: far over budget, an always-admitted frame frees about one frame, not every lower one.
         gfcFrameCache c; gfcFrameTable t; t.reset(240);
         c.setTestPooledBytes(0);
@@ -600,7 +651,7 @@ std::set<int> residentTimeline(gfcSequence* s) {
 
 size_t poolBytes() {
     const gfcUpload::Stats up = gfcUpload::stats();
-    return up.stagingBytes + up.pooledTextureBytes + gfcSurface::poolStats().pooledBytes;
+    return (up.stagingBytes - up.stagingHeldBytes) + up.pooledTextureBytes + gfcSurface::poolStats().pooledBytes;
 }
 
 struct SuiteGuard {   // the queue cap and thumbnails, restored on exit
@@ -683,6 +734,13 @@ int cacheBudgetSelfTest(const std::string& dir) {
         const std::set<int> ta = residentTimeline(a), tb = residentTimeline(b);
         std::printf("CACHE-BUDGET: mixed A=%zu B=%zu cacheBytes=%lld\n", ta.size(), tb.size(), (long long)frameCache.cacheBytes());
         check(boundOk, "mixed: every sample within budget + 2 timeline frames");
+        if (ta != tb) {
+            std::printf("CACHE-BUDGET: mixed A:");
+            for (int f : ta) std::printf(" %d", f);
+            std::printf(" B:");
+            for (int f : tb) std::printf(" %d", f);
+            std::printf(" playhead %d\n", playbackManager.getCurrentFrame());
+        }
         check(!ta.empty() && ta == tb, "mixed: both tracks hold the same timeline frames");
         trackManager.getSequence(1)->unloadAndClear();
         trackManager.getSequence(1)->myGUI->setFilename("");
