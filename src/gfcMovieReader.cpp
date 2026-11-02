@@ -86,6 +86,8 @@ struct gfcMovieReader::Impl {
     bool eofSent = false;
     int64_t lastIndex = -1;
     std::shared_ptr<AVFrame> last;   // most recently decoded frame (index lastIndex)
+    bool intraOnly = false;          // every frame a keyframe (ProRes, DNx): seeks are cheap
+    static constexpr int64_t kDecodeOnward = 12;   // longest forward skip decoded through rather than sought
     gfcMovieInfo info;
     std::mutex m;
 
@@ -168,6 +170,8 @@ struct gfcMovieReader::Impl {
         dec->pkt_timebase = stream()->time_base;
         ret = avcodec_open2(dec, codec, nullptr);
         if (ret < 0) { setErr(err, "cannot open decoder: " + avErr(ret)); return false; }
+        const AVCodecDescriptor* cd = avcodec_descriptor_get(par->codec_id);
+        intraOnly = cd && (cd->props & AV_CODEC_PROP_INTRA_ONLY);
         return true;
     }
 
@@ -511,7 +515,11 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
         return false;
     }
     if (!(d.last && index == d.lastIndex)) {
-        if (!(d.last && index == d.lastIndex + 1) && !d.seekTo(index, err)) return false;
+        // A short skip forward in a long-GOP stream decodes on (a seek would go
+        // back to the keyframe and decode further); an intra-only stream seeks.
+        const bool onward = d.last && index > d.lastIndex &&
+            (index == d.lastIndex + 1 || (!d.intraOnly && index - d.lastIndex <= Impl::kDecodeOnward));
+        if (!onward && !d.seekTo(index, err)) return false;
         if (!d.decodeUntil(index, err)) {
             d.last.reset();
             d.lastIndex = -1;

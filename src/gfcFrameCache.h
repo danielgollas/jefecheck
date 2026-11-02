@@ -76,6 +76,16 @@ public:
     // longer Decoding (table reset, load cancelled) is left alone; returns false.
     // cacheBytes() is derived from the tables, so nothing else needs updating.
     bool commitUploaded(gfcFrameTable& table, int index, size_t bytes);
+    // Keep time with the sound leading: the ahead pass skips the frames the
+    // playhead will pass before a job could finish (a < ceil(latency x fps) + 1,
+    // at most window - 1). They stay candidates and load later (near-behind,
+    // or once the lead is cleared). Lock-free; set by the playback manager.
+    void setLeadSkip(bool on) { leadSkip_.store(on, std::memory_order_release); if (on) wake(); }
+    bool leadSkip() const { return leadSkip_.load(std::memory_order_acquire); }
+    // Average time from nextJob handing a job out to commitUploaded (decode +
+    // upload wait), seconds; 0 until a job has finished.
+    double jobLatencySeconds() const { return latencyAvg_.load(std::memory_order_acquire); }
+    int leadSkipFrames() const;           // the current skip (0 when off), for tests
     void cancel(int track);               // makes nextJob return false now and until the next setTrackGeometry
     // GL thread: a drained victim was kept (it is on screen) and put back to
     // Resident; it no longer counts in stats().evicted.
@@ -129,6 +139,8 @@ private:
     bool admit(int timelineFrame, bool unconditional, size_t bytes);
     size_t timelineNeedLocked(int timelineFrame, int track, size_t bytes) const;
     void wake();
+    int leadSkipLocked(const Params& p) const;   // frames skipped ahead (0 when off)
+    void noteIssued(int track, int index);       // mutex_ held: a job handed out
 
     mutable std::mutex mutex_;
     std::condition_variable cv_;
@@ -150,6 +162,16 @@ private:
     mutable bool sysValid_ = false;
     Stats stats_{0, 0, 0, 0};
     std::atomic<uint64_t> retargets_{0};
+    // Job latency: issue times of the last few jobs per track (the loader runs
+    // ahead of the uploads, so more than one can be in flight), read lock-free
+    // by commitUploaded on the GL thread, which is the only writer of the average.
+    static constexpr int kIssued = 8;
+    struct Issued { std::atomic<int> index{-1}; std::atomic<int64_t> ns{0}; };
+    std::array<std::array<Issued, kIssued>, kMaxTracks> issued_;
+    std::array<std::atomic<int>, kMaxTracks> issuedNext_{};
+    std::array<std::atomic<const gfcFrameTable*>, kMaxTracks> issuedTable_{};
+    std::atomic<double> latencyAvg_{0.0};
+    std::atomic<bool> leadSkip_{false};
 };
 
 extern gfcFrameCache frameCache;   // defined in gfcFrameCache.cpp

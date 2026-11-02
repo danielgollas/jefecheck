@@ -73,6 +73,8 @@ void gfcPlaybackManager::update() {
     if (!playing) {
         intraFrameCount=0;
         buffering_=false;
+        fpsHeld_=false;
+        if (leadSkipOn_) setLeadSkip(false);
         return;
     }
 
@@ -126,6 +128,8 @@ void gfcPlaybackManager::update() {
         currentFrame=audioEngine.leaderFrame();
         audioEngine.stopLeading();
     }
+    // Pacing leads from here: the cache stops skipping ahead of the sound.
+    if (leadSkipOn_) setLeadSkip(false);
 
     intraFrameCount+=timeStep;
 
@@ -138,6 +142,7 @@ void gfcPlaybackManager::update() {
             const int next=advanceFrame(currentFrame, dirCopy, playbackMode, startLimit, endLimit);
             if (next!=currentFrame && !trackManager.timelineFrameResident(next)) {
                 intraFrameCount=timePerFrame;
+                fpsHeld_=true;
                 return;
             }
         }
@@ -200,8 +205,12 @@ void gfcPlaybackManager::recordAdvanceForFPS(int frames) {
 
 				// Ignore discontinuities (first advance, or resuming after a
 				// pause/idle gap) so they don't poison the average.
+				// An interval that ends a Show-every-frame hold is a real slow
+				// frame (up to 5 s), not a resume after a pause.
 				const double tpfMs = timePerFrame*1000.0;
-				if (interMs > 0.0 && interMs < 5.0*tpfMs) {
+				const bool held = fpsHeld_;
+				fpsHeld_ = false;
+				if (interMs > 0.0 && (interMs < 5.0*tpfMs || (held && interMs < 5000.0))) {
 					if (emaIntervalMs < 0.0) emaIntervalMs = interMs;
 					else emaIntervalMs += 0.05*(interMs - emaIntervalMs);
 				}
@@ -885,11 +894,20 @@ bool gfcPlaybackManager::audioTryLead() {
     audioEngine.setPlayerRate(targetRateNum, targetRateDen);
     const gfcAudioTransport t{currentFrame, getStartLimit(), getEndLimit(), playbackMode, currentDirection};
     audioSentStart=t.startLimit; audioSentEnd=t.endLimit; audioSentMode=t.loopMode; audioSentDir=t.direction;
+    // The picture is waiting for the pre-play buffer: its end starts the lead.
+    if (buffering_) { audioEngine.updateTransport(t); return false; }
     // Reverse is silent; Show every frame never lets the sound lead (each
     // shown frame plays its own slice instead).
     if (currentDirection<=0 || !keepTime()) { audioEngine.updateTransport(t); return false; }
     audioEngine.startLeading(t);   // a no-op unless the engine can lead
-    return audioEngine.isLeading();
+    const bool leading=audioEngine.isLeading();
+    setLeadSkip(leading);
+    return leading;
+}
+
+void gfcPlaybackManager::setLeadSkip(bool on) {
+    leadSkipOn_=on;
+    frameCache.setLeadSkip(on);
 }
 
 void gfcPlaybackManager::audioStop() {
@@ -899,6 +917,7 @@ void gfcPlaybackManager::audioStop() {
     }
     audioEngine.stopLeading();
     audioEngine.stopSlices();
+    setLeadSkip(false);
 }
 
 // The user moved the playhead: paused, play that frame's slice (step, seek,
@@ -925,6 +944,7 @@ bool gfcPlaybackManager::beginBuffering() {
     buffering_=true;
     bufferingSince_=std::chrono::steady_clock::now();
     audioEngine.stopLeading();   // silent while waiting
+    setLeadSkip(false);
     return true;
 }
 

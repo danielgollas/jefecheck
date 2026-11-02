@@ -68,8 +68,47 @@ void gfcFrameCache::setTrackFrameBytes(int track, size_t frameBytes) {
 
 bool gfcFrameCache::commitUploaded(gfcFrameTable& table, int index, size_t bytes) {
     const bool done = table.setResidentIfDecoding(index, bytes);
+    if (done) {   // the job's latency, issue to upload (lock-free)
+        const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_t_::now().time_since_epoch()).count();
+        for (int k = 0; k < kMaxTracks; ++k) {
+            if (issuedTable_[k].load(std::memory_order_acquire) != &table) continue;
+            for (Issued& e : issued_[k]) {
+                if (e.index.load(std::memory_order_acquire) != index) continue;
+                const int64_t at = e.ns.load(std::memory_order_acquire);
+                e.index.store(-1, std::memory_order_release);
+                const double secs = std::min(1.0, std::max(0.0, double(now - at) * 1e-9));
+                const double avg = latencyAvg_.load(std::memory_order_acquire);
+                latencyAvg_.store(avg <= 0.0 ? secs : avg + 0.2 * (secs - avg), std::memory_order_release);
+                break;
+            }
+            break;
+        }
+    }
     wake();
     return done;
+}
+
+void gfcFrameCache::noteIssued(int track, int index) {
+    issuedTable_[track].store(tracks_[track].table, std::memory_order_release);
+    const int slot = issuedNext_[track].fetch_add(1, std::memory_order_relaxed) % kIssued;
+    Issued& e = issued_[track][slot];
+    e.index.store(-1, std::memory_order_release);
+    e.ns.store(std::chrono::duration_cast<std::chrono::nanoseconds>(clock_t_::now().time_since_epoch()).count(),
+               std::memory_order_release);
+    e.index.store(index, std::memory_order_release);
+}
+
+int gfcFrameCache::leadSkipLocked(const Params& p) const {
+    if (!leadSkip_.load(std::memory_order_acquire)) return 0;
+    const double fps = fps_ > 0.0f ? fps_ : 24.0f;
+    const int lead = (int)std::ceil(latencyAvg_.load(std::memory_order_acquire) * fps) + 1;
+    return std::max(0, std::min(p.window - 1, lead));
+}
+
+int gfcFrameCache::leadSkipFrames() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    walk();
+    return leadSkipLocked(params());
 }
 
 void gfcFrameCache::clearTrack(int track) {
@@ -396,6 +435,7 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         if (!admit(t, unconditional, timelineNeedLocked(t, track, bytes))) { ++stats_.denied; return 2; }
         if (!tr.table->setDecoding(src, bytes)) return 0;
         out = Job{track, src, t, generation_.load(std::memory_order_acquire), bytes};
+        noteIssued(track, src);
         ++stats_.admitted;
         return 1;
     };
@@ -406,8 +446,12 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         if (attempt(src, true) == 1) return Scan::Job;
     }
     // Candidates come in falling score order, so the first refusal ends the scan.
+    // Keep time with the sound leading: frames nearer than the lead cannot
+    // arrive before the playhead passes them; they are skipped, not dropped.
+    const int lead = leadSkipLocked(p);
     for (int t : w.aheadOrder) {
         if (w.a[t - w.start] > p.window) break;
+        if (w.a[t - w.start] < lead) continue;
         const int r = attempt(t - 1 - tr.offset, false);
         if (r == 1) return Scan::Job;
         if (r == 2) return Scan::Denied;

@@ -1633,6 +1633,67 @@ gfcSequence* lagFixture(const std::string& dir, LagRig& rig) {
 }
 }  // namespace
 
+namespace {
+// One Keep-time play of `secs` seconds from `from` (sound leading, plate drawing every tick).
+struct KeepTimeRun {
+    int start = 0, end = 0, shown = 0;
+    uint64_t admitted = 0;
+    bool monotonic = true, led = false, ledInTime = false, stayed = true;
+    int lead = 0;   // the cache's lead skip at the end
+    double skippedPct() const { return end > start ? 100.0 * double((end - start) - shown) / double(end - start) : 0.0; }
+};
+KeepTimeRun keepTimeRun(gfcSequence* a, LagRig& rig, int from, double secs) {
+    KeepTimeRun r;
+    playbackManager.setCurrentFrame(from);
+    r.start = playbackManager.getCurrentFrame();
+    const uint64_t admitted0 = frameCache.stats().admitted;
+    playbackManager.startPlayFwd();
+    const auto t0 = std::chrono::steady_clock::now();
+    int last = r.start;
+    std::set<int> shown;
+    for (;;) {
+        const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        if (s >= secs) break;
+        rig.tick();
+        const int f = playbackManager.getCurrentFrame();
+        r.monotonic &= f >= last;
+        last = f;
+        const gfcFrame drawn = a->getFrame(f);   // what the plate draws this tick
+        if (drawn.loaded && drawn.indexNumber == f - 1) shown.insert(f);
+        const bool leading = audioEngine.isLeading();
+        if (leading && !r.led) { r.led = true; r.ledInTime = s <= 0.6; }
+        else if (r.led && !leading) r.stayed = false;
+    }
+    r.end = playbackManager.getCurrentFrame();
+    r.shown = int(shown.size());
+    r.admitted = frameCache.stats().admitted - admitted0;
+    r.lead = frameCache.leadSkipFrames();
+    playbackManager.pause();
+    return r;
+}
+
+// Play from `from` with the decoder at `delayMs`; returns when the playhead first moved (s), -1 if not within 1 s.
+// `held`/`silent`: the frame held and the sound waited for the first 150 ms.
+double prePlayStart(LagRig& rig, int from, int delayMs, bool& held, bool& silent) {
+    gfcSequence::setTestDecodeDelayMs(delayMs);
+    playbackManager.setCurrentFrame(from);
+    playbackManager.startPlayFwd();
+    const auto t0 = std::chrono::steady_clock::now();
+    held = silent = true;
+    double movedAt = -1;
+    for (;;) {
+        const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        if (s >= 1.0 || movedAt >= 0) break;
+        rig.tick();
+        const int f = playbackManager.getCurrentFrame();
+        if (s < 0.15) { held &= f == from; silent &= !audioEngine.isLeading(); }
+        if (f != from) movedAt = s;
+    }
+    playbackManager.pause();
+    return movedAt;
+}
+}  // namespace
+
 int cacheKeepTimeSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
     auto check = [&](bool cond, const char* msg) {
@@ -1646,37 +1707,34 @@ int cacheKeepTimeSelfTest(const std::string& dir) {
     LagRig rig;
     gfcSequence* a = lagFixture(dir, rig);
 
-    {   // 5 s of play with a loader at half the rate: sound leads, frames are skipped.
-        const int start = playbackManager.getCurrentFrame();
-        playbackManager.startPlayFwd();
-        const auto t0 = std::chrono::steady_clock::now();
-        bool monotonic = true, ledInTime = false, stayed = true, led = false;
-        int last = start;
-        std::set<int> shown;
-        while (true) {
-            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            if (secs >= 5.0) break;
-            rig.tick();
-            const int f = playbackManager.getCurrentFrame();
-            monotonic &= f >= last;
-            last = f;
-            const gfcFrame drawn = a->getFrame(f);   // what the plate draws this tick
-            if (drawn.loaded && drawn.indexNumber == f - 1) shown.insert(f);
-            const bool leading = audioEngine.isLeading();
-            if (leading && !led) { led = true; ledInTime = secs <= 0.6; }
-            else if (led && !leading) stayed = false;
-        }
-        const int end = playbackManager.getCurrentFrame();
-        std::printf("CACHE-KEEPTIME: frames %d..%d, shown %zu of %d, led=%d inTime=%d stayed=%d\n", start, end,
-                    shown.size(), end - start, int(led), int(ledInTime), int(stayed));
-        check(monotonic, "keep time: the frame sequence never goes back");
-        check(led && ledInTime && stayed, "keep time: the sound leads within 0.6 s and keeps leading");
-        check(int(shown.size()) < end - start, "keep time: frames were skipped (fewer shown than elapsed)");
-        check(end >= 100, "keep time: time was kept (frame >= 100 after 5 s)");
+    {   // 5 s with a loader at half the rate (80 ms a frame): sound leads, frames are skipped,
+        // and what the loader makes is mostly shown (it works past the frames the sound passes first).
+        const KeepTimeRun r = keepTimeRun(a, rig, 1, 5.0);
+        std::printf("CACHE-KEEPTIME: 80 ms: frames %d..%d, shown %d of %d (skipped %.0f%%), admitted %llu (shown/admitted %.2f), "
+                    "lead %d, latency %.0f ms, led=%d inTime=%d stayed=%d\n",
+                    r.start, r.end, r.shown, r.end - r.start, r.skippedPct(), (unsigned long long)r.admitted,
+                    r.admitted ? double(r.shown) / double(r.admitted) : 0.0, r.lead, frameCache.jobLatencySeconds() * 1000.0,
+                    int(r.led), int(r.ledInTime), int(r.stayed));
+        check(r.monotonic, "keep time: the frame sequence never goes back");
+        check(r.led && r.ledInTime && r.stayed, "keep time: the sound leads within 0.6 s and keeps leading");
+        check(r.shown < r.end - r.start, "keep time: frames were skipped (fewer shown than elapsed)");
+        check(r.end >= 100, "keep time: time was kept (frame >= 100 after 5 s)");
+        check(r.admitted > 0 && double(r.shown) >= 0.6 * double(r.admitted), "keep time: at least 60% of the frames loaded were shown");
         auto c = a->audioClip();
-        check(c && c->covers(0, gfcAudioClip::frameStartSample(120, 24, 1)),
-              "keep time: the sound has no hole in the first 5 s");
-        playbackManager.pause();
+        check(c && c->covers(0, gfcAudioClip::frameStartSample(120, 24, 1)), "keep time: the sound has no hole in the first 5 s");
+    }
+
+    {   // ~16 fps loader (60 ms a frame): at most half the frames are skipped.
+        gfcSequence::setTestDecodeDelayMs(60);
+        const KeepTimeRun r = keepTimeRun(a, rig, 121, 4.5);
+        std::printf("CACHE-KEEPTIME: 60 ms: frames %d..%d, shown %d of %d (skipped %.0f%%), admitted %llu (shown/admitted %.2f), lead %d, latency %.0f ms\n",
+                    r.start, r.end, r.shown, r.end - r.start, r.skippedPct(), (unsigned long long)r.admitted,
+                    r.admitted ? double(r.shown) / double(r.admitted) : 0.0, r.lead, frameCache.jobLatencySeconds() * 1000.0);
+        check(r.monotonic && r.led && r.stayed, "keep time 60 ms: monotonic, the sound leads throughout");
+        check(r.end - r.start >= 85, "keep time 60 ms: time was kept");
+        check(r.skippedPct() <= 50.0, "keep time 60 ms: at most 50% of the elapsed frames skipped");
+        check(r.admitted > 0 && double(r.shown) >= 0.6 * double(r.admitted), "keep time 60 ms: at least 60% of the frames loaded were shown");
+        check(!frameCache.leadSkip(), "paused: the lead skip is off");
     }
 
     {   // Skipped frames still load once the loader can.
@@ -1686,25 +1744,31 @@ int cacheKeepTimeSelfTest(const std::string& dir) {
         check(pumpUntil([&] { return timelineRangeResident(a, 60, 79); }, 3000), "skipped frames load: 60..79 resident within 3 s");
     }
 
-    {   // The pre-play buffer: play waits (silent) until the next ~0.25 s is in.
-        gfcSequence::setTestDecodeDelayMs(80);
-        playbackManager.setCurrentFrame(200);
-        playbackManager.startPlayFwd();
-        const auto t0 = std::chrono::steady_clock::now();
-        bool held = true, silent = true;
-        double movedAt = -1;
-        while (true) {
-            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            if (secs >= 1.0) break;
-            rig.tick();
-            const int f = playbackManager.getCurrentFrame();
-            if (secs < 0.15) { held &= f == 200; silent &= !audioEngine.isLeading(); }
-            if (f != 200 && movedAt < 0) movedAt = secs;
-        }
-        std::printf("CACHE-KEEPTIME: pre-play buffer moved after %.3f s\n", movedAt);
-        check(held && silent, "pre-play: frame 200 holds and the sound waits for 150 ms");
-        check(movedAt > 0 && movedAt <= 0.6, "pre-play: playback starts within 600 ms");
-        playbackManager.pause();
+    {   // The pre-play buffer: play waits (silent) until the next ~0.25 s is in, at most 0.5 s.
+        frameCache.setTestBudget(int64_t(20 * kFrame8));
+        playbackManager.setCurrentFrame(1);
+        pump(1000);   // settle at 1..20: the frames below are not resident
+        // A start frame with none of the next six resident (earlier runs leave some behind).
+        auto coldStart = [](int from, int to) {
+            for (int f = from; f <= to; ++f) {
+                bool cold = true;
+                for (int k = 0; k < 6 && cold; ++k) cold = !trackManager.timelineFrameResident(f + k);
+                if (cold) return f;
+            }
+            return -1;
+        };
+        const int slowAt = coldStart(150, 230);
+        check(slowAt > 0, "fixture: a start frame in 150..230 with nothing resident");
+        bool held = false, silent = false;
+        const double slow = prePlayStart(rig, slowAt, 200, held, silent);   // 6 frames need ~1.2 s: the cap ends the wait
+        std::printf("CACHE-KEEPTIME: pre-play 200 ms/frame from %d moved after %.3f s\n", slowAt, slow);
+        check(held && silent, "pre-play: the start frame holds and the sound waits for 150 ms");
+        check(slow >= 0.45 && slow <= 0.7, "pre-play: a slow loader waits out the 0.5 s cap, then plays");
+        const int fastAt = coldStart(40, 140);
+        check(fastAt > 0, "fixture: a start frame in 40..140 with nothing resident");
+        const double fast = prePlayStart(rig, fastAt, 30, held, silent);    // 6 frames in ~0.2 s
+        std::printf("CACHE-KEEPTIME: pre-play 30 ms/frame from %d moved after %.3f s\n", fastAt, fast);
+        check(fast > 0 && fast < 0.5, "pre-play: play starts as soon as the buffer is in, before the 0.5 s cap");
     }
 
     gfcSequence::setTestDecodeDelayMs(0);
@@ -1726,31 +1790,48 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
     LagRig rig;
     gfcSequence* a = lagFixture(dir, rig);
 
-    {   // 5 s of play with a loader at half the rate: playback slows to the loader.
-        const int start = playbackManager.getCurrentFrame();
+    // Plays `secs` from `from`; the plate draws every tick.
+    struct Run { int start, end; float fps; bool stepOne, everLed, allResident; };
+    auto run = [&](int from, double secs) {
+        Run r{};
+        playbackManager.setCurrentFrame(from);
+        r.start = playbackManager.getCurrentFrame();
+        r.stepOne = true; r.allResident = true;
         playbackManager.startPlayFwd();
         const auto t0 = std::chrono::steady_clock::now();
-        bool stepOne = true, everLed = false, allResident = true, advanced = false;
-        int last = start;
-        while (true) {
-            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            if (secs >= 5.0) break;
+        bool advanced = false;
+        int last = r.start;
+        for (;;) {
+            if (std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() >= secs) break;
             rig.tick();
             const int f = playbackManager.getCurrentFrame();
-            if (f != last) { stepOne &= f == last + 1; advanced = true; last = f; }
-            a->getFrame(f);   // the plate draws it
-            everLed |= audioEngine.isLeading();
-            if (advanced) allResident &= trackManager.timelineFrameResident(f);
+            if (f != last) { r.stepOne &= f == last + 1; advanced = true; last = f; }
+            a->getFrame(f);
+            r.everLed |= audioEngine.isLeading();
+            if (advanced) r.allResident &= trackManager.timelineFrameResident(f);
         }
-        const int end = playbackManager.getCurrentFrame();
-        const float fps = playbackManager.getCurrentFPS();
-        std::printf("CACHE-EVERYFRAME: frames %d..%d, fps %.1f, led=%d\n", start, end, fps, int(everLed));
-        check(stepOne, "every frame: each change is exactly +1");
-        check(!everLed, "every frame: the sound never leads");
-        check(end >= 40 && end <= 90, "every frame: playback slowed to the loader (frame 40..90 after 5 s)");
-        check(fps < 20.0f, "every frame: the measured fps shows the slowdown");
-        check(allResident, "every frame: every frame shown was resident");
+        r.end = playbackManager.getCurrentFrame();
+        r.fps = playbackManager.getCurrentFPS();
         playbackManager.pause();
+        return r;
+    };
+
+    {   // 5 s with a loader at half the rate: playback slows to the loader.
+        const Run r = run(1, 5.0);
+        std::printf("CACHE-EVERYFRAME: frames %d..%d, fps %.1f, led=%d\n", r.start, r.end, r.fps, int(r.everLed));
+        check(r.stepOne, "every frame: each change is exactly +1");
+        check(!r.everLed, "every frame: the sound never leads");
+        check(r.end >= 40 && r.end <= 90, "every frame: playback slowed to the loader (frame 40..90 after 5 s)");
+        check(r.fps < 20.0f, "every frame: the measured fps shows the slowdown");
+        check(r.allResident, "every frame: every frame shown was resident");
+    }
+
+    {   // A very slow loader (300 ms a frame, ~3 fps): the readout keeps following it down.
+        gfcSequence::setTestDecodeDelayMs(300);
+        const Run r = run(150, 8.0);
+        std::printf("CACHE-EVERYFRAME: 300 ms: frames %d..%d, fps %.1f\n", r.start, r.end, r.fps);
+        check(r.stepOne && !r.everLed && r.allResident, "every frame 300 ms: +1 steps, no lead, every frame resident");
+        check(r.fps > 0.0f && r.fps < 6.0f, "every frame 300 ms: the measured fps drops below 6");
     }
 
     gfcSequence::setTestDecodeDelayMs(0);

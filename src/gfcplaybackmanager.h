@@ -120,6 +120,13 @@ private: //private made public while debugging
     // Starts the wait unless the frames are already resident; true while waiting.
     // The engine stops leading for the wait. Called only when keepTime().
     bool beginBuffering();
+    // The frame cache's lead skip follows "the sound leads under Keep time";
+    // the mirror keeps the tick to a plain bool test when nothing changes.
+    bool leadSkipOn_ = false;
+    void setLeadSkip(bool on);
+    // Show every frame held the picture since the last advance: the interval
+    // that ends the hold is a real (slow) frame, not a discontinuity.
+    bool fpsHeld_ = false;
     int audioSentStart=-1, audioSentEnd=-1, audioSentMode=-1, audioSentDir=0;
     // Frame cache (frameCache): the transport (direction, loop mode, limits,
     // rate) is sent when it changes; a jump retargets, a playback step advances.
