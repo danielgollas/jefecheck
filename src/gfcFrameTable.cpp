@@ -10,6 +10,7 @@ void gfcFrameTable::reset(int frameCount) {
     std::lock_guard<std::mutex> lock(mutex_);
     entries_.assign(frameCount > 0 ? size_t(frameCount) : 0, Entry());
     onScreen_ = -1;
+    pinnedCount_ = 0;
     residentCount_ = 0;
     residentBytes_ = 0;
     reservedBytes_ = 0;
@@ -86,7 +87,17 @@ void gfcFrameTable::setFailed(int i) {
 
 void gfcFrameTable::setPinned(int i, bool on) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (inRange(i)) entries_[i].pinned = on;
+    if (!inRange(i) || entries_[i].pinned == on) return;
+    entries_[i].pinned = on;
+    pinnedCount_ += on ? 1 : -1;
+}
+
+void gfcFrameTable::pinnedIndices(std::vector<int>& out) const {
+    out.clear();
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (pinnedCount_ == 0) return;
+    for (int i = 0; i < (int)entries_.size(); ++i)
+        if (entries_[i].pinned) out.push_back(i);
 }
 
 bool gfcFrameTable::pinned(int i) const {

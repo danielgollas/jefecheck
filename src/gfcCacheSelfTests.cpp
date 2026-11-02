@@ -328,6 +328,11 @@ int cachePolicySelfTest() {
         if (got) c.commit(j, 1000, true);
         check(t.pinned(239) && c.score(0, 239) == INT_MAX, "pins: pinned on the table and never a victim");
         check(c.drainVictims().frames.empty(), "pins: the pinned load evicted nothing");
+        t.setPinned(200, true);   // straight on the table, as hold-edge does
+        const bool got2 = c.nextJob(0, j, ms(20));
+        check(got2 && j.sourceIndex == 200, "pins: a pin set on the table directly loads first");
+        if (got2) c.commit(j, 1000, true);
+        check(c.score(0, 200) == INT_MAX, "pins: a table pin is never a victim");
 
         Job w{}; bool wok = false;
         const auto t0 = std::chrono::steady_clock::now();
@@ -394,6 +399,34 @@ int cachePolicySelfTest() {
         check(!c.drainVictims().trimPools, "mixed: no trim at exactly costPerTimelineFrame");
     }
 
+    {   // One for one: far over budget, an always-admitted frame frees about one frame, not every lower one.
+        gfcFrameCache c; gfcFrameTable t; t.reset(240);
+        c.setTestPooledBytes(0);
+        c.attachTrack(0, &t);
+        c.setTrackGeometry(0, 0, 0, 239, 1000);
+        c.setTestBudget(10 * 1000);
+        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        check(pull(c, 0, 10, 1000) == seq(100, 109), "one-for-one: 100..109 resident");
+        c.setTestBudget(1000);   // far below the 10000 resident
+        c.advance(105);          // 100..104 now behind, 110 is within the minimum ahead
+        Job j{};
+        bool got = c.nextJob(0, j, ms(20));
+        check(got && j.timelineFrame == 110, "one-for-one: timeline 110 is always admitted");
+        if (got) c.commit(j, 1000, true);
+        gfcFrameCache::Victims v = c.drainVictims();
+        check(v.frames.size() == 1 && v.frames[0].sourceIndex == 99, "one-for-one: a single victim (timeline 100), not all five behind");
+        for (const auto& x : v.frames) t.setUnloaded(x.sourceIndex);
+        c.advance(106);          // advance by one more
+        got = c.nextJob(0, j, ms(20));
+        check(got && j.timelineFrame == 111, "one-for-one: timeline 111 admitted after advancing by 1");
+        if (got) c.commit(j, 1000, true);
+        v = c.drainVictims();
+        size_t vb = 0; for (const auto& x : v.frames) { vb += 1000; t.setUnloaded(x.sourceIndex); }
+        check(v.frames.size() == 1 && vb == 1000 && v.frames[0].sourceIndex == 100, "one-for-one: advancing by 1 frees one frame (timeline 101)");
+        check(t.residentCount() == 10, "one-for-one: the resident count holds at 10");
+        check(!c.nextJob(0, j, ms(20)), "one-for-one: then nothing more is admitted");
+    }
+
     {   // Generation, commit outcomes, cancel, derived budget.
         gfcFrameCache c; gfcFrameTable t; t.reset(240);
         c.setTestPooledBytes(0);
@@ -429,7 +462,7 @@ int cachePolicySelfTest() {
 
         c.setTestBudget(-1);
         const int64_t b = c.budgetBytes();
-        check(b != 10 * 1000 && b <= (int64_t)memoryManager.totalBytes(), "budget: -1 restores the derived budget");
+        check(b > 0 && b != 10 * 1000 && b <= (int64_t)memoryManager.totalBytes(), "budget: -1 restores a positive derived budget");
     }
 
     std::printf("CACHE-POLICY: pass=%d fail=%d\n", pass, fail);

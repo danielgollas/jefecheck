@@ -72,7 +72,6 @@ void gfcFrameCache::clearTrack(int track) {
     Track& tr = tracks_[track];
     tr.first = tr.last = -1;
     tr.frameBytes = 0;
-    tr.pins.clear();
     wake();
 }
 
@@ -111,7 +110,6 @@ void gfcFrameCache::pin(int track, int index, bool on) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!validTrack(track)) return;
     Track& tr = tracks_[track];
-    if (on) tr.pins.insert(index); else tr.pins.erase(index);
     if (tr.table) tr.table->setPinned(index, on);
     wake();
 }
@@ -285,7 +283,9 @@ int gfcFrameCache::score(int track, int sourceIndex) const {
 
 // Admits a frame of `bytes` at timeline frame t, naming victims (whole timeline
 // frames, every track's resident frame there, lowest score first) when the
-// cache would go over budget. Only frames scoring strictly below t are taken.
+// cache would go over budget. Only frames scoring strictly below t are taken,
+// and only enough to cover min(shortfall, bytes). An always-admitted frame
+// (pinned, or a < M) loads even when that is not covered.
 bool gfcFrameCache::admit(int t, bool unconditional, size_t bytes) {
     const Params p = params();
     const int64_t cache = cacheBytesLocked();
@@ -319,9 +319,12 @@ bool gfcFrameCache::admit(int t, bool unconditional, size_t bytes) {
     for (auto& kv : groups) order.push_back(&kv.second);
     std::stable_sort(order.begin(), order.end(), [](const Group* x, const Group* y) { return x->score < y->score; });
 
+    // One for one: free at most this frame's bytes, even when the cache is
+    // further over budget than that (the owner's "swap one for one" rule).
+    const int64_t need = std::min<int64_t>(shortfall, (int64_t)bytes);
     size_t taken = 0, covered = 0;
-    while (taken < order.size() && (int64_t)covered < shortfall) covered += order[taken++]->bytes;
-    if ((int64_t)covered < shortfall && !unconditional) return false;
+    while (taken < order.size() && (int64_t)covered < need) covered += order[taken++]->bytes;
+    if ((int64_t)covered < need && !unconditional) return false;
 
     for (size_t g = 0; g < taken; ++g) {
         for (const Victim& v : order[g]->frames) {
@@ -360,7 +363,9 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         return 1;
     };
 
-    for (int src : tr.pins) {
+    std::vector<int> pinned;
+    tr.table->pinnedIndices(pinned);   // pins set here or straight on the table (hold-edge)
+    for (int src : pinned) {
         if (attempt(src, true) == 1) return Scan::Job;
     }
     // Candidates come in falling score order, so the first refusal ends the scan.
@@ -419,7 +424,7 @@ void gfcFrameCache::commit(const Job& job, size_t actualBytes, bool decoded) {
         bool stale = tr.cancelled;
         if (!stale && job.generation < generation_.load(std::memory_order_acquire)) {
             walk();
-            const bool pinned = tr.pins.count(job.sourceIndex) > 0;
+            const bool pinned = tr.table->pinned(job.sourceIndex);
             stale = !pinned && !isCandidate(job.sourceIndex + 1 + tr.offset, params());
         }
         if (stale) tr.table->setUnloaded(job.sourceIndex);

@@ -31,7 +31,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <set>
 #include <vector>
 
 class gfcFrameTable;
@@ -81,8 +80,7 @@ private:
         int offset = 0;
         int first = -1, last = -1;
         size_t frameBytes = 0;
-        bool cancelled = false;
-        std::set<int> pins;
+        bool cancelled = false;   // pins live on the table (the single pin store)
     };
     // The playback walk from the playhead, cached per transport.
     struct Walk {

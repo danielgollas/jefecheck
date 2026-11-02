@@ -39,6 +39,8 @@ public:
     // A pinned frame, and the frame on screen, are never chosen as victims.
     void setPinned(int i, bool on);
     bool pinned(int i) const;
+    // Pinned frames in index order (cheap when none are pinned).
+    void pinnedIndices(std::vector<int>& out) const;
     void setOnScreen(int i);
     int onScreen() const;   // -1 none
 
@@ -66,6 +68,7 @@ private:
     mutable std::mutex mutex_;
     std::vector<Entry> entries_;
     int onScreen_ = -1;
+    int pinnedCount_ = 0;
     // Atomic so the timeline can poll them without the mutex; writers still
     // change them only while holding mutex_.
     std::atomic<int> residentCount_{0};
