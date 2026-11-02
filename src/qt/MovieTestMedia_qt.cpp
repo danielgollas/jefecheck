@@ -91,6 +91,12 @@ bool generate(const QString& dir, QString* err) {
          "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",
          "-c:v", "libx264", "-g", "12", "-colorspace", "bt709", "-color_primaries", "bt709",
          "-color_trc", "bt709", "-color_range", "tv", out("h264_25.mp4")},
+        // Long-GOP clips with the encoders' default GOP and B-frames: a short skip
+        // forward decodes on instead of seeking (gfcMovieReader::readFrame).
+        {"-y", "-f", "lavfi", "-i", kTestsrc2.arg("25"), "-frames:v", "60",
+         "-vf", "format=yuv420p", "-c:v", "libx264", out("h264_longgop_25.mp4")},
+        {"-y", "-f", "lavfi", "-i", kTestsrc2.arg("25"), "-frames:v", "60",
+         "-vf", "format=yuv420p", "-c:v", "libx265", "-x265-params", "log-level=error", out("hevc_longgop_25.mp4")},
         // Colour-test bars (--video-colour-test). The truth is the exact 8-bit
         // RGB the clips were made from (a 16-bit truth from swscale is itself
         // off by ~0.4 code). Chroma is box-filtered (flags=area) so it does not

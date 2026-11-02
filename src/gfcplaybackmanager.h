@@ -127,6 +127,9 @@ private: //private made public while debugging
     // Show every frame held the picture since the last advance: the interval
     // that ends the hold is a real (slow) frame, not a discontinuity.
     bool fpsHeld_ = false;
+    // Play (re)started since the last advance: the next interval spans the
+    // pause, so it is not a frame interval at all (held or not).
+    bool fpsResumed_ = false;
     int audioSentStart=-1, audioSentEnd=-1, audioSentMode=-1, audioSentDir=0;
     // Frame cache (frameCache): the transport (direction, loop mode, limits,
     // rate) is sent when it changes; a jump retargets, a playback step advances.

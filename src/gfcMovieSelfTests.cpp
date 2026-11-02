@@ -107,6 +107,25 @@ int movieReaderSelfTest(const std::string& dir) {
       check(ok && at10==11 && at11==11 && at30==30, "after a timestamp gap, reads report the real frame index");
       gfcMovieReader g2; gfcMovieFrame j11, j30;
       check(g2.open(dir+"/gap_25.mov", &err) && g2.readFrame(30, j30, &err) && g2.readFrame(11, j11, &err) && !s30.empty() && bytesOf(j30)==s30 && bytesOf(j11)==s11, "frames after the gap match their random-access decode"); }
+    // Long GOP with B-frames: a short skip forward decodes on (k+5, k+12), a longer
+    // one seeks (k+25); each must be the very frame a fresh reader seeks to.
+    for (const char* clip : {"/h264_longgop_25.mp4", "/hevc_longgop_25.mp4"}) {
+        gfcMovieReader on; gfcMovieFrame fr; bool ok = on.open(dir+clip, &err);
+        const int k = 10;
+        for (int n = 0; ok && n <= k; ++n) ok = on.readFrame(n, fr, &err);
+        bool same = ok;
+        for (int target : {k+5, k+12, k+12+13}) {
+            gfcMovieReader fresh; gfcMovieFrame want;
+            const bool got = ok && on.readFrame(target, fr, &err);
+            const bool ref = fresh.open(dir+clip, &err) && fresh.readFrame(target, want, &err);
+            const bool match = got && ref && fr.index == target && want.index == target && bytesOf(fr) == bytesOf(want);
+            if (!match) std::printf("  %s frame %d: index %lld (fresh %lld)\n", clip, target, (long long)fr.index, (long long)want.index);
+            same = same && match;
+        }
+        check(same, std::string(clip).find("hevc") != std::string::npos
+                    ? "hevc long GOP: skips decoded on (+5, +12) and sought (+13 more) match a fresh random-access read"
+                    : "h264 long GOP: skips decoded on (+5, +12) and sought (+13 more) match a fresh random-access read");
+    }
     std::printf("MOVIE-READER: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

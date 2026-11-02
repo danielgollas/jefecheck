@@ -74,6 +74,7 @@ void gfcPlaybackManager::update() {
         intraFrameCount=0;
         buffering_=false;
         fpsHeld_=false;
+        fpsResumed_=true;
         if (leadSkipOn_) setLeadSkip(false);
         return;
     }
@@ -208,9 +209,10 @@ void gfcPlaybackManager::recordAdvanceForFPS(int frames) {
 				// An interval that ends a Show-every-frame hold is a real slow
 				// frame (up to 5 s), not a resume after a pause.
 				const double tpfMs = timePerFrame*1000.0;
-				const bool held = fpsHeld_;
+				const bool held = fpsHeld_, resumed = fpsResumed_;
 				fpsHeld_ = false;
-				if (interMs > 0.0 && (interMs < 5.0*tpfMs || (held && interMs < 5000.0))) {
+				fpsResumed_ = false;
+				if (!resumed && interMs > 0.0 && (interMs < 5.0*tpfMs || (held && interMs < 5000.0))) {
 					if (emaIntervalMs < 0.0) emaIntervalMs = interMs;
 					else emaIntervalMs += 0.05*(interMs - emaIntervalMs);
 				}
@@ -292,6 +294,7 @@ void gfcPlaybackManager::startPlayFwd() {
         playing=true;
         currentDirection=1;
 		fpsTimer.reset();
+        fpsResumed_=true;
         // Keep time waits for the pre-play buffer; the sound leads when it ends.
         if (!(keepTime() && beginBuffering()))
             audioTryLead();
@@ -342,6 +345,7 @@ void gfcPlaybackManager::startPlayRev() {
         playing=true;
         currentDirection=-1;
 		fpsTimer.reset();
+        fpsResumed_=true;
         if (keepTime()) beginBuffering();
     }
     myGUI->setPlayRevLabel(playing);
