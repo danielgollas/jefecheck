@@ -129,8 +129,14 @@ void gfcPlaybackManager::update() {
         currentFrame=audioEngine.leaderFrame();
         audioEngine.stopLeading();
     }
-    // Pacing leads from here: the cache stops skipping ahead of the sound.
-    if (leadSkipOn_) setLeadSkip(false);
+    // Pacing leads from here. Keep time still skips ahead of the playhead
+    // whichever clock leads (reverse, every track muted, a rate the sound
+    // can't follow, Keep time on silent footage): the cache's walk follows
+    // the direction. Show every frame never skips. Atomics only.
+    {
+        const bool skip=keepTime();
+        if (leadSkipOn_!=skip) setLeadSkip(skip);
+    }
 
     intraFrameCount+=timeStep;
 
@@ -905,7 +911,9 @@ bool gfcPlaybackManager::audioTryLead() {
     if (currentDirection<=0 || !keepTime()) { audioEngine.updateTransport(t); return false; }
     audioEngine.startLeading(t);   // a no-op unless the engine can lead
     const bool leading=audioEngine.isLeading();
-    setLeadSkip(leading);
+    // Keep time and not buffering (both checked above): the lead skip is on
+    // whether or not the sound took the lead.
+    setLeadSkip(playing);
     return leading;
 }
 

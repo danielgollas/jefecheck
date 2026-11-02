@@ -120,7 +120,7 @@ private: //private made public while debugging
     // Starts the wait unless the frames are already resident; true while waiting.
     // The engine stops leading for the wait. Called only when keepTime().
     bool beginBuffering();
-    // The frame cache's lead skip follows "the sound leads under Keep time";
+    // The frame cache's lead skip follows "playing under Keep time, not buffering";
     // the mirror keeps the tick to a plain bool test when nothing changes.
     bool leadSkipOn_ = false;
     void setLeadSkip(bool on);

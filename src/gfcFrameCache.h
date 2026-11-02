@@ -83,7 +83,7 @@ public:
     // longer Decoding (table reset, load cancelled) is left alone; returns false.
     // cacheBytes() is derived from the tables, so nothing else needs updating.
     bool commitUploaded(gfcFrameTable& table, int index, size_t bytes);
-    // Keep time with the sound leading: the ahead pass skips the frames the
+    // Playing under Keep time (whichever clock leads): the ahead pass skips the frames the
     // playhead will pass before a job could finish (a < ceil(latency x fps) + 1,
     // at most window - 1). They stay candidates and load later (near-behind,
     // or once the lead is cleared). Lock-free; set by the playback manager.

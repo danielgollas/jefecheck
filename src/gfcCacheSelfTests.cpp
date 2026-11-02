@@ -1892,6 +1892,41 @@ int cacheKeepTimeSelfTest(const std::string& dir) {
         check(!frameCache.leadSkip(), "paused: the lead skip is off");
     }
 
+    {   // Reverse, where the sound never leads (FPS pacing): Keep time still skips
+        // ahead of the playhead in the play direction, so what loads is shown.
+        gfcSequence::setTestDecodeDelayMs(80);
+        playbackManager.setCurrentFrame(230);
+        pump(300);
+        const int start = playbackManager.getCurrentFrame();
+        const std::set<int> before = residentTimeline(a);   // shown for free: not counted
+        const uint64_t admitted0 = frameCache.stats().admitted;
+        playbackManager.startPlayRev();
+        const auto t0 = std::chrono::steady_clock::now();
+        std::set<int> shown;
+        bool skipOn = false, ledEver = false;
+        for (;;) {
+            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            if (secs >= 4.0) break;
+            rig.tick();
+            const int f = playbackManager.getCurrentFrame();
+            const gfcFrame drawn = a->getFrame(f);
+            if (drawn.loaded && drawn.indexNumber == f - 1 && !before.count(f)) shown.insert(f);
+            if (secs > 1.0) skipOn |= frameCache.leadSkip();
+            ledEver |= audioEngine.isLeading();
+        }
+        const int end = playbackManager.getCurrentFrame();
+        const uint64_t admitted = frameCache.stats().admitted - admitted0;
+        playbackManager.pause();
+        playbackManager.setDirection(1);
+        std::printf("CACHE-KEEPTIME: reverse 80 ms: frames %d..%d, shown (loaded during the run) %zu, admitted %llu (shown/admitted %.2f), lead skip seen %d, led %d\n",
+                    start, end, shown.size(), (unsigned long long)admitted,
+                    admitted ? double(shown.size()) / double(admitted) : 0.0, int(skipOn), int(ledEver));
+        check(!ledEver && skipOn, "keep time reverse: the sound never leads, the lead skip is on all the same");
+        check(start - end >= 70, "keep time reverse: time was kept (70+ frames back in 4 s)");
+        check(admitted > 0 && double(shown.size()) >= 0.6 * double(admitted), "keep time reverse: at least 60% of the frames loaded were shown");
+        check(!frameCache.leadSkip(), "keep time reverse: paused, the lead skip is off");
+    }
+
     {   // Skipped frames still load once the loader can.
         gfcSequence::setTestDecodeDelayMs(0);
         frameCache.setTestBudget(int64_t(60 * kFrame8));
