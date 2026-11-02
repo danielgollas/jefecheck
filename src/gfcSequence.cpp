@@ -2577,8 +2577,11 @@ bool gfcSequence::framePending(int timelineFrame) const {
 		idx = std::clamp ( idx, rangeBegin, rangeEnd );   // the edge is shown outside
 	if ( frames.empty() || idx<rangeBegin || idx>rangeEnd || idx>=(int)frames.size() )
 		return false;
+	// Failed is settled: the decode was tried and will not be retried (the
+	// plate shows black, as before the cache). Counting it as pending froze
+	// Show every frame on it and labelled it "Loading" for good.
 	const gfcFrameState st = frameTable_.state(idx);
-	return st!=gfcFrameState::Resident && st!=gfcFrameState::Evicting;
+	return st!=gfcFrameState::Resident && st!=gfcFrameState::Evicting && st!=gfcFrameState::Failed;
 }
 
 size_t gfcSequence::estimatedFrameBytes() const {

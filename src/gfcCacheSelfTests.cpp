@@ -1918,6 +1918,77 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
     return fail;
 }
 
+// ---- a frame that fails to decode (final review C2) ----
+
+int cacheFailedSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    const int savedLag = sett.lagPolicy;
+
+    // cache_seq frames 1..40 with frame 15 emptied (a zero-byte file).
+    namespace fs = std::filesystem;
+    const fs::path broken = fs::path(dir) / "broken";
+    std::error_code ec;
+    fs::remove_all(broken, ec);
+    fs::create_directories(broken, ec);
+    for (int f = 1; f <= 40; ++f) {
+        char name[64];
+        std::snprintf(name, sizeof name, "cache_seq.%04d.png", f);
+        if (f == 15) { std::FILE* z = std::fopen((broken / name).string().c_str(), "wb"); if (z) std::fclose(z); }
+        else fs::copy_file(fs::path(dir) / name, broken / name, fs::copy_options::overwrite_existing, ec);
+    }
+
+    frameCache.setTestBudget(int64_t(1) << 30);
+    playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+    playbackManager.setCurrentFrame(1);
+    gfcSequence* a = loadTrack(0, (broken / "cache_seq.0001.png").string(), GFC_8BPC, 100);
+    const bool failed = pumpUntil([&] { return a->frameTable().state(14) == gfcFrameState::Failed; }, 5000);
+    check(failed, "fixture: frame 15 (zero bytes) is Failed");
+
+    {   // Keep time, parked on it: settled, not pending, nothing to wait for.
+        sett.lagPolicy = 1;
+        playbackManager.setCurrentFrame(15);
+        pump(300);
+        check(!a->framePending(15), "keep time: a Failed frame is not pending (no endless Loading)");
+        check(trackManager.timelineFrameResident(15) && trackManager.timelineFramesResident(13, 6, +1),
+              "a Failed frame counts as settled for the residency checks");
+    }
+
+    {   // Show every frame across it: playback passes it and carries on.
+        sett.lagPolicy = 2;
+        playbackManager.setCurrentFrame(10);
+        pump(200);
+        playbackManager.startPlayFwd();
+        const auto t0 = std::chrono::steady_clock::now();
+        double passedAt = -1;
+        for (;;) {
+            const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            if (s >= 2.0) break;
+            jefe::qt::tickPlaybackTiming();
+            trackManager.generateTextures();
+            a->getFrame(playbackManager.getCurrentFrame());
+            if (passedAt < 0 && playbackManager.getCurrentFrame() >= 18) passedAt = s;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        const int end = playbackManager.getCurrentFrame();
+        playbackManager.pause();
+        std::printf("CACHE-FAILED: show every frame from 10: frame 18 after %.3f s, frame %d after 2 s\n", passedAt, end);
+        check(passedAt >= 0 && passedAt <= 1.0, "show every frame: playback passes the Failed frame 15 within 1 s");
+        check(end >= 25, "show every frame: and carries on past it");
+    }
+
+    sett.lagPolicy = savedLag;
+    clearAllTracks();
+    fs::remove_all(broken, ec);
+    std::printf("CACHE-FAILED: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
 // ---- app quit (final review C1) ----
 
 int cacheShutdownSelfTest(const std::string& dir) {

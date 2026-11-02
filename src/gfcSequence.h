@@ -286,7 +286,8 @@ public:
     void evictFrame(int index);
     // The frame getFrame() would show at this timeline frame (hold modes
     // applied: mode 1 the held frame, mode 2 the trim edge outside the range)
-    // is inside the trim range and not resident: it is waiting to be loaded.
+    // is inside the trim range, not resident and not Failed: it is waiting to
+    // be loaded (a Failed frame is settled; it is not retried).
     // False where the track has no footage (the plate shows plain black).
     bool framePending(int timelineFrame) const;
     // GPU bytes one frame of this load is expected to take: the preview frame's
