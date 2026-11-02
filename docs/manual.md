@@ -195,7 +195,7 @@ Besides image sequences, JefeCheck loads movie files: `.mov` and `.mp4` containi
 
 **Sound.** Every track with sound plays at the same time, mixed together. To mute a track, click the speaker on its lane in the timeline (or right-click the lane and choose **Mute audio**); the lane's waveform dims, and the mute is saved with the session. When you play forward at the movie's own rate the sound leads and the picture follows it, dropping a frame rather than letting the sound stutter. When you step, scrub, or play at any other rate, each frame you see plays its own slice of sound at normal pitch — cut short when playing faster, followed by silence when playing slower, never stretched. Reverse playback is silent. Offsets, ranges and looping apply to the sound as they do to the picture; a held frame does not repeat its sound.
 
-**Limits.** Like a sequence, a movie loads only what fits in memory. Very heavy 4K ProRes 4444 (around 1 Gb/s) can load slower than real time on current machines; once loaded it plays at full rate. There is no hardware decoding yet, MXF files are not supported, and rendered output carries no sound.
+**Limits.** A movie, like a sequence, does not have to fit in memory: a clip longer than memory plays to the end. Frames load ahead of the playhead and frames behind it are unloaded to make room, and the sound is loaded separately, so it never drops out where pictures are missing. Very heavy 4K ProRes 4444 (around 1 Gb/s) can load slower than real time on current machines; what happens then is set by **When loading can't keep up** in Preferences. Frames already in memory play at full rate. There is no hardware decoding yet, MXF files are not supported, and rendered output carries no sound.
 
 ---
 
@@ -257,7 +257,7 @@ The Timeline controls from left to right are:
 
   ![Track bar showing loading progress](manual-images/TrackBar.png)
 
-  ![Track loading mode indicator](manual-images/TrackLoadingMode.png) Inside the gray background there is a slightly darker gray area that shows the range of the track we wish to load. That range area lights up in green to show what frames are loaded in memory and ready to show. While a track is loading, you can play back whatever part is already in memory.
+  ![Track loading mode indicator](manual-images/TrackLoadingMode.png) Inside the gray background there is a slightly darker gray area that shows the range of the track we wish to load. Green segments over it show the frames that are in memory right now and ready to show. They move with the playhead: frames ahead of it load and turn green, and when memory is full, frames behind it are unloaded and their green disappears. A frame that is not in memory can still be reached; click it on the timeline and it loads.
 
 - **The Cancel Loading Button** — Turns red whenever its corresponding track is being loaded, allowing you to cancel the load at any point. When the track is completely loaded or no more frames can fit into memory, loading stops and the button turns gray.
 
@@ -494,7 +494,7 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 - **Playlist Manager** (`Ctrl+P`) — Opens the Playlist Window.
 - **Save Session** (`Ctrl+S`) — Saves a complete JefeCheck session including loaded tracks, load-time parameters, and viewport configurations into a single file for later recall.
 - **Open Session** (`Ctrl+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
-- **Export Review Summary…** — Writes the notes on everything in the current session to a PDF, text or CSV file, organized by shot, review round and frame. The PDF also shows a thumbnail of each noted frame with its markup. Use it to send feedback to people who don't have JefeCheck.
+- **Export Review Summary…** — Writes the notes on everything in the current session to a PDF, text or CSV file, organized by shot, review round and frame. The PDF also shows a thumbnail of each noted frame with its markup. Noted frames that are not in memory are loaded for the export as needed. Use it to send feedback to people who don't have JefeCheck.
 - **Export Review Package…** — Bundles the current session, its notes and any LUTs you loaded yourself into a single `.jcreview` file you can hand to someone else. Leave **Include media** ticked to copy the footage into the package so it opens anywhere; untick it when everyone can reach the same storage, and JefeCheck will find the footage by its content instead.
 - **Open Review Package…** — Opens a `.jcreview` file. JefeCheck loads its session and LUTs, finds the footage (inside the package, where it was originally, by searching your Search Paths, or by asking you to locate it), and adds the package's notes to any notes you already have on that footage — nothing of yours is removed. When it's done, it lists anything it couldn't find or load.
 - **Save Chat Log** — Saves the complete chat log after a remote session.
@@ -846,8 +846,11 @@ The Preferences Window is organized by tabs:
 
 **Engine Section:**
 
-- **Percentage of RAM to use** — The higher you set this, the more frames you will be able to load into RAM, but using up all the RAM will slow down other processes dramatically. Recommended setting is 85%.
-- **Use Inactive Memory** — On Mac OS X, this may allow a few more frames into RAM at the expense of system performance.
+- **Memory limit (% of RAM)** — Frames load while the whole machine's memory use (all programs, not just JefeCheck) stays under this share of its RAM. Above it, a frame behind the playhead is unloaded for each one that loads; nothing is unloaded while nothing is loading. The playhead and a few frames ahead of it always load, even over the limit, so footage can still be viewed on a busy machine. From 50% to 100%; the default is 90%. A new value applies to the next frame that loads.
+- **When loading can't keep up** — What playback does when the next frame isn't in memory yet:
+  - **Keep time (skip frames)** — The sound keeps playing on time and the picture holds the last loaded frame, skipping the frames that are not ready. Skipped frames still load, so the next pass shows them. Playback waits a fraction of a second after you press play or jump, so it doesn't start on a frozen frame.
+  - **Show every frame (slow down)** — Every frame is shown in order and playback runs only as fast as frames load; the FPS display shows the slower rate.
+  - **Automatic** (the default) — Keep time when a track has sound, show every frame when none has.
 - **Force GFL Loading Engine** — If you have problems loading certain types of DPX files, try this option to load with a different loading engine. It is usually slower but may be able to read some obscure DPX formats.
 - **Continue Loading sequence after load error** — If a frame is corrupt and can't be read, JefeCheck will stop loading the rest of the sequence unless this item is checked.
 - **Enable Vertical Redraw Sync** — Syncs the viewport drawing to the monitor's refresh rate. Drastically reduces image tearing. On Xinerama displays in Linux, this syncs to the main monitor, so displaying on a secondary monitor could increase tearing.
@@ -899,7 +902,7 @@ The Preferences Window is organized by tabs:
 
 Although JefeCheck is not a finishing tool, you can output high-quality images of your on-screen results in a variety of formats, including JPEG, BMP, TIFF, TGA, PNG, and OpenEXR. On Linux, you can even create an AVI movie file if you have `mencoder` installed.
 
-The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render Manager** (`F6` or **Dialogs > Render Manager**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render).
+The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render Manager** (`F6` or **Dialogs > Render Manager**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render). Each frame is loaded for the render as it is needed, so you can render frames that are not in memory, and rendering does not change which frames are loaded. When the render ends, the playhead is back where it was before you started.
 
 ### The Render Window
 

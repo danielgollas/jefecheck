@@ -77,15 +77,22 @@ Click on the white X stop button next to the track in the Main Window. The X but
 
 ### How to Start Loading a Sequence from a Certain Point in the Timeline
 
-`Alt+Left Click` on the timeline to start reloading all tracks from that point forward. This is useful when you need to check a very long sequence but are not sure where the frames that you are interested in start and you cannot fit the whole sequence into RAM.
+Click anywhere on the timeline. JefeCheck loads around that frame first: the frame appears after a short wait, the frames after it load next, and playback carries on from there. You don't have to fit the whole sequence into memory to look at any part of it.
 
-OR
+`Alt+Left Click` on the timeline (or on a specific track) still works; on a track that is already loaded it now just jumps to that frame, the same as a plain click. `Alt+I` now only sets the IN point at the current frame, which is already loading.
 
-Press `Alt+I` to set the IN point for the timeline and start loading all tracks at that point.
+### How to Review a Clip Longer Than Memory
 
-OR
+1. Load it as usual. You don't need to set a range or a lower resolution to make it fit.
+2. Press play. Frames load ahead of the playhead and frames behind it are unloaded to make room, so the clip plays to the end. The sound is loaded separately and never drops out.
+3. To look at another part, click there on the timeline; that frame appears after a short wait.
+4. If loading is slower than playback (very heavy 4K, for example), **File → Preferences… → General → When loading can't keep up** chooses between keeping time with the sound (skipping frames that aren't ready) and showing every frame (playing slower). By default clips with sound keep time and clips without sound show every frame. **Memory limit (% of RAM)** on the same page sets how much of the machine's memory may be used (default 90%).
 
-`Alt+Left Click` on a specific track to start loading only that track from that point forward.
+A range or loop that fits in memory loads once and stays loaded, however many times you play or scrub it.
+
+### What the Green Segments Under a Track Mean
+
+The green segments on each track's lane are the frames that are in memory right now. They move with the playhead: frames ahead of it turn green as they load, and when memory is full, frames behind it are unloaded and lose their green. A gap is not an error; clicking a frame in a gap loads it.
 
 ---
 
