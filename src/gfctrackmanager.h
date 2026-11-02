@@ -68,6 +68,16 @@ public:
 	void setTrackStateInfo(std::vector<gfcNetTrackStateInfo> info);
 	
 	int getMaxTrackLength();
+
+	// Rolling cache. Resident frames over all tracks.
+	int residentFrameCount() const;
+	// True when every track with footage at this timeline frame has it
+	// resident (true when no track has footage there).
+	bool timelineFrameResident(int frame) const;
+	// The same for count frames from `from`, stepping by direction (+1/-1).
+	bool timelineFramesResident(int from, int count, int direction) const;
+	// Hands the coordinator the playhead, loop mode, limits and rate for a load.
+	void syncCacheTransport();
 	int getMinTrackLength();
 	
 	void saveTrackSessionParameters(XMLNode &tracksNode);

@@ -72,6 +72,11 @@ void gfcFrameCache::clearTrack(int track) {
     Track& tr = tracks_[track];
     tr.first = tr.last = -1;
     tr.frameBytes = 0;
+    // Victims named on this track belong to the footage being cleared.
+    pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
+                                  [track](const Victim& v) { return v.track == track; }),
+                   pending_.end());
+    victimsPending_.store(!pending_.empty(), std::memory_order_release);
     wake();
 }
 
@@ -211,6 +216,7 @@ const gfcFrameCache::Walk& gfcFrameCache::walk() const {
     w.b.assign(N, -1);
     w.aheadOrder.clear();
     w.behindOrder.clear();
+    w.forwardOrder.clear();
     if (N == 0) return w;
     const int p = std::clamp(ph, w.start, w.end);
     std::vector<int> fwd, rev;
@@ -228,6 +234,8 @@ const gfcFrameCache::Walk& gfcFrameCache::walk() const {
     run(w.direction, w.a, fwd);
     run(-w.direction, w.b, rev);
     w.aheadOrder.push_back(p);
+    w.forwardOrder.push_back(p);
+    w.forwardOrder.insert(w.forwardOrder.end(), fwd.begin(), fwd.end());
     for (int t : fwd) {
         const int b = w.b[t - w.start];
         if (b < 0 || w.a[t - w.start] <= b) w.aheadOrder.push_back(t);
@@ -260,7 +268,11 @@ int gfcFrameCache::timelineScore(int t, const Params& p) const {
     const int a = w.a[t - w.start], b = w.b[t - w.start];
     const int N = p.N;
     if (a >= 0 && (b < 0 || a <= b)) return a <= p.window ? 3 * N + (N - a) : N + (N - a);
-    if (b >= 0) return b <= p.K ? 2 * N + (p.K - b) : N - b;
+    if (b >= 0) {
+        if (b <= p.K) return 2 * N + (p.K - b);
+        if (a >= 0 && a <= p.window) return N + (N - a);   // the window reaches round the loop
+        return N - b;
+    }
     return -1;
 }
 
@@ -269,7 +281,7 @@ bool gfcFrameCache::isCandidate(int t, const Params& p) const {
     if (p.N == 0 || t < w.start || t > w.end) return false;
     const int a = w.a[t - w.start], b = w.b[t - w.start];
     if (a >= 0 && (b < 0 || a <= b)) return a <= p.window;
-    return b >= 0 && b <= p.K;
+    return (b >= 0 && b <= p.K) || (a >= 0 && a <= p.window);
 }
 
 int gfcFrameCache::score(int track, int sourceIndex) const {
@@ -281,7 +293,23 @@ int gfcFrameCache::score(int track, int sourceIndex) const {
     return timelineScore(sourceIndex + 1 + tr.offset, params());
 }
 
-// Admits a frame of `bytes` at timeline frame t, naming victims (whole timeline
+// The bytes timeline frame t still needs: this track's frame plus every other
+// track's frame there that has footage and is not loaded yet (Unloaded).
+size_t gfcFrameCache::timelineNeedLocked(int t, int track, size_t bytes) const {
+    size_t need = bytes;
+    for (int k = 0; k < kMaxTracks; ++k) {
+        if (k == track) continue;
+        const Track& tr = tracks_[k];
+        if (!hasFootage(tr) || tr.cancelled) continue;
+        const int src = t - 1 - tr.offset;
+        if (src < tr.first || src > tr.last) continue;
+        if (tr.table->state(src) == gfcFrameState::Unloaded) need += tr.frameBytes;
+    }
+    return need;
+}
+
+// Admits `bytes` at timeline frame t (what t still needs on every track, see
+// timelineNeedLocked), naming victims (whole timeline
 // frames, every track's resident frame there, lowest score first) when the
 // cache would go over budget. Only frames scoring strictly below t are taken,
 // and only enough to cover min(shortfall, bytes). An always-admitted frame
@@ -330,6 +358,7 @@ bool gfcFrameCache::admit(int t, bool unconditional, size_t bytes) {
         for (const Victim& v : order[g]->frames) {
             if (tracks_[v.track].table->setEvicting(v.sourceIndex)) {
                 pending_.push_back(v);
+                victimsPending_.store(true, std::memory_order_release);
                 ++stats_.evicted;
             }
         }
@@ -356,7 +385,7 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
             unconditional = a >= 0 && (b < 0 || a <= b) && a < p.M;   // the playhead and M-1 more
         }
         const size_t bytes = tr.frameBytes;
-        if (!admit(t, unconditional, bytes)) { ++stats_.denied; return 2; }
+        if (!admit(t, unconditional, timelineNeedLocked(t, track, bytes))) { ++stats_.denied; return 2; }
         if (!tr.table->setDecoding(src, bytes)) return 0;
         out = Job{track, src, t, generation_.load(std::memory_order_acquire), bytes};
         ++stats_.admitted;
@@ -377,6 +406,17 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
     }
     for (int t : w.behindOrder) {
         if (w.b[t - w.start] > p.K) break;
+        const int r = attempt(t - 1 - tr.offset, false);
+        if (r == 1) return Scan::Job;
+        if (r == 2) return Scan::Denied;
+    }
+    // Behind frames past K that the window still reaches going forward (a loop
+    // that fits, or nearly): without this a clip longer than 2K never fully
+    // loads in LOOP mode, whatever the budget.
+    for (int t : w.forwardOrder) {
+        const int a = w.a[t - w.start], b = w.b[t - w.start];
+        if (a > p.window) break;
+        if (b < 0 || a <= b || b <= p.K) continue;   // ahead or near-behind: tried above
         const int r = attempt(t - 1 - tr.offset, false);
         if (r == 1) return Scan::Job;
         if (r == 2) return Scan::Denied;
@@ -437,6 +477,7 @@ gfcFrameCache::Victims gfcFrameCache::drainVictims() {
     std::lock_guard<std::mutex> lock(mutex_);
     Victims v;
     v.frames.swap(pending_);
+    victimsPending_.store(false, std::memory_order_release);
     v.trimPools = pooledBytesLocked() > costLocked();
     wake();
     return v;

@@ -7,6 +7,7 @@
 
 #include <glad/glad.h>
 #include <functional>
+#include <atomic>
 #include "gfcSequence.h"
 #include "gfcMediaKinds.h"
 #include "gfcMovieReader.h"
@@ -39,6 +40,25 @@ extern gfcPlaybackManager playbackManager;
 
 #include "gfcmemorymanager.h"
 extern gfcMemoryManager memoryManager;
+
+#include "gfcFrameCache.h"
+#include <chrono>
+
+namespace {
+std::atomic<int> g_testDecodeDelayMs{0};
+std::atomic<long> g_loadAnnouncements{0};
+}  // namespace
+
+// A queued frame that will never be uploaded: give back its pixels (staging
+// buffer, IOSurface) and its loader.
+static void discardRawFrame(gfcFrame& f)
+{
+	f.releaseMemory();
+	delete f.theImageLoader;
+	f.theImageLoader=NULL;
+	f.loaded=false;
+}
+
 
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
@@ -807,6 +827,18 @@ int gfcSequence::generateTextures ( int howMany ) {
 
 	//4, generateTexture from the extracted frame.
 	if ( notEmpty) {
+		const int index=tmpRawFrame.indexNumber;
+		if ( index<0 || index>=(int)frames.size() ) {
+			printf ( "\nOut of sequence bounds! Index: %i frames.size: %zu\n",index,frames.size() );
+			discardRawFrame(tmpRawFrame);
+			return 0;
+		}
+		// The table was reset (a new load) while it waited in the queue: it is
+		// no longer wanted.
+		if ( tmpRawFrame.loaded && frameTable_.state(index)!=gfcFrameState::Decoding ) {
+			discardRawFrame(tmpRawFrame);
+			return 0;
+		}
 		//    	printf("gfcSequence::generateTextures: rawQueue not empty\n");
 		if (tmpRawFrame.loaded ) {
 			//            printf ( "gfcSequence::generateTextures:  generating texture...\n" );
@@ -824,28 +856,29 @@ int gfcSequence::generateTextures ( int howMany ) {
 			//check for gl errors.
 
 			//5. Put into the regular frames vector.
-			if ( tmpRawFrame.indexNumber<frames.size() && tmpRawFrame.indexNumber>=0 ) {
-				frames[tmpRawFrame.indexNumber]=tmpRawFrame;
-				frameTable_.setResident(tmpRawFrame.indexNumber, tmpRawFrame.textureBytes);
-				myGUI->setLoadedRange(residentCount());
-			} else {
-				printf ( "\nOut of sequence bounds! Index: %i frames.size: %i \a\n",tmpRawFrame.indexNumber,frames.size() );
+			storeFrame(index, tmpRawFrame);
+			// The decode's commit: Resident with the texture's real bytes.
+			const int track=cacheTrack();
+			if ( track>=0 )
+				frameCache.commit(gfcFrameCache::Job{track, index, index+1+frameOffset, frameCache.generation(), 0},
+				                  tmpRawFrame.textureBytes, true);
+			else
+				frameTable_.setResident(index, tmpRawFrame.textureBytes);
+			// The first real upload corrects the coordinator's per-frame estimate.
+			if ( !cacheFrameBytesChecked_ && tmpRawFrame.textureBytes>0 ) {
+				cacheFrameBytesChecked_=true;
+				if ( track>=0 && tmpRawFrame.textureBytes!=cacheFrameBytes_ ) {
+					cacheFrameBytes_=tmpRawFrame.textureBytes;
+					frameCache.setTrackFrameBytes(track, cacheFrameBytes_);
+				}
 			}
+			myGUI->setLoadedRange(residentCount());
 		} else {
-			//if the frame is not loaded, then we simply store it with it's parameters for future use.
-			//printf("Raw queue not empty but not generating texture, just storing tmpRawFrame\n");
-
-
-			if ( tmpRawFrame.indexNumber<frames.size() && tmpRawFrame.indexNumber>=0 ) {
-				frames[tmpRawFrame.indexNumber]=tmpRawFrame;
-				// A decode that failed (and was skipped) is Failed; a frame
-				// stored for later (cancelled, or over the memory limit) is Unloaded.
-				if (tmpRawFrame.skipped)
-					frameTable_.setFailed(tmpRawFrame.indexNumber);
-				else
-					frameTable_.setUnloaded(tmpRawFrame.indexNumber);
-				myGUI->setLoadedRange(residentCount());
-			}
+			// A decode that failed: keep its name and error for the info line.
+			// The coordinator already marked it (Failed, or Unloaded when stale).
+			discardRawFrame(tmpRawFrame);
+			storeFrame(index, tmpRawFrame);
+			myGUI->setLoadedRange(residentCount());
 		}
 	}
 
@@ -1048,20 +1081,33 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 	//printf ( " Resizing frame vector to %i frames\n",files.size() );
 	frames.resize ( files.size() );
 
-	for ( int i=0;i<files.size();i++ ) {
-		frames[i].fileName=files[i];
+	// Every frame knows how to load itself, so a forced load (render, export)
+	// works anywhere in the clip, resident or not.
+	{
+		const std::shared_ptr<gfcMovieReader> reader=currentMovieReader();
+		for ( int i=0;i<(int)files.size();i++ ) {
+			frames[i].fileName=files[i];
+			frames[i].savedParams=frameLoadParams(i, reader);
+		}
 	}
-	if ( frameTable_.size()!=(int)frames.size() )
-		frameTable_.reset(frames.size());
+	frameTable_.reset(frames.size());
 
 	int startFrame=0, endFrame=0;
 	loadFrameRange(startFrame, endFrame);
 	// The trim range: what the track plays, whatever is resident.
-	if ( frames.empty() || endFrame<startFrame ) {
+	const bool hasFootage=!frames.empty() && endFrame>=startFrame;
+	if ( !hasFootage ) {
 		rangeBegin=rangeEnd=0;
 	} else {
 		rangeBegin=startFrame;
 		rangeEnd=endFrame;
+	}
+	cacheFrameBytes_=estimatedFrameBytes();
+	cacheFrameBytesChecked_=false;
+	const int track=cacheTrack();
+	if ( track>=0 ) {
+		frameCache.attachTrack(track, &frameTable_);
+		frameCache.setTrackGeometry(track, frameOffset, hasFootage ? startFrame : -1, hasFootage ? endFrame : -1, cacheFrameBytes_);
 	}
 	if ( holdFrameMode==2 )
 		pinHoldEdges(true);
@@ -1078,11 +1124,43 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 	return 0;
 }
 
+gfcLoadParams gfcSequence::frameLoadParams(int i, const std::shared_ptr<gfcMovieReader>& reader) const
+{
+	gfcLoadParams p=params;
+	p.forceGFLLoading=forceGFLLoading;
+	if ( i>=0 && i<(int)files.size() )
+		p.fileName=files[i];
+	if (reader) {
+		p.movieFrameIndex=i;
+		p.movieReader=reader;
+	}
+	return p;
+}
+
+int gfcSequence::cacheTrack() const
+{
+	const int t=trackIndex();
+	if ( t<0 || t>=gfcFrameCache::kMaxTracks )
+		return -1;
+	return trackManager.getSequence(t)==this ? t : -1;
+}
+
+// Puts a frame from the queue into frames[i]. A texture still there is freed
+// first (never leaked), and a frame that brings no thumbnail keeps the old one.
+void gfcSequence::storeFrame(int i, gfcFrame& f)
+{
+	gfcFrame& slot=frames[i];
+	if ( slot.textureID!=defaultTexture )
+		slot.deleteTexture();
+	if ( f.thumbnail.w==0 && slot.thumbnail.w>0 )
+		f.thumbnail=std::move(slot.thumbnail);
+	slot=f;
+}
+
 int gfcSequence::loadSequence() {
 
 	int endFrame;
 	int framesSize;
-	int withinMemoryLimits=true;
 
 	if ( params.stream ) {
 		printf ( "Streaming\n" );
@@ -1093,122 +1171,75 @@ int gfcSequence::loadSequence() {
 		//printf ( "Regular loading\n" );
 		//printf ( "First Frame=%i\n",firstFrame );
 		int startFrame;
-		if (params.loadFromTimeline==0)
+		if (params.loadFromTimeline==0) {
 			networkManager.sendSystemChatMessage(filenameGeneric,GFCNETMESSAGETYPE_LOAD);
+			g_loadAnnouncements.fetch_add(1);
+		}
 		loadFrameRange(startFrame, endFrame);
 		framesSize=frames.size();
-		/* if ( mainWindowExists ) {
-		mw.timeLine->maximum ( mw.vp->getMaxTrackLenght() );
-		mw.playUpToInput->value ( mw.vp->getMaxTrackLenght() );
-
-		}*/
-
-		//myGUI->setTrackWidget();
 
 		myGUI->activateAbortButton();
 		myGUI->setTrackRange(1,framesSize);
 		myGUI->setTotalFramesToLoad(startFrame+1,endFrame-startFrame+1); //these functions consider the first frame to be 1, not 0 as our vectors, so we add 1
 		myGUI->setLoadedRange(0);
 		myGUI->setTrackLabel(GetFilenameNoPath(filenameGeneric));
-		//load each of the frames we have to load
-		bool continueLoading=true;
-		withinMemoryLimits=true;
 		const std::shared_ptr<gfcMovieReader> movieReader=currentMovieReader();
 		const std::shared_ptr<gfcAudioClip> movieAudio=movieReader ? audioClip() : nullptr;
-		printf("***Track %c: Loading from %i to %i\n",trackID,startFrame,endFrame);
-		for ( int i=startFrame;i<=endFrame;i++ ) {
-
-			{ 	
-
-				if(withinMemoryLimits && !loadingCanceled)
-				{
-					//only check if we are within memory limits if we are not sure that we are not, if for some reason we again came 
-					//within limits, we would end up with some stored frames and some loaded frames, which is bad.
-					withinMemoryLimits=memoryManager.withinLimits();
-				}
-
-				/*if ( loadingCanceled || !withinMemoryLimits)
-				break;*/
-
-				gfcLoadParams tmpParams=params;
-				tmpParams.forceGFLLoading=forceGFLLoading;
-				//printf("%i\n",i);
-				tmpParams.fileName=files[i];
-				if (movieReader) {
-					tmpParams.movieFrameIndex=i;
-					tmpParams.movieReader=movieReader;
-				}
-				//printf ( "%c-%i: Loading: %s\n",trackID,i, GetFilenameNoPath(tmpParams.fileName).c_str() );
-				gfcFrame tmpFrame;
-
-				if ( loadingCanceled || !withinMemoryLimits) { //if we need to stop loading, we should still store the params on the frame.
-					tmpFrame.savedParams=tmpParams;
-					frameTable_.setUnloaded(i);
-				} else {
-					frameTable_.setDecoding(i, 0);
-					int loadResult=tmpFrame.loadFrame ( tmpParams );
-					// Decode order == append order: frame i's slice is in the
-					// reader's FIFO once frame i has loaded.
-					if (movieAudio)
-						appendMovieAudio(*movieReader, movieAudio);
-					if (loadResult==GFCFRAME_LOADERROR_NO_MORE_MEMORY)
-					{
-						printf("No more memory while loading frame, stopping sequence load\n");
-						loadingCanceled=true;
-						//withinMemoryLimits=false;
-					}
-
-					if (!tmpFrame.loaded) {
-						if (!continueLoadingOnError) {
-							loadingCanceled=true;
-						} else {
-							tmpFrame.skipped=true;
-						}
-
-					}
-
-
-				}
-				tmpFrame.indexNumber=i;
-
-				{//lock the mutex here to push the frame into the rawFrame stack, which is shared by the main thread, which is the one that generates the textures.
-					std::unique_lock<std::mutex> lock ( rawQueueMutex );
-
-					if (rawFrames.size()>sett.maximumFramesInQueue)
-					{	//wait for a condition signal that the rawFrames have reduced size
-						while(rawFrames.size()>sett.maximumFramesInQueue && !loadingCanceled)
-							cond.wait(lock);
-					}
-
-
-					rawFrames.push ( tmpFrame );
-					//printf("pushed tmpFrame into raw queue(%i)\n",i);
-					//if (rawFrames.size()>sett.maximumFramesInQueue)
-					//    continueLoading=false;
-					//printf ( "Pushed tmpFrame into raw queue\n" );
-				}
-
-
-				//this while loop is a control method for limiting the number of rawFrames we store in the queue. We dont want to have to many rawFrames in the queue since that means it takes longer to generate textures than it takes to load the raw frames.
-				/*while (!continueLoading && !loadingCanceled && sett.maximumFramesInQueue>0) {
-				{//lock the mutex here to check if the rawFrames queue is over it's allowed maximum lenght
-				std::lock_guard<std::mutex> lock ( rawQueueMutex );
-
-				printf("Waiting for raw queue to go under %i (currently %i)\n",sett.maximumFramesInQueue, rawFrames.size());
-				if (rawFrames.size()<sett.maximumFramesInQueue)
-				continueLoading=true;
-				}
-				#ifndef WIN32
-				//usleep ( 2 );
-				#else
-				//Sleep ( 2 );
-				#endif
-				}*/
-
-				gResizeTrigger=true;
-
+		const int track=cacheTrack();
+		printf("***Track %c: loading %i..%i as the cache asks\n",trackID,startFrame,endFrame);
+		// The cache coordinator decides what to decode next (playhead first, then
+		// ahead, then just behind) and when to stop (the budget). This thread runs
+		// until the load is cancelled; between jobs it waits in nextJob.
+		while ( !loadingCanceled && track>=0 ) {
+			gfcFrameCache::Job job;
+			const auto asked=std::chrono::steady_clock::now();
+			if ( !frameCache.nextJob(track, job, std::chrono::milliseconds(100)) ) {
+				// nextJob returns at once with no footage or a cancel: don't spin.
+				if ( std::chrono::steady_clock::now()-asked<std::chrono::milliseconds(20) )
+					std::this_thread::sleep_for(std::chrono::milliseconds(20));
+				continue;
 			}
-		} //end of mutex scope
+			if ( loadingCanceled ) {
+				frameCache.commit(job, 0, false);
+				break;
+			}
+			const int i=job.sourceIndex;
+			gfcFrame tmpFrame;
+			if ( const int delay=g_testDecodeDelayMs.load() )
+				std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+			const int loadResult=tmpFrame.loadFrame ( frameLoadParams(i, movieReader) );
+			// The reader's sound up to this frame goes into the clip (it keeps the
+			// clip contiguous from its start and drops what it already holds).
+			if (movieAudio)
+				appendMovieAudio(*movieReader, movieAudio);
+			if (loadResult==GFCFRAME_LOADERROR_NO_MORE_MEMORY)
+			{
+				printf("No more memory while loading frame, stopping sequence load\n");
+				loadingCanceled=true;
+			}
+			tmpFrame.indexNumber=i;
+			// A decoded frame stays Decoding (its bytes reserved) while it waits
+			// in the queue; the GL thread commits it when it is uploaded, so
+			// Resident always means on the GPU and a queued frame is never a victim.
+			if ( !tmpFrame.loaded ) {
+				tmpFrame.skipped=true;
+				if ( !continueLoadingOnError ) {
+					// Loading stops here, and this frame stays Failed (not
+					// retried), whatever the coordinator would call it.
+					loadingCanceled=true;
+					frameTable_.setFailed(i);
+				}
+				frameCache.commit(job, 0, false);
+			}
+
+			{//lock the mutex here to push the frame into the rawFrame stack, which is shared by the main thread, which is the one that generates the textures.
+				std::unique_lock<std::mutex> lock ( rawQueueMutex );
+				while(rawFrames.size()>sett.maximumFramesInQueue && !loadingCanceled)
+					cond.wait(lock);
+				rawFrames.push ( tmpFrame );
+			}
+			gResizeTrigger=true;
+		}
 		if (movieAudio) publishAudioPeaks(movieAudio);
 
 	}
@@ -1459,9 +1490,10 @@ int gfcSequence::clearSequence() {
 	previewFiles.reserve(1);*/
 
 
-	frameTable_.reset(0);
-
 	this->clearRawQueue();
+	if ( cacheTrack()>=0 )
+		frameCache.clearTrack(cacheTrack());   // also drops victims named on this track
+	frameTable_.reset(0);
 
 	if (myGUI) {
 		myGUI->setLoadedRange(0);
@@ -1705,6 +1737,8 @@ char * gfcSequence::getFilenameatFrame ( int frameNo ) {
 
 void gfcSequence::setOffset(int offset) {
 	frameOffset=offset;
+	if ( cacheTrack()>=0 )
+		frameCache.setTrackOffset(cacheTrack(), offset);
 	if (gfcAudioEngineAlive()) audioEngine.setTrackOffset(trackID-'A', offset);   // sound shifts with the picture
 	myGUI->setOffset(offset);
 	networkManager.notifyEvent(GFCNETEVENT_OTHER);
@@ -1791,6 +1825,9 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 	/*if (abortButton)
 	abortButton->activate();*/
 
+	// Loading starts at the playhead: the coordinator needs this load's limits.
+	trackManager.syncCacheTransport();
+
 	myGUI->activateAbortButton();
 
 	//printf ( "Starting thread for %c\n",trackID);
@@ -1813,6 +1850,8 @@ int gfcSequence::getRangeEnd() {
 void gfcSequence::stopLoading() {
 	//cancel the loading thread
 	loadingCanceled=true;
+	if ( cacheTrack()>=0 )
+		frameCache.cancel(cacheTrack());   // wakes it out of nextJob
 	cond.notify_all(); //in case it was waiting for the queue count to go down.
 	//wait for the thread to end
 	if ( myThread!=NULL ) {
@@ -1846,13 +1885,12 @@ void gfcSequence::clearRawQueue() {
 
 			rawFrames.pop();
 
-			tmpRawFrame.releaseMemory();
-			//even though we did not generate any textures and have freed the imageloader memory
-			//we still store the rawFrames, marking them as not loaded.
-			tmpRawFrame.loaded=false;
-			if ( tmpRawFrame.indexNumber>=0 && tmpRawFrame.indexNumber<(int)frames.size() )
-				frames[tmpRawFrame.indexNumber]=tmpRawFrame;
-			frameTable_.setUnloaded(tmpRawFrame.indexNumber);
+			const int i=tmpRawFrame.indexNumber;
+			discardRawFrame(tmpRawFrame);
+			// Decoded but never uploaded: back to Unloaded (its reservation goes).
+			// Every frame already holds its load params from initializeSequence.
+			if ( frameTable_.state(i)==gfcFrameState::Decoding )
+				frameTable_.setUnloaded(i);
 		}
 
 
@@ -2298,6 +2336,18 @@ int gfcSequence::getLoadedFrameCount() {
 	return residentCount();
 }
 
+void gfcSequence::setTestDecodeDelayMs(int ms) {
+	g_testDecodeDelayMs.store(ms<0?0:ms);
+}
+
+long gfcSequence::loadAnnouncements() {
+	return g_loadAnnouncements.load();
+}
+
+std::thread::id gfcSequence::loaderThreadId() const {
+	return myThread ? myThread->get_id() : std::thread::id();
+}
+
 bool gfcSequence::framePending(int timelineFrame) const {
 	const int idx = timelineFrame - 1 - frameOffset;
 	if ( frames.empty() || idx<rangeBegin || idx>rangeEnd || idx>=(int)frames.size() )
@@ -2318,7 +2368,7 @@ size_t gfcSequence::estimatedFrameBytes() const {
 	switch ( params.compressed ) {
 	case GFC_16BPC:
 	case GFC_16HALF:  return px*8;
-	case GFC_S3TCDX1: return px/2;
+	case GFC_S3TCDX1: return px;      // the loader uploads DXT5: one byte per pixel
 	case GFC_4BPC:    return px*2;
 	case GFC_8BPC:
 	default:          return px*4;
@@ -2416,8 +2466,15 @@ void gfcSequence::clearPreviewFrame() {
 void gfcSequence::pinHoldEdges(bool on) {
 	if ( frames.empty() )
 		return;
-	frameTable_.setPinned(rangeBegin, on);
-	frameTable_.setPinned(rangeEnd, on);
+	// Through the coordinator, so a waiting loader wakes for them.
+	const int track=cacheTrack();
+	if ( track>=0 ) {
+		frameCache.pin(track, rangeBegin, on);
+		frameCache.pin(track, rangeEnd, on);
+	} else {
+		frameTable_.setPinned(rangeBegin, on);
+		frameTable_.setPinned(rangeEnd, on);
+	}
 }
 
 void gfcSequence::setHoldMode(int holdMode, int holdFrame) {

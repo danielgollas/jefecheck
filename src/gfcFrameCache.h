@@ -17,9 +17,15 @@
 //   ahead, a <= window       -> 3N + (N - a)
 //   behind, b <= K           -> 2N + (K - b)
 //   ahead, a > window        -> N + (N - a)   (leftovers from an earlier jump)
+//   behind, b > K, a <= window -> N + (N - a) (a loop the window reaches all the
+//                                              way round: loaded last, after the
+//                                              near-behind frames)
 //   behind, b > K            -> N - b         (far behind, furthest lowest)
 //   outside the limits / unreached -> -1
 // Victims are whole timeline frames (every track's frame there), lowest first.
+// Admission is by timeline frame too: a track's frame fits when the cache can
+// also take the other tracks' unloaded frames at that timeline frame, so all
+// tracks hold the same timeline frames whatever their frame sizes.
 //
 // Plain C++: no GL, Qt or libav. Every method is thread-safe; advance() and
 // retarget() take no lock (atomic store + notify), so the playback tick may
@@ -64,6 +70,9 @@ public:
     void commit(const Job& job, size_t actualBytes, bool decoded);
     void cancel(int track);               // makes nextJob return false now and until the next setTrackGeometry
     Victims drainVictims();               // GL thread, before uploads: frames marked Evicting since the last drain
+    // Lock-free: true when drainVictims() has frames to hand out, so the
+    // playback tick drains only when there is something to free.
+    bool hasVictims() const { return victimsPending_.load(std::memory_order_acquire); }
     void pin(int track, int index, bool on);
     void setTestBudget(int64_t bytes);    // >= 0 replaces the derived budget; -1 restores it
     void setTestPooledBytes(size_t bytes);  // test only: replaces the pools' figure; size_t(-1) restores it
@@ -89,6 +98,7 @@ private:
         std::vector<int> a, b;          // per timeline frame (index t - start), -1 = not reached
         std::vector<int> aheadOrder;    // ahead frames by a (playhead first)
         std::vector<int> behindOrder;   // behind frames by b
+        std::vector<int> forwardOrder;  // every frame the forward walk reaches, by a (playhead first)
     };
     struct Params { int N, K, M, window; };   // window: ahead frames with a <= window
 
@@ -106,6 +116,7 @@ private:
     enum class Scan { Job, Denied, None };
     Scan scan(int track, Job& out);
     bool admit(int timelineFrame, bool unconditional, size_t bytes);
+    size_t timelineNeedLocked(int timelineFrame, int track, size_t bytes) const;
     void wake();
 
     mutable std::mutex mutex_;
@@ -118,6 +129,7 @@ private:
     float fps_ = 24.0f;
     mutable Walk walk_;
     std::vector<Victim> pending_;
+    std::atomic<bool> victimsPending_{false};
     int64_t testBudget_ = -1;
     size_t testPooled_ = size_t(-1);
     // System memory, sampled at most every 100 ms.

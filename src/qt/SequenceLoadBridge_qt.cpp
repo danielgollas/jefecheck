@@ -40,6 +40,7 @@
 #include "gfcsequencegui_qt.h"
 #include "AudioOutput_qt.h"
 #include "../gfcAudioEngine.h"
+#include "../gfcFrameCache.h"
 
 #include <algorithm>
 #include <atomic>
@@ -151,6 +152,16 @@ void initializeRenderingChain() {
     plateManager.initializeWidgets();
     trackManager.initializeWidgets();
     playbackManager.initializeWidgets();
+
+    // The rolling frame cache: one coordinator over the four tracks' frame
+    // tables. JEFECHECK_CACHE_BUDGET_MB replaces the derived byte budget
+    // (testing a small cache by hand).
+    for (int i = 0; i < 4; ++i)
+        frameCache.attachTrack(i, &trackManager.getSequence(i)->frameTable());
+    if (const char* mb = std::getenv("JEFECHECK_CACHE_BUDGET_MB")) {
+        const long long v = std::atoll(mb);
+        if (v > 0) frameCache.setTestBudget((int64_t)v << 20);
+    }
 
     // FLTK's readSettings populates sett.lutPath and pre-loads LUTs from
     // the install / env path; that whole function is FLTK-gated. Until

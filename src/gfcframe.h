@@ -150,6 +150,12 @@ public:
     // GPU bytes textureID holds (sizeX*sizeY at internalFormat), for the cache's
     // budget. Set by generateTexture, 0 when nothing was uploaded.
     size_t textureBytes;
+    // True while this frame's textureID is counted in liveTextures(); copied
+    // with textureID, cleared by deleteTexture().
+    bool countedTexture = false;
+    // Textures generateTexture made or took from the pool and deleteTexture
+    // has not freed yet, over every frame (for the leak tests).
+    static long liveTextures();
 
     bool loaded;
     bool skipped;

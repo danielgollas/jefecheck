@@ -16,6 +16,10 @@ extern gfcPlaybackManager playbackManager;
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
 
+#include "gfcFrameCache.h"
+#include "gfcIOSurface.h"
+#include "gfcUploadPool.h"
+
 gfcTrackManager::gfcTrackManager()
 {
 	numOfSequences=GFC_MAX_SEQUENCES;
@@ -240,6 +244,39 @@ int gfcTrackManager::getMaxTrackLength()
 	return max;
 }
 
+int gfcTrackManager::residentFrameCount() const
+{
+	int n=0;
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		n+=sequences[i].residentCount();
+	return n;
+}
+
+bool gfcTrackManager::timelineFrameResident(int frame) const
+{
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		if(sequences[i].framePending(frame))
+			return false;
+	return true;
+}
+
+bool gfcTrackManager::timelineFramesResident(int from, int count, int direction) const
+{
+	const int step=direction<0?-1:1;
+	for(int k=0;k<count;k++)
+		if(!timelineFrameResident(from+k*step))
+			return false;
+	return true;
+}
+
+void gfcTrackManager::syncCacheTransport()
+{
+	// Until playback drives it, the coordinator's transport is set per load:
+	// the playhead, forward, the loop mode, the whole timeline and the rate.
+	frameCache.setTransport(playbackManager.getCurrentFrame(), 1, playbackManager.getPlaybackMode(),
+	                        1, getMaxTrackLength(), playbackManager.getTargetFPS());
+}
+
 int gfcTrackManager::getMinTrackLength()
 {
 	//TODO: Implement Me
@@ -290,6 +327,19 @@ bool gfcTrackManager::checkBounds(int whichOne, std::string functionName)
  */
 void gfcTrackManager::generateTextures()
 {
+	// Frames the cache named as victims are freed first (GL thread, context
+	// current), so their memory is back before the next uploads. The check is
+	// one atomic load when there is nothing to free.
+	if(frameCache.hasVictims()){
+		const gfcFrameCache::Victims v=frameCache.drainVictims();
+		for(const gfcFrameCache::Victim& x : v.frames)
+			if(x.track>=0 && x.track<GFC_MAX_SEQUENCES)
+				sequences[x.track].evictFrame(x.sourceIndex);
+		if(v.trimPools){
+			gfcUpload::trimIdle(0);
+			gfcSurface::trimIdle(0);
+		}
+	}
 	for(int i=0;i<GFC_MAX_SEQUENCES;i++){
 		sequences[i].generateTextures(1);
 	}

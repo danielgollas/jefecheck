@@ -11,3 +11,14 @@ int frameStateSelfTest(const std::string& mediaDir);
 // CACHE-POLICY: gfcFrameCache window, unload order, loop/bounce/reverse walks,
 // minimum ahead, pins, offsets, mixed sizes and pool trim. No GL.
 int cachePolicySelfTest();
+// CACHE-BUDGET: the live loaders under an injected byte budget (one and two
+// tracks, retargets, a lowered budget) and a reloaded frame's thumbnail.
+int cacheBudgetSelfTest(const std::string& mediaDir);
+// CACHE-SETTLE: a full budget, a loop that fits and a clip that fits load
+// nothing more and evict nothing.
+int cacheSettleSelfTest(const std::string& mediaDir);
+// CACHE-LEAKS: load / retarget / clear cycles return textures, surfaces,
+// cache and pool bytes to the baseline; loader errors and announcements.
+int cacheLeaksSelfTest(const std::string& mediaDir);
+// CACHE-HOLD: hold-edge frames outside the window stay resident.
+int cacheHoldSelfTest(const std::string& mediaDir);

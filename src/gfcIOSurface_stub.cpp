@@ -17,6 +17,7 @@ void release(void*) {}
 bool bindToTexture(void*, int, int, Layout) { return false; }
 bool readBack(unsigned, int, int, float*) { return false; }
 PoolStats poolStats() { return {0, 0, 0, 0}; }
+long liveSurfaces() { return 0; }
 void drainPool() {}
 void trimIdle(double) {}
 long boundCount() { return 0; }

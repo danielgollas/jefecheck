@@ -22,6 +22,11 @@
 #include "gfcFrameCache.h"
 #include "UIConstants.h"
 #include "qt/SequenceLoadBridge_qt.h"
+#include "gfcIOSurface.h"
+#include "gfcUploadPool.h"
+#include "gfcframe.h"
+#include <set>
+#include <string>
 
 extern gfcPlaybackManager playbackManager;
 extern gfcTrackManager trackManager;
@@ -51,16 +56,29 @@ int memoryMeasureSelfTest(const std::string& dir) {
     check(total > (1ull << 30), "totalBytes > 1 GiB");
     check(used0 > 0 && used0 < total, "0 < usedBytes < totalBytes");
 
-    {   // Touching 256 MiB must show up in usedBytes().
+    {   // Touching 256 MiB must show up in usedBytes(). The system may compress or
+        // reclaim memory between samples (other processes too), so take the
+        // highest of several samples and ask for a quarter of it.
+        // The fill is pseudo-random: macOS counts compressed pages at their
+        // compressed size, and a constant fill compresses to almost nothing.
         const uint64_t before = memoryManager.usedBytes();
         const size_t n = size_t(256) << 20;
-        std::vector<uint8_t> buf(n);
-        std::memset(buf.data(), 0x5a, n);
-        uint64_t seen = memoryManager.usedBytes();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        seen = std::max(seen, memoryManager.usedBytes());
-        volatile uint8_t keep = buf[n / 2]; (void)keep;
-        check(seen >= before + (uint64_t(128) << 20), "usedBytes rises by >= 128 MiB for a touched 256 MiB");
+        std::vector<uint64_t> buf(n / sizeof(uint64_t));
+        uint64_t x = 0x9e3779b97f4a7c15ull;
+        for (uint64_t& w : buf) { x ^= x << 13; x ^= x >> 7; x ^= x << 17; w = x; }
+        // macOS rate-limits host_statistics64 per process (past a few calls a
+        // second it returns the previous figures), so sample sparsely, for up
+        // to 5 s, and stop at the first sample that shows the rise.
+        uint64_t seen = 0;
+        for (int k = 0; k < 20; ++k) {
+            seen = std::max(seen, memoryManager.usedBytes());
+            if (seen >= before + (uint64_t(64) << 20)) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
+        volatile uint64_t keep = buf[buf.size() / 2]; (void)keep;
+        const bool rose = seen >= before + (uint64_t(64) << 20);
+        if (!rose) std::printf("MEMORY-MEASURE: before %.0f MiB, highest after %.0f MiB\n", before / 1048576.0, seen / 1048576.0);
+        check(rose, "usedBytes rises by >= 64 MiB for a touched 256 MiB");
     }
 
     {   // 48 half-float 1080p textures: informational GL visibility, hard frame count.
@@ -466,5 +484,339 @@ int cachePolicySelfTest() {
     }
 
     std::printf("CACHE-POLICY: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- live loaders (Task 5) ----
+
+namespace {
+constexpr size_t kFrame8 = size_t(320) * 180 * 4;   // one 8-bit 320x180 frame: 230 400 B
+
+// Sets filename / bit depth / scale on the track's GUI, loads the preview and starts the loader.
+gfcSequence* loadTrack(int track, const std::string& path, int compression, int scalePct) {
+    gfcSequence* s = trackManager.getSequence(track);
+    s->myGUI->setFilename(path);
+    s->myGUI->setCompression(compression);
+    s->myGUI->setScale(std::to_string(scalePct));
+    s->loadPreview();
+    trackManager.startLoadingSequence(track);
+    return s;
+}
+
+// The GL half of the app's tick: victims freed, frames uploaded.
+void pump(int ms) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end) {
+        trackManager.generateTextures();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+}
+template <class F>
+void pump(int ms, F&& each) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end) {
+        trackManager.generateTextures();
+        each();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+}
+template <class Pred>
+bool pumpUntil(Pred pred, int ms) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end) {
+        trackManager.generateTextures();
+        if (pred()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return pred();
+}
+
+void clearAllTracks() {
+    for (int t = 0; t < 4; ++t) {
+        gfcSequence* s = trackManager.getSequence(t);
+        s->setHoldMode(0);
+        s->unloadAndClear();
+        s->myGUI->setFilename("");
+    }
+    // What the app's idle trim does after 2 s: pool bytes count against the
+    // budget, so a suite starts without the last suite's pooled memory.
+    gfcUpload::trimIdle(0);
+    gfcSurface::trimIdle(0);
+}
+
+// Timeline frames (offset folded in) resident on a track.
+std::set<int> residentTimeline(gfcSequence* s) {
+    std::vector<std::pair<int, int>> segs;
+    s->loadedSegments(segs);
+    std::set<int> out;
+    for (const auto& r : segs)
+        for (int i = r.first; i <= r.second; ++i) out.insert(i + 1 + s->getOffset());
+    return out;
+}
+
+size_t poolBytes() {
+    const gfcUpload::Stats up = gfcUpload::stats();
+    return up.stagingBytes + up.pooledTextureBytes + gfcSurface::poolStats().pooledBytes;
+}
+
+struct SuiteGuard {   // the queue cap and thumbnails, restored on exit
+    int queue = sett.maximumFramesInQueue;
+    bool thumbs = sett.showThumbnails;
+    SuiteGuard() { sett.maximumFramesInQueue = 100000; }
+    ~SuiteGuard() {
+        clearAllTracks();
+        frameCache.setTestBudget(-1);
+        sett.maximumFramesInQueue = queue;
+        sett.showThumbnails = thumbs;
+    }
+};
+}  // namespace
+
+int cacheBudgetSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    clearAllTracks();
+    sett.showThumbnails = true;
+    const std::string beep = dir + "/cache_beep_24.mp4";
+
+    {   // One track, 20 frames.
+        const int64_t budget = int64_t(20 * kFrame8);
+        frameCache.setTestBudget(budget);
+        gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
+        pump(3000);
+        const int rc = trackManager.residentFrameCount();
+        std::printf("CACHE-BUDGET: one track resident=%d cacheBytes=%lld budget=%lld pools=%zu\n", rc,
+                    (long long)frameCache.cacheBytes(), (long long)budget, poolBytes());
+        check(rc >= 19 && rc <= 21, "one track: 20 +/- 1 frames resident at a 20-frame budget");
+        const int64_t bound = budget + 2 * (int64_t)frameCache.costPerTimelineFrame();
+        check(frameCache.cacheBytes() <= bound, "one track: cacheBytes <= budget + 2 frames");
+        bool boundOk = true; int maxResident = 0;
+        auto sample = [&] {
+            boundOk &= frameCache.cacheBytes() <= bound;
+            maxResident = std::max(maxResident, trackManager.residentFrameCount());
+        };
+        frameCache.retarget(120); pump(2000, sample);
+        frameCache.retarget(230); pump(2000, sample);
+        std::printf("CACHE-BUDGET: retargets maxResident=%d\n", maxResident);
+        check(boundOk, "retargets: every sample within budget + 2 frames");
+        check(maxResident <= 22, "retargets: never more than 22 frames resident");
+        bool tail = true;
+        for (int i = 229; i <= 239; ++i) tail &= a->frameTable().state(i) == gfcFrameState::Resident;
+        check(tail, "retargets: frames 229..239 resident after retarget(230)");
+        check(a->frameReadyForRender(5) && a->frameReadyForRender(200), "every frame has load params (savedParams), resident or not");
+        check(a->estimatedFrameBytes() == kFrame8, "estimatedFrameBytes for 8-bit 320x180");
+
+        // A reload that captures no thumbnail keeps the old one.
+        std::vector<int> reload;
+        for (int i = 229; i <= 233; ++i) if (a->getThumbnail(i).w > 0) reload.push_back(i);
+        check(!reload.empty(), "thumbnails captured while loading");
+        sett.showThumbnails = false;
+        for (int i : reload) a->evictFrame(i);
+        bool back = pumpUntil([&] {
+            for (int i : reload) if (a->frameTable().state(i) != gfcFrameState::Resident) return false;
+            return true;
+        }, 3000);
+        bool thumbs = true;
+        for (int i : reload) thumbs &= a->getThumbnail(i).w > 0;
+        check(back, "evicted frames near the playhead are reloaded");
+        check(thumbs, "a reloaded frame keeps its thumbnail when the reload captured none");
+        sett.showThumbnails = true;
+        clearAllTracks();
+    }
+
+    {   // Mixed sizes: A full size, B at 50 %; the budget is 12 frames of A.
+        const int64_t budget = int64_t(12 * kFrame8);
+        frameCache.setTestBudget(budget);
+        gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
+        gfcSequence* b = loadTrack(1, beep, GFC_8BPC, 50);
+        check(b->estimatedFrameBytes() == kFrame8 / 4, "track B at 50 % estimates 57 600 B/frame");
+        const int64_t bound = budget + 2 * (int64_t)(kFrame8 + kFrame8 / 4);
+        bool boundOk = true;
+        pump(3000, [&] { boundOk &= frameCache.cacheBytes() <= bound; });
+        const std::set<int> ta = residentTimeline(a), tb = residentTimeline(b);
+        std::printf("CACHE-BUDGET: mixed A=%zu B=%zu cacheBytes=%lld\n", ta.size(), tb.size(), (long long)frameCache.cacheBytes());
+        check(boundOk, "mixed: every sample within budget + 2 timeline frames");
+        check(!ta.empty() && ta == tb, "mixed: both tracks hold the same timeline frames");
+        trackManager.getSequence(1)->unloadAndClear();
+        trackManager.getSequence(1)->myGUI->setFilename("");
+    }
+
+    {   // Lowering the budget evicts nothing by itself; a retarget swaps one for one (R11).
+        gfcSequence* a = trackManager.getSequence(0);
+        pump(500);
+        const int before = trackManager.residentFrameCount();
+        frameCache.setTestBudget(int64_t(5 * kFrame8));
+        pump(1000);
+        check(trackManager.residentFrameCount() == before, "lowered budget: nothing evicted while idle");
+        frameCache.retarget(50);
+        int maxResident = 0;
+        pump(2000, [&] { maxResident = std::max(maxResident, trackManager.residentFrameCount()); });
+        bool head = true;
+        for (int i = 49; i <= 54; ++i) head &= a->frameTable().state(i) == gfcFrameState::Resident;
+        std::printf("CACHE-BUDGET: lowered before=%d max=%d after=%d\n", before, maxResident, trackManager.residentFrameCount());
+        check(maxResident <= before, "lowered budget: the retarget never grows the cache");
+        check(head, "lowered budget: the playhead and the minimum ahead (50..55) are resident");
+    }
+
+    std::printf("CACHE-BUDGET: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int cacheSettleSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    clearAllTracks();
+
+    {   // Paused on a full budget.
+        frameCache.setTestBudget(int64_t(40 * kFrame8));
+        loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+        const bool full = pumpUntil([] { return trackManager.residentFrameCount() >= 40; }, 10000);
+        check(full, "40 frames resident at a 40-frame budget");
+        pump(300);
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        pump(2000);
+        const gfcFrameCache::Stats s1 = frameCache.stats();
+        check(s1.admitted == s0.admitted && s1.evicted == s0.evicted, "paused on a full budget: no loads, no evictions over 2 s");
+    }
+
+    {   // A loop that fits.
+        frameCache.setTransport(1, +1, LOOPMODELOOP_ID, 1, 30, 24);
+        pump(1500);
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        for (int round = 0; round < 10; ++round)
+            for (int f = 1; f <= 30; ++f) { frameCache.advance(f); pump(5); }
+        const gfcFrameCache::Stats s1 = frameCache.stats();
+        check(s1.evicted == s0.evicted, "a loop that fits: no evictions over 10 loops");
+        bool all = true;
+        for (int i = 0; i < 30; ++i) all &= trackManager.getSequence(0)->frameTable().state(i) == gfcFrameState::Resident;
+        check(all, "a loop that fits: frames 1..30 resident");
+        clearAllTracks();
+    }
+
+    {   // The whole clip fits the derived budget.
+        frameCache.setTestBudget(-1);
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        gfcSequence* a = loadTrack(0, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+        const bool all = pumpUntil([&] { return a->residentCount() == 240; }, 20000);
+        check(all, "whole clip: all 240 frames resident");
+        check(frameCache.stats().evicted == s0.evicted, "whole clip: nothing evicted");
+        bool none = true;
+        for (int k = 1; k <= 240; ++k) none &= !a->framePending(k);
+        check(none, "whole clip: no frame pending");
+        check(trackManager.timelineFramesResident(1, 240, +1) && trackManager.timelineFrameResident(500),
+              "timelineFramesResident(1, 240) and a frame with no footage count as resident");
+        a->evictFrame(9);
+        check(!trackManager.timelineFrameResident(10) && !trackManager.timelineFramesResident(5, 10, +1), "an evicted frame is not resident");
+    }
+
+    std::printf("CACHE-SETTLE: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int cacheLeaksSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    clearAllTracks();
+    sett.showThumbnails = true;
+    gfcUpload::trimIdle(0); gfcSurface::trimIdle(0);
+    const long tex0 = gfcFrame::liveTextures(), surf0 = gfcSurface::liveSurfaces();
+    const long ann0 = gfcSequence::loadAnnouncements();
+    frameCache.setTestBudget(int64_t(10 * kFrame8));
+
+    {   // Load / retarget / clear cycles: a movie (textures) and a PNG sequence (IOSurfaces on macOS).
+        bool loadedEach = true, counted = true;
+        for (int cycle = 0; cycle < 5; ++cycle) {
+            gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+            gfcSequence* c = loadTrack(2, dir + "/cache_seq.0001.png", GFC_8BPC, 100);
+            pump(1500);
+            loadedEach &= a->residentCount() > 0 && c->residentCount() > 0;
+            // The counters see the resident frames (PNG frames are IOSurface-backed on macOS).
+            counted &= gfcFrame::liveTextures() >= tex0 + a->residentCount() + c->residentCount();
+            if (gfcSurface::available() && gfcSurface::boundCount() > 0) counted &= gfcSurface::liveSurfaces() > surf0;
+            frameCache.retarget(200);
+            pump(1000);
+            a->unloadAndClear();
+            c->unloadAndClear();
+        }
+        check(loadedEach, "every cycle loads frames on both tracks");
+        check(counted, "liveTextures (and liveSurfaces where IOSurfaces bind) count the resident frames");
+        check(gfcSequence::loadAnnouncements() - ann0 == 10, "one LOAD announcement per track load, none per retarget");
+    }
+
+    {   // A broken movie: Failed frames, the loader keeps running and stops asking.
+        frameCache.setTestBudget(-1);
+        gfcSequence* d = loadTrack(3, dir + "/truncated.mov", GFC_8BPC, 100);
+        const std::thread::id id0 = d->loaderThreadId();
+        pump(3000);
+        int failed = 0;
+        for (int i = 0; i < d->frameTable().size(); ++i) failed += d->frameTable().state(i) == gfcFrameState::Failed;
+        std::printf("CACHE-LEAKS: truncated failed=%d resident=%d\n", failed, d->residentCount());
+        check(failed > 0 && d->residentCount() > 0, "truncated: some frames Failed, some resident");
+        const uint64_t d1 = frameCache.stats().denied;
+        pump(500);
+        check(frameCache.stats().denied == d1, "truncated: no more denials once settled");
+        check(id0 != std::thread::id() && d->loaderThreadId() == id0, "truncated: the loader thread keeps running");
+
+        // R8: a decode failure that stops loading marks the frame Failed.
+        d->setContinueLoadingOnError(false);
+        d = loadTrack(3, dir + "/truncated.mov", GFC_8BPC, 100);
+        pump(3000);
+        int failedStop = 0;
+        for (int i = 0; i < d->frameTable().size(); ++i) failedStop += d->frameTable().state(i) == gfcFrameState::Failed;
+        check(failedStop == 1, "stop on error: exactly one frame Failed");
+        check(d->loadingCanceled, "stop on error: loading stopped");
+        d->setContinueLoadingOnError(true);
+        d->unloadAndClear();
+        d->myGUI->setFilename("");
+    }
+
+    gfcUpload::trimIdle(0); gfcSurface::trimIdle(0);
+    std::printf("CACHE-LEAKS: textures %ld -> %ld, surfaces %ld -> %ld, pools %zu\n", tex0, gfcFrame::liveTextures(),
+                surf0, gfcSurface::liveSurfaces(), poolBytes());
+    check(gfcFrame::liveTextures() == tex0, "live textures back at the baseline");
+    check(gfcSurface::liveSurfaces() == surf0, "live surfaces back at the baseline");
+    check(trackManager.residentFrameCount() == 0, "nothing resident");
+    check(frameCache.cacheBytes() == 0, "cacheBytes 0");
+    check(poolBytes() == 0, "pool bytes 0 after the trim");
+
+    std::printf("CACHE-LEAKS: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int cacheHoldSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    clearAllTracks();
+    frameCache.setTestBudget(int64_t(10 * kFrame8));
+    gfcSequence* c = loadTrack(2, dir + "/cache_seq.0001.png", GFC_8BPC, 100);
+    frameCache.setTransport(60, +1, LOOPMODELOOP_ID, 1, 120, 24);
+    c->setHoldMode(2);
+    auto edges = [&] {
+        return c->frameTable().state(0) == gfcFrameState::Resident && c->frameTable().state(119) == gfcFrameState::Resident;
+    };
+    check(pumpUntil(edges, 3000), "hold-edge: frames 0 and 119 resident outside the window");
+    frameCache.retarget(60);
+    pump(2000);
+    check(edges(), "hold-edge: the edges stay resident after a retarget");
+    frameCache.retarget(90);   // the window moves: admissions now take victims
+    const bool moved = pumpUntil([&] { return c->frameTable().state(89) == gfcFrameState::Resident; }, 3000);
+    pump(500);
+    check(moved && edges(), "hold-edge: the edges survive a window that evicts to move");
+    check(c->residentCount() <= 12 + 2, "hold-edge: the budget still holds (10 frames, the two pins, one over)");
+    const gfcFrame f = c->getFrame(200, false);
+    check(f.loaded && f.fileName == dir + "/cache_seq.0120.png", "hold-edge: frame 200 shows frame 119");
+    std::printf("CACHE-HOLD: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

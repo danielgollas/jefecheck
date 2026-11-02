@@ -139,6 +139,9 @@ std::mutex g_poolMutex;
 std::vector<Pooled> g_pool;
 size_t g_poolBytes = 0;
 std::atomic<long> g_created{0}, g_reused{0};
+// Surfaces IOSurfaceCreate made that this file has not finally released;
+// pooled ones included (liveSurfaces subtracts them).
+std::atomic<long> g_alive{0};
 
 bool poolEnabled() {
     static const bool on = [] {
@@ -201,7 +204,7 @@ void* create(int width, int height, Layout layout) {
     CFRelease(nh);
     CFRelease(nb);
     CFRelease(np);
-    if (s) ++g_created;
+    if (s) { ++g_created; ++g_alive; }
     return s;
 }
 
@@ -246,6 +249,7 @@ void release(void* surface) {
                 while (g_poolBytes + bytes > kPoolCapBytes && !g_pool.empty()) {
                     g_poolBytes -= g_pool.front().bytes;
                     CFRelease(g_pool.front().surface);
+                    --g_alive;
                     g_pool.erase(g_pool.begin());
                 }
                 g_pool.push_back({s, (int)IOSurfaceGetWidth(s), (int)IOSurfaceGetHeight(s),
@@ -255,6 +259,7 @@ void release(void* surface) {
                 return;
             }
         }
+        if (CFGetRetainCount(s) == 1) --g_alive;   // the last reference goes now
     }
     CFRelease(s);
 }
@@ -264,9 +269,14 @@ PoolStats poolStats() {
     return {g_created.load(), g_reused.load(), g_pool.size(), g_poolBytes};
 }
 
+long liveSurfaces() {
+    std::lock_guard<std::mutex> lock(g_poolMutex);
+    return g_alive.load() - (long)g_pool.size();
+}
+
 void drainPool() {
     std::lock_guard<std::mutex> lock(g_poolMutex);
-    for (const Pooled& p : g_pool) CFRelease(p.surface);
+    for (const Pooled& p : g_pool) { CFRelease(p.surface); --g_alive; }
     g_pool.clear();
     g_poolBytes = 0;
 }
@@ -280,6 +290,7 @@ void trimIdle(double idleSeconds) {
     while (!g_pool.empty() && g_pool.front().pooledAt < cutoff) {
         g_poolBytes -= g_pool.front().bytes;
         CFRelease(g_pool.front().surface);
+        --g_alive;
         g_pool.erase(g_pool.begin());
     }
 }

@@ -58,6 +58,10 @@ struct PoolStats {
 };
 PoolStats poolStats();
 
+/** Surfaces alive outside the pool: held by frames, loaders or callers
+    (for the leak tests). 0 off macOS. */
+long liveSurfaces();
+
 /** Frees every pooled surface. */
 void drainPool();
 

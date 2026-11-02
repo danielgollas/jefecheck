@@ -4,6 +4,7 @@
 #include "gfcMediaKinds.h"
 
 
+#include <atomic>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -201,6 +202,15 @@ std::vector< std::string > gfcFrame::getChannelNames()
 
 
 namespace {
+std::atomic<long> g_liveTextures{0};
+}  // namespace
+
+long gfcFrame::liveTextures()
+{
+	return g_liveTextures.load(std::memory_order_relaxed);
+}
+
+namespace {
 // Bytes per texel of an internal format, for gfcFrame::textureBytes. DXT1 is
 // half a byte; formats not listed count as 4 (the drivers' usual RGBA8 storage).
 size_t textureBytesFor(GLint internalFormat, int w, int h)
@@ -395,6 +405,11 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 		}
 	}
 
+	if (textureID != defaultTexture && textureID != 0) {
+		countedTexture = true;
+		g_liveTextures.fetch_add(1, std::memory_order_relaxed);
+	}
+
 	//3. check for glErrors.
 	//glPrintError();
 	//4. Release imageLoader memory.
@@ -441,6 +456,10 @@ void gfcFrame::deleteTexture()
             gfcUpload::giveTexture(textureID, textureTarget, textureFormat, textureW, textureH);
         else
             glDeleteTextures(1,&textureID);
+    }
+    if (countedTexture) {
+        countedTexture=false;
+        g_liveTextures.fetch_sub(1, std::memory_order_relaxed);
     }
     gfcSurface::release(ioSurface);   // only after the texture using it is gone
     ioSurface=nullptr;

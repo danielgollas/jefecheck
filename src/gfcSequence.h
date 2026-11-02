@@ -291,6 +291,12 @@ public:
     // load's bit depth. 0 without a preview.
     size_t estimatedFrameBytes() const;
     int trackIndex() const { return trackID - 'A'; }
+    // Tests: a sleep before every decode on the loader threads (0 = none).
+    static void setTestDecodeDelayMs(int ms);
+    // How many times a load was announced to the remote session (LOAD message).
+    static long loadAnnouncements();
+    // The loader thread's id, or the default id when none is running.
+    std::thread::id loaderThreadId() const;
     // Thumbnail for a decoded frame (0-based sequence index), for the
     // timeline filmstrip. Returns an empty thumbnail (w==0) when the
     // index is out of range or that frame hasn't been captured.
@@ -440,6 +446,17 @@ public:
     int rangeEnd;
     // Pins (or unpins) the trim edges in frameTable_ for hold-edge mode.
     void pinHoldEdges(bool on);
+    // Frame i's load parameters (this load's params, file i, the movie reader).
+    gfcLoadParams frameLoadParams(int i, const std::shared_ptr<gfcMovieReader>& reader) const;
+    // This sequence's track in the frame cache, or -1 (not one of the four tracks).
+    int cacheTrack() const;
+    // GL thread: frames[i] = f, freeing a texture still there and keeping the
+    // old thumbnail when f brings none.
+    void storeFrame(int i, gfcFrame& f);
+    // The coordinator's per-frame estimate for this load, corrected once by
+    // the first real upload.
+    size_t cacheFrameBytes_ = 0;
+    bool cacheFrameBytesChecked_ = false;
     std::vector<int> luts;
 #include "gfcframe.h"
     gfcFrame forcedFrame;
