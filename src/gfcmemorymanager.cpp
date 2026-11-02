@@ -53,13 +53,10 @@
 gfcMemoryManager memoryManager;
 
 gfcMemoryManager::gfcMemoryManager() {
-#ifdef linux
-percentageToUse=85;
-#else
-percentageToUse=95;
-#endif
-    
-    
+    percentageToUse=90;
+    countInactive=false;
+    usedB=0;
+    totalB=0;
     freeRAM=0; 
     totalRAM=0;
     m_withinLimits=true;
@@ -88,6 +85,18 @@ void gfcMemoryManager::setLimit(const float percentage) {
 }
 
 
+
+uint64_t gfcMemoryManager::usedBytes() {
+    std::lock_guard<std::mutex> lock(updateMutex);
+    updateData();
+    return usedB;
+}
+
+uint64_t gfcMemoryManager::totalBytes() {
+    std::lock_guard<std::mutex> lock(updateMutex);
+    updateData();
+    return totalB;
+}
 
 float gfcMemoryManager::getFreeRAM() {
     std::lock_guard<std::mutex> lock(updateMutex);
@@ -184,6 +193,9 @@ void gfcMemoryManager::updateData() {
     }
     
     meminfo.close();
+    // freeRAM = MemFree + Cached (MB); used = total - that.
+    totalB=(uint64_t)(totalRAM*1024.0*1024.0);
+    usedB=(totalRAM>freeRAM)?(uint64_t)((totalRAM-freeRAM)*1024.0*1024.0):0;
 
     
 
@@ -206,6 +218,8 @@ void gfcMemoryManager::updateData() {
 
     freeRAM=statex.ullAvailPhys/1024.0/1024.0;
     totalRAM=statex.ullTotalPhys/1024.0/1024.0;
+    totalB=statex.ullTotalPhys;
+    usedB=statex.ullTotalPhys-statex.ullAvailPhys;
     
 
 #endif
@@ -243,41 +257,27 @@ void gfcMemoryManager::updateData() {
 
 
 
-	//GET TOTAL AVAILABLE MEMORY, calculated from total physical memory minus active, inactive and wired pages.
-	uint64_t        phys_mem;  /* bytes        */
+	// Used = active + wired + compressor pages (inactive/file cache is reclaimable).
+	uint64_t        phys_mem=0;  /* bytes        */
     size_t          phys_mem_size  = sizeof(phys_mem);
     int             phys_mem_mib[] = { CTL_HW, HW_MEMSIZE };
-
-    int             pagesize;  /* bytes        */
-    size_t          pagesize_size  = sizeof(pagesize);
-    int             pagesize_mib[] = { CTL_HW, HW_PAGESIZE };
-
-    uint64_t        pages_used;
-    off_t           swapSize;
-    off_t           swapUsed;
-    vm_statistics_data_t vm_stat;
-    unsigned int count = HOST_VM_INFO_COUNT;
-
     sysctl(phys_mem_mib, 2, &phys_mem, &phys_mem_size, NULL, 0);
-    sysctl(pagesize_mib, 2, &pagesize, &pagesize_size, NULL, 0);
-    host_statistics(mach_host_self(),HOST_VM_INFO,(host_info_t)&vm_stat,&count);
-    if(countInactive){
-    pages_used = vm_stat.active_count + vm_stat.inactive_count
-                                      + vm_stat.wire_count;
+
+    vm_size_t pagesize=0;
+    host_page_size(mach_host_self(), &pagesize);
+    vm_statistics64_data_t vm_stat;
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    uint64_t pages_used=0;
+    if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t)&vm_stat, &count) == KERN_SUCCESS) {
+        pages_used = (uint64_t)vm_stat.active_count + vm_stat.wire_count + vm_stat.compressor_page_count;
+        if (countInactive) pages_used += vm_stat.inactive_count;
     }
-    else
-    {
-    pages_used = vm_stat.active_count + vm_stat.wire_count;
-    }
-									  
-	freeRAM= ((phys_mem/pagesize) - pages_used)*pagesize/1024.0/1024.0;
-	totalRAM=phys_mem/1024.0/1024.0;
-  
+    totalB=phys_mem;
+    usedB=pages_used*(uint64_t)pagesize;
+    if (usedB>totalB) usedB=totalB;
+    totalRAM=phys_mem/1024.0/1024.0;
+    freeRAM=(totalB-usedB)/1024.0/1024.0;
 
-
-
-	
-	
     // http://lists.apple.com/archives/Darwin-development/2004/Jul/msg00050.html
     // http://net-snmp.sourceforge.net/wiki/index.php/Memory_HAL
 

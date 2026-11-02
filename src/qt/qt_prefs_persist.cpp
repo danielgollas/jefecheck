@@ -3,6 +3,7 @@
 // qt_prefs_persist.h. Centralizes preference keys that used to be scattered
 // across MainWindow_qt.cpp and PreferencesWindow_qt.cpp. Later tasks append
 // their sections' keys to both functions as those sections come on-line.
+#include <algorithm>
 #include "qt_prefs_persist.h"
 #include "../gfcStructures.h"
 #include "../gfcTextRenderer.h"
@@ -28,6 +29,7 @@ void loadPreferences() {
     // engine settings were hidden (JEF-16 audit: inert) or removed (balanceReads),
     // so they are no longer persisted.
     sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
+    sett.memoryLimitPercent    = std::clamp(s.value("Engine/memoryLimitPercent", sett.memoryLimitPercent).toInt(), 50, 100);
     sett.oiioThreads           = s.value("Engine/oiioThreads",           sett.oiioThreads).toInt();
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply at startup
     // Session behavior.
@@ -123,6 +125,7 @@ void writePreferences() {
     s.setValue("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter);
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
     s.setValue("Engine/maximumFramesInQueue", sett.maximumFramesInQueue);
+    s.setValue("Engine/memoryLimitPercent", sett.memoryLimitPercent);
     s.setValue("Engine/oiioThreads",          sett.oiioThreads);
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply on Done
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);

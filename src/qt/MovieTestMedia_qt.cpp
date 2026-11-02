@@ -163,4 +163,34 @@ bool generate(const QString& dir, QString* err) {
     return true;
 }
 
+bool generateCacheMedia(const QString& dir, QString* err) {
+    const QString ffmpeg = VideoEncoder_Qt::findFfmpeg();
+    if (ffmpeg.isEmpty()) {
+        if (err) *err = QStringLiteral("ffmpeg not found");
+        return false;
+    }
+    QDir d(dir);
+    if (!d.mkpath(".")) {
+        if (err) *err = QStringLiteral("cannot create %1").arg(dir);
+        return false;
+    }
+    auto out = [&](const char* name) { return d.filePath(QString::fromLatin1(name)); };
+    const QStringList h264 = {"-vf", "format=yuv420p", "-c:v", "libx264"};
+    const QList<QStringList> jobs = {
+        // The flashbeep recipe at 24/1: a 100 ms 1 kHz beep at the start of every second.
+        QStringList{"-y", "-f", "lavfi", "-i", kTestsrc2.arg("24"),
+         "-f", "lavfi", "-i", "aevalsrc='if(lt(mod(t\\,1)\\,0.1)\\,0.8*sin(2*PI*1000*t)\\,0)':s=48000:c=stereo",
+         "-frames:v", "240", "-t", "10"} + h264 + QStringList{"-c:a", "aac", out("cache_beep_24.mp4")},
+        QStringList{"-y", "-f", "lavfi", "-i", kTestsrc2.arg("24"), "-frames:v", "240"} + h264 +
+            QStringList{"-an", out("cache_silent_24.mp4")},
+        {"-y", "-f", "lavfi", "-i", kTestsrc2.arg("24"), "-frames:v", "120", "-pix_fmt", "rgb24",
+         "-f", "image2", "-start_number", "1", d.filePath("cache_seq.%04d.png")},
+        QStringList{"-y", "-f", "lavfi", "-i", QStringLiteral("testsrc2=size=1920x1080:rate=24,format=rgb24"),
+         "-frames:v", "48"} + h264 + QStringList{"-an", out("cache_big_24.mp4")},
+    };
+    for (const QStringList& args : jobs)
+        if (!runFfmpeg(ffmpeg, args, err)) return false;
+    return true;
+}
+
 }  // namespace jefe::qt::testmedia

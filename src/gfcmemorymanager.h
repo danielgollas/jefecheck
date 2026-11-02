@@ -4,6 +4,7 @@
 
 #include <thread>
 #include <mutex>
+#include <cstdint>
 
 /**
 	@author Daniel Gollas Gilman <gollas@jefecorp.com>
@@ -22,12 +23,18 @@ public:
      float getTotalRAM();
      int withinLimits();
      
+     // System memory in bytes (lock + refresh). used excludes reclaimable cache.
+     uint64_t usedBytes();
+     uint64_t totalBytes();
+
      bool countInactive;
      
 private:
 	float percentageToUse;
 	float freeRAM;
 	float totalRAM;
+	uint64_t usedB;
+	uint64_t totalB;
 	void updateData();
 	std::mutex updateMutex;
 	int m_withinLimits;

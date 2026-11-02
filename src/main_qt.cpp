@@ -47,6 +47,7 @@
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
 #include "gfcMovieSelfTests.h"
+#include "gfcCacheSelfTests.h"
 #include "gfcTimecode.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteMerge.h"
@@ -217,6 +218,14 @@ static bool hasAspectTest(int argc, char* argv[]) {
 static bool hasNotesTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--notes-test") == 0) return true;
+    return false;
+}
+
+// --cache-test : headless rolling-cache suites (offscreen GL + ffmpeg).
+static bool hasCacheTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--cache-test") == 0) return true;
+    }
     return false;
 }
 
@@ -700,6 +709,41 @@ int main(int argc, char* argv[]) {
         const int r = jefe::qt::audio::deviceSelfTest();
         std::fflush(stdout);
         std::_Exit(r < 0 ? 3 : (r == 0 ? 0 : 2));
+    }
+
+    if (hasCacheTest(argc, argv)) {
+        jefe::qt::setAudioOutputEnabled(false);
+        jefe::qt::initializeRenderingChain();
+        if (!jefe::qt::setupOffscreenTestGL()) {
+            printf("CACHE-TEST SKIP: no offscreen GL\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        if (VideoEncoder_Qt::findFfmpeg().isEmpty()) {
+            printf("CACHE-TEST SKIP: ffmpeg not found\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        const QString mediaQDir = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("jefe_cache_test_%1").arg(QCoreApplication::applicationPid()));
+        QString mediaErr;
+        if (!jefe::qt::testmedia::generate(mediaQDir, &mediaErr) ||
+            !jefe::qt::testmedia::generateCacheMedia(mediaQDir, &mediaErr)) {
+            QDir(mediaQDir).removeRecursively();
+            printf("CACHE-TEST FAIL: %s\n", mediaErr.toLocal8Bit().constData());
+            fflush(stdout);
+            std::_Exit(2);
+        }
+        const std::string mediaDir = mediaQDir.toStdString();
+        bool allZero = true;
+        allZero &= (memoryMeasureSelfTest(mediaDir) == 0);
+        jefe::qt::removeRecoverySession();
+        if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
+            printf("CACHE-TEST media: %s\n", mediaDir.c_str());
+        else
+            QDir(mediaQDir).removeRecursively();
+        std::fflush(stdout);
+        std::_Exit(allZero ? 0 : 2);
     }
 
     if (hasVideoLoadTest(argc, argv)) {

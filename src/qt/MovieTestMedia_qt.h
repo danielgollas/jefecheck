@@ -13,6 +13,10 @@ namespace jefe::qt::testmedia {
 // false with *err set when ffmpeg is not available or any clip fails.
 bool generate(const QString& dir, QString* err);
 
+// Writes the --cache-test clips into dir: cache_beep_24.mp4, cache_silent_24.mp4,
+// cache_seq.%04d.png (120 frames) and cache_big_24.mp4 (1080p, 48 frames).
+bool generateCacheMedia(const QString& dir, QString* err);
+
 }  // namespace jefe::qt::testmedia
 
 #endif
