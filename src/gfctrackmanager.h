@@ -63,6 +63,7 @@ public:
 	void addToRecentlyLoaded(std::string filename);
 	
 	gfcSequence* getSequence(int whichOne);
+	bool anyTrackHasAudio() const; ///true if any track has a sound clip; cheap, safe from the GL thread.
 	
 	std::vector<gfcNetTrackStateInfo> getTrackStateInfo();
 	void setTrackStateInfo(std::vector<gfcNetTrackStateInfo> info);

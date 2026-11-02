@@ -27,6 +27,9 @@
 #include "gfcIOSurface.h"
 #include "gfcUploadPool.h"
 #include "gfcframe.h"
+#include "qt/qt_prefs_persist.h"
+#include <QSettings>
+#include <QVariant>
 #include <set>
 #include <string>
 
@@ -1141,5 +1144,61 @@ int cacheTracksSelfTest(const std::string& dir) {
     check(bNone, "at 5: B holds nothing at 5..14 (its footage starts at 51)");
 
     std::printf("CACHE-TRACKS: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- preferences: memory limit and lag policy (Task 7) ----
+
+int cachePrefsSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    clearAllTracks();
+    // The harness touches the user's real QSettings: remember both keys.
+    const char* kMem = "Engine/memoryLimitPercent";
+    const char* kLag = "Engine/lagPolicy";
+    QVariant savedMem, savedLag;
+    { QSettings s; savedMem = s.value(kMem); savedLag = s.value(kLag); }
+    const int memField = sett.memoryLimitPercent, lagField = sett.lagPolicy;
+
+    { gfcSettings fresh; check(fresh.memoryLimitPercent == 90 && fresh.lagPolicy == 0, "defaults: 90 % and Automatic"); }
+    sett.memoryLimitPercent = 75; sett.lagPolicy = 2;
+    jefe::qt::writePreferences();
+    sett.memoryLimitPercent = 90; sett.lagPolicy = 0;
+    jefe::qt::loadPreferences();
+    check(sett.memoryLimitPercent == 75 && sett.lagPolicy == 2, "both settings round-trip through QSettings");
+
+    // keepTime(): Automatic follows the sound; 1 and 2 force it.
+    sett.lagPolicy = 0;
+    loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+    check(trackManager.anyTrackHasAudio() && playbackManager.keepTime(), "Automatic with a sound track: keep time");
+    sett.lagPolicy = 2;
+    check(!playbackManager.keepTime(), "Show every frame: never keep time");
+    clearAllTracks();
+    loadTrack(1, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+    sett.lagPolicy = 0;
+    check(!trackManager.anyTrackHasAudio() && !playbackManager.keepTime(), "Automatic with only a silent track: show every frame");
+    sett.lagPolicy = 1;
+    check(playbackManager.keepTime(), "Keep time: always");
+    sett.lagPolicy = 2;
+    check(!playbackManager.keepTime(), "Show every frame, silent: not keep time");
+
+    // Lowering the limit live unloads nothing by itself.
+    clearAllTracks();
+    loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+    pump(500);
+    const int before = trackManager.residentFrameCount();
+    sett.memoryLimitPercent = 50;
+    pump(500);
+    check(trackManager.residentFrameCount() >= before, "lowering the limit unloads nothing");
+
+    sett.memoryLimitPercent = memField; sett.lagPolicy = lagField;
+    clearAllTracks();
+    { QSettings s;
+      if (savedMem.isValid()) s.setValue(kMem, savedMem); else s.remove(kMem);
+      if (savedLag.isValid()) s.setValue(kLag, savedLag); else s.remove(kLag); }
+    std::printf("CACHE-PREFS: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

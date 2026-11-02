@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <algorithm>
 #include "PreferencesWindow_qt.h"
 #include "qticons.h"
 
@@ -349,6 +350,31 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* queueLabel = new QLabel("Frames to read ahead", page);
     queueLabel->setToolTip(queueTip);
     form->addRow(queueLabel, queue);
+
+    auto* memLimit = new QSpinBox(page);
+    memLimit->setRange(50, 100);
+    memLimit->setSuffix(" %");
+    memLimit->setValue(sett.memoryLimitPercent);
+    memLimit->setObjectName("preferences.engine.memorylimit.spin");
+    memLimit->setAccessibleName("Memory limit (% of RAM)");
+    const QString memTip = "Frames load while the whole machine's memory use stays under this share of RAM; above it, a frame is unloaded for each one that loads.";
+    memLimit->setToolTip(memTip);
+    connect(memLimit, QOverload<int>::of(&QSpinBox::valueChanged),
+            page, [](int v) { sett.memoryLimitPercent = v; });
+    auto* memLimitLabel = new QLabel("Memory limit (% of RAM)", page);
+    memLimitLabel->setToolTip(memTip);
+    form->addRow(memLimitLabel, memLimit);
+
+    auto* lagCombo = new QComboBox(page);
+    lagCombo->setObjectName("preferences.engine.lagpolicy.combo");
+    lagCombo->setAccessibleName("When loading can't keep up");
+    lagCombo->addItem("Automatic (keep time with sound, show every frame without)", 0);
+    lagCombo->addItem("Keep time (skip frames)", 1);
+    lagCombo->addItem("Show every frame (slow down)", 2);
+    lagCombo->setCurrentIndex(std::clamp(sett.lagPolicy, 0, 2));
+    connect(lagCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            page, [lagCombo](int i) { sett.lagPolicy = lagCombo->itemData(i).toInt(); });
+    form->addRow("When loading can't keep up", lagCombo);
 
     auto* oiioThreads = new QSpinBox(page);
     oiioThreads->setRange(0, 64);

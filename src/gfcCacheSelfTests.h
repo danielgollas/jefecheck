@@ -31,3 +31,5 @@ int cacheRetargetSelfTest(const std::string& mediaDir);
 int cacheDirectionSelfTest(const std::string& mediaDir);
 // CACHE-TRACKS: three tracks with offsets hold the same timeline frames.
 int cacheTracksSelfTest(const std::string& mediaDir);
+// CACHE-PREFS: memory limit and lag policy persist; keepTime() follows sound.
+int cachePrefsSelfTest(const std::string& mediaDir);

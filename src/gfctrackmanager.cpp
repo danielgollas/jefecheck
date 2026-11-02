@@ -653,3 +653,9 @@ void gfcTrackManager::cleanForcedLoaded()
         	sequences[i].cleanForcedLoad();
         }
 }
+bool gfcTrackManager::anyTrackHasAudio() const
+{
+	for(int i=0;i<numOfSequences;i++)
+		if(sequences[i].hasAudio()) return true;
+	return false;
+}

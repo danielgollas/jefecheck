@@ -30,6 +30,7 @@ void loadPreferences() {
     // so they are no longer persisted.
     sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
     sett.memoryLimitPercent    = std::clamp(s.value("Engine/memoryLimitPercent", sett.memoryLimitPercent).toInt(), 50, 100);
+    sett.lagPolicy             = std::clamp(s.value("Engine/lagPolicy", sett.lagPolicy).toInt(), 0, 2);
     sett.oiioThreads           = s.value("Engine/oiioThreads",           sett.oiioThreads).toInt();
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply at startup
     // Session behavior.
@@ -126,6 +127,7 @@ void writePreferences() {
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
     s.setValue("Engine/maximumFramesInQueue", sett.maximumFramesInQueue);
     s.setValue("Engine/memoryLimitPercent", sett.memoryLimitPercent);
+    s.setValue("Engine/lagPolicy", sett.lagPolicy);
     s.setValue("Engine/oiioThreads",          sett.oiioThreads);
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply on Done
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);

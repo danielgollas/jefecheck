@@ -890,3 +890,8 @@ void gfcPlaybackManager::cacheResendTransport() {
 void gfcPlaybackManager::cacheRefreshTransport() {
     cacheSyncTransport(false);
 }
+
+bool gfcPlaybackManager::keepTime() const
+{
+    return sett.lagPolicy==1 || (sett.lagPolicy==0 && trackManager.anyTrackHasAudio());
+}

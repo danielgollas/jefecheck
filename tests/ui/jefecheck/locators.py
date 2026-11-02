@@ -255,6 +255,8 @@ PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 # (JEF-16 audit: inert — no runtime effect); balanceReads was dropped entirely
 # (superseded by the read-ahead queue cap). Only the queue control remains.
 PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
+PREFS_ENGINE_MEMORY_LIMIT = "preferences.engine.memorylimit.spin"
+PREFS_ENGINE_LAG_POLICY = "preferences.engine.lagpolicy.combo"
 PREFS_ENGINE_OIIO_THREADS = "preferences.engine.oiiothreads.spin"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
