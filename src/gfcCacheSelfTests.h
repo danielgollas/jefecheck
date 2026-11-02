@@ -56,6 +56,9 @@ int cacheEveryFrameSelfTest(const std::string& mediaDir);
 // limits) still loads its frame; ONCE with a clip that fits loads every frame
 // from a mid-clip playhead, evicts nothing and settles.
 int cacheLimitsSelfTest(const std::string& mediaDir);
+// CACHE-BEHIND: the window leaves K frames for just behind, so after playing
+// past a budget and pausing, a step back is already loaded.
+int cacheBehindSelfTest(const std::string& mediaDir);
 // CACHE-FAILED: a frame that fails to decode is settled: never pending, and
 // Show every frame plays past it.
 int cacheFailedSelfTest(const std::string& mediaDir);

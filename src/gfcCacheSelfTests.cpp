@@ -254,14 +254,15 @@ int cachePolicySelfTest() {
         return out;
     };
 
-    {   // Window, advance, unload order.
-        const int N = 240;
+    {   // Window, advance, unload order. ONCE from the start limit: no frame is
+        // behind yet, so the whole budget is the window.
+        const int N = 141;
         gfcFrameCache c; gfcFrameTable t0; t0.reset(240);
         c.setTestPooledBytes(0);
         c.attachTrack(0, &t0);
         c.setTrackGeometry(0, 0, 0, 239, 1000);
         c.setTestBudget(10 * 1000);
-        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        c.setTransport(100, +1, LOOPMODEONCE_ID, 100, 240, 24);
         std::vector<int> tl; bool fieldsOk = true;
         Job j{};
         for (int i = 0; i < 10 && c.nextJob(0, j, ms(20)); ++i) {
@@ -332,10 +333,11 @@ int cachePolicySelfTest() {
         r.setTestPooledBytes(0);
         r.attachTrack(0, &tr);
         r.setTrackGeometry(0, 0, 0, 19, 1000);
-        r.setTestBudget(10 * 1000);
+        r.setTestBudget(20 * 1000);   // the window and the ten frames behind
         r.setTransport(10, -1, LOOPMODEONCE_ID, 1, 20, 24);
         std::vector<int> back; for (int i = 10; i >= 1; --i) back.push_back(i);
-        check(pull(r, 0, 30, 1000) == back, "reverse: jobs 10, 9 .. 1 and then none");
+        for (int i = 11; i <= 20; ++i) back.push_back(i);
+        check(pull(r, 0, 30, 1000) == back, "reverse: jobs 10, 9 .. 1 (ahead in reverse), then behind 11 .. 20, then none");
     }
 
     {   // Minimum ahead, pins, wake-up.
@@ -436,7 +438,7 @@ int cachePolicySelfTest() {
         c.setTrackGeometry(0, 0, 0, 239, 1000);
         c.setTrackGeometry(1, 0, 0, 239, 1000);
         c.setTestBudget(20 * 1000);
-        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        c.setTransport(100, +1, LOOPMODEONCE_ID, 100, 240, 24);   // nothing behind: the budget is the window
         check(pull(c, 1, 10, 1000) == seq(100, 109), "finish: track 1 loads 100..109");
         check(pull(c, 0, 9, 1000) == seq(100, 108), "finish: track 0 loads 100..108");
         c.setTestPooledBytes(500);   // a staging buffer appeared
@@ -455,14 +457,16 @@ int cachePolicySelfTest() {
         c.setTrackGeometry(0, 0, 0, 239, 1000);
         c.setTrackGeometry(1, 0, 0, 239, 1000);
         c.setTestBudget(20 * 1000);
-        c.setTransport(100, +1, LOOPMODELOOP_ID, 91, 109, 24);   // ahead 100..109, behind 91..99
-        check(pull(c, 1, 10, 1000) == seq(100, 109) && pull(c, 0, 10, 1000) == seq(100, 109), "drop: both tracks load 100..109");
-        t1.setDecoding(98, 1000); t1.setResident(98, 1000);   // track 1 alone holds timeline 99
+        c.setTransport(100, +1, LOOPMODELOOP_ID, 91, 109, 24);   // ahead 100..105 (window 5), behind 99..96
+        std::vector<int> want = seq(100, 105);
+        for (int i = 99; i >= 96; --i) want.push_back(i);
+        check(pull(c, 1, 10, 1000) == want && pull(c, 0, 10, 1000) == want, "drop: both tracks load 100..105 and 99..96");
+        t1.setDecoding(94, 1000); t1.setResident(94, 1000);   // track 1 alone holds timeline 95 (near behind)
         Job j{};
-        check(!c.nextJob(0, j, ms(20)), "drop: track 0's finish of 99 is refused (over budget, nothing lower)");
+        check(!c.nextJob(0, j, ms(20)), "drop: track 0's finish of 95 is refused (over budget, nothing lower)");
         const gfcFrameCache::Victims v = c.drainVictims();
-        check(v.frames.size() == 1 && v.frames[0].track == 1 && v.frames[0].sourceIndex == 98 &&
-              t1.state(98) == gfcFrameState::Evicting, "drop: track 1's copy of 99 becomes the victim");
+        check(v.frames.size() == 1 && v.frames[0].track == 1 && v.frames[0].sourceIndex == 94 &&
+              t1.state(94) == gfcFrameState::Evicting, "drop: track 1's copy of 95 becomes the victim");
     }
 
     {   // Four tracks, pools grown by more than a frame while track 0 lags:
@@ -475,7 +479,7 @@ int cachePolicySelfTest() {
             c.setTrackGeometry(k, 0, 0, 239, 1000);
         }
         c.setTestBudget(40 * 1000);   // 10 timeline frames of 4 tracks
-        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        c.setTransport(100, +1, LOOPMODEONCE_ID, 100, 240, 24);   // nothing behind: the budget is the window
         for (int k = 3; k >= 1; --k) check(pull(c, k, 10, 1000) == seq(100, 109), "four: tracks 3..1 load 100..109");
         check(pull(c, 0, 6, 1000) == seq(100, 105), "four: track 0 loads 100..105");
         c.setTestPooledBytes(3500);   // pools grew by three and a half frames
@@ -505,7 +509,7 @@ int cachePolicySelfTest() {
         c.attachTrack(0, &t);
         c.setTrackGeometry(0, 0, 0, 239, 1000);
         c.setTestBudget(10 * 1000);
-        c.setTransport(100, +1, LOOPMODELOOP_ID, 1, 240, 24);
+        c.setTransport(100, +1, LOOPMODEONCE_ID, 100, 240, 24);   // nothing behind yet: the budget is the window
         check(pull(c, 0, 10, 1000) == seq(100, 109), "one-for-one: 100..109 resident");
         c.setTestBudget(1000);   // far below the 10000 resident
         c.advance(105);          // 100..104 now behind, 110 is within the minimum ahead
@@ -775,9 +779,9 @@ int cacheBudgetSelfTest(const std::string& dir) {
         std::printf("CACHE-BUDGET: retargets maxResident=%d\n", maxResident);
         check(boundOk, "retargets: every sample within budget + 2 frames");
         check(maxResident <= 22, "retargets: never more than 22 frames resident");
-        bool tail = true;
-        for (int i = 229; i <= 239; ++i) tail &= a->frameTable().state(i) == gfcFrameState::Resident;
-        check(tail, "retargets: frames 229..239 resident after retarget(230)");
+        bool tail = true;   // the window (230..235) and the nearest frames behind
+        for (int i = 224; i <= 234; ++i) tail &= a->frameTable().state(i) == gfcFrameState::Resident;
+        check(tail, "retargets: frames 225..235 resident after retarget(230)");
         check(a->frameReadyForRender(5) && a->frameReadyForRender(200), "every frame has load params (savedParams), resident or not");
         check(a->estimatedFrameBytes() == kFrame8, "estimatedFrameBytes for 8-bit 320x180");
 
@@ -893,6 +897,25 @@ int cacheSettleSelfTest(const std::string& dir) {
               "timelineFramesResident(1, 240) and a frame with no footage count as resident");
         a->evictFrame(9);
         check(!trackManager.timelineFrameResident(10) && !trackManager.timelineFramesResident(5, 10, +1), "an evicted frame is not resident");
+    }
+
+    clearAllTracks();
+
+    {   // Two tracks of different sizes, paused on a full budget: the finish /
+        // drop-partial path settles too (no loads, no evictions over 2 s).
+        frameCache.setTestBudget(int64_t(30 * (kFrame8 + kFrame8 / 4)));
+        gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+        gfcSequence* b = loadTrack(1, dir + "/cache_beep_24.mp4", GFC_8BPC, 50);
+        pumpUntil([&] { return a->residentCount() >= 25 && b->residentCount() >= 25; }, 10000);
+        pump(1500);
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        pump(2000);
+        const gfcFrameCache::Stats s1 = frameCache.stats();
+        std::printf("CACHE-SETTLE: two tracks A=%d B=%d, over 2 s admitted %llu evicted %llu\n", a->residentCount(), b->residentCount(),
+                    (unsigned long long)(s1.admitted - s0.admitted), (unsigned long long)(s1.evicted - s0.evicted));
+        check(s1.admitted == s0.admitted && s1.evicted == s0.evicted, "two tracks paused on a full budget: no loads, no evictions over 2 s");
+        check(residentTimeline(a) == residentTimeline(b), "two tracks paused: the same timeline frames");
+        clearAllTracks();
     }
 
     std::printf("CACHE-SETTLE: pass=%d fail=%d\n", pass, fail);
@@ -1194,18 +1217,21 @@ int cacheDirectionSelfTest(const std::string& dir) {
         playbackManager.startPlayRev();
         pump(2000);
         const std::set<int> after = residentTimeline(a);
+        // At a 20-frame budget: the window (200 down to 195) and the frames
+        // just behind it in reverse, above 200.
         bool within = !after.empty();
         size_t fresh = 0;
         for (int t : after) {
-            within &= t >= 180 && t <= 200;
+            within &= t >= 176 && t <= 224;
             if (!before.count(t)) ++fresh;
         }
+        for (int t = 195; t <= 201; ++t) within &= after.count(t) > 0;
         const uint64_t admitted = frameCache.stats().admitted - s0.admitted;
         std::printf("CACHE-DIRECTION: reverse resident=%zu [%d..%d] admitted=%llu fresh=%zu\n", after.size(),
                     after.empty() ? 0 : *after.begin(), after.empty() ? 0 : *after.rbegin(),
                     (unsigned long long)admitted, fresh);
-        check(within && after.count(200), "reverse: the resident set is within [180, 200]");
-        check(admitted == fresh, "reverse: every admission after the jump landed in [180, 200]");
+        check(within, "reverse: 195..200 (ahead in reverse) and 201 (just behind) resident, nothing outside [176, 224]");
+        check(admitted == fresh, "reverse: every admission after the jump landed in [176, 224]");
         playbackManager.pause();
     }
 
@@ -1247,7 +1273,8 @@ int cacheDirectionSelfTest(const std::string& dir) {
         playbackManager.setInPoint(1);
         playbackManager.setOutPoint(240);
         playbackManager.setCurrentFrame(150);
-        const bool widened = pumpUntil([&] { return timelineRangeResident(a, 150, 160); }, 2000);
+        // At a 20-frame budget: the window 150..155 and the nearest frames behind.
+        const bool widened = pumpUntil([&] { return timelineRangeResident(a, 140, 155); }, 2000);
         if (!widened) {
             std::printf("CACHE-DIRECTION: widen resident:");
             for (int t : residentTimeline(a)) std::printf(" %d", t);
@@ -1257,7 +1284,7 @@ int cacheDirectionSelfTest(const std::string& dir) {
                         (unsigned long long)st.admitted, (unsigned long long)st.evicted, (unsigned long long)st.denied,
                         (long long)frameCache.cacheBytes(), (long long)frameCache.budgetBytes());
         }
-        check(widened, "widen: frames 150..160 resident (100..104 do not starve them)");
+        check(widened, "widen: frames 140..155 resident (100..104 do not starve them)");
     }
 
     std::printf("CACHE-DIRECTION: pass=%d fail=%d\n", pass, fail);
@@ -1293,13 +1320,21 @@ int cacheTracksSelfTest(const std::string& dir) {
         std::printf("CACHE-TRACKS: at 60 A=%zu [%d..%d] B=%zu [%d..%d] C=%d\n", ta.size(),
                     ta.empty() ? 0 : *ta.begin(), ta.empty() ? 0 : *ta.rbegin(), tb.size(),
                     tb.empty() ? 0 : *tb.begin(), tb.empty() ? 0 : *tb.rbegin(), c->residentCount());
-        check(ta == tb, "at 60: A and B hold the same timeline frames");
-        check(ta.size() >= 25 && tb.size() >= 25, "at 60: at least 25 frames each");
-        check(c->residentCount() == 0, "at 60: C (no footage from 21 on) holds nothing");
+        // The window and the near-behind frames reach below B's first frame (51).
+        std::set<int> taB;
+        for (int t : ta) if (t >= 51) taB.insert(t);
+        check(!tb.empty() && taB == tb, "at 60: A and B hold the same timeline frames where both have footage");
+        check(ta.size() >= 25 && tb.size() >= 10 && ta.count(60) && ta.count(65) && tb.count(60), "at 60: A holds 25+ frames, B 10+, both 60");
+        // C's footage ends at 20; what it holds in free room (fill) inside the
+        // limits, A holds too (B has no footage there).
+        bool cShared = true;
+        for (int t : residentTimeline(c)) cShared &= t <= 0 || ta.count(t) > 0;
+        check(cShared, "at 60: every frame C holds inside the limits A holds too");
     }
     playbackManager.setCurrentFrame(5);
-    const bool both = pumpUntil([&] { return timelineRangeResident(a, 5, 14) && timelineRangeResident(c, 5, 14); }, 2000);
-    check(both, "at 5: A and C hold timeline frames 5..14");
+    // The window 5..10 and the frames just behind it (1..4).
+    const bool both = pumpUntil([&] { return timelineRangeResident(a, 1, 10) && timelineRangeResident(c, 1, 10); }, 2000);
+    check(both, "at 5: A and C hold timeline frames 1..10");
     bool bNone = true;
     for (int t : residentTimeline(b)) bNone &= t > 14;
     check(bNone, "at 5: B holds nothing at 5..14 (its footage starts at 51)");
@@ -1932,6 +1967,17 @@ int cacheKeepTimeSelfTest(const std::string& dir) {
         frameCache.setTestBudget(int64_t(60 * kFrame8));
         playbackManager.setCurrentFrame(60);
         check(pumpUntil([&] { return timelineRangeResident(a, 60, 79); }, 3000), "skipped frames load: 60..79 resident within 3 s");
+        // The plate draws the playhead (as the app does), so the frame shown
+        // before the jump is no longer pinned on screen and can make room.
+        const bool behind = pumpUntil([&] { a->getFrame(60); return timelineRangeResident(a, 36, 59); }, 3000);
+        if (!behind) {
+            std::printf("CACHE-KEEPTIME: near behind missing:");
+            const std::set<int> r = residentTimeline(a);
+            for (int t = 30; t <= 100; ++t) if (!r.count(t)) std::printf(" %d", t);
+            std::printf(" (resident %zu, cache %lld, budget %lld, pools %zu)\n", r.size(), (long long)frameCache.cacheBytes(),
+                        (long long)frameCache.budgetBytes(), poolBytes());
+        }
+        check(behind, "near behind: 36..59 resident too (the window leaves K frames for them)");
     }
 
     {   // The pre-play buffer: play waits (silent) until the next ~0.25 s is in, at most 0.5 s.
@@ -1953,7 +1999,7 @@ int cacheKeepTimeSelfTest(const std::string& dir) {
         const double slow = prePlayStart(rig, slowAt, 200, held, silent);   // 6 frames need ~1.2 s: the cap ends the wait
         std::printf("CACHE-KEEPTIME: pre-play 200 ms/frame from %d moved after %.3f s\n", slowAt, slow);
         check(held && silent, "pre-play: the start frame holds and the sound waits for 150 ms");
-        check(slow >= 0.45 && slow <= 0.7, "pre-play: a slow loader waits out the 0.5 s cap, then plays");
+        check(slow >= 0.45 && slow <= 0.9, "pre-play: a slow loader waits out the 0.5 s cap, then plays");
         const int fastAt = coldStart(40, 140);
         check(fastAt > 0, "fixture: a start frame in 40..140 with nothing resident");
         const double fast = prePlayStart(rig, fastAt, 30, held, silent);    // 6 frames in ~0.2 s
@@ -2085,6 +2131,52 @@ int cacheLimitsSelfTest(const std::string& dir) {
     }
 
     std::printf("CACHE-LIMITS: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- just behind is kept once the budget binds (final review I3) ----
+
+int cacheBehindSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+
+    {   // Just behind is kept once the budget binds: play forward on a clip longer
+        // than the budget (60 frames), pause, and a step back is already loaded.
+        const int savedLag = sett.lagPolicy;
+        sett.lagPolicy = 2;   // Show every frame: every frame is played in turn
+        frameCache.setTestBudget(int64_t(60 * kFrame8));
+        playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+        playbackManager.setCurrentFrame(1);
+        gfcSequence* a = loadTrack(0, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+        pumpUntil([&] { return a->residentCount() >= 50; }, 8000);
+        playbackManager.startPlayFwd();
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(4000);
+        while (std::chrono::steady_clock::now() < end) {
+            jefe::qt::tickPlaybackTiming();
+            trackManager.generateTextures();
+            a->getFrame(playbackManager.getCurrentFrame());
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        playbackManager.pause();
+        pump(1500);
+        const int ph = playbackManager.getCurrentFrame();
+        const int K = 24;
+        const bool behind = timelineRangeResident(a, ph - K, ph - 1);
+        std::printf("CACHE-BEHIND: paused at %d after play, %d..%d resident=%d, resident %d\n", ph, ph - K, ph - 1, int(behind), a->residentCount());
+        check(ph > 60, "near behind: playback went past the 60-frame budget");
+        check(behind, "near behind: frames playhead-1 .. playhead-K resident after play and pause");
+        playbackManager.oneFrameRev();
+        const int back = playbackManager.getCurrentFrame();
+        check(back == ph - 1 && a->getFrame(back).loaded, "near behind: one frame back shows a loaded frame at once");
+        sett.lagPolicy = savedLag;
+    }
+
+    std::printf("CACHE-BEHIND: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
 

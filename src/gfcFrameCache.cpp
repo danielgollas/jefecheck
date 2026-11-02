@@ -340,7 +340,17 @@ gfcFrameCache::Params gfcFrameCache::params() const {
     int64_t W;
     if (cost == 0) W = p.N;
     else W = std::max<int64_t>(1, budget / (int64_t)cost);
-    p.window = (int)std::min<int64_t>(p.N, std::max<int64_t>(W, p.M - 1));
+    // Room is left for the near-behind frames (unloaded last), so a step back
+    // after playing past the budget is still instant: W timeline frames are
+    // the playhead, `window` ahead and up to K behind. Only behind frames the
+    // walk has (none at a ONCE start) take room. walk_ is current (callers
+    // run walk() first).
+    int behind = 0;
+    for (int t : walk_.behindOrder) {
+        if (behind >= p.K || walk_.b[t - walk_.start] > p.K) break;
+        ++behind;
+    }
+    p.window = (int)std::min<int64_t>(p.N, std::max<int64_t>(W - 1 - behind, p.M - 1));
     return p;
 }
 
@@ -602,19 +612,27 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
     // track past the loop limits) and nothing is ever evicted for it. In
     // falling score order: ahead past the window, far behind, then outside
     // the limits nearest the playhead.
-    auto fill = [&](int t) { return attempt(t - 1 - tr.offset, Mode::Fill); };
+    // After the first refusal only finishes are tried (a timeline frame another
+    // track already holds): this track's next fill frame may need more room
+    // than the finish, and stopping there would leave the tracks holding
+    // different frames. A refused finish unloads the other copies (attempt).
+    bool fillClosed = false;
+    auto fill = [&](int t) {
+        const int src = t - 1 - tr.offset;
+        if (src < tr.first || src > tr.last || tr.table->state(src) != gfcFrameState::Unloaded) return 0;
+        if (fillClosed && !timelineHeldElsewhereLocked(t, track)) return 0;
+        const int r = attempt(src, Mode::Fill);
+        if (r == 2) fillClosed = true;
+        return r;
+    };
     for (int t : w.aheadOrder) {
         if (w.a[t - w.start] <= p.window) continue;
-        const int r = fill(t);
-        if (r == 1) return Scan::Job;
-        if (r == 2) return Scan::Denied;
+        if (fill(t) == 1) return Scan::Job;
     }
     for (int t : w.behindOrder) {
         const int a = w.a[t - w.start];
         if (w.b[t - w.start] <= p.K || (a >= 0 && a <= p.window)) continue;   // tried above
-        const int r = fill(t);
-        if (r == 1) return Scan::Job;
-        if (r == 2) return Scan::Denied;
+        if (fill(t) == 1) return Scan::Job;
     }
     const int fs = tr.first + 1 + tr.offset, fe = tr.last + 1 + tr.offset, ph = w.playhead;
     const int dFrom = ph < fs ? fs - ph : (ph > fe ? ph - fe : 0);
@@ -623,9 +641,7 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         for (int side = 0; side < (d == 0 ? 1 : 2); ++side) {
             const int t = ph + (side == 0 ? d : -d) * w.direction;   // the play direction first
             if (t < fs || t > fe || (p.N > 0 && t >= w.start && t <= w.end)) continue;
-            const int r = fill(t);
-            if (r == 1) return Scan::Job;
-            if (r == 2) return Scan::Denied;
+            if (fill(t) == 1) return Scan::Job;
         }
     }
     return Scan::Denied;

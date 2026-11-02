@@ -12,7 +12,9 @@
 //   to the playhead. t is ahead when a <= b (or only a exists), else behind.
 //   K = max(4, round(fps)) capped at N  (just behind)
 //   M = max(4, ceil(0.25 * fps))        (always admitted: the playhead and M-1 ahead, a < M)
-//   W = max(1, budget / costPerTimelineFrame), window = max(W, M-1) capped at N
+//   W = max(1, budget / costPerTimelineFrame), window = max(W - 1 - B, M-1)
+//   capped at N, B = the near-behind frames the walk has (at most K): the
+//   playhead, the window and the near-behind frames fit the budget together
 //   pinned / on screen       -> never a victim (INT_MAX)
 //   ahead, a <= window       -> 3N + (N - a)
 //   behind, b <= K           -> 2N + (K - b)
