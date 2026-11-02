@@ -433,7 +433,8 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
     // Sound is optional: a movie whose audio cannot be decoded still plays.
     const bool audioUndecodable = (d.audioEnabled || d.audioOnly) && !d.openAudio();
     if (audioUndecodable) d.releaseAudio();
-    // Audio only: the demuxer skips every other stream's packets.
+    // Audio only: the demuxer also skips the audio streams not chosen (the
+    // loop above could not know which one openAudio would pick).
     if (d.audioOnly)
         for (unsigned k = 0; k < d.fmt->nb_streams; ++k)
             if (int(k) != d.astream) d.fmt->streams[k]->discard = AVDISCARD_ALL;

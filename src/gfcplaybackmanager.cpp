@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcplaybackmanager.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <numeric>
@@ -71,7 +72,22 @@ void gfcPlaybackManager::update() {
 
     if (!playing) {
         intraFrameCount=0;
+        buffering_=false;
         return;
+    }
+
+    // Pre-play buffer (Keep time): hold the playhead until the next ~0.25 s is
+    // resident or 0.5 s has passed, then let the sound lead. Runs only while
+    // waiting, which is bounded by kPrePlayMaxWait.
+    if (buffering_) {
+        const double waited=std::chrono::duration<double>(std::chrono::steady_clock::now()-bufferingSince_).count();
+        if (waited>=kPrePlayMaxWait || trackManager.timelineFramesResident(currentFrame, prePlayFrames(), currentDirection)) {
+            buffering_=false;
+            if (currentDirection>0) audioTryLead();
+        } else {
+            intraFrameCount=0;
+            return;
+        }
     }
 
     // The frame cache follows each step (and a BOUNCE turn): one atomic store
@@ -86,10 +102,11 @@ void gfcPlaybackManager::update() {
     // Native-rate forward play: the audio clock leads and the picture shows
     // the frame being heard (frames are dropped if drawing falls behind; the
     // sound never waits). Falls back to FPS pacing as soon as the engine can
-    // no longer lead (device lost, every native track muted, rate changed).
+    // no longer lead (device lost, every native track muted, rate changed) or
+    // the lag policy turns to Show every frame (the sound never leads there).
     if (audioEngine.isLeading()) {
         audioSyncTransport();
-        if (audioEngine.canLead()) {
+        if (audioEngine.canLead() && keepTime()) {
             intraFrameCount=0;
             const int f=audioEngine.leaderFrame();
             currentDirection=audioEngine.leaderDirection();
@@ -113,6 +130,18 @@ void gfcPlaybackManager::update() {
     intraFrameCount+=timeStep;
 
     if (intraFrameCount>=timePerFrame) {
+        // Show every frame: the next frame is not resident yet, so hold this
+        // one (no advance, no FPS count) and look again next tick; the measured
+        // FPS shows the slowdown. Only a tick that would advance pays the check.
+        if (!keepTime()) {
+            int dirCopy=currentDirection;
+            const int next=advanceFrame(currentFrame, dirCopy, playbackMode, startLimit, endLimit);
+            if (next!=currentFrame && !trackManager.timelineFrameResident(next)) {
+                intraFrameCount=timePerFrame;
+                return;
+            }
+        }
+
         recordAdvanceForFPS(1);
 
         intraFrameCount-=timePerFrame;
@@ -254,7 +283,9 @@ void gfcPlaybackManager::startPlayFwd() {
         playing=true;
         currentDirection=1;
 		fpsTimer.reset();
-        audioTryLead();
+        // Keep time waits for the pre-play buffer; the sound leads when it ends.
+        if (!(keepTime() && beginBuffering()))
+            audioTryLead();
     }
     myGUI->setPlayRevLabel(0);
     myGUI->setPlayFwdLabel(playing);
@@ -302,6 +333,7 @@ void gfcPlaybackManager::startPlayRev() {
         playing=true;
         currentDirection=-1;
 		fpsTimer.reset();
+        if (keepTime()) beginBuffering();
     }
     myGUI->setPlayRevLabel(playing);
     myGUI->setPlayFwdLabel(0);
@@ -512,7 +544,10 @@ void gfcPlaybackManager::setCurrentFrame(int frame, bool audible) {
     trackManager.retargetAudio(frame);   // and the sound fills from here first
     this->myGUI->setTimelineValue(frame);
     this->myGUI->setCurrentFrame(frame);
-    if (audible) audioSeek();
+    // A seek while playing (Keep time) waits for the pre-play buffer; the
+    // sound restarts from here when it ends.
+    const bool waiting = playing && keepTime() && beginBuffering();
+    if (audible && !waiting) audioSeek();
     updateTimeCode();
     sendPlayPauseMessage();
 	plateManager.setChanged();
@@ -850,7 +885,9 @@ bool gfcPlaybackManager::audioTryLead() {
     audioEngine.setPlayerRate(targetRateNum, targetRateDen);
     const gfcAudioTransport t{currentFrame, getStartLimit(), getEndLimit(), playbackMode, currentDirection};
     audioSentStart=t.startLimit; audioSentEnd=t.endLimit; audioSentMode=t.loopMode; audioSentDir=t.direction;
-    if (currentDirection<=0) { audioEngine.updateTransport(t); return false; }
+    // Reverse is silent; Show every frame never lets the sound lead (each
+    // shown frame plays its own slice instead).
+    if (currentDirection<=0 || !keepTime()) { audioEngine.updateTransport(t); return false; }
     audioEngine.startLeading(t);   // a no-op unless the engine can lead
     return audioEngine.isLeading();
 }
@@ -871,9 +908,24 @@ void gfcPlaybackManager::audioSeek() {
     if (!playing) {
         audioEngine.setPlayerRate(targetRateNum, targetRateDen);
         audioEngine.playSlice(currentFrame);
-    } else if (currentDirection>0 && audioEngine.isLeading()) {
-        audioTryLead();
+    } else if (currentDirection>0) {
+        audioTryLead();   // also resumes a lead a pre-play wait stopped
     }
+}
+
+int gfcPlaybackManager::prePlayFrames() const {
+    return std::max(1, int(std::ceil(kPrePlaySeconds*double(targetFPS))));
+}
+
+bool gfcPlaybackManager::beginBuffering() {
+    if (trackManager.timelineFramesResident(currentFrame, prePlayFrames(), currentDirection)) {
+        buffering_=false;
+        return false;
+    }
+    buffering_=true;
+    bufferingSince_=std::chrono::steady_clock::now();
+    audioEngine.stopLeading();   // silent while waiting
+    return true;
 }
 
 // ---- frame cache ----

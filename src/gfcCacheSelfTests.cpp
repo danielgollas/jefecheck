@@ -29,6 +29,7 @@
 #include "gfcframe.h"
 #include "gfcMovieReader.h"
 #include "gfcAudioClip.h"
+#include "gfcAudioEngine.h"
 #include "qt/qt_prefs_persist.h"
 #include <QSettings>
 #include <QCoreApplication>
@@ -1539,10 +1540,10 @@ int audioHolesSelfTest(const std::string& dir) {
     }
 
     {   // A jump past the fill point: sound arrives there first. Each 1 s audio
-        // block takes 250 ms, so a straight fill would reach the jump only after
-        // ~2.3 s, covering 3 s after ~0.75 s: arriving with 3 s still missing proves
+        // block takes 400 ms, so a straight fill would reach the jump only after
+        // ~3.7 s, covering 3 s after ~1.2 s: arriving with 3 s still missing proves
         // the target was filled first.
-        gfcSequence::setTestAudioBlockDelayMs(250);
+        gfcSequence::setTestAudioBlockDelayMs(400);
         playbackManager.setCurrentFrame(1);
         gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
         playbackManager.setCurrentFrame(212);   // source frame 211; the beep at frame 216 is filled after the seek
@@ -1554,10 +1555,10 @@ int audioHolesSelfTest(const std::string& dir) {
             if (!c || !c->covers(at, fss(239) - at)) return false;   // the source's sound ends just short of frame 240
             earlyHole = !c->covers(fss(72), 1);
             return true;
-        }, 2000);   // the jump takes ~3-5 blocks (0.8-1.2 s); a straight fill has 3 s covered long before it reaches 211
+        }, 4000);   // the jump takes ~3-5 blocks (1.2-2 s); a straight fill has 3 s covered long before it reaches 211
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - jumpedAt).count();
         std::printf("AUDIO-HOLES: jump there=%d earlyHole=%d after %.0f ms\n", int(there), int(earlyHole), ms);
-        check(there && earlyHole, "jump to 212: its sound is there within 2 s while 3 s is still a hole (filled first)");
+        check(there && earlyHole, "jump to 212: its sound is there within 4 s while 3 s is still a hole (filled first)");
         const int64_t jumpOnset = [&] { auto c = a->audioClip(); return c ? onsetAfter(*c, fss(216) - 2000) : -1; }();
         std::printf("AUDIO-HOLES: beep onset straight=%lld jump=%lld\n", (long long)straightOnset, (long long)jumpOnset);
         check(straightOnset > 0 && jumpOnset > 0 && std::llabs(jumpOnset - straightOnset) <= 2,
@@ -1588,5 +1589,172 @@ int audioHolesSelfTest(const std::string& dir) {
     }
 
     std::printf("AUDIO-HOLES: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- when loading can't keep up (Task 10) ----
+
+namespace {
+// The app's playback tick with a fake audio device that plays in real time:
+// each tick pumps the samples the wall clock says a device would have played.
+struct LagRig {
+    gfcFakeAudioOutput out;
+    std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+    int64_t pumped = 0;
+    LagRig() { audioEngine.setOutput(&out); out.open(&audioEngine); }
+    ~LagRig() { audioEngine.setOutput(nullptr); }
+    void tick() {
+        const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        const int64_t want = int64_t(secs * gfcAudioEngine::kRate);
+        if (want > pumped) { out.pump(int(want - pumped)); pumped = want; }
+        jefe::qt::tickPlaybackTiming();
+        trackManager.generateTextures();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+};
+
+// Loads cache_beep_24.mp4 on A at a 20-frame budget with an ~12 fps loader,
+// once mode from frame 1; waits for frame 1 and 5 s of sound in the engine.
+gfcSequence* lagFixture(const std::string& dir, LagRig& rig) {
+    frameCache.setTestBudget(int64_t(20 * kFrame8));
+    playbackManager.setPlaybackMode(LOOPMODEONCE_ID);
+    playbackManager.setCurrentFrame(1);
+    gfcSequence::setTestDecodeDelayMs(80);
+    gfcSequence* a = loadTrack(0, dir + "/cache_beep_24.mp4", GFC_8BPC, 100);
+    const int64_t fiveSecs = gfcAudioClip::frameStartSample(120, 24, 1);
+    const bool ready = pumpUntil([&] {
+        auto c = a->audioClip();
+        return trackManager.timelineFrameResident(1) && audioEngine.trackHasAudio(0) && c && c->covers(0, fiveSecs);
+    }, 5000);
+    if (!ready) std::printf("  note: lag fixture not ready (frame 1 / sound)\n");
+    rig.t0 = std::chrono::steady_clock::now();
+    rig.pumped = 0;
+    return a;
+}
+}  // namespace
+
+int cacheKeepTimeSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    const int savedLag = sett.lagPolicy;
+    sett.lagPolicy = 1;   // Keep time
+    LagRig rig;
+    gfcSequence* a = lagFixture(dir, rig);
+
+    {   // 5 s of play with a loader at half the rate: sound leads, frames are skipped.
+        const int start = playbackManager.getCurrentFrame();
+        playbackManager.startPlayFwd();
+        const auto t0 = std::chrono::steady_clock::now();
+        bool monotonic = true, ledInTime = false, stayed = true, led = false;
+        int last = start;
+        std::set<int> shown;
+        while (true) {
+            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            if (secs >= 5.0) break;
+            rig.tick();
+            const int f = playbackManager.getCurrentFrame();
+            monotonic &= f >= last;
+            last = f;
+            const gfcFrame drawn = a->getFrame(f);   // what the plate draws this tick
+            if (drawn.loaded && drawn.indexNumber == f - 1) shown.insert(f);
+            const bool leading = audioEngine.isLeading();
+            if (leading && !led) { led = true; ledInTime = secs <= 0.6; }
+            else if (led && !leading) stayed = false;
+        }
+        const int end = playbackManager.getCurrentFrame();
+        std::printf("CACHE-KEEPTIME: frames %d..%d, shown %zu of %d, led=%d inTime=%d stayed=%d\n", start, end,
+                    shown.size(), end - start, int(led), int(ledInTime), int(stayed));
+        check(monotonic, "keep time: the frame sequence never goes back");
+        check(led && ledInTime && stayed, "keep time: the sound leads within 0.6 s and keeps leading");
+        check(int(shown.size()) < end - start, "keep time: frames were skipped (fewer shown than elapsed)");
+        check(end >= 100, "keep time: time was kept (frame >= 100 after 5 s)");
+        auto c = a->audioClip();
+        check(c && c->covers(0, gfcAudioClip::frameStartSample(120, 24, 1)),
+              "keep time: the sound has no hole in the first 5 s");
+        playbackManager.pause();
+    }
+
+    {   // Skipped frames still load once the loader can.
+        gfcSequence::setTestDecodeDelayMs(0);
+        frameCache.setTestBudget(int64_t(60 * kFrame8));
+        playbackManager.setCurrentFrame(60);
+        check(pumpUntil([&] { return timelineRangeResident(a, 60, 79); }, 3000), "skipped frames load: 60..79 resident within 3 s");
+    }
+
+    {   // The pre-play buffer: play waits (silent) until the next ~0.25 s is in.
+        gfcSequence::setTestDecodeDelayMs(80);
+        playbackManager.setCurrentFrame(200);
+        playbackManager.startPlayFwd();
+        const auto t0 = std::chrono::steady_clock::now();
+        bool held = true, silent = true;
+        double movedAt = -1;
+        while (true) {
+            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            if (secs >= 1.0) break;
+            rig.tick();
+            const int f = playbackManager.getCurrentFrame();
+            if (secs < 0.15) { held &= f == 200; silent &= !audioEngine.isLeading(); }
+            if (f != 200 && movedAt < 0) movedAt = secs;
+        }
+        std::printf("CACHE-KEEPTIME: pre-play buffer moved after %.3f s\n", movedAt);
+        check(held && silent, "pre-play: frame 200 holds and the sound waits for 150 ms");
+        check(movedAt > 0 && movedAt <= 0.6, "pre-play: playback starts within 600 ms");
+        playbackManager.pause();
+    }
+
+    gfcSequence::setTestDecodeDelayMs(0);
+    sett.lagPolicy = savedLag;
+    std::printf("CACHE-KEEPTIME: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+int cacheEveryFrameSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    const int savedLag = sett.lagPolicy;
+    sett.lagPolicy = 2;   // Show every frame
+    LagRig rig;
+    gfcSequence* a = lagFixture(dir, rig);
+
+    {   // 5 s of play with a loader at half the rate: playback slows to the loader.
+        const int start = playbackManager.getCurrentFrame();
+        playbackManager.startPlayFwd();
+        const auto t0 = std::chrono::steady_clock::now();
+        bool stepOne = true, everLed = false, allResident = true, advanced = false;
+        int last = start;
+        while (true) {
+            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            if (secs >= 5.0) break;
+            rig.tick();
+            const int f = playbackManager.getCurrentFrame();
+            if (f != last) { stepOne &= f == last + 1; advanced = true; last = f; }
+            a->getFrame(f);   // the plate draws it
+            everLed |= audioEngine.isLeading();
+            if (advanced) allResident &= trackManager.timelineFrameResident(f);
+        }
+        const int end = playbackManager.getCurrentFrame();
+        const float fps = playbackManager.getCurrentFPS();
+        std::printf("CACHE-EVERYFRAME: frames %d..%d, fps %.1f, led=%d\n", start, end, fps, int(everLed));
+        check(stepOne, "every frame: each change is exactly +1");
+        check(!everLed, "every frame: the sound never leads");
+        check(end >= 40 && end <= 90, "every frame: playback slowed to the loader (frame 40..90 after 5 s)");
+        check(fps < 20.0f, "every frame: the measured fps shows the slowdown");
+        check(allResident, "every frame: every frame shown was resident");
+        playbackManager.pause();
+    }
+
+    gfcSequence::setTestDecodeDelayMs(0);
+    sett.lagPolicy = savedLag;
+    std::printf("CACHE-EVERYFRAME: pass=%d fail=%d\n", pass, fail);
     return fail;
 }

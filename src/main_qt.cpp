@@ -762,6 +762,8 @@ int main(int argc, char* argv[]) {
         allZero &= (cacheDisplaySelfTest(mediaDir) == 0);
         allZero &= (cacheRenderSelfTest(mediaDir) == 0);
         allZero &= (audioHolesSelfTest(mediaDir) == 0);
+        allZero &= (cacheKeepTimeSelfTest(mediaDir) == 0);
+        allZero &= (cacheEveryFrameSelfTest(mediaDir) == 0);
         jefe::qt::removeRecoverySession();
         if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
             printf("CACHE-TEST media: %s\n", mediaDir.c_str());

@@ -4,6 +4,7 @@
 #include "gfcplaybackgui.h"
 #include "gfcNetworkStructures.h"
 #include "gfcStructures.h"
+#include <chrono>
 
 enum LoopPriorities{GFC_LOOPPRIORITY_SHORTEST,GFC_LOOPPRIORITY_LONGEST,GFC_LOOPPRIORITY_TIMELINE};
 
@@ -108,6 +109,17 @@ private: //private made public while debugging
     void audioStop();               // stops leading and slices
     void audioSeek();               // currentFrame moved by the user
     void recordAdvanceForFPS(int frames);   // measured-FPS readout
+    // Pre-play buffer (Keep time only): play starts, or a seek while playing,
+    // wait until the next kPrePlaySeconds of frames are resident (at most
+    // kPrePlayMaxWait); the sound starts leading when the wait ends.
+    static constexpr double kPrePlaySeconds = 0.25;
+    static constexpr double kPrePlayMaxWait = 0.5;
+    bool buffering_ = false;
+    std::chrono::steady_clock::time_point bufferingSince_;
+    int prePlayFrames() const;      // ceil(kPrePlaySeconds x targetFPS), at least 1
+    // Starts the wait unless the frames are already resident; true while waiting.
+    // The engine stops leading for the wait. Called only when keepTime().
+    bool beginBuffering();
     int audioSentStart=-1, audioSentEnd=-1, audioSentMode=-1, audioSentDir=0;
     // Frame cache (frameCache): the transport (direction, loop mode, limits,
     // rate) is sent when it changes; a jump retargets, a playback step advances.

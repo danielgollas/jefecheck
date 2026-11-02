@@ -609,6 +609,9 @@ int audioPlaybackSelfTest(const std::string& dir) {
 
     gfcFakeAudioOutput out; audioEngine.setOutput(&out); out.open(&audioEngine);
     gfcSequence* seq=trackManager.getSequence(0); seq->myGUI->setFilename(dir+"/flashbeep_23976.mov"); seq->myGUI->setCompression(GFC_8BPC); seq->loadPreview();
+    // The frame cache loads around the playhead: put it on frame 1 so frames 1..40+ load (play
+    // starting on resident frames leads at once; otherwise Keep time waits for its pre-play buffer).
+    playbackManager.setCurrentFrame(1);
     const int savedQueueCap=sett.maximumFramesInQueue; sett.maximumFramesInQueue=100000; trackManager.startLoadingSequence(0);
     // Upload frames as the GUI tick does, so the loaded range (the loop limits) covers frames 1..40+.
     waitUntil([&]{ trackManager.generateTextures(); return seq->audioClip() && seq->audioClip()->endSample()>=2002*48 && seq->getLoadedFrameCount()>=41; }, 10000); trackManager.stopLoadingSequence(0); sett.maximumFramesInQueue=savedQueueCap;

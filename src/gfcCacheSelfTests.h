@@ -45,3 +45,10 @@ int cacheRenderSelfTest(const std::string& mediaDir);
 // decoded on its own thread: complete under a small picture budget, a jump
 // filled first then backfilled, a load from frame N lined up with the source.
 int audioHolesSelfTest(const std::string& mediaDir);
+// CACHE-KEEPTIME: Keep time with a loader at half the play rate: the sound
+// leads, frames are skipped, time is kept; skipped frames load afterwards; the
+// pre-play buffer holds play (silent) until ~0.25 s ahead is in.
+int cacheKeepTimeSelfTest(const std::string& mediaDir);
+// CACHE-EVERYFRAME: Show every frame with the same loader: playback slows to
+// it one frame at a time, the sound never leads, every frame shown is resident.
+int cacheEveryFrameSelfTest(const std::string& mediaDir);
