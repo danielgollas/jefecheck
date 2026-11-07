@@ -1,20 +1,18 @@
 #ifndef GFCWEBRTCTRANSPORT_H
 #define GFCWEBRTCTRANSPORT_H
 
-// JEF-24: WebRTC-backed ITransport over libdatachannel (host + client roles).
+// WebRTC-backed ITransport over libdatachannel (host + client roles).
 //
-// Topology / SDP convention (host and client MUST agree — see Task 4):
+// Topology / SDP convention (host and client MUST agree):
 //   The JOINING CLIENT is the OFFERER: it createDataChannel() + creates the
 //   offer. The HOST is the ANSWERER: it never createDataChannel(); it receives
 //   the channel via PeerConnection::onDataChannel and produces the answer by
 //   feeding the client's offer into setRemoteDescription (auto-negotiation).
 //
-// JEF-28: the offerer opens TWO reliable/ordered channels per peer — "jefe"
-// (state/chat/pointer/play/CC = Channel::State) and "assets" (bulk LUT/FX
-// bodies = Channel::Assets). The answerer receives both via onDataChannel and
-// branches on dc->label(). PeerConnected/ConnectAccepted fire on the STATE
-// channel opening only; the assets channel opens silently. send() routes by
-// the Channel argument.
+// The offerer opens TWO reliable/ordered channels per peer: "jefe"
+// (Channel::State) and "assets" (bulk LUT/FX bodies, Channel::Assets). The
+// answerer branches on dc->label() in onDataChannel. PeerConnected/ConnectAccepted
+// fire on the STATE channel opening only. send() routes by the Channel argument.
 //
 // This class carries jefe::wire FRAMES verbatim over a reliable/ordered data
 // channel — NO envelope byte (unlike RakNetTransport, whose byte is a RakNet
@@ -44,15 +42,11 @@ public:
     WebRtcTransport(const WebRtcTransport&) = delete;
     WebRtcTransport& operator=(const WebRtcTransport&) = delete;
 
-    // JEF-27: switch this instance into cloud-coordinator mode. MUST be called
-    // before startHost()/connect(). In coordinator mode the transport dials a
-    // CoordinatorSignaling to `url` (ws://|wss://) instead of a LAN
-    // SignalingServer/Client: the host create-session's; a joiner joins by
-    // `sessionCode`.
-    //
-    // `password` is INERT on this path and kept only for signature stability
-    // with the LAN transport -- the coordinator protocol has no password
-    // concept. Session access is the join code plus, for hosting, `authToken`.
+    // Switch this instance into cloud-coordinator mode. MUST be called before
+    // startHost()/connect(). It dials a CoordinatorSignaling at `url`
+    // (ws://|wss://) instead of a LAN SignalingServer/Client; a joiner joins by
+    // `sessionCode`. `password` is inert here (kept for signature parity with
+    // the LAN transport); access is the join code plus, for hosting, `authToken`.
     // `displayName` is the nickname the host sees when a joiner knocks.
     void configureCoordinator(const std::string& url,
                               const std::string& sessionCode,
@@ -60,13 +54,12 @@ public:
                               const std::string& authToken = "",
                               const std::string& displayName = "",
                               const SessionPolicy& policy = SessionPolicy{},
-                              // JEF-37: see TransportConfig::selfJoinNonce. On
-                              // a HOST this is the value that auto-admits;
-                              // empty means every joiner knocks, including the
-                              // host's own client.
+                              // See TransportConfig::selfJoinNonce. On a HOST
+                              // this value auto-admits; empty means every joiner
+                              // knocks, including the host's own client.
                               const std::string& selfJoinNonce = "");
 
-    // Host role (fully implemented this task).
+    // Host role.
     bool startHost(unsigned short port, const std::string& password,
                    int maxClients) override;
     void stopHost() override;
@@ -84,17 +77,17 @@ public:
     void closePeer(PeerId peer, bool sendNotification) override;
     int connectionCount() override;
 
-    // JEF-27: coordinator-assigned session code (host only; empty otherwise).
+    // Coordinator-assigned session code (host only; empty otherwise).
     std::string assignedSessionCode() override;
 
-    // JEF-30: per-peer WebRTC connection health (rtt / bytes / direct-vs-relay).
-    // Copies the pc shared_ptrs out under the peer-map lock, then queries
-    // libdatachannel OUTSIDE the lock (the stats calls may block).
+    // Per-peer WebRTC health (rtt / bytes / direct-vs-relay). Copies the pc
+    // shared_ptrs out under the peer-map lock and queries libdatachannel
+    // OUTSIDE it (the stats calls may block).
     std::vector<PeerStats> peerStats() override;
 
-    // JEF-37: lobby. pendingJoiners() is a snapshot taken under the same lock
-    // the coordinator callback writes it on; decideJoiner() sends admit/deny
-    // and drops the row locally so a second click cannot re-send.
+    // Lobby. pendingJoiners() is a snapshot under the lock the coordinator
+    // callback writes under; decideJoiner() sends admit/deny and drops the row
+    // locally so a second click cannot re-send.
     std::vector<PendingJoiner> pendingJoiners() override;
     void decideJoiner(const std::string& joinerId, bool admit) override;
     bool awaitingAdmission() override;

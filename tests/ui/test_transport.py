@@ -4,9 +4,8 @@ from jefecheck import locators
 
 def test_play_button_present_and_default_paused(app):
     play = app.by_object_name(locators.TRANSPORT_PLAY)
-    # The play button shows a play glyph when paused; pause glyph when
-    # playing. Title is "Play / Pause" in either state, but the button's
-    # text/value differs. The accessible name proves it's the right widget.
+    # The glyph differs between play and pause, but the title is "Play / Pause"
+    # either way; the accessible name proves it's the right widget.
     assert play.get_attribute("title") == "Play / Pause"
 
 
@@ -17,11 +16,8 @@ def test_fps_spin_default_is_24(app):
 
 
 def test_loop_mode_combo_default_is_once(app):
-    """Once / Loop / Bounce — three loop modes (UIConstants).
-
-    Combos in XCUITest report the currently-displayed value via
-    `title`, not the AX label, so we assert on the default selection
-    instead of the accessibleName.
+    """Once / Loop / Bounce (UIConstants). Combos in XCUITest report the
+    displayed value via `title`, not the AX label, so assert on the default selection.
     """
     combo = app.by_object_name(locators.TRANSPORT_LOOP)
     assert combo.get_attribute("title") == "Once"

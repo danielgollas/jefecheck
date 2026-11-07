@@ -1,10 +1,7 @@
-"""Track timeline widget presence.
-
-The per-track timeline rows (range / offset / loaded fill) are painted
-directly on a single QWidget rather than child widgets, so Appium can only
-assert the lane container is present and addressable. Behavior (drag-offset,
-alt-load, popup, drop) is verified manually per the implementation plan.
-"""
+"""Track timeline widget presence. The per-track rows (range / offset / loaded
+fill) are painted on a single QWidget rather than child widgets, so Appium can
+only assert the lane container is present and addressable. Behavior (drag-offset,
+alt-load, popup, drop) is verified manually."""
 from jefecheck import locators
 
 

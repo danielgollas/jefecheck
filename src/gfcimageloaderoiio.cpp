@@ -88,10 +88,7 @@ static std::vector<LayerInfo> discoverLayers(const OIIO::ImageSpec &spec) {
     for (auto &g : groups) {
         LayerInfo li;
         if (g.prefix.empty()) {
-            // Default layer — the file's primary (prefix-less) channels.
-            // Labeled "Main" so it reads consistently across formats
-            // and EXRs with named sub-layers. Single-channel stays
-            // "Luminance" since that's genuinely descriptive (grayscale).
+            // Default layer: the prefix-less channels, "Main" (or "Luminance" for single-channel).
             if (g.count == 1) li.name = "Luminance";
             else li.name = "Main";
         } else {
@@ -146,10 +143,8 @@ void reorientBitmap(GFL_BITMAP* bmp, int orientation) {
 }
 }  // namespace
 
-// Sets OIIO's global worker-thread pool size (0 = auto/all cores). Used by
-// ImageBufAlgo (our resize) and some readers' internal parallelism. Declared
-// as a plain free function so the Qt preference TUs can call it without
-// pulling in OIIO headers.
+// Sets OIIO's global worker-thread pool size (0 = auto). A plain free function
+// so the Qt preference TUs can call it without pulling in OIIO headers.
 void gfcSetOIIOThreadCount(int n) {
     OIIO::attribute("threads", n < 0 ? 0 : n);
 }
@@ -157,9 +152,8 @@ void gfcSetOIIOThreadCount(int n) {
 int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     this->params = params;
 
-    // Straight (unassociated) alpha: hint OIIO not to auto-premultiply on read.
-    // Passed as a config ImageSpec to open() (Formats prefs). Default off keeps
-    // OIIO's normal behavior.
+    // Straight (unassociated) alpha: hint OIIO not to auto-premultiply on read
+    // (Formats prefs), passed as a config ImageSpec to open().
     OIIO::ImageSpec config;
     if (sett.oiioUnassociatedAlpha)
         config.attribute("oiio:UnassociatedAlpha", 1);
@@ -180,10 +174,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     const int orientation = sett.applyExifOrientation
                                 ? spec.get_int_attribute("Orientation", 1) : 1;
 
-    // EXR display window vs. data window (overscan/crop). Non-EXR formats
-    // (and EXRs where the two windows coincide) leave this a no-op: outW/outH
-    // == width/height and dispDX/dispDY == 0, so the composite below
-    // degenerates to the original 1:1 copy.
+    // EXR display window vs. data window (overscan/crop). Without a distinct
+    // display window outW/outH == width/height and dispDX/dispDY == 0, a 1:1 copy.
     const bool hasDistinctDisplayWindow =
         (spec.full_width != spec.width || spec.full_height != spec.height ||
          spec.full_x != spec.x || spec.full_y != spec.y);
@@ -246,10 +238,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         }
     }
 
-    // Allocate output bitmap (always BGRA), sized to the display window so
-    // an EXR data window smaller/offset from the display window is padded
-    // into the full frame (unless the user opted to ignore the display
-    // window, in which case outW/outH == width/height, see above).
+    // Allocate output bitmap (always BGRA), sized to the display window so a
+    // smaller/offset EXR data window is padded into the full frame.
     int outChannels = 4;
     theBitmap = gflAllockBitmapEx(GFL_BGRA, outW, outH, bitsPerComponent, outChannels, nullptr);
     if (!theBitmap || !theBitmap->Data) {
@@ -257,11 +247,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         inp->close();
         return -1;
     }
-    // Zero the full bitmap so any area not covered by the data window
-    // (display-window padding) reads as transparent/black rather than
-    // uninitialized memory. gflAllockBitmapEx already callocs its buffer,
-    // but re-zero explicitly since that's an implementation detail we
-    // shouldn't rely on here.
+    // Zero the bitmap so display-window padding reads as transparent, not
+    // uninitialized memory.
     memset(theBitmap->Data, 0, (size_t)theBitmap->BytesPerLine * outH);
 
     // Read selected channels
@@ -272,11 +259,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     inp->read_image(0, 0, chBegin, chBegin + srcChannels, readType, imgBuf.data());
 
-    // Convert to BGRA, compositing the data window into the (possibly
-    // larger/offset) display window at (x + dispDX, y + dispDY). In the
-    // common case (no distinct display window, or the user asked to ignore
-    // it) dispDX == dispDY == 0 and outW/outH == width/height, so this is
-    // just a 1:1 copy identical to the pre-Task-3 behavior.
+    // Convert to BGRA, compositing the data window into the display window at
+    // (x + dispDX, y + dispDY); without a distinct display window this is a 1:1 copy.
     for (int y = 0; y < height; y++) {
         int dy = y + dispDY;
         if (dy < 0 || dy >= outH) continue; // whole source row falls outside the display window
@@ -328,10 +312,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     // Apply scale via OIIO (the filter actually matters here — our
     // local gflResize ignores filter selection and is nearest-only).
     if (params.scale > 0 && params.scale != 100) {
-        // Base the target on the composited bitmap (display-window size),
-        // not the raw data-window width/height — otherwise an overscan EXR
-        // (data window != display window) plus a non-100 decode scale would
-        // resize to the wrong dimensions and squash the image.
+        // Base the target on the composited (display-window size) bitmap, not the
+        // raw data window, or an overscan EXR would resize to the wrong dimensions.
         int newW = (int)(theBitmap->Width  * params.scale / 100.0f);
         int newH = (int)(theBitmap->Height * params.scale / 100.0f);
 
@@ -401,10 +383,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     quadSizeX = theBitmap->Width;
     quadSizeY = theBitmap->Height;
     if (!sett.exrIgnoreHeadersAspectRatio) {
-        // par stretches the ORIGINAL horizontal axis to correct non-square pixels.
-        // A 90°/270° reorient (Orientation 5..8) swapped the axes, so apply par to
-        // the vertical axis instead. (Rotated non-square-pixel images are rare, but
-        // keep it correct.)
+        // par stretches the original horizontal axis; a 90/270 degree reorient
+        // (Orientation 5..8) swaps the axes, so apply par to the vertical axis.
         if (orientation >= 5 && orientation <= 8)
             quadSizeY = (int)(quadSizeY * par);
         else

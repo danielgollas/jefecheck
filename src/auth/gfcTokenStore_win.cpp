@@ -1,9 +1,6 @@
-// Windows Credential Manager backend for the refresh token (JEF-31).
-//
-// wincred.h ships with the Windows SDK, so this adds no dependency. Credentials
-// are stored per-user and encrypted by the OS; the target name carries the
-// coordinator URL so a hosted-service token and a self-hosted one stay
-// separate.
+// Windows Credential Manager backend for the refresh token. Credentials are
+// stored per-user, encrypted by the OS; the target name carries the coordinator
+// URL so hosted and self-hosted tokens stay separate.
 
 #include "gfcTokenStore.h"
 

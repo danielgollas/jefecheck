@@ -9,12 +9,7 @@ constexpr const char* kGroupsKey = "Remote/groupNames";
 constexpr const char* kActiveKey = "Remote/activeGroup";
 constexpr const char* kDefaultGroup = "Default";
 
-/**
- * Group names become QSettings subkeys, so a name containing '/' would silently
- * create a nested key and make the group unloadable under its own name. Strip
- * the separators rather than rejecting the name -- the user typed a label, not
- * a path, and losing a slash is less surprising than a rejected save.
- */
+/** Group names become QSettings subkeys, so '/' would create a nested key and make the group unloadable under its own name. Strip separators rather than reject. */
 QString settingsKeyFor(const QString& name) {
     QString k = name;
     k.replace('/', '_');
@@ -32,9 +27,7 @@ QStringList sessionGroupNames() {
     QSettings s;
     QStringList names = s.value(kGroupsKey).toStringList();
     if (names.isEmpty()) {
-        // Seed rather than return empty: every caller would otherwise need its
-        // own "what if there are none" branch, and hosting always happens under
-        // some group.
+        // Seed rather than return empty: hosting always happens under some group.
         names << QLatin1String(kDefaultGroup);
         s.setValue(kGroupsKey, names);
     }
@@ -76,8 +69,7 @@ bool removeSessionGroup(const QString& name) {
     QSettings s;
     QStringList names = s.value(kGroupsKey).toStringList();
     // Refuse to remove the last group: hosting always happens under one, and an
-    // empty list would just be re-seeded with "Default" on the next read,
-    // silently discarding the user's rename.
+    // empty list would be re-seeded with "Default", discarding a rename.
     if (names.size() <= 1 || !names.contains(name)) return false;
     names.removeAll(name);
     s.setValue(kGroupsKey, names);

@@ -1,4 +1,4 @@
-// macOS Keychain backend for the refresh token (JEF-31).
+// macOS Keychain backend for the refresh token.
 //
 // Security.framework ships with the SDK, so this adds no dependency. The item
 // is a generic password under service "JefeCheck", with the coordinator URL as

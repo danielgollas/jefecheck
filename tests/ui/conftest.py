@@ -1,9 +1,7 @@
-"""Pytest fixtures — Appium server lifecycle + per-test JefeCheck launch.
+"""Pytest fixtures: Appium server lifecycle + per-test JefeCheck launch.
 
-The harness expects two things on PATH:
-  - `appium` (npm i -g appium && appium driver install mac2)
-  - JEFECHECK_BIN env var pointing at JefeCheck.app (set by the
-    `qt-uitests` CMake target; may also be set manually for ad-hoc runs)
+Needs `appium` on PATH (npm i -g appium && appium driver install mac2) and
+JEFECHECK_BIN pointing at JefeCheck.app (set by the `qt-uitests` CMake target).
 """
 from __future__ import annotations
 
@@ -46,11 +44,8 @@ def _wait_for_appium(timeout: float = 30.0) -> None:
 
 @pytest.fixture(scope="session")
 def appium_server():
-    """Start Appium in the background unless one is already listening.
-
-    Reusing an external server is the common dev workflow (faster
-    iteration). CI starts its own; we exit cleanly either way.
-    """
+    """Start Appium in the background unless one is already listening
+    (reusing an external server is the common dev workflow)."""
     if _port_open(APPIUM_HOST, APPIUM_PORT):
         yield APPIUM_URL
         return
@@ -67,10 +62,8 @@ def appium_server():
     proc = subprocess.Popen(
         [
             appium_bin, "--address", APPIUM_HOST, "--port", str(APPIUM_PORT),
-            # AppleScript is gated as an "insecure" feature; UI tests need
-            # it because Mac2's macos:keys can't deliver Cmd+modifier
-            # shortcuts to Qt's QShortcut on macOS, but System Events
-            # keystroke (via AppleScript) does.
+            # AppleScript is gated as "insecure"; needed because Mac2's macos:keys
+            # can't deliver Cmd+modifier shortcuts to Qt's QShortcut on macOS.
             "--allow-insecure", "mac2:apple_script",
         ],
         stdout=log_file, stderr=subprocess.STDOUT,
@@ -109,10 +102,8 @@ def jefecheck_binary() -> Path:
 
 
 def pytest_addoption(parser):
-    # --slow-mo SECONDS: pause after every Mac2 click / keystroke so a
-    # human watching the screen can see what each step does. Defaults to
-    # 0 (CI / dev runs untouched). Pure debugging aid — nothing in the
-    # suite asserts on timing, so a non-zero value never changes pass/fail.
+    # --slow-mo SECONDS: pause after every Mac2 click / keystroke so a human can
+    # watch; nothing asserts on timing.
     parser.addoption(
         "--slow-mo",
         action="store",
@@ -123,9 +114,7 @@ def pytest_addoption(parser):
              "send_keys, send_shortcut). Useful for watching the suite "
              "drive the app. Default: 0.",
     )
-    # --update-baselines: regenerate visual-diff baselines after an
-    # intentional UI change (theme, layout, dock arrangement). Without
-    # this flag, test_visual.py compares against committed baselines.
+    # --update-baselines: regenerate visual-diff baselines after an intentional UI change.
     parser.addoption(
         "--update-baselines",
         action="store_true",
@@ -142,16 +131,10 @@ def slow_mo(request) -> float:
 
 @pytest.fixture(scope="module")
 def app(appium_server, jefecheck_binary, tmp_path_factory, slow_mo):
-    """Module-scoped launch: one JefeCheck per test file.
-
-    Pays the ~15s WDA + Mac2 cold-start once per module instead of once
-    per test. Trade-off: tests in the same module share state, so any
-    test that mutates app state (layout, active plate, toggle buttons)
-    must restore the default before completing — or rely on a module-
-    level `reset_app_state` autouse fixture in that file.
-
-    The app's QSettings live in a per-module temp dir, so settings
-    written by one module never leak into another.
+    """Module-scoped launch: one JefeCheck per test file, paying the ~15s WDA +
+    Mac2 cold start once. Tests in a module share state, so a test that mutates
+    app state must restore it or rely on a module-level `reset_app_state` fixture.
+    QSettings live in a per-module temp dir.
     """
     config_dir = tmp_path_factory.mktemp("jefecheck-config")
     instance = JefeCheckApp.launch(
@@ -164,7 +147,7 @@ def app(appium_server, jefecheck_binary, tmp_path_factory, slow_mo):
     instance.quit()
 
 
-# Phase D: visual regression -----------------------------------------
+# Visual regression -----------------------------------------------
 
 @pytest.fixture(scope="session")
 def update_baselines(request) -> bool:
@@ -175,12 +158,9 @@ def update_baselines(request) -> bool:
 def test_pattern_image() -> Path:
     """4-quadrant RGB test pattern (committed under tests/ui/fixtures/).
 
-    Filename intentionally has no trailing digits — gfcSequence's
-    findSequenceFiles treats trailing digits as a frame number and
-    replaces them with `#` in filenameGeneric (e.g. `foo_64.png` →
-    `foo_##.png`). The status-bar 'Loaded:' label reads filenameGeneric,
-    so a frame-number-looking suffix would make assertions read like
-    implementation details.
+    The filename has no trailing digits: findSequenceFiles treats them as a
+    frame number and the 'Loaded:' label reads filenameGeneric (`foo_64.png`
+    becomes `foo_##.png`).
     """
     return make_test_pattern(fixtures_dir() / "test_pattern.png")
 
@@ -188,12 +168,8 @@ def test_pattern_image() -> Path:
 @pytest.fixture
 def visual_app(appium_server, jefecheck_binary, tmp_path,
                test_pattern_image):
-    """Launches JefeCheck with the test pattern preloaded into plate 0.
-
-    Visual tests use this instead of `app` so the viewport has known,
-    deterministic content (a fresh launch shows an empty black viewport
-    that produces no useful baseline).
-    """
+    """Launches JefeCheck with the test pattern preloaded into plate 0, so the
+    viewport has deterministic content for baselines."""
     instance = JefeCheckApp.launch(
         binary=jefecheck_binary,
         appium_url=appium_server,
@@ -208,17 +184,10 @@ def visual_app(appium_server, jefecheck_binary, tmp_path,
 def multiview_sequence() -> Path:
     """Path to the first frame of the committed multi-view EXR sequence.
 
-    The fixture is a 4-frame, 64×64 numbered EXR sequence with two named
-    layers: the default RGB and a `right` view (channel names
-    `R, G, B, right.R, right.G, right.B`). Synthesized once with
-    `oiiotool` (see scripts/gen_multiview_fixture.sh in the test plan
-    docs); committed because regenerating from oiiotool isn't
-    deterministic enough to leave un-committed in CI.
-
-    Pointing at frame 0001 lets gfcSequence::findSequenceFiles discover
-    the rest of the sequence — the test for layer-switch reload depends
-    on getNumPreviewFrames() > 1 so the bridge actually runs the async
-    re-decode (single frames take a different code path).
+    4 frames, 64x64, two named layers: the default RGB and a `right` view
+    (`R, G, B, right.R, right.G, right.B`). Frame 0001 lets
+    gfcSequence::findSequenceFiles discover the rest; the layer-switch reload
+    test needs getNumPreviewFrames() > 1 so the bridge runs the async re-decode.
     """
     seq_dir = fixtures_dir() / "multiview_seq"
     first_frame = seq_dir / "multiview.0001.exr"
@@ -230,12 +199,8 @@ def multiview_sequence() -> Path:
 @pytest.fixture
 def multiview_app(appium_server, jefecheck_binary, tmp_path,
                   multiview_sequence):
-    """Launches JefeCheck with the multi-view EXR sequence preloaded.
-
-    Layer-combo tests use this so plate 0's track has > 1 named layer
-    AND > 1 frame — exercises the full layer-switch path including the
-    async sequence reload.
-    """
+    """Launches JefeCheck with the multi-view EXR sequence preloaded (plate 0's
+    track has more than one named layer and more than one frame)."""
     instance = JefeCheckApp.launch(
         binary=jefecheck_binary,
         appium_url=appium_server,

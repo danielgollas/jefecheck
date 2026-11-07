@@ -266,11 +266,8 @@ void findSequence (std::vector<std::string> &refFiles, std::string inputFilename
 			nextNum=atoi ( num ) +1;
 			sprintf ( tmpName,nextString,nextNum );
 			//printf("\nConstructed filename: %s\n",tmpName);
-			// The originally-picked frame exists (that's what triggered detection),
-			// so endNum is at least atoi(num). Initializing to startNum was a bug
-			// when there were frames below the pick: e.g. pick=0008 with 0001..0008
-			// on disk → startNum=1 (down walk), endNum stayed at 1 because the up
-			// walk starts at 0009 and immediately fails.
+			// The picked frame exists, so endNum is at least atoi(num); starting
+			// at startNum broke when frames lay below the pick (the up walk fails at once).
 			endNum=atoi ( num );
 			//printf("Looking for files above...\n",tmpName);
 			while ( FILE_EXISTS( tmpName ) ) {
@@ -777,9 +774,8 @@ int gfcSequence::generateTextures ( int howMany ) {
 		//    	printf("gfcSequence::generateTextures: rawQueue not empty\n");
 		if (tmpRawFrame.loaded ) {
 			//            printf ( "gfcSequence::generateTextures:  generating texture...\n" );
-			// Capture a filmstrip thumbnail when enabled, capped per
-			// sequence: store at most kMaxThumbs frames (every Nth beyond
-			// that) so very long sequences stay bounded in memory.
+			// Capture a filmstrip thumbnail, at most kMaxThumbs per sequence
+			// (every Nth beyond that) to bound memory on long sequences.
 			constexpr int kMaxThumbs = 2000;
 			const int totalFrames = (int)files.size();
 			const int thumbStride = totalFrames > kMaxThumbs

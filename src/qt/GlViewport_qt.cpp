@@ -1,7 +1,5 @@
-// Qt implementation of IGLViewport. Pure listener relay — paintGL,
-// initializeGL, and resizeGL are forwarded to the registered
-// IGLViewportListener (typically RenderBridge_Qt). The widget itself
-// holds no rendering state.
+// Qt implementation of IGLViewport: a pure listener relay. paintGL,
+// initializeGL and resizeGL are forwarded to the registered IGLViewportListener.
 #include "GlViewport_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
@@ -33,16 +31,11 @@ GlViewport_Qt::GlViewport_Qt(QWidget* parent)
     setObjectName("viewport");
     setAccessibleName("Viewport");
     setAccessibleDescription("OpenGL plate viewport");
-    // We do a full repaint each frame (clear + redraw every plate), so
-    // we don't need Qt to preserve the previous frame's FBO contents.
-    // NoPartialUpdate skips that copy in the FBO→window composite step;
-    // measurable per-frame win on macOS where QOpenGLWidget already
-    // pays an FBO blit that FLTK's native NSOpenGLView avoids.
+    // Full repaint each frame, so skip the FBO->window copy of the previous frame.
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
 
-    // Accept native pinch gestures — trackpad two-finger pinch maps to
-    // zoom on the plate under the gesture center (Alt = gang). Without
-    // grabGesture, QPinchGesture events never reach this widget.
+    // Accept native pinch gestures (trackpad pinch zooms the plate under the
+    // gesture center, Alt = gang); QPinchGesture events need grabGesture.
     grabGesture(Qt::PinchGesture);
 }
 
@@ -84,9 +77,8 @@ void GlViewport_Qt::setLoadWindowOpen(bool open) {
     if (loadWindowOpen_ == open) return;
     loadWindowOpen_ = open;
 
-    // Drive every plate's showPreview deterministically from the flag.
-    // Routed through the bridge so this TU doesn't have to pull
-    // gfcplatemanager.h (glad transitivity vs QOpenGLWidget).
+    // Drive every plate's showPreview from the flag, via the bridge so this TU
+    // doesn't pull in gfcplatemanager.h (glad vs QOpenGLWidget).
     jefe::qt::setAllPlatesShowPreview(open);
     update();
 }
@@ -99,24 +91,18 @@ void GlViewport_Qt::initializeGL() {
 }
 
 void GlViewport_Qt::resizeGL(int w, int h) {
-    // Qt passes the size in logical pixels here. The QOpenGLWidget's
-    // backing framebuffer is allocated at logical * devicePixelRatio
-    // (2× on macOS Retina), so glViewport-bound rendering needs the
-    // framebuffer dimensions — using the raw w/h would leave only the
-    // bottom-left quarter of the FBO rendered.
+    // Qt passes logical pixels; the backing framebuffer is logical * devicePixelRatio
+    // (2x on Retina), so glViewport-bound rendering needs framebuffer dimensions.
     const float dpr = devicePixelRatioF();
     if (listener_) listener_->onResize(int(w * dpr), int(h * dpr));
 }
 
 void GlViewport_Qt::paintGL() {
     if (listener_) {
-        // QOpenGLWidget renders into its OWN framebuffer object, NOT screen
-        // FBO 0. The FX/FBO code (gfcPlate) was written for FLTK where the
-        // window framebuffer was 0, so it rebinds 0 to "return to screen" —
-        // which under Qt sends everything drawn after the first FX plate into
-        // an unpresented framebuffer (black viewport, sibling plates too).
-        // Publish Qt's real default FBO each frame so that code rebinds it
-        // instead of 0. It can change on resize, so refresh it every paint.
+        // QOpenGLWidget renders into its own FBO, not screen FBO 0, but gfcPlate
+        // rebinds 0 to "return to screen", sending later draws to an unpresented
+        // framebuffer (black viewport). Publish Qt's real default FBO every paint
+        // (it can change on resize).
         jefe::qt::setScreenFBO(defaultFramebufferObject());
         listener_->onDraw();
         // Chat + remote-pointer overlay (ported from the FLTK GlViewport).
@@ -132,19 +118,17 @@ void GlViewport_Qt::paintGL() {
 }
 
 void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
-    // Reclaim keyboard focus on any click so viewport shortcuts (space, W/E/Q/D/S,
-    // etc.) work after the user has been in a text field — e.g. the Remote panel's
-    // chat input, which otherwise keeps focus. The overridden handler doesn't get
-    // Qt's implicit click-focus, so set it explicitly.
+    // Reclaim keyboard focus on any click so viewport shortcuts work after the
+    // user was in a text field (e.g. chat input); the override doesn't get
+    // Qt's implicit click-focus.
     setFocus(Qt::MouseFocusReason);
     if (e->button() == Qt::LeftButton) {
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
 
-        // First give in-viewport pick overlays (the histogram sub-window) a
-        // chance to claim the click. doPicking runs a selection render +
-        // read-back, so the GL context must be current; update() afterwards
-        // repaints over the transient pick frame before it's composited.
+        // Give in-viewport pick overlays (the histogram sub-window) first claim
+        // on the click. doPicking needs the GL context current; update() repaints
+        // over the transient pick frame.
         const float dpr = devicePixelRatioF();
         const int xFb = int(lastMouseX_ * dpr);
         const int yFb = int((float(height()) - lastMouseY_) * dpr);
@@ -152,10 +136,9 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
         const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
         const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
 
-        // JEF-39: with a note tool armed, a left-drag draws instead of
-        // panning or picking. Checked FIRST — a pick pass would consume the
-        // click, and panning under the pencil would move the image out from
-        // under the stroke being drawn on it.
+        // With a note tool armed, a left-drag draws instead of panning or picking.
+        // Checked FIRST: a pick pass would consume the click, and panning would
+        // move the image out from under the stroke.
         if (jefe::qt::noteDrawingArmed()) {
             const int plate = jefe::qt::plateAtViewportPos(
                 int(lastMouseX_), int(lastMouseY_), width(), height());
@@ -176,10 +159,8 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
         makeCurrent();
         const bool picked = jefe::qt::viewportPickDown(xFb, yFb, ctrl, alt, shift) != 0;
         doneCurrent();
-        // doPicking renders the selection buffer into the widget FBO, so a
-        // repaint is always needed to restore the real frame — even when
-        // nothing was picked (otherwise a click while paused leaves the
-        // pick render on screen).
+        // doPicking renders the selection buffer into the widget FBO, so always
+        // repaint to restore the real frame, even when nothing was picked.
         update();
         if (picked) {
             pickDragActive_ = true;
@@ -188,16 +169,12 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
             return;
         }
 
-        // Hit-test which plate the click landed on so drag pan and
-        // (in single mode) keyboard shortcuts target it. The current
-        // viewport size matches what plateManager.draw saw last, so
-        // the partitioning lines up.
+        // Hit-test which plate the click landed on so drag pan and (in single
+        // mode) keyboard shortcuts target it.
         dragPlate_ = jefe::qt::plateAtViewportPos(
             int(lastMouseX_), int(lastMouseY_), width(), height());
         if (dragPlate_ >= 0) {
-            // Sync the active-plate concept (used by plate-card highlight
-            // and a couple of remaining keyboard paths) with the user's
-            // most recent click.
+            // Sync the active-plate concept (plate-card highlight, some keyboard paths) with the last click.
             jefe::qt::setActivePlate(dragPlate_);
             emit plateStateChanged();
         }
@@ -209,11 +186,8 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent* e) {
     if (noteDragActive_) {
         noteDragActive_ = false;
         if (jefe::qt::noteDrawIsText()) {
-            // A text note needs its words before it can exist. Ask on release
-            // -- the click placed it, a drag moved it -- and treat Cancel or
-            // an empty answer as "never mind" rather than committing a note
-            // with nothing in it, which would draw nothing and still clutter
-            // the dock.
+            // A text note needs its words before it exists. Ask on release; Cancel
+            // or an empty answer means "never mind", not an empty note.
             bool ok = false;
             const QString text = QInputDialog::getText(
                 this, tr("Text Note"), tr("Note:"), QLineEdit::Normal,
@@ -252,9 +226,7 @@ void GlViewport_Qt::mouseReleaseEvent(QMouseEvent* e) {
     const bool wasDragging = dragPlate_ >= 0;
     dragPlate_ = -1;
     if (listener_) listener_->onEvent(jefe::ui::EventType::Release);
-    // Final widget sync once the drag ends — this catches any motion
-    // that arrived after the most recent throttled emit so the
-    // spinboxes hold the exact final values.
+    // Final widget sync once the drag ends, catching motion after the last throttled emit.
     if (wasDragging) {
         emit plateStateChanged();
         dragEmittedAny_ = false;
@@ -273,9 +245,8 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
 
-    // Pick-overlay drag (histogram sub-window). Latched on press; runs the
-    // pick dispatch with the GL context current and consumes the motion so
-    // the plate doesn't also pan.
+    // Pick-overlay drag (histogram sub-window): latched on press; runs the pick
+    // dispatch with the GL context current and consumes the motion.
     if (pickDragActive_ && (e->buttons() & Qt::LeftButton)) {
         const float dpr = devicePixelRatioF();
         const int xFb  = int(float(e->position().x()) * dpr);
@@ -297,23 +268,17 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
 
-    // Remote pointer/trail gesture: SHIFT + left-drag over a plate. Avoids the
-    // macOS right-click context-menu ambiguity and is distinct from plain left-
-    // drag (pan) and W/E/Q/D/S+drag (color correction). dragPlate_ was set on the
-    // left press, so the quad is already known. The bridge converts framebuffer
-    // bottom-left coords to the plate's image space and throttles to ~60Hz; the
-    // receiver stores the stream per-nickname and draws a fading trail. Shift-drag
-    // is pointer-only — return so it doesn't also pan the plate.
+    // Remote pointer/trail gesture: SHIFT + left-drag over a plate (distinct from
+    // pan and W/E/Q/D/S+drag; avoids macOS right-click ambiguity). The bridge
+    // converts to image space and throttles to ~60Hz. Pointer-only: return so it
+    // doesn't also pan.
     if ((e->buttons() & Qt::LeftButton) &&
         e->modifiers().testFlag(Qt::ShiftModifier) && dragPlate_ >= 0) {
         const float dpr = devicePixelRatioF();
         const int xFb = int(float(e->position().x()) * dpr);
         const int yFb = int((float(height()) - float(e->position().y())) * dpr);
-        // getCursorPositionIn2DSpace inside the bridge does gluUnProject against
-        // the plate's live GL matrices, so the context MUST be current — without
-        // it, glGet returns stale matrices (constant garbage coords) and the
-        // out-of-context GL calls error-spam (the stutter). Same makeCurrent
-        // discipline as the pick-drag path above.
+        // getCursorPositionIn2DSpace does gluUnProject against the plate's live GL
+        // matrices, so the context MUST be current or glGet returns stale matrices.
         makeCurrent();
         jefe::qt::sendRemotePointer(xFb, yFb, dragPlate_);
         doneCurrent();
@@ -326,16 +291,9 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         const bool gang = (e->modifiers() & Qt::AltModifier) != 0;
 
         // ---- Color-correction key+drag dispatch (W/E/Q/D/S). ----
-        //
-        // FLTK GlViewport's left-drag path checks each letter key in
-        // order and applies `adjustmentValue = (eventX - prevX) * 0.01`
-        // additively (isDelta=1) to the matching plate field. Per-plate
-        // calls target the active plate; Alt-modified calls hit every
-        // plate via the *All variants.
-        //
-        // We branch BEFORE the pan path and early-return on a handled
-        // color drag — pan and color-correct shouldn't compose in one
-        // motion (matches FLTK's case-by-case if/else structure).
+        // Left-drag with a letter key applies (eventX - prevX) * 0.01 additively to
+        // the matching field (Alt = every plate via the *All variants). Handled
+        // before the pan path and returns early: pan and color-correct don't compose.
         const float dxLogical = float(e->position().x()) - lastMouseX_;
         const float adjust    = dxLogical * 0.01f;
         const int targetPlate = jefe::qt::getActivePlate();
@@ -366,9 +324,7 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
 
         if (handledColor) {
             update();
-            // Throttle + queued emit of plateColorChanged — same 60Hz
-            // cap as the transform path so we don't spam the event
-            // loop at the device's 100Hz+ mouse poll rate.
+            // Throttle + queued emit of plateColorChanged, same 60Hz cap as the transform path.
             constexpr qint64 kEmitIntervalMs = 16;
             if (!dragEmitTimer_.isValid()
                 || dragEmitTimer_.elapsed() >= kEmitIntervalMs) {
@@ -387,47 +343,26 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         }
 
         // ---- Pan path (no color key held). ----
-        //
-        // FLTK's GlViewport pans by (prevX - eventX, prevY - eventY) so
-        // dragging right shifts the plate left. Match that sign so the
-        // mouse behaves the same in both backends. Multiply by dpr —
-        // gfcPlate's pan is in world-space units which are now in
-        // framebuffer pixels, but Qt mouse positions are logical, so
-        // a 1-px drag would otherwise move the image only 1/dpr px on
-        // Retina.
+        // Pans by (prevX - eventX, prevY - eventY), so dragging right shifts the
+        // plate left, as in FLTK. Multiply by dpr: pan is in framebuffer pixels
+        // but Qt mouse positions are logical.
         const float dx = (lastMouseX_ - float(e->position().x())) * dpr;
         const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
         // Alt-drag = gang-transform: pan every plate by the same delta.
-        // Matches the FLTK convention in GlViewport.cpp where the
-        // letterless Alt+drag branch routes to panAllPlates. (FLTK has
-        // a separate Alt+drag = zoomPlate branch tied to a different
-        // condition higher up the if-chain; preserving the pan-all
-        // behavior the Qt UI already exposes — Daniel signed off on
-        // that semantics for the Qt port.)
         if (gang) {
             jefe::qt::panAllPlates(dx, dy);
         } else {
             jefe::qt::panPlate(dragPlate_, dx, dy);
         }
         update();
-        // Lightweight per-drag signal — only refreshes the four transform
-        // spinboxes on the dragged plate's card. Skips the heavy
-        // refreshAllCards (4 plates × ~15 fields) + FXParamPanel::refresh
-        // cascade that plateStateChanged triggers, AND the QSignalBlocker
-        // scope churn for every widget on every card.
-        //
-        // Throttled to ~60Hz so mouseMoveEvent stays fast even at the
-        // device's 100Hz+ poll rate. mouseReleaseEvent emits the full
-        // plateStateChanged so the inactive-plate cards and FX panel
-        // get their one-shot post-drag sync.
+        // Lightweight per-drag signal: refreshes only the dragged plate's four
+        // transform spinboxes, skipping the heavy plateStateChanged cascade.
+        // Throttled to ~60Hz; mouseReleaseEvent emits the full plateStateChanged.
         constexpr qint64 kEmitIntervalMs = 16;
         if (!dragEmitTimer_.isValid()
             || dragEmitTimer_.elapsed() >= kEmitIntervalMs) {
             if (gang) {
-                // Every card got panned — refresh each. Queued + cached
-                // so the cost is bounded; cards whose values didn't
-                // actually change (none in practice during gang-pan)
-                // would skip their setValue calls anyway.
+                // Every card got panned; refresh each (queued and cache-gated).
                 for (int p = 0; p < 4; ++p) emit plateTransformChanged(p);
             } else {
                 emit plateTransformChanged(dragPlate_);
@@ -445,10 +380,8 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
 }
 
 void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
-    // macOS trackpads report pixelDelta (smooth scroll); discrete-notch
-    // mice report angleDelta (eighths of a degree, 120 per notch).
-    // Convert both to FLTK-style "wheelDeltaY" units (~±1 per notch)
-    // before scaling by zoomSpeed.
+    // macOS trackpads report pixelDelta; mice report angleDelta (eighths of a
+    // degree, 120 per notch). Convert both to ~±1 per notch before zoomSpeed.
     float deltaY = 0.0f;
     if (!e->pixelDelta().isNull()) {
         deltaY = static_cast<float>(e->pixelDelta().y()) / 120.0f;
@@ -463,19 +396,15 @@ void GlViewport_Qt::wheelEvent(QWheelEvent* e) {
         // 0.1 matches FLTK's default zoomSpeed for the un-shifted wheel.
         jefe::qt::zoomPlate(plate, deltaY * 0.1f);
         update();
-        // Targeted refresh — wheel only mutates the zoom field on one
-        // plate, so the lightweight transform-only signal is enough.
-        // Plays nice with rapid wheel events: no FX-panel refresh and
-        // no other-card walk per scroll tick.
+        // Targeted refresh: wheel only mutates the zoom field on one plate.
         if (plate >= 0) emit plateTransformChanged(plate);
     }
     if (listener_) listener_->onEvent(jefe::ui::EventType::Wheel);
 }
 
 void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
-    // JEF-39: Escape puts the pencil down. Checked before the chat handler
-    // below claims Escape, but only when a tool is actually armed, so chat
-    // keeps its cancel key the rest of the time.
+    // Escape puts the pencil down. Checked before the chat handler claims
+    // Escape, and only when a tool is armed, so chat keeps its cancel key.
     if (e->key() == Qt::Key_Escape && jefe::qt::noteDrawingArmed() &&
         !jefe::qt::remoteChatModeActive()) {
         jefe::qt::setNoteDrawingArmed(false);
@@ -506,11 +435,9 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
         return;
     }
 
-    // Track color-correction modifier keys (W/E/Q/D/S) — combined with
-    // a left-drag in mouseMoveEvent they trigger the matching field
-    // adjustment. Don't gate on autoRepeat: holding the key while
-    // dragging is the normal use, and autoRepeat false on first press
-    // is enough since we only need set membership.
+    // Track color-correction modifier keys (W/E/Q/D/S); combined with a
+    // left-drag in mouseMoveEvent they adjust the matching field. Don't gate
+    // on autoRepeat: only set membership is needed.
     switch (e->key()) {
         case Qt::Key_W:
         case Qt::Key_E:
@@ -523,9 +450,8 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             break;
     }
 
-    // Plate-control shortcuts. Any unhandled key falls through to the
-    // listener and Qt's default propagation so menu mnemonics, dialog
-    // accelerators, etc. still work.
+    // Plate-control shortcuts. Unhandled keys fall through to the listener and
+    // Qt's default propagation so menu mnemonics and dialog accelerators work.
     const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
     const bool ctrl  = e->modifiers().testFlag(Qt::ControlModifier);
     const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
@@ -551,13 +477,9 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             if (ctrl) { jefe::qt::setFramingMode(FRAMINGQUAD_ID);       handled(); return; }
             break;
 
-        // F / Shift+F (fit), H / Shift+H (flop), V / Shift+V (flip),
-        // T / Alt+T (text mode) all live as ApplicationShortcut bindings
-        // in MainWindow_Qt — they need to fire regardless of whether the
-        // viewport, a dock widget, a spinbox, or the menu bar has focus.
-        // Keeping a duplicate handler here would either steal focus-
-        // dependent keystrokes from the focused input widget OR fire
-        // both the QShortcut and the viewport handler.
+        // F, H, V and T (and their Shift/Alt variants) are ApplicationShortcut
+        // bindings in MainWindow_Qt so they fire regardless of focus; a
+        // duplicate handler here would steal keystrokes from input widgets.
 
         // Track cycling on active plate (matches FLTK's Up/Down handler).
         case Qt::Key_Up:
@@ -575,9 +497,7 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             }
             break;
 
-        // Playback. Space pauses; arrows step a frame. Frame stepping
-        // is a no-op until the Qt build runs the playback loop, but
-        // wiring it here keeps the surface symmetric with FLTK.
+        // Playback. Space pauses; arrows step a frame.
         case Qt::Key_Space:
             if (!ctrl && !alt) {
                 jefe::qt::pausePlayback();
@@ -673,11 +593,8 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
 }
 
 void GlViewport_Qt::keyReleaseEvent(QKeyEvent* e) {
-    // Pair with keyPressEvent's color-correction modifier tracking. Qt
-    // does fire autoRepeat release/press pairs during a held key — we
-    // accept the brief drop in set membership; it just means the next
-    // mouseMoveEvent in that millisecond window won't apply an
-    // adjustment, which is invisible in practice at 60Hz emit gating.
+    // Pairs with keyPressEvent's modifier tracking. Qt fires autoRepeat
+    // release/press pairs during a held key; the brief drop is invisible at 60Hz.
     switch (e->key()) {
         case Qt::Key_W:
         case Qt::Key_E:
@@ -697,11 +614,8 @@ void GlViewport_Qt::enterEvent(QEnterEvent*) {
 }
 
 void GlViewport_Qt::leaveEvent(QEvent*) {
-    // Cursor left the viewport — drop any held drag-modifier keys so a
-    // subsequent re-enter without a fresh key press doesn't apply
-    // ghost color-correction adjustments. Qt stops delivering key
-    // events to a widget that loses focus, so without this clear the
-    // set could stay populated indefinitely.
+    // Cursor left the viewport: drop held drag-modifier keys, since Qt stops
+    // delivering key events to an unfocused widget and the set would go stale.
     heldDragModifierKeys_.clear();
     if (listener_) listener_->onEvent(jefe::ui::EventType::Leave);
 }
@@ -741,30 +655,21 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
         return;
     }
 
-    // Modal-open branch: forward the path to the active plate's strip
-    // and skip the fast load. Scale modifiers don't apply — the load
-    // window owns the load configuration.
+    // Modal-open branch: forward the path to the active plate's strip and skip
+    // the fast load; the load window owns the load configuration.
     if (loadWindowOpen_) {
-        const int plateIdx = 0;  // hardcoded today; future PR uses plate-under-cursor
+        const int plateIdx = 0;  // always the first plate
         emit fileDroppedWhileLoadWindowOpen(plateIdx, path);
         e->acceptProposedAction();
         return;
     }
 
-    // Modal-closed branch: existing scale-modifier fast path.
-    // Scale modifier mapping mirrors the spec:
-    //   plain     -> 1.0
-    //   Shift     -> 0.5
-    //   Shift+Cmd -> 0.25
-    // Any other modifier combo (Cmd-only, Alt-only, etc.) keeps the
-    // default 1.0 — Cmd-only is reserved for future "load into a
-    // specific plate" gestures, so no surprise behavior for users
-    // who hit it accidentally.
+    // Modal-closed branch: scale-modifier fast path (plain 1.0, Shift 0.5,
+    // Shift+Cmd 0.25). Other combos keep 1.0; Cmd-only is reserved for a
+    // future "load into a specific plate" gesture.
     const auto mods = e->keyboardModifiers();
     const bool shift = mods.testFlag(Qt::ShiftModifier);
     // Qt::ControlModifier == Cmd on macOS, Ctrl on Linux/Windows.
-    // The "Shift+Ctrl = 25%" gesture works fine on either since neither
-    // platform binds it to a drag-drop convention.
     const bool cmd = mods.testFlag(Qt::ControlModifier);
     float scale = 1.0f;
     if (shift && cmd) {
@@ -799,9 +704,8 @@ void GlViewport_Qt::handlePinchGesture(QPinchGesture* g) {
     }
 
     if (g->changeFlags() & QPinchGesture::ScaleFactorChanged && pinchPlate_ >= 0) {
-        // scaleFactor() is the incremental change since the last event
-        // (1.0 = no change, > 1 zooms in). Convert to additive delta —
-        // gfcPlateManager::zoomPlate / zoomAllPlates take a signed delta.
+        // scaleFactor() is the incremental change (1.0 = none); convert to the
+        // signed additive delta zoomPlate / zoomAllPlates take.
         const float delta = static_cast<float>(g->scaleFactor() - 1.0);
         if (delta != 0.0f) {
             const bool gang =
@@ -812,10 +716,8 @@ void GlViewport_Qt::handlePinchGesture(QPinchGesture* g) {
                 jefe::qt::zoomPlate(pinchPlate_, delta);
             }
             update();
-            // Targeted refresh of just the zoom spinbox(es). Same queued,
-            // cache-gated path used by wheel zoom and drag pan — pinch
-            // rate is trackpad-driven (~60Hz) so the existing 16ms throttle
-            // is unnecessary here.
+            // Targeted refresh of just the zoom spinbox(es); pinch rate is
+            // trackpad-driven so the 16ms throttle is unnecessary.
             if (gang) {
                 for (int p = 0; p < 4; ++p) emit plateTransformChanged(p);
             } else {

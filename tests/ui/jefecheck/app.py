@@ -1,8 +1,5 @@
-"""JefeCheckApp helper — thin wrapper over Appium's mac2 driver.
-
-Tests use this instead of touching webdriver directly so the locator
-strategy and capability boilerplate live in one place.
-"""
+"""JefeCheckApp helper: a thin wrapper over Appium's mac2 driver, so the locator
+strategy and capability boilerplate live in one place."""
 from __future__ import annotations
 
 import os
@@ -23,25 +20,16 @@ DEFAULT_APPIUM_URL = "http://127.0.0.1:4723"
 
 
 class _SlowElement:
-    """Proxy around a Mac2 WebElement that pauses after each interaction.
-
-    Active only when --slow-mo > 0 is passed to pytest. Lets a human
-    watching the screen catch each click/toggle before the next one
-    happens — by default Mac2 fires AX press actions back-to-back in
-    well under a second, faster than the eye can follow.
-
-    The proxy delegates everything to the underlying element via
-    __getattr__; only the interaction methods listed in `_SLOW_METHODS`
-    sleep after they return. Read-only attribute access (`get_attribute`,
-    `text`, etc.) goes through unchanged so assertion timing is untouched.
+    """Proxy around a Mac2 WebElement that sleeps after each interaction in
+    `_SLOW_METHODS`; active only when --slow-mo > 0. Everything else delegates
+    via __getattr__ unchanged, so assertion timing is untouched.
     """
 
     _SLOW_METHODS = ("click", "send_keys", "clear", "submit")
 
     def __init__(self, element: WebElement, slow_mo: float):
-        # Underscore-prefixed so `__getattr__` still triggers for the
-        # delegated members (Python skips __getattr__ for things found
-        # on the proxy itself).
+        # Underscore-prefixed so `__getattr__` still triggers for delegated
+        # members (Python skips it for attributes found on the proxy itself).
         self._element = element
         self._slow_mo = slow_mo
 
@@ -64,14 +52,11 @@ class JefeCheckApp:
                  slow_mo: float = 0.0, owns_config_dir: bool = True):
         self.driver = driver
         self.config_dir = config_dir
-        # When the caller supplies their own config_dir (e.g. the
-        # cross-launch persistence test), they own its lifecycle.
-        # Otherwise quit() clears the temp dir we created.
+        # A caller-supplied config_dir is owned by the caller; otherwise quit()
+        # clears the temp dir we created.
         self.owns_config_dir = owns_config_dir
-        # Inserted between every Mac2 interaction (click, key, shortcut)
-        # so a human watching the screen can follow what each step does.
-        # 0 disables the pause entirely; non-zero only slows the suite —
-        # nothing in the assertions depends on timing.
+        # Pause inserted between every Mac2 interaction so a human can follow;
+        # 0 disables it. Nothing asserts on timing.
         self.slow_mo = slow_mo
 
     @classmethod
@@ -85,10 +70,8 @@ class JefeCheckApp:
     ) -> "JefeCheckApp":
         """Start the app under Appium and return a wrapped client.
 
-        `open_files`: paths to load into plates 0..3 in order. Used by
-        visual-diff tests so the viewport has known content before the
-        screenshot is taken (otherwise a fresh launch shows an empty
-        black viewport and every test would hit the same baseline).
+        `open_files`: paths loaded into plates 0..3 in order, so visual-diff
+        tests have known viewport content.
         """
         owns_config_dir = config_dir is None
         if config_dir is None:
@@ -117,9 +100,8 @@ class JefeCheckApp:
         driver = webdriver.Remote(appium_url, options=opts)
         instance = cls(driver, config_dir, slow_mo=slow_mo,
                        owns_config_dir=owns_config_dir)
-        # Synchronize on the main window being AX-visible before returning.
-        # Without this the first synthesized keystroke after launch can
-        # race the app's window-activation phase and silently no-op.
+        # Wait for the main window to be AX-visible; otherwise the first keystroke
+        # can race window activation and silently no-op.
         instance.main_window()
         return instance
 
@@ -137,12 +119,8 @@ class JefeCheckApp:
         return element
 
     def by_object_name(self, name: str, timeout: float = 5.0) -> WebElement:
-        """Find a widget whose AXIdentifier ends with `name`.
-
-        Qt's identifier is the full parent chain
-        (e.g. `QApplication.MainWindow.dock.platemanager.....plate.0.gamma.spin`),
-        so we use a predicate suffix-match for stability.
-        """
+        """Find a widget whose AXIdentifier ends with `name` (Qt's identifier is
+        the full parent chain, so use a suffix-match predicate)."""
         predicate = f"identifier ENDSWITH '{name}'"
         deadline = time.monotonic() + timeout
         last_err: Optional[Exception] = None
@@ -169,22 +147,12 @@ class JefeCheckApp:
             "elementType == 4 AND title == 'JefeCheck'")
 
     def wait_for_startup_ready(self, timeout: float = 30.0) -> str:
-        """Block until the app's startup status label reaches a terminal state.
+        """Block until the startup status label reaches a terminal state
+        ('Ready (X FX, Y LUT)' or 'Errors (...)') and return its text.
 
-        The status walks through 'Loading LUTs…' → 'Loading FXs…' →
-        'Ready (X FX, Y LUT)' (or 'Errors (...)') as the autoload
-        finishes. Tests that read FX/LUT panel contents call this
-        before asserting so they don't race the load. Returns the
-        final label text so callers can assert on the FX/LUT counts
-        without re-querying.
-
-        Re-queries the element each iteration and tolerates
-        StaleElementReference / NoSuchElement: the label's text
-        updates rapidly (every ~16ms during FX autoload), and Mac2's
-        AX cache invalidates the element reference whenever the text
-        changes — a single resolve-then-read pattern races the
-        update and throws. Treat any read failure as "not yet
-        terminal" and try again.
+        Re-queries the element each iteration and treats StaleElementReference /
+        NoSuchElement as "not yet terminal": the label updates every ~16ms during
+        autoload and Mac2's AX cache invalidates the reference on each change.
         """
         from selenium.common.exceptions import (
             StaleElementReferenceException,
@@ -217,11 +185,8 @@ class JefeCheckApp:
     MOD_COMMAND = 1 << 20
 
     def send_keys(self, key: str, modifier_flags: int = 0) -> None:
-        """Send a single keystroke at the application level.
-
-        `key` is a literal character (e.g. '1', 'f') or an XCUIKeyboardKey
-        token (e.g. '' for Return).
-        """
+        """Send a single keystroke at the application level: a literal character
+        ('1', 'f') or an XCUIKeyboardKey token."""
         self.driver.execute_script(
             "macos: keys",
             {"keys": [{"key": key, "modifierFlags": modifier_flags}]})
@@ -229,16 +194,10 @@ class JefeCheckApp:
             time.sleep(self.slow_mo)
 
     def send_shortcut(self, combo: str) -> None:
-        """Send a Cmd/Ctrl/Shift/Opt-modified shortcut to JefeCheck.
-
-        Format: 'cmd+1', 'shift+f', 'cmd+,', etc. Only one main key.
-
-        Routes through System Events / AppleScript instead of XCTest's
-        UIKeyEvent synthesis. Mac2's `macos: keys` doesn't reliably
-        deliver Cmd+modifier shortcuts to Qt's QShortcut on macOS
-        (synthesized events don't propagate through Qt's window event
-        filter chain), but System Events keystroke does — it's the same
-        mechanism used by GUI scripting.
+        """Send a Cmd/Ctrl/Shift/Opt-modified shortcut ('cmd+1', 'shift+f',
+        'cmd+,'; one main key) via System Events / AppleScript. Mac2's
+        `macos: keys` doesn't reliably deliver Cmd+modifier shortcuts to Qt's
+        QShortcut on macOS.
         """
         parts = [p.strip().lower() for p in combo.split("+")]
         modifiers: list[str] = []
@@ -259,13 +218,9 @@ class JefeCheckApp:
         using_clause = ""
         if modifiers:
             using_clause = " using {" + ", ".join(modifiers) + "}"
-        # Force the JefeCheck process frontmost via System Events (more
-        # immediate than `tell application to activate`, which returns
-        # before the activation actually completes), wait long enough
-        # for the AppKit window-server handoff to settle, then deliver
-        # the keystroke. The settling time matters: the first
-        # synthesized keystroke after a fresh launch races the focus
-        # transition and silently no-ops if delivered too soon.
+        # Force the process frontmost via System Events (more immediate than
+        # `activate`), wait for the window-server handoff, then send the
+        # keystroke; the first keystroke after launch no-ops if sent too soon.
         script = (
             'tell application "System Events"\n'
             '  set frontmost of (first process whose '
@@ -279,14 +234,6 @@ class JefeCheckApp:
             time.sleep(self.slow_mo)
 
     def window_screenshot(self) -> bytes:
-        """Capture the JefeCheck main window as PNG bytes.
-
-        Routes through the AX element's screenshot endpoint rather than
-        the whole-display capture so the result is independent of the
-        host's display arrangement (CI runners and dev machines have
-        different resolutions, menubar heights, dock positions). The
-        captured frame includes window chrome — the title bar and dock
-        separators are stable enough that the chrome doesn't dominate
-        the diff.
-        """
+        """Capture the JefeCheck main window as PNG bytes via the AX element's
+        screenshot endpoint (independent of the host's display arrangement)."""
         return self.main_window().screenshot_as_png

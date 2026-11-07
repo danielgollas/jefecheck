@@ -15,13 +15,7 @@
 namespace jefe::auth {
 namespace {
 
-/**
- * Cap on how much of the request we will read before giving up.
- *
- * The peer is anything on the machine, not necessarily a browser, so an
- * unbounded read is a trivial local memory-exhaustion lever. A real redirect
- * is a few hundred bytes.
- */
+/** Cap on request bytes read; the peer is anything local, so an unbounded read is a memory-exhaustion lever. */
 constexpr int kMaxRequestBytes = 8192;
 
 /** The page the browser shows once we have what we need. */
@@ -68,9 +62,8 @@ bool LoopbackServer::start(const std::string& expectedState, int timeoutMs) {
     connect(server_, &QTcpServer::newConnection, this,
             &LoopbackServer::onNewConnection);
 
-    // LocalHost, NOT Any: binding all interfaces would expose the sign-in
-    // listener to the LAN. Port 0 lets the OS choose, so no fixed port exists
-    // for a hostile local process to squat before us.
+    // LocalHost, not Any: binding all interfaces would expose the listener to
+    // the LAN. Port 0 lets the OS pick, so no fixed port can be squatted.
     if (!server_->listen(QHostAddress::LocalHost, 0)) {
         delete server_.data();
         server_ = nullptr;
@@ -81,9 +74,7 @@ bool LoopbackServer::start(const std::string& expectedState, int timeoutMs) {
         timeout_ = new QTimer(this);
         timeout_->setSingleShot(true);
         connect(timeout_, &QTimer::timeout, this, [this]() {
-            // A listener must never outlive its sign-in attempt: the user
-            // closed the tab, or never finished, and leaving it open is a
-            // standing local attack surface for no benefit.
+            // A listener must not outlive its sign-in attempt.
             finish(false, QString(), QStringLiteral("timeout"));
         });
         timeout_->start(timeoutMs);
@@ -136,10 +127,8 @@ void LoopbackServer::onReadyRead(QTcpSocket* socket) {
 
     const RedirectResult r = parseRedirect(line, expectedState_);
 
-    // Always serve a page, even on refusal: the user is staring at a browser
-    // tab and a hung request tells them nothing. The page is deliberately the
-    // same either way — a distinct failure page would report to whoever sent
-    // the request whether their guess at `state` was close.
+    // Always serve the same page, even on refusal, so a distinct failure page
+    // cannot tell the sender whether their guess at `state` was close.
     const QByteArray body = QByteArray(kResponseBody);
     QByteArray head = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n";
     head += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
@@ -168,9 +157,7 @@ void LoopbackServer::finish(bool ok, const QString& code, const QString& error) 
 
 void LoopbackServer::stop() {
     done_ = true;
-    // Every member is a QPointer, so a null check here is also a
-    // still-alive check — the socket in particular may already have been
-    // deleteLater'd by its own `disconnected` signal.
+    // Members are QPointers; the socket may already be deleteLater'd by `disconnected`.
     if (timeout_) timeout_->stop();
     if (server_) {
         server_->close();
@@ -214,13 +201,8 @@ int loopbackSelfTest(int argc, char* argv[]) {
         check(waitFor([&] { return fired; }, 3000), "emitted received");
         check(gotOk && gotCode == "xyz789", "delivered the code");
 
-        // The browser must get a page it can read, not a dropped connection.
-        //
-        // bytesAvailable() first: the response very likely already arrived
-        // while the waitFor() above was pumping events, and waitForReadyRead
-        // would then block for its full timeout waiting for MORE data that is
-        // never coming — reporting a failure with the response sitting in the
-        // buffer.
+        // Read bytesAvailable() first: the response may already be buffered,
+        // and waitForReadyRead would block its full timeout for data that never comes.
         const bool haveResponse =
             client.bytesAvailable() > 0 || client.waitForReadyRead(3000);
         check(haveResponse, "served a response");

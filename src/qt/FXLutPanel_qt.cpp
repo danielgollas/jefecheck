@@ -59,7 +59,7 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     connect(table_, &QTreeWidget::itemDoubleClicked,
             this, [this](QTreeWidgetItem*, int) { applySelected(); });
 
-    auto* applyBtn = new QPushButton(jefe::qticons::check(),  // JEF-19
+    auto* applyBtn = new QPushButton(jefe::qticons::check(),
                                      "Apply to active plate", this);
     applyBtn->setObjectName("lut.apply.button");
     applyBtn->setAccessibleName("Apply LUT to active plate");
@@ -90,9 +90,8 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
 
     preview_ = new LUTPreview_Qt(this);
 
-    // Browser part (status + list + buttons) goes in the top of a vertical
-    // splitter; the preview pane in the bottom — so the user can drag the
-    // divider to give the cube room.
+    // Browser part (status + list + buttons) in the top of a vertical splitter,
+    // the preview pane below, so the divider can give the cube room.
     auto* browser = new QWidget(this);
     auto* browserL = new QVBoxLayout(browser);
     browserL->setContentsMargins(0, 0, 0, 0);

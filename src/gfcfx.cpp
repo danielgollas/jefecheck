@@ -95,12 +95,7 @@ void gfcFX::invalidateUniformLocations()
 	preparedGroups.clear();
 }
 
-/**
- * Resolves every uniform this FX can write into a flat prepared list, once,
- * right after the shader program is linked. bind() then replays that list with
- * cached locations instead of asking the driver to look up each name by string
- * on every single frame. Only LOCATIONS are cached here, never values.
- */
+/** Resolves every uniform this FX can write into a prepared list once, after link, so bind() replays cached locations instead of looking up names every frame. Only locations are cached, never values. */
 void gfcFX::prepareUniformLocations()
 {
 	invalidateUniformLocations();
@@ -116,9 +111,8 @@ void gfcFX::prepareUniformLocations()
 	for ( int i=0;i<4;i++ )
 		texCoordLocations[i]=glGetUniformLocationARB ( ShaderProgram,gfcFXTexCoordNames[i] );
 
-	//walk the groups in exactly the order bind() walks them (map order for the
-	//groups, widgetsOrder for the widgets), so texture units still get assigned
-	//in the order the FX author declared them and not alphabetically.
+	//walk the groups in the order bind() walks them (map order, then widgetsOrder)
+	//so texture units are assigned in the order the FX author declared them.
 	std::map<std::string,gfcFXWidgetGroup>::iterator groupsIter=groups.begin();
 	std::map<std::string,gfcFXWidgetGroup>::iterator groupsIterEnd=groups.end();
 	for ( groupsIter;groupsIter!=groupsIterEnd;groupsIter++ )
@@ -788,13 +782,10 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 			prepareUniformLocations();
 
 			//calculate the FXs content hash.
-			// JEF-28: hash the RAW BYTES of the .jfx + .vert + .frag files
-			// (portable — same digest on any build/platform, and it now
-			// COVERS THE SHADER SOURCE, which the old metadata-only hash
-			// ignored — two FX with identical metadata but different GLSL
-			// used to collide). shaderPath/vertex/fragment are the same paths
-			// the shader load above used. Falls back to the metadata hash only
-			// if none of the files can be re-read here.
+			// Hash the raw bytes of the .jfx + .vert + .frag files: portable across
+			// builds, and covers the shader source, so FX with identical metadata
+			// but different GLSL do not collide. Falls back to the metadata hash
+			// if the files cannot be re-read.
 			md5Hash=jefe::contentHashFiles ( { pfilename, shaderPath+vertex, shaderPath+fragment } );
 			if ( md5Hash.empty() ) md5Hash=GetMD5Hash ( inputForHash );
 			//printf ( "\nFX Hash:lenght=%s:%i\n",md5Hash.c_str(),md5Hash.size() );
@@ -858,9 +849,7 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 		glPrintError();
 		//printf("Shader Info:\n *Name: %s\n *Active shader %i, should be: %i\n",name, glGetHandleARB(GL_PROGRAM_OBJECT_ARB),ShaderProgram);
 
-		//Safety net only. The prepared list is built once, at link time, in
-		//load(). This catches a program that somehow reached bind() without one
-		//instead of silently binding nothing at all, it is not the mechanism.
+		//Safety net only: the prepared list is built at link time in load().
 		if ( !uniformsPrepared )
 			prepareUniformLocations();
 
@@ -870,8 +859,7 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 
 		//NEW STUFF!! Pass some additional program state data to the shader, it can use it if it wants, the data is also sent to the shader before the params, so the controls
 		//can override the values if they want, but I can't see why that would be needed.
-		//All of these locations were resolved when the program was linked, a
-		//location of -1 means the compiler dropped the uniform, so skip it.
+		//A location of -1 means the compiler dropped the uniform, so skip it.
 
 		//pass current frame number
 		if ( currentFrameLocation!=-1 )
@@ -886,9 +874,7 @@ PlateFXParams gfcFX::bind ( int previousTexID, FXTexCoords fboTexCoords, bool fo
 			glUniform1fARB ( timestepLocation,playbackManager.getTimestep() );
 
 
-		//the prepared list already holds the widgets in the order the FX author declared them,
-		//which is what decides the texture units, so walking it replays the old
-		//groups/widgetsOrder walk exactly, minus the per frame name lookups.
+		//the prepared list holds widgets in the declared order, which decides the texture units
 		for ( size_t groupIndex=0;groupIndex<preparedGroups.size();groupIndex++ )
 		{
 			const gfcFXPreparedGroup &preparedGroup=preparedGroups[groupIndex];

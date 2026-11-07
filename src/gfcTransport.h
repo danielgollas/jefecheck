@@ -1,10 +1,9 @@
 #ifndef GFCTRANSPORT_H
 #define GFCTRANSPORT_H
 
-// JEF-22: transport seam. Poll-based to match the existing 4 ms network pump.
-// PeerId packs a RakNet SystemAddress (binaryAddress<<16 | port) so no RakNet
-// type crosses this boundary. Serialization (BitStream) stays app-side until
-// the versioned wire format lands (JEF-23).
+// Transport seam. Poll-based to match the 4 ms network pump. PeerId packs a
+// RakNet SystemAddress (binaryAddress<<16 | port) so no RakNet type crosses
+// this boundary; serialization (BitStream) stays app-side.
 
 #include <cstdint>
 #include <string>
@@ -20,11 +19,9 @@ inline PeerId packPeerId(uint32_t binaryAddress, uint16_t port) {
     return (static_cast<uint64_t>(binaryAddress) << 16) | port;
 }
 
-// JEF-28: QoS lane selector. Orthogonal to the GFCNETID message type — the
-// receive dispatch is by GFCNETID regardless of channel. `Assets` carries the
-// bulk LUT/FX serialize bodies on a SEPARATE reliable-ordered stream so a big
-// transfer can't head-of-line-block live state/chat/pointer/play/CC traffic.
-// Defaulted to State everywhere so every existing call site is unchanged.
+// QoS lane selector, orthogonal to the GFCNETID message type (dispatch is by
+// GFCNETID). `Assets` carries bulk LUT/FX bodies on a separate reliable-ordered
+// stream so a big transfer can't head-of-line-block live traffic.
 enum class Channel { State = 0, Assets = 1 };
 
 enum class TransportEventType {
@@ -44,18 +41,14 @@ struct TransportEvent {
     TransportEventType type;
     PeerId peer = kInvalidPeerId;
     std::vector<unsigned char> bytes; // only for Data
-    // JEF-28: which QoS lane a Data event arrived on. Not needed for dispatch
-    // (GFCNETID drives that) but cheap + useful. WebRTC sets it accurately from
-    // the channel label; RakNet leaves it State (its receive side can't cheaply
-    // recover the ordering channel — see gfcRakNetTransport.cpp).
+    // Which QoS lane a Data event arrived on. WebRTC sets it from the channel
+    // label; RakNet leaves it State (its receive side can't recover the channel).
     Channel channel = Channel::State;
 };
 
-// JEF-30: read-only per-peer connection health, surfaced for the Remote-session
-// health indicator. Best-effort observability: a transport that can't produce
-// real WebRTC stats (RakNet) fills what it can (connected/presence) and leaves
-// the rest at the defaults. `rttMs` is -1 when unknown; `path` classifies the
-// selected ICE candidate pair (Direct = host/srflx/prflx, Relay = TURN).
+// Read-only per-peer connection health for the Remote-session indicator.
+// `rttMs` is -1 when unknown; `path` classifies the selected ICE candidate
+// pair (Direct = host/srflx/prflx, Relay = TURN). RakNet fills only presence.
 struct PeerStats {
     PeerId peer = kInvalidPeerId;
     long rttMs = -1;                 // round-trip time in ms; -1 = unknown
@@ -65,9 +58,8 @@ struct PeerStats {
     bool connected = false;
 };
 
-// JEF-37: one joiner waiting in a cloud session's lobby. Mirrors the
-// coordinator's join-request, kept here so gfcnetworkmanager and the Qt panel
-// can carry it without including the signaling header (developer_notes §1).
+// One joiner waiting in a cloud session's lobby. Mirrors the coordinator's
+// join-request, kept here so the Qt panel needs no signaling header (developer_notes §1).
 // `displayName` is peer-supplied and reaches the UI as untrusted text; `email`
 // is set only when `verified`.
 struct PendingJoiner {
@@ -97,8 +89,7 @@ public:
     // broadcastExcluding=false -> send to target only;
     // broadcastExcluding=true  -> send to everyone EXCEPT target
     //   (target==kInvalidPeerId -> everyone).
-    // JEF-28: `channel` selects the QoS lane (default State = unchanged
-    // behavior). Assets routes onto a second reliable-ordered stream.
+    // `channel` selects the QoS lane; Assets routes onto a second reliable-ordered stream.
     virtual void send(const unsigned char* data, int len, PeerId target,
                       bool broadcastExcluding,
                       Channel channel = Channel::State) = 0;
@@ -106,21 +97,16 @@ public:
     virtual void closePeer(PeerId peer, bool sendNotification) = 0;
     virtual int connectionCount() = 0;
 
-    // JEF-27: cloud-coordinator session code assigned to the HOST after
-    // create-session (empty for RakNet / LAN-WebRTC / joiners). Thread-safe.
-    // Non-pure so only the coordinator-capable transport overrides it.
+    // Cloud-coordinator session code assigned to the HOST after create-session
+    // (empty for RakNet / LAN-WebRTC / joiners). Thread-safe.
     virtual std::string assignedSessionCode() { return std::string(); }
 
-    // JEF-30: per-peer connection health. Defaulted empty so only the
-    // WebRTC/RakNet transports override. READ-ONLY + best-effort: never holds a
-    // lock across a blocking stats call, tolerates the underlying API returning
-    // nullopt/false. WebRTC returns real stats; RakNet returns basic presence.
+    // Per-peer connection health, read-only and best-effort: never holds a lock
+    // across a blocking stats call. WebRTC returns real stats; RakNet basic presence.
     virtual std::vector<PeerStats> peerStats() { return {}; }
 
-    // JEF-37: joiners knocking at a cloud session, waiting for the host's
-    // decision. Non-empty only on a coordinator-mode HOST; a joiner never
-    // learns who else is in the lobby. Defaulted so LAN transports, which have
-    // no lobby, need no stub.
+    // Joiners waiting for the host's decision; non-empty only on a
+    // coordinator-mode HOST. Defaulted so LAN transports need no stub.
     virtual std::vector<PendingJoiner> pendingJoiners() { return {}; }
     // Decide one pending joiner. `admit` false denies. A joinerId that is no
     // longer pending (it gave up, or the other decision already landed) is a
@@ -128,18 +114,13 @@ public:
     // anything down.
     virtual void decideJoiner(const std::string& /*joinerId*/, bool /*admit*/) {}
 
-    // JEF-37, joiner side: true between "the coordinator parked me in the
-    // lobby" and the host's decision. Without it a knocking joiner is
-    // indistinguishable from a failed connect -- nothing is connected, so the
-    // panel falls back to the connect forms while the person is, in fact,
-    // waiting on a human.
+    // Joiner side: true between "the coordinator parked me in the lobby" and
+    // the host's decision, so a waiting joiner is not mistaken for a failed connect.
     virtual bool awaitingAdmission() { return false; }
 
-    // JEF-31/37: the last {"type":"error"} the coordinator sent, if any.
-    // Returns false when there has been none. The CODE matters, not just the
-    // text: "sign in to host" and "you are out of credits" are different
-    // problems with different fixes, and collapsing them into one "session
-    // refused" leaves the user with nothing to act on.
+    // The last {"type":"error"} the coordinator sent; false when there has been
+    // none. The code matters, not just the text: "sign in to host" and "out of
+    // credits" have different fixes.
     virtual bool lastCoordinatorError(std::string& /*code*/,
                                       std::string& /*message*/) { return false; }
 };

@@ -1,10 +1,7 @@
-"""LUT preview/inspector presence.
-
-The preview canvases (1D curve / 3D cube inspector) are painted/GL widgets
-whose content isn't AX-addressable, so the smoke test asserts the container
-and toggle resolve. The 3D camera/render-modes/morph and the .tga (UnitCube)
-load are verified manually per the implementation plan.
-"""
+"""LUT preview/inspector presence. The preview canvases (1D curve / 3D cube)
+are painted/GL widgets that aren't AX-addressable, so the smoke test asserts
+the container and toggle resolve. The 3D camera/render-modes/morph and the
+.tga (UnitCube) load are verified manually."""
 from jefecheck import locators
 
 

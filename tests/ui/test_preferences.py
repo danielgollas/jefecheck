@@ -1,28 +1,16 @@
-"""Preferences dialog tests — currently skipped due to a Mac2 flake.
+"""Preferences dialog tests, currently skipped due to a Mac2 flake.
 
 The first AppleScript-synthesized Cmd+, after a fresh Mac2 session
-intermittently fails to fire JefeCheck's QShortcut, even though
-subsequent sends in the same process succeed. Layout shortcuts
-(Cmd+1..4) using the identical send_shortcut path work consistently,
-so the issue is specific to the Cmd+, → modal QDialog::exec() path
-(possibly the modal blocking the main event loop while AX queries
-race against it).
+intermittently fails to fire JefeCheck's QShortcut, though later sends in the
+same process succeed and the identical send_shortcut path works for Cmd+1..4.
+So the problem is specific to the Cmd+, -> modal QDialog::exec() path.
 
-Diagnosis attempted but unresolved:
-- Adding parallel Cmd+, QShortcut alongside the menu's Cmd+P: no
-- setMenuRole(NoRole) on the prefs QAction: no
-- Qt::ApplicationShortcut context instead of WindowShortcut: no
-- Retry loop inside the test (re-sending Cmd+,): no
-- Bumping AppleScript activation delay 0.1s → 0.4s: no
-- Switching to System Events `set frontmost` instead of `activate`: no
-
-Plausible root causes: macOS App Nap / Universal Access focus race;
-QDialog::exec()'s nested event loop interfering with AX queries;
-synthesized punctuation keys delivered differently than digit keys.
-
-Tracked as a follow-up. The harness covers other modal-opening paths
-fine (LUT panel buttons, plate-card combos), so this isn't a structural
-gap in Phase C.
+Tried without success: a parallel Cmd+, QShortcut, setMenuRole(NoRole),
+Qt::ApplicationShortcut context, a retry loop, a longer AppleScript activation
+delay, and System Events `set frontmost` instead of `activate`. Suspects: macOS
+App Nap / focus race, the nested event loop of exec() interfering with AX
+queries, or punctuation keys delivered differently than digits. Other
+modal-opening paths (LUT panel buttons, plate-card combos) work fine.
 """
 import pytest
 
