@@ -24,14 +24,9 @@ extern gfcTrackManager trackManager;
 
 namespace {
 /**
- * JEF-37: a fresh per-session secret for the host's own loopback client.
- *
- * 32 hex characters (128 bits) from std::random_device — enough that guessing
- * it is not a strategy even for someone who already knows the session code,
- * and short enough to survive the coordinator's display-name length cap.
- * Regenerated per session, so a leaked one is worthless the moment the session
- * ends. random_device is used directly rather than seeding a PRNG: this runs
- * once per session, so its cost is irrelevant and its unpredictability is not.
+ * A fresh per-session secret for the host's own loopback client: 32 hex
+ * characters (128 bits) from std::random_device, short enough for the
+ * coordinator's display-name length cap.
  */
 std::string makeSelfJoinNonce() {
     static const char* kHex = "0123456789abcdef";
@@ -87,9 +82,8 @@ gfcNetworkManager::gfcNetworkManager()
 	gChatMode=0;
 	chatFadeCounter=0;
 	cursorBlinkCounter=0;
-	// The overlay bubble draw reads these for the visible-message window and
-	// the typing-cursor position; never assigned elsewhere, so init to 0 to
-	// avoid reading indeterminate values (garbage would blank the overlay).
+	// The overlay bubble draw reads these (visible-message window, typing
+	// cursor); init to 0 to avoid indeterminate values.
 	chatLineOffset=0;
 	chatPosOffset=0;
 
@@ -139,10 +133,8 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
 		
 		resetSincStatus();
         
-        // JEF-37: mint this session's self-join nonce BEFORE the server starts,
-        // so it is already in place when the loopback client knocks. Without
-        // one, a host with knocking on (the default) waits to admit its own
-        // client and the session never gains a single participant.
+        // Mint the self-join nonce BEFORE the server starts, or a host with knocking
+        // on waits to admit its own loopback client forever.
         if (params && params->coordinatorMode && params->selfJoinNonce.empty())
             params->selfJoinNonce = makeSelfJoinNonce();
 
@@ -157,21 +149,12 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
         clientParams.serverIP="127.0.0.1";
         clientParams.port=server.getPort();
         clientParams.password=server.getPassowrd();
-        // JEF-27: in coordinator mode the loopback client joins the host's own
-        // cloud session by its assigned code instead of dialing 127.0.0.1. The
-        // code is assigned ASYNCHRONOUSLY by the coordinator (a background
-        // rtc::WebSocket thread sets it once the create-session round-trip
-        // completes), so at this point it is very likely still empty. Wait for
-        // it here — bounded — before connecting the loopback client with a valid
-        // code. The wait needs no app-side pumping: the coordinator socket runs
-        // on libdatachannel's own threads, so getAssignedSessionCode() flips
-        // non-empty on its own. LAN/RakNet hosting (coordinatorMode=false) skips
-        // the wait entirely, so that path is unchanged.
+        // Coordinator mode: the loopback client joins by the assigned code, set
+        // asynchronously by a background thread, so wait (bounded). LAN skips the wait.
         clientParams.coordinatorMode=server.getCoordinatorMode();
         clientParams.coordinatorUrl=server.getCoordinatorUrl();
-        // Present the nonce to the COORDINATOR only. `nickname` above is what
-        // participants see, and it is untouched — the two names are separate
-        // precisely so this one can be a secret.
+        // Present the nonce to the COORDINATOR only; `nickname` (what participants
+        // see) is separate so this one can be a secret.
         if (params) clientParams.coordDisplayName=params->selfJoinNonce;
         if (server.getCoordinatorMode()) {
             const int kCodeTimeoutMs = 5000;
@@ -179,15 +162,8 @@ void gfcNetworkManager::startServer(gfcServerParams * params)
                 if (!server.getAssignedSessionCode().empty()) break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
             }
-            // NO CODE => NO SESSION. The coordinator refused create-session
-            // (auth-required, insufficient-credits) or never answered.
-            //
-            // Bailing out here is load-bearing: the tail of this function used
-            // to set connected=true unconditionally, so a refused session still
-            // flipped the UI into its session view — an empty participant list,
-            // chat that went nowhere, and an End Session button with nothing to
-            // end. "Connected" has to mean a session exists, or every symptom
-            // of a failed start looks like a bug somewhere else.
+            // No code means no session (create-session refused or unanswered): bail out
+            // so "connected" always means a session exists.
             if (server.getAssignedSessionCode().empty()) {
                 networkLog.addToLog(
                     "Cloud session was refused by the coordinator (no session "
@@ -252,43 +228,36 @@ std::vector<jefe::net::PendingJoiner> gfcNetworkManager::pendingJoiners() {
 
 bool gfcNetworkManager::lastCoordinatorError(std::string& code,
                                              std::string& message) {
-    // Server first: a refused create-session is the case a caller most needs
-    // to distinguish, and a host that never got a session has nothing on the
-    // client side to report.
+    // Server first: a refused create-session is the case a caller most needs to
+    // distinguish.
     if (server.lastCoordinatorError(code, message)) return true;
     return client.lastCoordinatorError(code, message);
 }
 
 bool gfcNetworkManager::isAttemptingConnection() {
     if (isServer) return false;
-    // getIsConnected() flips on the transport's thread, but `connected` only
-    // flips when update() next consumes the status change. Callers reach here
-    // precisely when `connected` is still false, so counting that one-tick gap
-    // as "attempting" is what keeps it from reading as a disconnect.
+    // getIsConnected() flips on the transport's thread but `connected` only
+    // when update() next consumes it; count that one-tick gap as "attempting".
     return client.getAttemptingConnection() || client.getIsConnected() ||
            client.getJoinHandshakePending();
 }
 
 bool gfcNetworkManager::isAwaitingAdmission() {
     // A host's own loopback client is admitted by nonce and never lingers in a
-    // lobby, so this is a joiner-only condition -- and reporting it for a host
-    // would put a "waiting to be let in" banner on the person doing the letting.
+    // lobby, so this is joiner-only.
     if (isServer) return false;
     return client.getAwaitingAdmission();
 }
 
 void gfcNetworkManager::decideJoiner(const std::string& joinerId, bool admit) {
-    // Guarded by isServer, not merely by "the UI only shows this to a host":
-    // admit/deny is a host-only action at the coordinator too, and a joiner
-    // sending one would earn a protocol error for a button it should never
-    // have had.
+    // Guarded by isServer: admit/deny is host-only at the coordinator, and a
+    // joiner sending one would earn a protocol error.
     if (!isServer) return;
     server.decideJoiner(joinerId, admit);
 }
 
-// JEF-30: forward to the active transport. A host's stats come from the SERVER
-// transport (its view of every joined peer); a joiner's from the CLIENT
-// transport (its single peer, the host). Solo → empty.
+// Forward to the active transport: a host's stats come from the SERVER
+// transport (every peer), a joiner's from the CLIENT (the host). Solo: empty.
 std::vector<jefe::net::PeerStats> gfcNetworkManager::peerStats() {
     if (!connected) return {};
     return isServer ? server.peerStats() : client.peerStats();
@@ -327,8 +296,8 @@ std::vector<gfcNetworkManager::ChatEntryData> gfcNetworkManager::chatEntries() {
 }
 
 std::vector<std::string> gfcNetworkManager::drainErrors() {
-    // Errors already surface through client status strings (RED). Reserved
-    // for a dedicated error queue; empty for now so callers compile.
+    // Errors surface through client status strings (RED); no dedicated error
+    // queue, so this is empty.
     return {};
 }
 
@@ -344,17 +313,15 @@ bool gfcNetworkManager::getIsServer()
 
 bool gfcNetworkManager::overlayAnimating()
 {
-	// The chat/status overlay is fading out (chatFadeCounter counting down) or
-	// the user is typing a chat message — either needs the idle tick to keep
-	// repainting so the fade actually animates instead of jumping.
+	// The chat/status overlay is fading out or the user is typing; the idle
+	// tick must keep repainting so the fade animates.
 	return chatFadeCounter > 0 || gChatMode != 0;
 }
 
 bool gfcNetworkManager::consumeGotMessages()
 {
-	// client.GetGotMessages() returns true and clears the flag if any packet was
-	// processed since the last call. Used to repaint the receiver's viewport when
-	// mirrored state arrives (otherwise QOpenGLWidget only repaints on local input).
+	// Returns true and clears the flag if any packet was processed since the
+	// last call; used to repaint the receiver's viewport when state arrives.
 	return client.GetGotMessages();
 }
 
@@ -397,12 +364,8 @@ void gfcNetworkManager::update()
 	//Check the event notification flags from the rest of the program and send appropiate messages.
 	if(connected)
 	{
-	// JEF-4: the multi-step asset-sync readiness handshake (FX/LUT/stack/playlist
-	// merge -> SENDALLREADY) does not complete in the Qt port, so `allReady` was
-	// staying 0 forever and draw() rendered a blocking gray "please wait" box over
-	// the frames. Mirroring/chat/pointers do NOT depend on allReady, so treat the
-	// session as ready once connected. Full asset-sync completion is a follow-up
-	// ticket (out of JEF-4 scope).
+	// The asset-sync readiness handshake does not complete in the Qt port and
+	// would leave a "please wait" box; mirroring/chat don't need it, so ready = connected.
 	allReady=1;
 	float timeStep=playbackManager.getTimestep();
 	//check transformations
@@ -665,12 +628,8 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
 
 		glPushAttrib(GL_ALL_ATTRIB_BITS);
 
-                // Work in LOGICAL pixels: gfc_gl_height()/textWidth() report in
-                // logical px (they divide by the renderer's DPI scale), so the
-                // bubble geometry must use a logical-px ortho or the boxes come
-                // out half-size on a 2x Retina display while the text (rendered
-                // at physical glyph size) overflows them. The viewport stays at
-                // the full framebuffer size; only the ortho extents are logical.
+                // Work in LOGICAL pixels (gfc_gl_height()/textWidth() are logical, divided by
+                // the DPI scale) or the boxes come out half-size on Retina.
                 const float dprS = textRenderer().getDPIScale();
                 const int wl = dprS > 0 ? (int)(w / dprS) : w;
                 const int hl = dprS > 0 ? (int)(h / dprS) : h;
@@ -743,10 +702,8 @@ void gfcNetworkManager::draw(int w, int h, bool resized)
                         continue;
                     }
                     const bool self = (!e.sender.empty() && e.sender == me);
-                    // ASCII separator: the GL text renderer's glyph atlas is
-                    // ASCII-only (32-127), so a UTF-8 middle-dot would render as
-                    // an invisible gap. The Qt panel (Task 5) uses a real "·"
-                    // because QLabel handles UTF-8; the overlay uses " - ".
+                    // ASCII separator: the GL text renderer's glyph atlas is ASCII-only
+                    // (32-127), so a UTF-8 middle-dot would render as a gap.
                     std::string header = (self ? "You" : e.sender) + " - " + shortTime(e.time);
                     std::vector<std::string> lines = wrapToWidth(e.message, maxW - 2 * pad);
                     int bw = (int)textRenderer().textWidth(header.c_str());
@@ -953,13 +910,8 @@ void gfcNetworkManager::sendRemotePointerColor(int color){
 	}
 }
 
-// JEF-39: note sync. gfcnetworkclient.h is out of scope for this change (see
-// the file-ownership map in docs/superpowers/plans/2026-09-07-annotations.md,
-// Task 4), so there is no gfcNetworkClient::SendNoteAddMessage to call the
-// way sendPointerInfoMessage calls client.SendPointerInfoMessage above.
-// Instead the fully-encoded message is handed to
-// gfcNetworkClient::queueNoteMessage(), which Update() flushes to the
-// server on its next pump — only Update() owns the transport.
+// Note sync: the encoded message goes to gfcNetworkClient::queueNoteMessage(),
+// which Update() flushes (only Update() owns the transport).
 void gfcNetworkManager::broadcastNoteAdd(const gfcNote& n)
 {
 	RakNet::BitStream outBS;

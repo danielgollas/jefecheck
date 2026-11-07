@@ -209,11 +209,8 @@ void AuthSession::refresh() {
             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
         if (status == 401 || status == 403) {
-            // Rejected or reused. Clear it and report ONCE — the coordinator
-            // rotates refresh tokens and treats reuse as a compromise signal,
-            // so retrying is both useless and hostile. The caller decides
-            // whether to open a browser; doing it here would surprise the user
-            // with a window they did not ask for.
+            // Rejected or reused: clear it and report once, no retry (the coordinator
+            // treats reuse as compromise). The caller decides whether to open a browser.
             d_->store->erase(d_->config.account);
             d_->accessToken.clear();
             emit signInFailed(QStringLiteral("your session expired — sign in again"));
@@ -225,17 +222,8 @@ void AuthSession::refresh() {
 }
 
 void AuthSession::applyAuthResult(const QJsonObject& obj, const QString& failMsg) {
-    // camelCase, because that is what the coordinator actually sends. Both
-    // /auth/exchange and /auth/refresh return { accessToken, refreshToken,
-    // user } (authService.ts mintPair, authRoutes.ts). This read used to be
-    // snake_case, which made a SUCCESSFUL sign-in indistinguishable from a
-    // rejected one: the exchange verified the Google token, created the user
-    // and minted a token pair, and the client dropped all of it on the floor
-    // and said "this account could not be verified".
-    //
-    // Note the asymmetry with what we SEND — google_id_token and
-    // refresh_token are snake_case in the request bodies, and that is
-    // correct; the routes read those names. Only the responses are camel.
+    // camelCase, as the coordinator sends ({ accessToken, refreshToken, user });
+    // the request bodies (google_id_token, refresh_token) are snake_case.
     const QString access = obj.value("accessToken").toString();
     if (access.isEmpty()) {
         emit signInFailed(failMsg);
@@ -259,12 +247,8 @@ void AuthSession::applyAuthResult(const QJsonObject& obj, const QString& failMsg
     emit signedIn();
 }
 
-// ---------------------------------------------------------------------------
-// Self-test: a local HTTP stub stands in for the coordinator, so no live
-// network call happens. The Google leg is not exercised here (it needs a real
-// browser and a real consent screen) — the pieces it depends on are covered by
-// --pkce-test and --loopback-test.
-// ---------------------------------------------------------------------------
+// Self-test: a local HTTP stub stands in for the coordinator. The Google leg
+// is covered by --pkce-test and --loopback-test.
 namespace {
 
 /** Minimal one-shot HTTP stub returning a canned JSON body per path. */
@@ -341,11 +325,8 @@ int authSelfTest(int argc, char* argv[]) {
     {
         store->save(cfg.account, "stored-refresh");
         stub.nextStatus = 200;
-        // Field names copied from the coordinator's real response, not from
-        // what this file happens to read. The stub previously used snake_case
-        // — the same mistake the parser made — so the test agreed with the
-        // bug and passed while every live sign-in failed. A double that is
-        // written to match the client cannot catch the client being wrong.
+        // Field names copied from the coordinator's real response, not from what
+        // this file reads, so the stub cannot agree with a client bug.
         stub.nextBody =
             R"({"accessToken":"acc1","refreshToken":"rot1",)"
             R"("user":{"email":"a@b.com","creditBalanceSeconds":3597}})";
@@ -383,13 +364,8 @@ int authSelfTest(int argc, char* argv[]) {
         check(s.accessToken().empty(), "drops the in-memory access token");
     }
 
-    // --- a 200 the client cannot read is still a failure ------------------
-    // The bug this guards: the coordinator answered 200 with a valid token
-    // pair, the client looked for the wrong field names, found nothing, and
-    // reported the user's account as unverifiable. Server-side everything had
-    // succeeded — the user row was created, the tokens were minted — so no log
-    // anywhere showed a problem. Pinning the OLD spelling as a failure means
-    // the two halves can never silently drift apart again.
+    // A 200 the client cannot read is still a failure: pins the old snake_case
+    // spelling as one so client and coordinator field names cannot drift.
     {
         store->save(cfg.account, "stored-refresh");
         stub.nextStatus = 200;

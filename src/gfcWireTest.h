@@ -1,6 +1,5 @@
-// Declaration for the jefe::wire self-test (JEF-23), implemented in
-// gfcWireTest.cpp. Kept separate from gfcWire.h so pulling in the wire
-// primitives never drags in the test's <cstdio>/<cmath> includes.
+// Declaration for the jefe::wire self-test (gfcWireTest.cpp), kept apart from
+// gfcWire.h so the wire primitives don't pull in <cstdio>/<cmath>.
 #pragma once
 
 namespace jefe {

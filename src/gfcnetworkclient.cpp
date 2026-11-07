@@ -39,7 +39,7 @@ extern gfcPlaybackManager playbackManager;
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
 
-// JEF-39 note sync. The queues are members (see gfcnetworkclient.h);
+// Note sync. The queues are members (see gfcnetworkclient.h);
 // Update() flushes outgoing and the notes dock drains incoming.
 void gfcNetworkClient::queueNoteMessage(std::vector<unsigned char> bytes) {
     pendingOutgoingNoteMessages_.push_back(std::move(bytes));
@@ -52,11 +52,10 @@ std::vector<jefe::net::NoteSyncEvent> gfcNetworkClient::drainNoteSyncEvents() {
 }
 
 gfcNetworkClient::gfcNetworkClient() {
-    transport_ = jefe::net::makeTransport(); // kind from JEFECHECK_TRANSPORT (JEF-24)
+    transport_ = jefe::net::makeTransport(); // kind from JEFECHECK_TRANSPORT
 	haveSentMyPlaylist=false;
-	// Explicit init: pumpNetwork() reads these from the very first tick.
-	// Safe today only because networkManager is a global (static zero-init),
-	// but don't rely on that.
+	// Explicit init: pumpNetwork() reads these from the first tick; do not rely
+	// on networkManager being a zero-initialised global.
 	gotMessages=false;
 	isConnected=false;
 	attemptingConnection=false;
@@ -107,11 +106,8 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
     this->serverIP = theServerIP;
     this->port     = thePort;
 
-    // JEF-27: (re)build the transport from the connection params. Default
-    // (coordinatorMode=false, empty url) reproduces the JEF-24 RakNet / LAN
-    // path exactly; coordinator mode selects the WebRTC transport dialing the
-    // cloud coordinator. Rebuilt here (not in the ctor) because the config is
-    // only known once params arrive.
+    // (Re)build the transport from the connection params (RakNet/LAN by default,
+    // WebRTC in coordinatorMode); built here because the config arrives with params.
     {
         jefe::net::TransportConfig tcfg;
         if (params) {
@@ -119,10 +115,8 @@ bool gfcNetworkClient::Connect(gfcConnectionParams * params) {
             tcfg.coordinatorUrl  = params->coordinatorUrl;
             tcfg.sessionCode     = params->sessionCode;
             tcfg.authToken       = params->authToken;
-            // The name the host sees in the admit prompt (JEF-37). Normally
-            // the nickname; a host's own loopback client overrides it with the
-            // session's self-join nonce so it is admitted without prompting,
-            // while `nickName` (the participant list) stays the real name.
+            // The name the host sees in the admit prompt: the nickname, or for a host's own
+            // loopback client the self-join nonce (admitted without prompting).
             tcfg.displayName     = params->coordDisplayName.empty()
                                        ? params->nickname
                                        : params->coordDisplayName;
@@ -254,10 +248,8 @@ bool gfcNetworkClient::GetGotMessages()
 }
 
 void gfcNetworkClient::Update() {
-    // JEF-39: flush any note add/remove/lock messages queued via
-    // queueNoteMessage() since the last pump (see
-    // gfcNetworkStructures.h -- new outgoing note message types route
-    // through this queue rather than a new SendXxx method).
+    // Flush note add/remove/lock messages queued via queueNoteMessage() since
+    // the last pump.
     if ( !pendingOutgoingNoteMessages_.empty() ) {
         for ( auto& bytes : pendingOutgoingNoteMessages_ ) {
             transport_->send ( bytes.data(), ( int ) bytes.size(), serverPeerId_, false );
@@ -334,12 +326,11 @@ void gfcNetworkClient::Update() {
             //insertIntoNetLog ( "Connection Lost" );
         }
         break;
-        // ID_MODIFIED_PACKET is swallowed by the transport (JEF-22 decision, revisit JEF-23)
+        // ID_MODIFIED_PACKET is swallowed by the transport
 
         case jefe::net::TransportEventType::Data: {
-        // JEF-23: ev.bytes is a jefe::wire frame (the transport already
-        // stripped the RakNet envelope byte). Parse the frame header; a
-        // truncated buffer or version mismatch is a silent drop.
+        // ev.bytes is a jefe::wire frame (the transport stripped the RakNet
+        // envelope byte); a truncated buffer or version mismatch is a silent drop.
         jefe::wire::Reader r ( ev.bytes.data(), ev.bytes.size() );
         uint16_t msgType = 0;
         if ( !jefe::wire::readFrameHeader ( r, msgType ) ) break;
@@ -411,7 +402,7 @@ void gfcNetworkClient::Update() {
             if ( !readOk ) break; // malformed request: send nothing
 
             //send the serialized LUTs to the server.
-            // JEF-28: bulk LUT bodies go on the dedicated assets QoS lane.
+            // Bulk LUT bodies go on the dedicated assets QoS lane.
             if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false, jefe::net::Channel::Assets );
 
         }
@@ -598,7 +589,7 @@ void gfcNetworkClient::Update() {
             if ( !readOk ) break; // malformed request: send nothing
 
             //send the serialized FXs to the server.
-            // JEF-28: bulk FX bodies go on the dedicated assets QoS lane.
+            // Bulk FX bodies go on the dedicated assets QoS lane.
             if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), serverPeerId_, false, jefe::net::Channel::Assets );
             printf("FXs sent\n");
         }
@@ -689,11 +680,8 @@ void gfcNetworkClient::Update() {
             //printf("Client: got a OTHERSTATES message\n");
 
             gfcNetOtherStatesInfo info;
-            // Decode the whole message first (legacy interleaved reads with
-            // manager applies; a garbage packet would have applied partial
-            // state — we skip silently instead). Apply order below is
-            // byte-identical to legacy: playbackInfo, layout, plateStateInfo,
-            // trackStateInfo, all inside the takeNotifications(false) window.
+            // Decode the whole message first so a garbage packet applies no partial state;
+            // apply inside the takeNotifications(false) window.
             if ( !jefe::wire::decodeOtherStates ( r, info ) ) break; // malformed: skip silently
 
             networkManager.setTakeNotifications(false);
@@ -760,12 +748,8 @@ void gfcNetworkClient::Update() {
         break;
 
         case GFCNETID_LAYERCHANGEMESSAGE: {
-            // A peer switched the EXR layer/channel on a plate's track. Apply
-            // the same channel name, then re-decode via the ASYNC loader — NOT
-            // gfcSequence::loadPreview(), which calls generateTexture() (a GL
-            // upload) and we're not in a current GL context here. The async
-            // path decodes on the loader thread into rawFrames; the receiver's
-            // per-tick generateTextures() (which does makeCurrent) uploads them.
+            // A peer switched the EXR layer: re-decode via the ASYNC loader, not
+            // loadPreview() (it uploads a GL texture and no GL context is current here).
             int quadID = 0;
             std::string layerName;
             if ( !jefe::wire::decodeLayerChange ( r, quadID, layerName ) ) break; // malformed: skip silently
@@ -836,10 +820,8 @@ void gfcNetworkClient::Update() {
 			break;
 
 		case GFCNETID_NOTEADDBROADCASTMESSAGE: {
-			// JEF-39: mirrors GFCNETID_POINTERINFOBROADCASTMESSAGE's shape --
-			// decode and hand off to the poll queue rather than apply
-			// directly, since there is no reviewManager-equivalent global in
-			// scope for this task to write into (see gfcNetworkStructures.h).
+			// Mirrors GFCNETID_POINTERINFOBROADCASTMESSAGE: decode and hand off to the
+			// poll queue (no reviewManager-equivalent global is in scope here).
 			RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),false );
 			bs.IgnoreBits ( 8 );
 			std::unique_ptr<gfcNote> note = unserializeNote ( &bs );

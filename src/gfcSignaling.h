@@ -1,34 +1,5 @@
-// JEF-24 Task 2: local WebSocket signaling stub for the WebRTC transport.
-//
-// jefe::net::SignalingServer wraps rtc::WebSocketServer; jefe::net::
-// SignalingClient wraps rtc::WebSocket. They exchange the SDP offer/answer
-// and ICE candidates needed to bring up a WebRTC PeerConnection on a LAN.
-// This is a *stub*: LAN-only, no auth, no NAT traversal. JEF-25 replaces
-// the rendezvous with the cloud coordinator; STUN/TURN is JEF-26.
-//
-// ── Message schema ─────────────────────────────────────────────────────
-// Every signaling message is a flat JSON object. Recognised fields:
-//   {
-//     "type":      "hello" | "offer" | "answer" | "candidate",
-//     "sdp":       <string>,   // offer/answer session description
-//     "candidate": <string>,   // ICE candidate line
-//     "mid":       <string>,   // media/data line id for the candidate
-//     "peer":      <int>       // synthetic peer id (host-assigned)
-//   }
-// Only the fields relevant to a given "type" are populated; absent fields
-// decode to empty string / 0. The encoder/parser here handle exactly these
-// flat string/int fields (no nesting, no arrays) — sufficient for signaling
-// and deliberately not a general JSON library, to avoid a new dependency.
-// Parsing is defensive: a malformed message yields a best-effort struct and
-// never throws or crashes.
-//
-// ── Threading ──────────────────────────────────────────────────────────
-// libdatachannel fires WebSocket callbacks on its own background threads.
-// SignalingServer guards its client map with a mutex; user callbacks may
-// therefore be invoked from a libdatachannel thread — keep them short and
-// re-entrancy-safe. Register callbacks before start()/the client connects.
-//
-// This TU must not include Qt/GL headers (developer_notes §1).
+// Local WebSocket signaling stub for the WebRTC transport (LAN, no auth). Must not
+// include Qt/GL headers (developer_notes §1); callbacks fire on libdatachannel threads.
 #pragma once
 
 #include <cstdint>

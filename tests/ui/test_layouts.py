@@ -1,9 +1,5 @@
-"""Layout shortcuts (Cmd+1..4) change framing mode.
-
-The viewport widget itself doesn't appear in macOS's NSAccessibility
-tree (QOpenGLWidget is opaque to AX), so the main window owns a
-permanent status-bar label that mirrors the active framing mode.
-"""
+"""Layout shortcuts (Cmd+1..4) change framing mode. The viewport is opaque to
+AX (QOpenGLWidget), so a status-bar label mirrors the active framing mode."""
 from jefecheck import locators
 
 

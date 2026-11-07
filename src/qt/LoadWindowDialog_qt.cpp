@@ -13,11 +13,8 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
     : QDialog(parent), viewport_(viewport) {
     setObjectName("dialog.loadwindow");
     setWindowTitle("Load Sequence Manager");
-    // Non-modal — the user needs to interact with the main window while
-    // the dialog is open (change layouts, move docks, read metadata in
-    // the viewport, etc.). The drop-forward signal/slot chain doesn't
-    // require the dialog to be modal; viewport.loadWindowOpen_ is what
-    // gates whether drops route here or into the fast path.
+    // Non-modal: the user needs the main window while it is open.
+    // viewport.loadWindowOpen_ gates whether drops route here or to the fast path.
     setModal(false);
 
     auto* outer = new QVBoxLayout(this);
@@ -46,10 +43,8 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
 
     connect(loadAll_, &QPushButton::clicked, this, &LoadWindowDialog_Qt::accept);
 
-    // Default to a narrow + tall layout so FlowLayout stacks the four
-    // strips vertically (4×1) — 900px-tall display still fits all four
-    // comfortably. Users can widen the dialog to reflow into 2×2 if
-    // they prefer that.
+    // Narrow + tall by default so FlowLayout stacks the four strips vertically;
+    // users can widen it to reflow into 2x2.
     resize(620, 720);
 }
 
@@ -74,25 +69,15 @@ void LoadWindowDialog_Qt::accept() {
 }
 
 void LoadWindowDialog_Qt::onTrackEdited(int trackIdx) {
-    // loadPreview decodes a frame and uploads to GL; the viewport's
-    // QOpenGLWidget context must be current on the calling thread
-    // (mirrors MainWindow_Qt::loadFileIntoPlate's fast-path pattern at
-    // MainWindow_qt.cpp:768-774). Without this, glDeleteTextures /
-    // glTexImage2D inside loadPreview silently fail and previewFrame
-    // stays unloaded — findSequenceFiles writes the discovered range
-    // to the GUI before that point, but the broken pipeline caused
-    // observed brittle behavior where the spinners stayed at (1,1)
-    // and Load All loaded one frame.
+    // loadPreview uploads to GL: the viewport's context must be current on this
+    // thread (as in the loadFileIntoPlate fast path) or the upload fails silently.
     if (viewport_) viewport_->makeCurrent();
     const bool ok = jefe::qt::reloadTrackPreview(trackIdx);
     if (viewport_) viewport_->doneCurrent();
 
     if (trackIdx >= 0 && trackIdx < 4 && strips_[trackIdx]) {
-        // Always pull widget state back from the GUI — findSequenceFiles
-        // writes the discovered from/to bounds via setFromToBounds even
-        // when the preview pixel decode itself failed. Skipping the
-        // refresh on !ok was the reason the spinners stayed at (1,1)
-        // and Load All only got a single frame.
+        // Always pull widget state back: findSequenceFiles writes the discovered
+        // from/to bounds even when the preview decode failed.
         strips_[trackIdx]->refreshFromGUI();
         if (!ok) {
             // Distinguish "empty filename" (no error) from "preview failed".

@@ -20,13 +20,8 @@ constexpr const char* kAuthEndpoint = "https://accounts.google.com/o/oauth2/v2/a
 constexpr const char* kVerifierAlphabet =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 
-/**
- * `QRandomGenerator::system()` is the OS CSPRNG.
- *
- * NOT `global()`, which is a seeded PRNG intended for non-security use: a
- * predictable verifier would defeat the entire point of PKCE, and a
- * predictable `state` would reopen the login-injection hole it closes.
- */
+/** `QRandomGenerator::system()` is the OS CSPRNG; `global()` is a seeded PRNG
+ *  and must not be used for the verifier or `state`. */
 std::string randomFromAlphabet(int length, const char* alphabet, size_t alphabetLen) {
     std::string out;
     out.reserve(static_cast<size_t>(length));
@@ -152,9 +147,7 @@ int pkceSelfTest() {
     g_pass = 0;
     g_fail = 0;
 
-    // RFC 7636 Appendix B, the canonical verifier/challenge vector. If this
-    // derivation is wrong, Google rejects every exchange with invalid_grant
-    // and the error points at the token endpoint rather than at this function.
+    // RFC 7636 Appendix B, the canonical verifier/challenge vector.
     check(sha256Base64Url("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") ==
               "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           "RFC 7636 B.1 challenge vector");

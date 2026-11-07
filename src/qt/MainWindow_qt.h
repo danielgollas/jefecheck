@@ -78,20 +78,17 @@ public:
     void loadFileIntoPlate(int plateIdx, const QString& path);
 
     /**
-     * JEF-39: after media changes on a plate, pull that footage's notes out
-     * of their sidecar into the renderer and tell the Notes dock to redraw.
-     *
-     * Call this from every path that LOADS media — not from transform or
-     * colour edits, which cannot change which notes exist and would make
-     * this a tree rebuild on every drag.
+     * After media changes on a plate, pull that footage's notes out of their
+     * sidecar into the renderer and tell the Notes dock to redraw. Call it from
+     * every path that LOADS media, not from transform or colour edits.
      */
     void refreshNotesForLoadedMedia();
 
     /**
-     * JEF-41: copy the active plate's current frame to @a outPath with its
-     * notes attached (JSON header + notes.* layer), without re-rendering.
-     * Makes the viewport GL context current for the layer rasterisation.
-     * Fills @a message with a one-line outcome either way.
+     * Copy the active plate's current frame to @a outPath with its notes
+     * attached (JSON header + notes.* layer), without re-rendering. Makes the
+     * viewport GL context current for the layer rasterisation. Fills @a message
+     * with a one-line outcome either way.
      */
     bool stampActiveFrameNotes(const QString& outPath, QString* message);
 
@@ -109,8 +106,7 @@ public:
     /**
      * Writes the review summary of every media in the session to @a outPath;
      * the extension picks the format (.pdf, .txt or .csv). Fills @a message
-     * with a one-line outcome either way. See
-     * docs/superpowers/specs/2026-09-14-review-summary-export-design.md.
+     * with a one-line outcome either way.
      */
     bool exportReviewSummary(const QString& outPath, ReviewSummaryStats* stats, QString* message);
 
@@ -140,8 +136,7 @@ public:
     /** Total size of every frame file in the session (for "Include media"). */
     qint64 packageMediaBytes();
 
-    /** Writes a review package synchronously (CLI and tests; the dialog steps it). See
-        docs/superpowers/specs/2026-09-14-review-package-design.md. */
+    /** Writes a review package synchronously (CLI and tests; the dialog steps it). */
     bool exportReviewPackage(const QString& outPath, bool includeMedia, PackageStats* stats, QString* message);
 
     /** Headless end-to-end proof of the review package (--package-test <image>). */
@@ -150,8 +145,7 @@ public:
     /**
      * Opens a review package: extracts it, finds its media, merges its notes and
      * loads its session. @a interactive allows "Locate…" prompts for media it
-     * cannot find; without it they count as missing. See
-     * docs/superpowers/specs/2026-09-14-review-package-design.md.
+     * cannot find; without it they count as missing.
      */
     bool openReviewPackage(const QString& packagePath, bool interactive, PackageStats* stats, QString* message);
 
@@ -233,7 +227,7 @@ private:
     void openSessionPath(const QString& path);   // GL-current load + bookkeeping
     void refreshAfterSessionLoad();               // cards/LUT/timeline/viewport
     void rebuildRecentSessionsMenu();
-    // Playlist open + recent list (JEF-18).
+    // Playlist open + recent list.
     void doOpenPlaylist();
     void openPlaylistPath(const QString& path);   // load .jpl + refresh/raise dock
     void rebuildRecentPlaylistsMenu();
@@ -251,13 +245,9 @@ private:
     // save/restore sessions and GL renders -- while the first is mid-flight.
     bool summaryExportInProgress_ = false;
     QMenu*  recentMenu_ = nullptr;
-    QMenu*  recentPlaylistMenu_ = nullptr;   // File → Recent Playlists (JEF-18)
-    // The consolidated "Panels" menu (replaces the legacy "Dialogs" menu,
-    // JEF-17). Named "Panels" rather than "Window" so it doesn't claim the
-    // macOS-standard Window-menu semantics (Minimize/Zoom/window-list) that we
-    // don't provide. Created empty in buildMenuBar() and populated in
-    // buildDocks() once the docks exist, so a stored pointer replaces the old
-    // fragile find-View-menu-by-title-string lookup.
+    QMenu*  recentPlaylistMenu_ = nullptr;   // File → Recent Playlists
+    // The consolidated "Panels" menu, named so it doesn't claim the macOS Window-menu
+    // semantics. Created empty in buildMenuBar(), populated in buildDocks().
     QMenu*  panelsMenu_ = nullptr;
     bool    lastExitWasClean_ = true;
 

@@ -15,10 +15,8 @@ QCheckBox* check(const QString& label, bool on, const QString& objName) {
     auto* cb = new QCheckBox(label);
     cb->setObjectName(objName);
     cb->setChecked(on);
-    // Display-only — clicking shouldn't toggle, since the underlying
-    // GL state is fixed for this run. Keep them readable rather than
-    // greyed out (Qt's disabled state is hard to read in the dark
-    // theme), so we suppress focus + drop the toggle on click.
+    // Display-only: the GL state is fixed for this run. Not greyed out (hard to
+    // read in the dark theme), so suppress focus and the toggle on click.
     cb->setFocusPolicy(Qt::NoFocus);
     cb->setAttribute(Qt::WA_TransparentForMouseEvents);
     return cb;

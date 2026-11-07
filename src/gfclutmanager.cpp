@@ -18,10 +18,8 @@ gfcLUTManager lutManager;
 gfcLUTManager::gfcLUTManager()
     : loadedScroll(nullptr),
       autoloadAllButton(nullptr),
-      // The Qt build's Fl_Progress is a no-op stub class. Allocating a
-      // single owned instance keeps loadLUT and the trilerp loaders
-      // (which dereference `progress` on every status tick) safe to
-      // call, without auditing every `progress->...` call site.
+      // The Qt build's Fl_Progress is a no-op stub; one owned instance keeps
+      // loadLUT and the trilerp loaders (which dereference `progress`) safe.
       progress(new Fl_Progress),
       scrollPosY(0),
       scrollPosX(0) {
@@ -79,10 +77,8 @@ void gfcLUTManager::loadLUT(std::string fileName) {
     //1. Check that this LUT or one with the same name is already loaded
     for ( int i=0;i<lutArray.size();i++ ) {
         if ( GetFilenameNoPath ( lutArray[i].filename ) ==GetFilenameNoPath ( fileName ) ) {
-            // The Qt build runs without a real progress widget — calling
-            // through a null pointer here was crashing on every LUT
-            // autoload. Skip the status update; the load result still
-            // returns cleanly via the `return` below.
+            // No real progress widget in the Qt build: skip the status update rather
+            // than call through a null pointer.
             if (progress) {
                 progress->color ( fl_rgb_color(42,42,0) );
                 progress->copy_label ( " LUT Already Loaded, unload before reloading" );

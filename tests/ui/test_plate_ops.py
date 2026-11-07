@@ -5,39 +5,20 @@ from jefecheck import locators
 
 
 def _checked(widget) -> bool:
-    """Returns True if a toggle button is in the 'on' state.
-
-    XCUITest exposes a button's pressed/selected state via the `value`
-    attribute, which is '0'/'1' (or 'true'/'false') depending on driver
-    version.
-    """
+    """True if a toggle button is in the 'on' state (XCUITest `value` is '0'/'1'
+    or 'true'/'false' depending on driver version)."""
     val = widget.get_attribute("value")
     return val in ("1", "true", True)
 
 
 @pytest.fixture(autouse=True)
 def _reset_plate_toggles_after(app):
-    """Restore every plate's flip/flop/crop to off after each test.
+    """Restore every plate's flip/flop/crop to off after each test (the `app`
+    fixture is module-scoped, so a left-on toggle would leak into the next test).
 
-    The `app` fixture is module-scoped, so a test that leaves a toggle
-    on (e.g. `test_flop_button_toggles_when_clicked` only clicks once)
-    would leak state into the next test in the file. The cleanup
-    iterates every plate × every toggle but only clicks when actually
-    on, so the cost is one AX read per (plate, toggle) when nothing
-    has been changed — typically <100ms total.
-
-    Flip/flop are always-visible buttons. Crop, however, moved into the
-    aspect combo's drop-down popup (AspectCropCombo_Qt, a QToolButton whose
-    popup is a Qt::Popup frame), so its checkbox is only in the AX tree
-    while that popup is open. Reading or clearing crop therefore requires
-    opening each plate's aspect combo first — we pay that open cost
-    unconditionally for crop because the checked state can't be read without
-    the popup. Clicking the crop checkbox is INSIDE the Qt::Popup grab, so it
-    leaves the popup open. We re-open per plate; opening the NEXT plate's
-    combo is an outside-click relative to the prior plate's popup, which
-    dismisses it (the Qt::Popup click-outside-to-dismiss behavior). The last
-    plate's popup is left open but harmless — the next test's first AX click
-    dismisses it.
+    Crop lives in the aspect combo's Qt::Popup, so its checkbox is only in the AX
+    tree while the popup is open: reopen it per plate. Clicking inside the popup
+    leaves it open; opening the next plate's combo dismisses it.
     """
     yield
     for plate_id in range(4):
@@ -69,9 +50,8 @@ def test_flop_button_toggles_when_clicked(app):
 
 
 def test_crop_button_toggles_when_clicked(app):
-    # Crop moved into the aspect combo's drop-down popup, so the combo
-    # must be opened first before the crop checkbox is resolvable in the
-    # AX tree. Toggling the checkbox leaves the popup open by design.
+    # Crop lives in the aspect combo's popup: open the combo first so the
+    # checkbox is in the AX tree. Toggling it leaves the popup open.
     app.by_object_name(locators.plate(0, "aspect.combo")).click()
     btn = app.by_object_name(locators.plate(0, "crop.button"))
     initial = _checked(btn)

@@ -9,33 +9,8 @@
 #include <cstdio>
 #include <vector>
 
-// ---------------------------------------------------------------------------
-// Note overlay
-//
-// Notes are stored normalised (0..1). draw() maps them onto a rectangle given
-// in the caller's current GL coordinates and strokes them with immediate-mode
-// lines. It is deliberately dumb about where that rectangle came from: on
-// screen it is the plate's transformed quad (so notes track pan and zoom), at
-// export time it is the FBO's ortho rect. One mapping, two call sites.
-//
-// Two things here are load-bearing rather than stylistic:
-//
-//  * The active shader program is saved and cleared for the duration. The
-//    caller reaches us with the super-shader (or an FX pass) still bound, and
-//    lines pushed through a colour-correction shader would come out the wrong
-//    colour or not at all. GfcTextRenderer::drawLine does exactly this before
-//    its own quads; this matches it. ARB entry points only — on macOS
-//    GLhandleARB is void*, not GLuint, and mixing the two families breaks.
-//
-//  * Every note is stroked twice: a dark outline at size + 2, then the note's
-//    own colour at size. Without the outline a red note is invisible on a red
-//    frame, which is exactly the frame someone is most likely to draw a red
-//    circle on.
-//
-// Antialiasing is left alone. Consistent-width AA needs triangle-strip
-// expansion; the spec records that as a known quality limit and puts it out of
-// scope.
-// ---------------------------------------------------------------------------
+// Note overlay: draws normalised (0..1) notes into the caller's GL rect, on screen and in export.
+// The shader program is saved and cleared (ARB calls only: macOS GLhandleARB is void*).
 
 namespace
 {
@@ -51,11 +26,8 @@ namespace
 
 	typedef std::vector<gfcNotePoint> Polyline;
 
-	// Clamps a line width to what the driver will actually honour. macOS's GL
-	// caps aliased line width well below the "size + 2" a user could ask for,
-	// and an out-of-range glLineWidth is a GL_INVALID_VALUE that silently
-	// leaves the previous width in place — which would make the outline pass
-	// and the colour pass identical, i.e. no outline at all.
+	// Clamps a line width to what the driver honours: an out-of-range glLineWidth
+	// is a silent GL_INVALID_VALUE that keeps the old width (no outline).
 	float clampLineWidth(float w)
 	{
 		GLfloat range[2] = { 1.0f, 1.0f };
@@ -130,9 +102,8 @@ namespace
 				shaft.push_back(head);
 				out.push_back(shaft);
 
-				// Head barbs: rotate the head->tail direction by +/- 25
-				// degrees. Computed after mapping so a squashed target rect
-				// squashes the head the same way it squashes the shaft.
+				// Head barbs: rotate the head->tail direction by +/- 25 degrees, after
+				// mapping so a squashed rect squashes the head too.
 				const float dx = tail.x - head.x;
 				const float dy = tail.y - head.y;
 				const float len = std::sqrt(dx * dx + dy * dy);
@@ -186,9 +157,8 @@ namespace
 			{
 				continue;
 			}
-			// A freehand note that is a single click has nothing for
-			// GL_LINE_STRIP to connect and would silently vanish; draw the
-			// dot instead.
+			// A single-click freehand note has nothing for GL_LINE_STRIP to connect;
+			// draw it as a point.
 			glBegin(line.size() == 1 ? GL_POINTS : GL_LINE_STRIP);
 			for (size_t p = 0; p < line.size(); ++p)
 			{
@@ -232,10 +202,7 @@ void gfcNoteOverlay::draw(const std::vector<const gfcNote*>& notes,
 	}
 
 	// --- state save -------------------------------------------------------
-	// glPushAttrib(GL_ALL_ATTRIB_BITS) covers everything below: the enable
-	// bits (blend, depth test, both texture targets), the blend function, the
-	// line and point widths, and the current colour. The shader program is
-	// NOT part of the attribute stack, so it is saved by hand.
+	// glPushAttrib does not cover the shader program, so it is saved by hand.
 	glPushAttrib(GL_ALL_ATTRIB_BITS);
 
 	GLhandleARB prevProgram = glGetHandleARB(GL_PROGRAM_OBJECT_ARB);
@@ -244,19 +211,14 @@ void gfcNoteOverlay::draw(const std::vector<const gfcNote*>& notes,
 		glUseProgramObjectARB(0);
 	}
 
-	// The plate leaves a texture bound and enabled from the composite pass;
-	// leaving it on would modulate the lines by whatever pixel the texture
-	// coordinate happens to land on.
+	// The plate leaves a texture enabled from the composite pass; it would
+	// modulate the lines.
 	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_TEXTURE_RECTANGLE_ARB);
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
-	// Colour: ordinary "over". Alpha: ONE, ONE_MINUS_SRC_ALPHA -- not SRC_ALPHA.
-	// With plain glBlendFunc the destination alpha comes out a*a over a
-	// transparent buffer, which is wrong for the rasterised notes layer, and
-	// 1 - a + a*a over an opaque screen, which quietly punches alpha holes along
-	// every outline edge. Separate factors leave the colour identical and make
-	// the alpha correct in both places.
+	// Alpha uses ONE, ONE_MINUS_SRC_ALPHA (not SRC_ALPHA): plain glBlendFunc
+	// punches alpha holes along outline edges and gives a*a destination alpha.
 	glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
 	                    GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -272,10 +234,8 @@ void gfcNoteOverlay::draw(const std::vector<const gfcNote*>& notes,
 
 		if (n.noteType() == GFCNOTE_TEXT)
 		{
-			// One text path only: the existing renderer, which already does
-			// its own shadow pass for legibility and its own state save. It
-			// projects the point we hand it from the current matrices, so the
-			// mapped position is what it wants.
+			// One text path: the existing renderer, which does its own shadow pass and
+			// state save.
 			const gfcNoteText* t = dynamic_cast<const gfcNoteText*>(&n);
 			if (t && !t->text.empty())
 			{
@@ -372,9 +332,8 @@ bool gfcNoteOverlay::rasterise(const std::vector<const gfcNote*>& notes,
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	// Notes are y-DOWN normalised and this ortho is y-UP. An origin on the top
-	// edge with a negative height is the flip -- the same convention gfcPlate
-	// uses for both the screen and the export composite.
+	// Notes are y-DOWN normalised and this ortho is y-UP: origin on the top edge
+	// with a negative height is the flip, as gfcPlate does.
 	Rect target;
 	target.x = 0.0f;
 	target.y = (float)height;
@@ -413,13 +372,7 @@ bool gfcNoteOverlay::rasterise(const std::vector<const gfcNote*>& notes,
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-//
-// Geometry only. There is no headless GL context available here, so this
-// checks the one piece that decides where every note lands — mapPoint — and
-// leaves pixel proof to the render test, which runs with a real context.
-// ---------------------------------------------------------------------------
+// Self-test: geometry only (no headless GL); pixels are covered by the render test.
 
 int noteOverlaySelfTest()
 {
