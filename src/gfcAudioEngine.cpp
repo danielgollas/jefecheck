@@ -36,10 +36,8 @@ void gfcAudioEngine::setOutput(gfcAudioOutput* out) {
 
 void gfcAudioEngine::setTrackClip(int track, std::shared_ptr<gfcAudioClip> clip, int rateNum, int rateDen, int64_t frameCount) {
     if (track < 0 || track >= kMaxTracks) return;
-    // Every clip the track lets go of lands in one of these and is destroyed
-    // after the lock is released (freeing a long clip's chunks takes time, and
-    // render() must never wait on it). Each holder is empty when it is assigned,
-    // so no move-assignment can release a clip while the lock is held.
+    // Released clips are destroyed after the lock is released (render() must never wait on freeing one);
+    // each holder is empty when assigned, so no move-assignment frees a clip under the lock.
     std::shared_ptr<gfcAudioClip> replaced, rejected;
     {
         std::lock_guard<std::mutex> lock(m_);

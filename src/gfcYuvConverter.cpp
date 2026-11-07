@@ -12,12 +12,8 @@
 
 namespace {
 
-// Code-value maths shared by the shader (as uniforms) and the CPU path.
-// Codes c = texel x codeScale; B = bit depth, M = 2^B - 1.
-//   video range: y = (cY - 16*2^(B-8)) / (219*2^(B-8)), cb = (cCb - 128*2^(B-8)) / (224*2^(B-8))
-//   full range:  y = cY / M,                          cb = (cCb - 2^(B-1)) / M
-//   R = y + 2(1-Kr) cr;  G = y - 2(1-Kb)Kb/Kg cb - 2(1-Kr)Kr/Kg cr;  B = y + 2(1-Kb) cb
-// Unspecified matrix => Rec.709, unspecified range => video.
+// Code-value maths shared by the shader (as uniforms) and the CPU path; c = texel x codeScale, B = bit depth.
+// Unspecified matrix => Rec.709, unspecified range => video. Formulas: developer_notes.md §38.
 struct YuvMaths {
     float codeScale = 255.0f;
     float yOff = 16.0f, yScale = 219.0f, cOff = 128.0f, cScale = 224.0f;
@@ -53,9 +49,8 @@ YuvMaths mathsFor(const gfcGLFrameInfo& in) {
     m.gCr = float(2.0 * (1.0 - kr) * kr / kg);
     m.alphaScale = float(maxCode);
 
-    // Chroma coordinate for the luma texel centre s: s*r + offset, r = 1/sub.
-    // Horizontally co-sited ((s-0.5)r+0.5) unless Center; vertically centred
-    // (t*r) unless TopLeft. 4:4:4 reduces to s, t.
+    // Chroma coordinate for luma texel centre s: s*r + offset, r = 1/sub. Horizontally co-sited
+    // ((s-0.5)r+0.5) unless Center, vertically centred (t*r) unless TopLeft.
     const double rx = 1.0 / std::max(1, in.subX), ry = 1.0 / std::max(1, in.subY);
     m.chromaScaleX = float(rx);
     m.chromaScaleY = float(ry);
@@ -205,11 +200,8 @@ Program& programFor(const gfcGLFrameInfo& in) {
     return p;
 }
 
-// Uploads one plane into its cached rectangle texture on the active unit.
-// Single-channel GL_R8/GL_R16 (ARB_texture_rg) where available: native on the
-// Metal GL layer and measurably faster to upload than GL_LUMINANCE16 (4K
-// ProRes 4444: ~10.7 vs ~14.3 ms GPU time per frame); luminance otherwise.
-// Both keep the full 16 bits.
+// Uploads one plane into its cached rectangle texture on the active unit: GL_R8/GL_R16 where
+// ARB_texture_rg exists (faster on the Metal GL layer), else luminance; both keep 16 bits.
 void uploadPlane(int index, const gfcGLFrameInfo::Plane& pl, int bitDepth, GLint filter) {
     PlaneTex& t = gPlaneTex[index];
     const bool sixteen = bitDepth > 8;

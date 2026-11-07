@@ -1627,9 +1627,8 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         return;
 
     gfcPlate* ptrToPlate=&plates[params.quadrant];
-    // A render is not a seek: the frame cache's window stays where the
-    // playhead is (forced loads decode the rendered frames), and the playhead
-    // goes back to where it was afterwards.
+    // A render is not a seek: the cache window stays at the playhead (forced loads decode the
+    // rendered frames), and the playhead goes back afterwards.
     const int savedFrame=playbackManager.getCurrentFrame();
 
     for ( int i=params.from; i<=params.to;i++ ) {

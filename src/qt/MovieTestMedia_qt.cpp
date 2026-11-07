@@ -97,11 +97,8 @@ bool generate(const QString& dir, QString* err) {
          "-vf", "format=yuv420p", "-c:v", "libx264", out("h264_longgop_25.mp4")},
         {"-y", "-f", "lavfi", "-i", kTestsrc2.arg("25"), "-frames:v", "60",
          "-vf", "format=yuv420p", "-c:v", "libx265", "-x265-params", "log-level=error", out("hevc_longgop_25.mp4")},
-        // Colour-test bars (--video-colour-test). The truth is the exact 8-bit
-        // RGB the clips were made from (a 16-bit truth from swscale is itself
-        // off by ~0.4 code). Chroma is box-filtered (flags=area) so it does not
-        // bleed past the bar edges, and the H.264/odd clips are lossless, so a
-        // correct decode lands within rounding of the truth.
+        // Colour-test bars: the truth is the exact 8-bit RGB the clips came from; chroma is box-filtered
+        // (flags=area) so it stays inside the bars, and the H.264/odd clips are lossless.
         {"-y", "-f", "lavfi", "-i", bars, "-frames:v", "8", "-pix_fmt", "rgb24",
          d.filePath("bars_truth.%04d.png")},
         QStringList{"-y", "-f", "lavfi", "-i", bars, "-frames:v", "8",
@@ -116,11 +113,8 @@ bool generate(const QString& dir, QString* err) {
          "-c:v", "libx264", "-qp", "0", "-g", "4",
          "-bsf:v", "h264_metadata=colour_primaries=2:transfer_characteristics=2:matrix_coefficients=2:video_full_range_flag=0",
          out("bars_untagged.mp4")},
-        // Odd-sized phone-style frame, 4:2:0 with ceil(w/2) x ceil(h/2) chroma:
-        // made at 322x182 and cropped exactly in YUV, so its chroma keeps the
-        // 2:1 grid real encoders use (swscale resampling straight to 321x181
-        // drifts the chroma grid). Lossless VP9, since H.264/HEVC cannot code
-        // odd 4:2:0 sizes; Rec.709 video range, untagged.
+        // Odd 321x181 4:2:0: made at 322x182 and cropped in YUV so chroma keeps the encoders' 2:1 grid.
+        // Lossless VP9 (H.264/HEVC can't code odd 4:2:0 sizes); Rec.709 video range, untagged.
         {"-y", "-f", "lavfi", "-i", kBars.arg("322x182"), "-frames:v", "8", "-vf", "crop=321:181:0:0",
          "-pix_fmt", "rgb24", d.filePath("bars_odd_truth.%04d.png")},
         {"-y", "-f", "lavfi", "-i", kBars.arg("322x182"), "-frames:v", "8",

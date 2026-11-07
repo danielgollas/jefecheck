@@ -79,9 +79,8 @@ void gfcPlaybackManager::update() {
         return;
     }
 
-    // Pre-play buffer (Keep time): hold the playhead until the next ~0.25 s is
-    // resident or 0.5 s has passed, then let the sound lead. Runs only while
-    // waiting, which is bounded by kPrePlayMaxWait.
+    // Pre-play buffer (Keep time): hold the playhead until the next ~0.25 s is resident or 0.5 s
+    // has passed, then let the sound lead.
     if (buffering_) {
         const double waited=std::chrono::duration<double>(std::chrono::steady_clock::now()-bufferingSince_).count();
         if (waited>=kPrePlayMaxWait || trackManager.timelineFramesResident(currentFrame, prePlayFrames(), currentDirection)) {
@@ -102,11 +101,8 @@ void gfcPlaybackManager::update() {
         cacheSentDir=currentDirection;
     };
 
-    // Native-rate forward play: the audio clock leads and the picture shows
-    // the frame being heard (frames are dropped if drawing falls behind; the
-    // sound never waits). Falls back to FPS pacing as soon as the engine can
-    // no longer lead (device lost, every native track muted, rate changed) or
-    // the lag policy turns to Show every frame (the sound never leads there).
+    // Native-rate forward play: the audio clock leads and the picture drops frames to follow; the sound
+    // never waits. FPS pacing takes over once the engine can't lead or Show every frame is on.
     if (audioEngine.isLeading()) {
         audioSyncTransport();
         if (audioEngine.canLead() && keepTime()) {
@@ -129,10 +125,8 @@ void gfcPlaybackManager::update() {
         currentFrame=audioEngine.leaderFrame();
         audioEngine.stopLeading();
     }
-    // Pacing leads from here. Keep time still skips ahead of the playhead
-    // whichever clock leads (reverse, every track muted, a rate the sound
-    // can't follow, Keep time on silent footage): the cache's walk follows
-    // the direction. Show every frame never skips. Atomics only.
+    // Pacing leads from here. Keep time still skips ahead whichever clock leads (the cache walk
+    // follows the direction); Show every frame never skips. Atomics only.
     {
         const bool skip=keepTime();
         if (leadSkipOn_!=skip) setLeadSkip(skip);
@@ -141,9 +135,8 @@ void gfcPlaybackManager::update() {
     intraFrameCount+=timeStep;
 
     if (intraFrameCount>=timePerFrame) {
-        // Show every frame: the next frame is not resident yet, so hold this
-        // one (no advance, no FPS count) and look again next tick; the measured
-        // FPS shows the slowdown. Only a tick that would advance pays the check.
+        // Show every frame: the next frame isn't resident, so hold this one and look again next tick.
+        // Only a tick that would advance pays the check.
         if (!keepTime()) {
             int dirCopy=currentDirection;
             const int next=advanceFrame(currentFrame, dirCopy, playbackMode, startLimit, endLimit);
@@ -172,9 +165,8 @@ void gfcPlaybackManager::update() {
 
         boundCurrentFrameToLimits();
 
-        // Sound follows the picture forward: hand over to the audio clock when
-        // a native-rate track can lead (it just loaded, the device opened, a
-        // BOUNCE turned forward), otherwise play this frame's slice.
+        // Sound follows the picture forward: hand over to the audio clock when a native-rate track can
+        // lead, otherwise play this frame's slice.
         if (currentDirection>0 && currentFrame!=before && !audioTryLead())
             audioEngine.playSlice(currentFrame);
     }
@@ -841,9 +833,8 @@ float gfcPlaybackManager::getTargetFPS()
 	return targetFPS;
 }
 
-// The frame after `cur` for one playback step. BOUNCE flips `direction` at a
-// limit; ONCE clamps to the limits and holds. Shared by update() and the audio
-// engine's leading clock, so both walk frames identically.
+// The frame after `cur` for one step (BOUNCE flips `direction`, ONCE clamps and holds). Shared by
+// update() and the audio engine's clock, so both walk frames identically.
 int gfcPlaybackManager::advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit) {
     switch ( mode ) {
     case LOOPMODEONCE_ID: {
@@ -889,9 +880,8 @@ int gfcPlaybackManager::advanceFrame(int cur, int& direction, int mode, int star
 
 // ---- movie sound ----
 
-// Sends the player rate and the loop limits/mode to the audio engine when they
-// change (getStartLimit/getEndLimit move while tracks load). While the engine
-// leads it takes only the limits and mode; its walk keeps its own frame.
+// Sends the rate and loop limits/mode to the audio engine when they change (the limits move
+// while tracks load). While the engine leads it takes only the limits and mode.
 void gfcPlaybackManager::audioSyncTransport() {
     audioEngine.setPlayerRate(targetRateNum, targetRateDen);
     const int s0=getStartLimit(), e0=getEndLimit();
@@ -932,9 +922,8 @@ void gfcPlaybackManager::audioStop() {
     setLeadSkip(false);
 }
 
-// The user moved the playhead: paused, play that frame's slice (step, seek,
-// scrub; a newer request replaces one still pending). Playing, restart the
-// audio clock from the new frame so it does not pull the picture back.
+// The user moved the playhead. Paused: play that frame's slice (a newer request replaces one
+// pending). Playing: restart the audio clock there so it doesn't pull the picture back.
 void gfcPlaybackManager::audioSeek() {
     if (!playing) {
         audioEngine.setPlayerRate(targetRateNum, targetRateDen);
@@ -962,10 +951,8 @@ bool gfcPlaybackManager::beginBuffering() {
 
 // ---- frame cache ----
 
-// Sends the transport (playhead, direction, loop mode, limits, rate) to the
-// frame cache when any of direction/mode/limits/rate changed since the last
-// send (getStartLimit/getEndLimit move as tracks load). The playhead itself
-// travels by retarget() (a jump) and advance() (a step), which take no lock.
+// Sends the transport to the frame cache when direction/mode/limits/rate changed (the limits move
+// as tracks load). The playhead itself travels by retarget() and advance(), which take no lock.
 void gfcPlaybackManager::cacheSyncTransport(bool force) {
     const int s0=getStartLimit(), e0=getEndLimit();
     if (!force && s0==cacheSentStart && e0==cacheSentEnd && playbackMode==cacheSentMode &&

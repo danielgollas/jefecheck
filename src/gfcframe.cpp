@@ -265,9 +265,8 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 	glEnable(info.target);
 	if (info.planarYuv)
 	{
-		// Movies: YUV planes -> RGB on the GPU with the file's matrix/range,
-		// straight into the ordinary resident RGBA / RGBA16F texture, so the
-		// super-shader, FX, render read-back and thumbnails all see one RGB.
+		// Movies: YUV planes -> RGB on the GPU into the ordinary RGBA / RGBA16F texture, so everything
+		// downstream (super-shader, FX, render read-back, thumbnails) sees one RGB.
 		textureID = gfcYuvConvertToTexture(info, info.srcX, info.srcY, info.srcW, info.srcH,
 		                                   sizeX, sizeY, info.internalFormat);
 		if (textureID == 0)
@@ -327,10 +326,8 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 		}
 		glTexEnvf ( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
 		while (glGetError() != GL_NO_ERROR) {} // clear stale errors
-		// macOS: the decode thread left the pixels in an IOSurface; make it the
-		// texture's storage (no copy). Otherwise, or if the driver refuses the
-		// layout, upload: from the staging buffer the decode thread filled when
-		// there is one (the GPU pulls it, no CPU copy here), else from the bitmap.
+		// macOS: make the decode thread's IOSurface the texture's storage (no copy). Otherwise, or if refused,
+		// upload from the staging buffer when there is one, else from the bitmap.
 		const bool bound = info.ioSurface && info.target == GL_TEXTURE_RECTANGLE_ARB
 			&& gfcSurface::bindToTexture(info.ioSurface, sizeX, sizeY, info.ioSurfaceLayout);
 		bool uploaded = bound;
@@ -341,9 +338,8 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 			const bool staged = info.staging
 				&& gfcUpload::upload(info.staging, info.target, info.internalFormat, sizeX, sizeY,
 				                     info.format, info.dataType, !reused);
-			// The loader keeps no CPU copy once it filled a surface or a
-			// staging buffer: a surface the context would not bind is
-			// uploaded from the surface's own memory instead.
+			// The loader keeps no CPU copy once it filled a surface or staging buffer: a surface the
+			// context won't bind is uploaded from the surface's own memory.
 			const void* pixels = info.dataPointer;
 			size_t surfacePitch = 0;
 			const void* surfacePixels = (!staged && !pixels && info.ioSurface)
@@ -353,9 +349,8 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 				const size_t pixelBytes = info.dataType == GL_UNSIGNED_BYTE ? 4 : 8;
 				glPixelStorei(GL_UNPACK_ROW_LENGTH, (GLint)(surfacePitch / pixelBytes));
 			}
-			// Nothing to upload from (a staged upload that failed after the
-			// loader freed its copy). A texture from the pool still holds the
-			// frame it last showed: blank it rather than show the wrong frame.
+			// Nothing to upload from (a staged upload failed after the loader freed its copy): blank the
+			// pooled texture rather than show the frame it last held.
 			std::vector<unsigned char> blank;
 			if (!staged && !pixels) {
 				printf("generateTexture: no pixels to upload for %s\n", fileName.c_str());

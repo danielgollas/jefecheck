@@ -154,9 +154,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     trackStatusLabel_->setObjectName("statusbar.track.label");
     statusBar()->addPermanentWidget(trackStatusLabel_);
 
-    // Source timecode of the active plate's movie at the current frame
-    // ("TC 01:00:02:13"); hidden-empty for image sequences. Sits between the
-    // track and loaded labels.
+    // Source timecode of the active plate's movie ("TC 01:00:02:13"); empty for image sequences.
     timecodeStatusLabel_ = new QLabel(this);
     timecodeStatusLabel_->setObjectName("status.timecode");
     statusBar()->addPermanentWidget(timecodeStatusLabel_);
@@ -1825,10 +1823,8 @@ std::vector<char> interiorMask(const Rgb16Image& t) {
     return m;
 }
 
-// Reference RGB for a 10/12-bit planar clip known to be encoded Rec.709
-// video range with co-sited chroma, computed in double precision straight
-// from the decoder's planes (written independently of gfcYuvConverter, with
-// the encoding facts fixed rather than read from the file's tags).
+// Reference RGB for a planar clip known to be Rec.709 video range, co-sited, in double precision
+// from the decoder's planes: independent of gfcYuvConverter and of the file's tags.
 Rgb16Image decodedReference709Video(const QString& path, int64_t index, QString& err) {
     Rgb16Image out;
     gfcMovieReader reader;
@@ -1950,9 +1946,8 @@ int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
         int maxD = 0;
         double sumD = 0;
         long long n = 0;
-        // 16-bit: compare with the clip's own decoded planes converted here,
-        // so ProRes compression loss (which varies with the ffmpeg that made
-        // the clip) cancels out and the limit measures the GPU path alone.
+        // 16-bit: compare with the clip's own decoded planes, so ProRes compression loss cancels out
+        // and the limit measures the GPU path alone.
         Rgb16Image ref;
         if (ok && clip.sixteen) {
             QString refErr;
@@ -2007,14 +2002,8 @@ int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
                    clip.sixteen ? "16-bit" : "8-bit");
 
             if (clip.sixteen) {
-                // The grey ramp rows: truth rows with many distinct grey
-                // levels. The render must keep more than 16 distinct values
-                // there, and values an 8-bit path cannot produce (v % 257 != 0).
-                // Those alone miss an 8-bit texture behind the 16F render FBO
-                // (half-float read-back lands off the grid), so the ramp must
-                // also keep >= 75% of the decoded reference's distinct levels
-                // and stay within mean |d| 32 of it (8-bit storage measured
-                // 97 of ~199 levels).
+                // Grey ramp rows: > 16 distinct values off the 8-bit grid (v % 257 != 0), >= 75% of the reference's
+                // levels and mean |d| <= 32, which catches an 8-bit texture behind the 16F FBO (developer_notes.md §38).
                 std::set<int> distinct, refDistinct;
                 int offGrid = 0;
                 double rampSum = 0;
@@ -2423,21 +2412,8 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     const QString restore = dir + "/restore.jcs";
     const bool saved = needsPlaylistItem && !remote && jefe::qt::saveSession(restore.toStdString());
 
-    // gfcSequence::forceLoad (what a forRender=true frame request falls back
-    // to when a frame is not resident) works for any frame of a track once
-    // the track has its frame list, so the export waits, bounded, only for
-    // that, draining the GL upload queue while it waits.
-    //
-    // Pumps the Qt event loop between polls (excluding user input, see
-    // below) so timers, paints and accessibility keep running instead of
-    // stalling the GUI thread for up to the full timeout per wait the way an
-    // unyielded shader-compile pass does (see autoloadFXsFromPath()'s comment
-    // in SequenceLoadBridge_qt.cpp for the same problem elsewhere).
-    // summaryExportInProgress_ (set for the whole of exportReviewSummary)
-    // keeps a second export from starting mid-wait; excluding user input
-    // events here additionally queues any click/keystroke that arrives
-    // during the wait instead of letting it interact with a half-restored
-    // session.
+    // A forced load renders any frame once its track has its frame list, so the export waits (bounded) only
+    // for that. Polls pump events except user input; summaryExportInProgress_ blocks a second export.
     auto waitUntil = [this](const std::function<bool()>& done, int timeoutMs) {
         QElapsedTimer waitTimer;
         waitTimer.start();
@@ -2459,17 +2435,13 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
         }
         return done();
     };
-    // A track is ready once it has its frame list: every frame keeps its load
-    // parameters and a render force-loads it, resident or not (the rolling
-    // cache may hold none of a track's frames, e.g. outside the loop). One
-    // event-loop turn per track keeps the GUI responsive during the export.
+    // A track is ready once it has its frame list: a render force-loads any frame, resident or not.
+    // One event-loop turn per track keeps the GUI responsive.
     auto waitForTrackFrame = [&](int track) {
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).numFrames > 0; }, 5000);
     };
-    // Whether @a frame of @a track can be rendered: any frame inside the
-    // track can (see restartTrackLoadAtFrame); one outside it is refused at
-    // once, without a wait.
+    // Whether @a frame of @a track can render: any frame inside the track; outside is refused at once.
     auto frameReady = [&](int track, int frame) {
         if (jefe::qt::isTrackFrameReady(track, frame)) return true;
         bool started = false;
@@ -2771,8 +2743,7 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
           }, 5000),
           "the tracks reload from playlist item 0");
 
-    // Frames the rolling cache does not hold still render: every frame keeps
-    // its load parameters. A frame outside the track never does, and the
+    // Frames the cache doesn't hold still render; a frame outside the track never does, and the
     // export must not wait for it.
     check(jefe::qt::isTrackFrameReady(2, 2) && jefe::qt::restartTrackLoadAtFrame(2, 2, true),
           "a frame of the sequence can be rendered whether or not it is resident");
@@ -2834,9 +2805,8 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     });
 
     setUserState();
-    // As if the cache had evicted everything: the export waits for each
-    // track's first frame to come back (pumping events, which is where the
-    // re-entrant export lands), and still renders every note's frame.
+    // As if the cache evicted everything: the export waits for each track's first frame (pumping
+    // events, where the re-entrant export lands) and still renders every note's frame.
     viewport_->makeCurrent();
     int evicted = 0;
     for (int t = 0; t < 3; ++t) evicted += jefe::qt::evictTrackFrames(t);

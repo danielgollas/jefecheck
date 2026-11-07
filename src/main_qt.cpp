@@ -178,9 +178,7 @@ static QString resolveCCTestFile(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve --video-colour-test <dir> / --video-perf-test <movie> /
-// --upload-bench <dir>: headless movie colour (bars vs RGB truth),
-// decode+upload throughput, and per-bit-depth upload timing harnesses.
+// Resolves a flag's value: --video-colour-test <dir>, --video-perf-test <movie>, --upload-bench <dir>.
 static QString resolveArgValue(int argc, char* argv[], const char* flag) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], flag) == 0) {
@@ -237,10 +235,8 @@ static bool hasVideoLoadTest(int argc, char* argv[]) {
     return false;
 }
 
-// --audio-device-test : opens the real default audio output (quiet tone) and
-// measures its clock and step-slice latency. Exit 0 pass, 2 fail, 3 skip (no
-// output device). Kept out of --video-load-test: it depends on hardware and
-// wall-clock timing.
+// --audio-device-test: the real default output (quiet tone); exit 0 pass, 2 fail, 3 skip (no device).
+// Kept out of --video-load-test: it depends on hardware and wall-clock timing.
 static bool hasAudioDeviceTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--audio-device-test") == 0) return true;
@@ -612,9 +608,8 @@ int main(int argc, char* argv[]) {
     // caller-supplied directory. Must run BEFORE any QSettings is
     // constructed (MainWindow_Qt::restoreLayout creates the first one).
     QString configDir = resolveConfigDir(argc, argv);
-    // --cache-test writes preferences (CACHE-PREFS) and sets harness values;
-    // never let that reach the user's real QSettings. The temporary dir is
-    // removed when the cache test exits.
+    // --cache-test writes preferences: point QSettings at a temporary dir (removed on exit) so
+    // they never reach the user's real settings.
     QString cacheTestConfigDir;
     if (configDir.isEmpty() && hasCacheTest(argc, argv)) {
         configDir = QDir(QDir::tempPath()).filePath(
@@ -711,9 +706,8 @@ int main(int argc, char* argv[]) {
                     mergeFail == 0 && packageFail == 0 && packageOpenFail == 0) ? 0 : 2);
     }
 
-    // Headless movie-loading suites (--video-load-test). Loading tracks and
-    // sessions touches GL, so an offscreen context is required; track loads
-    // also write a crash-recovery session, which is removed before exiting.
+    // Headless movie suites (--video-load-test) need an offscreen GL context; the crash-recovery
+    // session that track loads write is removed before exiting.
     if (hasAudioDeviceTest(argc, argv)) {
         const int r = jefe::qt::audio::deviceSelfTest();
         std::fflush(stdout);
@@ -1940,10 +1934,8 @@ int main(int argc, char* argv[]) {
         });
     }
 
-    // Headless movie colour proof (--video-colour-test <dir>): generated SMPTE
-    // bars clips are loaded, rendered and compared with their RGB truth. The
-    // loader thread must not block on the default 5-frame queue cap while the
-    // harness waits (0 does not mean unlimited), so lift it for the run.
+    // --video-colour-test <dir>: generated SMPTE bars are rendered and compared with their RGB truth.
+    // Lift the queue cap so the loader never blocks while the harness waits (0 is not unlimited).
     const QString videoColourDir = resolveArgValue(argc, argv, "--video-colour-test");
     if (!videoColourDir.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, videoColourDir]() {
@@ -1997,14 +1989,12 @@ int main(int argc, char* argv[]) {
         });
     }
 
-    // Quit: join every track's loader and audio thread while the managers
-    // they use still exist (static teardown follows main's return). Runs after
-    // the window's closeEvent (recovery session, prefs), so nothing restarts them.
+    // Quit: join every loader and audio thread while the managers they use still exist (static
+    // teardown follows main's return). Runs after closeEvent, so nothing restarts them.
     QObject::connect(&qapp, &QCoreApplication::aboutToQuit, []() { jefe::qt::shutdownTracks(); });
 
-    // --quit-after <ms>: close the window and quit the way a user would
-    // (closeEvent, aboutToQuit, static teardown). For checking a clean exit;
-    // pair it with --config-dir.
+    // --quit-after <ms>: close and quit the way a user would, to check a clean exit; pair it
+    // with --config-dir.
     const QString quitAfter = resolveArgValue(argc, argv, "--quit-after");
     if (!quitAfter.isEmpty()) {
         QTimer::singleShot(quitAfter.toInt(), &window, [&window]() {

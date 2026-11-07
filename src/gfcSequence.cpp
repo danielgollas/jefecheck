@@ -907,9 +907,8 @@ void gfcSequence::prepareSequenceFiles()
 	{
 		findSequenceFiles(files,false);
 	}
-	// files[0] is the resolved path (search paths included); open the movie
-	// once here so every frame of this load shares the reader. Its sound stays
-	// off: the audio thread decodes it with a reader of its own.
+	// files[0] is the resolved path; one reader serves every frame of this load. Its sound stays
+	// off: the audio thread decodes with a reader of its own.
 	if (!files.empty() && gfcIsMovieFile(myGUI->getFilename()))
 		openMovieReaderFor(files[0]);
 	else
@@ -1068,13 +1067,8 @@ void gfcSequence::stopAudioThread()
 	}
 }
 
-// Fills the clip's [begin, end) with the movie's sound in one-second blocks:
-// forward from the start, or from a jump target that is not there yet (sought
-// to when it is behind the read position or more than 2 s ahead of it), then
-// once more from the start for any hole left behind. A hole the source cannot
-// fill (no sound there) is stepped over, so a pass always ends; the thread
-// then waits for the next jump or its cancel. Each block is decoded with no
-// lock held; audioMutex_ is taken only to write it.
+// Fills the clip's [begin, end) in one-second blocks, from the start or a jump target, then from the
+// start again for holes. Blocks decode with no lock held; audioMutex_ is taken only to write one.
 void gfcSequence::audioThreadMain(std::shared_ptr<gfcMovieReader> reader, std::shared_ptr<gfcAudioClip> clip,
                                   int64_t begin, int64_t end, int rateNum, int rateDen)
 {
@@ -1157,9 +1151,8 @@ void gfcSequence::audioThreadMain(std::shared_ptr<gfcMovieReader> reader, std::s
 		const bool read=!injected && reader->readAudioUntil(std::min(end, readFrom+kBlock), &err);
 		const bool got=read && reader->takeAudio(block, first);
 		if ( !read ) {
-			// A read error mid-file: skip one block past it and carry on (the
-			// next read seeks there), rather than leaving the rest silent until
-			// a jump. The pass back from the start retries it once.
+			// A read error mid-file: skip one block past it rather than leave the rest silent until a
+			// jump; the pass back from the start retries it once.
 			const int64_t skipTo=std::min(end, readFrom+kBlock);
 			printf("Track %c: audio read failed at sample %lld: %s; going on from %lld\n", trackID,
 			       (long long)readFrom, err.c_str(), (long long)skipTo);
@@ -1237,9 +1230,8 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 			frames[i].savedParams=frameLoadParams(i, reader);
 		}
 	}
-	// Victims named before this reset belong to the old load (APPEND/STREAM
-	// reach here without clearSequence): drop them with the track's geometry,
-	// which setTrackGeometry restores below.
+	// Victims named before this reset belong to the old load (APPEND/STREAM skip clearSequence):
+	// drop them with the track's geometry, which setTrackGeometry restores below.
 	if ( cacheTrack()>=0 )
 		frameCache.clearTrack(cacheTrack());
 	frameTable_.reset(frames.size());
@@ -1268,9 +1260,8 @@ int gfcSequence::initializeSequence ( gfcLoadParams pparams ) {
 		pinHoldEdges(true);
 	updateHeldFramePin();
 
-	// The clip covers the trim range (frame entry i is movie frame i), in the
-	// movie's own 48 kHz timeline. Whether there is one is decided here, by
-	// opening the audio-only reader: sound that cannot be decoded means no clip.
+	// The clip covers the trim range in the movie's 48 kHz timeline (entry i is movie frame i).
+	// Sound the audio-only reader cannot decode means no clip.
 	{
 		const std::shared_ptr<gfcMovieReader> reader=currentMovieReader();
 		std::shared_ptr<gfcMovieReader> audio;
@@ -1360,9 +1351,8 @@ int gfcSequence::loadSequence() {
 		const std::shared_ptr<gfcMovieReader> movieReader=currentMovieReader();
 		const int track=cacheTrack();
 		printf("***Track %c: loading %i..%i as the cache asks\n",trackID,startFrame,endFrame);
-		// The cache coordinator decides what to decode next (playhead first, then
-		// ahead, then just behind) and when to stop (the budget). This thread runs
-		// until the load is cancelled; between jobs it waits in nextJob.
+		// The cache coordinator picks the next frame and when to stop; this thread runs until the
+		// load is cancelled, waiting in nextJob between jobs.
 		while ( !loadingCanceled && track>=0 ) {
 			gfcFrameCache::Job job;
 			const auto asked=std::chrono::steady_clock::now();
@@ -1387,9 +1377,8 @@ int gfcSequence::loadSequence() {
 				loadingCanceled=true;
 			}
 			tmpFrame.indexNumber=i;
-			// A decoded frame stays Decoding (its bytes reserved) while it waits
-			// in the queue; the GL thread commits it when it is uploaded, so
-			// Resident always means on the GPU and a queued frame is never a victim.
+			// A decoded frame stays Decoding (bytes reserved) while queued; the GL thread commits it on upload,
+			// so Resident always means on the GPU and a queued frame is never a victim.
 			if ( !tmpFrame.loaded ) {
 				tmpFrame.skipped=true;
 				if ( !continueLoadingOnError ) {
@@ -1684,9 +1673,8 @@ int gfcSequence::clearSequence() {
 gfcFrame gfcSequence::forceLoad ( int frame ) {
 	//the frame parameter should already consider offset. The function does not check for range.
 
-	// A forced frame lives until the next forceLoad or cleanForcedLoad. The
-	// same frame asked for twice in one draw (a plate and an FX input reading
-	// the same track) is served from the one already loaded.
+	// A forced frame lives until the next forceLoad or cleanForcedLoad; the same frame asked for twice
+	// in one draw (a plate and an FX input) is served from the one already loaded.
 	if (forcedFrame.loaded && forcedFrameIndex == frame)
 		return forcedFrame;
 	cleanForcedLoad();
@@ -1724,13 +1712,8 @@ Rectang gfcSequence::getFrameSizeAt ( int frameNo ) {
 
 }
 
-// What a plate shows for source frame i (GL thread, every draw: atomics only,
-// no lock, no table walk). A loaded frame is shown and becomes the on-screen
-// frame, which the cache never evicts. An unloaded one shows the last drawn
-// frame while playing in Keep time, unless a jump came in between (the cache
-// generation moved); otherwise nothing (black, and the plate labels it
-// "Loading" while framePending()). A forced load (render) never substitutes
-// and never moves the on-screen pin or the last drawn frame.
+// What a plate shows for source frame i. GL thread, every draw: atomics only, no lock. In Keep time an
+// unloaded frame shows the last drawn one unless a jump came in between; forced loads never substitute.
 const gfcFrame& gfcSequence::displayFrame ( int i, bool pforceLoad, const gfcFrame& emptyFrame ) {
 	if ( frames[i].loaded ) {
 		if ( !pforceLoad ) {   // a render is not what the plate shows
@@ -2003,9 +1986,8 @@ void gfcSequence::startLoading ( gfcLoadParams pparams ) {
 
 	initializeSequence ( pparams );
 
-	// This load's sound (a fresh clip, filled by the loader thread) replaces the
-	// track's in the mixer; a sequence or a silent movie clears it. Frame entry i
-	// is movie frame i, so the engine's frame count is the entry count.
+	// This load's clip replaces the track's sound in the mixer; a sequence or silent movie clears it.
+	// Entry i is movie frame i, so the engine's frame count is the entry count.
 	if (gfcAudioEngineAlive()) {
 		const std::shared_ptr<gfcAudioClip> clip=audioClip();
 		const gfcMovieInfo* info=movieInfo();
@@ -2056,9 +2038,8 @@ int gfcSequence::getRangeEnd() {
 }
 
 void gfcSequence::stopLoading() {
-	//cancel the loading thread. Set under rawQueueMutex, so a loader between
-	//its queue-size check and cond.wait() can't miss the notify (the join
-	//below would then wait forever: loaders never finish on their own).
+	//cancel the loading thread. Set under rawQueueMutex so a loader between its size check and
+	//cond.wait() can't miss the notify (the join below would wait forever).
 	{
 		std::lock_guard<std::mutex> lock ( rawQueueMutex );
 		loadingCanceled=true;
@@ -2594,9 +2575,8 @@ bool gfcSequence::framePending(int timelineFrame) const {
 		idx = std::clamp ( idx, rangeBegin, rangeEnd );   // the edge is shown outside
 	if ( frames.empty() || idx<rangeBegin || idx>rangeEnd || idx>=(int)frames.size() )
 		return false;
-	// Failed is settled: the decode was tried and will not be retried (the
-	// plate shows black, as before the cache). Counting it as pending froze
-	// Show every frame on it and labelled it "Loading" for good.
+	// Failed is settled: tried and never retried (the plate shows black). Counting it as pending would
+	// hold Show every frame on it and label it "Loading" for good.
 	const gfcFrameState st = frameTable_.state(idx);
 	return st!=gfcFrameState::Resident && st!=gfcFrameState::Evicting && st!=gfcFrameState::Failed;
 }

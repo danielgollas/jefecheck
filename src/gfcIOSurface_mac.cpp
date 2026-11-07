@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// IOSurface-backed textures on macOS. See gfcIOSurface.h.
-//
-// This file must not include glad: it uses Apple's OpenGL headers for
-// CGLTexImageIOSurface2D, and the two cannot share a translation unit.
+// IOSurface-backed textures on macOS. See gfcIOSurface.h and developer_notes.md §39.
+// Must not include glad: it uses Apple's GL headers for CGLTexImageIOSurface2D.
 
 #include "gfcIOSurface.h"
 
@@ -38,9 +36,8 @@ struct LayoutDesc {
     Combo combos[2];
 };
 
-// Per layout: the IOSurface pixel format and the GL format triples to try,
-// in order. Apple's drivers accept different internal formats on different
-// GPUs, so the first combo that binds is remembered in g_chosen.
+// Per layout: the IOSurface pixel format and GL format triples to try in order; drivers differ
+// per GPU, so the first combo that binds is remembered in g_chosen.
 const LayoutDesc kLayouts[3] = {
     // BGRA8
     {'BGRA', 4,
@@ -71,9 +68,8 @@ bool tryBind(IOSurfaceRef s, int w, int h, const Combo& c) {
     return err == kCGLNoError;
 }
 
-// Draws the rectangle texture @a tex (w x h) 1:1 into a float FBO and reads
-// it back: what a shader sampling the texture sees. glGetTexImage is not
-// enough on its own, since Apple's drivers may answer it from a different copy.
+// Draws rectangle texture @a tex (w x h) 1:1 into a float FBO and reads it back (what a shader sees);
+// glGetTexImage alone may answer from a different copy on Apple's drivers.
 void drawAndRead(GLuint tex, int w, int h, float* out) {
     GLint oldFbo = 0, oldProgram = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING_EXT, &oldFbo);
@@ -124,9 +120,8 @@ void drawAndRead(GLuint tex, int w, int h, float* out) {
     glDeleteTextures(1, &target);
 }
 
-// Released surfaces wait here for a frame of the same size and layout, so
-// reloading a sequence or advancing the playlist reuses memory that is
-// already mapped instead of allocating (and page-faulting) fresh surfaces.
+// Released surfaces wait here for a frame of the same size and layout, so reloads reuse
+// already-mapped memory instead of page-faulting fresh surfaces.
 struct Pooled {
     IOSurfaceRef surface;
     int width, height;

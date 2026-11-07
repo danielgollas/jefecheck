@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Adds "// SPDX-License-Identifier: GPL-2.0-or-later" as line 1 of every
-# project-own C++ source. Vendored third-party code (RakNet, xmlParser,
-# Rijndael, DS_*, GLAD, CLI11, third_party/) is never matched and keeps its
-# own terms. --check lists files lacking the line and exits 1.
+# Usage: scripts/add_spdx_headers.sh [--check]   (--check lists files lacking the line, exits 1)
+# Adds the GPL-2.0-or-later SPDX line to project-own C++ sources; vendored code keeps its own terms.
 set -u
 cd "$(git rev-parse --show-toplevel)"
 LINE='// SPDX-License-Identifier: GPL-2.0-or-later'

@@ -142,9 +142,8 @@ void gfcFrameCache::setTransport(int playhead, int direction, int loopMode, int 
 
 // Lock-free: the playback tick may call these.
 void gfcFrameCache::retarget(int playhead) {
-    // A jump while not skipping (paused, or Show every frame): the latency
-    // measured before it may be another stretch's (a slow part, a busier
-    // moment); start the estimate over. A seek while Keep time plays keeps it.
+    // A jump while not skipping: the latency measured before it may belong to another stretch,
+    // so start the estimate over. A seek while Keep time plays keeps it.
     if (!leadSkip_.load(std::memory_order_acquire)) latencyAvg_.store(0.0, std::memory_order_release);
     playhead_.store(playhead, std::memory_order_release);
     generation_.fetch_add(1, std::memory_order_acq_rel);
@@ -203,9 +202,8 @@ size_t gfcFrameCache::costLocked() const {
 size_t gfcFrameCache::pooledBytesLocked() const {
     if (testPooled_ != size_t(-1)) return testPooled_;
     const gfcUpload::Stats up = gfcUpload::stats();
-    // A staging buffer held by a decoded frame waiting for upload is that
-    // frame's memory, already counted by its Decoding reservation: only the
-    // idle (or still in-flight after upload) buffers are pool bytes.
+    // A staging buffer held by a frame awaiting upload is already counted by its Decoding
+    // reservation; only idle or in-flight buffers are pool bytes.
     return (up.stagingBytes - up.stagingHeldBytes) + up.pooledTextureBytes + gfcSurface::poolStats().pooledBytes;
 }
 
@@ -216,14 +214,8 @@ int64_t gfcFrameCache::cacheBytesLocked() const {
     return (int64_t)sum;
 }
 
-// budget = L - max(systemUsed - cacheBytes, otherFloor), at most L, with
-// L = limit% x total. The system figure may not see all of the cache (GPU
-// memory on some machines): then systemUsed - cacheBytes falls as the cache
-// grows and the budget would grow with it. otherFloor, that term sampled
-// while the cache was small, stops it, so the cache stays within
-// L - other. The floor never exceeds the latest system figure, so it falls
-// when another app frees memory. A used figure of 0 means the system query failed: keep the
-// previous sample.
+// budget = L - max(systemUsed - cacheBytes, otherFloor), at most L: otherFloor stops the budget growing
+// when the system figure misses part of the cache (GPU memory). A used figure of 0 means the query failed.
 int64_t gfcFrameCache::budgetLocked() const {
     if (testBudget_ >= 0) return testBudget_;
     const int64_t cache = cacheBytesLocked();
@@ -240,9 +232,8 @@ int64_t gfcFrameCache::budgetLocked() const {
                 otherFloor_ = (int64_t)used - cache;
                 otherFloorCache_ = cache;
             }
-            // Other processes never use more than the whole system figure, so
-            // the floor can always drop to it: an app that quits after the
-            // floor was sampled gives its memory back without a reload.
+            // Other processes never use more than the whole system figure, so the floor can drop to it
+            // and an app that quits gives its memory back without a reload.
             if (otherFloor_ > (int64_t)used) otherFloor_ = (int64_t)used;
         }
     }
@@ -291,10 +282,8 @@ size_t gfcFrameCache::costPerTimelineFrame() const {
 
 // ---- policy ----
 
-// The walk forward from the playhead (a) and the walk that reaches it (b, the
-// same walk run with the direction flipped), at most N steps each. A walk stops
-// when it comes back to the playhead heading the same way, or stops moving
-// (ONCE at a limit).
+// Walk a goes forward from the playhead, walk b is the same walk reversed; at most N steps each. A walk
+// stops on returning to the playhead heading the same way, or when it stops moving (ONCE at a limit).
 const gfcFrameCache::Walk& gfcFrameCache::walk() const {
     const int ph = playhead_.load(std::memory_order_acquire);
     const int dir = direction_.load(std::memory_order_acquire);
@@ -351,11 +340,8 @@ gfcFrameCache::Params gfcFrameCache::params() const {
     int64_t W;
     if (cost == 0) W = p.N;
     else W = std::max<int64_t>(1, budget / (int64_t)cost);
-    // Room is left for the near-behind frames (unloaded last), so a step back
-    // after playing past the budget is still instant: W timeline frames are
-    // the playhead, `window` ahead and up to K behind. Only behind frames the
-    // walk has (none at a ONCE start) take room. walk_ is current (callers
-    // run walk() first).
+    // Leave room for the near-behind frames (unloaded last) so a step back past the budget stays
+    // instant; only behind frames the walk has take room. Callers run walk() first.
     int behind = 0;
     for (int t : walk_.behindOrder) {
         if (behind >= p.K || walk_.b[t - walk_.start] > p.K) break;
@@ -365,9 +351,8 @@ gfcFrameCache::Params gfcFrameCache::params() const {
     return p;
 }
 
-// The playhead outside the limits (the scrubber reaches past a shorter
-// track's end): its own frame and the next M-1 in the play direction, while
-// they are still outside. Returns the step k from the playhead, or -1.
+// The playhead outside the limits (past a shorter track's end): its frame and the next M-1 in the
+// play direction while still outside. Returns the step k from the playhead, or -1.
 int gfcFrameCache::playheadRunStep(int t, const Params& p) const {
     const Walk& w = walk_;
     const int ph = w.playhead;
@@ -459,17 +444,8 @@ size_t gfcFrameCache::timelineNeedLocked(int t, int track, size_t bytes) const {
     return need;
 }
 
-// Admits `bytes` at timeline frame t (what t still needs on every track, see
-// timelineNeedLocked), naming victims (whole timeline
-// frames, every track's resident frame there, lowest score first) when the
-// cache would go over budget. Only frames scoring strictly below t are taken,
-// and only enough to cover min(shortfall, bytes). An always-admitted frame
-// (pinned, or a < M) loads even when that is not covered.
-// Overshoot bound: the check is against bytes already reserved, so the cache
-// can pass the budget by one frame per track per admission (loaders admitting
-// at once), plus whatever the pools grew by since the admission. With the
-// other-processes floor in budgetLocked that holds even when the system
-// figure does not see the cache.
+// Admits `bytes` at timeline frame t, naming as victims whole timeline frames scoring below t, at most
+// min(shortfall, bytes). Each admission can pass the budget by one frame per track.
 bool gfcFrameCache::admit(int t, bool unconditional, size_t bytes, int victimCeiling) {
     const Params p = params();
     const int64_t cache = cacheBytesLocked();
@@ -548,16 +524,8 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
             }
         }
         const size_t bytes = tr.frameBytes.load(std::memory_order_acquire);
-        // Finishing a timeline frame another track already holds. It was
-        // admitted with this track's bytes counted, but other admissions or
-        // pool growth may have used that room since. Inside the ahead window
-        // it is always admitted: the window is budget / cost per timeline
-        // frame, so every track's window frames fit and the overshoot stays
-        // about one timeline frame. Victims for a finish come only from lower
-        // bands, so it never takes a same-band frame another track holds and
-        // this one has yet to finish. A finish that is refused outside the
-        // window unloads the other tracks' copies instead: a timeline frame is
-        // held on every track or on none.
+        // Finishing a timeline frame another track holds: always admitted inside the ahead window (it fits by
+        // construction); refused outside it, the other copies are unloaded, so a frame is held on every track or none.
         const bool finishing = timelineHeldElsewhereLocked(t, track);
         int victimCeiling = INT_MAX;
         if (finishing && mode != Mode::Fill) {
@@ -592,9 +560,8 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         if (playheadRunStep(t, p) < 0) break;
         if (attempt(t - 1 - tr.offset, Mode::Normal) == 1) return Scan::Job;
     }
-    // Candidates come in falling score order, so the first refusal ends the scan.
-    // Keep time with the sound leading: frames nearer than the lead cannot
-    // arrive before the playhead passes them; they are skipped, not dropped.
+    // Candidates come in falling score order, so the first refusal ends the scan. Frames nearer than
+    // the sound's lead can't arrive in time; they are skipped, not dropped.
     const int lead = leadSkipLocked(p);
     for (int t : w.aheadOrder) {
         if (w.a[t - w.start] > p.window) break;
@@ -609,9 +576,8 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         if (r == 1) return Scan::Job;
         if (r == 2) return Scan::Denied;
     }
-    // Behind frames past K that the window still reaches going forward (a loop
-    // that fits, or nearly): without this a clip longer than 2K never fully
-    // loads in LOOP mode, whatever the budget.
+    // Behind frames past K the window still reaches going forward: without these, a clip longer
+    // than 2K never fully loads in LOOP mode.
     for (int t : w.forwardOrder) {
         const int a = w.a[t - w.start], b = w.b[t - w.start];
         if (a > p.window) break;
@@ -620,15 +586,8 @@ gfcFrameCache::Scan gfcFrameCache::scan(int track, Job& out) {
         if (r == 1) return Scan::Job;
         if (r == 2) return Scan::Denied;
     }
-    // The lowest band (Fill): every other frame of this track's footage, into
-    // free room only, so a clip that fits loads entirely (ONCE far behind, a
-    // track past the loop limits) and nothing is ever evicted for it. In
-    // falling score order: ahead past the window, far behind, then outside
-    // the limits nearest the playhead.
-    // After the first refusal only finishes are tried (a timeline frame another
-    // track already holds): this track's next fill frame may need more room
-    // than the finish, and stopping there would leave the tracks holding
-    // different frames. A refused finish unloads the other copies (attempt).
+    // Fill band: the rest of this track's footage, into free room only (it never evicts). After the first
+    // refusal only finishes are tried, so the tracks don't end up holding different frames.
     bool fillClosed = false;
     auto fill = [&](int t) {
         const int src = t - 1 - tr.offset;

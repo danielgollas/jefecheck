@@ -69,18 +69,14 @@ int memoryMeasureSelfTest(const std::string& dir) {
     check(used0 > 0 && used0 < total, "0 < usedBytes < totalBytes");
 
     {   // Touching 256 MiB must show up in usedBytes(). The system may compress or
-        // reclaim memory between samples (other processes too), so take the
-        // highest of several samples and ask for a quarter of it.
-        // The fill is pseudo-random: macOS counts compressed pages at their
-        // compressed size, and a constant fill compresses to almost nothing.
+        // reclaim pages, so take the highest sample; pseudo-random fill, as macOS counts pages compressed.
         const uint64_t before = memoryManager.usedBytes();
         const size_t n = size_t(256) << 20;
         std::vector<uint64_t> buf(n / sizeof(uint64_t));
         uint64_t x = 0x9e3779b97f4a7c15ull;
         for (uint64_t& w : buf) { x ^= x << 13; x ^= x >> 7; x ^= x << 17; w = x; }
-        // macOS rate-limits host_statistics64 per process (past a few calls a
-        // second it returns the previous figures), so sample sparsely, for up
-        // to 5 s, and stop at the first sample that shows the rise.
+        // macOS rate-limits host_statistics64 (past a few calls a second it repeats figures), so
+        // sample sparsely for up to 5 s and stop at the first sample that shows the rise.
         uint64_t seen = 0;
         for (int k = 0; k < 20; ++k) {
             seen = std::max(seen, memoryManager.usedBytes());
@@ -685,9 +681,8 @@ int cachePolicySelfTest() {
     }
 
     {   // The derived budget with a fake system memory source. Limit L = 50 % of
-        // 1 MB = 500 000 B, other processes 200 000 B, frames 2 000 B (240 of
-        // them would be 480 000 B). Whether the system figure sees the cache or
-        // not, the cache stays within L - other plus one frame.
+        // 1 MB = 500 000 B, other processes 200 000 B, frames 2 000 B. Whether or not the system
+        // figure sees the cache, the cache stays within L - other plus one frame.
         const int savedPct = sett.memoryLimitPercent;
         sett.memoryLimitPercent = 50;
         auto run = [&](bool visible) {
@@ -728,9 +723,8 @@ int cachePolicySelfTest() {
         };
         const int64_t hiddenRegrow = regrow(false), seenRegrow = regrow(true);
         check(hiddenRegrow >= 300000 - 2000 && hiddenRegrow <= 300000 + 2000, "budget: grows back when another app frees memory (system misses the cache)");
-        // When the system figure sees the cache, the floor can only drop to
-        // other + the cache at the moment the app quit (here the 50 000 B
-        // minimum), so the budget grows back to within that of L - other.
+        // Seeing the cache, the floor drops only to other + the cache at quit (the 50 000 B minimum),
+        // so the budget grows back to within that of L - other.
         check(seenRegrow >= 250000 - 2000 && seenRegrow <= 300000 + 2000, "budget: grows back when another app frees memory (system sees the cache)");
         sett.memoryLimitPercent = savedPct;
     }
@@ -739,7 +733,7 @@ int cachePolicySelfTest() {
     return fail;
 }
 
-// ---- live loaders (Task 5) ----
+// ---- live loaders ----
 
 namespace {
 constexpr size_t kFrame8 = size_t(320) * 180 * 4;   // one 8-bit 320x180 frame: 230 400 B
@@ -903,7 +897,7 @@ int cacheBudgetSelfTest(const std::string& dir) {
         trackManager.getSequence(1)->myGUI->setFilename("");
     }
 
-    {   // Lowering the budget evicts nothing by itself; a retarget swaps one for one (R11).
+    {   // Lowering the budget evicts nothing by itself; a retarget swaps frames one for one.
         gfcSequence* a = trackManager.getSequence(0);
         pump(500);
         const int before = trackManager.residentFrameCount();
@@ -1045,7 +1039,7 @@ int cacheLeaksSelfTest(const std::string& dir) {
         check(frameCache.stats().denied == d1, "truncated: no more denials once settled");
         check(id0 != std::thread::id() && d->loaderThreadId() == id0, "truncated: the loader thread keeps running");
 
-        // R8: a decode failure that stops loading marks the frame Failed.
+        // A decode failure that stops loading marks the frame Failed.
         d->setContinueLoadingOnError(false);
         d = loadTrack(3, dir + "/truncated.mov", GFC_8BPC, 100);
         pump(3000);
@@ -1119,7 +1113,7 @@ int cacheHoldSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- seeks move the window (Task 6) ----
+// ---- seeks move the window ----
 
 namespace {
 // The transport the suites below change, put back on exit.
@@ -1419,7 +1413,7 @@ int cacheTracksSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- preferences: memory limit and lag policy (Task 7) ----
+// ---- preferences: memory limit and lag policy ----
 
 int cachePrefsSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
@@ -1484,7 +1478,7 @@ int cachePrefsSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- what an unloaded frame shows (Task 8) ----
+// ---- what an unloaded frame shows ----
 
 int cacheDisplaySelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
@@ -1589,7 +1583,7 @@ int cacheDisplaySelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- renders through the cache (Task 8 fix round 1) ----
+// ---- renders through the cache ----
 
 namespace {
 // Mean of R, G and B over the image, 0..255; -1 when it cannot be read.
@@ -1806,9 +1800,7 @@ int audioHolesSelfTest(const std::string& dir) {
     }
 
     {   // A jump past the fill point: sound arrives there first. Each 1 s audio
-        // block takes 400 ms, so a straight fill would reach the jump only after
-        // ~3.7 s, covering 3 s after ~1.2 s: arriving with 3 s still missing proves
-        // the target was filled first.
+        // block takes 400 ms, so arriving with 3 s still unfilled proves the target was filled first.
         gfcSequence::setTestAudioBlockDelayMs(400);
         playbackManager.setCurrentFrame(1);
         gfcSequence* a = loadTrack(0, beep, GFC_8BPC, 100);
@@ -1873,7 +1865,7 @@ int audioHolesSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- when loading can't keep up (Task 10) ----
+// ---- when loading can't keep up ----
 
 namespace {
 // The app's playback tick with a fake audio device that plays in real time:
@@ -2167,7 +2159,7 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- a playhead outside the loop limits; a clip that fits in ONCE (final review C3) ----
+// ---- a playhead outside the loop limits; a clip that fits in ONCE ----
 
 int cacheLimitsSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
@@ -2225,7 +2217,7 @@ int cacheLimitsSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- just behind is kept once the budget binds (final review I3) ----
+// ---- just behind is kept once the budget binds ----
 
 int cacheBehindSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
@@ -2271,7 +2263,7 @@ int cacheBehindSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- a frame that fails to decode (final review C2) ----
+// ---- a frame that fails to decode ----
 
 int cacheFailedSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
@@ -2342,7 +2334,7 @@ int cacheFailedSelfTest(const std::string& dir) {
     return fail;
 }
 
-// ---- app quit (final review C1) ----
+// ---- app quit ----
 
 int cacheShutdownSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;

@@ -157,9 +157,8 @@ void initializeRenderingChain() {
     trackManager.initializeWidgets();
     playbackManager.initializeWidgets();
 
-    // The rolling frame cache: one coordinator over the four tracks' frame
-    // tables. JEFECHECK_CACHE_BUDGET_MB replaces the derived byte budget
-    // (testing a small cache by hand).
+    // The rolling frame cache over the four tracks' frame tables. JEFECHECK_CACHE_BUDGET_MB
+    // overrides the derived byte budget.
     for (int i = 0; i < 4; ++i)
         frameCache.attachTrack(i, &trackManager.getSequence(i)->frameTable());
     if (const char* mb = std::getenv("JEFECHECK_CACHE_BUDGET_MB")) {
@@ -189,9 +188,8 @@ void initializeRenderingChain() {
     pickManager.registerNotifee(&plateManager);
     plateManager.registerPlatesAsPickNotifees();
 
-    // Movie sound. Opening is asynchronous (the sink starts on its own
-    // thread); until it does, or with no device at all, the engine cannot
-    // lead and playback keeps FPS pacing.
+    // Movie sound. The sink opens asynchronously; until it does (or with no device) the engine
+    // can't lead and playback keeps FPS pacing.
     if (!gAudioOutput && gAudioOutputEnabled) {
         gAudioOutput = jefe::qt::audio::createOutput();
         audioEngine.setOutput(gAudioOutput);
@@ -473,9 +471,8 @@ bool uploadPoolsNeedTrim() {
 }
 
 void trimUploadPools() {
-    // Long enough to bridge the gap between a sequence being cleared and the
-    // next one loading (or a playlist advance), short enough that an idle
-    // player gives the memory back.
+    // Bridges a cleared sequence and the next load (or a playlist advance); short enough that an
+    // idle player gives the memory back.
     constexpr double kIdleSeconds = 2.0;
     gfcUpload::trimIdle(kIdleSeconds);
     gfcSurface::trimIdle(kIdleSeconds);
@@ -3403,9 +3400,8 @@ bool isTrackFrameReady(int track, int frame) {
 bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce) {
     if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
     gfcSequence* seq = trackManager.getSequence(track);
-    // Every frame of a loaded track can be force-loaded (it keeps its load
-    // parameters), so nothing restarts: the caller's forced load does it. A
-    // frame outside the track never can, so the caller does not wait for it.
+    // Every frame of a loaded track can be force-loaded, so nothing restarts; a frame outside
+    // the track never can, so the caller doesn't wait for it.
     (void)allowAnnounce;
     return seq && !seq->isEmpty() && seq->frameReadyForRender(frame);
 }
@@ -3652,9 +3648,8 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
     }
     result.noteCount = (int)notes.size();
 
-    // A movie frame is decoded here and stamped from pixels instead of read
-    // from an EXR: the CPU twin of the GPU upload pass, so the stamp carries
-    // the picture a 16-bit track shows (decodeMovieFrameRGB).
+    // A movie frame is decoded and stamped from pixels (the CPU twin of the GPU upload pass), so
+    // the stamp carries what a 16-bit track shows.
     const bool movie = seq->isMovie();
     std::vector<float> movieRgb;
     if (movie) {
@@ -3943,17 +3938,15 @@ int runUploadBench(const std::string& dir) {
         return 2;
     }
 
-    // IOSurface-backed textures (macOS): check the layouts round-trip first,
-    // then report per mode which path the frames took. Run with
-    // JEFECHECK_NO_IOSURFACE=1 to time the glTexImage2D path instead.
+    // IOSurface textures (macOS): check the layouts round-trip, then report per mode which path the
+    // frames took. JEFECHECK_NO_IOSURFACE=1 times the glTexImage2D path instead.
     const int surfaceLayouts = gfcSurface::selfTest();
 
     struct Mode { const char* name; char value; };
     const Mode modes[] = {{"8bit", GFC_8BPC}, {"16bit", GFC_16BPC}, {"half", GFC_16HALF}};
     float halfMax = -1.0f;
-    // Per mode, the first frame's mean red and blue (clamped to the display
-    // range) from the texture and from the filmstrip thumbnail. Every bit
-    // depth must agree with 8-bit, which catches a swapped R/B channel order.
+    // Per mode, the first frame's mean red and blue from texture and thumbnail; every depth must
+    // agree with 8-bit, which catches a swapped R/B order.
     struct Means { double texR = 0, texB = 0, thumbR = 0, thumbB = 0; };
     std::vector<std::pair<const char*, Means>> means;
     bool lastFramesOk = true;
@@ -3991,10 +3984,8 @@ int runUploadBench(const std::string& dir) {
             uploadMs.push_back(std::chrono::duration<double, std::milli>(t3 - t2).count());
             bytes += double(frame.sizeX) * frame.sizeY * 4 * (mode.value == GFC_8BPC ? 1 : 2);
 
-            // Read the texture back as float: what the shaders will see. The
-            // first frame of a mode always takes a fresh texture; the last one
-            // comes through the pools (staging buffer, reused texture), so
-            // both are checked.
+            // Read the texture back as float (what shaders see). A mode's first frame gets a fresh texture
+            // and its last comes through the pools, so both are checked.
             auto readTexture = [&frame](float& maxV, double& r, double& b) {
                 std::vector<float> px(size_t(frame.sizeX) * frame.sizeY * 4);
                 if (frame.ioSurface) {

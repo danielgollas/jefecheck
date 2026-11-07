@@ -86,10 +86,8 @@ struct gfcMovieReader::Impl {
     bool eofSent = false;
     int64_t lastIndex = -1;
     std::shared_ptr<AVFrame> last;   // most recently decoded frame (index lastIndex)
-    // Every frame a keyframe (ProRes, DNx). Such a decoder gets slice threads
-    // only (openDecoder), so a seek lands on the frame and the next packet
-    // returns it: seeks are cheap. With frame threads a flushed decoder needs
-    // about one packet per thread before its first frame (~9x the work).
+    // Every frame a keyframe (ProRes, DNx). Such decoders get slice threads only, so a seek is cheap;
+    // a flushed frame-threaded decoder needs about one packet per thread first.
     bool intraOnly = false;
     int64_t packetsSent = 0;         // video packets given to the decoder (self-test hook)
     static constexpr int64_t kDecodeOnward = 12;   // longest forward skip decoded through rather than sought
@@ -174,11 +172,8 @@ struct gfcMovieReader::Impl {
         const AVCodecDescriptor* cd = avcodec_descriptor_get(par->codec_id);
         intraOnly = cd && (cd->props & AV_CODEC_PROP_INTRA_ONLY);
         dec->thread_count = 0;
-        // Intra-only: slice threads only, so a seek costs one frame's decode
-        // (frame threads hold back ~thread_count packets after every flush).
-        // Long-GOP codecs keep frame threads: they decode on rather than seek.
-        // An intra-only decoder without slice threading keeps frame threads
-        // too: slice-only would decode it on one thread.
+        // Slice threads only for intra-only codecs that support them: frame threads hold back ~thread_count
+        // packets after each flush. Long-GOP and slice-less decoders keep frame threads.
         const bool sliceOnly = intraOnly && (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS);
         dec->thread_type = sliceOnly ? FF_THREAD_SLICE : (FF_THREAD_SLICE | FF_THREAD_FRAME);
         dec->pkt_timebase = stream()->time_base;
@@ -187,9 +182,8 @@ struct gfcMovieReader::Impl {
         return true;
     }
 
-    // Next frame in presentation order. False at end of stream or on a decode
-    // error (truncated data), with err set. A software frame is returned; a
-    // future hwaccel path would call av_hwframe_transfer_data here.
+    // Next frame in presentation order; false at end of stream or on a decode error (err set).
+    // A future hwaccel path would call av_hwframe_transfer_data here.
     bool decodeNext(AVFrame* out, std::string* err) {
         for (;;) {
             int ret = avcodec_receive_frame(dec, out);
@@ -213,9 +207,8 @@ struct gfcMovieReader::Impl {
         }
     }
 
-    // The next video packet into `pkt`: queued ones first (in demux order),
-    // then from the file, decoding any audio packets met on the way. False at
-    // the end of the file.
+    // The next video packet into `pkt`: queued ones first, then from the file (decoding audio
+    // packets met on the way). False at the end of the file.
     bool nextVideoPacket() {
         if (!videoQueue.empty()) {
             AVPacket* q = videoQueue.front();
@@ -241,10 +234,8 @@ struct gfcMovieReader::Impl {
         audioEof = true;
     }
 
-    // Demuxes until the FIFO reaches `target` (a 48 kHz movie-time index) or
-    // the file ends; video packets met are queued for the picture decoder.
-    // Gives up once the queued picture runs kAudioLookahead past the target, so
-    // audio that ends early (or a gap in it) never queues the rest of the file.
+    // Demuxes until the FIFO reaches `target` (a 48 kHz movie-time index), queuing video packets met.
+    // Stops kAudioLookahead past the target so audio that ends early never queues the whole file.
     static constexpr int64_t kAudioLookahead = 2 * gfcAudioClip::kRate;
     void pumpAudio(int64_t target) {
         if (!adec) return;
@@ -314,10 +305,8 @@ struct gfcMovieReader::Impl {
         if (n > 0) audioEnd += n;
     }
 
-    // On failure every audio member is freed again: an allocated but unopened
-    // AVCodecContext must never reach avcodec_flush_buffers (its internal state
-    // only exists after a successful avcodec_open2), so adec is non-null only
-    // when it is open.
+    // On failure every audio member is freed: an unopened AVCodecContext must never reach
+    // avcodec_flush_buffers, so adec is non-null only when it is open.
     bool openAudio() {
         astream = av_find_best_stream(fmt, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
         if (astream < 0) return false;
@@ -355,10 +344,8 @@ struct gfcMovieReader::Impl {
             const int64_t idx = frameIndexOf(f.get(), expected);
             expected = idx + 1;
             if (idx >= index) {
-                // After a timestamp gap the frame found can be later than the
-                // one asked for: record (and report) its real index, so the
-                // next sequential read continues from it instead of shifting
-                // every later frame by the gap.
+                // After a timestamp gap the frame found can be later than asked: record its real index so the
+                // next sequential read doesn't shift every later frame by the gap.
                 last = std::move(f);
                 lastIndex = idx;
                 return true;
@@ -423,9 +410,8 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
 
     int ret = avformat_open_input(&d.fmt, path.c_str(), nullptr, nullptr);
     if (ret < 0) { d.fmt = nullptr; return fail("cannot open " + path + ": " + avErr(ret)); }
-    // Audio only: the demuxer skips every non-audio stream from here on, so
-    // the stream probe below does not decode picture (it can cost hundreds of
-    // ms on 4K ProRes 4444); the container header still gives the video rate.
+    // Audio only: skip every non-audio stream so the probe below decodes no picture (hundreds of ms
+    // on 4K ProRes 4444); the container header still gives the video rate.
     if (d.audioOnly)
         for (unsigned k = 0; k < d.fmt->nb_streams; ++k)
             if (d.fmt->streams[k]->codecpar->codec_type != AVMEDIA_TYPE_AUDIO)

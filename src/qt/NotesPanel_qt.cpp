@@ -94,9 +94,8 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolRow->addWidget(toolText_);
     layout->addLayout(toolRow);
 
-    // Not exclusive: an exclusive group cannot be clicked back to "no tool",
-    // which left the pencil armed with no way to return to panning except
-    // Escape. Exclusivity is kept by syncToolButtons() instead.
+    // Not exclusive: an exclusive group can't be clicked back to "no tool";
+    // syncToolButtons() keeps exclusivity instead.
     auto* toolGroup = new QButtonGroup(this);
     toolGroup->setExclusive(false);
     toolGroup->addButton(toolFreehand_, jefe::qt::NOTETOOL_FREEHAND);
@@ -105,9 +104,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolGroup->addButton(toolText_,     jefe::qt::NOTETOOL_TEXT);
     connect(toolGroup, &QButtonGroup::idClicked, this,
             [this](int id) {
-                // Clicking the armed tool puts the pencil down (back to
-                // click-and-drag panning); clicking any other tool picks it
-                // up and arms drawing on the viewport.
+                // Clicking the armed tool puts the pencil down (back to panning); any other tool arms drawing.
                 if (jefe::qt::noteDrawingArmed() && jefe::qt::activeNoteTool() == id) {
                     jefe::qt::setNoteDrawingArmed(false);
                 } else {

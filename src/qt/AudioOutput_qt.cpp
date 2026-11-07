@@ -1,19 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The app's audio device: QAudioSink in pull mode, fed by gfcAudioEngine.
-//
-// The only TU with Qt Multimedia includes (developer_notes §1); it must not
-// include glad, gfcStructures.h or gfcplaybackmanager.h.
-//
-// Threading: the sink, its pull device and a clock-poll timer live on one
-// dedicated audio thread, so a busy GUI thread (uploads, paints) never starves
-// the device and opening a device never blocks the GUI. playedSamples() and
-// isOpen() only read atomics: the engine calls playedSamples() under its own
-// mutex, and an atomic can never call back into the engine or wait on a lock
-// a Qt backend holds while it pulls readData().
-//
-// Format: 48000 Hz / 2 ch / Float; else 48000 / 2 / Int16 (converted); else the
-// device's preferredFormat() (rate, channels, sample type) with a linear
-// resampler and a stereo→device channel map. The buffer is 40 ms.
+// The app's audio device: QAudioSink in pull mode on its own thread, fed by gfcAudioEngine.
+// The only Qt Multimedia TU; never include glad here. See developer_notes.md §38.
 #include "AudioOutput_qt.h"
 
 #include "../gfcAudioEngine.h"
@@ -171,9 +158,8 @@ public:
         delete poll_; poll_ = nullptr;
         delete pull; pull = nullptr;
     }
-    // Default device added, removed or changed: follow it. Samples the old
-    // sink still held are dropped and counted as played, so playedSamples()
-    // keeps matching what the engine rendered.
+    // Default device changed: follow it. Samples the old sink still held count as played, so
+    // playedSamples() keeps matching what the engine rendered.
     void devicesChanged() {
         if (!wanted_ || !pull) return;
         const QAudioDevice dev = QMediaDevices::defaultAudioOutput();

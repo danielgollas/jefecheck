@@ -39,9 +39,7 @@ fi
 chmod +x "$APP/Contents/Resources/ffmpeg"
 cp packaging/ffmpeg-NOTICE.txt "$APP/Contents/Resources/"
 
-# Bundle the linked FFmpeg libraries (movie reading and sound) into
-# Contents/Frameworks/ and record their version + configure line in
-# Resources/ffmpeg-libs-VERSION.txt. Qt and OpenImageIO are not bundled yet.
+# Bundle the linked FFmpeg libraries; Qt and OpenImageIO are not bundled yet.
 bash "$(dirname "$0")/bundle_macos_libav.sh" "$APP"
 
 cat > "$APP/Contents/Info.plist" << PLIST

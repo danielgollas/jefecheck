@@ -86,9 +86,8 @@ Level detectLevel() {
     return classicOk ? Level::Classic : Level::Off;
 }
 
-// GL thread. Maps a classic-level buffer for the next writer; the
-// glBufferData orphan gives the driver fresh storage, so a transfer still
-// reading the old contents is never waited on or overwritten.
+// GL thread. Maps a classic-level buffer for the next writer; the glBufferData orphan means a
+// transfer still reading the old contents is never waited on or overwritten.
 bool remapClassic(Staging* s) {
     glBufferData(GL_PIXEL_UNPACK_BUFFER, (GLsizeiptr)s->bytes, nullptr, GL_STREAM_DRAW);
     s->data = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
@@ -119,9 +118,8 @@ Staging* createStaging(size_t bytes, Level level) {
     return s;
 }
 
-// g_mutex held. The Held buffer @a ticket names, or nullptr: a ticket that
-// was uploaded or abandoned matches nothing, even after its buffer has gone
-// back to the pool and been handed to another acquire().
+// g_mutex held. The Held buffer @a ticket names, or nullptr: a stale ticket matches nothing,
+// even after its buffer went back to the pool and to another acquire().
 Staging* findHeld(Ticket ticket) {
     if (!ticket) return nullptr;
     for (Staging* s : g_staging)

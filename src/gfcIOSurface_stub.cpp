@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// IOSurface stubs for platforms without it: every call reports "unavailable",
-// so callers keep the glTexImage2D path. See gfcIOSurface.h.
+// IOSurface stubs: every call reports "unavailable", so callers keep the glTexImage2D path.
 
 #include "gfcIOSurface.h"
 

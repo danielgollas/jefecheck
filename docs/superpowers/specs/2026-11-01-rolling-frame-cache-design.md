@@ -1,6 +1,6 @@
 # Rolling frame cache: design
 
-Date: 2026-11-01. Branch: `feature/rolling-cache-upload` (video loading + the macOS upload work + its fixes). Background and code map: `docs/superpowers/handoffs/2026-10-31-rolling-cache-handoff.md` (read it first; this document does not repeat its "What exists today" section).
+Date: 2026-11-01. Background and code map: `developer_notes.md` §38–§40 (movie loading, frame upload, rolling frame cache).
 
 ## Why
 

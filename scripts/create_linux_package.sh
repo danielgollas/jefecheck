@@ -28,9 +28,7 @@ fi
 chmod +x "$PACKAGE/bin/ffmpeg"
 cp packaging/ffmpeg-NOTICE.txt "$PACKAGE/"
 
-# The FFmpeg libraries (movie reading and sound) and Qt Multimedia are not
-# bundled: the package depends on the distribution's packages. DEPENDENCIES
-# names them (Ubuntu 24.04); install.sh checks for them.
+# FFmpeg and Qt Multimedia come from the distribution (Ubuntu 24.04), not the package; install.sh checks them.
 cat > "$PACKAGE/DEPENDENCIES" << DEPS
 Runtime packages (Ubuntu 24.04):
   libavformat60 libavcodec60 libavutil58 libswresample4 libswscale7 libqt6multimedia6
@@ -39,9 +37,7 @@ Install with:
   sudo apt install libavformat60 libavcodec60 libavutil58 libswresample4 libswscale7 libqt6multimedia6
 DEPS
 
-# Record the FFmpeg libraries this build linked: the distribution package
-# versions (which identify the source package and its configure line) and,
-# when the ffmpeg program from the same packages is installed, its -version.
+# Record the linked FFmpeg package versions, and ffmpeg -version when it is installed.
 {
     echo "FFmpeg libraries this build was linked against (not bundled)"
     echo

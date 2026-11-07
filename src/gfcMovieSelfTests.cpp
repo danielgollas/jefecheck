@@ -127,9 +127,8 @@ int movieReaderSelfTest(const std::string& dir) {
                     ? "hevc long GOP: skips decoded on (+5, +12) and sought (+13 more) match a fresh random-access read"
                     : "h264 long GOP: skips decoded on (+5, +12) and sought (+13 more) match a fresh random-access read");
     }
-    // Intra-only (ProRes): a backward read is one seek, and the decoder returns
-    // the sought frame from that one packet (slice threads only; frame threads
-    // would hold back ~thread_count packets after the flush).
+    // Intra-only (ProRes): a backward read is one seek, and the decoder returns the sought frame
+    // from that one packet (slice threads only).
     {   gfcMovieReader seqR, rev; gfcMovieFrame fr;
         std::vector<std::vector<uint8_t>> want(24);
         bool ok = seqR.open(dir+"/prores4444_24.mov", &err);
@@ -282,15 +281,8 @@ int movieStampSelfTest(const std::string& dir) {
     std::vector<float> rgb(320*180*3, 0.25f); gfcReview review; gfcNoteStamp::Options opt;
     check(gfcNoteStamp::stampPixels(320,180,rgb.data(), dir+"/stamp.exr", review, opt, &err), "stampPixels writes");
     int w=0,h=0; check(gfcNoteStamp::imageSize(dir+"/stamp.exr",&w,&h) && w==320 && h==180, "stamped EXR has the frame size");
-    // The pixels Stamp Notes writes for a movie frame equal the GPU upload's
-    // RGBA16F texture. Tolerance: one half-float step (the 16-bit track's own
-    // storage) plus the GPU sampler's precision where it blends two chroma
-    // samples: Apple's sampler filters R16 at about half-float precision, so
-    // up to two fp16 steps at 0.5 (2^-11 each) through the largest matrix
-    // coefficient (Rec.709 B = y + 1.8556 cb), about 0.0018 -- measured
-    // ~0.001 at 4:2:2 bar edges (one 10-bit code); 4:4:4 and co-sited samples
-    // only differ by the half-float step. The swscale conversion the stamp
-    // used before is measured against the same texture for contrast.
+    // Stamp Notes pixels for a movie frame match the GPU upload's RGBA16F texture within one half-float
+    // step plus the sampler's chroma-blend precision (developer_notes.md §38); swscale is shown for contrast.
     auto gpuMatchesStamp = [&](const std::string& movie, int64_t index, double& worstSteps, double& worstSws) {
         int sw=0, sh=0; std::vector<float> cpu; std::string e;
         if (!jefe::qt::decodeMovieFrameRGB(movie, index, sw, sh, cpu, &e)) { std::printf("  stamp decode: %s\n", e.c_str()); return false; }
@@ -496,9 +488,8 @@ int audioEngineSelfTest(const std::string& dir) {
     e.setPlayerRate(24000,1001); check(e.canLead(), "native-rate unmuted track can lead");
     gfcAudioTransport t{1,1,48,LOOPMODELOOP_ID}; e.startLeading(t); cap.clear(); out.pump(2002*10+1000,&cap);
     check(e.isLeading() && e.leaderFrame()==11, "after 10.5 frames of samples the leader is on frame 11");
-    // After the first slice's fade-in the output is the clip sample for sample,
-    // straight across all ten frame boundaries (incl. the beep->silence cut at
-    // frame 1|2, where any fade-out would show): no fades between contiguous frames.
+    // After the first slice's fade-in the output equals the clip sample for sample across all ten frame
+    // boundaries (incl. the beep->silence cut at 1|2): no fades between contiguous frames.
     { const int n = 2002*10+1000; std::vector<float> ref(size_t(2*n)); clipA->read(0, n, ref.data()); float worst=0;
       for (int i=gfcAudioEngine::kFadeSamples; i<n && size_t(2*i+1)<cap.size(); ++i)
           worst=std::max({worst, std::fabs(cap[2*i]-ref[2*i]), std::fabs(cap[2*i+1]-ref[2*i+1])});
@@ -510,9 +501,8 @@ int audioEngineSelfTest(const std::string& dir) {
     // mixing: two tracks, sum and clamp
     e.setTrackClip(1, clipA, 24000, 1001, 240); e.setPlayerRate(24000,1001); cap.clear(); e.playSlice(25); out.pump(2002,&cap);
     float peak=0; for (float v: cap) peak=std::max(peak,std::fabs(v)); check(peak<=1.0f && peak>0.95f, "two 0.8 beeps sum then clamp to 1.0");
-    // A clip the engine drops is destroyed after the engine mutex is released
-    // (render() must never wait on freeing a long clip): clearTrack, and a
-    // setTrackClip that replaces the clip with one rejected for a bad rate.
+    // A clip the engine drops (clearTrack, or a replacement rejected for a bad rate) is destroyed
+    // after the engine mutex is released.
     { int freedUnlocked = 0, freed = 0;
       auto tracked = [&]{ return std::shared_ptr<gfcAudioClip>(new gfcAudioClip, [&](gfcAudioClip* c){ ++freed; freedUnlocked += e.testMutexFreeFromOtherThread() ? 1 : 0; delete c; }); };
       e.setTrackClip(2, tracked(), 24000, 1001, 240); e.clearTrack(2);
@@ -570,10 +560,8 @@ int audioSyncSelfTest(const std::string& dir) {
     return fail;
 }
 
-// Leading walk details on a synthetic constant-level clip: BOUNCE return
-// passes are silent and resume with a fade-in, ONCE holds without repeating,
-// offsets shift sound with picture, and 29.97 (1601/1602-sample frames) streams
-// without gaps.
+// Leading walk on a constant-level clip: BOUNCE returns are silent and fade back in, ONCE holds,
+// offsets shift sound with picture, and 29.97 (1601/1602-sample frames) streams without gaps.
 int audioWalkSelfTest(const std::string&) {
     int pass = 0, fail = 0;
     auto check = [&](bool cond, const char* msg) {
@@ -630,9 +618,8 @@ int audioWalkSelfTest(const std::string&) {
     return fail;
 }
 
-// The real playback manager with the app's engine on a fake device: the audio
-// clock leads native-rate forward play, pacing leads otherwise (off-rate,
-// reverse, no device), and a seek plays exactly one slice.
+// The real playback manager on a fake device: the audio clock leads native-rate forward play,
+// pacing leads otherwise, and a seek plays exactly one slice.
 int audioPlaybackSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
     auto check = [&](bool cond, const char* msg) {
@@ -711,9 +698,8 @@ int muteBridgeSelfTest(const std::string& dir) {
     return fail;
 }
 
-// Forced loads (renders, review thumbnails, frames past the memory limit) use
-// a reader of their own: they never touch the loader's reader, so its sound
-// is neither discarded by their seeks nor left queued with no consumer.
+// Forced loads (renders, thumbnails, frames past the limit) use their own reader, so the
+// loader's sound is neither discarded by their seeks nor left queued.
 int audioForcedLoadSelfTest(const std::string& dir) {
     int pass = 0, fail = 0;
     auto check = [&](bool cond, const char* msg) {

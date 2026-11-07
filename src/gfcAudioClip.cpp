@@ -186,9 +186,8 @@ void gfcAudioPeaks::accumulate(const float* interleaved, int64_t frames) {
         const float v = std::max(std::fabs(interleaved[2 * k]), std::fabs(interleaved[2 * k + 1]));
         if (v > peaks[bin]) peaks[bin] = v;
     }
-    // Readers copy the whole vector when the version moves, so it moves at
-    // most once per second of new audio (plus the first block after a reset);
-    // the holder calls publish() when loading stops to show the tail.
+    // Readers copy the whole vector when the version moves, so it moves at most once per second
+    // of new audio; the holder calls publish() when loading stops.
     const int64_t before = framesAccumulated;
     framesAccumulated += frames;
     if (before == 0 || before / gfcAudioClip::kRate != framesAccumulated / gfcAudioClip::kRate) ++version;

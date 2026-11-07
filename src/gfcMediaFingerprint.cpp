@@ -34,9 +34,8 @@ namespace
 		sha.update(bytes, 8);
 	}
 
-	// Container bytes of a movie: head, middle and tail windows. Hashing the file
-	// (not decoded pixels) keeps the value identical across platforms and FFmpeg
-	// versions. Offsets are 64-bit throughout (ifstream/streamoff), never off_t.
+	// Container bytes of a movie (head, middle, tail): stable across platforms and FFmpeg versions.
+	// Offsets are 64-bit throughout (ifstream/streamoff), never off_t.
 	bool hashMovieBytes(gfcSha1& sha, const std::string& path, std::string* err)
 	{
 		namespace fs = std::filesystem;

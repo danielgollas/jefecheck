@@ -1,8 +1,7 @@
 name: Upload bench (Mesa)
 
-# Runs --upload-bench on Mesa's llvmpipe software renderer, which has the
-# ARB_buffer_storage path macOS can't reach. Checks correctness only:
-# llvmpipe renders on the CPU, so the timings are meaningless.
+# Runs --upload-bench on Mesa's llvmpipe, which has the ARB_buffer_storage path macOS lacks.
+# Correctness only: llvmpipe renders on the CPU, so the timings mean nothing.
 
 on:
   workflow_dispatch:

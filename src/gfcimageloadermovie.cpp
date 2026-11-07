@@ -67,11 +67,8 @@ int gfcImageLoaderMovie::load(gfcLoadParams params) {
         if (cw > 0 && ch > 0) { cx = x0; cy = y0; w = cw; h = ch; }
     }
 
-    // Planar YUV (3 planes, or 4 with alpha; little-endian samples) goes to
-    // the GPU as planes and is converted to RGB at upload with the file's
-    // matrix/range (gfcYuvConverter). The decoder's frame is kept, not copied.
-    // Anything else (semi-planar, packed, big-endian, 4-bit/S3TC tracks) is
-    // converted to BGRA here.
+    // Planar little-endian YUV goes to the GPU as planes, converted at upload (the frame is kept, not
+    // copied); anything else, and 4-bit/S3TC tracks, is converted to BGRA here.
     const bool bigEndian = info.pixFmt.size() > 2 && info.pixFmt.compare(info.pixFmt.size() - 2, 2, "be") == 0;
     const bool gpuDepth = params.compressed == GFC_8BPC || params.compressed == GFC_16BPC ||
                           params.compressed == GFC_16HALF;

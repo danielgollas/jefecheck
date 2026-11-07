@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
-# Runs the upload bench (--upload-bench) on Mesa's llvmpipe software
-# renderer under Xvfb, once per staging level. llvmpipe has
-# ARB_buffer_storage, so this checks the persistent-mapped staging path
-# that macOS's GL 2.1 can't reach. It proves correctness, not speed:
-# llvmpipe renders on the CPU, so the timings mean nothing.
-#
-# Usage: scripts/mesa_upload_bench.sh <path/to/jefecheck>
-# Needs: xvfb (xvfb-run), Mesa (libgl1-mesa-dri), oiiotool.
+# Usage: scripts/mesa_upload_bench.sh <path/to/jefecheck>   (needs xvfb-run, Mesa, oiiotool)
+# Runs --upload-bench on llvmpipe per staging level to check the persistent-mapped path macOS can't reach.
+# Correctness only: llvmpipe renders on the CPU, so the timings mean nothing.
 set -euo pipefail
 
 bin="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-# Twelve identical UHD frames whose values reach 4.0, so the bench can check
-# that half-float keeps highlights and that the last (pooled) frame matches
-# the first. Red reaches 4.0 across, blue only 1.0 down, so their means
-# differ and a swapped channel order shows.
+# Twelve identical UHD frames reaching 4.0: half-float must keep highlights, the pooled last frame match the first.
+# Red ramps across to 4.0, blue down to 1.0, so a swapped channel order shows.
 mkdir -p "$work/frames"
 oiiotool --pattern fill:topleft=0,0,0:topright=4,0.5,0:bottomleft=0,0.5,1:bottomright=4,4,1 3840x2160 3 \
     -d half -o "$work/frames/bench.0001.exr"

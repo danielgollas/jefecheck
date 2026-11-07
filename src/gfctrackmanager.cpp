@@ -283,9 +283,8 @@ void gfcTrackManager::retargetAudio(int timelineFrame)
 
 void gfcTrackManager::syncCacheTransport(bool force)
 {
-	// A load moves the loop limits: send the player's whole transport
-	// (playhead, direction, mode, limits, rate) now. An offset change sends
-	// it only when the limits actually moved.
+	// A load moves the loop limits, so send the whole transport now; an offset change sends it
+	// only when the limits moved.
 	if(force)
 		playbackManager.cacheResendTransport();
 	else
@@ -342,9 +341,8 @@ bool gfcTrackManager::checkBounds(int whichOne, std::string functionName)
  */
 void gfcTrackManager::generateTextures()
 {
-	// Frames the cache named as victims are freed first (GL thread, context
-	// current), so their memory is back before the next uploads. The check is
-	// one atomic load when there is nothing to free.
+	// Free the cache's victims first (GL thread, context current) so their memory is back before
+	// the next uploads; one atomic load when there are none.
 	if(frameCache.hasVictims()){
 		const gfcFrameCache::Victims v=frameCache.drainVictims();
 		for(const gfcFrameCache::Victim& x : v.frames){
@@ -530,10 +528,8 @@ void gfcTrackManager::setRecentBrowsed(std::vector< std::string > precentBrowsed
 	}
 }
 
-// "Load from here" on a loaded track is a jump: the frame cache loads around
-// the playhead, and every frame can be loaded on demand, so the playhead moves
-// to startFrame (0-based; the timeline is 1-based) and nothing restarts. Only
-// an empty track starts a load there.
+// "Load from here" on a loaded track only moves the playhead to startFrame (0-based; the timeline
+// is 1-based), since any frame loads on demand. Only an empty track starts a load there.
 void gfcTrackManager::startLoadingSequenceAt(int whichOne, int startFrame)
 {
 	if(!checkBounds(whichOne,"startLoadingSequenceAt"))
@@ -549,9 +545,8 @@ void gfcTrackManager::startLoadingSequenceAt(int whichOne, int startFrame)
 
 void gfcTrackManager::startLoadingAllAt(int startFrame)
 {
-	// Loaded tracks jump (see startLoadingSequenceAt). An empty track loads
-	// from the timeline frame: track-relative 0 plus the timeline frame, so
-	// the track accounts for its own offset.
+	// Loaded tracks jump. An empty track loads from the timeline frame (track-relative 0 plus it),
+	// so the track accounts for its own offset.
 	bool anyLoaded=false;
 	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
 		anyLoaded|=!sequences[i].isEmpty();

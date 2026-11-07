@@ -1,20 +1,7 @@
 #!/bin/bash
-# bundle_macos_libav.sh <App.app>
-#
-# Copies the FFmpeg libraries (libav*/libsw*) the app binary links, plus every
-# non-system dylib they pull in, into <App>/Contents/Frameworks/, rewrites their
-# install names to @rpath/<name>, points the binary at
-# @executable_path/../Frameworks, records the FFmpeg version and configure line
-# in Contents/Resources/ffmpeg-libs-VERSION.txt, and re-signs ad hoc.
-#
-# Which libraries get bundled: JefeCheck only decodes (ProRes / H.264 / H.265
-# through libavcodec's own decoders, AAC/PCM audio through libswresample), so it
-# never calls into libx264, libx265, libSvtAv1Enc, libmp3lame (encoders) or
-# libvpx, libdav1d, libopus (other codecs). Homebrew's ffmpeg links all of them
-# with ordinary (non-weak) load commands, though, and libavformat/libavutil link
-# OpenSSL; dyld refuses to load libavcodec when any of them is missing. So the
-# whole non-system closure is bundled: it is required by the loader, not by the
-# decode path.
+# Usage: bundle_macos_libav.sh <App.app>
+# Bundles the linked FFmpeg libraries and their whole non-system dylib closure into Contents/Frameworks:
+# dyld refuses to load libavcodec if any non-weak linked library (encoders, OpenSSL) is missing.
 set -euo pipefail
 
 APP="${1:?usage: bundle_macos_libav.sh <App.app>}"
@@ -97,9 +84,8 @@ for d in $(deps "$BIN"); do
     case "$(basename "$d")" in libav*|libsw*) args+=(-change "$d" "@rpath/$(basename "$d")") ;; esac
 done
 install_name_tool "${args[@]}" "$BIN" 2>/dev/null
-# Make @executable_path/../Frameworks the first rpath, so @rpath/libavcodec...
-# resolves inside the bundle even where a build-tree rpath (/opt/homebrew/lib)
-# also contains one. Existing rpaths are kept, in order, after it.
+# @executable_path/../Frameworks goes first so @rpath resolves inside the bundle even where a
+# build-tree rpath (/opt/homebrew/lib) also has the library; existing rpaths follow in order.
 OLD_RPATHS=$(otool -l "$BIN" | awk '/LC_RPATH/{getline; getline; print $2}')
 for rp in $OLD_RPATHS; do install_name_tool -delete_rpath "$rp" "$BIN"; done
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$BIN"
