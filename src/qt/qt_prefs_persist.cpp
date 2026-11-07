@@ -21,13 +21,11 @@ namespace jefe { namespace qt {
 
 void loadPreferences() {
     QSettings s;
-    // Engine (already persisted in MainWindow_qt today — centralize here).
+    // Engine.
     sett.defaultDecodeFilter  = s.value("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter).toInt();
     sett.defaultTextureFormat = s.value("Engine/defaultTextureFormat", sett.defaultTextureFormat).toInt();
-    // Engine (JEF-16 Task 2 — Playback & Engine section).
-    // Only maximumFramesInQueue has a live effect and a UI control; the other
-    // engine settings were hidden (JEF-16 audit: inert) or removed (balanceReads),
-    // so they are no longer persisted.
+    // Engine: only maximumFramesInQueue has a live effect and a UI control, so
+    // the other engine settings are not persisted.
     sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
     sett.memoryLimitPercent    = std::clamp(s.value("Engine/memoryLimitPercent", sett.memoryLimitPercent).toInt(), 50, 100);
     sett.lagPolicy             = std::clamp(s.value("Engine/lagPolicy", sett.lagPolicy).toInt(), 0, 2);
@@ -36,9 +34,8 @@ void loadPreferences() {
     // Session behavior.
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
-    // General (JEF-16 Task 1).
-    // RGB background. Migrate from the legacy grayscale General/bgColor: if the
-    // RGB keys are absent, each channel falls back to the old gray value.
+    // General: RGB background. Migrate from the legacy grayscale General/bgColor:
+    // if the RGB keys are absent, each channel falls back to the old gray value.
     sett.bgColor        = s.value("General/bgColor", sett.bgColor).toFloat();
     sett.bgColorR       = s.value("General/bgColorR", sett.bgColor).toFloat();
     sett.bgColorG       = s.value("General/bgColorG", sett.bgColor).toFloat();
@@ -52,13 +49,13 @@ void loadPreferences() {
     sett.feedbackMessageSize = s.value("General/feedbackMessageSize", sett.feedbackMessageSize).toInt();
     sett.feedbackMessageFadeDelay = s.value("General/feedbackMessageFadeDelay", sett.feedbackMessageFadeDelay).toFloat();
 
-    // Formats (JEF-16 Task 3).
+    // Formats.
     sett.exrIgnoreDisplayWindow      = s.value("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow).toInt();
     sett.exrIgnoreHeadersAspectRatio = s.value("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio).toInt();
     sett.oiioUnassociatedAlpha       = s.value("Formats/oiioUnassociatedAlpha",       sett.oiioUnassociatedAlpha).toInt();
     sett.applyExifOrientation        = s.value("Formats/applyExifOrientation",        sett.applyExifOrientation).toInt();
 
-    // Search Paths (JEF-16 Task 4).
+    // Search Paths.
     sett.useSearchPaths       = s.value("Search/useSearchPaths", sett.useSearchPaths).toBool();
     sett.searchPathsRecursive = s.value("Search/recursive",      sett.searchPathsRecursive).toBool();
     sett.relinkByFingerprint  = s.value("Search/relinkByFingerprint", sett.relinkByFingerprint).toBool();
@@ -69,7 +66,7 @@ void loadPreferences() {
         sett.searchPaths.clear();
         for (const QString& p : paths) sett.searchPaths.push_back(p.toStdString());
     }
-    // Remote (JEF-16 Task 5).
+    // Remote.
     sett.nickName = s.value("Remote/nickName",
                              QString::fromStdString(sett.nickName)).toString().toStdString();
     sett.chatFadeDelay            = s.value("Remote/chatFadeDelay",            sett.chatFadeDelay).toFloat();
@@ -81,8 +78,8 @@ void loadPreferences() {
     sett.remotePointerFadeDelay   = s.value("Remote/remotePointerFadeDelay",   sett.remotePointerFadeDelay).toFloat();
     sett.remotePointerColor       = s.value("Remote/remotePointerColor",       sett.remotePointerColor).toInt();
 
-    // Text (JEF-16 Task 6) — GfcTextRenderer is a separate singleton, not
-    // part of `sett`; applied via its own setters rather than assigned here.
+    // Text: GfcTextRenderer is a separate singleton, not part of `sett`;
+    // applied via its own setters rather than assigned here.
     applyTextPrefs();
 
     // NOTE: later tasks append their sections' keys here.
@@ -92,13 +89,11 @@ void applyTextPrefs() {
     QSettings s;
     GfcTextRenderer& tr = textRenderer();
 
-    // Fallbacks come from GfcTextDefaults (gfcTextRenderer.h), the single source
-    // shared with buildTextPage and the renderer ctor, so a first run (no Text/*
-    // keys) is a visual no-op and the sites can't drift.
+    // Fallbacks come from GfcTextDefaults (gfcTextRenderer.h), shared with
+    // buildTextPage and the renderer ctor, so a first run is a visual no-op.
     using namespace GfcTextDefaults;
     // Size + color drive the on-plate label overlay (gfcPlate::drawText) via the
-    // renderer's label style — the visible knobs. (setSize/setColor here are
-    // transient and get overwritten per-draw; the label setters are what stick.)
+    // renderer's label style; setSize/setColor here are overwritten per-draw.
     const float textSize = s.value("Text/size", kLabelSize).toFloat();
     tr.setSize(textSize);
     tr.setLabelSize(textSize);
@@ -132,7 +127,7 @@ void writePreferences() {
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply on Done
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);
 
-    // General (JEF-16 Task 1).
+    // General.
     s.setValue("General/bgColor",        sett.bgColor);   // luminance, for legacy readers
     s.setValue("General/bgColorR",       sett.bgColorR);
     s.setValue("General/bgColorG",       sett.bgColorG);
@@ -146,13 +141,13 @@ void writePreferences() {
     s.setValue("General/feedbackMessageSize",       sett.feedbackMessageSize);
     s.setValue("General/feedbackMessageFadeDelay",  sett.feedbackMessageFadeDelay);
 
-    // Formats (JEF-16 Task 3).
+    // Formats.
     s.setValue("Formats/exrIgnoreDisplayWindow",      sett.exrIgnoreDisplayWindow);
     s.setValue("Formats/exrIgnoreHeadersAspectRatio", sett.exrIgnoreHeadersAspectRatio);
     s.setValue("Formats/oiioUnassociatedAlpha",       sett.oiioUnassociatedAlpha);
     s.setValue("Formats/applyExifOrientation",        sett.applyExifOrientation);
 
-    // Search Paths (JEF-16 Task 4).
+    // Search Paths.
     s.setValue("Search/useSearchPaths", sett.useSearchPaths);
     s.setValue("Search/recursive",      sett.searchPathsRecursive);
     s.setValue("Search/relinkByFingerprint", sett.relinkByFingerprint);
@@ -161,7 +156,7 @@ void writePreferences() {
         for (const auto& p : sett.searchPaths) paths << QString::fromStdString(p);
         s.setValue("Search/paths", paths);
     }
-    // Remote (JEF-16 Task 5).
+    // Remote.
     s.setValue("Remote/nickName", QString::fromStdString(sett.nickName));
     s.setValue("Remote/chatFadeDelay",            sett.chatFadeDelay);
     s.setValue("Remote/chatAutoFade",             sett.chatAutoFade);

@@ -42,9 +42,8 @@ QString typeLabel(jefe::qt::FXParamType t) {
     return "unknown";
 }
 
-// Number of decimals for a float spinbox: derive from `step` so values
-// like step=0.001 get 3 decimals and step=1.0 gets 0. Clamp to a sane
-// range so a pathologically tiny step doesn't blow the field width up.
+// Number of decimals for a float spinbox, derived from `step` (0.001 -> 3, 1.0 -> 0)
+// and clamped so a tiny step doesn't blow up the field width.
 int decimalsForStep(float step) {
     if (step <= 0.0f) return 3;
     const float abs_step = std::fabs(step);
@@ -57,15 +56,11 @@ int decimalsForStep(float step) {
 
 }  // namespace
 
-// ---------------------------------------------------------------------------
 // FXReorderList_Qt
-// ---------------------------------------------------------------------------
 
 void FXReorderList_Qt::dropEvent(QDropEvent* e) {
-    // Capture the stack indices in their pre-drop order. Each item carries
-    // its build-time stack position in kFxIndexRole; a fresh rebuild stores
-    // these as the identity sequence [0, 1, … n-1], so `before` is identity
-    // and the moved element's old position equals its stored value.
+    // Capture the stack indices in their pre-drop order: each item's build-time position
+    // is in kFxIndexRole, so the moved element's old position equals its stored value.
     std::vector<int> before;
     before.reserve(count());
     for (int i = 0; i < count(); ++i) {
@@ -102,20 +97,17 @@ void FXReorderList_Qt::dropEvent(QDropEvent* e) {
     if (from != to) emit itemsReordered(from, to);
 }
 
-// ---------------------------------------------------------------------------
 // FXParamPanel_Qt
-// ---------------------------------------------------------------------------
 
 FXParamPanel_Qt::FXParamPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("fxparams.panel");
 
-    // "+ Add FX" — InstantPopup tool button driving a hierarchical menu
-    // built from each FX's menuName. Rebuilt on aboutToShow so a late
-    // autoload is reflected.
+    // "+ Add FX": InstantPopup button with a hierarchical menu built from each FX's
+    // menuName, rebuilt on aboutToShow so a late autoload is reflected.
     addButton_ = new QToolButton(this);
     addButton_->setObjectName("fxparams.addfx.button");
     addButton_->setAccessibleName("Add FX");
-    addButton_->setIcon(jefe::qticons::add());          // JEF-19
+    addButton_->setIcon(jefe::qticons::add());
     addButton_->setIconSize(QSize(14, 14));
     addButton_->setText("Add FX");
     addButton_->setToolTip("Add an effect to the active plate");
@@ -129,9 +121,8 @@ FXParamPanel_Qt::FXParamPanel_Qt(QWidget* parent) : QWidget(parent) {
     addButton_->setMenu(addMenu_);
     connect(addMenu_, &QMenu::aboutToShow, this, [this]() { rebuildAddMenu(); });
 
-    // No accessibleName on the status label — Mac AX otherwise reports the
-    // QLabel under its accessibleName (AXTitle) instead of letting setText
-    // drive AXValue.
+    // No accessibleName on the status label: Mac AX would report it as AXTitle instead
+    // of letting setText drive AXValue.
     status_ = new QLabel(this);
     status_->setStyleSheet("color: #888; font-style: italic;");
     status_->setObjectName("fxparams.status.label");
@@ -223,11 +214,8 @@ void FXParamPanel_Qt::rebuildAddMenu() {
 void FXParamPanel_Qt::refresh() {
     const int active = jefe::qt::getActivePlate();
 
-    // Fast path: when the active plate and the FX stack's name list
-    // haven't changed since the last rebuild, the editor widgets are
-    // still valid — just refresh their values in place. plateStateChanged
-    // fires per viewport mouse-move, so without this every drag pixel tore
-    // down + rebuilt the whole card hierarchy.
+    // Fast path: when the active plate and the FX name list are unchanged, just refresh
+    // widget values in place; plateStateChanged fires per mouse-move during a drag.
     if (active >= 0 && active == lastActivePlate_) {
         const auto stackNames = jefe::qt::getFXStackOnPlate(active);
         if (stackNames == lastStack_ && !stackNames.empty()) {
@@ -302,9 +290,8 @@ void FXParamPanel_Qt::refresh() {
         nameLab->setStyleSheet("border: none;");
         nameLab->setObjectName(QString("fxparams.fx%1.header").arg(fxIdx));
         nameLab->setToolTip(fxDisplay);
-        // Let the name absorb slack AND shrink/clip below its text width so a
-        // long menuName never pushes the active/remove buttons out of view or
-        // forces the whole dock wider. Ignored = ignore size + minimum hints.
+        // Let the name absorb slack AND shrink/clip below its text width, so a long
+        // menuName never pushes the active/remove buttons out of view (Ignored policy).
         nameLab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         headerLay->addWidget(nameLab, /*stretch*/ 1);
 
@@ -325,7 +312,7 @@ void FXParamPanel_Qt::refresh() {
         auto* removeBtn = new QToolButton(headerRow);
         removeBtn->setObjectName(QString("fxparams.fx%1.remove.button").arg(fxIdx));
         removeBtn->setAccessibleName(QString("Remove FX %1").arg(fxIdx));
-        removeBtn->setIcon(jefe::qticons::remove());  // JEF-19 (was ⌫)
+        removeBtn->setIcon(jefe::qticons::remove());
         removeBtn->setIconSize(QSize(14, 14));
         removeBtn->setToolTip("Remove this effect");
         removeBtn->setStyleSheet("border: none;");
@@ -459,12 +446,8 @@ void FXParamPanel_Qt::refresh() {
                     break;
                 }
                 case jefe::qt::FXParamType::Texture: {
-                    // Texture input picker. Matches the FLTK FX-control
-                    // Fl_Choice: the source feeding this texture uniform is
-                    // "Previous" (the FBO result of the prior pass) or one of
-                    // the four tracks. The stored value is the option index,
-                    // which gfcFX::bind() maps: 0 = previousTexID, 1..4 =
-                    // trackManager.getSequence(value-1) (Track A..D).
+                    // Texture input picker: option 0 = "Previous" (prior pass FBO), 1..4 =
+                    // trackManager.getSequence(value-1) (Track A..D), as gfcFX::bind() maps it.
                     auto* combo = new QComboBox(row);
                     combo->setObjectName(
                         QString("fxparams.fx%1.param.%2.texture")
@@ -493,12 +476,8 @@ void FXParamPanel_Qt::refresh() {
                 }
                 case jefe::qt::FXParamType::Cube:
                 case jefe::qt::FXParamType::LUT: {
-                    // LUT picker. Cube = 3D LUTs, LUT = 1D LUTs. Matches the
-                    // FLTK Fl_Choice fed by lutManager.get3DLutNames() /
-                    // get1DLutNames(). The combo DISPLAYS names but STORES the
-                    // global lutManager index (display order != stored value),
-                    // carried per-item in Qt::UserRole; gfcFX::bind() reads
-                    // getLUT(value).texture3D/.texture1D.
+                    // LUT picker (Cube = 3D, LUT = 1D). The combo DISPLAYS names but STORES the
+                    // global lutManager index in Qt::UserRole; gfcFX::bind() reads getLUT(value).
                     const bool is3D = (p.type == jefe::qt::FXParamType::Cube);
                     const auto choices = is3D ? jefe::qt::getCubeLutChoices()
                                               : jefe::qt::getLut1DChoices();
@@ -559,12 +538,8 @@ void FXParamPanel_Qt::refresh() {
                     break;
                 }
             }
-            // Let the editor compress further than its content-based minimum
-            // when the dock is narrowed. Spinboxes/combos otherwise impose a
-            // wide floor (longest item / digit count) that keeps the whole
-            // panel from shrinking. Ignored horizontal policy drops that floor;
-            // a small explicit minimum keeps the control usable, and the row's
-            // stretch still lets it grow when there's room.
+            // Let the editor shrink below its content-based minimum when the dock narrows
+            // (Ignored policy); a small explicit minimum keeps the control usable.
             if (editor) {
                 editor->setMinimumWidth(40);
                 editor->setSizePolicy(QSizePolicy::Ignored,
@@ -602,10 +577,8 @@ void FXParamPanel_Qt::refresh() {
         // Keep the default item flags (drag+drop enabled) so InternalMove
         // reordering works; just disable inline rename.
         item->setFlags(item->flags() & ~Qt::ItemIsEditable);
-        // Width 0 → the item spans the list viewport width (never wider), so
-        // the card is sized to the dock and the list never scrolls
+        // Width 0: the item spans the list viewport width, so the list never scrolls
         // horizontally (which would slide the active/remove buttons off-view).
-        // Only the height comes from the card's content.
         item->setSizeHint(QSize(0, card->sizeHint().height()));
         list_->setItemWidget(item, card);
     }
@@ -617,9 +590,8 @@ void FXParamPanel_Qt::refresh() {
             .arg(paramCount)
             .arg(editableCount));
 
-    // Update the stack fingerprint for the next refresh() call. Names only
-    // — mirror getFXStackOnPlate's name selection (menuName preferred) so
-    // the fast-path equality check works.
+    // Update the stack fingerprint (names only, menuName preferred, as getFXStackOnPlate
+    // selects them) for the next refresh() fast-path check.
     lastActivePlate_ = active;
     lastStack_.clear();
     lastStack_.reserve(stack.size());
@@ -631,10 +603,8 @@ void FXParamPanel_Qt::refresh() {
 }
 
 bool FXParamPanel_Qt::refreshValuesOnly() {
-    // Fast-path partner to refresh(). Walks the cached editor list and
-    // re-reads the bridge's current param values; only writes a widget
-    // when the value actually changed. Returns false to demand a full
-    // rebuild if the bridge's row layout no longer matches our cache.
+    // Fast-path partner to refresh(): re-reads the bridge's param values and writes only
+    // changed widgets. Returns false to demand a full rebuild if the row layout no longer matches.
     const int active = lastActivePlate_;
     if (active < 0) return false;
 

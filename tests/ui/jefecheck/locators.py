@@ -1,11 +1,5 @@
 """Object-name locators for JefeCheck widgets.
-
-Qt bridges `objectName` to the AXIdentifier as the full dotted parent
-chain. Tests target widgets via `identifier ENDSWITH '<name>'` predicates,
-which are robust against widget reparenting and tab-order changes.
-
-Each constant here is just the trailing piece (the leaf objectName).
-"""
+Qt bridges objectName to the AXIdentifier as the full dotted parent chain; tests match `identifier ENDSWITH '<name>'` against each constant (the trailing leaf)."""
 
 BUNDLE_ID = "com.danielgollas.jefecheck.qt"
 
@@ -17,35 +11,29 @@ STATUSBAR_LAYOUT = "statusbar.layout.label"
 STATUSBAR_TRACK = "statusbar.track.label"
 STATUSBAR_LOADED = "statusbar.loaded.label"
 STATUSBAR_STARTUP = "statusbar.startup.label"
-# Default bit depth moved to Preferences → Playback & Engine
-# (preferences.engine.bitdepth.combo); status-bar visibility toggles via
-# View → Show Status Bar (menu.view.statusbar).
+# Default bit depth is at Preferences → Playback & Engine (preferences.engine.bitdepth.combo);
+# the status bar toggles via View → Show Status Bar (menu.view.statusbar).
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
 DOCK_TIMELINE = "dock.timeline"
 DOCK_LUTS = "dock.luts"
 
-# Timeline widgets (inside the timeline dock). The scrubber and the
-# track-rows lane are single painted QWidgets — their sub-regions are
-# not separate AX elements, so only the container objectNames resolve.
+# Timeline widgets. The scrubber and track-rows lane are single painted
+# QWidgets, so only the container objectNames resolve.
 TIMELINE_SCRUBBER = "timeline.scrubber"
 TIMELINE_TRACKS = "timeline.tracks"
 TIMELINE_THUMBS_TOGGLE = "transport.thumbnails.toggle"
 
-# Menus / actions. Note: macOS folds Qt's QMenuBar into the system
-# menu bar, which lives in a separate AX tree from the application
-# window — `by_object_name(menu.*)` does NOT resolve via Mac2.
-# These constants are kept as documentation of the canonical
-# objectNames; functional menu testing happens via the keyboard
-# shortcut bound to each action instead.
+# Menus / actions. macOS folds Qt's QMenuBar into the system menu bar (a separate AX tree), so `by_object_name(menu.*)` does NOT resolve via Mac2;
+# menu tests use the action's keyboard shortcut instead.
 MENU_FILE = "menu.file"
 MENU_FILE_LOAD = "menu.file.load"
 MENU_FILE_SAVE_SESSION = "menu.file.savesession"
 MENU_FILE_OPEN_SESSION = "menu.file.opensession"
 MENU_FILE_RECENT = "menu.file.recent"
-MENU_FILE_OPENPLAYLIST = "menu.file.openplaylist"      # JEF-18: open a .jpl
-MENU_FILE_RECENTPLAYLISTS = "menu.file.recentplaylists"  # JEF-18: recent .jpl submenu
+MENU_FILE_OPENPLAYLIST = "menu.file.openplaylist"      # open a .jpl
+MENU_FILE_RECENTPLAYLISTS = "menu.file.recentplaylists"  # recent .jpl submenu
 MENU_FILE_PREFERENCES = "menu.file.preferences"
 MENU_FILE_QUIT = "menu.file.quit"
 MENU_VIEW = "menu.view"
@@ -54,15 +42,15 @@ MENU_VIEW_CCFAVORITES = "menu.view.ccfavorites"
 MENU_VIEW_HISTOGRAM = "menu.view.histogram"            # Ctrl+H (active quad)
 MENU_VIEW_HISTOGRAM_ALL = "menu.view.histogramall"     # Ctrl+Alt+H (all plates)
 MENU_VIEW_STATUSBAR = "menu.view.statusbar"            # checkable: show/hide status bar
-# JEF-17: active-plate transforms folded into the View menu (were keyboard-only).
+# Active-plate transforms in the View menu.
 MENU_VIEW_FIT = "menu.view.fit"                        # F  (Shift+F = all plates)
 MENU_VIEW_FLIP = "menu.view.flip"                      # V  (vertical mirror)
 MENU_VIEW_FLOP = "menu.view.flop"                      # M  (horizontal mirror; was H)
 MENU_VIEW_TEXTMODE = "menu.view.textmode"              # T  (Alt+T = all plates)
 MENU_VIEW_RESETPLATE = "menu.view.resetplate"          # Ctrl+R
 MENU_VIEW_RESETCC = "menu.view.resetcc"                # Shift+R
-# JEF-17: the "Panels" menu (renamed from the legacy "Dialogs" menu) is the
-# single home for every dock toggle + the Remote/Render launchers.
+# The "Panels" menu is the single home for every dock toggle + the
+# Remote/Render launchers.
 MENU_PANELS = "menu.panels"
 MENU_PANELS_PLATEMANAGER = "menu.panels.platemanager"  # F2 (dock toggleViewAction)
 MENU_PANELS_TIMELINE = "menu.panels.timeline"          # dock toggleViewAction
@@ -73,18 +61,14 @@ MENU_PANELS_REMOTE = "menu.panels.remote"              # F5
 MENU_PANELS_RENDER = "menu.panels.render"              # F6
 MENU_PANELS_HIDECONTROLS = "menu.panels.hidecontrols"  # Ctrl+Alt+F
 MENU_HELP = "menu.help"
-# NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's
-# objectName — every menu item appears with `identifier='qt_itemFired:'`
-# under Mac2. Look up menu items by `title` instead (see test_minspecs.py
-# for the elementType==54 + title pattern). The QAction objectNames
-# below are kept for future Linux/Windows runs where Qt's QMenu does
-# expose them via AT-SPI / UIA.
+# NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's objectName (every item is `qt_itemFired:` under Mac2); look up menu items by `title`.
+# The names below are for Linux/Windows runs where AT-SPI / UIA expose them.
 MENU_HELP_ABOUT = "menu.help.about"
 MENU_HELP_SPECS = "menu.help.specs"
 MENU_HELP_MANUAL = "menu.help.manual"            # F1
 MENU_HELP_QUICKSTART = "menu.help.quickstart"
 MENU_HELP_ISSUES = "menu.help.issues"            # GitHub issue tracker
-MENU_HELP_ONSCREEN = "menu.help.onscreen"        # H — on-screen help overlay toggle (JEF-17)
+MENU_HELP_ONSCREEN = "menu.help.onscreen"        # H — on-screen help overlay toggle
 
 # Min Specs dialog (Help → System Specs). The dialog itself is a real
 # QDialog so its child widgets DO surface objectNames as identifiers.
@@ -110,25 +94,20 @@ TRANSPORT_FPS = "transport.fps.spin"
 LUT_LIST = "lut.list"
 LUT_APPLY = "lut.apply.button"
 LUT_REFRESH = "lut.refresh.button"
-# LUT preview/inspector (the 1D curve / 3D cube canvases are painted/GL
-# widgets whose content isn't AX-addressable — only the container + toggle
-# resolve; behavior is verified manually).
+# LUT preview/inspector: the curve/cube canvases are painted/GL widgets, so
+# only the container + toggle resolve.
 LUT_PREVIEW = "lut.preview"
 LUT_PREVIEW_TOGGLE = "lut.preview.toggle"
 
-# FX panel (combined effect-controls for the active plate — replaces the
-# old separate FX Stack browser). "+ Add FX" menu button at top, a list of
-# per-FX cards (active checkbox + remove button + inline param editors),
-# drag-to-reorder. Per-FX object names are templated by stack index N:
-#   fxparams.fx{N}.active.check, fxparams.fx{N}.remove.button,
-#   fxparams.fx{N}.param.{name}.{spin|check|combo|value}
+# FX panel: "+ Add FX" menu button, per-FX cards, drag-to-reorder. Per-FX names are templated by stack index N:
+#   fxparams.fx{N}.active.check, .remove.button, .param.{name}.{spin|check|combo|value}
 DOCK_FXPARAMS = "dock.fxparams"
 FXPARAMS_PANEL = "fxparams.panel"
 FXPARAMS_STATUS = "fxparams.status.label"
 FXPARAMS_ADD = "fxparams.addfx.button"
 FXPARAMS_LIST = "fxparams.list"
 
-# Remote sessions dialog (PR-41a — modal File → Remote Session…)
+# Remote sessions dialog (modal File → Remote Session…)
 DIALOG_REMOTE = "dialog.remote"
 REMOTE_DONE = "remote.done.button"
 REMOTE_SERVER_NAME = "remote.server.name.edit"
@@ -143,16 +122,8 @@ REMOTE_CLIENT_CONNECT = "remote.client.connect.button"
 REMOTE_DISCONNECT = "remote.disconnect.button"
 REMOTE_STATUS = "remote.status.label"
 
-# Playlist dock (PlaylistPanel_Qt). Button object names follow the
-# playlist.button.* scheme; checkboxes/combo/status added in the rewritten
-# panel. Old names (playlist.add.button / playlist.remove.button /
-# playlist.up.button / playlist.down.button / playlist.clear.button /
-# playlist.save.button / playlist.load.button) are removed.
-# Per-card leaves (templated by item index i):
-#   playlist.card.<i>         — the PlaylistItemCard QWidget
-#   playlist.card.<i>.name    — item name label
-#   playlist.card.<i>.chevron — expand/collapse toggle
-#   playlist.card.<i>.remove  — per-card remove button
+# Playlist dock (PlaylistPanel_Qt). Button leaves follow playlist.button.*; per-card leaves are templated by item index i:
+#   playlist.card.<i> (card), .name, .chevron (expand/collapse), .remove
 DOCK_PLAYLIST           = "dock.playlist"
 PLAYLIST_PANEL          = "playlist.panel"
 PLAYLIST_LIST           = "playlist.list"
@@ -172,7 +143,7 @@ PLAYLIST_SCALEOVERRIDE  = "playlist.check.scaleoverride"
 PLAYLIST_SCALECOMBO     = "playlist.combo.scale"
 PLAYLIST_STATUS         = "playlist.status.label"
 
-# Render dialog (PR-39a — minimal: quadrant/format/range/scale/path/prefix)
+# Render dialog (quadrant/format/range/scale/path/prefix)
 DIALOG_RENDER = "dialog.render"
 RENDER_QUADRANT = "dialog.render.quadrant.combo"
 RENDER_FORMAT = "dialog.render.format.combo"
@@ -234,7 +205,7 @@ PREFERENCES_BUTTONS = "preferences.buttons"
 PREFERENCES_DONE = "preferences.done.button"
 PREFERENCES_CANCEL = "preferences.cancel.button"
 
-# Preferences → General panel widgets (JEF-16 Task 1/8).
+# Preferences → General panel widgets.
 PREFS_GENERAL_BGCOLOR = "preferences.general.bgcolor.button"
 PREFS_GENERAL_CHECKERBOARD = "preferences.general.checkerboard.check"
 PREFS_GENERAL_BROWSEPATH = "preferences.general.browsepath.edit"
@@ -248,12 +219,8 @@ PREFS_GENERAL_THUMBNAILS = "preferences.general.thumbnails.check"
 PREFS_GENERAL_FEEDBACK_SIZE = "preferences.general.feedbacksize.spin"
 PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 
-# Preferences → Playback & Engine panel widgets. Standardized (JEF-16
-# Task 2) onto the `preferences.engine.*.combo` leaf convention used by
-# the other Engine widgets.
-# renderingEngine / vsync / numOfPartitions / forcePBO controls were removed
-# (JEF-16 audit: inert — no runtime effect); balanceReads was dropped entirely
-# (superseded by the read-ahead queue cap). Only the queue control remains.
+# Preferences → Playback & Engine widgets, `preferences.engine.*.combo` leaf convention;
+# only the queue control remains.
 PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
 PREFS_ENGINE_MEMORY_LIMIT = "preferences.engine.memorylimit.spin"
 PREFS_ENGINE_LAG_POLICY = "preferences.engine.lagpolicy.combo"
@@ -261,13 +228,13 @@ PREFS_ENGINE_OIIO_THREADS = "preferences.engine.oiiothreads.spin"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"
 
-# Preferences → Formats panel widgets (JEF-16 Task 3).
+# Preferences → Formats panel widgets.
 PREFS_FORMATS_EXR_IGNORE_DISPLAY = "preferences.formats.exrignoredisplay.check"
 PREFS_FORMATS_EXR_IGNORE_ASPECT = "preferences.formats.exrignoreaspect.check"
 PREFS_FORMATS_STRAIGHT_ALPHA = "preferences.formats.straightalpha.check"
 PREFS_FORMATS_APPLY_ORIENTATION = "preferences.formats.applyorientation.check"
 
-# Preferences → Search Paths panel widgets (JEF-16 Task 4).
+# Preferences → Search Paths panel widgets.
 PREFS_SEARCH_ENABLE = "preferences.search.enable.check"
 PREFS_SEARCH_RECURSIVE = "preferences.search.recursive.check"
 PREFS_SEARCH_FINGERPRINT_RELINK = "preferences.search.fingerprintRelink.check"
@@ -275,7 +242,7 @@ PREFS_SEARCH_PATHS_LIST = "preferences.search.paths.list"
 PREFS_SEARCH_ADD = "preferences.search.add.button"
 PREFS_SEARCH_REMOVE = "preferences.search.remove.button"
 
-# Preferences → Remote panel widgets (JEF-16 Task 5).
+# Preferences → Remote panel widgets.
 PREFS_REMOTE_NICKNAME = "preferences.remote.nickname.edit"
 PREFS_REMOTE_CHAT_FADE = "preferences.remote.chatfade.spin"
 PREFS_REMOTE_CHAT_AUTOFADE = "preferences.remote.chatautofade.check"
@@ -286,9 +253,8 @@ PREFS_REMOTE_CHAT_LINES = "preferences.remote.chatlines.spin"
 PREFS_REMOTE_POINTER_FADE = "preferences.remote.pointerfade.spin"
 PREFS_REMOTE_POINTER_COLOR = "preferences.remote.pointercolor.button"
 
-# Preferences → Text panel widgets (JEF-16 Task 6). Deferred (Done-writes)
-# persistence — see qt_prefs_persist.cpp applyTextPrefs()/PreferencesWindow_Qt
-# writeTextPrefs().
+# Preferences → Text panel widgets. Deferred (Done-writes) persistence; see
+# qt_prefs_persist.cpp applyTextPrefs() / PreferencesWindow_Qt::writeTextPrefs().
 PREFS_TEXT_SIZE = "preferences.text.size.spin"
 PREFS_TEXT_COLOR = "preferences.text.color.button"
 PREFS_TEXT_HINT = "preferences.text.hint.combo"

@@ -127,12 +127,8 @@ std::string GetExtension(const std::string& filename);
 
 std::string GetMD5Hash(std::string theString);
 
-// ---------------------------------------------------------------------------
-// Portable content digest (JEF-28 Task 1). Unlike GetMD5Hash (std::hash over a
-// string — build/platform-dependent, NOT over file bytes), these are a fixed
-// FNV-1a 64-bit hash over RAW BYTES, so two peers on different builds/platforms
-// compute the SAME 16-hex-char digest for the same bytes. Used for the LUT/FX
-// content hashes that drive the P2P asset-sync dedup (must agree across peers).
+// Portable content digest: FNV-1a 64-bit over RAW BYTES (unlike the build-dependent
+// GetMD5Hash), so peers on different builds agree. Drives P2P asset-sync dedup.
 namespace jefe {
     // Digest of an arbitrary byte range.
     std::string contentHash(const unsigned char* data, size_t len);
@@ -359,7 +355,7 @@ public:
 	int exrEnableExposureTransformOnLoad;
 
     int maxRecentSessions;
-    int maxRecentPlaylists;      // JEF-18: cap for the File → Recent Playlists list
+    int maxRecentPlaylists;      // cap for the File → Recent Playlists list
     int startupSessionBehavior;  // 0=Empty, 1=Reopen last, 2=Ask
     int maxRecentBrowsed;
     int maxRecentIPs;
@@ -367,7 +363,7 @@ public:
     std::vector<std::string> recentFXStacks;
     std::vector<std::string> recentFXs;
     std::vector<std::string> recentSessions;
-    std::vector<std::string> recentPlaylists;   // JEF-18: recently opened/saved .jpl paths
+    std::vector<std::string> recentPlaylists;   // recently opened/saved .jpl paths
     std::vector<std::string> recentBrowsed;
     std::vector<std::string> recentIPs;
 

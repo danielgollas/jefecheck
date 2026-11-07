@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Loads GLAD function pointers without dragging Qt's OpenGL headers into the
-// same translation unit. macOS's OpenGL.framework + Qt's QOpenGLWidget chain
-// pull in <OpenGL/glext.h>, which collides with glad's redefinition of the
-// same `glClampColorARB` / `glDrawBuffersARB` / etc. symbols. Keeping glad
-// confined to this file (no Qt headers) sidesteps the conflict.
+// Loads GLAD function pointers without Qt's OpenGL headers in the same TU
+// (macOS <OpenGL/glext.h> collides with glad's ARB redefinitions).
 #include <glad/glad.h>
 
 bool jefecheck_loadGladGL() {

@@ -1,17 +1,6 @@
-"""Remote sessions modal dialog — PR-41a scaffold smoke tests.
-
-The Remote Session UI is a QDialog launched from File → Remote Session…
-PR-41a only ships the form fields plus connect-as-server / connect-as-
-client / disconnect plumbing through gfcNetworkManager. Tests here
-just confirm the dialog opens and its widgets resolve via objectName —
-actual connectivity needs a paired second instance which is out of
-scope until PR-41b.
-
-Why a dialog rather than a dock: an earlier scaffold tried a fourth
-left-side dock; the Mac2 AX bridge dropped child widgets out of its
-tree under sweep load, breaking the FX param tests. The FLTK side was
-also a separate window, so this matches existing behavior too.
-"""
+"""Remote Session dialog smoke tests: it opens from File -> Remote Session… and
+its widgets resolve via objectName. Actual connectivity needs a paired second
+instance (see the headless --remote-test harness)."""
 from appium.webdriver.common.appiumby import AppiumBy
 
 from jefecheck import locators

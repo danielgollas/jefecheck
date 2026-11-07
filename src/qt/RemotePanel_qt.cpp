@@ -44,8 +44,8 @@
 
 namespace {
 
-// JEF-30: session-health colors, matching the existing statusDot_ palette
-// (green connected/good, amber warn/relay, gray unknown/no-stats).
+// Session-health colors, matching the statusDot_ palette (green
+// connected/good, amber warn/relay, gray unknown/no-stats).
 const char* kHealthGood = "#5bb07a";
 const char* kHealthWarn = "#d6a15b";
 const char* kHealthGray = "#6a6a70";
@@ -148,31 +148,8 @@ QWidget* makeHostPage(QLineEdit*& nameOut, QSpinBox*& portOut,
     return page;
 }
 
-// Google Desktop-app OAuth client (JEF-31).
-//
-// The "secret" is not confidential in the usual sense: RFC 8252 installed apps
-// are PUBLIC clients that cannot keep one, and Google's token endpoint still
-// demands it (probe it and you get "client_secret is missing"). PKCE is what
-// actually protects the exchange.
-//
-// It is nevertheless NOT hardcoded here, for a reason that has nothing to do
-// with cryptography: this repository is public. A literal in the source gets
-// caught by secret scanning and auto-revoked, which breaks sign-in for every
-// shipped build until somebody notices. So it arrives one of two ways:
-//
-//   1. -DJEFECHECK_GOOGLE_CLIENT_SECRET=... at configure time (release CI,
-//      from a repository secret),
-//   2. $JEFECHECK_GOOGLE_CLIENT_SECRET at run time, or
-//   3. ~/.config/jefecheck/google_client.json — the credentials file Google's
-//      console hands you, unedited.
-//
-// (3) exists because (2) does not survive a Finder or Dock launch: macOS gives
-// a GUI app the login environment, not a shell's, so an `export` in a terminal
-// is invisible to the way the app is normally started. A file on disk works
-// either way, and keeps the value out of the repository.
-//
-// With none of the three, sign-in is simply unavailable and says so, rather
-// than failing deep in a token exchange with an error nobody can act on.
+// Google Desktop-app OAuth client. Its "secret" is not confidential but Google demands it
+// and the repo is public: -DJEFECHECK_GOOGLE_CLIENT_SECRET, env var, or ~/.config/jefecheck/google_client.json.
 constexpr const char* kGoogleDesktopClientId =
     "424897654904-s5i61ngt4gm2ir8kihqt4d7qcro5g0db.apps.googleusercontent.com";
 
@@ -188,11 +165,7 @@ static QString googleClientFilePath() {
            QStringLiteral("/.config/jefecheck/google_client.json");
 }
 
-/**
- * Build-time secret, else the environment, else the downloaded credentials
- * file. Returns "" when none is configured — callers must treat that as
- * "sign-in unavailable", never as "try anyway".
- */
+/** Build-time secret, else the environment, else the downloaded credentials file; "" means sign-in unavailable. */
 static std::string googleClientSecret() {
     if (kBuiltInGoogleClientSecret[0] != '\0') return kBuiltInGoogleClientSecret;
 
@@ -205,8 +178,7 @@ static std::string googleClientSecret() {
     f.close();
     if (!doc.isObject()) return {};
     // Google nests under "installed" for a desktop client and "web" for a web
-    // one. Accept either: pointing this at the wrong file should fail on the
-    // client id not matching, not on a key name.
+    // one; accept either.
     const QJsonObject root = doc.object();
     const QJsonObject creds = root.contains(QStringLiteral("installed"))
                                   ? root.value(QStringLiteral("installed")).toObject()
@@ -243,16 +215,8 @@ QString defaultCoordinatorUrl() {
     return QSettings().value("Remote/coordinatorUrl").toString();
 }
 
-// Build the JefeCheck Cloud page. Mirrors makeHostPage deliberately: a short
-// form ending in one accent button, so hosting on the cloud reads as the same
-// action as hosting on the LAN.
-//
-// There is NO password row: the coordinator protocol has no password concept
-// (session access is the join code plus, for the host, an access token), so a
-// Password field would be a control that silently does nothing.
-//
-// There is no coordinator-URL row either — that moved to Preferences -> Remote.
-// The result block below the button stays hidden until a session exists.
+// Build the JefeCheck Cloud page, mirroring makeHostPage. No password row (the
+// protocol has none) and no URL row (Preferences -> Remote); the result block stays hidden.
 QWidget* makeCloudPage(QComboBox*& groupOut, QPushButton*& newGroupOut,
                        QLineEdit*& hostNameOut, QCheckBox*& knockOut,
                        QLineEdit*& passwordOut, QSpinBox*& timeoutOut,
@@ -291,10 +255,7 @@ QWidget* makeCloudPage(QComboBox*& groupOut, QPushButton*& newGroupOut,
     v->addLayout(form);
 
     // --- Host-side settings, saved on the selected group ------------------
-    // Every control below belongs to the GROUP, not the machine: a client
-    // review wants knocking and a tight cap, internal dailies want neither,
-    // and one global set means re-toggling them every time (which in practice
-    // means they end up wrong). Joiners never see any of this.
+    // These belong to the GROUP, not the machine; joiners never see them.
     v->addWidget(sectionLabel("Session settings", page));
 
     knockOut = new QCheckBox("Ask me before letting each person in", page);
@@ -375,9 +336,8 @@ QWidget* makeCloudPage(QComboBox*& groupOut, QPushButton*& newGroupOut,
     acctRow->addWidget(accountOut, /*stretch*/ 1);
     acctRow->addWidget(signOutOut);
 
-    // NOTE: credits are deliberately NOT here. They live in the always-visible
-    // status header and appear only while hosting -- a joiner has no balance
-    // worth showing, since joining is free.
+    // NOTE: credits are deliberately NOT here; they live in the status header
+    // and appear only while hosting.
     auto* rform = new QFormLayout();
     rform->setContentsMargins(0, 0, 0, 0);
     rform->setSpacing(9);
@@ -390,9 +350,8 @@ QWidget* makeCloudPage(QComboBox*& groupOut, QPushButton*& newGroupOut,
     return page;
 }
 
-// Unified Join page: one place for "someone gave me something to join with",
-// switching on WHAT they gave you. Joining a cloud session needs no account,
-// so this page has no sign-in affordance.
+// Unified Join page: session code OR IP address. Joining a cloud session
+// needs no account, so there is no sign-in affordance.
 QWidget* makeJoinPage(QLineEdit*& nameOut, QRadioButton*& modeCodeOut,
                       QRadioButton*& modeIpOut, QLineEdit*& codeOut,
                       QWidget*& ipRowsOut, QLineEdit*& ipOut,
@@ -495,10 +454,8 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     statusRow->addWidget(statusDot_);
     statusRow->addWidget(statusLabel_, /*stretch*/ 1);
 
-    // Credits: always visible WHILE HOSTING, and only then. A joiner never
-    // sees a balance — joining is free, so the number would be both
-    // meaningless and misleading to them. refreshCreditsVisibility() owns the
-    // hiding; this only builds it.
+    // Credits: visible only WHILE HOSTING (a joiner has no balance; joining is
+    // free). refreshCreditsVisibility() owns the hiding; this only builds it.
     creditsLabel_ = new QLabel(QString(), this);
     creditsLabel_->setObjectName("remote.status.credits");
     creditsLabel_->setTextFormat(Qt::PlainText);
@@ -507,9 +464,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     statusRow->addWidget(creditsLabel_);
 
     // ---- Connect section (shown when disconnected): Host / Join ----------
-    // A segmented toggle that shows exactly one of the two forms, so the panel
-    // sizes to the visible form (no dead space; avoids QTabWidget's stacked
-    // layout always sizing to the tallest page).
+    // A segmented toggle shows one form so the panel sizes to it (not the tallest page).
     hostToggle_ = new QPushButton("Host", this);
     cloudToggle_ = new QPushButton("Cloud", this);
     joinToggle_ = new QPushButton("Join", this);
@@ -607,7 +562,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     chatInput_->setClearButtonEnabled(true);
     // Dedicated Send button next to the input — the native chat pattern, and it
     // makes the send affordance obvious (Enter also sends).
-    auto* sendBtn = new QPushButton(jefe::qticons::send(), "Send", this);  // JEF-19
+    auto* sendBtn = new QPushButton(jefe::qticons::send(), "Send", this);
     sendBtn->setObjectName("remote.chat.send");
     sendBtn->setToolTip("Send the message (Enter also sends)");
     sendBtn->setProperty("accent", true);
@@ -617,9 +572,8 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     chatInputRow->addWidget(chatInput_, /*stretch*/ 1);
     chatInputRow->addWidget(sendBtn);
 
-    // End/Leave lives in the session header (top), away from the chat input, so
-    // it can't be mistaken for a send button. Text is set contextually in
-    // refreshConnectionState (host "End Session" vs client "Leave").
+    // End/Leave lives in the session header, away from the chat input; text is
+    // set in refreshConnectionState (host "End Session" vs client "Leave").
     disconnectBtn_ = new QPushButton("Leave", this);
     disconnectBtn_->setObjectName("remote.disconnect.button");
     disconnectBtn_->setProperty("danger", true);
@@ -634,8 +588,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     errorLabel_->setWordWrap(true);
 
     // Cloud-host code banner: keeps the assigned session code visible (with a
-    // Copy button) while connected, so the host can keep inviting peers. Shown
-    // only when connected as a cloud host (remoteSessionCode() non-empty).
+    // Copy button) while connected as a cloud host (remoteSessionCode() non-empty).
     cloudCodeBanner_ = new QWidget(this);
     cloudCodeBanner_->setObjectName("remote.cloud.codeBanner");
     cloudCodeBanner_->setProperty("card", true);
@@ -687,10 +640,8 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     clientIPEdit_->setText("127.0.0.1");
     clientNameEdit_->setText(QSysInfo::machineHostName());
 
-    // Chat area (sessionBox_) and the connection log share a vertical splitter
-    // so the chat fills available space and the user can drag the boundary to
-    // grow/shrink the log. The chat gets the stretch; the log stays compact by
-    // default but is freely resizable.
+    // Chat area (sessionBox_) and the connection log share a vertical splitter;
+    // the chat gets the stretch, the log stays compact but resizable.
     auto* sessionSplitter = new QSplitter(Qt::Vertical, this);
     sessionSplitter->setObjectName("remote.sessionsplitter");
     sessionSplitter->setChildrenCollapsible(false);
@@ -700,21 +651,12 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     sessionSplitter->setStretchFactor(1, 0);   // log stays compact
     sessionSplitter->setSizes({400, 120});
 
-    // ---- Knock panel (JEF-37, joiner side) -------------------------------
-    // Shown INSTEAD of the connect forms while waiting on the host. Three
-    // things a person needs while blocked on someone else's decision, and the
-    // small amber status line carried none of them: that the request was
-    // actually sent, that the app is still alive, and how long it has been.
-    //
-    // The bar is indeterminate on purpose. There is no progress to report —
-    // a human is deciding — but a still panel and a hung panel look identical,
-    // and that ambiguity is the whole complaint. Motion answers it without
-    // implying a percentage nobody can know.
+    // ---- Knock panel (joiner side) ---------------------------------------
+    // Shown INSTEAD of the connect forms; the bar is indeterminate on purpose (not hung).
     knockPanel_ = new QWidget(this);
     knockPanel_->setObjectName("remote.knock.panel");
-    // A card, not floating text. Waiting is a state the app is IN, and giving
-    // it its own surface says that more directly than any wording — the
-    // amber matches the status dot for the same phase.
+    // A card, not floating text: waiting is a state the app is IN. The amber
+    // matches the status dot for the same phase.
     knockPanel_->setStyleSheet(
         "#remote\\.knock\\.panel {"
         "  background-color: #241f1a;"
@@ -774,8 +716,7 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     connect(startServerBtn_, &QPushButton::clicked,
             this, &RemoteDialog_Qt::onStartServerClicked);
     // --- Session groups ---------------------------------------------------
-    // Populate before connecting, so filling the combo doesn't fire
-    // currentTextChanged and write a half-built form over a stored group.
+    // Populate before connecting so filling the combo doesn't fire currentTextChanged.
     cloudGroupCombo_->addItems(jefe::qt::sessionGroupNames());
     cloudGroupCombo_->setCurrentText(jefe::qt::activeSessionGroup());
     loadGroupIntoForm(cloudGroupCombo_->currentText());
@@ -865,20 +806,16 @@ void RemoteDialog_Qt::onDisconnectClicked() {
     refreshConnectionState();
 }
 
-// --- Cloud (coordinator) mode — JEF-27 --------------------------------------
+// --- Cloud (coordinator) mode --------------------------------------
 
-// Runs the (potentially 5s-blocking) coordinator connect `work` on a detached
-// worker thread so the Qt event loop keeps running, then marshals a call to
-// onCloudConnectFinished(wasHost) back onto the GUI thread. A QPointer guards
-// against the dialog being destroyed mid-connect (no use-after-free): if the
-// dialog is gone when the worker finishes, the queued lambda is a no-op.
+// Runs the coordinator connect `work` (up to ~5s) on a detached worker thread,
+// then calls onCloudConnectFinished(wasHost) on the GUI thread (QPointer-guarded).
 void RemoteDialog_Qt::launchCloudConnect(bool wasHost, std::function<void()> work) {
     QPointer<RemoteDialog_Qt> guard(this);
     std::thread([guard, wasHost, work = std::move(work)]() {
         work();   // blocks off the GUI thread
-        // Marshal back onto the GUI thread. qApp is the context object (it
-        // lives on the main thread), so the lambda runs there; the QPointer
-        // tells us whether the dialog is still alive.
+        // Marshal back onto the GUI thread: qApp (main thread) is the context
+        // object, and the QPointer says whether the dialog is still alive.
         QMetaObject::invokeMethod(qApp, [guard, wasHost]() {
             if (guard) guard->onCloudConnectFinished(wasHost);
         }, Qt::QueuedConnection);
@@ -901,18 +838,8 @@ jefe::auth::AuthSession* RemoteDialog_Qt::authSession() {
 
     jefe::auth::AuthConfig cfg;
     const QString ws = coordinatorUrlSetting().trimmed();
-    // Where the HTTP API lives. This used to be DERIVED from the WebSocket URL
-    // by swapping the scheme and dropping the stage, on the assumption that the
-    // two are the same host. On AWS they are not: an API Gateway WebSocket API
-    // and an HTTP API are separate resources with separate ids, so the derived
-    // address pointed at the WebSocket endpoint, which answers every POST with
-    // 426 Upgrade Required. Google sign-in completed, the browser redirected,
-    // and only then did the token exchange hit a wall — reported as a bare
-    // "sign-in failed" with the actual cause nowhere on screen.
-    //
-    // So: no guessing. An explicit setting, an environment override for
-    // testing, and a known constant for the hosted service. Anything else is
-    // reported as unconfigured BEFORE a browser opens.
+    // Where the HTTP API lives: not derived from the WebSocket URL (on AWS they are
+    // separate resources and the WebSocket endpoint answers POSTs with 426).
     {
         const QByteArray env = qgetenv("JEFECHECK_HTTP_API_BASE");
         const QString setting =
@@ -922,9 +849,8 @@ jefe::auth::AuthSession* RemoteDialog_Qt::authSession() {
         } else if (!setting.isEmpty()) {
             cfg.httpBase = setting.toStdString();
         } else if (ws.contains(QStringLiteral("execute-api"))) {
-            // A raw API Gateway WebSocket URL with no companion configured.
-            // Leaving httpBase empty makes AuthSession fail fast with a
-            // reason, instead of posting credentials at the wrong endpoint.
+            // A raw API Gateway WebSocket URL with no companion: leave httpBase empty so
+            // AuthSession fails fast instead of posting credentials at the wrong endpoint.
             cfg.httpBase.clear();
         } else {
             // Self-hosted: one process serves both, so same host, no stage.
@@ -1006,13 +932,8 @@ void RemoteDialog_Qt::onCreateCloudClicked() {
         return;
     }
 
-    // No token at all: HOST ANONYMOUSLY and see what the coordinator says.
-    //
-    // Not every coordinator demands an account — a self-hosted one usually
-    // does not — and opening a browser before anyone has asked for credentials
-    // makes signing in feel mandatory when it is not. The hosted service
-    // answers "auth-required", and onCloudConnectFinished signs in and retries
-    // then. Sign-in is a response to a refusal, not a toll on the front door.
+    // No token: host anonymously and see what the coordinator says; the hosted one
+    // answers "auth-required" and onCloudConnectFinished signs in and retries.
     hostWithToken();
 }
 
@@ -1038,23 +959,21 @@ void RemoteDialog_Qt::hostWithToken() {
     p.sessionPassword    = cloudPasswordEdit_->text().toStdString();
     p.idleTimeoutMinutes = cloudTimeoutSpin_->value();
     p.maxParticipants    = cloudMaxPeersSpin_->value();
-    // The access token from the signed-in session. Falls back to the env var
-    // when empty, which keeps the pre-sign-in workflow (and the two-window
-    // test script) working unchanged.
+    // The access token from the signed-in session; falls back to the env var
+    // when empty (keeps the two-window test script working).
     if (authSession_ != nullptr) {
         p.authToken = authSession_->accessToken();
     }
-    // Legacy note kept for the env fallback in makeTransport: the
-    // JEFECHECK_COORDINATOR_TOKEN env fallback in makeTransport fills it for
-    // now, so a hand-supplied token already works end to end.
+    // The JEFECHECK_COORDINATOR_TOKEN env fallback in makeTransport fills the
+    // token, so a hand-supplied token works end to end.
     launchCloudConnect(/*wasHost*/ true, [p]() { jefe::qt::connectAsCloudHost(p); });
 }
 
 void RemoteDialog_Qt::onJoinCloudClicked() {
     clearUiPreview();   // a real action always wins over --ui-preview
 
-    // JEF-37: while knocking this button reads "Cancel" (see
-    // refreshConnectionState) and means "stop waiting", not "join again".
+    // While knocking this button reads "Cancel" (see refreshConnectionState) and
+    // means "stop waiting", not "join again".
     if (currentUiState().phase == jefe::qt::RemotePhase::Knocking) {
         jefe::qt::disconnectRemote();
         refreshConnectionState();
@@ -1083,10 +1002,8 @@ void RemoteDialog_Qt::onJoinCloudClicked() {
     connectClientBtn_->setText("Joining…");
     errorLabel_->clear();
     shownStatusText_.clear();
-    // NOT "waiting for the host" — nobody has been asked yet. The code may be
-    // wrong, the session full, or knocking off entirely; claiming the lobby
-    // here is the same optimism that produced phantom sessions before. The
-    // real Knocking state comes from the coordinator, via remoteUiState().
+    // NOT "waiting for the host": nobody has been asked yet. The real Knocking
+    // state comes from the coordinator, via remoteUiState().
     statusLabel_->setText("Joining…");
 
     jefe::qt::RemoteCloudJoinParams p;
@@ -1111,14 +1028,10 @@ void RemoteDialog_Qt::onCloudConnectFinished(bool wasHost) {
             cloudCopyBtn_->setEnabled(true);
             cloudResultBox_->setVisible(true);
         } else {
-            // Name the actual cause. "The session was refused" told the user
-            // nothing they could act on, and the three causes below need three
-            // different responses.
+            // Name the actual cause; the three causes below need different responses.
             const std::string ec = jefe::qt::remoteCoordinatorErrorCode();
-            // No secret configured: say so here rather than opening a browser
-            // for a flow that cannot finish. Google's token endpoint rejects
-            // this client without one ("client_secret is missing"), so the
-            // user would consent, get redirected, and hit a dead end.
+            // No secret configured: say so rather than open a browser for a flow that
+            // cannot finish (Google rejects the client without one).
             if (ec == "auth-required" && googleClientSecret().empty()) {
                 failMsg =
                     "This coordinator requires an account, but this build has no "
@@ -1128,9 +1041,8 @@ void RemoteDialog_Qt::onCloudConnectFinished(bool wasHost) {
             } else if (ec == "auth-required" &&
                        (authSession() == nullptr ||
                         authSession()->httpBase().empty())) {
-                // Caught BEFORE the browser opens. Signing in against an
-                // unknown API address wastes the user's consent and then
-                // fails somewhere they cannot see.
+                // Caught BEFORE the browser opens: signing in against an unknown API
+                // address wastes the user's consent.
                 failMsg =
                     "This coordinator requires an account, but the address of its "
                     "HTTP API is not configured, so sign-in cannot complete. Set "
@@ -1138,10 +1050,8 @@ void RemoteDialog_Qt::onCloudConnectFinished(bool wasHost) {
                     "coordinator's https:// endpoint.";
             } else if (ec == "auth-required" && !hostRetryPending_ &&
                 authSession() != nullptr) {
-                // The coordinator wants an account after all. THIS is the
-                // moment sign-in is warranted — the user asked to host and the
-                // service said no. One attempt: hostRetryPending_ guards the
-                // retry so a failure cannot loop a browser open.
+                // The coordinator wants an account after all: sign in now. One attempt;
+                // hostRetryPending_ keeps a failure from looping a browser open.
                 hostRetryPending_ = true;
                 cloudHostBtn_->setEnabled(false);
                 cloudHostBtn_->setText("Waiting for browser…");
@@ -1181,14 +1091,8 @@ void RemoteDialog_Qt::copySessionCodeToClipboard() {
 }
 
 void RemoteDialog_Qt::refreshConnectionState() {
-    // --ui-preview paints a state nothing is actually in. This runs on a timer,
-    // so without this guard it would hide the session view — and with it the
-    // pending-admission rows and the credits — on the next tick, leaving only
-    // the Cloud form visible.
-    // ONE state, sampled once. Every widget below is a function of `st` and
-    // nothing else — no second look at getConnected/getIsServer/the code,
-    // which is how the panel previously ended up rendering a session that did
-    // not exist.
+    // --ui-preview paints a state nothing is in; this runs on a timer, so the
+    // guard keeps it from hiding the session view. ONE state, sampled once.
     const jefe::qt::RemoteUiState st = currentUiState();
     using Phase = jefe::qt::RemotePhase;
 
@@ -1205,12 +1109,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
         statusDot_->setStyleSheet("color:" + dotColor + "; font-size: 13px;");
     }
 
-    // Contextual sections: forms when there is no session, the session view
-    // when there is. setVisible / setText are no-ops when unchanged.
-    // JEF-37: knocking replaces the connect forms rather than sitting beside
-    // them. Leaving the forms up meant a submitted join changed almost nothing
-    // on screen, which read as "the button didn't work" — and the natural
-    // response, pressing Join again, queues a second knock.
+    // Contextual sections: forms when there is no session, the session view when
+    // there is. Knocking replaces the connect forms so a submitted join is visible.
     const bool knocking = st.phase == Phase::Knocking;
     connectPanel_->setVisible(!st.inSession && !knocking);
     if (knockPanel_ != nullptr) knockPanel_->setVisible(knocking);
@@ -1221,9 +1121,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
         if (knockStartedMs_ == 0) knockStartedMs_ = QDateTime::currentMSecsSinceEpoch();
         const qint64 secs =
             (QDateTime::currentMSecsSinceEpoch() - knockStartedMs_) / 1000;
-        // Naming the code matters when someone is in more than one session's
-        // queue, or suspects they typed the wrong one — the alternative is
-        // cancelling just to re-read what they entered.
+        // Naming the code matters when someone is in more than one queue or may
+        // have typed the wrong one.
         QString code = QString::fromStdString(st.sessionCode).trimmed();
         if (code.isEmpty() && joinCodeEdit_ != nullptr)
             code = joinCodeEdit_->text().trimmed();
@@ -1245,9 +1144,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
     // Host ends the session for everyone; a joiner just leaves it.
     disconnectBtn_->setText(st.isHost ? "End Session" : "Leave");
 
-    // JEF-37: while knocking, the Join button becomes the way OUT. Without it
-    // someone waiting on a host who never answers has no control at all — and
-    // a still-live "Join" invites them to queue a second time.
+    // While knocking, the Join button becomes the way OUT, so a live "Join"
+    // can't invite a second knock.
     if (knocking) {
         connectClientBtn_->setEnabled(true);
         connectClientBtn_->setText("Cancel");
@@ -1271,14 +1169,11 @@ void RemoteDialog_Qt::refreshConnectionState() {
     // Credits are one field of the state now, not a separately-derived guess.
     refreshCreditsVisibility(st.showCredits);
 
-    // Participants change only on join/leave (which changes the count), so
-    // rebuild the ROW WIDGETS only when the count moved — not on every packet.
-    // The health fields inside each row (rtt/kbps/path/dot) are refreshed
-    // every tick below via updateParticipantHealthRow (cheap setText, no
-    // relayout).
+    // Rebuild the row widgets only when the participant count moved; the health
+    // fields are refreshed every tick via updateParticipantHealthRow.
     const auto participants = jefe::qt::remoteParticipants();
-    // JEF-37 lobby, straight off the resolved state — empty for a joiner, for
-    // a LAN host, and offline, so no call site here re-derives who may see it.
+    // Lobby, straight off the resolved state: empty for a joiner, a LAN host and
+    // offline, so no call site re-derives who may see it.
     const std::vector<jefe::qt::RemotePendingJoiner>& pending = st.pending;
 
     QString rosterSig;
@@ -1317,9 +1212,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
                       .arg((int)pending.size()));
     }
 
-    // Announce a new knock on the viewport when the panel is not on screen —
-    // reusing the existing feedback message (Preferences size/fade) rather
-    // than adding a second notification path.
+    // Announce a new knock on the viewport when the panel is not on screen,
+    // reusing the feedback message (Preferences size/fade).
     if (!pending.empty() && !isVisible()) {
         for (const auto& p : pending) {
             if (std::find(announcedKnocks_.begin(), announcedKnocks_.end(),
@@ -1341,16 +1235,13 @@ void RemoteDialog_Qt::refreshConnectionState() {
         announcedKnocks_.swap(still);
     }
 
-    // JEF-30: per-peer session health. Drop stale samples on disconnect (a
-    // later reconnect starts clean, so kbps doesn't spike from a huge gap or
-    // a peer-name reused across sessions with a stale byte total).
+    // Per-peer session health: drop stale samples on disconnect so a reconnect
+    // starts clean (no kbps spike, no reused peer name with a stale total).
     if (!st.inSession) {
         peerHealthSamples_.clear();
     } else if (!participants.empty()) {
-        // Build a name -> stat lookup once, then update each visible row.
-        // remotePeerStats() honors gCloudConnectInFlight itself (empty
-        // during a cloud connect) — that degrades gracefully to hasStats=false
-        // below, same as any other name that doesn't resolve to a peer stat.
+        // Build a name -> stat lookup once, then update each visible row (empty
+        // remotePeerStats() during a cloud connect gives hasStats=false).
         const auto stats = jefe::qt::remotePeerStats();
         std::unordered_map<std::string, const jefe::qt::RemotePeerStat*> byName;
         byName.reserve(stats.size());
@@ -1374,11 +1265,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
             }
             const jefe::qt::RemotePeerStat& s = *it->second;
 
-            // kbps from a byte-delta sample, keyed by name. Guard div-by-zero
-            // and a too-short interval (noisy at up to ~60Hz refresh) by only
-            // recomputing once at least 150ms have elapsed since the last
-            // sample; otherwise keep showing the last stable value so the
-            // row doesn't flicker to "—" between recomputes.
+            // kbps from a byte-delta sample keyed by name; recompute after at least 150ms
+            // (div-by-zero, noise at ~60Hz), else keep the last value to avoid flicker.
             auto& sample = peerHealthSamples_[name];
             double kbps = sample.lastKbps;
             if (!sample.hasSample) {
@@ -1428,9 +1316,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
         for (int i = shownChatLines_; i < total; ++i)
             appendChatBubble(entries[i]);
         shownChatLines_ = total;
-        // Only when new bubbles actually arrived AND the user was at the bottom.
-        // refreshConnectionState() runs at up to ~60Hz during a session, so an
-        // unconditional post here would queue a no-op every tick while idle.
+        // Only when new bubbles arrived AND the user was at the bottom;
+        // refreshConnectionState() runs at ~60Hz, so don't post every tick.
         if (appended > 0 && atBottom) {
             // Defer so the layout has sized the new bubbles before we scroll.
             QMetaObject::invokeMethod(this, [bar]{ bar->setValue(bar->maximum()); },
@@ -1442,9 +1329,8 @@ void RemoteDialog_Qt::refreshConnectionState() {
     appendNewLogLines(netLogView_, jefe::qt::remoteNetworkLog(), shownNetLogLines_);
 }
 
-// Appends only lines beyond `shownCount` to `view`, updating `shownCount`.
-// If the source shrank below what's shown (e.g. a reconnect cleared the log),
-// clears and rebuilds once so the view can't drift out of sync.
+// Appends only lines beyond `shownCount` to `view`. If the source shrank
+// (e.g. a reconnect cleared the log), clears and rebuilds once.
 void RemoteDialog_Qt::appendNewLogLines(QTextEdit* view,
                                         const std::vector<std::string>& lines,
                                         int& shownCount) {
@@ -1512,13 +1398,8 @@ void RemoteDialog_Qt::appendChatBubble(const jefe::qt::ChatEntry& e) {
     chatLayout_->insertWidget(chatLayout_->count() - 1, row);  // before stretch
 }
 
-// JEF-30: builds one participantsList_ row widget: a colored health dot,
-// the participant name, and rtt/kbps/path fields (updated in place every
-// refresh by updateParticipantHealthRow — the row itself is only rebuilt
-// when the participant COUNT changes, matching the existing incremental-
-// refresh discipline for this dialog). Object names use the dotted-leaf
-// scheme; reused across rows like the chat_* widgets above (this dialog has
-// no per-row automated locator today — see tests/ui/jefecheck/locators.py).
+// Builds one participantsList_ row (dot, name, rtt/kbps/path), updated in place
+// by updateParticipantHealthRow; rebuilt only when the participant count changes.
 QWidget* RemoteDialog_Qt::buildParticipantHealthRow(const QString& name) {
     auto* row = new QWidget();
     row->setObjectName("remote.health.participantRow");
@@ -1554,8 +1435,8 @@ QWidget* RemoteDialog_Qt::buildParticipantHealthRow(const QString& name) {
     return row;
 }
 
-// JEF-37: one lobby row. Nobody has connected yet — there is no PeerConnection
-// and no PeerId behind this — so it carries identity and a decision, not health.
+// One lobby row. Nobody has connected yet (no PeerConnection or PeerId), so
+// it carries identity and a decision, not health.
 QWidget* RemoteDialog_Qt::buildPendingJoinerRow(
     const jefe::qt::RemotePendingJoiner& p) {
     const QString joinerId = QString::fromStdString(p.joinerId);
@@ -1573,16 +1454,13 @@ QWidget* RemoteDialog_Qt::buildPendingJoinerRow(
 
     auto* nameLbl = new QLabel(row);
     nameLbl->setObjectName("remote.pending.name");
-    // PLAIN TEXT, always. The coordinator sanitizes displayName, but this is a
-    // string a stranger chose; the client must not depend on someone else's
-    // validation to keep markup out of its own UI.
+    // PLAIN TEXT, always: displayName is a string a stranger chose.
     nameLbl->setTextFormat(Qt::PlainText);
     nameLbl->setText(p.displayName.empty() ? QStringLiteral("(no name)")
                                            : QString::fromStdString(p.displayName));
 
-    // The email is the only trustworthy part of a knock. Saying "(not signed
-    // in)" for the rest is the point: an unverified joiner can type any name,
-    // including one the host recognizes.
+    // The email is the only trustworthy part of a knock; an unverified joiner
+    // can type any name, so the rest is marked "(not signed in)".
     auto* whoLbl = new QLabel(row);
     whoLbl->setObjectName("remote.pending.identity");
     whoLbl->setTextFormat(Qt::PlainText);
@@ -1601,9 +1479,8 @@ QWidget* RemoteDialog_Qt::buildPendingJoinerRow(
     deny->setObjectName("remote.pending." + joinerId + ".deny");
 
     const std::string id = p.joinerId;
-    // Disable BOTH buttons on the first click. The row survives until the next
-    // refresh tick, and a second click on a decided joiner would be a decision
-    // about someone the coordinator no longer has pending.
+    // Disable BOTH buttons on the first click: the row survives until the next
+    // refresh, and a second click would decide a joiner no longer pending.
     auto decide = [this, id, admit, deny](bool yes) {
         admit->setEnabled(false);
         deny->setEnabled(false);
@@ -1621,12 +1498,8 @@ QWidget* RemoteDialog_Qt::buildPendingJoinerRow(
     return row;
 }
 
-// JEF-30: refreshes one row's dot/rtt/kbps/path text+color in place (cheap
-// QLabel::setText/setStyleSheet — no layout rebuild). `hasStats` false means
-// this participant has no matching remotePeerStats() entry (self, or a name
-// that doesn't resolve — client-role nickname resolution is a known gap,
-// see JEF-30 Task 1 report); render as a plain gray "connected"/blank row,
-// never fabricate numbers.
+// Refreshes one row's dot/rtt/kbps/path in place. `hasStats` false means no
+// matching remotePeerStats() entry: render a gray row, never fabricate numbers.
 void RemoteDialog_Qt::updateParticipantHealthRow(QWidget* row, bool hasStats,
                                                   bool connected, long rttMs,
                                                   double kbps, const QString& path) {
@@ -1644,9 +1517,8 @@ void RemoteDialog_Qt::updateParticipantHealthRow(QWidget* row, bool hasStats,
         return;
     }
 
-    // Path badge + dot color (§3): direct=green, relay=amber, n/a/unknown=gray.
-    // RakNet ("n/a") and any not-yet-connected peer show "connected"/"—"
-    // without fabricated WebRTC numbers.
+    // Path badge + dot color: direct=green, relay=amber, n/a/unknown=gray.
+    // RakNet ("n/a") and not-yet-connected peers show "connected"/"—".
     const bool isDirect = (path == "direct");
     const bool isRelay  = (path == "relay" || path == "relay (TURN)");
     const QString dotColor = isDirect ? kHealthGood : isRelay ? kHealthWarn : kHealthGray;
@@ -1674,14 +1546,8 @@ void RemoteDialog_Qt::updateParticipantHealthRow(QWidget* row, bool hasStats,
     pathLbl->setStyleSheet(QString("color:%1;").arg(dotColor));
 }
 
-// ---------------------------------------------------------------------------
-// Session groups (the "parent" a session is hosted under).
-//
-// Settings persist PER GROUP rather than globally, because they describe how a
-// kind of session is run, not how this machine is configured. Every edit writes
-// through immediately — there is no OK/Apply on this panel, so a deferred save
-// would silently lose settings when the dock is closed.
-// ---------------------------------------------------------------------------
+// Session groups (the "parent" a session is hosted under). Settings persist
+// per group, and every edit writes through (no OK/Apply on this panel).
 void RemoteDialog_Qt::loadGroupIntoForm(const QString& name) {
     const jefe::qt::SessionGroup g = jefe::qt::loadSessionGroup(name);
     // Block signals: setting these programmatically would otherwise re-enter
@@ -1762,13 +1628,8 @@ void RemoteDialog_Qt::refreshCreditsVisibility(bool hosting) {
     creditsLabel_->setVisible(hosting);
 }
 
-// ---------------------------------------------------------------------------
-// --ui-preview (JEF-31/37 design review)
-//
-// Fills the Cloud result block and the participants list with sample data so
-// the layouts can be judged without a coordinator, an account, or a session.
-// Nothing here is wired: the buttons do exactly what they do today.
-// ---------------------------------------------------------------------------
+// --ui-preview: fills the Cloud result block and participants list with sample
+// data so layouts can be judged without a coordinator. Nothing here is wired.
 void RemoteDialog_Qt::clickHostOnCloud() {
     if (cloudToggle_ != nullptr) cloudToggle_->click();   // select the Cloud tab
     if (cloudHostBtn_ != nullptr) cloudHostBtn_->click();
@@ -1796,17 +1657,14 @@ void RemoteDialog_Qt::applyUiPreviewKnocking() {
     if (joinCodeEdit_ != nullptr) joinCodeEdit_->setText("JEFE-6ZDN");
 
     // Backdate the stamp so the elapsed readout shows a real duration rather
-    // than "Just asked" — the state worth reviewing is the one that has been
-    // sitting there a while, since that is when people start wondering
-    // whether anything is happening.
+    // than "Just asked".
     knockStartedMs_ = QDateTime::currentMSecsSinceEpoch() - 47000;
     refreshConnectionState();
 }
 
 void RemoteDialog_Qt::applyUiPreview() {
-    // Describe the state ONCE, then let the normal render path paint it. The
-    // refresh timer keeps running: it simply reads this instead of the live
-    // managers, so preview and reality cannot drift apart.
+    // Describe the state once and let the normal render path paint it; the
+    // refresh timer reads this instead of the live managers.
     previewState_ = jefe::qt::RemoteUiState{};
     previewState_.phase = jefe::qt::RemotePhase::HostingCloud;
     previewState_.statusText =
@@ -1815,9 +1673,8 @@ void RemoteDialog_Qt::applyUiPreview() {
     previewState_.inSession = true;
     previewState_.isHost = true;
     previewState_.showCredits = true;
-    // Sample knocks (JEF-37): one verified, one not — the distinction the row
-    // exists to show. These go through the SAME builder the live path uses, so
-    // reviewing the preview reviews the real widget.
+    // Sample knocks: one verified, one not. They go through the same builder as
+    // the live path, so the preview reviews the real widget.
     {
         jefe::qt::RemotePendingJoiner a;
         a.joinerId = "preview-1";

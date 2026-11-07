@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // ---------------------------------------------------------------------------
-// Desktop sign-in session (JEF-31).
+// Desktop sign-in session.
 //
 // Owns the ACCESS token in memory and the REFRESH token in the TokenStore, and
 // drives the two network steps the rest of the flow needs:

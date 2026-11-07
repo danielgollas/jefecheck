@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// JEF-27 Task 1: cloud-coordinator signaling client. See
-// gfcCoordinatorSignaling.h for the full JEF-25 protocol contract + threading.
+// Cloud-coordinator signaling client. See gfcCoordinatorSignaling.h for the
+// protocol contract and threading.
 #include "gfcCoordinatorSignaling.h"
 
 #include <rtc/rtc.hpp>
@@ -18,11 +18,7 @@
 namespace jefe {
 namespace net {
 
-// ── Local JSON helpers ──────────────────────────────────────────────────────
-// The envelope codec reuses the exported encodeSignal()/parseSignal() from
-// gfcSignaling for the nested payload, but the coordinator envelope itself
-// needs string escaping + a small value-aware parser (nested object/array),
-// which gfcSignaling's flat parser does not expose. These are file-local.
+// ── Local JSON helpers (envelope escaping + value-aware parser) ─────────────
 
 namespace {
 
@@ -107,10 +103,8 @@ bool parseString(const std::string& s, size_t& i, std::string& val) {
     return false;  // unterminated
 }
 
-// Capture the raw substring spanning a whole JSON value at s[i] (object, array,
-// string, number, or literal), advancing i to just past it. Handles nested
-// braces/brackets and quoted strings (so a '}' inside a string is not counted).
-// Returns false on malformation.
+// Capture the raw substring of the JSON value at s[i] (nested braces and quoted
+// strings handled), advancing i past it. Returns false on malformation.
 bool captureRawValue(const std::string& s, size_t& i, std::string& raw) {
     skipWs(s, i);
     if (i >= s.size()) return false;
@@ -186,10 +180,8 @@ std::string encodeCreateSession(const std::string& authToken) {
 
 std::string encodeCreateSession(const std::string& authToken,
                                 const SessionPolicy& policy) {
-    // Every policy field is omitted when it equals its default, so a host that
-    // changed nothing produces byte-identical output to the no-policy form.
-    // That keeps the anonymous/no-policy wire contract intact and means an
-    // older coordinator only ever sees fields it can ignore.
+    // Policy fields equal to their default are omitted, so an unchanged host emits
+    // the no-policy bytes and an older coordinator sees only fields it can ignore.
     const bool anyPolicy = !policy.requireKnock || !policy.password.empty() ||
                            policy.idleTimeoutMinutes != 0 ||
                            policy.maxParticipants != 0;
@@ -246,7 +238,7 @@ std::string encodeSignalEnvelope(const std::string& toPeerId,
     std::string out = "{\"action\":\"signal\",\"to\":\"";
     appendEscaped(out, toPeerId);
     out += "\",\"payload\":";
-    out += encodeSignal(msg);  // nested JSON object (reused JEF-24 codec)
+    out += encodeSignal(msg);  // nested JSON object (reused LAN signaling codec)
     out += "}";
     return out;
 }
@@ -321,7 +313,7 @@ bool parseServerMsg(const std::string& json, CoordServerMessage& out) {
             } else if (key == "iceServers") {
                 out.iceServersJson = raw;  // opaque pass-through
             } else if (key == "payload") {
-                // Nested JEF-24 SignalMessage — parse with the flat codec.
+                // Nested SignalMessage: parse with the flat codec.
                 out.hasPayload = parseSignal(raw, out.payload);
             }
             // unknown non-string key: ignore
@@ -373,10 +365,8 @@ struct CoordinatorSignaling::Impl {
     std::function<void(JoinRequest)> onJoinRequestFn;
     std::function<void()> onJoinPendingFn;
 
-    // ── JEF-27 Task 5: bounded reconnect / backoff ──────────────────────────
-    // The reconnect loop runs on its OWN thread and only ever re-dials THIS
-    // coordinator WebSocket. It never touches the P2P PeerConnections (those
-    // live in WebRtcTransport and survive a coordinator drop — design spec §5).
+    // ── Bounded reconnect / backoff ─────────────────────────────────────────
+    // Own thread; only re-dials THIS WebSocket (P2P PeerConnections survive a drop).
     std::string url;                          // guarded by mtx: the dialled URL
     std::atomic<bool> intentionalClose{false};  // close()/leave() => no reconnect
     std::atomic<bool> connected{false};       // socket currently open
@@ -435,10 +425,8 @@ struct CoordinatorSignaling::Impl {
                 "CoordinatorSignaling: reconnected to coordinator (signaling "
                 "channel restored; phase-1 does NOT resume session membership — "
                 "see developer_notes §34)\n");
-            // Deliberately DO NOT fire onOpenFn on a reconnect: the host's onOpen
-            // create-session's (fresh code) and the joiner's re-joins — neither
-            // is correct on a transient drop. The established P2P DataChannel is
-            // what carries the session and it lives independently of this socket.
+            // Do NOT fire onOpenFn on a reconnect: it would create a new session
+            // (host) or re-join (joiner).
             return;
         }
         if (onOpenFn) onOpenFn();
@@ -455,11 +443,8 @@ struct CoordinatorSignaling::Impl {
         // onClosed typically follows a transport error and drives the reconnect.
     }
 
-    // Fired from a libdatachannel thread (handleClosed). Starts the reconnect
-    // loop unless a deliberate close()/leave() is in progress or the attempt
-    // budget is spent. Thread-safe against a concurrent close() (which sets
-    // intentionalClose BEFORE moving the thread under mtx; we re-check it here
-    // under the same lock so a thread is never orphaned).
+    // Fired from a libdatachannel thread. close() sets intentionalClose BEFORE
+    // moving the thread under mtx; re-check it here under the same lock.
     void scheduleReconnect() {
         if (intentionalClose.load()) return;
         std::thread stale;
@@ -472,7 +457,7 @@ struct CoordinatorSignaling::Impl {
                 reconnectState = "failed";
                 return;
             }
-            // Reap a previously-finished loop's thread before starting a new one.
+            // Reap a finished loop's thread before starting a new one.
             if (reconnectThread.joinable()) stale = std::move(reconnectThread);
             reconnecting = true;
             reconnectState = "reconnecting";
@@ -555,9 +540,8 @@ struct CoordinatorSignaling::Impl {
         } else if (m.type == "signal") {
             if (onSignalFn) onSignalFn(m.from, m.payload);
         } else if (m.type == "join-request") {
-            // Re-derive through parseJoinRequest so the same guards (a knock
-            // needs a joinerId; an email is only an identity when verified)
-            // apply here as at every other entry point.
+            // Re-derive through parseJoinRequest so the same guards apply as at
+            // every other entry point.
             JoinRequest req;
             if (parseJoinRequest(raw, req) && onJoinRequestFn) onJoinRequestFn(req);
         } else if (m.type == "join-pending") {
@@ -631,9 +615,8 @@ bool CoordinatorSignaling::connect(const std::string& url) {
 
 void CoordinatorSignaling::close() {
     if (!d_) return;
-    // Mark the close deliberate BEFORE touching the thread, so a concurrent
-    // handleClosed()/scheduleReconnect() (on an rtc thread) skips reconnect and
-    // no loop is orphaned. Then wake + join any in-flight reconnect loop.
+    // Mark the close deliberate BEFORE touching the thread so a concurrent
+    // handleClosed()/scheduleReconnect() skips reconnect; then wake and join the loop.
     d_->intentionalClose.store(true);
     d_->reconnectCv.notify_all();
     std::thread t;
@@ -725,10 +708,8 @@ int coordinatorSignalingSelfTest() {
               "{\"action\":\"join-session\",\"code\":\"JEFE-7K2M\"}",
           "join-session exact");
 
-    // ---- JEF-31: optional authToken / displayName ----
-    // Explicitly-empty extras MUST produce byte-identical output to the
-    // pre-auth protocol, so a self-hosted coordinator and the --coord-test
-    // harness see exactly what they saw before.
+    // ---- optional authToken / displayName ----
+    // Empty extras must produce the same bytes as the anonymous protocol.
     check(encodeCreateSession("") == "{\"action\":\"create-session\"}",
           "create-session empty token identical");
     check(encodeJoinSession("JEFE-7K2M", "", "") ==
@@ -754,10 +735,8 @@ int coordinatorSignalingSelfTest() {
               "\"displayName\":\"A\\\"B\"}",
           "join-session escapes displayName");
 
-    // ---- JEF-37: host-side session policy ----
-    // Defaults must be invisible on the wire, so a host who changed nothing
-    // produces exactly the no-policy bytes and an older coordinator sees only
-    // fields it already knows.
+    // ---- host-side session policy ----
+    // Defaults must be invisible on the wire.
     {
         SessionPolicy dflt;   // requireKnock=true, no password, no caps
         check(encodeCreateSession("", dflt) == "{\"action\":\"create-session\"}",
@@ -808,9 +787,8 @@ int coordinatorSignalingSelfTest() {
         check(contains(env, "\\r\\n"), "signal payload CRLF escaped");
         check(!contains(env, "\r\n"), "signal payload has no raw CRLF");
 
-        // Round-trip: the envelope should parse back as a server-style signal
-        // if a coordinator relayed it verbatim (from replaces to). Prove the
-        // nested payload survives by re-parsing the payload directly.
+        // Round-trip: parse the envelope back as a server-style signal (from
+        // replaces to) and re-parse the nested payload directly.
         CoordServerMessage relayed;
         std::string serverForm =
             "{\"type\":\"signal\",\"from\":\"A\",\"payload\":" + encodeSignal(m) + "}";
@@ -915,7 +893,7 @@ int coordinatorSignalingSelfTest() {
         check(m.message == "unknown or expired code", "error message");
     }
 
-    // ---- JEF-37 admission ----
+    // ---- admission ----
     {
         check(encodeAdmit("conn-7") == "{\"action\":\"admit\",\"joinerId\":\"conn-7\"}",
               "admit exact");
@@ -958,9 +936,8 @@ int coordinatorSignalingSelfTest() {
     }
 
     {
-        // A display name carrying quotes/backslashes round-trips unchanged --
-        // it reaches a QLabel, so a parser that mangled it would corrupt the
-        // one field the host reads to decide who is knocking.
+        // A display name with quotes/backslashes round-trips unchanged; it
+        // reaches a QLabel, and the host reads it to decide who is knocking.
         JoinRequest r;
         std::string j = "{\"type\":\"join-request\",\"joinerId\":\"c\","
                         "\"displayName\":\"a\\\"b\\\\c\",\"verified\":false}";
@@ -999,11 +976,8 @@ int coordinatorSignalingSelfTest() {
         ++g_pass;  // reached here without crashing
     }
 
-    // ---- Optional loopback against a tiny scripted rtc::WebSocketServer ----
-    // Proves connect()→createSession()→onSessionCreated wiring end-to-end. The
-    // server echoes the JEF-25 session-created reply. Bounded + best-effort:
-    // any timeout/failure is a soft skip (codec tests above are the core), so
-    // the gate never hangs or flakes.
+    // ---- Optional loopback against a scripted rtc::WebSocketServer ----
+    // Best-effort: any timeout is a soft skip so the gate never hangs.
     {
         rtc::Preload();
         bool sawCreated = false;

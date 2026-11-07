@@ -2,9 +2,7 @@
 #include "gfcfxstack.h"
 //#include "network.h"
 
-// fxcontrolwindow.h transitively pulls all the FLTK widget headers used by
-// handleGUICB below. Only needed in the FLTK build; the rest of this file
-// (storage, networking, save/load) is FLTK-free.
+// fxcontrolwindow.h pulls in the widget headers used by handleGUICB below.
 #include "trilerp.h"
 
 #include "gfclutmanager.h"
@@ -46,33 +44,8 @@ gfcFX gfcFXStack::getFX(int index) {
     }
 }
 
-/**
- * Reference-returning counterpart to getFX(). getFX() copies the whole gfcFX
- * (its nested std::map/std::vector param tree, all std::strings) out by value,
- * which is exactly the per-frame, per-effect deep copy that the render loop in
- * gfcPlate.cpp needs to avoid: it also throws away any state bind() caches on
- * the object, since that state lives on a temporary that's discarded at the
- * end of each loop iteration.
- *
- * Callers MUST only use this for direct, same-iteration access (e.g. the FX
- * render loop's bind()/unbind() pair) and must not hold the reference across
- * anything that can add/remove FXs from this stack (addFX(), FX_DELETE /
- * FX_MOVEUP / FX_MOVEDOWN via handleGUICB(), moveFX(), setActive(),
- * processNetFXCommonInfo(), clearStack(), appendFXStack()) -- those can
- * reallocate or reorder the backing std::vector<gfcFX> and invalidate this
- * reference, same as any vector<T>& element reference would be invalidated.
- *
- * Bounds handling: unlike getFX(), we can't manufacture a fresh temporary to
- * return by reference, so an out-of-range index returns a function-local
- * static "sentinel" gfcFX instead of a copy. We explicitly force the
- * sentinel's active flag to false (gfcFX's own default ctor otherwise leaves
- * active=true) so that a caller following the same "if (fx.active) bind()"
- * pattern the render loop uses never ends up calling bind()/unbind() on a
- * dummy, empty-initialized FX. The sentinel is shared across all out-of-range
- * calls, but this path only exists to keep a caller mistake from touching
- * memory outside the vector -- it is not something the per-frame render path
- * is expected to ever hit (the loop bound is fxStack.getNumOfFXs()).
- */
+ /** Reference-returning counterpart to getFX() (which deep-copies); any add/remove/reorder invalidates it.
+  * An out-of-range index returns a shared inactive sentinel gfcFX. */
 gfcFX& gfcFXStack::fxAt(int index) {
     if (index>=0 && index<(int)fxs.size()) {
         return fxs[index];
@@ -112,12 +85,7 @@ GFC_FX_GUI_TYPE gfcFXStack::getWidgetType(int fxIndex,
     return wIt->second.type;
 }
 
-/**
- *
- * @param o
- * @param data
- * @return Returns 1 if the fxControl window needs updating, otherwise 0
- */
+/** @return 1 if the fxControl window needs updating, otherwise 0 */
 int gfcFXStack::handleGUICB(void * widgetHandle, void * data) {
     // Non-FLTK builds: FX widget callbacks are not yet wired up.
     (void)widgetHandle; (void)data;
@@ -162,13 +130,8 @@ std::vector< int > gfcFXStack::getActiveFXIndexes() {
 void gfcFXStack::processNetFXAttribInfo(gfcNetFXAttribInfo &info) {
     //printf("Processing attrib info\n");
 
-    // Bounds-guard the wire-supplied FX index and names. Peers' FX stacks can
-    // diverge (late join, add/remove/reorder races) because asset/stack sync
-    // isn't complete in the Qt port, and this path is now driven continuously
-    // by live parameter streaming — an out-of-range index would do an OOB
-    // std::vector access, and using map::operator[] on an unknown group/widget
-    // name would silently insert a phantom entry (quiet state drift). Drop the
-    // message instead.
+    // Bounds-guard the wire-supplied FX index and names: peers' stacks can diverge,
+    // and map::operator[] on an unknown name would insert a phantom entry. Drop instead.
     if (info.id.index < 0 || info.id.index >= (int)fxs.size()) return;
     auto gIt = fxs[info.id.index].groups.find(info.groupName);
     if (gIt == fxs[info.id.index].groups.end()) return;
@@ -197,10 +160,8 @@ void gfcFXStack::processNetFXAttribInfo(gfcNetFXAttribInfo &info) {
 }
 
 void gfcFXStack::processNetFXCommonInfo(gfcNetFXCommonInfo &info) {
-    //printf("Processing common info\n");
-    // Same divergence guard as processNetFXAttribInfo: a wire index outside the
-    // local stack must not index fxs (the reset/onOff/upDown cases below assume
-    // it's valid). Drop the message when it is.
+    // Same guard as processNetFXAttribInfo: a wire index outside the local stack
+    // must not index fxs. Drop the message.
     if ( info.id.index < 0 || info.id.index >= (int)fxs.size() ) return;
     //delete?
     if ( info.remove ) {

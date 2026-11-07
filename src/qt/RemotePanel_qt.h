@@ -55,13 +55,8 @@ private:
     void onDisconnectClicked();
     void onChatSubmit();   // send the chat input field's text
 
-    // JEF-27 Cloud mode. Create/Join both run the (potentially 5s-blocking)
-    // coordinator connect on a detached worker thread and marshal the result
-    // back to onCloudConnectFinished on the GUI thread via a queued invoke
-    // (guarded by a QPointer so a mid-connect dialog close can't crash).
-    // --ui-preview: populate every Cloud/Join/admission state with sample data
-    // so the layout can be reviewed without a live coordinator or a session.
-    // Purely presentational; wires nothing.
+    // Cloud Create/Join run the connect on a detached worker thread and post the result
+    // to onCloudConnectFinished (QPointer-guarded). --ui-preview fills in sample state.
 public:
     void applyUiPreview();
     /**
@@ -133,19 +128,15 @@ private:
     // per-user color, HH:MM). System/LOAD types render centered without a bubble.
     void appendChatBubble(const jefe::qt::ChatEntry& e);
 
-    // JEF-30: builds one participant row widget (dot + name + rtt + kbps +
-    // path) used as the participantsList_ item widget. Object names follow
-    // the dotted-leaf scheme (reused across rows, like the chat_* widgets).
+    // Builds one participant row widget (dot + name + rtt + kbps + path) used as
+    // the participantsList_ item widget; object names follow the dotted-leaf scheme.
     QWidget* buildParticipantHealthRow(const QString& name);
 
-    // JEF-37: one lobby row — who is knocking, whether their identity is
-    // verified, and the two buttons that decide it. `displayName` is
-    // peer-supplied and is rendered as Qt::PlainText.
+    // One lobby row: who is knocking, whether their identity is verified, and the
+    // buttons that decide it. `displayName` is peer-supplied (Qt::PlainText).
     QWidget* buildPendingJoinerRow(const jefe::qt::RemotePendingJoiner& p);
-    // Updates an existing row's dot/rtt/kbps/path labels in place (no relayout
-    // churn) from a resolved health sample. `hasStats` false -> blank/gray
-    // (participant with no matching peer-stats entry: self, or a name that
-    // doesn't resolve on the client side — see developer_notes JEF-30).
+    // Updates a row's dot/rtt/kbps/path labels in place; `hasStats` false -> blank/gray
+    // (no matching peer-stats entry: self, or a name that doesn't resolve).
     void updateParticipantHealthRow(QWidget* row, bool hasStats, bool connected,
                                     long rttMs, double kbps, const QString& path);
 
@@ -171,16 +162,13 @@ private:
     // (participants + chat) shows when connected. Toggled in refreshConnectionState.
     QWidget*     connectPanel_ = nullptr;  // segmented Host/Cloud/Join toggle + forms
     QPushButton* hostToggle_ = nullptr;    // segmented control (Host)
-    QPushButton* cloudToggle_ = nullptr;   // segmented control (Cloud) — JEF-27
+    QPushButton* cloudToggle_ = nullptr;   // segmented control (Cloud)
     QPushButton* joinToggle_ = nullptr;    // segmented control (Join)
     QWidget*     hostForm_ = nullptr;
     QWidget*     cloudForm_ = nullptr;
     QWidget*     joinForm_ = nullptr;
-    // JEF-37 lobby, joiner side. While knocking, the connect forms come DOWN
-    // and this goes up in their place. Leaving the forms on screen made a
-    // submitted join look like a no-op — same controls, same layout, only a
-    // small status line changed — so people pressed Join again while already
-    // in the queue.
+    // Lobby, joiner side. While knocking, the connect forms come down and this
+    // goes up in their place, so a submitted join doesn't look like a no-op.
     QWidget*      knockPanel_ = nullptr;
     QLabel*       knockDetail_ = nullptr;    // "Asked 12s ago", session code
     QProgressBar* knockBar_ = nullptr;       // indeterminate: proves liveness
@@ -191,8 +179,8 @@ private:
     QWidget*     sessionBox_ = nullptr;    // participants + chat + disconnect
     QLabel*      participantsHeader_ = nullptr;
 
-    // JefeCheck Cloud form widgets — JEF-27 / JEF-31. Hosting only; joining a
-    // cloud session lives on the Join tab (it needs no account).
+    // JefeCheck Cloud form widgets. Hosting only; joining a cloud session lives
+    // on the Join tab (it needs no account).
     QComboBox*   cloudGroupCombo_ = nullptr;      // parent session group
     QPushButton* cloudNewGroupBtn_ = nullptr;
     QLineEdit*   cloudHostNameEdit_ = nullptr;    // session name -> host nickname
@@ -210,13 +198,13 @@ private:
     // meaningless to them. See refreshCreditsVisibility().
     QLabel*      creditsLabel_ = nullptr;
     QPushButton* cloudSignOutBtn_ = nullptr;
-    // Desktop sign-in (JEF-31). Lazily created on first Cloud use.
+    // Desktop sign-in. Lazily created on first Cloud use.
     jefe::auth::AuthSession* authSession_ = nullptr;
     std::unique_ptr<jefe::auth::TokenStore> tokenStore_;
     /** Guards the single sign-in-then-retry, so a failure cannot loop. */
     bool hostRetryPending_ = false;
 
-    // Unified Join tab (JEF-31): session code OR IP address.
+    // Unified Join tab: session code OR IP address.
     QRadioButton* joinModeCodeRadio_ = nullptr;
     QRadioButton* joinModeIpRadio_ = nullptr;
     QLineEdit*    joinCodeEdit_ = nullptr;
@@ -257,9 +245,8 @@ private:
     // minutes is announced once rather than on every refresh tick.
     std::vector<std::string> announcedKnocks_;
 
-    // JEF-30: per-peer byte-delta sample for kbps derivation, keyed by peer
-    // display name (RemotePeerStat carries no PeerId). Cleared on disconnect
-    // so a later session starts with a clean first-sample state.
+    // Per-peer byte-delta sample for kbps derivation, keyed by peer display
+    // name (RemotePeerStat carries no PeerId). Cleared on disconnect.
     struct PeerHealthSample {
         unsigned long long bytes = 0;
         std::chrono::steady_clock::time_point ts;

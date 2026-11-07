@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Qt implementation of IGLViewport, backed by QOpenGLWidget. Forwards
-// initializeGL / resizeGL / paintGL to a registered IGLViewportListener
-// — the JefeCheck rendering chain (gfcPlateManager, gfcNetworkManager,
-// etc.) plugs in via that listener interface (see RenderBridge_qt).
-//
-// Drag-and-drop: accepts file URL drops anywhere on the viewport and
-// emits fileDropped(path). The owning MainWindow handles loading and
-// hands the result to gfcSequence / gfcPlate (PR-10+).
+// Qt implementation of IGLViewport, backed by QOpenGLWidget; forwards GL callbacks
+// to an IGLViewportListener (see RenderBridge_qt) and emits fileDropped(path).
 #ifndef GLVIEWPORT_QT_H
 #define GLVIEWPORT_QT_H
 
@@ -129,7 +123,7 @@ private:
     // True while a left-drag is moving/resizing an in-viewport pick overlay
     // (the histogram sub-window). Set on press when viewportPickDown reports
     // a hit; suppresses the plate pan/color path for that drag.
-    bool noteDragActive_ = false;   // JEF-39: drawing a note, not panning
+    bool noteDragActive_ = false;   // drawing a note, not panning
     bool pickDragActive_ = false;
 
     bool loadWindowOpen_ = false;

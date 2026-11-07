@@ -1,21 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // ---------------------------------------------------------------------------
-// Session groups (JEF-31/37).
+// Session groups.
 //
-// A GROUP is the named parent a session is created under -- "Client review",
-// "Internal dailies" -- and it owns every HOST-side setting: whether joiners
-// must knock, an optional password, the idle cutoff that stops billing, and
-// the participant cap. Selecting the parent on the Cloud tab loads its
-// settings; hosting applies them.
-//
-// Why per-group rather than global: these settings are properties of *how a
-// kind of session is run*, not of the machine. A client review wants knocking
-// and a tight cap; internal dailies want neither. One global set forces you to
-// re-toggle them every time, which in practice means they end up wrong.
-//
-// Joiners never see any of this. Everything here is host-side by construction:
-// the Cloud tab is the hosting tab.
+// A GROUP is the named parent a session is created under ("Client review",
+// "Internal dailies") and owns every HOST-side setting: knocking, an optional
+// password, the idle cutoff that stops billing, and the participant cap.
+// Selecting it on the Cloud tab loads its settings; hosting applies them.
+// Settings are per group, not global, because they describe how a kind of
+// session is run. Joiners never see any of this.
 //
 // Persistence is QSettings under Remote/groups/<name>/*, matching the rest of
 // the Qt preference model (see developer_notes §27). Group names are used as
@@ -31,7 +24,7 @@ struct SessionGroup {
     QString name;
 
     // --- admission -------------------------------------------------------
-    /** Each joiner waits for the host's Admit/Deny (JEF-37). */
+    /** Each joiner waits for the host's Admit/Deny. */
     bool requireKnock = true;
     /**
      * Optional shared password, checked in addition to the join code.

@@ -256,9 +256,7 @@ std::string getApplicationDataPath() {
 #endif
 
 #ifdef WIN32
-    // %APPDATA% is the user's Roaming folder — same effective location
-    // Fl_Preferences::getUserdataPath returned. SHGetFolderPath would be
-    // more rigorous but the existing FLTK call wasn't either.
+    // %APPDATA% is the user's Roaming folder.
     const char* appdata = std::getenv("APPDATA");
     if (appdata && *appdata) {
         return std::string(appdata) + "\\JefeCorp\\JefeCheck\\JefeCheck\\";
@@ -268,11 +266,8 @@ std::string getApplicationDataPath() {
 	
 #ifdef __APPLE__
 
-	// Prefer the actual loaded bundle's Resources path when running as a
-	// .app — robust against symlinks and chdir, and the canonical Cocoa
-	// path. Falls through to the argv[0]-derived path for raw-binary
-	// dev builds (USE_QT=OFF without bundling, or running the binary
-	// directly out of build_qt/jefecheck.app/Contents/MacOS/).
+	// Prefer the loaded bundle's Resources path when running as a .app (robust
+	// against symlinks and chdir); raw-binary dev builds fall through to argv[0].
 	{
 		extern std::string getMacBundleResourcePath();
 		std::string bundlePath = getMacBundleResourcePath();
@@ -519,13 +514,8 @@ std::string GetMD5Hash ( std::string theString ) {
     return std::string(buf);
 }
 
-// ---------------------------------------------------------------------------
-// Portable content digest (JEF-28 Task 1) — FNV-1a 64-bit over raw bytes.
-// Deterministic + identical across builds/platforms for the same bytes (the
-// old GetMD5Hash used std::hash, whose result is implementation-defined). The
-// P2P LUT/FX sync dedup depends on peers agreeing on the digest, so it MUST be
-// a fixed algorithm over the actual file bytes, not std::hash and not parsed
-// values. FNV-1a is not cryptographic; it is only used for content dedup.
+// ---- Portable content digest: FNV-1a 64-bit over raw bytes (not cryptographic) ----
+// P2P LUT/FX sync dedup needs peers to agree, so use a fixed algorithm, not std::hash (implementation-defined).
 namespace jefe {
 
 static const uint64_t kFnvOffset = 14695981039346656037ULL;
@@ -546,9 +536,8 @@ std::string contentHashString(const std::string& s) {
     return contentHash((const unsigned char*)s.data(), s.size());
 }
 
-// Streaming FNV-1a so we never materialize a whole file (LUTs can be MBs).
-// Feeds each file's bytes into a running hash; returns "" if `any` is false
-// after all files (i.e. nothing was readable) so callers can detect failure.
+// Streaming FNV-1a so a whole file is never materialized (LUTs can be MBs).
+// Returns "" if nothing was readable.
 static std::string contentHashFilesImpl(const std::vector<std::string>& paths,
                                         bool requireAny) {
     uint64_t h = kFnvOffset;

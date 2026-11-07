@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// JEF-24 Task 2: local WebSocket signaling stub. See gfcSignaling.h for the
-// message schema and threading contract.
+// Local WebSocket signaling stub. See gfcSignaling.h for the message schema
+// and threading contract.
 #include "gfcSignaling.h"
 
 #include <rtc/websocket.hpp>
@@ -15,9 +15,8 @@
 namespace jefe {
 namespace net {
 
-// ── Tiny flat-JSON encoder/parser ──────────────────────────────────────
-// Handles exactly the SignalMessage fields: a flat object of string and int
-// values. Not a general JSON library. Defensive: never throws.
+// ---- Tiny flat-JSON encoder/parser ----
+// Handles only the flat SignalMessage object (string and int values); not a general JSON library. Never throws.
 
 static void appendEscaped(std::string& out, const std::string& s) {
     for (char c : s) {

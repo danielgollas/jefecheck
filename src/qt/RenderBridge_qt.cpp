@@ -12,12 +12,8 @@
 namespace jefe::qt {
 
 namespace {
-// Paints a full-framebuffer checkerboard in place of the flat bgColor
-// fill (General prefs → "Checkerboard background"). Immediate-mode /
-// glOrtho to match the compatibility-profile drawing gfcplatemanager.cpp
-// already uses elsewhere in the rendering chain.
-// One checkerboard shade of channel value `b`: nudge away by a fixed delta
-// (lighten if dark, darken if light), clamped to [0,1].
+// Checkerboard background (replaces the flat bgColor fill); immediate-mode glOrtho.
+// One shade of channel `b`: nudged lighter if dark, darker if light, clamped to [0,1].
 inline float checkerShade(float b, bool light) {
     const float d = 0.06f;
     float lo = b - d, hi = b + d;
@@ -61,14 +57,8 @@ RenderBridge_Qt::RenderBridge_Qt()  = default;
 RenderBridge_Qt::~RenderBridge_Qt() = default;
 
 void RenderBridge_Qt::onGLInit() {
-    // GLAD is loaded by GlViewport_Qt before the first listener call.
-    // The plate manager is initialized by MainWindow_Qt via the
-    // SequenceLoadBridge before this fires.
-    //
-    // Capture GL system specs (version, extensions, max sizes) here —
-    // we have a current GL context. The Help → System Specs dialog
-    // reads the snapshot rather than re-querying, since glGetString
-    // requires the context to be current.
+    // GLAD is loaded by GlViewport_Qt before the first listener call. Capture GL system
+    // specs here while the GL context is current; the System Specs dialog reads the snapshot.
     captureGLSystemInfo();
 }
 

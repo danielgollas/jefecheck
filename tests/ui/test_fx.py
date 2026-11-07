@@ -1,15 +1,5 @@
-"""FX Stack panel: browser → active plate stack add/remove.
-
-The panel is split into two QListWidgets — `Available` lists every FX
-fxManager has loaded from `src/FX/*.jfx`, `On active plate` lists the
-FXs in the active plate's gfcFXStack. Add button copies the selection
-from available into the stack; Remove deletes the selection from the
-stack.
-
-Every test that reads the FX panel waits for the startup label to
-reach 'Ready' first; otherwise the assertion races the autoload and
-sees a partial list.
-"""
+"""FX Stack panel: Available list -> active plate stack add/remove.
+Tests wait for the startup label to reach 'Ready' first, or the assertion races the autoload and sees a partial list."""
 import re
 
 import pytest
@@ -20,15 +10,7 @@ from jefecheck import locators
 
 def _list_items(list_widget):
     """Enumerate visible rows of a QListWidget via AX.
-
-    Qt exposes a QListWidget as an AXList containing N AXRow children
-    (one per item) followed by a trailing AXColumn placeholder — the
-    column is always present, even when the list is empty. The naive
-    `*` xpath would mis-count an empty list as size-1; XCUIElementType
-    -based filters silently return 0 (Mac2 doesn't map AXRow). The
-    pragmatic fix is to slice off the last child, which is always
-    the placeholder.
-    """
+    Qt exposes an AXList with N AXRow children plus a trailing always-present AXColumn placeholder, so slice off the last child (`*` xpath and XCUIElementType filters miscount)."""
     items = list_widget.find_elements(AppiumBy.XPATH, "*")
     return items[:-1] if items else []
 
@@ -44,10 +26,8 @@ def ready_app(app):
 
 @pytest.fixture(autouse=True)
 def _clean_fx_stack(app):
-    # Module-scoped `app` shares state across tests in this file. A
-    # test that Adds without Removing would leak an entry into the
-    # next test's stack count. Clear before each test so order doesn't
-    # matter. Idempotent: a no-op when the stack is already empty.
+    # Module-scoped `app` shares state across tests in this file; clear the
+    # stack before each test so order doesn't matter (no-op when empty).
     app.wait_for_startup_ready()
     while True:
         stack = app.by_object_name(locators.FXSTACK_STACK)
@@ -71,15 +51,8 @@ def test_startup_status_reaches_terminal_state(app):
 
 
 def test_startup_loads_all_fxs(app):
-    """Every shipped .jfx must compile + load. Failures here mean a
-    GLSL shader regressed and the entire FX subsystem is broken —
-    far worse than a single broken LUT.
-
-    LUT load failures are tolerated (e.g. the Truelight Cube format
-    in printFotokem.cube isn't supported by the current parser); this
-    test only asserts on the FX side. A separate assertion would
-    catch LUT regressions if/when the parser gains coverage.
-    """
+    """Every shipped .jfx must compile and load; a failure means a GLSL shader regressed.
+    LUT load failures are tolerated (printFotokem.cube isn't supported by the parser); asserts on FX only."""
     final = app.wait_for_startup_ready()
     # Both formats embed the FX counts; pull them out for assertion.
     m = re.search(r"\((\d+)/(\d+) FX", final) or \
@@ -120,11 +93,8 @@ def test_fx_panel_add_button_titles(ready_app):
 
 
 def test_fx_add_first_effect_lands_in_stack(ready_app):
-    """Selecting a row in Available + clicking Add appends to the stack.
-
-    Catches the bridge wiring end-to-end: addFXToActivePlate →
-    plateManager.getFXStack(active)->addFX → getFXStackOnPlate reads
-    it back → refreshLists rebuilds the visible stack list.
+    """Selecting a row in Available + clicking Add appends to the stack
+    (addFXToActivePlate -> getFXStackOnPlate -> refreshLists, end to end).
     """
     available = ready_app.by_object_name(locators.FXSTACK_AVAILABLE)
     items = _list_items(available)
@@ -141,11 +111,9 @@ def test_fx_add_first_effect_lands_in_stack(ready_app):
 
 
 def test_fx_remove_clears_stack_entry(ready_app):
-    """Add then Remove leaves the stack empty again.
-
-    Same end-to-end coverage as the Add test, plus the removeFXFromPlate
-    bridge path (clearStack + re-add everything except the removed
-    index — handles the gfcFXStack lack of single-item-remove).
+    """Add then Remove leaves the stack empty; covers the removeFXFromPlate
+    bridge path (clearStack + re-add all but the removed index, since
+    gfcFXStack has no single-item remove).
     """
     available = ready_app.by_object_name(locators.FXSTACK_AVAILABLE)
     items = _list_items(available)

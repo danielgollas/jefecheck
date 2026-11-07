@@ -1,29 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// jefe::wire — small, versioned, explicitly little-endian wire format.
-//
-// Replaces RakNet::BitStream/StringCompressor at message read/write sites
-// (JEF-23). Header-only, no third-party or RakNet dependency so it can be
-// used from both the RakNet transport TU and (later, JEF-24) a WebRTC
-// transport TU without linking RakNet.
-//
-// Frame layout: [u8 version][u16 msgType, little-endian][payload...].
-// `msgType` reuses the existing GFCNETID_* enum values. Version starts at 1;
-// `readFrameHeader` rejects anything else so a version mismatch is a clean,
-// silent drop rather than a misparse.
-//
-// All multi-byte integers are written/read explicitly byte-by-byte (little-
-// endian) — never via memcpy/reinterpret_cast of the multi-byte value itself,
-// so this is safe regardless of host endianness or alignment. Floats/doubles
-// are transmitted as their IEEE-754 bit pattern: a single `memcpy` converts
-// the scalar to same-width unsigned integer (this is the one sanctioned use
-// of memcpy here — converting one scalar's bit pattern, not reading/writing
-// multi-byte values directly off the wire), and that integer is then written
-// with the same explicit little-endian byte routine as everything else.
-//
-// Reader is fully bounds-checked: every read that would run past the end of
-// the buffer fails cleanly (returns false, sets an internal "bad" flag) and
-// never touches memory outside the buffer. Once bad, all further reads
-// short-circuit to false without moving the cursor.
+// jefe::wire: small, versioned, little-endian wire format, header-only.
+// Frame: [u8 version][u16 msgType LE][payload]; the Reader is bounds-checked and sticky-fails.
 
 #pragma once
 

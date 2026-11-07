@@ -1,29 +1,5 @@
-"""Preferences dialog tests — currently skipped due to a Mac2 flake.
-
-The first AppleScript-synthesized Cmd+, after a fresh Mac2 session
-intermittently fails to fire JefeCheck's QShortcut, even though
-subsequent sends in the same process succeed. Layout shortcuts
-(Cmd+1..4) using the identical send_shortcut path work consistently,
-so the issue is specific to the Cmd+, → modal QDialog::exec() path
-(possibly the modal blocking the main event loop while AX queries
-race against it).
-
-Diagnosis attempted but unresolved:
-- Adding parallel Cmd+, QShortcut alongside the menu's Cmd+P: no
-- setMenuRole(NoRole) on the prefs QAction: no
-- Qt::ApplicationShortcut context instead of WindowShortcut: no
-- Retry loop inside the test (re-sending Cmd+,): no
-- Bumping AppleScript activation delay 0.1s → 0.4s: no
-- Switching to System Events `set frontmost` instead of `activate`: no
-
-Plausible root causes: macOS App Nap / Universal Access focus race;
-QDialog::exec()'s nested event loop interfering with AX queries;
-synthesized punctuation keys delivered differently than digit keys.
-
-Tracked as a follow-up. The harness covers other modal-opening paths
-fine (LUT panel buttons, plate-card combos), so this isn't a structural
-gap in Phase C.
-"""
+"""Preferences dialog tests, currently skipped due to a Mac2 flake: the first AppleScript-synthesized Cmd+, after a fresh session intermittently fails to fire the QShortcut, though Cmd+1..4 work.
+Specific to the Cmd+, -> modal QDialog::exec() path; suspects: App Nap/focus race, nested exec() event loop vs AX, punctuation key delivery."""
 import pytest
 
 from jefecheck import locators

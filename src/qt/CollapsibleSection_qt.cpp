@@ -6,10 +6,8 @@
 
 namespace {
 
-// Self-contained dark styling so the section looks intentional in any context:
-// a subtle header bar with a hover state and a thin divider under it, and a
-// slightly inset content area. The triangle is Qt's native arrow (crisp at any
-// DPI); the header spans the full width and left-aligns like Nuke/Maya groups.
+// Self-contained dark styling: a subtle header bar with hover state and divider,
+// a slightly inset content area, and Qt's native arrow (crisp at any DPI).
 const char* kSectionStyle = R"(
 QToolButton#collapsible_header {
     background: #26262b;

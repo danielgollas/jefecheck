@@ -23,10 +23,8 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QScrollArea(parent) {
     inner_->setLayout(grid_);
 
     for (int i = 0; i < 4; ++i) {
-        // Bind to the rendering chain's plate GUI when it's available
-        // (set up by initializeRenderingChain() before docks are built).
-        // Falls back to an owned GUI when running without the chain so
-        // the dock still renders for tests / dev.
+        // Bind to the rendering chain's plate GUI when available (set up before the docks
+        // are built); otherwise use an owned GUI so the dock renders for tests.
         auto* externalGui = jefe::qt::getPlateGUIQt(i);
         auto* card = new PlateCard_Qt(i, externalGui, inner_);
         connect(card, &PlateCard_Qt::clicked,
@@ -74,21 +72,16 @@ void PlateManager_Qt::arrange() {
                          Qt::AlignLeft | Qt::AlignTop);
     }
 
-    // Content rows/cols take zero stretch. Horizontal is fixed on BOTH axes
-    // to the 2×2 content (so floating/docked is always exactly that size),
-    // so it needs no spacer. Vertical fixes width only and lets height grow,
-    // so a trailing spacer row keeps the cards pinned to the top.
+    // Content rows/cols take zero stretch. Horizontal is fixed to the 2x2 content;
+    // vertical fixes width only, so a trailing spacer row pins the cards to the top.
     for (int c = 0; c <= 2; ++c) grid_->setColumnStretch(c, 0);
     for (int r = 0; r <= n; ++r) grid_->setRowStretch(r, 0);
     if (vertical_) grid_->setRowStretch(rows, 1);
 
     if (n == 0) return;
 
-    // Pin the panel size to the packed cards. Do it now (best-effort) AND
-    // again next event-loop turn: reading a card's sizeHint synchronously
-    // during a dock move/undock can return a stale/zero size, which is what
-    // collapsed the vertical width and produced a 0-size window on undock.
-    // The deferred pass measures after the widget tree has settled.
+    // Pin the panel size now and again next event-loop turn: a card's sizeHint read
+    // during a dock move/undock can be stale/zero (a 0-size window).
     applyFixedExtent();
     QTimer::singleShot(0, this, [this]() { applyFixedExtent(); });
 }
@@ -108,10 +101,8 @@ void PlateManager_Qt::applyFixedExtent() {
         cardW = std::max(cardW, sh.width());
         cardH = std::max(cardH, sh.height());
     }
-    // Safety floors: a transient bad sizeHint (dock/undock mid-flight) must
-    // never collapse the panel to a near-zero window. The narrow card is
-    // ~200 wide; the wide-short card ~56 tall. These floors keep the panel
-    // usable until the deferred pass measures the real size.
+    // Safety floors: a transient bad sizeHint (dock/undock mid-flight) must not
+    // collapse the panel; the narrow card is ~200 wide, the wide-short ~56 tall.
     cardW = std::max(cardW, 200);
     cardH = std::max(cardH, 56);
 
@@ -120,8 +111,7 @@ void PlateManager_Qt::applyFixedExtent() {
     const int frame = frameWidth() * 2;  // QScrollArea border on both sides
 
     if (vertical_) {
-        // Fix width to one narrow card; height is free and scrolls. No
-        // horizontal scrollbar (width is fixed to content); the vertical
+        // Fix width to one narrow card; height is free and scrolls. The vertical
         // scrollbar gets its own extent so it doesn't cover the controls.
         const int sb = style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 2;
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -131,9 +121,8 @@ void PlateManager_Qt::applyFixedExtent() {
         setMaximumHeight(QWIDGETSIZE_MAX);
         setFixedWidth(cardW + m.left() + m.right() + frame + sb);
     } else {
-        // Fixed both ways — exactly the 2×2 block (cols×rows cards plus the
-        // grid spacing and margins), floating or docked. Scrollbars off so
-        // the area doesn't reserve a strip (reads as extra height/width).
+        // Fixed both ways: exactly the 2x2 block (cards plus grid spacing and
+        // margins). Scrollbars off so the area reserves no strip.
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         const int w = cols * cardW + (cols - 1) * sp + m.left() + m.right() + frame;

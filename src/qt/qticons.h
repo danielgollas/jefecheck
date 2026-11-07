@@ -1,16 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// qticons.h — shared programmatic icon factory (JEF-19).
-//
-// JefeCheck ships no icon asset files and uses no Qt resource (.qrc) or
-// QStyle::standardIcon glyphs. Every icon is painted with QPainter. This module
-// promotes the pattern that previously lived privately in PlateCard_qt.cpp
-// (makeMirrorPixmap/makeMirrorIcon/makeIconToggle) into one reusable place so
-// the Playlist, Timeline, FX/LUT panels and the dialogs can share it.
-//
-// Each icon is a DUAL-STATE QIcon: a light glyph (0xE0E0E0) for the normal
-// dark-theme button (QIcon::Off) and a dark glyph (0x1A1A1A) for the orange
-// ":checked" background (QIcon::On). Non-checkable buttons simply use the Off
-// pixmap. Rendered at 2x device-pixel-ratio for retina crispness.
+// qticons.h — shared programmatic icon factory (no asset files; icons are painted with
+// QPainter, dual-state light/dark for the orange :checked accent). See developer_notes.md §29.
 #pragma once
 
 #include <QIcon>

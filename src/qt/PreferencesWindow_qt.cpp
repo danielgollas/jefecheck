@@ -86,18 +86,14 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     connect(buttons, &QDialogButtonBox::rejected, this, [this]() {
         sett = *sett_backup_;           // revert live mutations
         jefe::qt::applyTextPrefs();     // revert live text-renderer edits (Text/*
-                                         // QSettings are untouched since Text is
-                                         // deferred-persistence, so this reapplies
+                                         // QSettings are untouched; this reapplies
                                          // the pre-dialog state)
         emit viewportRepaintRequested(); // paint the reverted state before closing
         reject();
     });
 
-    // Live preview: while this (modal) dialog is open, repaint the viewport at
-    // ~30 Hz so text style / background color / checkerboard / aspect-bar changes
-    // show in real time. A modal exec() still processes the parent's paint
-    // events, so the owner's connected viewport->update() runs. The timer is
-    // parented to `this`, so it stops and is destroyed with the dialog.
+    // Live preview: repaint the viewport at ~30 Hz while this modal dialog is open
+    // (a modal exec() still processes the parent's paint events).
     liveTimer_ = new QTimer(this);
     liveTimer_->setInterval(33);
     connect(liveTimer_, &QTimer::timeout, this,
@@ -115,9 +111,8 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     outer->addWidget(buttons);
 }
 
-// Out-of-line so the unique_ptr<gfcSettings> destructor is instantiated here,
-// where gfcStructures.h (included above) provides the complete type — the
-// header only forward-declares gfcSettings (see PreferencesWindow_qt.h).
+// Out-of-line so the unique_ptr<gfcSettings> destructor sees the complete
+// type from gfcStructures.h (the header only forward-declares it).
 PreferencesWindow_Qt::~PreferencesWindow_Qt() = default;
 
 void PreferencesWindow_Qt::addPage(const QString& title, QWidget* page) {
@@ -147,9 +142,8 @@ void styleSwatch(QPushButton* btn, const QColor& c) {
                            .arg(c.name()));
 }
 
-// Runs a color dialog that applies each intermediate color live (via `apply`)
-// so the viewport previews in real time as the user drags. Reverts to `start`
-// if the dialog is cancelled. Returns the accepted color (or `start`).
+// Runs a color dialog that applies each intermediate color live (via
+// `apply`); reverts to `start` if cancelled. Returns the accepted color.
 QColor liveColorDialog(QWidget* parent, const QColor& start, const QString& title,
                        bool withAlpha, const std::function<void(const QColor&)>& apply) {
     QColorDialog dlg(start, parent);
@@ -218,7 +212,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     connect(browsePath, &QLineEdit::editingFinished, page, [browsePath]() {
         sett.defaultBrowsePath = browsePath->text().toStdString();
     });
-    auto* browseBtn = new QPushButton(jefe::qticons::folder(), "Browse…", browseRow);  // JEF-19
+    auto* browseBtn = new QPushButton(jefe::qticons::folder(), "Browse…", browseRow);
     browseBtn->setObjectName("preferences.general.browsepath.button");
     browseBtn->setToolTip(QStringLiteral("Browse for the default folder that file dialogs open to."));
     browseBtn->setAccessibleName("Choose default browse path");
@@ -320,13 +314,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     form->addRow("Feedback fade delay (s)", fbFade);
 
     // ---- Playback & Engine (folded into General) -----------------------------
-    // renderingEngine, vsync, numOfPartitions and forcePBO are intentionally not
-    // exposed. vsync/renderingEngine are genuinely inert (only a hardcoded swap
-    // interval / commented-out reads). numOfPartitions/forcePBO ARE read live in
-    // gfcSequence.cpp, but only gate a partitioned-PBO upload path that is
-    // half-implemented (a //TODO stub + a redundant glDeleteTextures loop), so
-    // enabling them takes an unfinished path rather than a working alternative.
-    // Pinned to their safe ctor defaults (1 / 0); revisit if the PBO path lands.
+    // renderingEngine, vsync, numOfPartitions and forcePBO are inert or gate an unfinished PBO path; not exposed (1 / 0).
     auto* engineHeader = new QLabel("Playback & Engine", page);
     engineHeader->setProperty("role", "section");
     form->addRow(engineHeader);
@@ -445,21 +433,15 @@ QColor floatsToQColor(float r, float g, float b, float a) {
 }
 }  // namespace
 
-// Text page binds to the GfcTextRenderer singleton (declared in
-// gfcTextRenderer.h), not `sett` — there is no gfcSettings storage for text
-// prefs. Unlike the rest of this dialog, edits here call ONLY the renderer's
-// setters for live preview; QSettings ("Text/*") is written once on Done
-// (writeTextPrefs(), below) and reapplied via jefe::qt::applyTextPrefs() on
-// Cancel, matching the deferred-persistence pattern the Engine combos use
-// (see qt_prefs_persist.cpp and developer_notes.md).
+// Text page binds to the GfcTextRenderer singleton, not `sett`: QSettings ("Text/*")
+// is written on Done and reapplied on Cancel (applyTextPrefs()). See developer_notes.md §27.
 void PreferencesWindow_Qt::buildTextPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
     configureForm(form);
 
     // Seed every control from persisted Text/* QSettings, falling back to the
-    // shared GfcTextDefaults (gfcTextRenderer.h) so a first run (no keys yet)
-    // matches the renderer's live state and applyTextPrefs exactly.
+    // shared GfcTextDefaults so a first run matches the renderer's live state.
     using namespace GfcTextDefaults;
     QSettings s;
     const float initSize          = s.value("Text/size", kLabelSize).toFloat();
@@ -628,11 +610,8 @@ void PreferencesWindow_Qt::buildTextPage() {
     addPage("Text", page);
 }
 
-// Reads the Text page widgets' current values and persists them to
-// `Text/*` QSettings — called from the Done handler alongside
-// jefe::qt::writePreferences(). Text prefs are deferred-write (see the
-// buildTextPage() comment above): live edits only touch the renderer, so
-// this is the single point where they land in QSettings.
+// Persists the Text page widgets to `Text/*` QSettings on Done; live edits only
+// touch the renderer.
 void PreferencesWindow_Qt::writeTextPrefs() {
     QSettings s;
     s.setValue("Text/size", textSizeSpin_->value());
@@ -696,11 +675,8 @@ void PreferencesWindow_Qt::buildFormatsPage() {
     addPage("Formats", page);
 }
 
-// Consumer: gfcSequence.cpp:114/:1660 call findFileInSearchPaths(...) when
-// !fileExists(...) && sett.useSearchPaths — that function (gfcStructures.cpp:944+)
-// iterates sett.searchPaths and honors sett.searchPathsRecursive via
-// findFileInPath. Wiring here is UI-only: bind the checkboxes/list to `sett`
-// and persist; no consumer changes needed.
+// Consumer: findFileInSearchPaths (gfcStructures.cpp) honors sett.searchPaths and
+// searchPathsRecursive; this page only binds the widgets to `sett`.
 void PreferencesWindow_Qt::buildSearchPathsPage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
@@ -720,10 +696,8 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     connect(recursive, &QCheckBox::toggled, page, [](bool on){ sett.searchPathsRecursive = on; });
     form->addRow(recursive);
 
-    // Review-package relink (see ReviewPackage_qt.h resolveMedia): off by
-    // default, the cheap file-name match inside these search paths already
-    // finds most moved media. On, the slower fingerprint search (reads
-    // pixels of candidate sequences) also runs for media whose name changed.
+    // Review-package relink (ReviewPackage_qt.h resolveMedia): off by default; on,
+    // the slower fingerprint search (reads candidate pixels) also runs.
     auto* fingerprintRelink = new QCheckBox("Also match moved media by fingerprint (slower)", page);
     fingerprintRelink->setChecked(sett.relinkByFingerprint);
     fingerprintRelink->setObjectName("preferences.search.fingerprintRelink.check");
@@ -740,7 +714,7 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
     form->addRow(list);
 
     auto* row = new QHBoxLayout();
-    auto* add = new QPushButton(jefe::qticons::add(), "Add…", page);  // JEF-19
+    auto* add = new QPushButton(jefe::qticons::add(), "Add…", page);
     add->setObjectName("preferences.search.add.button");
     add->setToolTip(QStringLiteral("Add a folder to the search paths."));
     auto* rem = new QPushButton(jefe::qticons::remove(), "Remove", page);
@@ -772,9 +746,8 @@ void PreferencesWindow_Qt::buildSearchPathsPage() {
 }
 
 namespace {
-// remotePointerColor packs (r<<24)|(g<<16)|(b<<8) with the low (alpha) byte
-// zero; 0 is a sentinel meaning "unset -> default gray 0.6" (mirrors
-// gfcUnpackPointerColor in gfcPlate.cpp and unpackRGB in gfcnetworkmanager.cpp).
+// remotePointerColor packs (r<<24)|(g<<16)|(b<<8), low (alpha) byte zero; 0 means
+// "unset -> default gray 0.6" (see gfcUnpackPointerColor in gfcPlate.cpp).
 QColor pointerColorToQ() {
     if (sett.remotePointerColor == 0) return QColor(153, 153, 153);
     const int r = (sett.remotePointerColor >> 24) & 0xff;
@@ -784,20 +757,15 @@ QColor pointerColorToQ() {
 }
 void qToPointerColor(const QColor& c) {
     int packed = (c.red() << 24) | (c.green() << 16) | (c.blue() << 8);
-    // 0 is the "unset → default gray" sentinel (see pointerColorToQ and
-    // gfcPlate's gfcUnpackPointerColor), so a deliberately-picked pure black
-    // would render as gray. Nudge it to a near-black that isn't the sentinel.
+    // 0 is the "unset -> default gray" sentinel (see pointerColorToQ), so a
+    // picked pure black is nudged to a near-black that isn't the sentinel.
     if (packed == 0) packed = (1 << 8);   // B=1/255 ≈ black, non-zero
     sett.remotePointerColor = packed;
 }
 }  // namespace
 
-// Consumers: gfcnetworkclient.cpp / gfcnetworkmanager.cpp read nickName,
-// chat*, remotePointerFadeDelay, remotePointerColor, sendRemoteLoadRequests
-// and autoAcceptRemoteLoadRequests at connect/render time; gfcPlate.cpp
-// unpacks remotePointerColor for the pointer overlay and gfcTrackManager.cpp
-// consults the load-request toggles. Wiring here is UI-only: bind widgets to
-// `sett` and persist; no consumer changes needed (see task-5-brief.md).
+// This page only binds widgets to `sett`; gfcnetworkclient/manager, gfcPlate and
+// gfcTrackManager read the values at connect/render time.
 void PreferencesWindow_Qt::buildRemotePage() {
     auto* page = new QWidget(this);
     auto* form = new QFormLayout(page);
@@ -813,11 +781,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     form->addRow("Nickname", nickname);
 
     // --- JefeCheck Cloud --------------------------------------------------
-    // The coordinator URL lives HERE, not on the Cloud tab: it is configured
-    // once per machine, while the Cloud tab is about running a session. It is
-    // written straight to QSettings rather than to `sett`, because the
-    // rendering-chain settings struct has no business knowing about it and the
-    // Remote dialog reads the same key (see RemoteDialog_Qt::coordinatorUrlSetting).
+    // The coordinator URL is per machine: written straight to QSettings, not `sett`.
     auto* cloudHeader = new QLabel("JefeCheck Cloud", page);
     cloudHeader->setProperty("role", "section");
     form->addRow(cloudHeader);

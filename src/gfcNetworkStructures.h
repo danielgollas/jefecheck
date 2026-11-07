@@ -27,8 +27,7 @@
 
 #include "gfcfx.h"
 
-// JEF-39: note sync -- gfcNote and its concrete subclasses (Task 1 of the
-// annotations plan, docs/superpowers/plans/2026-09-07-annotations.md).
+// Note sync: gfcNote and its concrete subclasses.
 #include "gfcnote.h"
 #include "gfcnotestroke.h"
 #include "gfcnotearrow.h"
@@ -82,15 +81,12 @@ GFCNETID_SENDFXTACKS, GFCNETID_RECEIVEDFXSTACKS, GFCNETID_SENDSTACKSINCFINISHED,
 GFCNETID_REQUESTPLAYLIST, GFCNETID_SENDPLAYLISTFORMERGE, GFCNETID_MERGEDPLAYLISTS, GFCNETID_PLAYLISTMERGEFINISHED,
 GFCNETID_SENDALLREADY,
 
-// JEF-39: note sync. Appended at the END of the enum, never inserted in the
-// middle -- these values are wire-visible and renumbering would silently
-// desync any peer running a different build. See
-// docs/superpowers/plans/2026-09-07-annotations.md, Task 4.
+// Note sync. Appended at the END of the enum, never inserted: these values are
+// wire-visible and renumbering would desync peers on a different build.
 GFCNETID_NOTEADDMESSAGE, GFCNETID_NOTEADDBROADCASTMESSAGE,
 GFCNETID_NOTEREMOVEMESSAGE, GFCNETID_NOTEREMOVEBROADCASTMESSAGE,
 GFCNETID_REVISIONLOCKMESSAGE, GFCNETID_REVISIONLOCKBROADCASTMESSAGE,
-// Unlock was missing, so a host unlocking a round changed only their own copy
-// while every peer kept it locked. Appended for the same reason as above.
+// Unlock, so a host unlocking a round updates every peer.
 GFCNETID_REVISIONUNLOCKMESSAGE, GFCNETID_REVISIONUNLOCKBROADCASTMESSAGE,
 
 };
@@ -101,15 +97,8 @@ GFCNETMESSAGETYPE_SYSTEM,
 GFCNETMESSAGETYPE_LOAD
 };
 
-// jefe::wire FX/LUT serialize helpers (JEF-23; the legacy RakNet-serializer
-// overloads were deleted in Task 4). Field sequences are identical to the
-// legacy versions, modulo the sanctioned wire changes: strings are
-// u32-length-prefixed (compressed-string coding dropped), the legacy explicit
-// "length" fields preceding each compressed string are dropped (writeString
-// carries the length), and the LUT file body travels as length-prefixed raw
-// bytes. The unserialize overloads read ALL fields before performing any
-// side effects (file writes / manager loads) and return false — with no
-// side effects — on a truncated/malformed buffer.
+// jefe::wire FX/LUT serialize helpers. Unserialize reads ALL fields before any
+// side effect and returns false, with none, on a truncated or malformed buffer.
 void serializeFX ( const gfcFX* theFX, jefe::wire::Writer& w );
 bool unserializeFX ( jefe::wire::Reader& r );
 
@@ -138,21 +127,18 @@ public:
 char serverName[60];
 char password[60];
 int port;
-// JEF-27 cloud-coordinator hosting. When coordinatorMode is set, the host
-// dials coordinatorUrl and creates a session (port is ignored); sessionCode
-// stays empty (the coordinator assigns it).
+// Cloud-coordinator hosting: the host dials coordinatorUrl and creates a session
+// (port ignored); the coordinator assigns sessionCode.
 bool coordinatorMode = false;
 std::string coordinatorUrl;
 std::string sessionCode;
-// JEF-31: coordinator access JWT (empty = anonymous).
+// Coordinator access JWT (empty = anonymous).
 std::string authToken;
-// JEF-37: host-side session policy (knock / password / idle timeout /
-// capacity) from the selected session group. Sent with create-session; the
-// coordinator enforces it for everyone. Host-only by construction.
+// Host-side session policy (knock / password / idle timeout / capacity), sent
+// with create-session and enforced by the coordinator.
 jefe::net::SessionPolicy policy;
-// JEF-37: secret that lets this host's own loopback client skip its own
-// lobby. gfcNetworkManager::startServer generates one when empty and hands
-// the same value to the loopback as its coordinator display name.
+// Secret that lets this host's own loopback client skip its own lobby;
+// gfcNetworkManager::startServer generates one when empty.
 std::string selfJoinNonce;
 };
 
@@ -163,19 +149,16 @@ std::string serverIP;
 int port;
 std::string password;
 std::string nickname;
-// JEF-27 cloud-coordinator join. When coordinatorMode is set, the client
-// dials coordinatorUrl and joins sessionCode (serverIP/port are ignored).
+// Cloud-coordinator join. When coordinatorMode is set, the client dials
+// coordinatorUrl and joins sessionCode (serverIP/port are ignored).
 bool coordinatorMode = false;
 std::string coordinatorUrl;
 std::string sessionCode;
-// JEF-31: coordinator access JWT (empty = anonymous). Joiners need none --
-// only hosting is gated -- but a valid one earns a verified badge in the
-// host's admit prompt.
+// Coordinator access JWT (empty = anonymous). Joiners need none (only hosting
+// is gated), but a valid one earns a verified badge in the host's admit prompt.
 std::string authToken;
-// JEF-37: name presented to the COORDINATOR when knocking, which is separate
-// from `nickname` (the app-level name in the participant list). A host's
-// loopback client puts its self-join nonce here so it is admitted silently,
-// while still showing up under the session's real name. Empty = use nickname.
+// Name presented to the COORDINATOR when knocking, separate from `nickname`; a
+// host's loopback client puts its self-join nonce here. Empty = use nickname.
 std::string coordDisplayName;
 };
 
@@ -520,26 +503,8 @@ char lutOrCube[60]; // for LUTs and CUBEs
 };
 
 
-// ---------------------------------------------------------------------------
-// JEF-39: note sync (docs/superpowers/plans/2026-09-07-annotations.md, Task 4)
-// ---------------------------------------------------------------------------
-// A note's geometry is variable length -- a freehand stroke can be hundreds
-// of points, text is an arbitrary string -- so unlike the fixed structs above
-// it is serialized field-by-field directly into the BitStream, the same way
-// gfcNetTransformationMessage writes its count-prefixed vector rather than a
-// POD struct. The message pairing itself mirrors GFCNETID_POINTERINFOMESSAGE
-// / GFCNETID_POINTERINFOBROADCASTMESSAGE exactly: a client sends the
-// *MESSAGE form to the server; the server stamps a verified author from its
-// own nickname map (never trusted from the client -- see
-// gfcnetworkserver.cpp's GFCNETID_NOTEADDMESSAGE handling) and relays the
-// *BROADCASTMESSAGE form to everyone.
-//
-// A note carries no revisionId of its own (see gfcnote.h) -- it always
-// belongs to whatever the sender considers "the open revision". The server
-// caches known notes and, on GFCNETID_REVISIONLOCKMESSAGE (host only),
-// records which revision id is locked, purely so a joiner can be handed a
-// snapshot (see gfcnetworkserver.cpp's GFCNETID_NICKNAMESEND handling, which
-// hands out the snapshot the same way it already hands out the peer list).
+// Note sync: geometry is serialized field-by-field. The server stamps a verified
+// author (never trusted from the client) and relays the *BROADCASTMESSAGE form.
 
 inline void serializeNote(const gfcNote& note, RakNet::BitStream* bs) {
 	bs->Write((unsigned char)note.noteType());
@@ -583,11 +548,8 @@ inline void serializeNote(const gfcNote& note, RakNet::BitStream* bs) {
 	}
 }
 
-// Reconstructs the correct concrete subclass from the wire type byte -- there
-// is no stored "type" field on gfcNote, noteType() is virtual, so the
-// declared type can never disagree with the actual subclass. Returns nullptr
-// on an unrecognised type byte (e.g. a newer peer's note type reaching an
-// older build) so callers can safely ignore it.
+// Reconstructs the concrete subclass from the wire type byte; nullptr on an
+// unrecognised byte (e.g. a newer peer's note type) so callers can ignore it.
 inline std::unique_ptr<gfcNote> unserializeNote(RakNet::BitStream* bs) {
 	unsigned char rawType = 0;
 	bs->Read(rawType);
@@ -661,30 +623,8 @@ inline std::unique_ptr<gfcNote> unserializeNote(RakNet::BitStream* bs) {
 	return note;
 }
 
-// ---------------------------------------------------------------------------
-// Client <-> gfcNetworkClient::Update() bridge for outgoing/incoming note
-// messages.
-//
-// gfcnetworkclient.h and gfcnetworkserver.h are OUT OF SCOPE for JEF-39 Task
-// 4 (see the plan's file-ownership map) -- only the .cpp bodies are. That
-// means a new outgoing message type cannot become a new
-// gfcNetworkClient::SendXxx method the way SendPointerInfoMessage was added
-// for pointer sync, since that requires a new method declaration in a header
-// this task does not own.
-//
-// Instead: gfcNetworkManager::broadcastNoteAdd/Remove/RevisionLock (see
-// gfcnetworkmanager.cpp) hand a fully-encoded message to
-// gfcNetworkClient::queueNoteMessage()
-// below; gfcNetworkClient::Update() -- an EXISTING method, so its body is in
-// scope -- flushes that queue to the server once per pump. Symmetrically,
-// drainNoteSyncEvents() lets a future consumer (the notes dock, Task 6) pull
-// inbound add/remove/lock events the same way gfcNetworkClient::getChatLog()
-// is polled today. Both are implemented in gfcnetworkclient.cpp.
-//
-// This is a deliberate, minimal-footprint workaround for the file-ownership
-// boundary, not a new architectural pattern -- the wire messages themselves
-// still mirror the pointer-info convention exactly. A follow-up with
-// gfcnetworkclient.h in scope could fold this into proper member methods.
+// Note-message bridge to gfcNetworkClient::Update(): queueNoteMessage() queues
+// outgoing messages; drainNoteSyncEvents() returns inbound events (gfcnetworkclient.cpp).
 namespace jefe { namespace net {
 
 struct NoteSyncEvent {

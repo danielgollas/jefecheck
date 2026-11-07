@@ -266,8 +266,7 @@ std::vector<std::pair<int, std::string>> getLut1DChoices();
 
 // FX parameter metadata, flattened across groups in declaration order.
 // Mirrors gfcFXWidget without dragging glad/gfcfx.h into Qt translation
-// units. The Qt FX param panel renders this list — read-only in PR-38;
-// PR-38b will add a setter and per-row editors.
+// units. The Qt FX param panel renders this list.
 enum class FXParamType {
     Unknown,
     Float,
@@ -326,13 +325,9 @@ void setFXParamValueOnPlate(int plateIdx,
                             const std::string& widgetName,
                             float value);
 
-// Render dialog (PR-39). Qt-friendly mirror of `gfcRenderParams`
-// without dragging glad / FLTK headers into the Qt TU. Format mirrors
-// the gfcRenderFormats enum: 0=JPEG, 1=EXR, 2=TIFF, 3=TGA, 4=BMP,
-// 5=PNG. PR-39a passes a small subset (path / prefix / postfix /
-// padding / range / scale / format / quadrant); the format-specific
-// quality fields, video codec, and movie-creation pipeline land in
-// PR-39b. Defaults match `gfcRenderParams`'s ctor values.
+// Render dialog. Qt-friendly mirror of `gfcRenderParams` without dragging glad
+// / FLTK headers into the Qt TU. Format mirrors gfcRenderFormats:
+// 0=JPEG, 1=EXR, 2=TIFF, 3=TGA, 4=BMP, 5=PNG. Defaults match `gfcRenderParams`'s ctor.
 struct RenderParams {
     int quadrant = 0;
     int format   = 0;        // gfcRenderFormats enum value
@@ -375,17 +370,12 @@ std::string previewRenderFilename(const RenderParams& params);
 int triggerSyncRender(const RenderParams& params,
                       const std::function<void(int, int)>& onProgress = {});
 
-// Cancel hooks. Today only meaningful from a worker thread (PR-39b);
-// stubbed here for symmetry with the FLTK callback shape.
+// Cancel hooks (kept for symmetry with the FLTK callback shape).
 void abortRender();
 bool isRendering();
 
-// Remote sessions (PR-41). The Qt RemotePanel uses these to drive
-// gfcNetworkManager + the existing gfcNetworkClient/Server GUI
-// abstractions. PR-41a only ships the connect/status hooks; chat,
-// participant list, and saving the chat log come in PR-41b along
-// with a per-event refresh signal so the panel can react to remote
-// peers connecting/disconnecting in real time.
+// Remote sessions. The Qt RemotePanel uses these to drive gfcNetworkManager
+// and the existing gfcNetworkClient/Server GUI abstractions.
 //
 // `connectAsServer` calls gfcNetworkManager::startServer with the
 // supplied params; `connectAsClient` calls startConnection. Both
@@ -406,7 +396,7 @@ struct RemoteClientParams {
 void connectAsServer(const RemoteServerParams& params);
 void connectAsClient(const RemoteClientParams& params);
 
-// JEF-27 cloud coordinator mode. Cloud host: dials the coordinator URL and
+// Cloud coordinator mode. Cloud host: dials the coordinator URL and
 // asks it to create a session (the port is ignored); the assigned short code
 // is surfaced via remoteSessionCode() once it arrives. Cloud client: dials the
 // coordinator and joins by that code. Both funnel into
@@ -418,10 +408,9 @@ void connectAsClient(const RemoteClientParams& params);
 // event loop keeps running, then marshal the result back to the UI thread.
 struct RemoteCloudHostParams {
     std::string coordinatorUrl;
-    // Shown to participants. Was hardcoded to "jefe-cloud-host" for EVERY
-    // cloud host, so every host appeared under the same name.
+    // Shown to participants.
     std::string hostName;
-    // JEF-31 coordinator access JWT. Empty = anonymous; the coordinator
+    // Coordinator access JWT. Empty = anonymous; the coordinator
     // answers auth-required if it gates create-session.
     std::string authToken;
 
@@ -429,7 +418,7 @@ struct RemoteCloudHostParams {
     // These are HOST-only by construction: the coordinator takes them at
     // create-session and enforces them for everyone. A joiner cannot set,
     // see, or override any of them.
-    /** Each joiner waits for Admit/Deny (JEF-37). */
+    /** Each joiner waits for Admit/Deny. */
     bool requireKnock = true;
     /** Optional shared password, checked before a joiner reaches the lobby. */
     std::string sessionPassword;
@@ -450,7 +439,7 @@ struct RemoteCloudJoinParams {
     std::string clientName;
     std::string coordinatorUrl;
     std::string sessionCode;
-    // Optional (JEF-37): joining needs no account, but a valid token earns a
+    // Optional: joining needs no account, but a valid token earns a
     // verified badge in the host's admit prompt.
     std::string authToken;
 };
@@ -492,11 +481,11 @@ bool remoteTestServerSawPlay(int port, int settleMs);
 // rationale): start + await the loopback client, then settle for the peer's play.
 bool remoteTestServerStart(int port, int loopbackTimeoutMs);
 bool remoteTestServerSettleForPlay(int settleMs);
-// JEF-27 Task 3: --coord-test cloud-coordinator E2E helpers. Host role: start in
+// --coord-test cloud-coordinator E2E helpers. Host role: start in
 // coordinator mode (create-session), wait for the assigned code + loopback client
 // to come up. Peer role: join by code, hold, toggle play. See the .cpp.
 bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs);
-// JEF-37 --coord-live-test: same bring-up against a REAL coordinator, with the
+// --coord-live-test: same bring-up against a REAL coordinator, with the
 // default host policy (knock on). Returns true only once the host's own
 // loopback client appears as a participant — which is exactly what host policy
 // can block, and what the test-double coordinator cannot exercise.
@@ -515,7 +504,7 @@ std::string coordTestGetCode();
 void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
                        int holdMs, bool play, int connectTimeoutMs = 12000);
 bool coordTestSettleForPlay(int settleMs);
-// JEF-28 Task 2: --asset-test late-join LUT/FX transfer helpers. Host role:
+// --asset-test late-join LUT/FX transfer helpers. Host role:
 // load a fixture into the host managers (returns its content hash, "" on
 // failure / no-GL FX), start the RakNet server, pump it while the peer syncs.
 // Peer role reuses remoteTestPeerConnect; these getters read the peer's
@@ -549,7 +538,7 @@ bool isRemoteServer();
 // consistent answer, so the invariants live HERE rather than being re-derived
 // at each call site. The panel's job is then a pure render of this struct.
 // ---------------------------------------------------------------------------
-// JEF-37 lobby, host side. Mirrors jefe::net::PendingJoiner without dragging
+// Lobby, host side. Mirrors jefe::net::PendingJoiner without dragging
 // the transport headers into Qt TUs (developer_notes §1). `displayName` is
 // peer-supplied — render it as Qt::PlainText, never rich text. `email` is
 // non-empty only when `verified`, which is the only part of a knock the host
@@ -600,7 +589,7 @@ struct RemoteUiState {
      */
     bool showCredits = false;
     /**
-     * JEF-37: joiners knocking, waiting on this host's decision. Non-empty only
+     * Joiners knocking, waiting on this host's decision. Non-empty only
      * while hosting a cloud session. Part of the state struct rather than a
      * separate getter so the panel has ONE place it reads state from, and
      * --ui-preview can populate a lobby without a second override path.
@@ -611,13 +600,12 @@ struct RemoteUiState {
 /** Resolve the current remote state. Safe to call from the GUI thread. */
 RemoteUiState remoteUiState();
 
-// JEF-30: per-peer session-health snapshot for the Remote dialog indicator.
+// Per-peer session-health snapshot for the Remote dialog indicator.
 // `name` resolves the peer's nickname when possible, else its PeerId as a
 // string. `rttMs` is -1 when unknown (RakNet always, WebRTC on localhost).
-// `bytes` is the running total (sent+received); T2 derives kbps from deltas
-// between refreshes (so `kbps` is left 0 here — carried for the T2 struct
-// shape). `path` is "direct" / "relay" / "n/a". Honors gCloudConnectInFlight
-// (returns empty during a cloud connect, like the other getters).
+// `bytes` is the running total (sent+received); `kbps` is derived from deltas
+// between refreshes and left 0 here. `path` is "direct" / "relay" / "n/a".
+// Honors gCloudConnectInFlight (returns empty during a cloud connect).
 struct RemotePeerStat {
     std::string name;
     long rttMs = -1;
@@ -654,7 +642,7 @@ struct ChatEntry {
 };
 std::vector<ChatEntry> remoteChatEntries();
 
-// Chat overlay + keyboard chat entry (Task 7).
+// Chat overlay + keyboard chat entry.
 // drawNetworkOverlay renders the ported networkManager.draw() chat/pointer
 // overlay into the current GL context (w, h are framebuffer pixels).
 // remoteChatModeActive returns true while the user is composing a message.
@@ -668,19 +656,18 @@ void remoteChatBackspace();
 void remoteChatAppend(const std::string& s);
 void remoteChatSubmit();
 
-// Remote pointer broadcast (Task 8). Sends the local cursor position to all
+// Remote pointer broadcast. Sends the local cursor position to all
 // session peers. xPx/yPx are framebuffer pixel coords with GL bottom-left
 // framebuffer pixels, GL bottom-left origin (caller applies dpr scale and
 // Y-flip); quadID is the plate under the cursor (dragPlate_). Converts to the
 // plate's image space before sending. No-ops when disconnected or quadID < 0.
 void sendRemotePointer(int xPx, int yPx, int quadID);
 
-// Playlist (PR-40). The Qt PlaylistPanel calls these to drive
-// gfcPlaylistManager + gfcTrackManager without dragging glad in.
+// Playlist. The Qt PlaylistPanel calls these to drive gfcPlaylistManager +
+// gfcTrackManager without dragging glad in.
 //
-// `getPlaylistItemNames` returns one entry per playlist item; the
-// display name is the basename of the item's first track filename
-// (full paths visible in tooltips / status bar in PR-40b).
+// `getPlaylistItemNames` returns one entry per playlist item; the display name
+// is the basename of the item's first track filename.
 //
 // `addPlaylistFile(path)` builds a single-track gfcPlaylistItem via
 // `gfcPlaylistManager::createPlaylistItemFrom({path})` and appends.
@@ -811,12 +798,10 @@ void setLayerOnPlate(int plateIdx, const std::string& layerName);
 // next to its "original" entry so the user sees the file's true ratio.
 std::string getPlateNativeAspect(int plateIdx);
 
-// Headless self-test for JEF-21: drives every aspect-ratio preset string
-// through the real GUI conversion (gfcPlateGUI_Qt::setAspectChoice ->
-// aspectFromString) and asserts the resulting renderer aspect uses the
-// height/width convention gfcPlate::calculatePolySizesCropEtc expects
-// (every landscape "W:H" preset must map to a value in (0,1), not W/H).
-// Prints ASPECT-TEST PASS/FAIL and returns true on pass. Needs no GL.
+// Headless self-test: drives every aspect-ratio preset string through
+// gfcPlateGUI_Qt::setAspectChoice -> aspectFromString and asserts the renderer
+// aspect uses gfcPlate's height/width convention (every landscape "W:H" preset
+// maps into (0,1)). Prints ASPECT-TEST PASS/FAIL; returns true on pass. Needs no GL.
 bool runAspectSelfTest();
 
 // Loads the file into sequence `whichSequence` as a preview frame and
@@ -1165,19 +1150,16 @@ std::string recoverySessionPath();
 // Recent sessions (manager keeps sett.recentSessions, cap 5).
 std::vector<std::string> getRecentSessions();
 void setRecentSessions(const std::vector<std::string>& paths);
-// Recent playlists (JEF-18: sett.recentPlaylists, cap 5). loadPlaylistFile /
-// savePlaylistFile push onto this automatically; these are for QSettings
-// seed/read-back at startup/close.
+// Recent playlists (sett.recentPlaylists, cap 5). loadPlaylistFile /
+// savePlaylistFile push onto this automatically; these seed/read back QSettings.
 std::vector<std::string> getRecentPlaylists();
 void setRecentPlaylists(const std::vector<std::string>& paths);
 // Startup-session preference (0 Empty / 1 Reopen / 2 Ask).
 int  getStartupSessionBehavior();
 void setStartupSessionBehavior(int mode);
-// General prefs (JEF-16 Task 1) — read-only accessors so MainWindow_qt.cpp
-// can apply "start in fullscreen" / "open Load window at startup" and seed
-// the Quick Load dialog's default directory without including
-// gfcStructures.h (which drags glad, incompatible with QOpenGLWidget in
-// this TU — see developer_notes.md §1).
+// General prefs: read-only accessors so MainWindow_qt.cpp avoids including
+// gfcStructures.h (it drags glad, incompatible with QOpenGLWidget in this TU;
+// developer_notes.md §1).
 bool getStartFullscreen();
 bool getOpenLoadWindowAtStartup();
 std::string getDefaultBrowsePath();
@@ -1188,11 +1170,9 @@ bool saveCCFavoritesFile(const std::string& path);
 bool loadCCFavoritesFile(const std::string& path);
 std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
 
-// --- Notes dock (JEF-39 Task 6) ---------------------------------------------
-// NotesPanel_Qt must not include gfcreview.h / gfcrevision.h / gfcnote.h --
-// only this TU may (developer_notes.md §1). Everything the dock needs comes
-// through the plain-data accessors below, mirroring the PlaylistTrackDetail /
-// ChatEntry convention already in this header.
+// --- Notes dock ---------------------------------------------------------------
+// NotesPanel_Qt must not include gfcreview.h / gfcrevision.h / gfcnote.h; only
+// this TU may (developer_notes.md §1). The dock uses the plain-data accessors below.
 
 // One drawn note, flattened out of gfcNote so the panel never touches the
 // polymorphic type. typeIndex mirrors gfcNoteType (0 stroke, 1 arrow, 2 box,
@@ -1271,10 +1251,8 @@ bool canRemoveNote(int plateIdx, const std::string& noteId);
 bool removeNoteFromPlate(int plateIdx, const std::string& noteId);
 
 // --- Drawing-tool selection ---------------------------------------------
-// State only. Mouse drawing on the viewport is NOT wired by Task 6 (see the
-// plan's file-ownership map) -- these accessors just give a future viewport
-// hook one place to read the reviewer's chosen tool/colour/size instead of
-// the dock reaching into gfcPlate directly.
+// State only: the reviewer's chosen tool/colour/size, so the dock does not
+// reach into gfcPlate directly.
 enum NoteTool { NOTETOOL_FREEHAND = 0, NOTETOOL_ARROW, NOTETOOL_BOX, NOTETOOL_TEXT };
 void setActiveNoteTool(int tool);
 int  activeNoteTool();
@@ -1283,10 +1261,8 @@ void getActiveNoteColor(float& r, float& g, float& b);
 void setActiveNoteSize(int size);
 int  activeNoteSize();
 
-// Bare `N` visibility toggle (MainWindow_qt.cpp). Pure UI state until the
-// on-screen overlay call site (Task 5, gfcPlate.cpp -- not owned by Task 6)
-// reads it; see the Task 6 report for the forward-declared accessor Task 5
-// needs to call.
+// Bare `N` visibility toggle (MainWindow_qt.cpp); on-screen only, the overlay
+// call site in gfcPlate.cpp reads it.
 // --- Mouse drawing on the viewport --------------------------------------
 // Armed by picking a tool in the Notes dock; disarmed by Escape or by
 // toggling the tool off. While armed the viewport draws instead of panning,
@@ -1498,7 +1474,7 @@ struct NoteStampResult {
 };
 
 /**
- * JEF-41: copy the plate's CURRENT frame file to outExr with its notes
+ * Copy the plate's CURRENT frame file to outExr with its notes
  * attached -- the review's geometry as a jefecheck:notes JSON header
  * attribute, and this frame's visible markup rasterised into a notes.R/G/B/A
  * layer. The beauty channels come from the file on disk; nothing is

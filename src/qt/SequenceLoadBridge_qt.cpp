@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Implementation lives in a Qt-free TU so it can pull the manager
-// headers (which include glad) without colliding with Qt's QOpenGLWidget
-// system-OpenGL include path.
+// Implementation lives in a Qt-free TU so it can include the manager headers
+// (which pull glad) without colliding with QOpenGLWidget's system-OpenGL include.
 #include "SequenceLoadBridge_qt.h"
 
 #include "../gfcplatemanager.h"
@@ -74,28 +73,12 @@ void findSequence(std::vector<std::string>& refFiles, std::string inputFilename,
 
 namespace jefe::qt {
 
-// JEF-27: set true while a cloud connect (connectAsCloudHost/Client) owns the
-// networkManager on a worker thread. connectAsCloudHost blocks up to ~5s in the
-// coordinator's code-assignment wait; the GUI thread's pumpNetwork() must NOT
-// call networkManager.update() concurrently with the worker's startServer /
-// startConnection (server/client Update() would race the transport bring-up).
-// pumpNetwork() checks this and skips the tick while it is set. The window is
-// short and the dialog refreshes itself when the worker finishes, so skipping a
-// few pump ticks costs nothing.
-//
-// The worker is the SOLE thread allowed to touch networkManager while this is
-// set, so EVERY GUI-thread manager reader must honor it too: the remote getters
-// below (isRemoteConnected/isRemoteServer/remoteParticipants/remoteStatusText/
-// remoteSessionCode/remoteErrors/…) return empty/false, and drawNetworkOverlay
-// draws nothing, while a cloud connect is in flight. drawNetworkOverlay
-// self-gates inside this TU, so GlViewport_qt's paintGL call already no-ops
-// without a GlViewport edit; cloudConnectInFlight() is exported for any future
-// GUI-thread caller that needs the same gate.
+// Set while a cloud connect owns the networkManager on a worker thread (~5s):
+// pumpNetwork() skips update(), remote getters return empty, the overlay draws nothing.
 static std::atomic<bool> gCloudConnectInFlight{false};
 
-// Set once the app is tearing down (QCoreApplication::aboutToQuit). A detached
-// cloud-connect worker checks this before touching networkManager so it can't
-// mutate a global that static destruction may be racing on quit.
+// Set once the app is tearing down (aboutToQuit); a detached cloud-connect
+// worker checks it before touching networkManager during static destruction.
 static std::atomic<bool> gBridgeShuttingDown{false};
 
 bool cloudConnectInFlight() {
@@ -143,13 +126,8 @@ void setDefaultDecodeFilter(int filterId) {
 }
 
 void initializeRenderingChain() {
-    // FLTK's main.cpp probes GL_ARB_shader_objects + GL_EXT_framebuffer_object
-    // and writes these flags. The Qt build skips that probe but uses the
-    // same render path (gfcPlate::draw, super-shader, gfcFX::load), all of
-    // which check the flags. Set them unconditionally — every macOS /
-    // Linux / Windows GL stack the Qt build supports has both extensions.
-    // Without this, gfcFX::load returns early with "FXs not Supported"
-    // and fxArray stays empty no matter how many .jfx files we hand it.
+    // Set unconditionally: every supported GL stack has both extensions, and
+    // without these gfcFX::load returns early with "FXs not Supported".
     sett.glsl = true;
     sett.fbo = true;
 
@@ -180,10 +158,8 @@ void initializeRenderingChain() {
         sett.lutPath = ::getApplicationDataPath() + "FX/";
     }
 
-    // Wire the color-pick subsystem (FLTK did this in main.cpp). Without
-    // it nothing registers with pickManager, so in-viewport overlays like
-    // the histogram window never receive click/drag events. Plates are a
-    // fixed-size vector built in the gfcPlateManager ctor, so they exist.
+    // Wire the color-pick subsystem; without it nothing registers with
+    // pickManager and in-viewport overlays (histogram) never get click/drag.
     pickManager.registerDrawee(&plateManager);
     pickManager.registerNotifee(&plateManager);
     plateManager.registerPlatesAsPickNotifees();
@@ -202,9 +178,8 @@ void initializeRenderingChain() {
 }
 
 namespace {
-// Build the gfcPickFlags bitfield doPicking expects. BUTTON1 is always set
-// (we only dispatch picks for the left button); ctrl/alt/shift map to the
-// GFC_PICK_MODIFIER_* bits.
+// Build the gfcPickFlags bitfield doPicking expects: BUTTON1 always set
+// (left-button picks only); ctrl/alt/shift map to GFC_PICK_MODIFIER_*.
 unsigned int pickFlags(bool ctrl, bool alt, bool shift) {
     unsigned int f = GFC_PICK_MODIFIER_BUTTON1;
     if (ctrl)  f |= GFC_PICK_MODIFIER_CTRL;
@@ -237,11 +212,8 @@ void viewportPickUp(int xFb, int yFb, bool ctrl, bool alt, bool shift) {
 
 void initializeTextRenderer(float dpiScale) {
     namespace fs = std::filesystem;
-    // Path resolution mirrors the FX/LUT autoload: prefer the bundled
-    // path, fall back to the dev-mode `./fonts/` symlink. FLTK's
-    // main.cpp tries both in the same order; we keep the convention so
-    // a CLAUDE.md-style dev setup (symlink fonts → src/fonts) keeps
-    // working in the Qt build too.
+    // Path resolution mirrors the FX/LUT autoload: the bundled path, then the
+    // dev-mode `./fonts/` symlink.
     const std::string bundled = ::getApplicationDataPath() + "fonts/";
     const std::string dev     = "fonts/";
     const std::string regularName = "Roboto-Regular.ttf";
@@ -263,11 +235,8 @@ void initializeTextRenderer(float dpiScale) {
     if (!tryLoadRegular(bundled)) tryLoadRegular(dev);
     if (!tryLoadBold(bundled))    tryLoadBold(dev);
 
-    // DPI scale drives the atlas bake size (fontSize * dpiScale texels)
-    // so glyphs stay crisp on Retina. The shadow offset is in physical
-    // pixels — 1 logical pixel down-right matches FLTK's default and
-    // gives plate labels a readable drop without the blurry feel of a
-    // larger blur radius.
+    // DPI scale drives the atlas bake size (fontSize * dpiScale texels) so
+    // glyphs stay crisp on Retina. The shadow offset is in physical pixels.
     textRenderer().setDPIScale(dpiScale);
     textRenderer().setShadowEnabled(true);
     textRenderer().setShadowOffset(dpiScale, -dpiScale);
@@ -276,12 +245,8 @@ void initializeTextRenderer(float dpiScale) {
 }
 
 void initializeInstallLUTs() {
-    // LUT autoload path resolution. Try, in order:
-    //   1. sett.lutPath (whatever readSettings or the prefs window saved)
-    //   2. <bundle Resources>/FX/  (release/install convention)
-    //   3. ./FX/                   (CLAUDE.md dev-mode symlink)
-    // First match wins. Logged so the user can tell from the terminal
-    // which one the binary picked up.
+    // LUT autoload path, first match wins (logged): sett.lutPath, then
+    // <bundle Resources>/FX/ (install), then ./FX/ (dev symlink).
     namespace fs = std::filesystem;
     std::vector<std::string> candidates;
     if (!sett.lutPath.empty()) candidates.push_back(sett.lutPath);
@@ -313,17 +278,14 @@ bool needsPlaybackTick() {
     // Playback engine actively advancing — must tick to keep currentFrame
     // moving and to call plateManager.setChanged() each frame.
     if (playbackManager.isPlaying()) return true;
-    // Any sequence with decoded-but-not-yet-uploaded frames also needs a
-    // tick so trackManager.generateTextures() can drain them onto the GPU.
-    // hasPendingRawFrames() is an O(1) queue::empty() check.
+    // Sequences with decoded-but-not-uploaded frames need a tick so
+    // trackManager.generateTextures() can drain them (hasPendingRawFrames() is O(1)).
     for (int i = 0; i < 4; ++i) {
         gfcSequence* seq = trackManager.getSequence(i);
         if (seq && seq->hasPendingRawFrames()) return true;
     }
-    // A fading feedback message (zoom/reset/flip overlay) or a settling
-    // flip/flop rotation needs the tick to keep animating + repainting while
-    // playback is stopped — otherwise it only appears/updates on the next
-    // forced repaint (mouse move, play).
+    // A fading feedback message or settling flip/flop rotation needs the tick to
+    // keep animating while playback is stopped.
     if (plateManager.hasActiveAnimations()) return true;
     // The remote chat/status overlay fading out (or chat entry) needs the tick
     // to keep repainting while playback is stopped, same as plate animations.
@@ -331,66 +293,46 @@ bool needsPlaybackTick() {
     return false;
 }
 
-// Any time-based animation that needs the viewport repainted every tick even
-// when playback is stopped and no new frame is dirty: settling flip/flop,
-// fading remote-pointer trails, or the fading chat/status overlay.
+// Any time-based animation that needs a repaint every tick even when stopped:
+// settling flip/flop, fading remote-pointer trails, the fading chat/status overlay.
 bool hasActiveViewportAnimation() {
     return plateManager.hasActiveAnimations() || networkManager.overlayAnimating();
 }
 
 bool tickPlayback() {
-    // playbackManager.update() is the heart of the playback engine —
-    // advances currentFrame at target FPS, calls plateManager.setChanged()
-    // when a new frame should display.
+    // playbackManager.update() advances currentFrame at target FPS and calls
+    // plateManager.setChanged() when a new frame should display.
     playbackManager.update();
 
-    // Drives the per-plate flip/flop rotations and any other smoothly-
-    // animated state. Without this, gfcPlate::updateRot never runs, so
-    // pressing H/V toggles the flag but rX/rY stay at 0 and the
-    // rotation never plays — flip/flop look like no-ops.
+    // Drives the per-plate flip/flop rotations; without it gfcPlate::updateRot
+    // never runs and flip/flop look like no-ops.
     plateManager.updateAnimations();
 
-    // Drain one frame from each sequence's rawFrames queue and upload
-    // it to a GL texture. The loader thread fills the queue; this call
-    // is what makes those frames visible to the renderer. Cheap when
-    // queues are empty (early return on try_lock fail). Caller MUST
-    // make the viewport's GL context current before calling — texture
-    // uploads happen on the calling thread.
+    // Drain one frame per sequence's rawFrames queue into a GL texture. Caller
+    // MUST make the viewport's GL context current (uploads run on this thread).
     trackManager.generateTextures();
 
-    // Pushes per-track widget state (visible range, current frame, etc.)
-    // into the gfcSequenceGUI for each sequence. In the Qt build the
-    // GUI methods are mostly stubs today, but calling this keeps the
-    // surface symmetric with FLTK so wiring a real timeline later is
-    // a matter of filling in stubs, not threading the call.
+    // Pushes per-track widget state into the gfcSequenceGUI for each sequence
+    // (mostly stubs in the Qt build).
     trackManager.updateTrackWidgets();
 
-    // Drain the dirty flag here so callers know when to redraw without
-    // having to query plateManager themselves. Any input path that calls
-    // setChanged() (drop, keys, mouse, playback frame advance) gets
-    // picked up here.
+    // Drain the dirty flag so callers know when to redraw; any setChanged()
+    // (drop, keys, mouse, frame advance) is picked up here.
     const bool dirty = plateManager.getChanged();
     return dirty;
 }
 
 namespace {
-// Auto-advance edge state. ONCE mode clamps currentFrame at endLimit and
-// leaves isPlaying() true (the playback manager never stops itself), so the
-// "reached end" event is the transition prevFrame != endLimit -> currentFrame
-// == endLimit while playing forward in ONCE mode. Latched here, consumed by
-// the idle tick via consumePlaylistAdvanceSignal().
+// Auto-advance edge state: ONCE mode clamps at endLimit but stays "playing", so
+// "reached end" is prevFrame != endLimit -> currentFrame == endLimit going forward.
 int  gPrevPlaybackFrame = -1;
 bool gPlaylistAdvanceLatch = false;
-// True only when the currently-playing content was loaded via a playlist
-// entry (loadPlaylistItem / loadPlaylistItemAndPlay). Cleared by quick-load,
-// drag-drop (loadFileIntoPlate), and clearPlaylist so auto-advance can't
-// hijack unrelated playback.
+// True only when the playing content came from a playlist entry; cleared by
+// quick-load, drag-drop and clearPlaylist so auto-advance can't hijack playback.
 bool gCurrentContentFromPlaylist = false;
 
-// Mirror of gfcPlaybackManager::getEndLimit() (which is private) using only
-// public accessors, so auto-advance can read the effective forward end
-// boundary without promoting an engine method. Kept in sync with the engine
-// definition in gfcplaybackmanager.cpp.
+// Mirror of gfcPlaybackManager::getEndLimit() (private) using public
+// accessors; keep in sync with gfcplaybackmanager.cpp.
 int playlistEffectiveEndLimit() {
     int tmp = 1;
     switch (playbackManager.getLoopPriority()) {
@@ -407,12 +349,8 @@ int playlistEffectiveEndLimit() {
 }  // namespace
 
 bool tickPlaybackTiming() {
-    // No-GL half of tickPlayback(). playbackManager.update() advances
-    // currentFrame at the target FPS off the wall clock, so running this
-    // at a high rate (e.g. 250 Hz) lets a frame advance land within a few
-    // ms of its true time instead of being quantized to a coarse tick —
-    // this is what keeps the measured FPS pinned at the target instead of
-    // wobbling. None of these calls touch the GL context.
+    // No-GL half of tickPlayback(): update() advances currentFrame off the wall
+    // clock, so a high rate (e.g. 250 Hz) keeps the measured FPS at the target.
     playbackManager.update();
     // Edge-detect once-mode end-of-playback for playlist auto-advance.
     if (playbackManager.isPlaying() &&
@@ -432,10 +370,8 @@ bool tickPlaybackTiming() {
 }
 
 bool hasPendingTextureUploads() {
-    // Same probe as needsPlaybackTick()'s second clause, exposed on its
-    // own so the timer can gate the expensive makeCurrent/generateTextures/
-    // doneCurrent trio: only enter the GL context when there's actually a
-    // decoded frame waiting to upload.
+    // Same probe as needsPlaybackTick()'s second clause, so the timer enters the
+    // GL context only when a decoded frame is waiting.
     for (int i = 0; i < 4; ++i) {
         gfcSequence* seq = trackManager.getSequence(i);
         if (seq && seq->hasPendingRawFrames()) return true;
@@ -444,20 +380,14 @@ bool hasPendingTextureUploads() {
 }
 
 bool consumePlateChanged() {
-    // Destructively reads plateManager's dirty flag (set by setChanged() from
-    // ANY state edit — local or remote). The idle timer uses this so that a
-    // bare setChanged() while playback is stopped and nothing is animating
-    // still forces exactly one repaint, instead of relying on every edit call
-    // site to also request a viewport refresh. When playback/animation is
-    // running, tickPlaybackTiming() drains the same flag instead, so it's
-    // consumed exactly once per tick either way.
+    // Destructively reads plateManager's dirty flag (any local or remote edit) so a
+    // bare setChanged() while stopped forces one repaint.
     return plateManager.getChanged();
 }
 
 void uploadPendingTextures() {
-    // GL half of tickPlayback(): drain one frame from each sequence's
-    // rawFrames queue and upload it via glTexImage2D. Caller MUST make the
-    // viewport's GL context current first (uploads run on this thread).
+    // GL half of tickPlayback(): drain one frame per sequence and upload it.
+    // Caller MUST make the viewport's GL context current first.
     trackManager.generateTextures();
 }
 
@@ -540,14 +470,8 @@ void toggleOnScreenHelp() {
     plateManager.setChanged();
 }
 
-// The Qt loop-mode combo uses 0/1/2 for Once/Loop/Bounce, but the
-// playback manager's switch in update() matches against the CBArgs
-// enum values (LOOPMODEONCE_ID=22, LOOPMODELOOP_ID=23, LOOPMODEBOUNCE_ID=24).
-// Without this translation, changing the combo wrote a value (0/1/2) that
-// no case matched — the switch fell through silently and playback froze.
-// Constructor-time default of LOOPMODEONCE_ID worked, so first-loop playback
-// succeeded; any subsequent mode change broke everything. Translate at the
-// bridge boundary in both directions.
+// The Qt loop-mode combo uses 0/1/2 but the playback manager matches CBArgs
+// values (LOOPMODEONCE_ID=22 ... BOUNCE=24); translate here or playback freezes.
 static int comboIdxToLoopModeId(int idx) {
     switch (idx) {
         case 1:  return LOOPMODELOOP_ID;
@@ -668,9 +592,7 @@ float getMeasuredFPS() {
 }
 
 void autoloadLUTs(const std::string& path) {
-    // FLTK's loadLUTsFromPath uses fl_filename_list and is gated to the
-    // FLTK build. The Qt build uses std::filesystem instead so we don't
-    // pull FLTK back in just to enumerate a directory.
+    // std::filesystem rather than FLTK's fl_filename_list to enumerate the directory.
     namespace fs = std::filesystem;
     if (path.empty()) return;
     std::error_code ec;
@@ -721,16 +643,8 @@ int countFilesByExt(const std::string& path,
     return n;
 }
 
-// Walk `path` and ask fxManager to load every .jfx file. fxManager's
-// loadFX compiles GLSL via ARB shader extensions, so a GL context
-// must be current before calling — same constraint as autoloadLUTs.
-// Files are loaded in alphabetical order so the user-facing list is
-// stable across runs.
-//
-// Yields the Qt event loop between each load. Without this, the
-// 35-shader compile pass blocks the main thread for 3-5 seconds
-// straight; AX queries (and the WDA "find main window" handshake
-// that precedes them) time out, breaking back-to-back test launches.
+// Walk `path` and load every .jfx file (alphabetical); a GL context must be
+// current. Yields the event loop between loads or the shader compiles block AX/WDA.
 void autoloadFXsFromPath(const std::string& path) {
     namespace fs = std::filesystem;
     if (path.empty()) return;
@@ -843,10 +757,8 @@ void loadOneLUTFile(const std::string& path) {
     lutManager.loadLUT(path);
     const int after = (int)lutManager.getAllNames().size();
     if (after == before) {
-        // lutManager.loadLUT prints a generic "Error loading LUT" with
-        // no filename; tag it with which file we were trying so the
-        // user can fix the .cube/.lut/.cub on disk (or strip it from
-        // the install dir).
+        // lutManager.loadLUT prints a generic "Error loading LUT" with no filename;
+        // tag it so the user can fix or remove the file.
         fprintf(stderr, "[jefecheck] LUT failed to parse: %s\n",
                 path.c_str());
         fflush(stderr);
@@ -863,10 +775,8 @@ void finalizeFXLoad() {
 }
 
 void initializeInstallFXs() {
-    // Reuses sett.lutPath for resolution — historically LUTs and FXs
-    // ship from the same FX/ directory in the install bundle and the
-    // dev tree (see CLAUDE.md). initializeInstallLUTs sets sett.lutPath
-    // to the chosen directory; we simply scan it again for .jfx files.
+    // Reuses sett.lutPath: LUTs and FXs ship from the same FX/ directory.
+    // initializeInstallLUTs sets it; scan it again for .jfx files.
     if (!sett.lutPath.empty()) autoloadFXsFromPath(sett.lutPath);
 }
 
@@ -892,11 +802,8 @@ void addFXToActivePlate(int fxIndex) {
     if (q < 0) return;
     auto* stack = plateManager.getFXStack(q);
     if (!stack) return;
-    // fxManager::getFX returns a copy — gfcFXStack::addFX takes by
-    // value and stores its own copy. Out-of-range indices return a
-    // default-constructed gfcFX (no shaders), which renders as a
-    // pass-through; cheap to detect by checking name afterwards but
-    // not worth the extra bridge round-trip in the common path.
+    // fxManager::getFX returns a copy and gfcFXStack::addFX stores its own. An
+    // out-of-range index returns a default gfcFX (no shaders, pass-through).
     gfcFX fx = fxManager.getFX(fxIndex);
     if (fx.name.empty() && fx.menuName.empty()) return;
     stack->addFX(fx);
@@ -909,9 +816,8 @@ void removeFXFromPlate(int plateIdx, int stackIndex) {
     if (!stack) return;
     auto all = stack->getAllFXs();
     if (stackIndex < 0 || stackIndex >= (int)all.size()) return;
-    // gfcFXStack lacks a single-FX remove — clear the stack and
-    // re-add everything except the removed entry. Cheap; stacks rarely
-    // exceed a few FXs and addFX is just a vector push.
+    // gfcFXStack lacks a single-FX remove: clear the stack and re-add everything
+    // except the removed entry (stacks are small, addFX is a vector push).
     stack->clearStack();
     for (int i = 0; i < (int)all.size(); ++i) {
         if (i == stackIndex) continue;
@@ -946,9 +852,8 @@ void moveFXOnPlate(int plateIdx, int from, int to) {
 }
 
 std::vector<std::pair<int, std::string>> getAvailableFXMenu() {
-    // getMenuNames() walks fxManager's fxArray in order, and getFX(i)
-    // (which addFXToActivePlate calls) indexes the same fxArray — so the
-    // returned indices are valid fxIndex args for addFXToActivePlate.
+    // getMenuNames() walks fxManager's fxArray in order, as getFX(i) does, so
+    // the returned indices are valid fxIndex args for addFXToActivePlate.
     std::vector<std::string> menuNames = fxManager.getMenuNames();
     std::vector<std::pair<int, std::string>> result;
     result.reserve(menuNames.size());
@@ -962,9 +867,8 @@ std::vector<std::pair<int, std::string>> getAvailableFXMenu() {
 }
 
 std::vector<std::pair<int, std::string>> getCubeLutChoices() {
-    // 3D LUTs for an FX cube param. `.first` is the GLOBAL lutManager index
-    // (what gfcFX::bind() reads via getLUT(value).texture3D and what
-    // setFXParamValueOnPlate stores); `.second` is the display name.
+    // 3D LUTs for an FX cube param. `.first` is the GLOBAL lutManager index (read
+    // by gfcFX::bind()); `.second` is the display name.
     std::vector<std::pair<int, std::string>> result;
     for (const std::string& name : lutManager.get3DLutNames())
         result.emplace_back(lutManager.getLutIndexByName(name), name);
@@ -1002,9 +906,8 @@ void setFXParamValueOnPlate(int plateIdx,
                             const std::string& groupName,
                             const std::string& widgetName,
                             float value) {
-    // Routes through the plate manager so the edit is both applied and
-    // broadcast to remote peers (live FX-attrib streaming); setChanged() and
-    // the histogram-cache clear happen inside setFXWidgetValue.
+    // Routes through the plate manager so the edit is applied and broadcast to
+    // remote peers; setFXWidgetValue calls setChanged() and clears the histogram cache.
     plateManager.setFXWidgetValue(plateIdx, fxIndex, groupName, widgetName, value);
 }
 
@@ -1022,9 +925,8 @@ gfcRenderParams toCoreRenderParams(const RenderParams& src) {
     p.outWidth     = src.outWidth;
     p.outHeight    = src.outHeight;
     p.path         = src.path;
-    // CreateRenderFilename concatenates path+prefix directly, so the output
-    // directory needs a trailing separator (QFileDialog hands one back
-    // without it).
+    // CreateRenderFilename concatenates path+prefix, so the output directory
+    // needs a trailing separator (QFileDialog returns one without it).
     if (!p.path.empty() && p.path.back() != '/' && p.path.back() != '\\') {
         p.path += '/';
     }
@@ -1135,11 +1037,8 @@ int getSelectedPlaylistItem() {
 
 bool currentContentIsPlaylistItem() { return gCurrentContentFromPlaylist; }
 
-// JEF-18: push a .jpl path onto the recent-playlists list (dedup → newest at
-// the back → cap). Mirrors the session recent-list logic (gfcsessionmanager),
-// but lives here because playlists have no shared-core load/save hook — every
-// playlist open/save funnels through loadPlaylistFile/savePlaylistFile below,
-// so this is the single place that keeps sett.recentPlaylists current.
+// Push a .jpl path onto the recent-playlists list (dedup, newest last, capped).
+// Every playlist open/save funnels through loadPlaylistFile/savePlaylistFile.
 static void noteRecentPlaylist(const std::string& path) {
     if (path.empty()) return;
     auto& rp = sett.recentPlaylists;
@@ -1206,9 +1105,8 @@ std::vector<PlaylistTrackDetail> getPlaylistItemDetail(int index) {
         d.toFrame = lp.toFrame;
         d.totalFrames = (lp.toFrame >= lp.fromFrame)
                         ? (lp.toFrame - lp.fromFrame + 1) : 0;
-        // scale is a float: a fraction (1.0 == 100%) or already a percent.
-        // Upsampling isn't supported, so anything > 1.5 is treated as a
-        // percent value; otherwise it's a 0..1 fraction.
+        // scale is a float: a fraction (1.0 == 100%) or already a percent. Upsampling
+        // isn't supported, so anything > 1.5 is treated as a percent.
         d.scalePct = (lp.scale <= 1.5f)
                      ? int(lp.scale * 100.0f + 0.5f)
                      : int(lp.scale + 0.5f);
@@ -1286,9 +1184,7 @@ void connectAsCloudHost(const RemoteCloudHostParams& params) {
     if (networkManager.getConnected()) return;
     gfcServerParams sp;
     // The host's name reaches participants as its nickname
-    // (gfcnetworkmanager.cpp: clientParams.nickname = server.getName()). This
-    // was hardcoded to "jefe-cloud-host", so every cloud host showed up under
-    // that one name.
+    // (gfcnetworkmanager.cpp: clientParams.nickname = server.getName()).
     const std::string hostName =
         params.hostName.empty() ? std::string("Host") : params.hostName;
     std::snprintf(sp.serverName, sizeof(sp.serverName), "%s", hostName.c_str());
@@ -1302,9 +1198,8 @@ void connectAsCloudHost(const RemoteCloudHostParams& params) {
     sp.policy.password           = params.sessionPassword;
     sp.policy.idleTimeoutMinutes = params.idleTimeoutMinutes;
     sp.policy.maxParticipants    = params.maxParticipants;
-    // BLOCKS up to ~5s for the coordinator-assigned code — callers run this off
-    // the GUI thread. Hold the in-flight guard so the GUI-thread pump doesn't
-    // race the transport bring-up.
+    // BLOCKS up to ~5s for the coordinator-assigned code; callers run this off
+    // the GUI thread. Hold the in-flight guard so the GUI pump doesn't race it.
     gCloudConnectInFlight.store(true, std::memory_order_release);
     networkManager.startServer(&sp);
     gCloudConnectInFlight.store(false, std::memory_order_release);
@@ -1352,9 +1247,8 @@ bool isRemoteServer() {
 RemoteUiState remoteUiState() {
     RemoteUiState s;
 
-    // A connect worker owns the manager while this is set — every field it
-    // would read is mid-mutation, so report Connecting rather than a torn mix
-    // of old and new values.
+    // A connect worker owns the manager while this is set and every field is
+    // mid-mutation, so report Connecting rather than a torn mix.
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) {
         s.phase = RemotePhase::Connecting;
         s.statusText = "Connecting…";
@@ -1362,18 +1256,15 @@ RemoteUiState remoteUiState() {
     }
 
     if (!networkManager.getConnected()) {
-        // JEF-37: knocking is NOT offline. Nothing is connected yet, but a
-        // human is deciding — showing the connect forms again here read as a
-        // failed join, so people re-entered the code while already in the queue.
+        // Knocking is NOT offline: nothing is connected yet but a human is
+        // deciding; showing the connect forms again reads as a failed join.
         if (networkManager.isAwaitingAdmission()) {
             s.phase = RemotePhase::Knocking;
             s.statusText = "Waiting for the host to let you in…";
             return s;
         }
-        // Admitted but still completing the P2P handshake. Reporting Offline
-        // here flashed the connect forms back up for a beat right after the
-        // host said yes — which reads as a rejection at exactly the moment the
-        // person is watching for an answer.
+        // Admitted but still completing the P2P handshake: reporting Offline would
+        // flash the connect forms back up right after the host said yes.
         if (networkManager.isAttemptingConnection()) {
             s.phase = RemotePhase::Connecting;
             s.statusText = networkManager.connectionStatusText();
@@ -1389,17 +1280,15 @@ RemoteUiState remoteUiState() {
     s.inSession = true;
     s.isHost = networkManager.getIsServer();
 
-    // A cloud host is exactly a host WITH a coordinator-assigned code. This is
-    // the invariant that used to be re-derived (inconsistently) at each call
-    // site; resolving it once here is the point of this function.
+    // A cloud host is a host WITH a coordinator-assigned code; resolved once here.
     const std::string code = s.isHost ? networkManager.getAssignedSessionCode()
                                       : std::string();
     if (s.isHost) {
         s.phase = code.empty() ? RemotePhase::HostingLan : RemotePhase::HostingCloud;
         s.sessionCode = code;
         s.showCredits = !code.empty();
-        // JEF-37: the lobby exists only where the coordinator does. A LAN host
-        // has no admission step, so it must not render one.
+        // The lobby exists only where the coordinator does; a LAN host has no
+        // admission step.
         if (!code.empty()) {
             for (const auto& p : networkManager.pendingJoiners()) {
                 RemotePendingJoiner r;
@@ -1437,10 +1326,8 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
         meta.description       = fx.description;
         meta.active            = fx.active;
         meta.loadedAndCompiled = fx.loadedAndCompiled;
-        // Walk groups in insertion order — the gfcFX side stores
-        // widgetsOrder per group but std::map iteration order on
-        // group names is alphabetical by key. The FLTK control
-        // window walked groups by name too, so this matches.
+        // Walk groups in insertion order: gfcFX stores widgetsOrder per group, but
+        // std::map iterates group names alphabetically.
         for (auto& kv : fx.groups) {
             const std::string& groupName = kv.first;
             gfcFXWidgetGroup& g = kv.second;
@@ -1480,11 +1367,8 @@ bool loadLUTFile(const std::string& path) {
 }
 
 void applyLUTToActivePlate(int guiLutIndex) {
-    // The Qt panel uses GUI-style indexing: row 0 = "(No LUT)",
-    // row 1+ = lutManager array entries offset by 1. gfcPlate::setLUT
-    // takes the raw lutManager index (-1 means "no LUT" — getLUT(-1)
-    // returns an empty CubeLUT with texture id 0, which gives gfcPlate
-    // a no-bind path).
+    // The Qt panel uses row 0 = "(No LUT)", row 1+ = lutManager entry + 1;
+    // gfcPlate::setLUT takes the raw index (-1 = no LUT, an empty CubeLUT).
     const int q = plateManager.getActiveQuad();
     if (q < 0) return;
     plateManager.setLUT(q, guiLutIndex - 1);
@@ -1543,9 +1427,8 @@ LutPreviewData getLutPreview(int guiLutIndex) {
         return d;
     }
 
-    // 3D: build a structured working grid (with adjacency, so the widget
-    // can draw faces / lattice / dots). Subsample large cubes to a bounded
-    // working edge so faces and lattice stay manageable.
+    // 3D: build a structured working grid (with adjacency, for faces / lattice /
+    // dots), subsampling large cubes to a bounded edge.
     constexpr int kMaxCubeEdge = 33;
     const int s = lut.size;
     int stride = 1;
@@ -1594,8 +1477,7 @@ void zoomAllPlates(float zoomDelta) {
 }
 
 // Color-correction adjustment helpers. `1` as the isDelta flag asks
-// plateManager to sum the value onto the current field rather than
-// overwrite — same convention the FLTK GlViewport key+drag path uses.
+// plateManager to sum onto the current field rather than overwrite.
 void adjustPlateGamma(int plateIdx, float delta) {
     if (plateIdx < 0) return;
     plateManager.setGamma(plateIdx, delta, 1);
@@ -1670,18 +1552,8 @@ void setAllPlatesShowPreview(bool showPreview) {
     for (int i = 0; i < 4; ++i) {
         plateManager.setPlateShowPreview(i, showPreview);
     }
-    // setPlateShowPreview only writes to the Qt GUI side. gfcPlate::showPreview
-    // (and the other plate fields — gamma, exposure, BCS, LUT) are mirrored
-    // from the GUI by updateValueFromGUI. Without this propagation, the
-    // dialog's flag flip never reaches the plate, the previewFrame never
-    // renders, and after Load All the plate keeps stale color state (the
-    // "gray until Shift-R" symptom).
-    //
-    // We use updatePlatesFromGUI rather than updateAllFromGUI here because
-    // the latter also resets the layout (framingMode) and active quad from
-    // the plate-manager-GUI's stale fields — the Qt build drives those via
-    // separate paths (Cmd+1/2/3/4 shortcuts; plate-card clicks) that don't
-    // round-trip through the plate-manager GUI.
+    // setPlateShowPreview only writes the Qt GUI side; use updatePlatesFromGUI, not
+    // updateAllFromGUI, which also resets layout and active quad from stale fields.
     plateManager.updatePlatesFromGUI();
     plateManager.setChanged();
 }
@@ -1815,10 +1687,7 @@ std::string getLoadedSequenceName(int plateIdx) {
     auto* seq = trackManager.getSequence(track);
     if (!seq) return {};
     // previewFrame.loaded is the cheap signal that loadPreview ran;
-    // filenameGeneric holds the source path (single image or
-    // numbered-sequence pattern). Empty = nothing's been loaded into
-    // this track's sequence yet — the launch-default state for any
-    // plate that --open-file didn't target.
+    // filenameGeneric holds the source path. Empty = nothing loaded yet.
     if (!seq->getPreviewFrame().loaded) return {};
     namespace fs = std::filesystem;
     fs::path p(seq->filenameGeneric);
@@ -1853,9 +1722,8 @@ std::string getActiveLayerOnPlate(int plateIdx) {
 std::string getPlateNativeAspect(int plateIdx) {
     auto* seq = sequenceForPlate(plateIdx);
     if (!seq) return {};
-    // getPreviewFrame() returns a shallow copy (gfcFrame has no destructor),
-    // so reading its dimensions is cheap and safe. An unloaded frame defaults
-    // to the 15x15 sentinel with loaded==false — gate on both.
+    // getPreviewFrame() returns a shallow copy (gfcFrame has no destructor). An
+    // unloaded frame defaults to the 15x15 sentinel with loaded==false; gate on both.
     gfcFrame f = seq->getPreviewFrame();
     if (!f.loaded || f.sizeX <= 0 || f.sizeY <= 0) return {};
     const double ratio =
@@ -1866,13 +1734,8 @@ std::string getPlateNativeAspect(int plateIdx) {
 }
 
 bool runAspectSelfTest() {
-    // Exercise the exact path the plate card uses: the aspect control emits a
-    // preset string, PlateCard forwards it to gfcPlateGUI_Qt::setAspectChoice,
-    // which converts via aspectFromString and stores the renderer float read
-    // back by getAspect(). gfcPlate::calculatePolySizesCropEtc treats that
-    // float as content HEIGHT/WIDTH, so a landscape "W:H" preset (W > H) MUST
-    // map to a value in (0,1) — the JEF-21 bug returned W/H (> 1), producing
-    // off-frame (invisible) crop bars and an inverted anamorphic reshape.
+    // Exercise the plate card's path. calculatePolySizesCropEtc treats the aspect
+    // as content HEIGHT/WIDTH, so a landscape "W:H" preset MUST map to (0,1).
     struct Case { const char* str; double expected; };
     const Case cases[] = {
         {"16:9",   9.0 / 16.0},
@@ -1914,26 +1777,15 @@ void setLayerOnPlate(int plateIdx, const std::string& layerName) {
     auto* seq = trackManager.getSequence(trackIdx);
     if (!seq || !seq->myGUI) return;
 
-    // Order matters: setChannel(name) must land before loadPreview()
-    // because loadPreview only resets channel index to 0 when params.
-    // channel == -1; the string the OIIO loader uses to pick a layer is
-    // params.channelName, which getLoadParamsFromGUI pulls straight off
-    // myGUI->getChannelName(). Without the rewrite first, the preview
-    // would re-decode the previously-selected layer.
+    // Order matters: setChannel(name) must land before loadPreview(), which picks
+    // the layer from params.channelName; otherwise it re-decodes the old layer.
     seq->myGUI->setChannel(layerName);
 
-    // Re-decode the preview frame against the new layer so the texture
-    // currently on screen reflects the choice immediately. The OIIO
-    // loader's layer pick is driven by params.channelName which we just
-    // set above.
+    // Re-decode the preview so the texture on screen reflects the choice.
     seq->loadPreview();
 
-    // The async multi-frame loader caches the channel choice into each
-    // frame's load params at startLoadingSequence time, so a layer
-    // switch needs a full re-decode. Matches the FLTK shift-click-on-
-    // timeline behavior the user asked for. Cheap when the sequence is
-    // a single frame (the per-tick generateTextures drain handles the
-    // texture refresh from loadPreview alone).
+    // The async loader caches the channel in each frame's load params at
+    // startLoadingSequence time, so a layer switch needs a full re-decode.
     if (seq->getNumPreviewFrames() > 1) {
         trackManager.startLoadingSequence(trackIdx);
     }
@@ -1958,22 +1810,16 @@ bool loadFileIntoPlate(const std::string& path,
     gCurrentContentFromPlaylist = false;
     seq->myGUI->setFilename(path);
 
-    // Apply the global default bit depth before loadPreview reads it.
-    // gfcSequenceGUI::setCompression takes one of the
-    // GFC_*BPC / GFC_*HALF enum values; gfcSettings::defaultTextureFormat
-    // stores that enum directly (default GFC_16HALF).
+    // Apply the global default bit depth before loadPreview reads it
+    // (sett.defaultTextureFormat holds the GFC_*BPC / GFC_*HALF enum directly).
     seq->myGUI->setCompression(sett.defaultTextureFormat);
 
-    // Translate the 0..1 scale factor to the percentage string the
-    // FLTK Choice widget convention expects ("100", "50", "25"). Clamp
-    // to (0, 1] so a stray 0 or negative doesn't get sent through and
-    // a > 1.0 doesn't try to upsample (the loader doesn't support it).
+    // Translate the 0..1 scale factor to the percentage string the Choice widget
+    // convention expects ("100", "50", "25"). Clamp to (0, 1]: the loader can't upsample.
     if (scale <= 0.0f) scale = 1.0f;
     if (scale > 1.0f) scale = 1.0f;
     int pct = int(scale * 100.0f + 0.5f);
-    // Defend against sub-1% inputs that round to 0 — the float
-    // clamp catches scale<=0 but not scale=0.001 → "0%". The loader
-    // has no defined behavior for 0% scale.
+    // Sub-1% inputs round to 0, which the loader doesn't define.
     if (pct < 1)   pct = 100;
     if (pct > 100) pct = 100;
     char scaleBuf[8];
@@ -1985,23 +1831,12 @@ bool loadFileIntoPlate(const std::string& path,
         return false;
     }
 
-    // gfcPlate::showPreview, scale, track, channel masks etc. are read
-    // from members that updateValuesFromGUI copies out of myGUI. The
-    // FLTK build calls this once on startup; the Qt build never does,
-    // so the plate would otherwise keep its uninitialized showPreview
-    // and never render the preview frame we just loaded.
+    // updateValuesFromGUI copies showPreview, scale, track and channel masks from
+    // myGUI; the Qt build never calls it at startup, so call it here.
     plateManager.updateAllFromGUI();
 
-    // loadPreview() runs findSequenceFiles, which clamps from_/to_ on
-    // the gfcSequenceGUI_Qt to the discovered range. If that range is
-    // > 1, kick off the async multi-frame loader so playback can step
-    // through the whole sequence. Going through trackManager (rather
-    // than seq->startLoading directly) also bumps playbackManager's
-    // from/to to the track length, so Left/Right + Space land on real
-    // frames. The thread uses try_lock on the rawFrames queue; the
-    // per-tick generateTextures() drain (PR-16) puts frames on the
-    // GPU. Without this, dropping an EXR stack would only ever show
-    // frame 1.
+    // If loadPreview() found > 1 frame, start the async loader via trackManager
+    // (not seq->startLoading), which also sets playbackManager's from/to.
     if (kickOffSequenceLoad && seq->getNumPreviewFrames() > 1) {
         trackManager.startLoadingSequence(whichSequence);
     }
@@ -2110,11 +1945,8 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
     if (!seq) return s;
     s.present = !seq->isEmpty();
     s.offset  = seq->getOffset();
-    // gfcSequence ranges are 0-based (an 8-frame clip is 0..7), but the
-    // timeline and the playback limits are 1-based — getEndLimit/
-    // getStartLimit add +1 to the sequence range, and `to` is the frame
-    // count. Convert here so the bar lines up with the 1-based scrubber/
-    // playhead (without +1 the last frame's slice never fills).
+    // gfcSequence ranges are 0-based but the timeline and playback limits are
+    // 1-based (getEndLimit/getStartLimit add +1); convert so the last slice fills.
     s.rangeStart = seq->getRangeStart() + 1;   // offset already folded in
     s.rangeEnd   = seq->getRangeEnd() + 1;
     s.numFrames  = seq->getNumFrames();
@@ -2257,13 +2089,8 @@ void setTrackChannel(int trackIdx, int channelIdx) {
     auto* seq = trackManager.getSequence(trackIdx);
     if (!seq || !seq->myGUI) return;
     seq->myGUI->setChannel(channelIdx);
-    // The OIIO loader picks the EXR layer from params.channelName
-    // (resolved via myGUI->getChannelName() in getLoadParamsFromGUI),
-    // not the int index. Mirror the per-plate setLayerOnPlate path:
-    // resolve idx → name through the Qt GUI's channel-options cache
-    // and write that too. Without this, switching channels through
-    // the Load Window int-only setter leaves channelName stale and
-    // the loader re-decodes the previously-selected layer.
+    // The OIIO loader picks the EXR layer from params.channelName, not the int
+    // index: resolve idx -> name via the channel-options cache and write it too.
     if (auto* gui = dynamic_cast<gfcSequenceGUI_Qt*>(seq->myGUI)) {
         const auto& opts = gui->getChannelOptions();
         if (channelIdx >= 0 && channelIdx < (int)opts.size()) {
@@ -2363,19 +2190,15 @@ std::string getFavoritesFilePath() {
     return ::getApplicationDataPath() + "favorites.jcs";
 }
 
-// All of these read gfcNetworkManager state. While a cloud connect worker owns
-// the manager (gCloudConnectInFlight), a direct refreshConnectionState() (e.g.
-// the F5 handler) must NOT read mid-mutation — return empty/cached instead.
+// All of these read gfcNetworkManager state: while a cloud connect worker owns
+// it (gCloudConnectInFlight) return empty/cached instead of reading mid-mutation.
 std::vector<std::string> remoteParticipants() {
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     return networkManager.participantNames();
 }
 
-// JEF-30: UI-friendly per-peer health view. Reads networkManager's active
-// transport stats (server side when hosting, client side when joined) and maps
-// each to a RemotePeerStat: resolves the nickname when known (server role), maps
-// the Path enum to a string, and carries the running byte total (T2 derives kbps
-// from deltas). Honors gCloudConnectInFlight like the other manager readers.
+// Per-peer health view: maps the active transport's stats to RemotePeerStat
+// with the running byte total (kbps derives from deltas). Honors gCloudConnectInFlight.
 std::vector<RemotePeerStat> remotePeerStats() {
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) return {};
     std::vector<RemotePeerStat> out;
@@ -2454,9 +2277,8 @@ std::vector<ChatEntry> remoteChatEntries() {
     return out;
 }
 
-// JEF-39: forward-declared here so pumpNetwork() (just below) can drain
-// inbound note sync events; defined with the rest of the Notes dock support
-// near the end of this file, alongside the gfcReview storage it touches.
+// Forward-declared so pumpNetwork() can drain inbound note sync events;
+// defined with the Notes dock support near the end of this file.
 namespace { bool applyInboundNoteSyncEvents(); void syncPlateNotesImpl(); }
 
 bool pumpNetwork() {
@@ -2465,30 +2287,22 @@ bool pumpNetwork() {
     static size_t      prevChat      = 0;
     static size_t      prevPending   = 0;
     static std::string prevStatus;
-    // A worker thread is inside startServer/startConnection (cloud connect):
-    // skip this tick so we don't call server/client Update() concurrently with
-    // the transport bring-up. See gCloudConnectInFlight.
+    // A worker is inside startServer/startConnection (cloud connect): skip this
+    // tick. See gCloudConnectInFlight.
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) return false;
     networkManager.update();
     const bool        nowConnected = networkManager.getConnected();
     const size_t      nowPeers     = networkManager.participantNames().size();
     const size_t      nowChat      = networkManager.chatLogLines().size();
     const std::string nowStatus    = networkManager.connectionStatusText();
-    // JEF-37: a knock arrives on the coordinator's own socket. It builds no
-    // peer and queues no transport event -- deliberately, since a joiner that
-    // may yet be denied must have nothing to receive on -- so none of the
-    // signals above move and the panel would never learn about it.
+    // A knock arrives on the coordinator's own socket and builds no peer or
+    // transport event, so none of the signals above move; poll for it.
     const size_t      nowPending   = networkManager.pendingJoiners().size();
-    // Repaint whenever any inbound packet was processed this tick: client.Update()
-    // applies mirrored plate/playback/FX state to the managers, but QOpenGLWidget
-    // only repaints on local input — without this the receiver wouldn't redraw
-    // remote changes until the user interacted locally.
+    // Repaint on any inbound packet: client.Update() applies mirrored state, but
+    // QOpenGLWidget only repaints on local input.
     const bool gotInbound = networkManager.consumeGotMessages();
-    // JEF-39: apply inbound note add/remove/lock events into the in-memory
-    // gfcReview store (see the Notes dock section below) so a remote peer's
-    // markup shows up here without a local interaction. Folded into the same
-    // "changed" signal as chat/participants so MainWindow's tick refreshes
-    // the Notes dock exactly the way it already refreshes the Remote dialog.
+    // Apply inbound note add/remove/lock events into the in-memory gfcReview store;
+    // folded into the same "changed" signal so the tick refreshes the Notes dock.
     const bool notesApplied = applyInboundNoteSyncEvents();
     // A note that arrived from a peer changed the store; push it through to
     // the plates or it stays invisible until something else happens to sync.
@@ -2503,12 +2317,7 @@ bool pumpNetwork() {
 }
 
 // Child/client role: connect, pump until connected (or timeout), optionally
-// start playback (mirrors a play message — used by Task 5), then hold.
-// Both halves of --remote-test print timestamped milestones. The test used to
-// report only a final participants/mirrored_play line, which cannot tell apart
-// "the peer started too slowly", "the peer never connected and played into
-// nothing" and "play arrived but was not mirrored" -- three different faults
-// with the same summary.
+// start playback, then hold. Both halves print timestamped milestones.
 namespace {
 long long remoteTestMsSince(const std::chrono::steady_clock::time_point& t0) {
     return (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2523,12 +2332,8 @@ void remoteTestPeerConnect(const std::string& ip, int port, int holdMs, bool pla
     connectAsClient(cp);
     printf("REMOTE-PEER: +%lldms connectAsClient returned\n", remoteTestMsSince(t0));
     fflush(stdout);
-    // Wait until the session is actually connected before toggling play — the
-    // play/pause message is sent ONCE (synchronously inside togglePlayFwd), so a
-    // toggle issued before the channel is open would be dropped and never
-    // re-sent. RakNet connects instantly (3000 ms is plenty); WebRTC needs the
-    // full signaling+ICE+DTLS+datachannel handshake, hence the larger timeout
-    // the caller threads through.
+    // Wait until connected before toggling play (the message is sent ONCE, so an
+    // earlier toggle is dropped); WebRTC needs the caller's larger timeout.
     for (int t = 0; t < connectTimeoutMs && !isRemoteConnected(); t += 10) {
         pumpNetwork();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -2577,17 +2382,8 @@ bool remoteTestServerSawPlay(int port, int settleMs) {
     return sawPlay;
 }
 
-// Split-phase orchestrator for the WebRTC harness. Rationale: the play/pause
-// message the peer sends is ONE-SHOT and the host mirrors it via its own
-// loopback client (startServer connects a 127.0.0.1 client to the host's own
-// server; the peer's play is forwarded to that loopback, which applies it, and
-// isPlaying() then reads the shared playbackManager). RakNet's loopback connects
-// instantly, so remoteTestServerSawPlay's connect-then-settle is fine. WebRTC's
-// loopback needs a full signaling+ICE+DTLS handshake and can open its server-
-// side channel LATER than a fast remote peer — so if the peer plays before the
-// loopback channel is open, the forward reaches 0 channels and is lost forever.
-// The fix is to bring the loopback fully up (its nickname registered on the
-// server == its channel open both ways) BEFORE the peer is even spawned.
+// Split-phase orchestrator for the WebRTC harness: bring the host's loopback
+// fully up BEFORE the peer spawns, or the peer's one-shot play is lost.
 
 // Start the host and pump until the loopback client has registered (its channel
 // is open both ways). Returns true once the loopback is a live participant.
@@ -2615,17 +2411,11 @@ bool remoteTestServerSettleForPlay(int settleMs) {
     return false;
 }
 
-// ── JEF-28 Task 2: --asset-test late-join LUT/FX transfer harness ────────────
-// Proves a peer that joins AFTER the host already loaded a LUT (and, when a GL
-// context is available, an FX) receives the asset body over the wire and
-// hot-loads it. Runs over RakNet (the --remote-test transport): simplest,
-// instant connect, and the FX/LUT sync is transport-agnostic so proving it here
-// proves the mechanism for every transport.
+// ── --asset-test late-join LUT/FX transfer harness ──────────────────────────
+// Proves a peer joining AFTER the host loaded a LUT/FX receives it over the wire.
 
-// Return the first hash present in `after` but not in `before` (the hash of the
-// asset that loadLUT/loadFX just added). "" if nothing new appeared (load
-// failed, or produced no valid content hash — e.g. an FX whose shaders could
-// not compile because there is no GL context).
+// First hash in `after` not in `before` (the asset loadLUT/loadFX just
+// added); "" if the load failed or produced no valid content hash.
 static std::string firstNewHash(const std::vector<std::string>& before,
                                 const std::vector<std::string>& after) {
     for (const auto& h : after) {
@@ -2636,19 +2426,15 @@ static std::string firstNewHash(const std::vector<std::string>& before,
     return "";
 }
 
-// Host role: load a fixture LUT into the host's lutManager and return its
-// content hash (so the orchestrator can tell the peer what to expect and the
-// server has a non-empty asset to push). "" on failure.
+// Host role: load a fixture LUT and return its content hash ("" on failure).
 std::string assetTestLoadLUT(const std::string& path) {
     auto before = lutManager.getHashes();
     lutManager.loadLUT(path);
     return firstNewHash(before, lutManager.getHashes());
 }
 
-// Host role: load a fixture FX. Headless (no GL context) this produces no valid
-// hash because gfcFX only sets its content hash after a successful shader
-// compile+link, so the returned hash is typically "" in the --asset-test
-// harness — the orchestrator treats an empty FX hash as "FX not applicable".
+// Host role: load a fixture FX. Headless (no GL) gfcFX sets no content hash,
+// so "" means "FX not applicable".
 std::string assetTestLoadFX(const std::string& path) {
     auto before = fxManager.getHashes();
     fxManager.loadFX(path);
@@ -2656,8 +2442,7 @@ std::string assetTestLoadFX(const std::string& path) {
 }
 
 // Host role: bring up the RakNet server (instant connect). The FX/LUT sync
-// fires automatically when the peer joins (server-side GFCNETID_ enters
-// startFXSinc → … → the LUT push).
+// fires automatically when the peer joins.
 bool assetTestServerStart(int port) {
     RemoteServerParams sp; sp.serverName = "jefe-asset-test"; sp.port = port; sp.password = "";
     connectAsServer(sp);
@@ -2685,22 +2470,11 @@ bool remoteHasFXHash(const std::string& hash) {
 }
 int remoteFXCount() { return (int)fxManager.getHashMap().size(); }
 
-// ── JEF-27 Task 3: --coord-test cloud-coordinator E2E harness ───────────────
-// Same split-phase topology as the WebRTC LAN harness (host + its loopback
-// client live in the orchestrator process; the peer is a spawned child), but
-// both the host and the peer reach each other through a cloud coordinator by
-// session code instead of a LAN SignalingServer at ip:port.
-//
-// The trickiest part is the host's OWN loopback client: gfcNetworkManager::
-// startServer connects it to the host's session immediately after start(), but
-// in coordinator mode the session code is assigned asynchronously. startServer
-// now waits (bounded) for getAssignedSessionCode() to be non-empty BEFORE the
-// loopback connects, so the loopback joins by the real code. See the manager.
+// ── --coord-test cloud-coordinator E2E harness ──────────────────────────────
+// Like the WebRTC LAN harness, via a coordinator; startServer waits for the code.
 
-// Start the host in coordinator mode (create-session) and bring its loopback
-// client fully up. Returns true once the loopback has registered as a live
-// participant (its P2P channel is open both ways) — mirroring
-// remoteTestServerStart but over the coordinator. `coordUrl` is a ws:// URL.
+// Start the host in coordinator mode and bring its loopback client fully up;
+// true once it is a live participant. `coordUrl` is a ws:// URL.
 bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs) {
     if (networkManager.getConnected()) return false;
     gfcServerParams sp;
@@ -2714,8 +2488,7 @@ bool coordTestHostStart(const std::string& coordUrl, int loopbackTimeoutMs) {
     networkManager.startServer(&sp);
     if (networkManager.getAssignedSessionCode().empty()) return false;
     // Pump until the loopback client has registered its nickname on the server
-    // (== its WebRTC channel is open both directions and ready to receive
-    // forwards). Same live-participant gate as the LAN WebRTC harness.
+    // (its WebRTC channel is open both ways).
     for (int t = 0; t < loopbackTimeoutMs; t += 10) {
         pumpNetwork();
         if (!networkManager.participantNames().empty()) return true;
@@ -2734,9 +2507,8 @@ bool coordLiveHostStart(const std::string& coordUrl, const std::string& authToke
     sp.coordinatorMode = true;
     sp.coordinatorUrl  = coordUrl;
     sp.authToken       = authToken;
-    // DEFAULT policy on purpose. Overriding requireKnock here would test a
-    // configuration no real host starts in, and hide the very interaction this
-    // harness exists to catch.
+    // DEFAULT policy on purpose: overriding requireKnock would test a
+    // configuration no real host starts in.
     networkManager.startServer(&sp);
     if (networkManager.getAssignedSessionCode().empty()) return false;
     for (int t = 0; t < loopbackTimeoutMs; t += 10) {
@@ -2752,19 +2524,16 @@ int coordLiveAwaitAndAdmit(int timeoutMs) {
     // branch: a denied joiner must be told no and never join the roster.
     const char* denyEnv = std::getenv("JEFE_LIVE_DENY");
     const bool admitThem = !(denyEnv && denyEnv[0] == '1');
-    // JEFE_LIVE_ADMIT_DELAY_MS holds a knock before deciding, standing in for
-    // the seconds a real host takes to look. Without it the round trip is
-    // faster than the joiner polls, so its "waiting to be let in" state is
-    // real but never observed — the delay is what makes it testable.
+    // JEFE_LIVE_ADMIT_DELAY_MS holds a knock before deciding, standing in for a
+    // real host; without it the joiner's "waiting" state is never observed.
     int holdMs = 0;
     if (const char* d = std::getenv("JEFE_LIVE_ADMIT_DELAY_MS")) holdMs = std::atoi(d);
 
     int decided = 0;
     for (int t = 0; t < timeoutMs; t += 10) {
         pumpNetwork();
-        // Read through remoteUiState(), not the manager, so this exercises the
-        // exact path the panel renders from -- a harness that bypassed it
-        // could pass while the UI still showed nothing.
+        // Read through remoteUiState(), not the manager, to exercise the path the
+        // panel renders from.
         const RemoteUiState st = remoteUiState();
         for (const auto& p : st.pending) {
             std::printf("COORD-LIVE-TEST: knock name=[%s] email=[%s] verified=%d\n",
@@ -2777,10 +2546,8 @@ int coordLiveAwaitAndAdmit(int timeoutMs) {
             remoteDecideJoiner(p.joinerId, admitThem);
             ++decided;
         }
-        // Keep pumping after the decision: an admitted joiner still has a
-        // WebRTC handshake to finish, and quitting the moment we clicked would
-        // end the session out from under it — which looks exactly like a
-        // failed admit.
+        // Keep pumping after the decision: an admitted joiner still has a WebRTC
+        // handshake to finish.
         if (decided > 0 && st.pending.empty() && !admitThem) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -2842,10 +2609,8 @@ void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
     cp.coordinatorUrl  = coordUrl;
     cp.sessionCode     = code;
     networkManager.startConnection(&cp);
-    // Wait until the P2P session is actually connected before toggling play —
-    // the play/pause message is sent ONCE and a toggle issued before the channel
-    // opens would be dropped. Coordinator + ICE + DTLS + datachannel needs the
-    // larger timeout the caller threads through.
+    // Wait until connected before toggling play (the message is sent ONCE);
+    // Coordinator + ICE + DTLS needs the larger caller-supplied timeout.
     for (int t = 0; t < connectTimeoutMs && !isRemoteConnected(); t += 10) {
         pumpNetwork();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -2858,23 +2623,21 @@ void coordTestPeerJoin(const std::string& coordUrl, const std::string& code,
 }
 
 // Orchestrator: pump for up to settleMs, reporting whether the peer's mirrored
-// play reached this (host) side via the loopback client. Assumes coordTestHostStart
-// already brought the host + loopback up.
+// play reached this host via the loopback. Assumes coordTestHostStart ran.
 bool coordTestSettleForPlay(int settleMs) {
     return remoteTestServerSettleForPlay(settleMs);
 }
 
-// --- Chat overlay + keyboard chat entry (Task 7) ----------------------------
+// --- Chat overlay + keyboard chat entry ------------------------------------
 
 void drawNetworkOverlay(int w, int h) {
-    // networkManager.draw() reads connected/allReady/client — skip it while a
-    // cloud connect worker owns the manager. The overlay vanishing for the ≤5s
-    // connect window is harmless.
+    // networkManager.draw() reads connected/allReady/client: skip it while a
+    // cloud connect worker owns the manager.
     if (gCloudConnectInFlight.load(std::memory_order_acquire)) return;
     networkManager.draw(w, h);
 }
 
-// --- Remote pointer broadcast (Task 8) --------------------------------------
+// --- Remote pointer broadcast -----------------------------------------------
 
 void sendRemotePointer(int xPx, int yPx, int quadID) {
     if (!networkManager.getConnected()) return;
@@ -2888,12 +2651,8 @@ void sendRemotePointer(int xPx, int yPx, int quadID) {
     if (now - lastSend < std::chrono::milliseconds(16)) return;
     lastSend = now;
     lastX = xPx; lastY = yPx;
-    // Send the cursor in the plate's IMAGE space (not raw framebuffer pixels):
-    // the receiver draws the pointer inside the matching plate, transformed by
-    // that plate's pan/zoom/rotation, so it must arrive as (quadID, image-x,
-    // image-y, scale). getCursorPositionIn2DSpace packs the scale into z. (This
-    // matches the original FLTK send and also supplies the correct quad/scale
-    // that Task 8 had hardcoded to 0/1.)
+    // Send the cursor in the plate's IMAGE space (quadID, image-x, image-y, scale;
+    // getCursorPositionIn2DSpace packs scale into z) so the receiver can transform it.
     Vec3D pos = plateManager.getCursorPositionIn2DSpace(xPx, yPx, quadID);
     gfcNetPointerInfo info;
     info.quadID = quadID;
@@ -2928,30 +2687,16 @@ void remoteChatSubmit() {
     networkManager.gChatMode = 0;
 }
 
-// -----------------------------------------------------------------------
-// Notes dock (JEF-39 Task 6)
-//
-// One gfcReview per piece of footage (mediaPath is the identity, matching
-// the spec), not per plate -- two plates showing the same sequence share a
-// review, and gfcNote::quadID picks out which plate's markup a note is.
-// g_noteReviews holds every review touched this session; reviewForPlate()
-// resolves "whichever review belongs to the media currently on this plate"
-// and lazily loads its sidecar (gfcNoteStore::load) the first time that
-// media is asked about, mirroring gfcSessionManager's own lazy-XML shape.
-// -----------------------------------------------------------------------
+// Notes dock: one gfcReview per piece of footage (mediaPath is the identity),
+// not per plate; gfcNote::quadID picks out which plate's markup a note is.
 namespace {
 
-// gfcReview declares its own destructor (~gfcReview(), gfcreview.h), which
-// suppresses the implicit move constructor, and it holds a
-// vector<gfcRevision> whose notes are unique_ptr -- so gfcReview is neither
-// copyable nor movable. std::vector<gfcReview> can't grow (push_back would
-// need to relocate existing elements). Hence unique_ptr<gfcReview> here.
+// gfcReview has a destructor (no implicit move) and unique_ptr notes, so it is
+// neither copyable nor movable and std::vector<gfcReview> can't grow.
 std::vector<std::unique_ptr<gfcReview>> g_noteReviews;
 
-// Finds the in-memory review for `normalisedPath`, loading its sidecar on
-// first touch. `load()` leaves its argument untouched on failure, and the
-// argument already has mediaPath set, so a review with no sidecar yet still
-// comes back with the right identity and zero revisions.
+// Finds the in-memory review for `normalisedPath`, loading its sidecar on first
+// touch; one with no sidecar still has the right identity and zero revisions.
 gfcReview& reviewForPath(const std::string& normalisedPath) {
     for (auto& r : g_noteReviews) {
         if (r->mediaPath == normalisedPath) return *r;
@@ -2968,27 +2713,14 @@ gfcReview& reviewForPath(const std::string& normalisedPath) {
 gfcReview* reviewForPlate(int plateIdx) {
     gfcSequence* seq = sequenceForPlate(plateIdx);
     if (!seq) return nullptr;
-    // Gate on the MEDIA PATH, not on a loaded preview frame.
-    //
-    // This used to also require seq->getPreviewFrame().loaded, mirroring
-    // getLoadedSequenceName(). That is wrong here, and intermittently so: the
-    // preview frame is a Load-Sequence-Manager concept, populated when that
-    // modal stages a track. A plate that loaded footage through Quick Load,
-    // drag-drop or --open-file plays its numbered sequence frames and may have
-    // no preview at all — so the Notes dock reported "no media loaded" over an
-    // image that was visibly on screen, depending on which path had loaded it.
-    //
-    // A review is keyed by media path. If a plate has a path, it can have
-    // notes; whether a preview frame happens to be decoded is unrelated.
+    // Gate on the MEDIA PATH, not a loaded preview frame (a Load-Sequence-Manager
+    // concept; Quick Load, drag-drop and --open-file plates may have none).
     if (seq->filenameGeneric.empty()) return nullptr;
     return &reviewForPath(gfcNoteStore::normalisePath(seq->filenameGeneric));
 }
 
-// ---------------------------------------------------------------------------
-// Store -> renderer. gfcPlate::setNotes takes BORROWED pointers, so what is
-// pushed must outlive the next draw: these point into g_noteReviews, which
-// lives for the session and is only mutated here, never mid-frame.
-// ---------------------------------------------------------------------------
+// Store -> renderer. gfcPlate::setNotes takes BORROWED pointers, which point
+// into g_noteReviews (lives for the session, only mutated here, never mid-frame).
 
 // Mouse-drawing state, declared here rather than beside the drawing code
 // because the list published below includes the stroke being drawn.
@@ -2999,31 +2731,22 @@ std::unique_ptr<gfcNote> g_drawNote;
 /** Points collected so far; for arrow/box only the first and last matter. */
 std::vector<gfcNotePoint> g_drawPoints;
 
-/** Copies published by setPlateNotesToRound(), keyed by plate index. Plates
-    borrow them until the next syncPlateNotesImpl() republishes the real
-    notes and frees all of them. Kept per plate -- not one shared pool --
-    because gfcPlate::setNotes() stores borrowed pointers per plate until
-    THAT plate is republished, so freeing one plate's copies while
-    replacing another's would leave the first plate pointing at freed
-    memory. */
+/** Copies published by setPlateNotesToRound(), keyed by plate index. Kept per
+    plate: gfcPlate::setNotes() borrows pointers until THAT plate is
+    republished, so freeing another plate's copies would leave it dangling. */
 std::map<int, std::vector<std::unique_ptr<gfcNote>>> g_roundNoteCopies;
 
 void syncPlateNotesImpl() {
     for (int i = 0; i < plateManager.plateCount(); ++i) {
         std::vector<const gfcNote*> out;
         if (gfcReview* review = reviewForPlate(i)) {
-            // Every revision, locked or not: a locked round stays VISIBLE,
-            // which is the whole reason the model has rounds — you give
-            // Wednesday's notes while looking at Monday's.
+            // Every revision, locked or not: a locked round stays VISIBLE.
             for (const auto& revision : review->revisions)
                 for (const auto& n : revision.notes)
                     if (n) out.push_back(n.get());
         }
-        // The stroke being drawn right now. Without this nothing appeared
-        // until the mouse was released, although the drawing code claimed live
-        // feedback. It is borrowed like the rest: every path that destroys
-        // g_drawNote -- cancel, or a commit the revision refuses -- re-syncs
-        // before returning, so the plate is never left holding it.
+        // The stroke being drawn right now (live feedback). Borrowed like the rest:
+        // every path that destroys g_drawNote re-syncs before returning.
         if (g_drawNote && g_drawPlate == i) out.push_back(g_drawNote.get());
         plateManager.setPlateNotes(i, out);
     }
@@ -3040,18 +2763,8 @@ bool applyInboundNoteSyncEvents() {
             gfcReview* review = reviewForPlate(ev.note->quadID);
             if (!review) continue;
 
-            // Idempotent by note id, as the design requires. The server relays
-            // every note-add to ALL peers -- including the one that drew it,
-            // whose own loopback client receives it back -- so without this
-            // check whoever draws a note stores it twice: once on commit, once
-            // from the echo. Recorded in a two-player run: the host's sidecar
-            // held 8 notes for 4 drawn.
-            //
-            // A note that already exists is not added again, but it does adopt
-            // the author the server stamped. The server takes the name from
-            // its own peer map rather than the payload, so its attribution is
-            // the verified one; the drawer's local copy only had its own
-            // preference name.
+            // Idempotent by note id: the server relays note-adds to ALL peers, including
+            // the drawer, so it would be stored twice. An existing note adopts the server-stamped author.
             gfcNote* existing = nullptr;
             for (auto& revision : review->revisions) {
                 for (auto& n : revision.notes) {
@@ -3111,10 +2824,8 @@ bool applyInboundNoteSyncEvents() {
     return applied;
 }
 
-// Drawing-tool selection state (Task 6 does not wire mouse drawing -- see
-// the plan's file-ownership map). Kept as plain file-scope state so a
-// future viewport hook has one accessor to read instead of the dock
-// reaching into gfcPlate.
+// Drawing-tool selection state, plain file-scope state so a viewport hook has
+// one accessor to read instead of reaching into gfcPlate.
 int   g_activeNoteTool  = NOTETOOL_FREEHAND;
 float g_noteColorR = 1.0f, g_noteColorG = 0.2f, g_noteColorB = 0.2f;
 int   g_noteSize   = 3;
@@ -3134,9 +2845,8 @@ std::vector<RevisionRow> notesForPlate(int plateIdx) {
         rr.created = static_cast<long long>(it->created);
         rr.locked  = it->locked;
         for (auto& n : it->notes) {
-            // This review may hold notes for a sibling plate showing the
-            // same footage (gfcNote::quadID) -- only this plate's markup
-            // belongs in its own dock.
+            // This review may hold notes for a sibling plate showing the same footage
+            // (gfcNote::quadID); only this plate's markup belongs in its dock.
             if (n->quadID != plateIdx) continue;
             NoteRow nr;
             nr.id        = n->id;
@@ -3270,12 +2980,8 @@ std::vector<SessionMedia> getSessionMediaSet() {
         gfcSequence* seq = trackManager.getSequence(t);
         if (!seq || !seq->myGUI) continue;
         const std::string gui = seq->myGUI->getFilename();
-        // Prefer the generic pattern; fall back to the one real frame path
-        // when the sequence hasn't been scanned yet (filenameGeneric still
-        // empty) -- unlike reviewForPlate(), which skips the track in that
-        // case. normalisePath() collapses a frame path to the same pattern
-        // as its generic form, so this still lands on the sidecar's real
-        // key and the track still belongs in the summary.
+        // Prefer the generic pattern; fall back to the one real frame path when the
+        // sequence isn't scanned yet (filenameGeneric empty); normalisePath() maps both to one key.
         add(seq->filenameGeneric.empty() ? gui : seq->filenameGeneric, gui, t, -1, -1);
     }
     if (auto* entries = playlistManager.getPlaylist()) {
@@ -3376,9 +3082,8 @@ bool setPlateNotesToRound(int plateIdx, const std::string& mediaPath, int roundI
             copies.push_back(std::move(c));
         }
     }
-    // Publish the new list before freeing this plate's previous copies --
-    // and only this plate's entry, so a sibling plate's still-borrowed
-    // copies are untouched.
+    // Publish the new list before freeing this plate's previous copies, and only
+    // this plate's entry (a sibling's borrowed copies stay).
     plateManager.setPlateNotes(plateIdx, borrowed);
     g_roundNoteCopies[plateIdx] = std::move(copies);
     return true;
@@ -3507,9 +3212,8 @@ bool isInstallLutPath(const std::string& path) {
 }
 
 void reloadReviewFromDisk(const std::string& mediaPath) {
-    // Plates borrow pointers into the review: move it out first, republish
-    // (which loads the sidecar afresh for any plate showing this media), and
-    // only then let the old copy go.
+    // Plates borrow pointers into the review: move it out, republish (reloads the
+    // sidecar for any plate showing this media), then let the old copy go.
     std::vector<std::unique_ptr<gfcReview>> stale;
     for (auto it = g_noteReviews.begin(); it != g_noteReviews.end();) {
         if ((*it)->mediaPath == mediaPath) {
@@ -3589,9 +3293,8 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
         return false;
     };
 
-    // The header attribute and the named layer only mean something in EXR.
-    // Refuse anything else up front rather than write a PNG that silently
-    // dropped both.
+    // The header attribute and named layer only mean something in EXR; refuse
+    // anything else rather than write a PNG that dropped both.
     std::string ext = outExr.size() >= 4 ? outExr.substr(outExr.size() - 4) : std::string();
     for (char& c : ext) {
         if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
@@ -3602,29 +3305,8 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
     gfcReview* review = reviewForPlate(plateIdx);
     if (!seq || !review) return fail("no media is loaded on this plate");
 
-    // Resolve the file of what the plate is DISPLAYING, which lives in one of
-    // two places.
-    //
-    // A sequence loaded for playback populates the decoded-frames list, and
-    // framePathAt() gives that frame's path -- never getFilenameatFrame(),
-    // which is a display string that appends " - NOT IN RAM" to any frame not
-    // decoded right now.
-    //
-    // A still opened through Quick Load, drag-drop or --open-file leaves that
-    // list EMPTY and is drawn from the sequence's preview frame instead
-    // (gfcPlate::getFrameAndSequence, showPreview branch). Asking only the
-    // frames list reported "frame 1 is outside this plate's sequence" over an
-    // image that was plainly on screen -- so fall back to the preview frame's
-    // own path.
-    //
-    // Both of those are filled by an ASYNCHRONOUS decode, so right after a load
-    // either can still be empty: the same stamp failed at 4.5 s on one run and
-    // succeeded on the next with no code change. filenameGeneric is set when
-    // the sequence is identified, before any decode, and for a single still it
-    // is simply that file's path -- so it closes the race for stills. A true
-    // sequence pattern ("name.####.exr") is not a path, and guessing its frame
-    // numbering would risk stamping the wrong file, so that case says what to
-    // do instead of guessing.
+    // Resolve the file the plate is DISPLAYING: framePathAt() (not getFilenameatFrame(),
+    // which appends " - NOT IN RAM"), else the preview frame's path, else filenameGeneric.
     const int frame = getCurrentFrame();
     result.sourcePath = seq->framePathAt(frame);
     if (result.sourcePath.empty()) {
@@ -3667,9 +3349,8 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
     opt.writeHeader = writeHeader;
     std::string err;
     if (writeLayer) {
-        // Rasterised at the SOURCE image's own size. Notes are normalised to
-        // the source, so this mapping is exact -- none of the plate's pan,
-        // zoom or crop is involved.
+        // Rasterised at the SOURCE image's size; notes are normalised to the source,
+        // so plate pan, zoom and crop are not involved.
         if (!gfcNoteOverlay::rasterise(notes, frame, plateIdx,
                                        result.width, result.height,
                                        opt.layerRGBA, &err)) {
@@ -3763,9 +3444,8 @@ void noteDrawCancel() {
 }
 
 namespace {
-// Writes g_drawPoints into the in-progress note's own geometry. Shared by the
-// pencil (noteDrawAppend) and the scripting hook (demoNoteAppend) so the two
-// can never interpret the same points differently.
+// Writes g_drawPoints into the in-progress note's geometry; shared by the
+// pencil (noteDrawAppend) and the scripting hook (demoNoteAppend).
 void applyDrawPoints() {
     if (!g_drawNote || g_drawPoints.empty()) return;
     if (auto* stroke = dynamic_cast<gfcNoteStroke*>(g_drawNote.get()))
@@ -3785,9 +3465,8 @@ bool noteDrawBegin(int xFb, int yFb, int plateIdx) {
 
     gfcReview* review = reviewForPlate(plateIdx);
     if (!review) return false;
-    // Refuse before the first point rather than at commit: letting someone
-    // draw a whole stroke and then silently dropping it is worse than not
-    // letting the stroke start.
+    // Refuse before the first point rather than at commit: dropping a whole
+    // drawn stroke silently is worse.
     gfcRevision* open = review->openRevision();
     if (open && open->locked) return false;
 
@@ -3802,9 +3481,8 @@ bool noteDrawBegin(int xFb, int yFb, int plateIdx) {
     }
     g_drawPlate = plateIdx;
     g_drawPoints.assign(1, gfcNotePoint{nx, ny});
-    // A text note is placed where it is clicked. Without this its anchor stayed
-    // at the default (0,0), so every text note landed in the image's top-left
-    // corner no matter where it was put.
+    // A text note is placed where it is clicked (otherwise its anchor stays at
+    // the default (0,0), the top-left corner).
     if (auto* text = dynamic_cast<gfcNoteText*>(g_drawNote.get()))
         text->anchor = gfcNotePoint{nx, ny};
 
@@ -3825,8 +3503,7 @@ void noteDrawAppend(int xFb, int yFb) {
     if (!g_drawNote || g_drawPlate < 0) return;
     float nx = 0.0f, ny = 0.0f;
     // A drag that leaves the image keeps the last point inside it rather than
-    // ending the note — people overshoot constantly and losing the stroke for
-    // it would be maddening.
+    // ending the note.
     if (!plateManager.cursorToNormalisedImage(xFb, yFb, g_drawPlate, nx, ny)) return;
     g_drawPoints.push_back(gfcNotePoint{nx, ny});
     applyDrawPoints();
@@ -3887,16 +3564,14 @@ void demoNoteAppend(float nx, float ny) {
 bool noteDrawEnd() {
     if (!g_drawNote || g_drawPlate < 0) { noteDrawCancel(); return false; }
 
-    // A click with no drag is a degenerate arrow or box — zero-area, invisible,
-    // and pure clutter in the dock. A single-point freehand is a legitimate
-    // dot, so only the two-point tools are rejected.
+    // A click with no drag is a zero-area arrow or box; reject the two-point
+    // tools (a single-point freehand is a legitimate dot).
     const bool needsDrag = g_drawNote->noteType() == GFCNOTE_ARROW ||
                            g_drawNote->noteType() == GFCNOTE_BOX;
     if (needsDrag && g_drawPoints.size() < 2) { noteDrawCancel(); return false; }
 
-    // The same reasoning for text: a text note with no words renders nothing,
-    // so it is refused here as well as in the viewport's prompt -- a second
-    // caller that forgets to set the text must not commit an invisible note.
+    // A text note with no words renders nothing: refuse it here as well as in
+    // the viewport's prompt.
     if (auto* t = dynamic_cast<gfcNoteText*>(g_drawNote.get())) {
         if (t->text.empty()) { noteDrawCancel(); return false; }
     }
@@ -3915,10 +3590,8 @@ bool noteDrawEnd() {
     g_drawPoints.clear();
     g_drawPlate = -1;
     g_drawNote.reset();
-    // Unconditionally. The plate has been drawing this stroke through a
-    // borrowed pointer; a refused commit destroyed the note inside addNote(),
-    // so republishing only on success would leave the plate holding a
-    // dangling pointer until something else happened to sync.
+    // Unconditionally: the plate borrows this stroke's pointer, and a refused
+    // commit destroyed the note inside addNote(), so republish on failure too.
     syncPlateNotesImpl();
     return added;
 }

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// JEF-24 Task 3: WebRtcTransport — HOST role over libdatachannel.
-// See gfcWebRtcTransport.h for the offerer/answerer convention and the
-// no-envelope-byte contract. The whole TU is guarded so a build without
-// JEFECHECK_WEBRTC (factory then keeps the RakNet fallback) still links.
+// WebRtcTransport: HOST role over libdatachannel. See gfcWebRtcTransport.h for the
+// offerer/answerer convention and the no-envelope-byte contract. Guarded by JEFECHECK_WEBRTC.
 #include "gfcWebRtcTransport.h"
 
 #ifdef JEFECHECK_WEBRTC
@@ -22,23 +20,18 @@
 #include <vector>
 
 #include "gfcSignaling.h"
-#include "gfcCoordinatorSignaling.h"  // JEF-27 coordinator-mode signaling
+#include "gfcCoordinatorSignaling.h"  // coordinator-mode signaling
 
 namespace jefe {
 namespace net {
 
 namespace {
 
-// ── iceServers JSON → rtc::IceServer (JEF-27 / JEF-26) ───────────────────────
-// The coordinator hands us the iceServers as an opaque raw-JSON array substring
-// (see gfcCoordinatorSignaling.h): [{"urls":<string|string[]>,"username?":...,
-// "credential?":...}, ...]. We parse it here — where rtc types live — into
-// rtc::Configuration.iceServers. Defensive: malformed input yields an empty
-// list and never throws (LAN behavior, no ICE servers).
+// ── iceServers JSON -> rtc::IceServer ────────────────────────────────────────
+// Parses the coordinator's raw-JSON iceServers array; malformed input yields an empty list.
 
-// JEF-37: compare a secret without an early exit on the first differing byte.
-// The nonce arrives over the network from an untrusted party, and a plain ==
-// leaks a match prefix through timing. Length is not secret (it is fixed).
+// Compare a secret without an early exit on the first differing byte: the nonce comes from
+// an untrusted party and a plain == leaks a match prefix through timing.
 bool constantTimeEquals(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) return false;
     unsigned char diff = 0;
@@ -189,9 +182,8 @@ void initLoggerOnce() {
     std::call_once(g_loggerOnce, [] { rtc::InitLogger(rtc::LogLevel::Error); });
 }
 
-// Opt-in state-transition tracing for the two-process --remote-test-webrtc
-// harness (set JEFECHECK_REMOTE_TEST_DEBUG=1). Off by default so production
-// sessions stay quiet.
+// Opt-in state-transition tracing for the --remote-test-webrtc harness
+// (JEFECHECK_REMOTE_TEST_DEBUG=1); off by default.
 bool traceEnabled() {
     static const bool on = std::getenv("JEFECHECK_REMOTE_TEST_DEBUG") != nullptr;
     return on;
@@ -214,37 +206,8 @@ void attachStateTrace(const std::shared_ptr<rtc::PeerConnection>& pc,
     });
 }
 
-// ── JEF-28 Task 4: transport-level chunking on the "assets" channel ──────────
-//
-// The sync layer (gfcnetworkserver/client) hands the transport whole serialized
-// LUT/FX bodies in ONE send() call. libdatachannel's SCTP data channel has a
-// per-message size limit (256 KB local default, but only 64 KB is guaranteed
-// when the peer doesn't advertise a larger max-message-size in its SDP), and a
-// single over-limit send() fails. So Channel::Assets sends are split at the
-// TRANSPORT level into ordered chunks; the sync layer stays oblivious and the
-// receive side reassembles them into ONE Data event. The State ("jefe") channel
-// carries small messages and is never chunked.
-//
-// This framing exists ONLY on the "assets" channel and NEVER carries the RakNet
-// envelope byte — the reassembled payload is the app's jefe::wire frame verbatim
-// (leading GFCNETID byte intact). Chunk wire format (little-endian), prepended
-// to every "assets" frame (single/complete messages use chunkCount==1 so the
-// receive path is uniform):
-//
-//   byte  0      magic 'A' (0x41)
-//   byte  1      magic 'C' (0x43)
-//   byte  2      version  (currently 1)
-//   byte  3      flags    (reserved, 0)
-//   bytes 4..7   messageId   uint32  — per-peer monotonic, from 1
-//   bytes 8..11  chunkIndex  uint32  — 0-based
-//   bytes 12..15 chunkCount  uint32  — total chunks (1 = unchunked/complete)
-//   bytes 16..19 offset      uint32  — this chunk's byte offset in the message
-//   bytes 20..23 totalLen    uint32  — full reassembled payload length
-//   bytes 24..N  payload slice
-//
-// `offset` makes reassembly independent of the sender's chunk size (the receiver
-// never has to know it), so the sender may clamp the chunk size to the
-// negotiated max-message-size without a wire renegotiation.
+// ── Chunking on the "assets" channel: SCTP messages are limited (64 KB guaranteed), so sends are split
+// into ordered chunks (24-byte LE header: 'AC', ver, flags, msgId, index, count, offset, totalLen).
 constexpr size_t   kAssetHeaderSize    = 24;
 constexpr size_t   kAssetChunkPayload  = 60 * 1024;      // 61440: frame < 64 KB
 constexpr size_t   kAssetHighWater     = 1 * 1024 * 1024; // pause sending at 1 MB
@@ -265,10 +228,8 @@ inline uint32_t rd32le(const unsigned char* p) {
            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
-// Client role: the host is a single opaque peer. The app treats PeerIds as
-// opaque tokens (JEF-22), so a fixed synthetic id is fine. We key the client's
-// single Peer under this id in the same `peers` map the host uses, so send() /
-// poll() / connectionCount() work uniformly for both roles.
+// Client role: the host is a single opaque peer under a fixed synthetic id in the same
+// `peers` map the host uses, so send()/poll()/connectionCount() work for both roles.
 constexpr PeerId kHostPeerId = 1;
 
 } // namespace
@@ -278,24 +239,20 @@ struct WebRtcTransport::Impl {
     // opened on it. `open` flips true on the channel's onOpen.
     struct Peer {
         int clientId = 0;
-        std::string coordPeerId;  // JEF-27: coordinator connId (coordinator mode)
+        std::string coordPeerId;  // coordinator connId (coordinator mode)
         std::shared_ptr<rtc::PeerConnection> pc;
         std::shared_ptr<rtc::DataChannel> dc;        // "jefe" — Channel::State
         std::shared_ptr<rtc::DataChannel> assetsDc;  // "assets" — Channel::Assets
         bool open = false;        // state ("jefe") channel open
-        bool assetsOpen = false;  // assets channel open (JEF-28)
+        bool assetsOpen = false;  // assets channel open
 
-        // ── JEF-28 Task 4: assets-channel chunking state (guarded by Impl::mtx) ─
-        // TX: pending, ready-to-send chunk frames + a monotonic per-peer message
-        // id. Draining is serialized by assetTxDraining (only one drainer at a
-        // time; the other caller — send() on the app thread or onBufferedAmountLow
-        // on the rtc thread — returns and lets the active drainer continue).
+        // ── Assets-channel chunking state (guarded by Impl::mtx) ─
+        // TX: assetTxDraining allows one drainer at a time (send() or onBufferedAmountLow).
         std::deque<rtc::binary> assetTxQueue;
         uint32_t assetTxMsgId   = 0;
         bool     assetTxDraining = false;
-        // RX: reassembly buffer for the message currently in flight (SCTP is
-        // reliable+ordered, so at most one message reassembles at a time; the
-        // per-chunk `got` flags dedup and the fields are cross-checked defensively).
+        // RX: reassembly buffer for the message in flight (SCTP is ordered, so at most one);
+        // fields are cross-checked defensively.
         uint32_t assetRxMsgId        = 0;   // 0 = nothing in progress
         uint32_t assetRxChunkCount   = 0;
         uint32_t assetRxTotalLen     = 0;
@@ -312,21 +269,17 @@ struct WebRtcTransport::Impl {
     SignalingServer signaling;        // host role (LAN)
     SignalingClient clientSignaling;  // client role (LAN)
 
-    // ── JEF-27 coordinator mode ──────────────────────────────────────────
-    // When coordinatorMode is set (via configureCoordinator, before
-    // startHost/connect), the transport dials a CoordinatorSignaling to the
-    // cloud coordinator instead of the LAN SignalingServer/Client. The P2P
-    // PeerConnection/DataChannel/event-queue machinery below is reused verbatim.
+    // Coordinator mode (configureCoordinator, before startHost/connect): dial a CoordinatorSignaling
+    // instead of the LAN SignalingServer/Client.
     bool coordinatorMode = false;
     std::string coordinatorUrl;
     std::string coordSessionCode;   // join-only (host: empty)
     std::string coordPassword;   // inert: the coordinator has no password
-    std::string coordAuthToken;  // JEF-31 access JWT ("" = anonymous)
-    // Host-side session policy from the selected session group (JEF-37).
-    // Sent with create-session; the coordinator enforces it for everyone.
+    std::string coordAuthToken;  // access JWT ("" = anonymous)
+    // Host-side session policy from the selected session group, enforced by the coordinator.
     SessionPolicy coordPolicy;
     std::string coordDisplayName;
-    // JEF-37: host-side secret that identifies its own loopback client's knock.
+    // Host-side secret that identifies its own loopback client's knock.
     std::string selfJoinNonce;
     // Last coordinator {"type":"error"}, guarded by mtx. Empty code = none.
     std::string lastErrCode;
@@ -337,19 +290,14 @@ struct WebRtcTransport::Impl {
     std::map<std::string, PeerId> coordToPeer;  // coordinator connId -> PeerId
     std::string clientHostCoordId;  // joiner: the host's coordinator connId
     bool clientPcBuilt = false;     // joiner: guard against double-build
-    // JEF-37 lobby (host only), guarded by mtx. Written from the coordinator's
-    // WebSocket thread, read from the GUI thread. A vector rather than a map:
-    // it holds a handful of entries at most and the UI renders them in arrival
-    // order, which is the order a host expects to answer them in.
+    // Lobby (host only), guarded by mtx: written from the WebSocket thread, read from the GUI
+    // thread. A vector, in arrival order (the order a host answers in).
     std::vector<PendingJoiner> pendingJoiners;
-    // JEF-37 (joiner side), guarded by mtx: the coordinator parked us in a
-    // lobby and a human has to act before anything else happens.
+    // Joiner side, guarded by mtx: parked in a lobby until the host acts.
     bool awaitingAdmission = false;
 
-    // Single mutex guards the peer maps AND the event queue. All libdatachannel
-    // / signaling callbacks fire on background threads and mutate under it; the
-    // app thread (poll/send/closePeer/connectionCount) reads under it. Network
-    // sends (dc->send) are done OUTSIDE the lock (shared_ptrs copied out first).
+    // Single mutex guards the peer maps AND the event queue (callbacks fire on background
+    // threads). Network sends (dc->send) happen OUTSIDE the lock, with shared_ptrs copied out.
     std::mutex mtx;
     std::map<PeerId, Peer> peers;        // by assigned PeerId
     std::map<int, PeerId> clientToPeer;  // signaling clientId -> PeerId
@@ -362,12 +310,8 @@ struct WebRtcTransport::Impl {
     bool hosting = false;
     bool client = false;  // set once connect() starts the client signaling
 
-    // Client-session guard (mtx-protected). connect() sets it true; disconnect()/
-    // teardownClient() set it false. The async client signaling callbacks
-    // (onClientSignalingOpen etc.) fire on a WebSocket thread and may race a
-    // connect()-then-immediate-disconnect(): they check this under the lock and
-    // bail (constructing/pushing nothing) if the session was already torn down,
-    // so a live pc/dc can't be orphaned into a session the caller abandoned.
+    // Client-session guard (mtx-protected): async signaling callbacks check it under the lock
+    // and bail if the session was torn down, so a live pc/dc isn't orphaned.
     bool clientActive = false;
 
     void pushEvent(TransportEventType type, PeerId peer,
@@ -382,9 +326,8 @@ struct WebRtcTransport::Impl {
         events.push_back(std::move(ev));
     }
 
-    // ── JEF-28 Task 4: assets-channel chunk TX ───────────────────────────────
-    // Split a whole asset payload into ordered chunk frames and append them to
-    // `pid`'s TX queue (caller then calls drainAssetQueue). Runs under mtx.
+    // ── Assets-channel chunk TX ──────────────────────────────────────────────
+    // Split a whole asset payload into ordered chunk frames on `pid`'s TX queue. Runs under mtx.
     void enqueueAssetMessage(PeerId pid, const unsigned char* data, size_t len) {
         std::lock_guard<std::mutex> lk(mtx);
         auto it = peers.find(pid);
@@ -421,14 +364,8 @@ struct WebRtcTransport::Impl {
                          "(%zu bytes)\n", msgId, count, len);
     }
 
-    // Drain `pid`'s asset TX queue, honoring bufferedAmount backpressure. Sends
-    // chunks while buffered < kAssetHighWater; when it hits the high-water mark
-    // it stops and leaves the remainder queued — onBufferedAmountLow resumes the
-    // drain once SCTP flushes below kAssetLowThreshold. Callable concurrently
-    // from the app thread (send) and the rtc callback thread (onBufferedAmountLow);
-    // assetTxDraining serializes to keep ordered chunks strictly in order. The
-    // dc->send() calls happen OUTSIDE mtx (shared_ptr copied out), so the poll
-    // path is never blocked and mtx is never held across a network send.
+    // Drain `pid`'s asset TX queue with bufferedAmount backpressure (onBufferedAmountLow resumes);
+    // assetTxDraining keeps chunks in order across threads. dc->send() runs OUTSIDE mtx.
     void drainAssetQueue(PeerId pid) {
         std::shared_ptr<rtc::DataChannel> dc;
         {
@@ -454,8 +391,7 @@ struct WebRtcTransport::Impl {
                 if (buffered > p.assetTxMaxBuffered) p.assetTxMaxBuffered = buffered;
                 if (p.assetTxQueue.empty()) { p.assetTxDraining = false; return; }
                 if (buffered >= kAssetHighWater) {
-                    // Backpressure: stop. onBufferedAmountLow will resume us when
-                    // SCTP drains below kAssetLowThreshold (a fresh downward
+                    // Backpressure: stop; onBufferedAmountLow resumes us (a fresh downward
                     // crossing, so no lost wakeup).
                     p.assetTxDraining = false;
                     if (traceEnabled())
@@ -471,11 +407,8 @@ struct WebRtcTransport::Impl {
         }
     }
 
-    // ── JEF-28 Task 4: assets-channel chunk RX / reassembly ──────────────────
-    // Feed one inbound "assets" frame through header validation + reassembly.
-    // Pushes ONE Data(Channel::Assets) event when the last chunk of a message
-    // arrives. Never crashes on malformed/hostile input — every field is bounds
-    // checked and an unreasonable total is rejected to bound memory.
+    // ── Assets-channel chunk RX: validate + reassemble one inbound frame; pushes ONE
+    // Data(Channel::Assets) event on the last chunk. Bounds-checks every field (hostile input).
     void handleAssetMessage(PeerId pid, const unsigned char* data, size_t n) {
         if (n < kAssetHeaderSize) return;                       // too short
         if (data[0] != kAssetMagic0 || data[1] != kAssetMagic1 ||
@@ -543,10 +476,8 @@ struct WebRtcTransport::Impl {
                       Channel::Assets);
     }
 
-    // Build the rtc::Configuration for a PeerConnection. In coordinator mode
-    // this folds in the coordinator-supplied iceServers (STUN/TURN, JEF-26); in
-    // LAN mode coordIceServersJson is empty, so this is an empty config (the
-    // JEF-24 host-candidates-only behavior — unchanged).
+    // Build the rtc::Configuration for a PeerConnection: in coordinator mode it folds in the
+    // coordinator-supplied iceServers (STUN/TURN); in LAN mode it is empty (host candidates only).
     rtc::Configuration makeConfig() {
         std::string js;
         { std::lock_guard<std::mutex> lk(mtx); js = coordIceServersJson; }
@@ -558,12 +489,8 @@ struct WebRtcTransport::Impl {
         return cfg;
     }
 
-    // Attach handlers to a reliable channel the client opened (host side).
-    // JEF-28: onDataChannel fires once per channel; branch on the label so the
-    // "jefe" channel drives State + peer lifecycle (PeerConnected/PeerLost) and
-    // the "assets" channel is a silent Channel::Assets lane (its open/close does
-    // NOT emit peer events — the state channel is the single source of truth for
-    // whether a peer is connected).
+    // Attach handlers to a channel the client opened (host side): "jefe" drives State + peer
+    // lifecycle; "assets" is a silent lane (open/close emits no peer events).
     void setupChannel(PeerId pid, std::shared_ptr<rtc::DataChannel> dc) {
         const bool isAssets = (dc->label() == "assets");
         {
@@ -574,8 +501,7 @@ struct WebRtcTransport::Impl {
             else          it->second.dc = dc;
         }
 
-        // JEF-28 Task 4: on the assets channel, resume the paced chunk drain
-        // whenever SCTP flushes below the low-water threshold (backpressure).
+        // Assets channel: resume the paced chunk drain when SCTP flushes below the low-water threshold.
         if (isAssets) {
             dc->setBufferedAmountLowThreshold(kAssetLowThreshold);
             dc->onBufferedAmountLow([this, pid]() { drainAssetQueue(pid); });
@@ -599,9 +525,8 @@ struct WebRtcTransport::Impl {
             }
         });
 
-        // Binary frames only (jefe::wire frames). Text is unused on the wire.
-        // Assets frames carry the chunk header (reassembled before dispatch);
-        // state frames are the app payload verbatim.
+        // Binary frames only (jefe::wire). Assets frames carry the chunk header (reassembled
+        // before dispatch); state frames are the app payload verbatim.
         dc->onMessage(
             [this, pid, isAssets](rtc::binary msg) {
                 const unsigned char* p =
@@ -688,9 +613,8 @@ struct WebRtcTransport::Impl {
         bool inserted = false;
         {
             std::lock_guard<std::mutex> lk(mtx);
-            // Authoritative capacity re-check under the lock (closes the
-            // check-then-insert TOCTOU: two clients racing here can't both pass
-            // a released-lock check and overshoot maxClients).
+            // Authoritative capacity re-check under the lock (closes the check-then-insert
+            // TOCTOU: two racing clients can't both pass and overshoot maxClients).
             if (maxClients == 0 ||
                 static_cast<int>(peers.size()) < maxClients) {
                 Peer p;
@@ -749,21 +673,17 @@ struct WebRtcTransport::Impl {
             auto it = clientToPeer.find(clientId);
             if (it != clientToPeer.end()) pid = it->second;
         }
-        // The signaling socket dropping does not itself tear down the media
-        // channel; PeerLost is emitted from dc->onClosed. Nothing to do here
-        // beyond leaving the peer intact (WebRTC survives signaling loss on a
-        // LAN once connected). Suppress unused warning.
+        // The signaling socket dropping does not tear down the media channel (PeerLost
+        // comes from dc->onClosed); leave the peer intact. Suppress unused warning.
         (void)pid;
     }
 
     // ── Client role ─────────────────────────────────────────────────────
-    // Wire the reliable channel WE opened to the host (offerer side). Mirrors
-    // setupChannel but emits client-flavoured events (ConnectAccepted /
-    // ConnectionLost) against the fixed synthetic kHostPeerId.
+    // Wire the channel WE opened to the host (offerer side); emits ConnectAccepted / ConnectionLost for kHostPeerId.
     void setupClientChannel(std::shared_ptr<rtc::DataChannel> dc) {
-        const bool isAssets = (dc->label() == "assets");  // JEF-28
+        const bool isAssets = (dc->label() == "assets");
 
-        // JEF-28 Task 4: backpressure resume on the client's assets channel.
+        // Backpressure resume on the client's assets channel.
         if (isAssets) {
             dc->setBufferedAmountLowThreshold(kAssetLowThreshold);
             dc->onBufferedAmountLow([this]() { drainAssetQueue(kHostPeerId); });
@@ -816,9 +736,8 @@ struct WebRtcTransport::Impl {
                     it->second.open = false;
                 }
             }
-            // A drop after the channel was open is a lost connection; a close
-            // before it ever opened is a failed/graceful teardown. (disconnect()
-            // resets callbacks first, so this fires only for spontaneous drops.)
+            // A drop after the channel opened is a lost connection; a close before it opened
+            // is a failed/graceful teardown (disconnect() resets callbacks first).
             pushEvent(wasOpen ? TransportEventType::ConnectionLost
                               : TransportEventType::Disconnected,
                       kHostPeerId);
@@ -867,15 +786,14 @@ struct WebRtcTransport::Impl {
             clientSignaling.send(encodeSignal(m));
         });
 
-        // Reliable + ordered (RakNet RELIABLE_ORDERED parity). The default
-        // Reliability is already reliable (no maxPacketLifeTime/maxRetransmits)
-        // and ordered (unordered=false); set explicitly for intent.
+        // Reliable + ordered (RakNet RELIABLE_ORDERED parity); the defaults already are,
+        // set explicitly for intent.
         rtc::DataChannelInit init;
         init.reliability.unordered = false;
         init.reliability.maxPacketLifeTime.reset();
         init.reliability.maxRetransmits.reset();
 
-        // JEF-28: open BOTH the "jefe" (State) and "assets" (Assets) channels.
+        // Open BOTH the "jefe" (State) and "assets" (Assets) channels.
         std::shared_ptr<rtc::DataChannel> dc, assetsDc;
         try {
             dc = pc->createDataChannel("jefe", init);
@@ -955,10 +873,8 @@ struct WebRtcTransport::Impl {
         std::shared_ptr<rtc::DataChannel> dc, assetsDc;
         {
             std::lock_guard<std::mutex> lk(mtx);
-            // Flip the session guard first so any in-flight WS-thread callback
-            // (onClientSignalingOpen still constructing a pc/dc) bails / drops
-            // its orphan instead of publishing it after we return. Idempotent:
-            // a second disconnect() finds no peer and no active session.
+            // Flip the session guard first so an in-flight WS-thread callback bails or drops
+            // its orphan. Idempotent: a second disconnect() finds no peer and no session.
             clientActive = false;
             clientPcBuilt = false;
             clientHostCoordId.clear();
@@ -977,7 +893,7 @@ struct WebRtcTransport::Impl {
         if (assetsDc) { try { assetsDc->resetCallbacks(); assetsDc->close(); } catch (...) {} }
         if (pc) { try { pc->resetCallbacks(); pc->close(); } catch (...) {} }
         clientSignaling.close();
-        if (coord) coord->close();  // JEF-27: also drop the coordinator socket
+        if (coord) coord->close();  // also drop the coordinator socket
         client = false;
     }
 
@@ -997,9 +913,8 @@ struct WebRtcTransport::Impl {
                 coordToPeer.erase(it->second.coordPeerId);
             peers.erase(it);
         }
-        // Reset callbacks + close outside the lock so no callback re-enters.
-        // resetCallbacks() on BOTH channels and the PeerConnection (teardown
-        // symmetry) so no forwarder fires into a half-dead peer.
+        // Reset callbacks + close outside the lock so no callback re-enters; reset both
+        // channels and the PeerConnection so no forwarder fires into a half-dead peer.
         if (dc) { try { dc->resetCallbacks(); dc->close(); } catch (...) {} }
         if (assetsDc) { try { assetsDc->resetCallbacks(); assetsDc->close(); } catch (...) {} }
         if (pc) { try { pc->resetCallbacks(); pc->close(); } catch (...) {} }
@@ -1037,15 +952,13 @@ struct WebRtcTransport::Impl {
         // other, and stop()/close() are no-ops when the other was never used.
         signaling.stop();
         clientSignaling.close();
-        if (coord) coord->close();  // JEF-27: drop the coordinator socket too
+        if (coord) coord->close();  // drop the coordinator socket too
         hosting = false;
         client = false;
     }
 
-    // ── JEF-27 coordinator mode: HOST ────────────────────────────────────
-    // The host create-session's; each coordinator `peer-joined` spins up an
-    // ANSWERER PeerConnection (host never creates the channel) whose SDP/ICE is
-    // relayed back to that joiner via coord->sendSignal(coordPeerId, ...).
+    // ── Coordinator mode: HOST ───────────────────────────────────────────
+    // Each coordinator `peer-joined` spins up an ANSWERER PeerConnection whose SDP/ICE is relayed via coord->sendSignal().
 
     void onCoordSessionCreated(const std::string& code, const std::string& /*token*/,
                                const std::string& iceServersJson) {
@@ -1055,16 +968,13 @@ struct WebRtcTransport::Impl {
         trace("host", "coordinator session created");
     }
 
-    // JEF-37: someone knocked. Park them until the host decides. Nothing is
-    // built for them here -- no PeerConnection, no PeerId -- because a denied
-    // joiner must never have had anything to receive traffic on.
+    // Someone knocked: park them until the host decides. No PeerConnection or PeerId is
+    // built, so a denied joiner never has anything to receive traffic on.
     void onCoordHostJoinRequest(const JoinRequest& req) {
         trace("host", "coordinator join request");
 
-        // The host's OWN loopback client, recognised by the nonce it carries as
-        // its coordinator display name. Admit it without ever surfacing a row:
-        // asking a host to admit itself is not a decision, and until it did the
-        // session would have no participants at all.
+        // The host's OWN loopback client, recognised by the nonce it carries as its
+        // coordinator display name: admit it without a row (the host can't admit itself).
         {
             std::string nonce;
             { std::lock_guard<std::mutex> lk(mtx); nonce = selfJoinNonce; }
@@ -1077,9 +987,8 @@ struct WebRtcTransport::Impl {
 
         std::lock_guard<std::mutex> lk(mtx);
         for (const PendingJoiner& p : pendingJoiners) {
-            // A re-knock from the same connection replaces nothing: the row is
-            // already showing and re-adding it would give the host two buttons
-            // for one person.
+            // A re-knock from the same connection replaces nothing, or the host would see
+            // two buttons for one person.
             if (p.joinerId == req.joinerId) return;
         }
         PendingJoiner p;
@@ -1100,9 +1009,8 @@ struct WebRtcTransport::Impl {
 
     void onCoordHostPeerJoined(const std::string& coordPeerId) {
         trace("host", "coordinator peer joined");
-        // An admitted joiner arrives here as a normal peer; its lobby row has
-        // served its purpose. Removing it on peer-joined (not only on the
-        // admit click) also covers auto-admit, where no click ever happens.
+        // An admitted joiner arrives as a normal peer: remove its lobby row here (not only
+        // on the admit click) so auto-admit is covered too.
         dropPending(coordPeerId);
         if (maxClients > 0) {
             std::lock_guard<std::mutex> lk(mtx);
@@ -1183,9 +1091,8 @@ struct WebRtcTransport::Impl {
     }
 
     void onCoordHostPeerLeft(const std::string& coordPeerId) {
-        // Covers the joiner that closed its window while still knocking: its
-        // row must go, or the host is left offering to admit someone who has
-        // already gone.
+        // The joiner closed its window while still knocking: drop its row, or the host
+        // is left offering to admit someone who has gone.
         dropPending(coordPeerId);
         PeerId pid = kInvalidPeerId;
         {
@@ -1199,10 +1106,8 @@ struct WebRtcTransport::Impl {
         closePeerInternal(pid);
     }
 
-    // ── JEF-27 coordinator mode: JOINER ──────────────────────────────────
-    // The joiner is the OFFERER. It joins by code; the roster (or a fallback
-    // peer-joined) tells it the host's coordinator connId, then it builds the
-    // offerer PeerConnection + "jefe" channel and relays SDP/ICE to the host.
+    // ── Coordinator mode: JOINER ─────────────────────────────────────────
+    // The joiner is the OFFERER: it joins by code, learns the host's connId from the roster, then relays SDP/ICE.
 
     void buildClientOfferer(const std::string& hostCoordId) {
         {
@@ -1246,7 +1151,7 @@ struct WebRtcTransport::Impl {
         init.reliability.maxPacketLifeTime.reset();
         init.reliability.maxRetransmits.reset();
 
-        // JEF-28: open BOTH the "jefe" (State) and "assets" (Assets) channels.
+        // Open BOTH the "jefe" (State) and "assets" (Assets) channels.
         std::shared_ptr<rtc::DataChannel> dc, assetsDc;
         try {
             dc = pc->createDataChannel("jefe", init);
@@ -1323,15 +1228,8 @@ struct WebRtcTransport::Impl {
         }
     }
 
-    /**
-     * Host-side coordinator error (create-session refused, or the socket gave
-     * up reconnecting).
-     *
-     * Surfaces as ConnectFailed so the dialog stops showing a session that
-     * does not exist. The most common cases are auth-required (no token — the
-     * desktop sign-in is not built yet) and insufficient-credits, both of
-     * which are the user's problem to see, not stderr's.
-     */
+    // Host-side coordinator error (create-session refused, or reconnect gave up): surfaces as
+    // ConnectFailed so the dialog stops showing a session that does not exist.
     void onCoordHostError(const std::string& code, const std::string& msg) {
         std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                      code.c_str(), msg.c_str());
@@ -1350,9 +1248,8 @@ struct WebRtcTransport::Impl {
         std::fprintf(stderr, "WebRtcTransport: coordinator error [%s] %s\n",
                      code.c_str(), msg.c_str());
         recordCoordError(code, msg);
-        // Refused (join-denied) or failed while waiting: either way we are no
-        // longer in the lobby, and leaving the flag set would leave the panel
-        // saying "waiting for the host" forever after a refusal.
+        // Refused (join-denied) or failed while waiting: we are no longer in the lobby, so
+        // clear the flag or the panel says "waiting for the host" forever.
         { std::lock_guard<std::mutex> lk(mtx); awaitingAdmission = false; }
         pushEvent(TransportEventType::ConnectFailed, kHostPeerId);
     }
@@ -1370,11 +1267,8 @@ struct WebRtcTransport::Impl {
         coord->onSignal([d](std::string from, SignalMessage m) {
             d->onCoordHostSignal(from, m);
         });
-        // Route host-side coordinator errors into the SAME sink the joiner
-        // path uses. Printing to stderr alone made a refused create-session
-        // (auth-required, insufficient-credits) invisible in the app: the
-        // dialog sat there as though it had worked, and nothing reached the
-        // remote log the user actually reads.
+        // Route host-side coordinator errors into the SAME sink the joiner path uses, so a
+        // refused create-session (auth-required, insufficient-credits) is visible in the app.
         coord->onError([d](std::string c, std::string m) {
             d->onCoordHostError(c, m);
         });
@@ -1477,10 +1371,8 @@ std::vector<PendingJoiner> WebRtcTransport::pendingJoiners() {
 }
 
 void WebRtcTransport::decideJoiner(const std::string& joinerId, bool admit) {
-    // Drop the row FIRST, and only send if it was actually still pending. Two
-    // clicks (or a click landing just after the joiner gave up) then send one
-    // decision at most -- the coordinator would reject the second anyway, but
-    // it would surface as an error the host did nothing to deserve.
+    // Drop the row FIRST and send only if it was still pending, so a double click sends
+    // at most one decision (the coordinator would reject the second as an error).
     bool wasPending = false;
     {
         std::lock_guard<std::mutex> lk(d_->mtx);
@@ -1503,9 +1395,7 @@ bool WebRtcTransport::startHost(unsigned short port, const std::string& /*passwo
     if (d_->hosting) return false;
     d_->maxClients = maxClients;
 
-    // JEF-27: coordinator mode dials the cloud coordinator instead of a LAN
-    // SignalingServer. Everything downstream (PeerConnection/DataChannel/event
-    // queue) is shared.
+    // Coordinator mode dials the cloud coordinator instead of a LAN SignalingServer.
     if (d_->coordinatorMode) return d_->startHostCoordinator();
 
     // Register callbacks BEFORE start() (documented SignalingServer contract).
@@ -1530,24 +1420,18 @@ void WebRtcTransport::stopHost() {
     d_->teardownAll();
 }
 
-// ── Client role ─────────────────────────────────────────────────────────
-// connect() mirrors RakNet's semantics: it returns as soon as the async attempt
-// has STARTED (the signaling socket began dialing). The actual WebRTC session
-// completes later and is reported via events (ConnectAccepted on channel open,
-// ConnectFailed/ConnectionLost on failure). InitLogger/Preload were already run
-// in the ctor (idempotent, refcounted, balanced by Cleanup in the dtor).
+// ── Client role: connect() returns once the async attempt has STARTED; the outcome arrives
+// via events (ConnectAccepted / ConnectFailed / ConnectionLost).
 bool WebRtcTransport::connect(const std::string& ip, unsigned short port,
                               const std::string& /*password*/) {
     if (d_->hosting || d_->client) return false;  // one role per instance
     initLoggerOnce();
 
-    // JEF-27: coordinator mode joins the cloud session by code instead of
-    // dialing a LAN SignalingServer at ip:port.
+    // Coordinator mode joins the cloud session by code instead of dialing a LAN SignalingServer.
     if (d_->coordinatorMode) return d_->connectCoordinator();
 
-    // Mark the session active BEFORE the async dial so the WS-thread callbacks
-    // (which may fire immediately) see a live session. A racing disconnect()
-    // flips this false and the callbacks bail.
+    // Mark the session active BEFORE the async dial so WS-thread callbacks see a live
+    // session; a racing disconnect() flips it false and they bail.
     {
         std::lock_guard<std::mutex> lk(d_->mtx);
         d_->clientActive = true;
@@ -1589,13 +1473,8 @@ void WebRtcTransport::send(const unsigned char* data, int len, PeerId target,
     const bool assets = (channel == Channel::Assets);
     const size_t n = static_cast<size_t>(len);
 
-    // Resolve target PeerIds under the lock (RakNet parity, gfcTransport.h):
-    //   broadcastExcluding=false → `target` ONLY; target==kInvalidPeerId → NOBODY.
-    //   broadcastExcluding=true  → everyone EXCEPT `target`
-    //                              (target==kInvalidPeerId → everyone).
-    // We collect PeerIds (not raw channels) so the assets path can address each
-    // peer's per-peer chunk queue; a peer whose target channel isn't open yet is
-    // skipped (same drop-if-not-open behavior the state channel always had).
+    // Resolve target PeerIds under the lock (RakNet parity, gfcTransport.h): broadcastExcluding=
+    // false -> `target` only (kInvalidPeerId -> nobody); true -> everyone EXCEPT `target`.
     std::vector<PeerId>                              statePeers;   // state fast path
     std::vector<std::shared_ptr<rtc::DataChannel>>   stateChans;
     std::vector<PeerId>                              assetPeers;   // chunked path
@@ -1631,9 +1510,8 @@ void WebRtcTransport::send(const unsigned char* data, int len, PeerId target,
         return;
     }
 
-    // Assets channel (JEF-28 Task 4): split into ordered chunks per peer, then
-    // drain with bufferedAmount backpressure. Enqueue for every target first,
-    // then drain — draining one peer must not delay queueing the others.
+    // Assets channel: enqueue chunks for every target first, then drain, so draining one
+    // peer does not delay queueing the others.
     for (PeerId pid : assetPeers) d_->enqueueAssetMessage(pid, data, n);
     for (PeerId pid : assetPeers) d_->drainAssetQueue(pid);
 }
@@ -1650,12 +1528,8 @@ int WebRtcTransport::connectionCount() {
     return n;
 }
 
-// JEF-30: per-peer WebRTC stats. Lock discipline mirrors send()/drainAssetQueue:
-// hold Impl::mtx ONLY long enough to copy each peer's id + pc shared_ptr + open
-// flag out; then query libdatachannel (rtt/bytes/getSelectedCandidatePair) with
-// the lock RELEASED — those calls touch the rtc worker/SCTP state and may block,
-// and holding mtx across them would stall the poll/send path. Every read is
-// best-effort: a throwing/absent value degrades to the field's default.
+// Per-peer WebRTC stats. Hold Impl::mtx only long enough to copy each peer's id + pc out,
+// then query libdatachannel with the lock RELEASED (those calls may block). Reads are best-effort.
 std::vector<PeerStats> WebRtcTransport::peerStats() {
     struct Snapshot {
         PeerId id;
@@ -1691,9 +1565,8 @@ std::vector<PeerStats> WebRtcTransport::peerStats() {
         try {
             rtc::Candidate local, remote;
             if (s.pc->getSelectedCandidatePair(&local, &remote)) {
-                // Classify by the REMOTE candidate: a Relayed remote means the
-                // media flows through a TURN server; anything else is a direct
-                // (host / server-reflexive / peer-reflexive) path.
+                // Classify by the REMOTE candidate: Relayed means a TURN server; anything
+                // else is a direct path.
                 switch (remote.type()) {
                     case rtc::Candidate::Type::Relayed:
                         ps.path = PeerStats::Path::Relay;

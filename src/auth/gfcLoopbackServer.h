@@ -1,26 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
-// ---------------------------------------------------------------------------
-// One-shot loopback listener for the OAuth redirect (JEF-31).
-//
-// The system browser sends Google's redirect here, carrying `code` and
-// `state`. The listener exists ONLY for the duration of one sign-in attempt.
-//
-// Three properties are load-bearing, and all three are easy to get wrong:
-//
-//   * Bound to 127.0.0.1, NEVER QHostAddress::Any. `Any` would publish the
-//     sign-in listener to the whole LAN.
-//   * Port 0 — the OS assigns. There is then no fixed port for a hostile local
-//     process to squat ahead of us. Google accepts any port on a loopback
-//     redirect URI, so nothing needs registering.
-//   * Exactly one request, then closed; plus a hard timeout. A listener that
-//     outlives its sign-in is a standing local attack surface for no benefit.
-//
-// Anything on the machine can connect here — that is inherent to loopback
-// redirect, and it is why PKCE (not the listener's privacy) is what actually
-// protects the exchange. The `state` check is what stops another local process
-// from completing ITS sign-in into our session.
-// ---------------------------------------------------------------------------
+// One-shot loopback listener for the OAuth redirect: bound to 127.0.0.1 (never Any) on an
+// OS-assigned port, one request then closed, with a hard timeout.
 
 #include <QObject>
 #include <QPointer>

@@ -5,12 +5,7 @@ from jefecheck import locators
 
 
 def test_lut_panel_lists_install_luts(app):
-    """The autoload pass should drop ≥1 .cube/.lut into the panel.
-
-    The repo's src/FX/ ships 13 LUTs; bundle build copies them into
-    Contents/Resources/FX/. We assert ≥2 because index 0 is the implicit
-    'No LUT' slot — anything beyond that is a real autoloaded LUT.
-    """
+    """Autoload drops >=1 .cube/.lut into the panel (index 0 is the implicit 'No LUT' slot, so assert >=2)."""
     list_widget = app.by_object_name(locators.LUT_LIST)
     items = list_widget.find_elements(AppiumBy.XPATH, "*")
     assert len(items) >= 2, f"Expected ≥2 LUT entries, got {len(items)}"

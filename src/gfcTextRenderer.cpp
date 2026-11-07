@@ -19,18 +19,14 @@
 #include <GL/glu.h>
 #endif
 
-// ---------------------------------------------------------------------------
 // Singleton
-// ---------------------------------------------------------------------------
 
 GfcTextRenderer& textRenderer() {
     static GfcTextRenderer instance;
     return instance;
 }
 
-// ---------------------------------------------------------------------------
 // Construction / destruction
-// ---------------------------------------------------------------------------
 
 GfcTextRenderer::GfcTextRenderer()
     : fontLoaded(false)
@@ -61,9 +57,7 @@ GfcTextRenderer::~GfcTextRenderer() {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Font loading
-// ---------------------------------------------------------------------------
 
 static bool readFileToVector(const std::string &path, std::vector<unsigned char> &out) {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
@@ -105,9 +99,7 @@ bool GfcTextRenderer::loadBoldFont(const std::string &fontPath) {
     return false;
 }
 
-// ---------------------------------------------------------------------------
 // State setters
-// ---------------------------------------------------------------------------
 
 void GfcTextRenderer::setSize(float pixelSize) { currentSize = pixelSize; }
 void GfcTextRenderer::setBold(bool bold) { currentBold = bold; }
@@ -125,9 +117,8 @@ void GfcTextRenderer::setShadowBlur(float radius) { shadowBlurRadius = radius; }
 void GfcTextRenderer::setHintMode(HintMode mode) {
     if (hintMode != mode) {
         hintMode = mode;
-        // Invalidate caches — need to rebake with new hinting. May be called
-        // live from the Preferences dialog with no GL context current, so
-        // defer the actual glDeleteTextures to the next draw.
+        // Rebake with new hinting. May be called with no GL context current
+        // (Preferences dialog), so defer glDeleteTextures to the next draw.
         queueAtlasInvalidation();
     }
 }
@@ -149,9 +140,7 @@ void GfcTextRenderer::queueAtlasInvalidation() {
     boldAtlasCache.clear();
 }
 
-// ---------------------------------------------------------------------------
 // Atlas baking
-// ---------------------------------------------------------------------------
 
 static FT_Library ftLibrary() {
     static FT_Library lib = nullptr;
@@ -345,9 +334,7 @@ GfcFontAtlas& GfcTextRenderer::getAtlas() {
     return cache[key];
 }
 
-// ---------------------------------------------------------------------------
 // Drawing
-// ---------------------------------------------------------------------------
 
 // Emit quads for a line of text at (x, y) baseline. No GL state changes.
 static void emitQuads(const GfcBakedGlyph *glyphs, const char *str, int len,
@@ -398,16 +385,8 @@ void GfcTextRenderer::drawLine(const char *str, int len, float x, float y) {
     glDisable(GL_TEXTURE_RECTANGLE_ARB);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
 
-    // Texture env: the glyph atlas is GL_ALPHA, and the plate/image draw
-    // leaves GL_REPLACE active (gfcSequence/gfcframe). Under REPLACE a
-    // GL_ALPHA texture takes its alpha straight from the texture and IGNORES
-    // the vertex-color alpha — so setColor()'s alpha had no effect and faded
-    // text (e.g. the viewport feedback overlay) never dimmed, it just popped
-    // off when the message cleared. We can't use plain GL_MODULATE either:
-    // GL_ALPHA's RGB is 0, which would render black text. GL_COMBINE lets us
-    // take RGB from the primary color (colored text, same as REPLACE) while
-    // multiplying alpha = primaryAlpha * textureAlpha (so colorA fades).
-    // Restored by the glPopAttrib(GL_ALL_ATTRIB_BITS) below.
+    // GL_ALPHA atlas under GL_REPLACE ignores vertex-color alpha; GL_COMBINE takes RGB
+    // from the primary color and multiplies alpha (GL_MODULATE would give black text).
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
     glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB,   GL_REPLACE);
     glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB,   GL_PRIMARY_COLOR);
@@ -558,9 +537,7 @@ void GfcTextRenderer::draw3D(const char *str, float x, float y, float z) {
     endPixelOrtho();
 }
 
-// ---------------------------------------------------------------------------
 // Measurement
-// ---------------------------------------------------------------------------
 
 float GfcTextRenderer::textWidth(const char *str) {
     if (!str || !fontLoaded) return 0;
@@ -596,9 +573,7 @@ void GfcTextRenderer::measure(const char *str, int &w, int &h, int wrapWidth) {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Word wrapping
-// ---------------------------------------------------------------------------
 
 std::vector<GfcTextRenderer::TextLine> GfcTextRenderer::wrapText(const char *str, float maxWidth) {
     std::vector<TextLine> lines;
@@ -669,9 +644,7 @@ std::vector<GfcTextRenderer::TextLine> GfcTextRenderer::wrapText(const char *str
     return lines;
 }
 
-// ---------------------------------------------------------------------------
 // FLTK-compatible wrapper functions
-// ---------------------------------------------------------------------------
 
 void gfc_gl_font(int face, int size) {
     // FL_HELVETICA=0, FL_BOLD=1, FL_ITALIC=2
@@ -704,9 +677,7 @@ float gfc_gl_dpiscale() {
     return textRenderer().getDPIScale();
 }
 
-// ---------------------------------------------------------------------------
 // System font enumeration
-// ---------------------------------------------------------------------------
 
 #include <dirent.h>
 #include <sys/stat.h>

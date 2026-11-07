@@ -1,9 +1,6 @@
-"""Help → System Specs dialog: smoke test on the menu wiring.
-
-Qt's macOS NSMenuItem AX bridge does NOT propagate QAction::objectName
-into the AX `identifier` attribute — every menu item shows up with
-`identifier='qt_itemFired:'`. The reliable lookup is by `title`.
-"""
+"""Help → System Specs dialog: smoke test on the menu wiring. Qt's macOS
+NSMenuItem AX bridge does not propagate objectName (every item is
+`identifier='qt_itemFired:'`), so look items up by `title`."""
 from appium.webdriver.common.appiumby import AppiumBy
 
 

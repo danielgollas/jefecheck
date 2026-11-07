@@ -206,9 +206,8 @@ int testHandle()
 
 void gfcTrackManager::initializeWidgets()
 {
-    // Qt: each sequence gets a stateful gfcSequenceGUI_Qt. The drop
-    // handler / future load panel will push filename + load params via
-    // setters; loadPreview reads them back through getXxx().
+    // Qt: each sequence gets a stateful gfcSequenceGUI_Qt; the drop handler
+    // pushes filename + load params via setters and loadPreview reads them back.
     for (int i = 0; i < GFC_MAX_SEQUENCES; ++i) {
         sequences[i].myGUI  = new gfcSequenceGUI_Qt;
         sequences[i].trackID = 'A' + i;

@@ -38,9 +38,7 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 {
 	if (inExr == outExr)
 	{
-		// Refused rather than handled. Writing over the source means a failure
-		// half way through destroys the only copy, and the whole point of a
-		// stamp is that the original pixels survive.
+		// Refused: writing over the source would destroy the only copy on failure.
 		setErr(err, "stamp: input and output must differ");
 		return false;
 	}
@@ -57,9 +55,7 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 	const int h = src.height;
 	const int srcChannels = src.nchannels;
 
-	// Read the source as float. EXR is float or half on disk, and going
-	// through float keeps a half source lossless rather than quantising it on
-	// the way past -- this must not alter the beauty.
+	// Read as float so a half source stays lossless and the beauty is unaltered.
 	std::vector<float> pixels((size_t)w * h * srcChannels);
 	if (!in->read_image(0, 0, 0, srcChannels, OIIO::TypeDesc::FLOAT, pixels.data()))
 	{
@@ -109,12 +105,8 @@ bool writeStamped(const OIIO::ImageSpec& src, const std::vector<float>& pixels,
 	OIIO::ImageSpec outSpec = src;          // carries every source attribute through
 	outSpec.nchannels = outChannels;
 
-	// When a spec has per-channel formats, that array must be exactly nchannels
-	// long. Raising nchannels without extending it made the writer read formats
-	// past the end of the array and misalign the conversion of every channel:
-	// on a real CG render (mixed half RGBA + float Z) R and G came back as NaN
-	// and 1.748, and the notes layer as 3.4e38. Keep each source channel's own
-	// storage type, and store the notes channels in the source's primary format.
+	// Per-channel formats need an array exactly nchannels long, or the writer reads past its end and misaligns channels.
+	// Keep each source channel's type; store the notes channels in the source's primary format.
 	if (!src.channelformats.empty())
 	{
 		outSpec.channelformats = src.channelformats;
@@ -128,10 +120,8 @@ bool writeStamped(const OIIO::ImageSpec& src, const std::vector<float>& pixels,
 		}
 	}
 
-	// Channel names: keep the source's, then append the notes layer. OIIO and
-	// OpenEXR both treat a dotted prefix as a layer, which is exactly how
-	// gfcImageLoaderOIIO already discovers layers on the way back IN -- so a
-	// frame stamped here reads back as a selectable "notes" layer.
+	// Keep the source channel names, then append the notes layer; the dotted
+	// prefix is what gfcImageLoaderOIIO reads back as a selectable layer.
 	outSpec.channelnames = src.channelnames;
 	if ((int)outSpec.channelnames.size() < srcChannels)
 	{
@@ -224,9 +214,7 @@ std::string gfcNoteStamp::readEmbeddedJson(const std::string& exrPath)
 	return out;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-// ---------------------------------------------------------------------------
+// ---- Self-test ----
 
 namespace
 {
@@ -249,13 +237,8 @@ int noteStampSelfTest()
 	const std::string outPath = dir + "/stamped.exr";
 	std::remove(outPath.c_str());
 
-	// The source is deliberately MIXED-format: R, G, B, A stored as half and Z
-	// as float, declared through per-channel channelformats -- the same shape
-	// as a real CG render (openexr-images/ScanLines/Blobbies.exr). An earlier
-	// version of this test used a uniform half source and passed while the
-	// stamp corrupted every mixed-format EXR it touched. Values vary per pixel
-	// and per channel so any channel shift or misalignment shows up, and all
-	// are exactly representable in half, so the comparison can be tight.
+	// Deliberately mixed-format source (R,G,B,A half, Z float) like a real CG render;
+	// values are exactly representable in half so the comparison can be tight.
 	const int w = 8, h = 4;
 	const int srcCh = 5;
 	auto srcValue = [](int x, int y, int c) -> float

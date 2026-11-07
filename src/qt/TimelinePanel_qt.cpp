@@ -32,9 +32,8 @@
 namespace {
 constexpr int kScrubberPad = 4;  // horizontal padding inside the lane area
 
-// Shared pixel<->frame mapping used by both the scrubber and the track
-// rows so their frames line up vertically. `width` is the widget width;
-// the playable strip [from, to] sits inside `kScrubberPad` on each side.
+// Shared pixel<->frame mapping for the scrubber and the track rows so their
+// frames line up. The playable strip [from, to] sits inside `kScrubberPad`.
 int frameFromXMapped(int x, int width, int from, int to) {
     const int span = to - from;
     if (span <= 0) return from;
@@ -105,9 +104,7 @@ void TimelineScrubber_Qt::paintEvent(QPaintEvent*) {
     p.fillRect(QRect(x_from, strip_y, x_to - x_from, strip_h),
                QColor(48, 48, 48));
 
-    // In/out highlight — slightly lighter so the user can see what
-    // they'll actually play through. Skipped if in/out collapse to a
-    // point or invert.
+    // In/out highlight, slightly lighter; skipped if in/out collapse or invert.
     if (out_ > in_) {
         const int x_in  = xFromFrame(in_);
         const int x_out = xFromFrame(out_);
@@ -136,10 +133,8 @@ void TimelineScrubber_Qt::mouseMoveEvent(QMouseEvent* e) {
 // ---- TimelineTracks_Qt ----
 
 TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
-    // Modest floor; the timeline shares the bottom dock row with the Plate
-    // Manager (horizontal split), so it takes that row's height — we must
-    // NOT force a taller floor or the timeline ends up taller than the
-    // plate cards. Thumbnails scale to whatever lane height the row gives.
+    // Modest floor: the timeline shares the bottom dock row with the Plate Manager,
+    // so a taller floor would make it taller than the plate cards.
     setMinimumHeight(96);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setObjectName("timeline.tracks");
@@ -159,9 +154,8 @@ int TimelineTracks_Qt::laneTopY(int track) const {
 }
 
 void TimelineTracks_Qt::refresh() {
-    // The timeline view spans the in/out range across the full widget
-    // width — in/out are the zoom control (tick size = width / span), not
-    // sub-markers of a larger total. So map everything through [in, out].
+    // The timeline spans the in/out range across the full widget width (in/out
+    // are the zoom control), so map everything through [in, out].
     const int from = jefe::qt::getInPoint();
     const int to   = std::max(jefe::qt::getOutPoint(), from);
     const int cur  = jefe::qt::getCurrentFrame();
@@ -241,9 +235,8 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
         const QChar letter('A' + i);
 
         if (!s.present) {
-            // Empty lane: just the track letter. The load hints live in
-            // the widget tooltip so a long string can't force the panel
-            // wide.
+            // Empty lane: just the track letter; load hints live in the tooltip so a
+            // long string can't force the panel wide.
             p.setPen(QColor(90, 90, 90));
             p.drawText(8, y + lh / 2 + 4, QString(letter));
             continue;
@@ -397,9 +390,8 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
     const int loadedEndFrame =
         segments_[track].empty() ? s.firstLoadedFrame : segments_[track].back().second;
 
-    // A thumbnail is always its natural width (stripH × frame aspect) — never
-    // squeezed or cropped. The aspect is the same for every frame, so probe
-    // one decoded thumbnail; fall back to 16:9 until one exists.
+    // A thumbnail is always its natural width (stripH x frame aspect), never
+    // squeezed or cropped. Probe one decoded thumbnail; fall back to 16:9.
     double aspect = 16.0 / 9.0;
     {
         const QPixmap probe = thumbPixmap(track, s.firstLoadedFrame - s.rangeStart);
@@ -408,10 +400,8 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
     }
     const int naturalW = std::max((int)(stripH * aspect + 0.5), 2);
 
-    // Walk the visible loaded frames left→right; draw each at its own tick x
-    // (centered), at natural width, and skip any frame whose thumbnail would
-    // overlap the previous drawn one. Sparse → every frame, tick-aligned with
-    // gaps; dense → auto-samples and packs. "Min width = natural ratio."
+    // Walk the visible loaded frames left to right, each centered at its tick x at
+    // natural width, skipping any that would overlap the previous thumbnail.
     const int firstVis = std::max(s.firstLoadedFrame, from_);
     const int lastVis  = std::min(loadedEndFrame, to_);
     const double rightLimit = width() - kScrubberPad - naturalW;
@@ -573,7 +563,7 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     auto makeButton = [this](const QIcon& icon, const QString& tip,
                               const QString& objectName,
                               const QString& accessibleName) {
-        auto* b = new QPushButton(this);   // JEF-19: icon transport buttons
+        auto* b = new QPushButton(this);   // icon transport buttons
         b->setIcon(icon);
         b->setIconSize(QSize(16, 16));
         b->setToolTip(tip);
@@ -658,7 +648,7 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     fpsSpin_->setAccessibleName("Target FPS");
     transport->addWidget(fpsSpin_);
 
-    thumbsBtn_ = new QPushButton(this);   // JEF-19: filmstrip icon
+    thumbsBtn_ = new QPushButton(this);   // filmstrip icon
     thumbsBtn_->setIcon(jefe::qticons::filmstrip());
     thumbsBtn_->setIconSize(QSize(16, 16));
     thumbsBtn_->setCheckable(true);
@@ -673,11 +663,8 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         if (tracks_) tracks_->refresh();
     });
 
-    // JEF-19: give every control in the transport row the same height so the
-    // whole line reads as one band. Match the TALLEST control — the number
-    // spinboxes are taller than the combo/buttons because of the dark theme's
-    // spinbox padding — and poll after polishing so the QSS-applied heights
-    // are reflected in sizeHint().
+    // Give every transport-row control the same height: match the TALLEST (the
+    // spinboxes) and poll after polishing so QSS heights are in sizeHint().
     loopMode_->ensurePolished();
     frameSpin_->ensurePolished();
     fpsSpin_->ensurePolished();
@@ -739,14 +726,12 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
 }
 
 void TimelinePanel_Qt::refreshFromPlayback() {
-    // Track rows update independently of the transport values (their
-    // loaded fill grows during decode even while frame/range hold), and
-    // refresh() is itself cache-gated, so do it before the fast-path.
+    // Track rows update independently of the transport values (the loaded fill
+    // grows during decode); refresh() is cache-gated.
     tracks_->refresh();
 
-    // Keep the thumbnails toggle button in sync if the state was changed
-    // elsewhere (e.g. the track right-click menu). Signal-blocked so it
-    // doesn't re-enter setThumbnailsEnabled.
+    // Keep the thumbnails toggle in sync if changed elsewhere (e.g. the track
+    // right-click menu); signal-blocked so it doesn't re-enter.
     if (thumbsBtn_) {
         const bool on = jefe::qt::getThumbnailsEnabled();
         if (thumbsBtn_->isChecked() != on) {
@@ -764,9 +749,8 @@ void TimelinePanel_Qt::refreshFromPlayback() {
     const float fps = jefe::qt::getTargetFPS();
     const bool playing = jefe::qt::isPlaying();
 
-    // Fast-path: nothing changed since the last tick, so every widget
-    // setter below would be a value-identical no-op that still walks
-    // QAccessible / AppKit / AttributeGraph. Skip the whole pass.
+    // Fast-path: nothing changed since the last tick, so every setter below
+    // would be a no-op that still walks QAccessible / AppKit. Skip the pass.
     if (lastCacheValid_
         && from == lastFrom_ && to == lastTo_ && cur == lastCur_
         && in == lastIn_ && out == lastOut_ && loop == lastLoop_
@@ -781,11 +765,8 @@ void TimelinePanel_Qt::refreshFromPlayback() {
         const QSignalBlocker bFps(fpsSpin_);
         const QSignalBlocker bLoop(loopMode_);
 
-        // The timeline view is the in/out range, so the current-frame spin
-        // is bounded by [in, out]. In/out themselves are freely editable
-        // (the zoom control) and NOT capped to track length. Re-set ranges
-        // only when in/out changed — setRange fires AX notifications even
-        // when the bounds match.
+        // The view is the in/out range, so the current-frame spin is bounded by [in, out].
+        // Re-set ranges only when in/out changed: setRange fires AX notifications.
         constexpr int kRangeMax = 9999999;
         if (in != lastIn_ || out != lastOut_) {
             frameSpin_->setRange(std::max(in, 1), std::max(out, 1));

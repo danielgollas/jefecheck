@@ -1,11 +1,5 @@
-"""File → Render… dialog: PR-39a smoke tests.
-
-The dialog is modal; opening it via the File menu requires the Mac AX
-bridge dance (menu-item lookup by title). Once open, the dialog's own
-widgets surface their objectNames as identifiers — assert on field
-presence without actually firing the render (sync render would freeze
-the test session).
-"""
+"""File → Render… dialog smoke tests: assert field presence without firing the render
+(a sync render would freeze the test session)."""
 import pytest
 from appium.webdriver.common.appiumby import AppiumBy
 
@@ -51,10 +45,7 @@ def test_render_dialog_format_combo_has_six_entries(app):
     """
     _open_render_dialog(app)
     combo = app.by_object_name("dialog.render.format.combo")
-    # On Mac2 a QComboBox exposes its option count via its child
-    # static-text rows once opened, but the closed combo's `value`
-    # attribute returns the currently-selected entry's text. We don't
-    # need to enumerate — assert the default entry is JPEG.
+    # A closed Mac2 QComboBox's `value` is the selected entry's text; assert the default is JPEG.
     val = combo.get_attribute("value") or combo.text or ""
     assert "JPEG" in val, f"Expected default format JPEG, got: {val!r}"
     app.by_object_name("dialog.render.done.button").click()

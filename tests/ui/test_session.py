@@ -1,11 +1,7 @@
-"""Session menu / locator presence.
-
-macOS folds Qt's menu bar into the system menu bar (a separate AX tree), so
-menu QActions aren't reliably addressable by objectName under Mac2 — these
-constants document the canonical names. Functional save/open/recover and the
-CC-favorites round-trip are verified manually per the implementation plan.
-This test keeps the locators importable and parse-checked.
-"""
+"""Session menu / locator presence. macOS folds Qt's menu bar into the system
+menu bar (a separate AX tree), so menu QActions aren't addressable by
+objectName under Mac2; this test keeps the locators importable and
+parse-checked."""
 from jefecheck import locators
 
 

@@ -7,9 +7,7 @@
 #include <cstring>
 
 namespace {
-// Toggleable noisy log so you can verify in a smoke test that PlateCard
-// signals are flowing into the GUI state. Off by default; enable via
-// JEFECHECK_QT_PLATE_LOG=1.
+// Noisy log to verify PlateCard signals reach the GUI state. Enable with JEFECHECK_QT_PLATE_LOG=1.
 bool plateLogEnabled() {
     static int cached = -1;
     if (cached < 0) {
@@ -30,23 +28,12 @@ void plog(int idx, const char* fmt, ...) {
 }
 
 float aspectFromString(const std::string& s) {
-    // "original" / empty / unparseable → -1 is gfcPlate's sentinel for "use the
-    // frame's native size" (calculatePolySizesCropEtc). Returning 1.0 here
-    // forced a square (960x960) poly that squashed the image; -1 keeps native.
+    // "original" / empty / unparseable -> -1, gfcPlate's sentinel for "use the
+    // frame's native size"; 1.0 would force a square poly and squash the image.
     if (s.empty() || s == "original") return -1.0f;
 
-    // The UI shows the cinematographic width:height convention ("2.39:1",
-    // "16:9"), but gfcPlate::calculatePolySizesCropEtc treats `aspect` as
-    // content HEIGHT/WIDTH: polySizeX*aspect is the target content height, so a
-    // value < 1 letterboxes a landscape source and a value > 1 reshapes it to
-    // portrait. So parse the displayed W:H and return its reciprocal H/W. A
-    // bare number ("2.39") is read as W:1. This also makes arbitrary custom
-    // ratios work, not just the presets.
-    //
-    // JEF-21: this previously returned W/H (e.g. 2.39), which the renderer read
-    // as height/width — so every landscape preset produced content TALLER than
-    // the frame, i.e. off-frame (invisible) crop bars and an inverted
-    // anamorphic squeeze instead of a letterbox.
+    // UI shows W:H ("2.39:1"), but calculatePolySizesCropEtc treats `aspect` as content HEIGHT/WIDTH: parse W:H and return H/W.
+    // A bare number ("2.39") is read as W:1.
     const char* p = s.c_str();
     char* end = nullptr;
     const double w = std::strtod(p, &end);
@@ -129,9 +116,7 @@ float gfcPlateGUI_Qt::getBrightness() { return brightness_; }
 float gfcPlateGUI_Qt::getContrast()   { return contrast_; }
 float gfcPlateGUI_Qt::getSaturation() { return saturation_; }
 
-// In the Qt backend we don't cache widget pointers — the widgets push
-// values into us via setX() from their signal connections, rather than
-// us reading values back out via the widget pointer (FLTK pattern).
+// The Qt backend doesn't cache widget pointers; widgets push values in via setX().
 void gfcPlateGUI_Qt::assignTXWidget(void*) {}
 void gfcPlateGUI_Qt::assignTYWidget(void*) {}
 void gfcPlateGUI_Qt::assignRZWidget(void*) {}

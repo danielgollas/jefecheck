@@ -50,9 +50,7 @@ gfcNoteMerge::Result gfcNoteMerge::mergeInto(gfcReview& local, gfcReview&& incom
 	return result;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-// ---------------------------------------------------------------------------
+// ---- Self-test ----
 int noteMergeSelfTest()
 {
 	int pass = 0;

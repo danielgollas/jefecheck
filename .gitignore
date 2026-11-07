@@ -50,3 +50,9 @@ Thumbs.db
 .cache/
 
 .superpowers/
+
+# Implementation plans and prototypes stay local
+docs/superpowers/plans/
+docs/superpowers/prototypes/
+docs/superpowers/handoffs/
+docs/superpowers/*-explainer.html

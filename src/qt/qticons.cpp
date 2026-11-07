@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// qticons.cpp — programmatic icon factory (JEF-19). See qticons.h.
+// qticons.cpp — programmatic icon factory. See qticons.h.
 #include "qticons.h"
 
 #include <cmath>
@@ -268,9 +268,8 @@ void pSpeaker(QPainter& p, qreal s, const QColor& c, bool muted) {
 }
 
 void pRecent(QPainter& p, qreal s, const QColor& c) {
-    // "history" clock: a full clock face with hands, plus a counter-clockwise
-    // arrow arcing over the top-left (the standard "history" affordance). A
-    // FULL circle (not one broken at the top) avoids reading as a power symbol.
+    // "history" clock: a full clock face with hands plus a counter-clockwise
+    // arrow over the top-left. A FULL circle avoids reading as a power symbol.
     const QPointF ctr(s*0.5, s*0.56);
     const qreal R = s*0.24;
     auto onCircle = [&](qreal deg, qreal rad) {

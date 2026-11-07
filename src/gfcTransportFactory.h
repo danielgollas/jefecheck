@@ -2,13 +2,8 @@
 #ifndef GFCTRANSPORTFACTORY_H
 #define GFCTRANSPORTFACTORY_H
 
-// JEF-24: runtime transport selection. The factory is the ONE networking TU
-// allowed to include concrete transport headers (gfcRakNetTransport.h and,
-// from Task 3, gfcWebRtcTransport.h); client/server construct via
-// makeTransport() and stay decoupled from the implementations.
-//
-// Selection: env JEFECHECK_TRANSPORT ("webrtc" -> WebRtc, anything else or
-// unset -> RakNet). RakNet remains the default — zero regression.
+// Runtime transport selection; the ONE networking TU allowed to include concrete
+// transport headers. Env JEFECHECK_TRANSPORT ("webrtc" -> WebRtc, otherwise RakNet).
 
 #include <memory>
 #include <string>
@@ -27,46 +22,24 @@ enum class TransportKind { RakNet, WebRtc };
 // Reads JEFECHECK_TRANSPORT once per call; "webrtc" -> WebRtc, else RakNet.
 TransportKind transportKindFromEnv();
 
-// JEF-27: full transport-selection config. The default-constructed value
-// (kind from env, coordinatorMode=false, empty strings) reproduces the JEF-24
-// behavior exactly (RakNet default / LAN-WebRTC via JEFECHECK_TRANSPORT).
-// When coordinatorMode is on (or coordinatorUrl is non-empty), the WebRTC
-// transport is selected and dials the cloud coordinator instead of a LAN
-// SignalingServer/Client.
+// Full transport-selection config. Default-constructed: RakNet, or LAN-WebRTC via
+// JEFECHECK_TRANSPORT; coordinatorMode (or a coordinatorUrl) dials the cloud coordinator.
 struct TransportConfig {
     TransportKind kind = transportKindFromEnv();
     bool coordinatorMode = false;
     std::string coordinatorUrl;   // ws:// or wss:// coordinator endpoint
     std::string sessionCode;      // join-only (the code to join); host: empty
     std::string password;
-    // JEF-31: coordinator access JWT. Empty = anonymous; the coordinator
-    // answers auth-required if it gates create-session, and the caller runs
-    // sign-in then retries.
+    // Coordinator access JWT. Empty = anonymous; the coordinator answers
+    // auth-required if it gates create-session, and the caller signs in and retries.
     std::string authToken;
-    // JEF-37: nickname shown to the host in the admit prompt when knocking.
+    // Nickname shown to the host in the admit prompt when knocking.
     std::string displayName;
     // Host-side session policy (knock/password/timeout/cap) from the selected
     // session group. Ignored for joiners — only a host sends it.
     SessionPolicy policy;
-    /**
-     * JEF-37: shared secret that lets the host's OWN loopback client skip the
-     * lobby.
-     *
-     * A cloud host also connects to its own session as a client (that loopback
-     * is how the host mirrors state). With knocking on, that client is just
-     * another joiner — so the host ends up waiting to admit itself, and until
-     * it does the session has no participants at all.
-     *
-     * The host generates a random nonce, hosts with it, and hands the same
-     * value to its loopback as that client's COORDINATOR-level display name
-     * (the app-level nickname, and so the participant list, is untouched). A
-     * knock whose display name matches is admitted without ever reaching the
-     * UI. Everyone else still knocks.
-     *
-     * Deliberately not a coordinator-side rule: this works against a
-     * coordinator already deployed, and against an anonymous self-hosted one
-     * where there is no identity to match on.
-     */
+    // Shared secret that lets the host's OWN loopback client skip the lobby: it is
+    // sent as the client's coordinator-level display name and admitted without a knock.
     std::string selfJoinNonce;
 };
 

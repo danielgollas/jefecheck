@@ -109,9 +109,8 @@ QString ReviewPackageDialog_Qt::formatBytes(qint64 bytes) {
         value /= 1024.0;
         ++unit;
     }
-    // Rounding to one decimal can carry the displayed value up to 1024 (e.g.
-    // 1048525 bytes is 1023.95 KB, which rounds to "1024.0 KB"); bump the
-    // unit once more so the value shown is always what actually displays.
+    // Rounding to one decimal can carry the value up to 1024 (1048525 bytes is
+    // "1024.0 KB"); bump the unit once more so the shown value is accurate.
     if (unit > 0 && unit < 4 && std::round(value * 10.0) / 10.0 >= 1024.0) {
         value /= 1024.0;
         ++unit;

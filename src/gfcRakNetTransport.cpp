@@ -27,9 +27,8 @@ RakNetTransport::RakNetTransport()
     : peer_(RakNetworkFactory::GetRakPeerInterface()) {}
 
 RakNetTransport::~RakNetTransport() {
-    // Matches legacy behavior: peers were never destroyed (empty dtors,
-    // gfcnetworkclient.cpp:75 / gfcnetworkserver.cpp:76). Keep identical
-    // lifetime semantics for zero behavior change; revisit in JEF-23.
+    // Peers are never destroyed (empty dtors in the client/server), so lifetime
+    // semantics are kept identical.
 }
 
 bool RakNetTransport::startHost(unsigned short port, const std::string& password,
@@ -68,9 +67,7 @@ bool RakNetTransport::poll(TransportEvent& ev) {
     Packet* p = peer_->Receive();
     while (p) {
         if (p->data[0] == ID_MODIFIED_PACKET) {
-            // Legacy behavior was log-and-continue (discard the tampered
-            // packet and keep draining the queue). Loop form per reviewer
-            // preference instead of recursing.
+            // Log-and-continue: discard the tampered packet and keep draining.
             peer_->DeallocatePacket(p);
             p = peer_->Receive();
             continue;
@@ -93,12 +90,8 @@ bool RakNetTransport::poll(TransportEvent& ev) {
                                : TransportEventType::ConnectionLost;
             break;
         default:
-            // App packet or unknown system id. Since JEF-23, ITransport
-            // carries FRAMES ([u8 version][u16 msgType LE][payload]); the
-            // leading RakNet envelope byte (GFCNET_USER_PACKET_BASE, added
-            // by send() below) is stripped here before the frame is emitted.
-            // A packet shorter than 2 bytes is a bare envelope byte with no
-            // frame — malformed; drop it and keep draining the queue.
+            // App packet or unknown system id: strip the RakNet envelope byte added by
+            // send(); a packet under 2 bytes has no frame, so drop it.
             if (p->length < 2) {
                 peer_->DeallocatePacket(p);
                 p = peer_->Receive();
@@ -119,21 +112,14 @@ void RakNetTransport::send(const unsigned char* data, int len, PeerId target,
     SystemAddress addr = (target == kInvalidPeerId)
                              ? UNASSIGNED_SYSTEM_ADDRESS
                              : toSystemAddress(target);
-    // JEF-23: `data` is a jefe::wire frame. Prepend the single RakNet
-    // envelope byte so RakNet routes the packet as user data (every app
-    // packet arrives with first byte GFCNET_USER_PACKET_BASE == 91 — RakNet
-    // only needs one user id; the real msgType lives in the frame header).
-    // One copy per send is fine at our message rates.
+    // `data` is a jefe::wire frame. Prepend the RakNet envelope byte
+    // (GFCNET_USER_PACKET_BASE == 91); the real msgType is in the frame header.
     std::vector<unsigned char> packet;
     packet.reserve((size_t)len + 1);
     packet.push_back(GFCNET_USER_PACKET_BASE);
     packet.insert(packet.end(), data, data + len);
-    // JEF-28: map Channel::Assets → RakNet ordering channel 1 (a second
-    // reliable-ordered stream) so bulk asset bodies don't head-of-line-block
-    // state traffic on channel 0. On the RECEIVE side RakNet doesn't cheaply
-    // hand back the ordering channel, so poll() leaves TransportEvent.channel
-    // at State for RakNet — the QoS separation is best-effort here (legacy
-    // transport); dispatch is by GFCNETID regardless, so this is harmless.
+    // Channel::Assets maps to RakNet ordering channel 1 so bulk bodies don't block
+    // state traffic; poll() reports State on receive (dispatch is by GFCNETID).
     const char orderingChannel = (channel == Channel::Assets) ? 1 : 0;
     peer_->Send((const char*)packet.data(), (int)packet.size(), HIGH_PRIORITY,
                 RELIABLE_ORDERED, orderingChannel, addr, broadcastExcluding);
@@ -147,11 +133,8 @@ int RakNetTransport::connectionCount() {
     return (int)peer_->NumberOfConnections();
 }
 
-// JEF-30: RakNet has no WebRTC stats API (no per-peer rtt/bytes/candidate pair
-// we surface here). Degrade gracefully: enumerate the connected systems and emit
-// one basic PeerStats each — connected=true, path=Unknown, rttMs=-1, bytes=0.
-// The per-peer PeerId is available (GetConnectionList), so we key each entry to
-// its real peer rather than a single aggregate.
+// RakNet has no WebRTC stats API: emit one basic PeerStats per connected
+// system (connected=true, path=Unknown, rttMs=-1, bytes=0), keyed by PeerId.
 std::vector<PeerStats> RakNetTransport::peerStats() {
     std::vector<PeerStats> out;
     unsigned short count = 0;
@@ -161,9 +144,8 @@ std::vector<PeerStats> RakNetTransport::peerStats() {
     const unsigned short cap = count;   // buffer capacity for the fetch
     unsigned short filled = cap;
     if (!peer_->GetConnectionList(systems.data(), &filled)) return out;
-    // GetConnectionList only writes up to `cap` entries but reports the true
-    // active count in `filled`; clamp so a peer that connected between the two
-    // calls can't push us past the buffer.
+    // GetConnectionList writes at most `cap` entries but reports the true count
+    // in `filled`; clamp so a late connect cannot overrun the buffer.
     const unsigned short n = filled < cap ? filled : cap;
     out.reserve(n);
     for (unsigned short i = 0; i < n; ++i) {

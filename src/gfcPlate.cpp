@@ -24,17 +24,13 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 
 #include "gfchistogram.h"
 
-// "Screen" framebuffer for the active GL context. 0 under FLTK; under Qt's
-// QOpenGLWidget it's defaultFramebufferObject() (published each frame by
-// GlViewport_Qt::paintGL via jefe::qt::setScreenFBO). See gfcPlate.h.
+// "Screen" framebuffer for the active GL context: the QOpenGLWidget's
+// defaultFramebufferObject(), set each frame via jefe::qt::setScreenFBO.
 GLuint gScreenFBO = 0;
 
 namespace {
-// Unpacks a remote participant's packed-RGB color (the same value the server
-// assigns at join and the chat bubbles use: (r<<24)|(g<<16)|(b<<8)) into
-// float components in [0,1] for glColor4f. This keeps a participant's pointer
-// the SAME color as their chat bubble name. 0 = unset -> neutral gray. Mirrors
-// unpackRGB() in gfcnetworkmanager.cpp.
+// Unpacks a participant's packed RGB ((r<<24)|(g<<16)|(b<<8)) into [0,1]
+// floats so a pointer matches their chat bubble color; 0 = unset -> gray.
 inline void gfcUnpackPointerColor(int packed, float& r, float& g, float& b) {
     if (packed == 0) { r = g = b = 0.6f; return; }
     r = ((packed >> 24) & 0xff) / 255.0f;
@@ -179,14 +175,8 @@ gfcPlate::gfcPlate ( void )
     ssLocBrightness = ssLocContrast = ssLocSaturation = -1;
     useShader=false;
 	
-	// Color-correction neutral defaults. Without these the members are
-	// left uninitialized: gamma reads as 0 and lutID as 0 (a valid-looking
-	// LUT texture id, since useLUT tests lutID>=0), so recompileSuperShader
-	// builds a broken shader (gamma 0 + a LUT that was never loaded) and the
-	// plate renders flat gray. It stays gray because the config never changes
-	// until the user nudges a color-correction control — which is exactly the
-	// "gray until I touch exposure" symptom. A freshly-loaded plate (playlist
-	// load, remote-synced load) must display correctly with no interaction.
+	// Neutral CC defaults: uninitialized gamma/lutID read as 0 (a valid-looking LUT id), the shader
+	// builds broken and the plate renders flat gray until a CC control is touched.
 	gamma=1.0;
 	exposure=0.0;
 	brightness=1.0;
@@ -196,9 +186,8 @@ gfcPlate::gfcPlate ( void )
 	lutSize=0;
 	lutType=CubeLUT::JEFECHECK1D;
 	currentLUTType=CubeLUT::JEFECHECK1D;
-	// Shader-config trackers: usingTextureType=-1 forces the first recompile
-	// to build a real (passthrough) shader; the rest must not report a LUT/CC
-	// as already active before buildShader runs.
+	// Shader-config trackers: usingTextureType=-1 forces the first recompile to
+	// build a real passthrough shader.
 	usingLUT=0;
 	usingGammaExp=0;
 	usingBCS=0;
@@ -225,9 +214,7 @@ void gfcPlate::capturePointerCoords() {	//TEST CAPTURING THE GL COORDINATES FROM
         glGetDoublev( GL_MODELVIEW_MATRIX,modelView );
         glGetDoublev( GL_PROJECTION_MATRIX,projection );
 
-        // Qt build doesn't have a `mw` global yet; remote-pointer
-        // capture isn't wired. Single-plate Qt rendering will route
-        // viewport coords through the active GlViewport_Qt directly.
+        // Remote-pointer capture isn't wired in the Qt build.
         return;
         prevPointerX=posX;
         prevPointerY=posY;
@@ -602,9 +589,8 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 		glAttachObjectARB(ssProgram,ssVertexShader);
 		glAttachObjectARB(ssProgram,ssFramgmentShader);
 
-		// A new program invalidates every location from the old one. Reset
-		// first, so a failed link can never leave stale locations behind that
-		// startSuperShader() would then write through into the wrong slots.
+		// A new program invalidates every location from the old one; reset first
+		// so a failed link leaves no stale locations for startSuperShader() to use.
 		ssLocLUT = ssLocLutSize = ssLocImage = -1;
 		ssLocR = ssLocG = ssLocB = ssLocA = -1;
 		ssLocGamma = ssLocExposure = -1;
@@ -624,9 +610,7 @@ void gfcPlate::buildShader(int useLut,int useGammaExp, int useBCS, int useRGBAMa
 			printf ( "SuperShader: Program linked OK\n");
 			ssProgramCreated=1;
 
-			// Resolved once here instead of on every frame in
-			// startSuperShader(). Locations are fixed for the life of a linked
-			// program, and this block is the only place ssProgram is relinked.
+			// Resolved once here; locations are fixed for the life of a linked program.
 			ssLocLUT        = glGetUniformLocationARB(ssProgram, "LUT");
 			ssLocLutSize    = glGetUniformLocationARB(ssProgram, "lutSize");
 			ssLocImage      = glGetUniformLocationARB(ssProgram, "image");
@@ -867,12 +851,8 @@ void gfcPlate::updateAnimations() {
     //we separete it from the drawing function
     //so we can have a smooth animation but still only draw when something has changed.
     pointerStorage.updateFaders();
-    // Clamp the rotation timestep. When the app is idle the tick loop stops
-    // calling playbackManager.update(), so the first getTimestep() after a
-    // flip/flop is triggered from idle is the whole idle gap (seconds) — which
-    // makes updateRot overshoot and snap to the target in one step instead of
-    // animating. Cap it so the animation always plays smoothly; playback pacing
-    // still uses the raw timestep, so this doesn't affect frame timing.
+    // Clamp the rotation timestep: after idle the first getTimestep() is the whole idle gap, so updateRot would snap.
+    // Playback pacing still uses the raw timestep.
     float animStep = playbackManager.getTimestep();
     if (animStep > 0.05f) animStep = 0.05f;
     updateRot(animStep,flip,flop);
@@ -1250,43 +1230,17 @@ void gfcPlate::updateRot ( float timeStep, bool flip, bool flop ) {
 
 }
 
-// ---------------------------------------------------------------------------
-// Note overlay
-//
-// Notes are stored in normalised image space: x and y in 0..1 across the
-// source image, with (0,0) the image's TOP-LEFT corner and y increasing
-// DOWNWARD. That is what a drawing tool naturally produces (a mouse position
-// is top-down) and what the sidecar stores.
-//
-// GL at both call sites is y-up: the on-screen ortho is
-// glOrtho(-w/2, w/2, -h/2, h/2) (gfcplatemanager.cpp) and the FBO's is
-// glOrtho(-fboVP.w/2, fboVP.w/2, -fboVP.h/2, fboVP.h/2) above. In both, the
-// image's top row lives at POSITIVE y. That one fact is the whole Y story:
-// callers pass a rect whose origin sits at the TOP and whose height is
-// NEGATIVE, so normalised y walks downward. gfcNoteOverlay::mapPoint is
-// deliberately a straight affine map with no flip of its own, so the decision
-// belongs here, in the code that knows how the plate is oriented.
-//
-// Flip and flop are deliberately NOT expressed in the rect. On screen this is
-// called inside startTransform()/endTransform(), so the plate's flip
-// (glRotatef(rX,1,0,0)) and flop (glRotatef(rY,0,1,0)) are already in the
-// modelview and carry the notes around with the image — which is the entire
-// point of storing geometry in image space rather than screen pixels.
-// Negating the rect on top of that would flip the notes twice and mirror them
-// relative to the frame they annotate. The export path applies no flip/flop at
-// all today (its modelview is identity), so it needs none either.
-// ---------------------------------------------------------------------------
-// Declared in src/qt/SequenceLoadBridge_qt.h. Forward-declared rather than
-// included: it takes and returns only plain types, so the rendering chain can
-// ask the question without pulling a Qt header into this TU (developer_notes §1).
+// ---- Note overlay ----
+// Notes are image-space y-DOWN but GL is y-up: pass a top-origin rect with NEGATIVE height.
+// Flip/flop are already in the modelview (startTransform); negating for them mirrors notes twice.
+
+// Declared in src/qt/SequenceLoadBridge_qt.h; forward-declared to keep Qt headers out of this TU (developer_notes §1).
 namespace jefe { namespace qt { bool notesVisible(); } }
 
 void gfcPlate::drawNoteOverlay(float originX, float originY, float extentX, float extentY,
                                bool honorVisibilityToggle) {
-    // Bare `N` hides notes ON SCREEN. It deliberately does NOT reach the
-    // export path: burn-in is governed only by its own Render-dialog
-    // checkbox, so what you hide from your own view can never silently
-    // change what a delivered render contains.
+    // Bare `N` hides notes on screen only. Burn-in is governed by its own
+    // Render-dialog checkbox, so hiding notes never changes a delivered render.
     if (honorVisibilityToggle && !jefe::qt::notesVisible())
         return;
 
@@ -1375,12 +1329,7 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                     }*/
 
                     //if ( polySizeX!=fboVP.w || polySizeY!=fboVP.h )
-                    // For a render with an explicit output size, size the FBO
-                    // to the target (the source quad is sampled across it, so
-                    // it scales to fit); otherwise track the source texture
-                    // size. This is what makes the render's resolution control
-                    // actually change the output (and gives video a constant
-                    // size across frames of differing source dimensions).
+                    // With an explicit render output size the FBO is sized to it (the source quad scales to fit); otherwise it tracks the source texture.
                     int wantW = textureSize.w;
                     int wantH = textureSize.h;
                     if (forRender && renderParams.outWidth > 0 && renderParams.outHeight > 0) {
@@ -1452,14 +1401,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                     //JUST A TEST: with the binded fboTexture, draw to the FBO and move on to next step
                     for ( int i=0; i<fxStack.getNumOfFXs();i++ ) {
 
-                        // fxAt() returns a reference into fxStack's backing vector instead of
-                        // getFX()'s by-value copy -- avoids deep-copying the FX's whole param
-                        // tree (nested std::map/std::vector of widget structs with std::strings)
-                        // every frame for every active effect, and lets any state bind() caches
-                        // on the object actually persist between frames instead of living and
-                        // dying on a discarded temporary. Safe here because nothing in this loop
-                        // body adds/removes FXs from fxStack, which is the only thing that could
-                        // invalidate the reference.
+                        // fxAt() returns a reference, not getFX()'s by-value copy; safe
+                        // because nothing in this loop adds or removes FXs from fxStack.
                         gfcFX& theFX=fxStack.fxAt(i);
                         if ( theFX.active ) {
                             //"swap" the active FBO
@@ -1525,13 +1468,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
         }
 
         if ( forRender ) {
-            // The FX loop leaves the composited FX result in
-            // fboTexturev[activeFBO], but the super-shader (gamma/exposure/BCS
-            // + the plate's LUT) is only applied by startSuperShader() in the
-            // on-screen LAST pass below — which runs AFTER the read-back. So
-            // apply it here into the other FBO buffer, then read that back;
-            // otherwise rendered frames drop colour correction and the LUT.
-            // (Single-buffered-FX GPUs can't ping-pong; they keep old behaviour.)
+            // The FX result is in fboTexturev[activeFBO]; apply the super-shader here into the other FBO buffer (it otherwise
+            // runs only in the on-screen last pass), so renders keep CC and the LUT. Single-buffered-FX GPUs can't ping-pong.
             if (!forceSingleBufferedFX) {
                 glPushAttrib(GL_ALL_ATTRIB_BITS);
                 const int fxResultTex = fboTexturev[activeFBO];
@@ -1564,29 +1502,17 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                 glDisable(GL_TEXTURE_RECTANGLE_ARB);
                 stopSuperShader();
 
-                // Burn the notes in, if asked. Same reasoning as on screen:
-                // after the super-shader, never through it. Before the crop
-                // bake below, so a baked letterbox covers markup that fell
-                // outside the framing, exactly as it does on screen.
-                //
-                // (Only on the ping-pong path. A forceSingleBufferedFX GPU
-                // can't run this pass at all, which is why it already loses
-                // colour correction in renders; notes share that limitation
-                // rather than inventing a second, untested composite.)
+                // Burn notes in after the super-shader (never through it) and before the crop bake, so a baked letterbox covers markup outside the framing.
+                // Ping-pong path only.
                 if (renderParams.burnInNotes) {
-                    // honorVisibilityToggle=false: this is the EXPORT path.
-                    // The user ticked "Burn in notes"; whether they happen to
-                    // have notes hidden on their own screen is irrelevant to
-                    // what the render must contain.
+                    // honorVisibilityToggle=false: this is the export path, so the
+                    // on-screen hide toggle must not affect the render.
                     drawNoteOverlay(-fboVP.w/2.0f,  fboVP.h/2.0f,
                                      (float)fboVP.w, -(float)fboVP.h,
                                      /*honorVisibilityToggle*/ false);
                 }
 
-                // Optional: bake the aspect/crop letterbox into the render.
-                // The crop bars are computed in poly space; scale them to the
-                // FBO. Opaque black (a letterbox is solid, unlike the on-screen
-                // semi-transparent preview).
+                // Optional: bake the crop letterbox (poly space scaled to the FBO) as opaque black.
                 if (renderParams.bakeCropBars && cropOn && polySizeX && polySizeY) {
                     const double sx = (double)fboVP.w / (double)polySizeX;
                     const double sy = (double)fboVP.h / (double)polySizeY;
@@ -1729,13 +1655,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
             glBindTexture ( GL_TEXTURE_RECTANGLE_ARB,0 );
             glDisable ( GL_TEXTURE_RECTANGLE_ARB );
 
-            // Annotations, on the transformed quad we just textured, so they
-            // track pan, zoom, flip and flop with the image. This is AFTER
-            // stopSuperShader() on purpose: markup must never go through
-            // colour correction, or a note's red would shift when exposure is
-            // pulled and the markup would start lying about itself. The quad
-            // spans +/-polySize/2 with the image's top at +polySizeY/2, hence
-            // the negative height.
+            // Annotations go on the transformed quad (tracking pan/zoom/flip/flop), after stopSuperShader() so CC never shifts markup.
+            // The image top is at +polySizeY/2, hence the negative height.
             drawNoteOverlay(-polySizeX/2.0f,  polySizeY/2.0f,
                              polySizeX,      -polySizeY);
         }
@@ -1870,14 +1791,8 @@ void gfcPlate::draw3Drect(int pcurrentFrame) {
 			stopSuperShader();
             glColorMask(1,1,1,1);
 
-            // Annotations. Same rect and the same after-the-super-shader rule
-            // as the FX path in draw3DrectWithFX(); see drawNoteOverlay().
-            //
-            // The plan named only draw3DrectWithFX, but that function only
-            // runs when the plate has an active FX or is rendering — a plate
-            // with a clean stack comes through here instead, and that is the
-            // common case. Notes that vanished the moment you removed an FX
-            // would be a worse bug than the one line this costs.
+            // Annotations: same rect and after-the-super-shader rule as the FX
+            // path. A plate with a clean stack comes through here, not the FX path.
             drawNoteOverlay(-polySizeX/2.0f,  polySizeY/2.0f,
                              polySizeX,      -polySizeY);
         }
@@ -2611,9 +2526,8 @@ void gfcPlate::drawText() {
         glDisable(GL_TEXTURE_RECTANGLE_ARB);
         glDisable(GL_TEXTURE_2D);
 
-        // Size + color come from the Preferences → Text page (via the text
-        // renderer's label style), so those controls drive this overlay. Opacity
-        // stays per-plate (textDisplayOpacity).
+        // Size and color come from Preferences -> Text via the renderer's label
+        // style; opacity stays per-plate (textDisplayOpacity).
         float lr, lg, lb;
         textRenderer().labelColor(lr, lg, lb);
         gfc_gl_font(FL_HELVETICA, (int)textRenderer().labelSize());

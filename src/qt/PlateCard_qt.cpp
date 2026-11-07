@@ -22,10 +22,8 @@
 #include <QVBoxLayout>
 
 namespace {
-// One height for every control on the card (combos, spinboxes, buttons) so
-// rows line up exactly. Combos enforce a min height from their padding, so
-// the card stylesheet trims that padding to let everything sit at this
-// compact height under labels-on-top.
+// One height for every control on the card so rows line up; the card stylesheet trims
+// combo padding to allow this compact height.
 constexpr int kCtrlHeight = 22;
 
 QDoubleSpinBox* makeSpin(QWidget* parent, double min, double max, double step,
@@ -42,13 +40,8 @@ QDoubleSpinBox* makeSpin(QWidget* parent, double min, double max, double step,
     return s;
 }
 
-// A "label on top" cell: a small gray caption above the control, returned
-// as a QVBoxLayout the caller adds to the row. An empty caption still
-// reserves the caption's height, so captionless controls (Flip/Flop, LUT)
-// bottom-align with the labeled ones. `capObjectName`, when set, names the
-// caption QLabel — used so the "Track" caption can serve as the plate-
-// activation click target (a QLabel doesn't consume the press, so it
-// propagates to PlateCard_Qt::mousePressEvent → clicked()).
+// A "label on top" cell: a gray caption above the control (an empty caption still reserves its
+// height). `capObjectName` names the caption; a click on it propagates to PlateCard_Qt::mousePressEvent.
 QVBoxLayout* labeledCell(QWidget* parent, const QString& caption, QWidget* w,
                          const QString& capObjectName = QString()) {
     auto* v = new QVBoxLayout();
@@ -63,9 +56,8 @@ QVBoxLayout* labeledCell(QWidget* parent, const QString& caption, QWidget* w,
     return v;
 }
 
-// Draw a double-headed mirror arrow into a 2x-dpr pixmap, tinted `color`.
-// vertical=true → up/down arrow (Flip, mirrors top-bottom); false → left/
-// right arrow (Flop, mirrors left-right). Logical canvas is 14x14.
+// Draw a double-headed mirror arrow into a 2x-dpr pixmap, tinted `color`: vertical =
+// up/down (Flip), else left/right (Flop). Logical canvas is 14x14.
 QPixmap makeMirrorPixmap(bool vertical, const QColor& color) {
     QPixmap pm(28, 28);
     pm.setDevicePixelRatio(2.0);
@@ -104,9 +96,8 @@ QIcon makeMirrorIcon(bool vertical) {
     return icon;
 }
 
-// Compact icon-only toggle button (Flip/Flop). Tight padding so the card row
-// stays narrow; fixed size keeps the 14px glyph from being clipped by the
-// theme's default button padding.
+// Compact icon-only toggle button (Flip/Flop); fixed size keeps the 14px glyph from
+// being clipped by the theme's default padding.
 QPushButton* makeIconToggle(QWidget* parent, const QIcon& icon,
                             const QString& tip) {
     auto* b = new QPushButton(parent);
@@ -134,10 +125,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
 
     setFrameShape(QFrame::StyledPanel);
     setFrameShadow(QFrame::Plain);
-    // No artificial minimum: let the layout's own minimumSizeHint govern so
-    // the card never shrinks below its tightly-packed contents. The Plate
-    // Manager's scroll area then shows a horizontal scrollbar when the dock
-    // is narrower, instead of squashing fixed-width children into overlap.
+    // No artificial minimum: the layout's minimumSizeHint governs, so a narrow dock
+    // scrolls horizontally instead of squashing fixed-width children into overlap.
 
     setStyleSheet(
         "QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox, "
@@ -148,9 +137,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
         "QAbstractSpinBox { padding: 1px 2px; }"
     );
 
-    // Plate-card object names follow `plate.<idx>.<role>` so UI tests can
-    // target a specific plate without depending on tab order. Setting
-    // setAccessibleName as well so the AX label matches the on-screen text.
+    // Object names follow `plate.<idx>.<role>` so UI tests can target a plate; the
+    // accessible name matches the on-screen text.
     objPrefix_ = QStringLiteral("plate.%1").arg(id);
     setObjectName(objPrefix_ + ".card");
     setAccessibleName(QStringLiteral("Plate %1").arg(id + 1));
@@ -165,10 +153,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     trackBox_->setObjectName(objPrefix_ + ".track.combo");
     trackBox_->setAccessibleName("Track");
 
-    // Layer picker. Lives between Track and Aspect so it reads as "this
-    // track, this layer, this aspect". Always visible: it shows "Main"
-    // by default (the file's primary channels) and adds the EXR sub-layers
-    // (e.g. "right", "diffuse") when a multi-layer file is loaded.
+    // Layer picker between Track and Aspect. Always visible: "Main" plus the EXR
+    // sub-layers (e.g. "right", "diffuse") of a multi-layer file.
     layerBox_ = new QComboBox(this);
     // Fixed width — wide enough for "Main" and typical layer names; longer
     // names elide. (The card no longer grows, so nothing expands here.)
@@ -178,10 +164,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     layerBox_->setAccessibleName("Layer");
     layerBox_->setToolTip("Image layer / channel group driving this plate");
 
-    // Aspect ratio control with the letterbox toggle folded into its popup.
-    // The checkbox keeps the old `crop.button` leaf objectName so existing
-    // UI-test locators resolve it once the popup is open; its visible/AX
-    // label is "Letterbox".
+    // Aspect ratio control with the letterbox toggle in its popup. The checkbox keeps the
+    // `crop.button` leaf objectName for UI-test locators; its visible label is "Letterbox".
     aspectCrop_ = new AspectCropCombo_Qt(this);
     aspectCrop_->setPresets({"original", "16:9", "4:3", "2.39:1", "2.35:1", "1.85:1", "1.37:1"});
     // Fixed, just wide enough for "source" (the default label). Layer takes
@@ -194,9 +178,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     aspectCrop_->setCropAccessibleName("Letterbox");
     aspectCrop_->setCropToolTip("Letterbox to the selected aspect ratio (black bars)");
 
-    // Icon-only toggles: Flip = vertical mirror (up/down arrow), Flop =
-    // horizontal mirror (left/right arrow). accessibleName stays "Flip"/
-    // "Flop" so AX titles and UI-test locators are unchanged.
+    // Icon-only toggles: Flip = vertical mirror, Flop = horizontal. accessibleName stays
+    // "Flip"/"Flop" so AX titles and UI-test locators are unchanged.
     flipBtn_ = makeIconToggle(this, makeMirrorIcon(/*vertical=*/true),
                               "Flip vertically (mirror top–bottom)");
     flipBtn_->setObjectName(objPrefix_ + ".flip.button");
@@ -209,19 +192,14 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     rgbaBtn_ = new QPushButton("RGB", this);
     rgbaBtn_->setCheckable(true);
     rgbaBtn_->setToolTip("Cycle RGBA channel display (shortcuts r/g/b/a)");
-    // Fixed size with tight padding so the button doesn't jitter as its
-    // label cycles RGB → R → G → B (different glyph widths). 40px clears
-    // the widest label ("RGB") with the reduced padding.
+    // Fixed size so the button doesn't jitter as its label cycles RGB -> R -> G -> B.
     rgbaBtn_->setFixedSize(36, kCtrlHeight);
     rgbaBtn_->setStyleSheet("QPushButton { padding: 1px 4px; }");
     rgbaBtn_->setObjectName(objPrefix_ + ".rgba.button");
     rgbaBtn_->setAccessibleName("RGBA channel");
 
-    // Narrow fields — sized to fit "00.00" (theme adds 6px padding + 1px
-    // border each side). Pan/rotation get a touch more for the sign / 3rd
-    // digit ("-360.00").
-    // Snug fields sized for "00.00" (kNarrowSpin); Pan X/Y get the wider
-    // width (pixel offsets run 3–4 digits); rotation fits "360.00".
+    // Narrow fields sized for "00.00" (kNarrowSpin); Pan X/Y get the wider width (pixel
+    // offsets run 3-4 digits); rotation fits "360.00".
     constexpr int kNarrowSpin = 38;  // Zoom + color fields — fits "00.00"/"-9.99"
     constexpr int kWideSpin   = 40;  // Pan X/Y — fits "0000" / "-999"
     constexpr int kRotSpin    = 48;
@@ -240,21 +218,16 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
 
     lutBox_ = new QComboBox(this);
     lutBox_->addItem("No LUT");
-    // Ignored width policy: a QComboBox normally sizes to its longest item,
-    // which would balloon the card once LUTs autoload. Ignored makes the
-    // combo's sizeHint irrelevant — it simply fills the space row 2 has
-    // left over (the card width is set by the wider transforms row), so the
-    // LUT never extends past row 1's right edge. The popup still shows full
-    // names; long current selections elide. Min keeps it usable.
+    // Ignored width policy: a QComboBox sizes to its longest item, which would balloon the
+    // card once LUTs autoload. The popup shows full names; long selections elide.
     lutBox_->setMinimumWidth(50);
     lutBox_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     lutBox_->setFixedHeight(kCtrlHeight);
     lutBox_->setObjectName(objPrefix_ + ".lut.combo");
     lutBox_->setAccessibleName("LUT");
 
-    // Color controls cap at 9.99 (the useful range for grade tweaks).
-    // gamma/contrast/saturation are non-negative; exposure/brightness are
-    // bipolar (±9.99). Two-decimal display.
+    // Color controls cap at 9.99; gamma/contrast/saturation are non-negative, exposure/
+    // brightness bipolar.
     gammaSpin_      = makeSpin(this, 0.0,   9.99, 0.01, 1.0, kNarrowSpin);
     gammaSpin_->setObjectName(objPrefix_ + ".gamma.spin");
     gammaSpin_->setAccessibleName("Gamma");
@@ -271,28 +244,20 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     saturationSpin_->setObjectName(objPrefix_ + ".saturation.spin");
     saturationSpin_->setAccessibleName("Saturation");
 
-    // Top-level layout: one swappable content_ child holding the caption
-    // labels and per-row layouts. Created once here; rebuildContent() builds
-    // (and on later setVertical calls rebuilds) it. Keeping the row assembly
-    // in rebuildContent lets the wide-short and narrow-tall forms share one
-    // code path while the control widgets are simply reparented across swaps.
+    // Top-level layout: one swappable content_ child built by rebuildContent(), so the
+    // wide-short and narrow-tall forms share one code path (controls are reparented).
     auto* top = new QVBoxLayout(this);
     top->setContentsMargins(0, 0, 0, 0);
     top->setSpacing(0);
     rebuildContent();
 
-    // Wire signals to the GUI state object. gfcPlate reads through the
-    // same interface, so each connect() below is the actual control →
-    // rendering pipeline link.
+    // Wire signals to the GUI state object that gfcPlate reads through.
     auto* g = gui_;
     using QDS = QDoubleSpinBox;
     using QCB = QComboBox;
 
-    // Route through the bridge (rather than g->setTrackChoice) so the
-    // change actually reaches gfcPlate::track. setTrackChoice on the GUI
-    // alone only updates the parallel GUI value object — gfcPlate's
-    // rendering path reads through plateManager.setTrackOnPlate, which
-    // also clears the histogram cache and pushes a feedback message.
+    // Route through the bridge, not g->setTrackChoice: gfcPlate reads via
+    // plateManager.setTrackOnPlate, which also clears the histogram cache.
     const int boundPlateIdForTrack = id_;
     connect(trackBox_,  QOverload<int>::of(&QCB::currentIndexChanged),
             this, [boundPlateIdForTrack](int idx) {
@@ -304,12 +269,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
         jefe::qt::propagatePlateChanges();
     });
 
-    // Layer change → bridge does the heavy lifting (rewrite the track's
-    // gfcSequenceGUI channel name, re-decode the preview, and kick off
-    // a full async sequence reload so every cached frame matches the
-    // newly-selected layer). The combo's items are layer name strings
-    // pulled from the OIIO loader's discovery, so the text round-trips
-    // unchanged.
+    // Layer change: the bridge rewrites the track's channel name, re-decodes the preview
+    // and kicks off an async reload so every cached frame matches the new layer.
     {
         const int boundPlateId = id_;
         connect(layerBox_, &QCB::currentTextChanged,
@@ -322,11 +283,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
                 });
     }
 
-    // Every plate-card slot that writes to the Qt GUI must follow with a
-    // jefe::qt::propagatePlateChanges() call. Without it, the plate's
-    // actual fields stay stale and the super-shader never picks up the
-    // new value — controls appear inert. The LUT and Layer combos below
-    // route through bridge functions that already handle propagation.
+    // Every plate-card slot that writes to the Qt GUI must follow with
+    // jefe::qt::propagatePlateChanges(), or the controls appear inert (the LUT/Layer combos use bridge functions).
     connect(aspectCrop_, &AspectCropCombo_Qt::cropToggled, this, [g](bool on) {
         g->setCrop(on ? 1 : 0); jefe::qt::propagatePlateChanges();
     });
@@ -353,10 +311,8 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     connect(rotSpin_,  QOverload<double>::of(&QDS::valueChanged),
             this, [g](double v) { g->setRZ((float)v); jefe::qt::propagatePlateChanges(); });
 
-    // Route LUT change through the bridge so plates[id_].setLUT actually
-    // binds the new GL texture and recompiles the super-shader. Calling
-    // gui_->setLUT alone only writes the GUI value; the rendering path
-    // wouldn't see it until a separate updateValuesFromGUI cycle.
+    // Route LUT change through the bridge so plates[id_].setLUT binds the GL texture and
+    // recompiles the super-shader; gui_->setLUT alone only writes the GUI value.
     const int boundPlateId = id_;
     connect(lutBox_,  QOverload<int>::of(&QCB::currentIndexChanged),
             this, [boundPlateId](int idx) {
@@ -386,18 +342,12 @@ void PlateCard_Qt::setVertical(bool vertical) {
 }
 
 void PlateCard_Qt::rebuildContent() {
-    // Build the new content into a fresh child widget. Adding the shared
-    // control widgets to nc's layouts reparents them into nc — intended:
-    // the members survive (and their signal connections persist across
-    // reparenting); only the caption QLabels and layout containers are nc's
-    // own children, so deleting the old content can't strand a caption.
+    // Build the new content into a fresh child widget. Adding the shared controls to nc's
+    // layouts reparents them (signal connections persist); only captions/layouts are nc's own.
     auto* nc = new QWidget(this);
 
     if (!vertical_) {
-        // ---- Wide-short (horizontal dock): two rows. ----
-        // Flip/Flop share one cell (a blank caption keeps them bottom-
-        // aligned with the labeled fields). A fresh mirrorBox parented to
-        // nc each rebuild so it dies with the old content.
+        // ---- Wide-short (horizontal dock): two rows; Flip/Flop share one bottom-aligned cell. ----
         auto* mirrorBox = new QWidget(nc);
         auto* mirrorLay = new QHBoxLayout(mirrorBox);
         mirrorLay->setContentsMargins(0, 0, 0, 0);
@@ -414,10 +364,8 @@ void PlateCard_Qt::rebuildContent() {
         xformGroup->addLayout(labeledCell(nc, "Y",    panYSpin_));
         xformGroup->addLayout(labeledCell(nc, "Rot",  rotSpin_));
 
-        // Row 1 — Track (fixed) + Layer/Aspect + packed transforms. The
-        // "Track" caption carries the `track.label` objectName so it's the
-        // plate-activation click target. Flip/Flop moved to row 2 so Layer/
-        // Aspect don't clip.
+        // Row 1: Track (fixed) + Layer/Aspect + packed transforms. The "Track" caption
+        // carries the `track.label` objectName as the plate-activation click target.
         auto* row1 = new QHBoxLayout();
         row1->setSpacing(2);
         row1->addLayout(labeledCell(nc, "Track",  trackBox_, objPrefix_ + ".track.label"));
@@ -452,10 +400,7 @@ void PlateCard_Qt::rebuildContent() {
         outer->addLayout(row1);
         outer->addLayout(row2);
     } else {
-        // ---- Narrow-tall (vertical dock): five stacked rows, ~200px. ----
-        // The color row (row D, five fields) sets the card's width. Each row
-        // is a QHBoxLayout of cells with a trailing stretch so cells pack
-        // left; row E lets the LUT fill instead.
+        // ---- Narrow-tall (vertical dock): five stacked rows; the color row sets the width. ----
         auto* mirrorBox = new QWidget(nc);
         auto* mirrorLay = new QHBoxLayout(mirrorBox);
         mirrorLay->setContentsMargins(0, 0, 0, 0);
@@ -463,9 +408,7 @@ void PlateCard_Qt::rebuildContent() {
         mirrorLay->addWidget(flipBtn_);
         mirrorLay->addWidget(flopBtn_);
 
-        // Row A — Track + Layer + channel. "Track" caption keeps the
-        // click-target id. Channel rides here (not row B) to leave row B's
-        // width for the LUT.
+        // Row A: Track + Layer + channel; the "Track" caption keeps the click-target id.
         auto* rowA = new QHBoxLayout();
         rowA->setSpacing(2);
         rowA->addLayout(labeledCell(nc, "Track", trackBox_, objPrefix_ + ".track.label"));
@@ -473,9 +416,7 @@ void PlateCard_Qt::rebuildContent() {
         rowA->addLayout(labeledCell(nc, "Chan",  rgbaBtn_));
         rowA->addStretch(1);
 
-        // Row B — Aspect + Flip/Flop mirror + LUT (fills the leftover width
-        // via its Ignored size policy). Folding the LUT in here keeps the
-        // narrow card to four rows instead of five.
+        // Row B: Aspect + Flip/Flop + LUT (fills leftover width via its Ignored policy).
         auto* rowB = new QHBoxLayout();
         rowB->setSpacing(2);
         rowB->addLayout(labeledCell(nc, "Aspect", aspectCrop_));
@@ -511,9 +452,8 @@ void PlateCard_Qt::rebuildContent() {
         outer->addLayout(rowD);
     }
 
-    // Swap content. Build nc first (reparenting the controls into it) BEFORE
-    // deleting the old content_, so the deletion can't take the shared
-    // control widgets with it.
+    // Swap content: build nc first (reparenting the controls into it) BEFORE deleting
+    // the old content_, so the deletion can't take the shared controls with it.
     auto* top = layout();
     if (content_) {
         top->removeWidget(content_);
@@ -529,9 +469,7 @@ void PlateCard_Qt::rebuildContent() {
 }
 
 void PlateCard_Qt::mousePressEvent(QMouseEvent* e) {
-    // Child widgets (spinboxes, combos, buttons) handle their own
-    // events first; this only fires when the user clicks on the card's
-    // background or a label.
+    // Child widgets handle their own events first; this fires only for the card background or a label.
     if (e->button() == Qt::LeftButton) {
         emit clicked(id_);
     }
@@ -539,10 +477,7 @@ void PlateCard_Qt::mousePressEvent(QMouseEvent* e) {
 }
 
 void PlateCard_Qt::setActiveHighlight(bool on) {
-    // Border-only cue. The orange matches the FLTK build's accent
-    // color (and the dark-VFX theme's active-state color). 1px is
-    // enough to read at the card's compact height without crowding
-    // the spinboxes inside.
+    // Border-only cue in the dark-VFX theme's orange active-state color.
     if (on) {
         setStyleSheet(styleSheet() +
             " PlateCard_Qt { border: 1px solid #d4771e; }");
@@ -558,11 +493,8 @@ void PlateCard_Qt::setActiveHighlight(bool on) {
 void PlateCard_Qt::refreshFromState() {
     if (!gui_) return;
 
-    // Read fresh state once up front. The reads themselves are cheap
-    // (plain getters off the GUI state object); the cost being optimized
-    // is the widget-side setValue/setText/setChecked/setCurrentIndex
-    // cascade through QAccessible + AppKit + AttributeGraph that fires
-    // even when the new value equals the old.
+    // Read fresh state once up front; the cost being avoided is the widget-side setValue/
+    // setText cascade through QAccessible + AppKit, which fires even for an unchanged value.
     const int track = gui_->getSequenceID();
     const QString aspect = QString::fromStdString(gui_->getAspectString());
     const bool crop = gui_->getCrop() != 0;
@@ -583,9 +515,8 @@ void PlateCard_Qt::refreshFromState() {
     const auto layers = jefe::qt::getLayersOnPlate(id_);
     const std::string activeLayer = jefe::qt::getActiveLayerOnPlate(id_);
 
-    // Block every widget's signals for the duration of the refresh.
-    // Without this, programmatic setValue() loops back into the setters
-    // we just wired up, fighting the user's edits and re-rounding floats.
+    // Block every widget's signals during the refresh, or programmatic setValue() loops
+    // back into the setters and fights the user's edits.
     const QSignalBlocker bTrack(trackBox_);
     const QSignalBlocker bLayer(layerBox_);
     // aspectCrop_ has inherently signal-free setters (setCurrentAspect /
@@ -611,11 +542,8 @@ void PlateCard_Qt::refreshFromState() {
         trackBox_->setCurrentIndex(track);
     }
 
-    // Layer combo: always visible. Defaults to a single "Main" entry
-    // when the plate has no loaded layers yet (or a non-EXR/single-layer
-    // file); multi-layer EXRs add their discovered sub-layer names. The
-    // OIIO/DPX loaders already name the default layer "Main", so a
-    // loaded plate's first entry matches this default with no special-case.
+    // Layer combo: always visible, a single "Main" entry until a multi-layer EXR adds its
+    // sub-layer names (the loaders already name the default layer "Main").
     {
         std::vector<std::string> items = layers;
         // Defensive: any blank/legacy entry shows as "Main".
@@ -670,9 +598,8 @@ void PlateCard_Qt::refreshFromState() {
     if (firstPass || ty    != lastShown_.ty)            panYSpin_->setValue(ty);
     if (firstPass || rz    != lastShown_.rz)            rotSpin_->setValue(rz);
 
-    // Rebuild the LUT combo if the gui's LUT list changed (it grows after
-    // initializeInstallLUTs runs the autoload). Cheap to compare; saves a
-    // user-visible flicker when the names already match.
+    // Rebuild the LUT combo if the gui's LUT list changed (it grows after the autoload);
+    // comparing first avoids a flicker when the names already match.
     const bool lutListChanged = firstPass || (lutOpts != lastShown_.lutOptions);
     if (lutListChanged) {
         lutBox_->clear();
@@ -715,10 +642,8 @@ void PlateCard_Qt::refreshFromState() {
 
 void PlateCard_Qt::refreshTransformOnly() {
     if (!gui_) return;
-    // Read only the four fields that change during a viewport pan/zoom drag.
-    // Same delta-vs-cache gating as refreshFromState — typical drag touch
-    // is 2-4 setValue calls on this one card, with no other widget scope
-    // churn and no FX panel refresh fired.
+    // Read only the four fields that change during a pan/zoom drag, with the same
+    // delta-vs-cache gating as refreshFromState.
     const float scale = gui_->getScale();
     const float tx    = gui_->getTX();
     const float ty    = gui_->getTY();
@@ -745,12 +670,8 @@ void PlateCard_Qt::refreshTransformOnly() {
 
 void PlateCard_Qt::refreshColorOnly() {
     if (!gui_) return;
-    // Mirror of refreshTransformOnly for the five color-correction
-    // spinboxes. Reads the GUI's current values, short-circuits when
-    // none changed against the cache, then writes only the changed
-    // fields with signals blocked. Saves the full refreshFromState
-    // walk (13+ widget writes across track/aspect/layer/RGBA/LUT/etc.)
-    // during a W/E/Q/D/S drag.
+    // Mirror of refreshTransformOnly for the five color-correction spinboxes: writes only
+    // the changed fields, signals blocked, during a W/E/Q/D/S drag.
     const float gamma      = gui_->getGamma();
     const float exposure   = gui_->getExposure();
     const float contrast   = gui_->getContrast();

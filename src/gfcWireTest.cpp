@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Self-test for jefe::wire (JEF-23). No framework — simple assert-count
-// pattern, mirrors the style of the other --*-test harnesses in main_qt.cpp.
-// Invoked via --wire-test, before any GUI/GL setup. Primitives are pure
-// data; the message-codec tests (Task 2) additionally pull in the network
-// structs and the FX/LUT serialize helpers — still no Qt/GL at runtime
-// (the serialize fixtures are hand-built structs + temp files; the
-// side-effecting unserialize paths are only exercised on truncated input,
-// which returns false BEFORE any file write / manager load).
+// Self-test for jefe::wire (--wire-test): assert-count pattern like the other --*-test
+// harnesses, run before GUI/GL setup.
 
 #include "gfcWire.h"
 #include "gfcWireMessages.h"
 #include "gfcNetworkStructures.h"
-#include "gfcStructures.h"   // jefe::contentHash* (JEF-28 Task 1)
+#include "gfcStructures.h"   // jefe::contentHash*
 
 #include <cstdint>
 #include <cstring>
@@ -104,9 +98,8 @@ void testF32() {
         Reader r(w.data(), w.size());
         float out = 0.0f;
         const bool okRead = r.readF32(out);
-        // Bit-exact comparison (handles -0.0f correctly via memcmp semantics,
-        // ordinary == also treats -0.0f == 0.0f as true, but we want the
-        // actual bit pattern preserved).
+        // Bit-exact comparison: ordinary == treats -0.0f == 0.0f, but the bit
+        // pattern must be preserved.
         bool bitsMatch = false;
         if (okRead) {
             uint32_t a = 0, b = 0;
@@ -276,9 +269,8 @@ void testTruncatedPrimitives() {
         int32_t i32v; float f32v; double f64v; bool boolv;
         std::string strv; std::vector<unsigned char> bytesv;
 
-        // Read the exact same sequence as written. At some point this will
-        // run past the truncated buffer's end; from then on every read must
-        // return false and ok() must go false, never touch OOB memory.
+        // Read the same sequence as written; once past the truncated end every
+        // read must return false and ok() must go false, never touching OOB memory.
         bool sequenceOk = true;
         sequenceOk = sequenceOk && r.readU8(u8v);
         sequenceOk = sequenceOk && r.readU16(u16v);
@@ -343,7 +335,7 @@ void testStringLengthExceedsRemaining() {
     check(!r.ok(), "ok() false after malformed string length");
 }
 
-// ---- message codecs (Task 2) -------------------------------------------
+// ---- message codecs ----------------------------------------------------
 
 // Decoding any strict prefix of a well-formed encode must return false
 // (clean truncation failure, no crash, no UB). One call per codec family.
@@ -792,16 +784,7 @@ void testFramedCodec() {
           "framed playpause: header + payload round-trip");
 }
 
-// ---- FX / LUT serialize helpers ----------------------------------------
-//
-// serializeLUT/serializeFX only need a filename-bearing fixture plus real
-// files on disk (no GL, no managers), so they are exercised for real
-// against temp files and their wire output is verified field-by-field
-// (which doubles as the decode-sequence spec: unserializeLUT reads
-// string+bytes, unserializeFX reads six strings, in exactly this order).
-// The side-effecting full unserialize paths (file writes + fxManager/
-// lutManager loads — manager/GL territory) are exercised ONLY on
-// truncated input, which must return false before any side effect.
+// ---- FX / LUT serialize helpers (unserialize side effects only on truncated input) ----
 
 std::filesystem::path wireTestDir() {
     std::filesystem::path dir =
@@ -867,10 +850,8 @@ void testSerializeFX() {
     const std::filesystem::path vertPath = dir / "wiretest_fx.vert";
     const std::filesystem::path fragPath = dir / "wiretest_fx.frag";
 
-    // Mirrors the real .jfx structure (src/FX/*.jfx). The XML declaration
-    // matters: without it xmlParser's top-node semantics change,
-    // getChildNode("root") comes back empty, and getAttribute returns NULL
-    // (legacy serializeFX would crash identically on such a file).
+    // Mirrors the real .jfx structure. The XML declaration matters: without it
+    // xmlParser's top-node semantics change and getChildNode("root") is empty.
     const std::string jfxBody =
         "<?xml version = '1.0' encoding = 'UTF-8'?>\n"
         "<root><shaders vertex=\"wiretest_fx.vert\" "
@@ -918,13 +899,8 @@ void testSerializeFX() {
     std::filesystem::remove(fragPath, ec);
 }
 
-// ---- content digest (JEF-28 Task 1) ------------------------------------
-//
-// The P2P LUT/FX sync dedup depends on every peer computing the SAME digest
-// for the same bytes, on any build/platform. These pin the algorithm (FNV-1a
-// 64-bit over bytes), prove same-bytes→same / diff-bytes→diff, prove the FX
-// digest now COVERS THE SHADER SOURCE (the old metadata-only hash didn't), and
-// exercise the filename sanitization that closes the path-traversal gap.
+// ---- content digest ----
+// Pins FNV-1a 64-bit, same bytes -> same digest, FX digest covering shader source.
 
 void testContentDigestGolden() {
     // Pinned FNV-1a 64-bit vector (standard published test vector). If this
@@ -951,10 +927,8 @@ void testContentDigestSameVsDifferent() {
 }
 
 void testContentDigestFXShaderSource() {
-    // Prove the FX content hash (contentHashFiles over .jfx+.vert+.frag) now
-    // covers the shader body: two FX with IDENTICAL metadata (.jfx) and vertex
-    // shader but a DIFFERENT fragment shader must hash DIFFERENTLY. Under the
-    // old metadata-only hash these collided.
+    // The FX content hash covers the shader body: same .jfx and vertex shader but a
+    // different fragment shader must hash differently.
     const std::filesystem::path dir = wireTestDir();
     const std::filesystem::path jfx  = dir / "cd_fx.jfx";
     const std::filesystem::path vert = dir / "cd_fx.vert";
@@ -989,9 +963,8 @@ void testContentDigestFXShaderSource() {
 }
 
 void testFilenameSanitization() {
-    // The sanitization unserializeFX/unserializeLUT apply before writing under
-    // receivedPath is exactly std::filesystem::path(name).filename(). Verify it
-    // defuses traversal + absolute paths and flags empty basenames.
+    // Sanitization before writing under receivedPath is path(name).filename(); verify
+    // it defuses traversal and absolute paths and flags empty basenames.
     using std::filesystem::path;
     check(path("../../evil").filename().string() == "evil",
           "sanitize: '../../evil' -> 'evil'");
@@ -1033,7 +1006,7 @@ int selfTest() {
     testReadPastEndReturnsFalse();
     testStringLengthExceedsRemaining();
 
-    // Message codecs (Task 2).
+    // Message codecs.
     testMsgPlayPause();
     testMsgPointerInfo();
     testMsgRemotePointerInfo();
@@ -1051,7 +1024,7 @@ int selfTest() {
     testSerializeLUT();
     testSerializeFX();
 
-    // Content digest (JEF-28 Task 1).
+    // Content digest.
     testContentDigestGolden();
     testContentDigestSameVsDifferent();
     testContentDigestFXShaderSource();

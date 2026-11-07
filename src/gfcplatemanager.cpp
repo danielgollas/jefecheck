@@ -35,10 +35,8 @@ gfcPlateManager::gfcPlateManager() : myGUI(nullptr) {
     activeQuad=0;
     framingMode=FRAMINGSINGLE_ID;
     showHelp=false;
-    // Keep this in sync with the actual Qt key bindings (JEF-17):
-    //  - plate shortcuts: MainWindow_Qt ctor bindPlateAction / bindLayout
-    //  - raw keys (playback, in/out, track cycle): GlViewport_Qt::keyPressEvent
-    //  - mouse (pan/zoom/CC drag/remote pointer): GlViewport_Qt mouse handlers
+    // Keep in sync with the Qt key bindings (MainWindow_Qt ctor bindPlateAction /
+    // bindLayout; GlViewport_Qt::keyPressEvent and mouse handlers).
     helpMessage =
         "\n\n\nJefeCheck - Quick Help\n(toggle on/off with 'h')\n-------------\n\n"
         "VIEWPORT LAYOUTS\n"
@@ -441,9 +439,8 @@ void gfcPlateManager::updateAnimations()
 	static float previousOpacity=0;
 	feedbackMessageOpacity-=playbackManager.getTimestep();
 	feedbackMessageOpacity=max(feedbackMessageOpacity,0.0);
-	// Redraw on ANY change, including the final fade to 0 — otherwise the last
-	// faint frame lingers until the next forced repaint (the tick idles once
-	// hasActiveAnimations() goes false).
+	// Redraw on ANY change, including the final fade to 0; otherwise the last
+	// faint frame lingers (the tick idles once hasActiveAnimations() is false).
 	if (previousOpacity!=feedbackMessageOpacity)
 	{
 		setChanged();
@@ -650,21 +647,15 @@ void gfcPlateManager::resetPlate(int whichOne) {
 }
 
 void gfcPlateManager::initializeWidgets() {
-    // Qt: each plate gets a stateful gfcPlateGUI_Qt. Widgets push state
-    // into it via setters (no Fl_Widget pointers to assign). The plate
-    // manager itself uses gfcPlateManagerGUI_Qt for layout-mode tracking.
-    // Default plate i to track i (matches the FLTK pairing of
-    // plate 0↔track A, plate 1↔track B, …) so getFrameAndSequence picks
-    // up sequences[i] instead of trackManager's dummy sequence.
+    // Each plate gets a stateful gfcPlateGUI_Qt and defaults to track i, so
+    // getFrameAndSequence picks up sequences[i], not trackManager's dummy.
     for (int i = (int)plates.size() - 1; i >= 0; --i) {
         auto* g = new gfcPlateGUI_Qt;
         g->setPlateIndex(i);
         plates[i].myGUI = g;
         plates[i].quadID = i;
-        // setTrack writes both gfcPlate::track AND myGUI->trackChoice_,
-        // so the plate's renderer and the plate-card's combo agree from
-        // launch. Earlier this only set the GUI side; gfcPlate::track
-        // stayed 0 for every plate, so all four cards rendered track A.
+        // setTrack writes both gfcPlate::track AND myGUI->trackChoice_, so the
+        // renderer and the plate-card's combo agree from launch.
         plates[i].setTrack(i);
     }
     myGUI = new gfcPlateManagerGUI_Qt;
@@ -677,10 +668,8 @@ gfcPlateGUI* gfcPlateManager::getPlateGUI(int whichOne) {
 
 int gfcPlateManager::getPlateAtPosition(int vx, int vy, int w, int h) {
     if (w <= 0 || h <= 0) return -1;
-    // Mirror drawPlates' viewport partitioning. The cases below match
-    // the rectangles set up there per framingMode. Coordinates come in
-    // top-down (Qt-style); each branch picks the plate whose viewport
-    // covers (vx, vy).
+    // Mirror drawPlates' viewport partitioning per framingMode. Coordinates come
+    // in top-down (Qt-style); pick the plate whose viewport covers (vx, vy).
     switch (framingMode) {
         case FRAMINGSINGLE_ID:
             return 0;
@@ -1031,11 +1020,8 @@ void gfcPlateManager::setFXWidgetValue(int whichOne, int fxIndex,
     stack->setWidgetValue(fxIndex, groupName, widgetName, value);
     this->clearHistogramCache(whichOne);
 
-    // Broadcast the live param edit to remote peers (mirrors the throttled
-    // COLOR/TRANSFORMS streams). sendFXAttribMessage no-ops when not in a
-    // session, but skip building the message entirely when solo. The receiver
-    // (gfcFXStack::processNetFXAttribInfo) keys off attribType to pick which
-    // field it reads, so fill the one matching this widget's type.
+    // Broadcast the live param edit to remote peers; the receiver keys off
+    // attribType (gfcFXStack::processNetFXAttribInfo), so fill the matching field.
     if (!networkManager.getConnected())
         return;
 
@@ -1059,9 +1045,8 @@ void gfcPlateManager::setFXWidgetValue(int whichOne, int fxIndex,
         break;
     case FX_GUI_LUT:
     case FX_GUI_CUBE: {
-        // The panel stores the GLOBAL lutManager index as the value; the wire
-        // carries the LUT's name (getAllNames is indexed by that same global
-        // index, and the receiver maps name -> index via getLutIndexByName).
+        // The panel stores the GLOBAL lutManager index; the wire carries the LUT's
+        // name (the receiver maps it back via getLutIndexByName).
         std::vector<std::string> names = lutManager.getAllNames();
         int idx = (int)value;
         if (idx >= 0 && idx < (int)names.size())
@@ -1197,12 +1182,8 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 			int textHeight=h/10;
 
 			gfc_gl_measure(feedbackMessage.c_str(), textWidth, textHeight);
-			// gfc_gl_measure returns LOGICAL pixels, but this overlay is laid
-			// out and drawn in the viewport's PHYSICAL-pixel ortho (draw() is
-			// called with framebuffer dimensions). On Retina the two differ by
-			// dpiScale, so without this the box is ~half the text's real size —
-			// the message then wraps to two lines and runs off the edge. Scale
-			// the measurement up to physical pixels to match the ortho.
+			// gfc_gl_measure returns LOGICAL pixels but this overlay draws in PHYSICAL
+			// pixels (differ by dpiScale on Retina): scale the measurement up.
 			const float uiScale = gfc_gl_dpiscale();
 			textWidth  = (int)(textWidth  * uiScale);
 			textHeight = (int)(textHeight * uiScale);

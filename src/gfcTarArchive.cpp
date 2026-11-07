@@ -309,9 +309,7 @@ bool gfcTar::Reader::extractTo(const Entry& entry, const std::string& destPath, 
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-// ---------------------------------------------------------------------------
+// ---- Self-test ----
 int tarSelfTest()
 {
 	int pass = 0;
@@ -358,9 +356,8 @@ int tarSelfTest()
 	check(!gfcTar::isSafeName("../evil") && !gfcTar::isSafeName("a/../b") && !gfcTar::isSafeName("/abs") &&
 		  !gfcTar::isSafeName("a//b") && !gfcTar::isSafeName("a\\b") && !gfcTar::isSafeName(""),
 		  "absolute, parent, empty-segment and backslash names are unsafe");
-	// On Windows, std::filesystem's `dir / "C:/..."` discards `dir`, so a
-	// drive-qualified name (or an NTFS alternate-stream name) would escape
-	// the extraction directory.
+	// On Windows, `dir / "C:/..."` discards `dir`, so a drive-qualified or NTFS
+	// alternate-stream name would escape the extraction directory.
 	check(!gfcTar::isSafeName("C:/evil.txt"), "a drive-qualified absolute name is unsafe");
 	check(!gfcTar::isSafeName("C:evil.txt"), "a drive-relative name is unsafe");
 	check(!gfcTar::isSafeName("a.exr:stream"), "an alternate-data-stream name is unsafe");

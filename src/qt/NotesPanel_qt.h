@@ -1,20 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Notes dock for the Qt port (JEF-39 Task 6) -- lists the revisions and
-// notes drawn on the active plate's footage, a tool/colour/size picker for
-// a future drawing hook, click-to-jump-to-frame, and a "Lock Round" button
-// (toggles to "Unlock Round" -- one button, mirrors the transport
-// play/pause toggle rather than shipping two buttons).
-//
-// This panel MUST NOT include gfcreview.h / gfcrevision.h / gfcnote.h, or
-// any other rendering-chain header -- only SequenceLoadBridge_qt.cpp may
-// (developer_notes.md §1: glad and QOpenGLWidget can't share a TU on
-// macOS). Everything here goes through the jefe::qt::* accessors added to
-// that bridge for this task (NoteRow, RevisionRow, notesForPlate(), ...).
-//
-// Mouse drawing on the viewport is NOT wired here -- see the plan's
-// file-ownership map (Task 6 owns this panel, the bridge accessors, and
-// the dock/menu/shortcut wiring, not gfcPlate.cpp). The tool/colour/size
-// pickers only set state in the bridge for a future viewport hook to read.
+// Notes dock: lists the revisions and notes on the active plate's footage,
+// with a tool/colour/size picker, click-to-jump-to-frame and a Lock/Unlock Round toggle.
+// MUST NOT include rendering-chain headers (gfcreview.h, gfcnote.h, ...); go
+// through the jefe::qt::* bridge accessors. See developer_notes.md §1.
 #ifndef JEFECHECK_QT_NOTES_PANEL_H
 #define JEFECHECK_QT_NOTES_PANEL_H
 

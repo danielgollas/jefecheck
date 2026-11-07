@@ -1,14 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Playlist dock for the Qt port. PR-40 ships a `QDockWidget` hosting
-// a `QListWidget` of playlist entries plus add / remove / up / down /
-// clear buttons. Double-clicking an entry calls
-// `trackManager.setPlaylistItem(playlistManager.getItem(idx))` —
-// same path as the FLTK `playlistItemCB`.
-//
-// PR-40b will add: drag-and-drop reorder, multi-track items per
-// row (current MVP creates one-track items via Add), session-save
-// integration, and the FLTK "compact view" / "show full paths" /
-// "scale override" submenu items.
+// Playlist dock: a list of playlist items (one card per item with collapsible
+// per-track details). See developer_notes.md §25.
 #ifndef JEFECHECK_QT_PLAYLIST_PANEL_H
 #define JEFECHECK_QT_PLAYLIST_PANEL_H
 

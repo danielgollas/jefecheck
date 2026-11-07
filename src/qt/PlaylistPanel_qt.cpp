@@ -32,9 +32,7 @@ constexpr const char* kScaleValKey  = "Playlist/scaleOverridePct";
 constexpr const char* kLastDirKey   = "Playlist/lastAddDir";
 }
 
-// ---------------------------------------------------------------------------
-// PlaylistItemCard implementation
-// ---------------------------------------------------------------------------
+// ---- PlaylistItemCard implementation ----
 
 PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded,
                                    bool fullPaths, QWidget* parent)
@@ -49,7 +47,7 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     header->setContentsMargins(0, 0, 0, 0);
     header->setSpacing(6);
 
-    auto* handle = new QLabel(this);  // drag affordance (JEF-19 icon)
+    auto* handle = new QLabel(this);  // drag affordance
     handle->setPixmap(jefe::qticons::dragHandle().pixmap(QSize(14, 14)));
     handle->setToolTip("Drag to reorder");
     header->addWidget(handle);
@@ -139,9 +137,7 @@ void PlaylistItemCard::mouseDoubleClickEvent(QMouseEvent* ev) {
     QWidget::mouseDoubleClickEvent(ev);
 }
 
-// ---------------------------------------------------------------------------
-// PlaylistPanel_Qt implementation
-// ---------------------------------------------------------------------------
+// ---- PlaylistPanel_Qt implementation ----
 
 PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("playlist.panel");
@@ -160,8 +156,8 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     connect(list_, &QListWidget::customContextMenuRequested,
             this, &PlaylistPanel_Qt::showContextMenu);
 
-    // JEF-19: icon buttons. Hybrid — the wordy "Add" actions keep icon+text;
-    // the compact ops are icon-only with a mandatory tooltip.
+    // Icon buttons: the wordy "Add" actions keep icon+text; the compact ops are
+    // icon-only with a mandatory tooltip.
     auto mkIcon = [this](const QIcon& icon, const char* obj, const QString& tip,
                          void (PlaylistPanel_Qt::*slot)(),
                          const QString& text = QString()) {
@@ -477,9 +473,8 @@ bool PlaylistPanel_Qt::eventFilter(QObject* obj, QEvent* ev) {
             onDownClicked(); return true;
         }
     }
-    // DropOnly's model rejects URL mime by default, which would suppress the
-    // Drop event entirely — accept drag-enter/move for URL payloads so the
-    // Drop below actually fires for Finder/Explorer drags.
+    // DropOnly's model rejects URL mime by default, suppressing the Drop event;
+    // accept drag-enter/move for URL payloads so Finder/Explorer drops fire.
     if ((ev->type() == QEvent::DragEnter || ev->type() == QEvent::DragMove) &&
         (obj == list_ || obj == list_->viewport())) {
         auto* de = static_cast<QDragMoveEvent*>(ev);

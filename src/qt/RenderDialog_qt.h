@@ -1,15 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// File → Render… dialog for the Qt port. PR-39a ships a minimal
-// modal dialog covering quadrant / format / range / scale / output
-// path / prefix / postfix / padding, plus a Render button that calls
-// `triggerSyncRender` synchronously (the UI freezes until the render
-// completes — async + cancel comes in PR-39b along with a QThread
-// driver for `plateManager.renderPlate`).
-//
-// Format-specific quality knobs (jpeg quality / png level / tiff + exr
-// compression / exr depth) are wired via a QStackedWidget keyed on the
-// format index. Video codec and "create movie" / "delete frames after"
-// remain TODO (FLTK used mencoder, Linux-only).
+// File → Render… dialog with per-format quality pages in a QStackedWidget keyed on
+// the format index. See developer_notes.md §18–20, §30.
 #ifndef JEFECHECK_QT_RENDER_DIALOG_H
 #define JEFECHECK_QT_RENDER_DIALOG_H
 

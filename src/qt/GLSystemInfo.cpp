@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Captures GL state for the "Host System Specs" dialog. Pure glad —
-// no Qt headers in this TU (the macOS OpenGL framework headers
-// QOpenGLWidget pulls in conflict with glad's symbol redefinitions).
+// Captures GL state for the "Host System Specs" dialog. Pure glad, no Qt headers
+// in this TU (macOS OpenGL framework headers conflict with glad's redefinitions).
 #include "GLSystemInfo.h"
 
 #include <glad/glad.h>
@@ -20,9 +19,8 @@ const char* glsString(GLenum name) {
 }
 
 bool hasExtension(const char* name) {
-    // GL_EXTENSIONS is a single space-separated string in the
-    // compatibility profile glad targets here. Substring match isn't
-    // safe ("GL_EXT_foo" matches "GL_EXT_foobar"), so walk tokens.
+    // GL_EXTENSIONS is one space-separated string; walk tokens, since a
+    // substring match would find "GL_EXT_foo" inside "GL_EXT_foobar".
     const char* exts = glsString(GL_EXTENSIONS);
     if (!exts || !*exts) return false;
     const std::size_t nameLen = std::strlen(name);

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// JEF-24 Task 2: headless loopback self-test for the signaling stub
-// (--signal-test). Kept in its own TU so the rtc lifecycle bracketing
-// (Preload/Cleanup) and <chrono>/<condition_variable> live away from the
-// production wrappers.
+// Headless loopback self-test for the signaling stub (--signal-test), in its own TU so the rtc
+// Preload/Cleanup bracketing stays away from the production wrappers.
 #include "gfcSignaling.h"
 
 #include <rtc/rtc.hpp>
@@ -39,7 +37,7 @@ int signalingSelfTest() {
     SignalMessage clientRx;
 
     // The exact SDP the host pushes — asserted byte-for-byte on the client,
-    // incl. embedded CRLFs (Task 3 pushes real SDP through this path).
+    // incl. embedded CRLFs (real SDP goes through this path).
     const std::string sentOfferSdp =
         "v=0\r\n"
         "o=- 42 2 IN IP4 127.0.0.1\r\n"

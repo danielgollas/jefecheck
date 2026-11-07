@@ -4,7 +4,7 @@
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "UIConstants.h"
 #include "gfcStructures.h"
-#include <algorithm>  // std::sort — used to be transitive via FLTK headers
+#include <algorithm>  // std::sort
 extern gfcSettings sett;
 
 #include "gfcnetworkmanager.h"
@@ -18,9 +18,8 @@ gfcFXManager::gfcFXManager()
       progress(nullptr),
       scrollPosY(0),
       scrollPosX(0) {
-    // Same fix gfcLUTManager got in PR-21: zero-init the FLTK widget
-    // pointers so the Qt build can call loadFX before initWidgets has
-    // run. Each callsite below null-checks before dereferencing.
+    // Zero-init the FLTK widget pointers so the Qt build can call loadFX
+    // before initWidgets has run; each callsite null-checks before dereferencing.
 }
 
 

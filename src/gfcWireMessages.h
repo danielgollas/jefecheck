@@ -1,26 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// jefe::wire message codecs (JEF-23).
-//
-// One encode/decode pair per struct-based network message. The field ORDER
-// and semantic content of every codec mirrors the legacy RakNet::BitStream
-// write/read pair exactly (the legacy sequences in gfcnetworkclient.cpp /
-// gfcnetworkserver.cpp are the spec — see the per-codec comments below,
-// which cite both legacy sites). Sanctioned deviations from legacy:
-//   - StringCompressor::EncodeString(x, maxLen)  ->  Writer::writeString
-//     (u32 length prefix + raw bytes; no Huffman coding, no per-field
-//     max-length truncation).
-//   - Explicit "length" fields that legacy wrote immediately before a
-//     compressed string (FX stack, playlist, SENDFXTACKS-style payloads)
-//     are dropped: writeString's own u32 prefix carries the length.
-//   - Vectors are u32 count + elements (legacy: WriteCompressed(int) count).
-//
-// Encoders append payload fields only — they do NOT write the frame header;
-// callers compose `beginFrame(w, GFCNETID_X); encodeX(w, ...)`. Decoders
-// likewise assume the frame header has already been consumed.
-//
-// Every decoder returns false (and leaves the Reader sticky-failed) if the
-// buffer is truncated or malformed mid-message; output structs may be
-// partially written in that case and must be discarded by the caller.
+// jefe::wire message codecs mirroring the legacy RakNet::BitStream field order. Encoders
+// append payload only (callers write the header); a decoder returns false on a bad buffer.
 
 #pragma once
 

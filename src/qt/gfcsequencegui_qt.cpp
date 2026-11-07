@@ -20,13 +20,8 @@ int   gfcSequenceGUI_Qt::getChannel()           { return channel_; }
 std::string gfcSequenceGUI_Qt::getChannelName() { return channelName_; }
 
 void gfcSequenceGUI_Qt::setFromToBounds(int Min, int Max, bool setToMinAndMax) {
-    // gfcSequence::findSequenceFiles calls this with the discovered
-    // sequence range. Without storing it, getFrom()/getTo() keep
-    // their constructor defaults (1,1) and loadSequence loads only the
-    // first frame. The FLTK impl writes the range onto its spinner
-    // widgets; here we just stash it onto from_/to_ when the caller
-    // asks for clamp-to-bounds (the only path that flows through
-    // findSequenceFiles).
+    // gfcSequence::findSequenceFiles calls this with the discovered range;
+    // stash it into from_/to_ on clamp-to-bounds, or loadSequence loads one frame.
     if (setToMinAndMax) {
         from_ = Min;
         to_   = Max;
@@ -36,13 +31,8 @@ void gfcSequenceGUI_Qt::setToFrame(int v)               { to_ = v; }
 void gfcSequenceGUI_Qt::setFromFrame(int v)             { from_ = v; }
 void gfcSequenceGUI_Qt::setFilename(std::string s)      { filename_ = std::move(s); }
 void gfcSequenceGUI_Qt::setScale(std::string s) {
-    // FLTK's gfcSequenceGUI_FLTK::setScale stores the percentage
-    // string from the Choice widget ("100" / "50" / "25"); getScale()
-    // returns the float for the loader. Mirror that contract here so
-    // the SequenceLoadBridge's Shift-drop scale modifier actually
-    // takes effect — without this body the bridge writes a string
-    // that's silently dropped, and getScale keeps returning the
-    // constructor's default of 100.0f.
+    // Stores the percentage string ("100"/"50"/"25"); getScale() returns the
+    // float for the loader. Without this the bridge's Shift-drop scale is dropped.
     if (s.empty()) {
         scale_ = 100.0f;
         return;
@@ -59,11 +49,8 @@ void gfcSequenceGUI_Qt::setFilter(int v)                { filter_ = v; }
 void gfcSequenceGUI_Qt::setCrop(int v)                  { crop_ = v; }
 void gfcSequenceGUI_Qt::setCompression(int v)           { compression_ = v; }
 void gfcSequenceGUI_Qt::setChannelOptions(std::vector<std::string> opts) {
-    // gfcSequence::loadPreview pushes the discovered EXR layer list here
-    // every time a preview frame is decoded. Stash it so PlateCard_Qt's
-    // per-plate layer combo can populate from it. The base interface
-    // doesn't have a getter (FLTK reads directly off its widget), so
-    // this is a Qt-only side-channel that getChannelOptions() exposes.
+    // loadPreview pushes the EXR layer list here on each preview decode for PlateCard_Qt's layer combo;
+    // a Qt-only side-channel (the base interface has no getter).
     channelOptions_ = std::move(opts);
 }
 void gfcSequenceGUI_Qt::setChannel(int v)               { channel_ = v; }

@@ -18,11 +18,8 @@ namespace
 
 	bool parseRoot(const std::string& xml, XMLNode& top, XMLNode& root, std::string* err)
 	{
-		// A saved .jcs always starts with a UTF-8 BOM (gfcSessionManager
-		// writes one). XMLNode::parseFile strips a leading EF BB BF itself;
-		// XMLNode::parseString, which every caller here uses, does not --
-		// so every caller of this file would otherwise see a document with
-		// no <root>.
+		// A saved .jcs starts with a UTF-8 BOM; XMLNode::parseString (unlike
+		// parseFile) does not strip it, so skip it here.
 		const char* text = skipUtf8Bom(xml.c_str());
 
 		XMLResults results;
@@ -64,9 +61,8 @@ namespace
 		}
 	}
 
-	// "no LUT" is the plate@lut placeholder for "none selected", not a real LUT
-	// name; excludeNoLut narrows that exclusion to plate@lut callers so it
-	// cannot swallow a widget value or FX literally named "no LUT".
+	// "no LUT" is the plate@lut placeholder for none selected; excludeNoLut limits
+	// that exclusion to plate@lut so a widget value or FX named "no LUT" survives.
 	void addUnique(std::vector<std::string>& out, XMLCSTR value, bool excludeNoLut = false)
 	{
 		if (!value) return;
@@ -172,9 +168,7 @@ bool gfcSessionPaths::rewriteMedia(const std::string& jcsXml, const std::map<std
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-// ---------------------------------------------------------------------------
+// ---- Self-test ----
 int sessionPathsSelfTest()
 {
 	using namespace gfcSessionPaths;
@@ -234,9 +228,7 @@ int sessionPathsSelfTest()
 			  refs[2].path == "/shots/a/sh010.0001.exr", "the second playlist track");
 	}
 
-	// A saved .jcs always starts with a UTF-8 BOM (gfcSessionManager writes
-	// one); XMLNode::parseString, unlike parseFile, does not skip it on its
-	// own, so parseRoot() must.
+	// A saved .jcs starts with a UTF-8 BOM that parseString (unlike parseFile) does not skip.
 	std::vector<MediaRef> bomRefs;
 	check(listMedia("\xEF\xBB\xBF" + xml, bomRefs, &err) && bomRefs.size() == 3 &&
 		  bomRefs[0].kind == Kind::Track && bomRefs[0].index == 0 && bomRefs[0].sub == -1 &&

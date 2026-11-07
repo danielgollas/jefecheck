@@ -38,23 +38,20 @@ public:
     std::vector<std::string> participantNames();
     std::string connectionStatusText();
 
-    // JEF-30: per-peer connection health, forwarded to whichever transport is
-    // active (server side when hosting, client side when joined). Empty when
-    // solo. `peerNickname` resolves a peer's display name (server role only;
-    // empty otherwise).
+    // Per-peer connection health from the active transport (server side when
+    // hosting, client side when joined); empty when solo.
     std::vector<jefe::net::PeerStats> peerStats();
     std::string peerNickname(jefe::net::PeerId peer);
 
-    // JEF-27: the coordinator-assigned cloud session code (host role, coordinator
-    // mode only; empty otherwise). Surfaced for the Remote dialog + --coord-test.
+    // The coordinator-assigned cloud session code (host role, coordinator
+    // mode only; empty otherwise).
     std::string getAssignedSessionCode();
 
-    // JEF-37: joiners waiting for admission, and the host's decision on one.
-    // Host role only -- a joiner is never told who else is in the lobby, so
-    // these return empty / no-op for everyone else.
+    // Joiners waiting for admission, and the host's decision on one.
+    // Host role only; empty / no-op for everyone else.
     std::vector<jefe::net::PendingJoiner> pendingJoiners();
     void decideJoiner(const std::string& joinerId, bool admit);
-    /** JEF-37, joiner side: knocked, and still waiting on the host. */
+    /** Joiner side: knocked, and still waiting on the host. */
     bool isAwaitingAdmission();
     /** A join is in flight: dialling, knocking, or mid-handshake. */
     bool isAttemptingConnection();
@@ -119,18 +116,15 @@ public:
 	
 	void sendRemotePointerColor(int color);
 
-	// JEF-39: note sync. Mirrors the pointer-info client->server->broadcast
-	// convention; see gfcNetworkStructures.h and gfcnetworkserver.cpp for the
-	// wire format and the author-or-host removal check. gfcNote comes from
-	// Task 1 (src/gfcnote.h).
+	// Note sync, like pointer info (client -> server -> broadcast); see
+	// gfcNetworkStructures.h and gfcnetworkserver.cpp for the wire format.
 	void broadcastNoteAdd(const gfcNote& n);
 	void broadcastNoteRemove(const std::string& noteId);
 	void broadcastRevisionLock(const std::string& revisionId);
 	void broadcastRevisionUnlock(const std::string& revisionId);
 
-	// Drains note add/remove/lock events received since the last call --
-	// mirrors chatLogLines()/getChatLog()'s poll-and-drain shape. For a
-	// future consumer (the notes dock, Task 6).
+	// Drains note add/remove/lock events received since the last call
+	// (poll-and-drain, like chatLogLines()/getChatLog()).
 	std::vector<jefe::net::NoteSyncEvent> drainNoteSyncEvents();
 
 	void handleAllReady(); //this sets whatever needs to be set when the server tells us that all the players are ready.
