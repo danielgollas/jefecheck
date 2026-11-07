@@ -184,7 +184,7 @@ private:
     
     /***********************
     File sequence attributes
-    /**********************/
+    **********************/
     std::vector<std::string> files;
 	std::vector<std::string> previewFiles; //files loaded from the preview to determine range.
     int sequenceStartFrame;
