@@ -79,22 +79,22 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-qt6-base
-            mingw-w64-x86_64-qt6-tools
-            mingw-w64-x86_64-openimageio
-            mingw-w64-x86_64-openexr
-            mingw-w64-x86_64-imath
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-fmt
-            mingw-w64-x86_64-freetype
-            mingw-w64-x86_64-ffmpeg
-            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-openimageio
+            mingw-w64-ucrt-x86_64-openexr
+            mingw-w64-ucrt-x86_64-imath
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-fmt
+            mingw-w64-ucrt-x86_64-freetype
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-qt6-multimedia
             zip
 
       - name: Build
@@ -116,15 +116,15 @@ jobs:
             "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64"
           cp packaging/ffmpeg-NOTICE.txt "$PACKAGE/"
           # Bundle MinGW runtime DLLs (includes the libav* DLLs and Qt6Multimedia.dll)
-          ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
+          ldd build/jefecheck.exe | grep ucrt64 | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
           # Qt Multimedia backends (ffmpegmediaplugin / windowsmediaplugin) are
           # loaded from <exe dir>/multimedia/; copy them and the DLLs they need.
-          cp -r /mingw64/share/qt6/plugins/multimedia "$PACKAGE/"
+          cp -r /ucrt64/share/qt6/plugins/multimedia "$PACKAGE/"
           # Plain cp: "cp -n" exits 1 on an existing file (coreutils >= 9.2), which fails xargs.
           # grep exits 1 for a plugin with no MinGW deps; that is not an error.
-          for p in "$PACKAGE"/multimedia/*.dll; do ldd "$p" | { grep mingw || true; } | awk '{print $3}' | xargs -r -I{} cp {} "$PACKAGE/"; done
+          for p in "$PACKAGE"/multimedia/*.dll; do ldd "$p" | { grep ucrt64 || true; } | awk '{print $3}' | xargs -r -I{} cp {} "$PACKAGE/"; done
           # Record the shipped FFmpeg version and configure line (same MSYS2 package as the DLLs)
-          /mingw64/bin/ffmpeg.exe -hide_banner -version > "$PACKAGE/ffmpeg-libs-VERSION.txt"
+          /ucrt64/bin/ffmpeg.exe -hide_banner -version > "$PACKAGE/ffmpeg-libs-VERSION.txt"
           # Fail the job when the libav DLLs, Qt Multimedia or its plugins are missing
           ls "$PACKAGE"/avcodec-*.dll "$PACKAGE"/Qt6Multimedia.dll "$PACKAGE"/multimedia/*.dll || exit 1
           # MSYS2 ships zip; use it instead of 7z which isn't installed by default

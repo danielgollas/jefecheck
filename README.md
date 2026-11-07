@@ -48,9 +48,9 @@ cmake -B build && cmake --build build -j$(nproc)
 
 ### Windows (MSYS2 / MinGW)
 
-Use MSYS2 with `mingw-w64-x86_64-qt6-base`, `mingw-w64-x86_64-qt6-tools`,
-`mingw-w64-x86_64-qt6-multimedia`, `mingw-w64-x86_64-openimageio`,
-`mingw-w64-x86_64-ffmpeg`, and `mingw-w64-x86_64-freetype` (see
+Use MSYS2 (UCRT64 environment) with `mingw-w64-ucrt-x86_64-qt6-base`, `mingw-w64-ucrt-x86_64-qt6-tools`,
+`mingw-w64-ucrt-x86_64-qt6-multimedia`, `mingw-w64-ucrt-x86_64-openimageio`,
+`mingw-w64-ucrt-x86_64-ffmpeg`, and `mingw-w64-ucrt-x86_64-freetype` (see
 `.github/workflows/build.yml`), then `cmake -B build && cmake --build build`.
 
 ## Usage

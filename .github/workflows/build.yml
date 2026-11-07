@@ -90,22 +90,22 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-qt6-base
-            mingw-w64-x86_64-qt6-tools
-            mingw-w64-x86_64-openimageio
-            mingw-w64-x86_64-openexr
-            mingw-w64-x86_64-imath
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-fmt
-            mingw-w64-x86_64-freetype
-            mingw-w64-x86_64-ffmpeg
-            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-openimageio
+            mingw-w64-ucrt-x86_64-openexr
+            mingw-w64-ucrt-x86_64-imath
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-fmt
+            mingw-w64-ucrt-x86_64-freetype
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-qt6-multimedia
 
       - name: Configure
         run: cmake -B build -G "MinGW Makefiles"
