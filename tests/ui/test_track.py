@@ -1,14 +1,5 @@
-"""Plate-card track combo binds to the rendered track.
-
-The plate-card's track combo (A/B/C/D) used to update only the GUI
-value object — gfcPlate::track stayed at its constructor default,
-so all four plates rendered Track A regardless of what the cards
-displayed. PR-22 routes the combo through the bridge so the plate's
-internal track field actually changes, and adds a status-bar label
-that mirrors the active plate's plate-side track for testability.
-
-Status-bar label format: 'Track: A', 'Track: B', etc.
-"""
+"""Plate-card track combo binds to the rendered track: the status-bar label mirrors the
+active plate's gfcPlate::track, as 'Track: A'."""
 from jefecheck import locators
 
 
@@ -25,28 +16,14 @@ def test_default_active_plate_shows_track_a(app):
 
 
 def _activate_plate(app, plate_id: int) -> None:
-    """Click on plate `plate_id`'s card to make it the active plate.
-
-    Mac2 / XCUITest doesn't expose the QFrame itself as an AX element
-    (no built-in interaction model), but the "Track" caption QLabel
-    inside the frame does surface, and QLabel doesn't consume mouse
-    presses — they propagate up to PlateCard_Qt::mousePressEvent which
-    emits the clicked signal. (This caption replaced the old plate-number
-    label as the activation handle.)
-    """
+    """Click plate `plate_id`'s "Track" caption to activate it (a QLabel doesn't consume the
+    press, so it reaches PlateCard_Qt::mousePressEvent)."""
     label = app.by_object_name(locators.plate(plate_id, "track.label"))
     label.click()
 
 
 def test_clicking_plate_1_switches_label_to_track_b(app):
-    """Active-plate change reflects in the status-bar track readout.
-
-    This catches the init-time half of the bug: each plate is bound to
-    its index-matching track at startup (plate 0→A, 1→B, 2→C, 3→D), so
-    activating plate 1 means the status bar should now read 'Track: B'.
-    Before PR-22, plate 1 (and 2 and 3) had `track=0` because the GUI's
-    setTrackChoice(i) call didn't propagate to gfcPlate::track.
-    """
+    """Activating plate 1 reads 'Track: B': each plate starts bound to its index-matching track."""
     _activate_plate(app, 1)
     assert _track_label(app) == "Track: B"
 

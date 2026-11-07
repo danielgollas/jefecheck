@@ -1,8 +1,4 @@
-"""Smoke test — proves the harness can launch the app and see widgets.
-
-Phase B intentionally ships this as the only test; Phase C adds the
-real per-feature suite.
-"""
+"""Smoke test: the harness can launch the app and see widgets."""
 from jefecheck import locators
 
 
@@ -12,13 +8,7 @@ def test_app_launches_and_main_window_visible(app):
 
 
 def test_plate_zero_card_widgets_resolvable(app):
-    """All plate-0 widgets should resolve via the objectName predicate.
-
-    Title-vs-value mapping varies by XCUITest element type (buttons
-    return label, combos return selected value), so this test only
-    asserts on locator resolution. Per-widget attribute checks live in
-    Phase C's feature tests.
-    """
+    """All plate-0 widgets resolve via the objectName predicate (locator resolution only)."""
     expected = [
         locators.plate(0, "gamma.spin"),
         locators.plate(0, "exposure.spin"),
@@ -37,11 +27,7 @@ def test_plate_zero_card_widgets_resolvable(app):
 
 
 def test_plate_button_titles_reflect_accessible_name(app):
-    """For button widgets, AXTitle should match the Qt accessibleName.
-
-    This verifies the Phase A naming pass actually reaches the AX layer
-    (and that Appium can read it) for the widget type that maps cleanly.
-    """
+    """For button widgets, AXTitle matches the Qt accessibleName."""
     # crop.button moved into the aspect combo popup (AspectCropCombo_Qt)
     # and is no longer always-visible; it is covered by test_plate_ops.
     expected = {

@@ -183,9 +183,8 @@ void LutCloudWidget::nodePos(int ix, int iy, int iz, float out[3]) const {
 
 void LutCloudWidget::initializeGL() {
     initializeOpenGLFunctions();
-    // Note: per-frame GL state (depth test etc.) is set in paintGL, not here.
-    // The QPainter used for axis labels resets GL state every frame, so
-    // enabling depth test once in initializeGL would only hold for frame 1.
+    // Per-frame GL state (depth test etc.) is set in paintGL: QPainter resets it every
+    // frame, so enabling it once here would only hold for frame 1.
 }
 
 void LutCloudWidget::resizeGL(int w, int h) {
@@ -195,9 +194,8 @@ void LutCloudWidget::resizeGL(int w, int h) {
 }
 
 void LutCloudWidget::applyCamera() {
-    // Dynamic frustum: bracket the cube + axes around the current distance so
-    // neither plane clips the scene as the camera dollies. Keeping top = near
-    // * 0.6 holds the field of view constant while near varies.
+    // Dynamic frustum: bracket the cube + axes around the camera distance so neither
+    // plane clips as it dollies; top = near * 0.6 holds the field of view constant.
     const double aspect = (height() > 0) ? (double)width() / height() : 1.0;
     double znear = dist_ - 2.0;
     if (znear < 0.05) znear = 0.05;
@@ -288,9 +286,8 @@ void LutCloudWidget::drawGrid() {
 }
 
 void LutCloudWidget::drawSolid() {
-    // The outer shell: the 6 boundary faces (each axis at its min and max
-    // index), each drawn as Gouraud-shaded triangle strips with per-vertex
-    // output colors. No interior fill.
+    // The outer shell: the 6 boundary faces as Gouraud-shaded triangle strips with
+    // per-vertex output colors; no interior fill.
     const int m = cs_ - 1;
     if (m < 1) return;
 
@@ -324,10 +321,8 @@ void LutCloudWidget::drawSolid() {
 }
 
 void LutCloudWidget::paintGL() {
-    // Wrap the raw GL in beginNativePainting/endNativePainting so QPainter
-    // (used for the axis labels below) saves/restores GL state cleanly. Set
-    // depth state every frame — QPainter disables GL_DEPTH_TEST when it runs,
-    // so enabling it only in initializeGL would break occlusion from frame 2.
+    // Wrap the raw GL in beginNativePainting/endNativePainting so QPainter (axis
+    // labels) restores GL state; set depth state every frame since QPainter disables it.
     QPainter painter(this);
     painter.beginNativePainting();
 

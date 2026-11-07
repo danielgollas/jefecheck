@@ -9,9 +9,8 @@ echo "Creating macOS app bundle ($VERSION)..."
 mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
 
-# The macOS build sets MACOSX_BUNDLE, so the binary lands inside a .app at
-# build/jefecheck.app/Contents/MacOS/jefecheck. Older non-bundle builds put
-# it at build/jefecheck. Accept either.
+# The binary lives inside the .app at build/jefecheck.app/Contents/MacOS/jefecheck
+# (MACOSX_BUNDLE) or at build/jefecheck; accept either.
 if [ -f build/jefecheck ]; then
     SRC_BIN="build/jefecheck"
 elif [ -f build/jefecheck.app/Contents/MacOS/jefecheck ]; then
@@ -25,10 +24,8 @@ cp -r src/FX "$APP/Contents/Resources/"
 cp -r src/fonts "$APP/Contents/Resources/"
 cp packaging/macos/JefeCheck.icns "$APP/Contents/Resources/"
 
-# Bundle a static FFmpeg (video export) into Resources/, where
-# VideoEncoder_Qt::findFfmpeg() looks first. GPL static build — compatible
-# with this GPL v2 app. Set JEFECHECK_FFMPEG_BIN to use a local binary
-# instead of downloading (offline/dev packaging).
+# Bundle a static FFmpeg (GPL build) into Resources/, where VideoEncoder_Qt::findFfmpeg()
+# looks first; JEFECHECK_FFMPEG_BIN uses a local binary instead of downloading.
 FFMPEG_VERSION="b6.1.1"
 if [ -n "${JEFECHECK_FFMPEG_BIN:-}" ] && [ -f "$JEFECHECK_FFMPEG_BIN" ]; then
     cp "$JEFECHECK_FFMPEG_BIN" "$APP/Contents/Resources/ffmpeg"

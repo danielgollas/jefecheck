@@ -12,22 +12,7 @@
 
 #include <OpenImageIO/imageio.h>
 
-// ---------------------------------------------------------------------------
-// OIIO-backed image saver.
-//
-// The render path (gfcPlate::draw with forRender=true) does:
-//   1. saver = getImageSaverInstance(renderParams)
-//   2. void* px = saver->getPixelPointer()           <- allocates our buffer
-//   3. glGetTexImage(..., saver->getGLFormat(),
-//                         saver->getGLPixelFormat(), px)
-//   4. saver->save()                                  <- writes via OIIO
-//   5. saver->freeResources(); delete saver
-//
-// We always read back RGBA. LDR formats read 8-bit unsigned; EXR reads
-// 32-bit float (OIIO converts to half on write when requested). OpenGL
-// hands back rows bottom-to-top, so save() flips vertically to OIIO's
-// top-left origin and strips alpha for formats that don't carry it.
-// ---------------------------------------------------------------------------
+// OIIO-backed image saver. Always reads back RGBA; OpenGL rows come bottom-to-top, so save() flips them.
 
 namespace {
 
@@ -131,9 +116,8 @@ public:
     }
 
 private:
-    // Copy `src` (width*height*4, bottom-up) into `dst`
-    // (width*height*outChannels, top-down), dropping channels past
-    // outChannels.
+    // Copy `src` (width*height*4, bottom-up) into `dst` (top-down,
+    // outChannels per pixel), dropping channels past outChannels.
     template <typename T>
     void flipAndPack(const T* src, T* dst, int outChannels) const {
         for (int y = 0; y < height_; ++y) {

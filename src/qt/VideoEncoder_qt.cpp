@@ -76,9 +76,8 @@ void VideoEncoder_Qt::start(const Params& p) {
         return;
     }
 
-    // Target canvas = first frame's size, rounded up to even (h264/h265
-    // require even dimensions). All frames are scaled to fit and padded,
-    // so a sequence with varying per-frame sizes still encodes cleanly.
+    // Canvas = first frame's size rounded up to even (h264/h265 need even
+    // dimensions); frames are scaled to fit and padded.
     int w = 0, h = 0;
     {
         const QString firstFrame = QString::asprintf(

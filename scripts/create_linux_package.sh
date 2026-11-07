@@ -15,9 +15,8 @@ cp -r src/fonts "$PACKAGE/share/jefecheck/"
 cp scripts/install_linux.sh "$PACKAGE/install.sh"
 chmod +x "$PACKAGE/install.sh"
 
-# Bundle a static FFmpeg (video export) next to the binary, where
-# VideoEncoder_Qt::findFfmpeg() looks first. GPL static build. Override
-# with JEFECHECK_FFMPEG_BIN for offline/dev packaging.
+# Bundle a static FFmpeg (GPL build) next to the binary, where
+# VideoEncoder_Qt::findFfmpeg() looks first. JEFECHECK_FFMPEG_BIN overrides.
 FFMPEG_VERSION="b6.1.1"
 if [ -n "${JEFECHECK_FFMPEG_BIN:-}" ] && [ -f "$JEFECHECK_FFMPEG_BIN" ]; then
     cp "$JEFECHECK_FFMPEG_BIN" "$PACKAGE/bin/ffmpeg"

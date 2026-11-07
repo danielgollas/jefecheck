@@ -22,15 +22,11 @@
 #include <regex>
 #include <sstream>
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
 namespace
 {
-	// Matches the trailing ".<digits-or-hashes>.<ext>" frame-number segment
-	// of a sequence filename, e.g. ".0101.exr" or ".####.exr". Used both to
-	// normalise a path (Task's normalisePath) and to strip the frame+ext
-	// segment off when computing the sidecar's basename.
+	// Matches the trailing ".<digits-or-hashes>.<ext>" frame segment of a sequence
+	// filename (".0101.exr", ".####.exr").
 	const std::regex& frameNumberPattern()
 	{
 		static const std::regex re(R"(\.(\d+|#+)\.([^./\\]+)$)");
@@ -215,9 +211,8 @@ namespace
 		return xTop;
 	}
 
-	// Constructs the correct concrete subclass for `type` and restores its
-	// own geometry members from `pts` -- points() is read-only output, so
-	// this is the only place geometry gets written back in.
+	// Constructs the concrete subclass for `type` and restores its geometry from
+	// `pts` (points() is read-only output).
 	std::unique_ptr<gfcNote> makeNoteWithGeometry(gfcNoteType type, const std::vector<gfcNotePoint>& pts)
 	{
 		switch (type)
@@ -341,13 +336,8 @@ namespace
 		return xTop.writeToFile(path.c_str()) == eXMLErrorNone;
 	}
 
-	// Finds the <jefecheckNotes> element in an already-parsed document `parsed`
-	// (a file or a string, parsed with no tag argument -- see fromXmlString for
-	// why a tag argument isn't safe to pass to xmlParser here). Some xmlParser
-	// builds hand back the named root directly when there is no separate
-	// <?xml?> declaration in front of it, rather than as a child of a wrapper
-	// node, so both shapes are checked. Returns false, `top` unset, if neither
-	// shape matches.
+	// Finds the <jefecheckNotes> element in a parsed document; some xmlParser builds
+	// return the named root directly (no <?xml?>), so both shapes are checked.
 	bool locateNotesRoot(const XMLNode& parsed, XMLNode& top)
 	{
 		XMLNode child = parsed.getChildNode("jefecheckNotes");
@@ -391,9 +381,7 @@ namespace
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Public interface
-// ---------------------------------------------------------------------------
 
 namespace
 {
@@ -469,9 +457,8 @@ std::string gfcNoteStore::toJsonString(const gfcReview& review)
 			out += buf;
 			out += "\"author\":\"" + jsonEscape(n->author) + "\",";
 
-			// OTIO's vocabulary: a range is a start plus a duration, not a
-			// start plus an end. Frames are integers HERE only because the
-			// model is -- see the rational-time limitation in the spec.
+			// OTIO vocabulary: a range is a start plus a duration. Frames are
+			// integers here only because the model is.
 			std::snprintf(buf, sizeof(buf),
 				"\"range\":{\"start_frame\":%d,\"duration_frames\":%d},",
 				n->from, (n->to - n->from) + 1);
@@ -544,9 +531,8 @@ bool gfcNoteStore::save(const gfcReview& review)
 		return true;
 	}
 
-	// The path sidecarPathFor() chose failed anyway (e.g. a race between the
-	// writability probe and the real write) -- fall back as a last resort
-	// rather than silently losing the round.
+	// The chosen sidecar path failed anyway (e.g. a race with the writability
+	// probe): fall back rather than lose the round.
 	std::string fallback = fallbackSidecarPath(normalisedPath);
 	if (fallback == path)
 	{
@@ -588,14 +574,8 @@ std::string gfcNoteStore::toXmlString(const gfcReview& review)
 
 bool gfcNoteStore::fromXmlString(const std::string& xml, gfcReview& out)
 {
-	// Parsed WITHOUT a tag argument: when passed one, parseString() compares
-	// it against the parsed root's node name via _tcsicmp() -- and for input
-	// with no XML tag at all (e.g. plain text), no element is created and
-	// that name is NULL, so the comparison segfaults. Parsing untagged and
-	// locating the root ourselves (locateNotesRoot(), shared with tryLoad())
-	// sidesteps this.
-	// parseString, unlike parseFile, does not skip a leading UTF-8 BOM, and
-	// save() writes one -- so sidecar bytes read into a string start with it.
+	// Parse WITHOUT a tag argument: parseString() compares it to the root node name via
+	// _tcsicmp(), NULL (segfault) for input with no XML tag. It keeps the BOM save() writes.
 	XMLResults results;
 	XMLNode xFile = XMLNode::parseString(skipUtf8Bom(xml.c_str()), NULL, &results);
 	if (results.error != eXMLErrorNone)
@@ -620,9 +600,7 @@ bool gfcNoteStore::fromXmlString(const std::string& xml, gfcReview& out)
 	return true;
 }
 
-// ---------------------------------------------------------------------------
 // Self-test
-// ---------------------------------------------------------------------------
 int noteStoreSelfTest()
 {
 	int pass = 0;
@@ -729,10 +707,8 @@ int noteStoreSelfTest()
 		}
 	}
 
-	// read-only fallback: make the media directory unwritable, save again
-	// (a *different* review so it can't be satisfied by the file we already
-	// wrote above), and confirm the note lands under ~/.config and still
-	// reads back from there.
+	// read-only fallback: make the media directory unwritable, save a different
+	// review, and confirm the note lands under ~/.config and reads back.
 	std::filesystem::permissions(testDir,
 		std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec,
 		std::filesystem::perm_options::replace);

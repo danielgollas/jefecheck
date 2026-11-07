@@ -37,17 +37,7 @@ public:
 
     void Update();
 
-    /**
-     * Note sync (JEF-39). Outgoing messages are QUEUED rather than sent
-     * inline because only Update() owns the transport pump; it flushes
-     * whatever accumulated since the last tick.
-     *
-     * These were briefly file-static globals in the .cpp, because the task
-     * that added them was scoped to the .cpp files and could not declare a
-     * member here. That is a scoping artefact, not a design: the queues
-     * belong to the client that drains them, and a second client instance
-     * would have silently shared one global.
-     */
+    /** Note sync. Outgoing messages are queued because only Update() owns the transport pump. */
     void queueNoteMessage(std::vector<unsigned char> bytes);
     /** Note add/remove/lock events received since the last call. */
     std::vector<jefe::net::NoteSyncEvent> drainNoteSyncEvents();
@@ -90,9 +80,8 @@ public:
     int getStatusColor();
     std::vector<std::string> getPeersInSession();
 
-    // JEF-30: per-peer connection health from the underlying transport (the
-    // client's single peer is the host). Empty when not connected.
-    // JEF-37: true while parked in a session's lobby awaiting the host.
+    // Per-peer connection health from the transport (the single peer is the host).
+    // Empty when not connected. True while parked in a session's lobby.
     bool getAwaitingAdmission() {
         return transport_ ? transport_->awaitingAdmission() : false;
     }
@@ -117,11 +106,8 @@ private:
     bool gotMessages;
     bool isConnected;
     bool attemptingConnection;
-    // JEF-37: the gap between "the transport is up" and "the peer list has
-    // arrived", i.e. the app-level handshake. `attemptingConnection` is already
-    // false here and `isConnected` is not yet true, so without this the client
-    // looks briefly offline right after being admitted — a rejection, to anyone
-    // watching for an answer. Cleared alongside both of those.
+    // The gap between "transport is up" and "peer list has arrived": without it the
+    // client looks briefly offline right after being admitted.
     bool joinHandshakePending_ = false;
     std::unique_ptr<jefe::net::ITransport> transport_;
     int port;
