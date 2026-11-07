@@ -196,6 +196,9 @@ int frameStateSelfTest(const std::string& dir) {
         check(seq->getLoadedFrameCount() == 115, "115 frames resident");
         check(seq->loadedVersion() > v0, "eviction moves the version");
         check(seq->getThumbnail(0).w > 0, "an evicted frame keeps its thumbnail");
+        const int firstDrawn = jefe::qt::timelineFirstThumbnailDrawn(1);
+        std::printf("FRAME-STATE: first thumbnail drawn at frame index %d\n", firstDrawn);
+        check(firstDrawn == 0, "the timeline still draws the evicted frames' thumbnails");
         check(!seq->getFrame(1, false).loaded && seq->getFrame(1, false).textureBytes == 0, "frame 1's texture is gone");
         check(seq->framePending(1) && !seq->framePending(6) && !seq->framePending(0) && !seq->framePending(121), "framePending: evicted yes, resident/outside no");
         check(seq->getRangeStart() == 0 && seq->getRangeEnd() == 119, "eviction leaves the trim range");

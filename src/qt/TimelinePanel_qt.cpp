@@ -224,6 +224,7 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
     QPainter p(this);
     const QRect r = rect();
     p.fillRect(r, QColor(28, 28, 28));
+    firstThumbDrawn_.fill(-1);
 
     const int lh = laneHeight();
     for (int i = 0; i < 4; ++i) {
@@ -387,23 +388,21 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
     const int stripH = laneH - barH - 4 - waveH;
     if (stripH < 6) return;  // lane too short; nothing legible to draw
 
-    const int loadedEndFrame =
-        segments_[track].empty() ? s.firstLoadedFrame : segments_[track].back().second;
-
     // A thumbnail is always its natural width (stripH x frame aspect), never
     // squeezed or cropped. Probe one decoded thumbnail; fall back to 16:9.
     double aspect = 16.0 / 9.0;
     {
-        const QPixmap probe = thumbPixmap(track, s.firstLoadedFrame - s.rangeStart);
+        QPixmap probe = thumbPixmap(track, s.firstLoadedFrame - s.rangeStart);
+        if (probe.isNull()) probe = thumbPixmap(track, 0);   // nothing resident: try the first frame
         if (!probe.isNull() && probe.height() > 0)
             aspect = (double)probe.width() / probe.height();
     }
     const int naturalW = std::max((int)(stripH * aspect + 0.5), 2);
 
-    // Walk the visible loaded frames left to right, each centered at its tick x at
-    // natural width, skipping any that would overlap the previous thumbnail.
-    const int firstVis = std::max(s.firstLoadedFrame, from_);
-    const int lastVis  = std::min(loadedEndFrame, to_);
+    // Walk the whole visible track, not just the loaded frames: a thumbnail
+    // outlives its frame's texture, so the strip stays a map of the clip.
+    const int firstVis = std::max(s.rangeStart, from_);
+    const int lastVis  = std::min(s.rangeEnd, to_);
     const double rightLimit = width() - kScrubberPad - naturalW;
     double lastRight = -1e9;
     for (int f = firstVis; f <= lastVis; ++f) {
@@ -419,6 +418,7 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
         const QPixmap scaled = pm.scaled(naturalW, stripH, Qt::IgnoreAspectRatio,
                                          Qt::SmoothTransformation);
         p.drawPixmap((int)(x + 0.5), stripTop, scaled);
+        if (firstThumbDrawn_[track] < 0) firstThumbDrawn_[track] = frameIndex;
         lastRight = x + naturalW;
     }
 
@@ -797,3 +797,16 @@ void TimelinePanel_Qt::refreshFromPlayback() {
     lastFps_ = fps; lastPlaying_ = playing;
     lastCacheValid_ = true;
 }
+
+namespace jefe { namespace qt {
+int timelineFirstThumbnailDrawn(int track) {
+    if (track < 0 || track > 3) return -1;
+    TimelineTracks_Qt w;
+    w.resize(2400, 400);
+    w.refresh();
+    QImage img(w.size(), QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::black);
+    w.render(&img);
+    return w.firstThumbnailDrawn(track);
+}
+}}  // namespace jefe::qt

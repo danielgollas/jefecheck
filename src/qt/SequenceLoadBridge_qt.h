@@ -1094,6 +1094,9 @@ struct ThumbPixels {
 };
 
 ThumbPixels getTrackThumbnail(int track, int frameIndex);
+// Test hook: renders the timeline tracks widget offscreen and returns the first
+// 0-based frame index whose thumbnail it drew on `track`, or -1 if none.
+int timelineFirstThumbnailDrawn(int track);
 
 bool getThumbnailsEnabled();        // reads sett.showThumbnails
 void setThumbnailsEnabled(bool on); // writes sett.showThumbnails; setChanged()

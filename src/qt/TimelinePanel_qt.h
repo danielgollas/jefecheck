@@ -71,6 +71,7 @@ public:
     // the bridge; cache-compare and repaint only on change. Driven from
     // TimelinePanel_Qt::refreshFromPlayback. Cheap when idle.
     void refresh();
+    int firstThumbnailDrawn(int track) const { return firstThumbDrawn_[track]; }
 
 protected:
     void paintEvent(QPaintEvent* e) override;
@@ -105,6 +106,8 @@ private:
     // Loaded runs per track (1-based inclusive timeline frames), refetched only
     // when a track's loadedVersion or offset moves.
     std::vector<std::pair<int, int>> segments_[4];
+
+    std::array<int, 4> firstThumbDrawn_{{-1, -1, -1, -1}};   // per paint, for the test hook
 
     // Cached thumbnail pixmaps, keyed by (track << 24) | frameIndex.
     QHash<int, QPixmap> thumbCache_;
