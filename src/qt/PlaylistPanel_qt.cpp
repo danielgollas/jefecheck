@@ -31,9 +31,7 @@ constexpr const char* kScaleValKey  = "Playlist/scaleOverridePct";
 constexpr const char* kLastDirKey   = "Playlist/lastAddDir";
 }
 
-// ---------------------------------------------------------------------------
-// PlaylistItemCard implementation
-// ---------------------------------------------------------------------------
+// ---- PlaylistItemCard implementation ----
 
 PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded,
                                    bool fullPaths, QWidget* parent)
@@ -138,9 +136,7 @@ void PlaylistItemCard::mouseDoubleClickEvent(QMouseEvent* ev) {
     QWidget::mouseDoubleClickEvent(ev);
 }
 
-// ---------------------------------------------------------------------------
-// PlaylistPanel_Qt implementation
-// ---------------------------------------------------------------------------
+// ---- PlaylistPanel_Qt implementation ----
 
 PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("playlist.panel");

@@ -1,11 +1,5 @@
-"""Plate-reset shortcuts (Cmd+R, Cmd+Alt+R, Shift+R, Shift+Alt+R).
-
-Cmd+R resets every per-plate override on the active plate, Cmd+Alt+R on all
-four; Shift+R resets only color correction on the active plate, Shift+Alt+R on
-all. The flip/flop buttons are the observable proxy (they toggle cleanly via AX);
-color correction is tested negatively (Shift+R must NOT clear flip) because Mac2
-has no reliable spinbox setter.
-"""
+"""Plate-reset shortcuts (Cmd+R, Cmd+Alt+R, Shift+R, Shift+Alt+R): Cmd resets all per-plate overrides, Shift resets only color correction (Alt = all plates).
+Flip/flop are the observable proxy; CC is tested negatively (Shift+R must NOT clear flip) since Mac2 has no reliable spinbox setter."""
 import pytest
 
 from jefecheck import locators

@@ -1,6 +1,5 @@
-// Headless loopback self-test for the signaling stub (--signal-test), in its
-// own TU so the rtc lifecycle bracketing (Preload/Cleanup) stays away from the
-// production wrappers.
+// Headless loopback self-test for the signaling stub (--signal-test), in its own TU so the rtc
+// Preload/Cleanup bracketing stays away from the production wrappers.
 #include "gfcSignaling.h"
 
 #include <rtc/rtc.hpp>

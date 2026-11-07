@@ -1,11 +1,5 @@
 """Pixel-diff helpers for visual regression tests.
-
-Pillow loads `actual` and `baseline` as RGBA; differing sizes fail loudly
-(window chrome changed, baseline invalid). pixelmatch counts differing pixels
-with a perceptual `threshold`, and up to `max_diff_ratio` may differ to absorb
-font hinting and GL rasterizer jitter. With `--update-baselines` the actual
-screenshot becomes the new baseline.
-"""
+Pillow RGBA load, differing sizes fail loudly; pixelmatch counts differing pixels with up to `max_diff_ratio` allowed to absorb hinting/GL jitter."""
 from __future__ import annotations
 
 import io
@@ -42,11 +36,8 @@ def assert_matches_baseline(
     pixel_threshold: float = DEFAULT_PIXEL_THRESHOLD,
     max_diff_ratio: float = DEFAULT_MAX_DIFF_RATIO,
 ) -> None:
-    """Compare `actual_png` against `baselines/<baseline_name>`.
-
-    `update=True` writes the baseline instead of comparing. A failed match writes
-    `.actual.png` and `.diff.png` next to the baseline.
-    """
+    """Compare `actual_png` against `baselines/<baseline_name>`; `update=True` writes the baseline instead.
+    A failed match writes `.actual.png` and `.diff.png` next to the baseline."""
     baseline_path = baselines_dir() / baseline_name
     baseline_path.parent.mkdir(parents=True, exist_ok=True)
 

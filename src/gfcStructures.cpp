@@ -512,10 +512,8 @@ std::string GetMD5Hash ( std::string theString ) {
     return std::string(buf);
 }
 
-// ---------------------------------------------------------------------------
-// Portable content digest: FNV-1a 64-bit over raw bytes. P2P LUT/FX sync dedup
-// needs peers to agree, so it must be a fixed algorithm over the file bytes
-// (not std::hash, which is implementation-defined). Not cryptographic.
+// ---- Portable content digest: FNV-1a 64-bit over raw bytes (not cryptographic) ----
+// P2P LUT/FX sync dedup needs peers to agree, so use a fixed algorithm, not std::hash (implementation-defined).
 namespace jefe {
 
 static const uint64_t kFnvOffset = 14695981039346656037ULL;

@@ -43,12 +43,8 @@ gfcFX gfcFXStack::getFX(int index) {
     }
 }
 
-/**
- * Reference-returning counterpart to getFX(), which deep-copies the gfcFX per
- * call. Use only for same-iteration access: anything that adds, removes or
- * reorders FXs invalidates the reference. An out-of-range index returns a
- * shared inactive sentinel gfcFX.
- */
+ /** Reference-returning counterpart to getFX() (which deep-copies); any add/remove/reorder invalidates it.
+  * An out-of-range index returns a shared inactive sentinel gfcFX. */
 gfcFX& gfcFXStack::fxAt(int index) {
     if (index>=0 && index<(int)fxs.size()) {
         return fxs[index];

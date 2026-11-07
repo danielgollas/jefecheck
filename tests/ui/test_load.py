@@ -1,11 +1,5 @@
-"""Image-loading behavioral tests.
-
-Boots JefeCheck with `--open-file`, waits for the deferred load, then asserts
-on AX-visible state that proves the load reached gfcSequence, not just the GUI
-value object. Complements the visual-diff tests in `test_visual.py`: those catch
-rendering regressions, these catch plumbing regressions (load path, status
-surfaces, sequence-name reporting).
-"""
+"""Image-loading behavioral tests: boot with `--open-file`, wait for the deferred load, assert AX-visible state proving the load reached gfcSequence.
+Complements test_visual.py: those catch rendering regressions, these catch plumbing regressions."""
 import time
 
 import pytest
@@ -22,11 +16,8 @@ def _loaded_label(app) -> str:
 
 
 def _wait_for_load(app, timeout: float = 5.0) -> str:
-    """Spin until the loaded-label transitions out of the empty state.
-
-    --open-file dispatches via QTimer::singleShot(0) after paintGL has run (so
-    GLAD is initialised); usually <500ms on a cold launch, plus WDA variance.
-    """
+    """Spin until the loaded-label leaves the empty state.
+    --open-file dispatches via QTimer::singleShot(0) after paintGL (so GLAD is initialised); usually <500ms plus WDA variance."""
     deadline = time.monotonic() + timeout
     last = ""
     while time.monotonic() < deadline:
@@ -46,26 +37,15 @@ def test_default_active_plate_loaded_label_starts_empty(app):
 
 
 def test_depth_combo_default_is_16_half(app):
-    """Fresh launch (per-module config_dir, no saved Engine/defaultTextureFormat)
-    shows the default of 16-half on the status-bar depth combo.
-
-    QComboBox exposes its selected text via `title`, not `value` (as for
-    TRANSPORT_LOOP).
-
-    Must run before any test that spawns a separate JefeCheck instance (e.g.
-    `visual_app`): Mac2 is single-session, so a second launch invalidates this
-    module's `app` WDA session.
-    """
+    """Fresh launch (no saved Engine/defaultTextureFormat) shows the default 16-half on the status-bar depth combo (QComboBox exposes its text via `title`, not `value`).
+    Must run before any test spawning a separate JefeCheck (e.g. `visual_app`): Mac2 is single-session, so a second launch invalidates this module's `app` session."""
     combo = app.by_object_name(locators.STATUSBAR_DEPTH)
     assert combo.get_attribute("title") == "16-half"
 
 
 def test_visual_app_loads_test_pattern_into_plate_zero(visual_app):
-    """visual_app preloads test_pattern_64.png into plate 0. Asserts the
-    'Loaded:' label leaves the empty state (the QTimer::singleShot path fired)
-    and reports the fixture basename (we reached gfcSequence::filenameGeneric,
-    not just the GUI's parallel state).
-    """
+    """visual_app preloads test_pattern_64.png into plate 0; asserts 'Loaded:' leaves the empty state
+    and reports the fixture basename (we reached gfcSequence::filenameGeneric, not just GUI state)."""
     label = _wait_for_load(visual_app)
     assert label == "Loaded: test_pattern.png", (
         f"Expected 'Loaded: test_pattern.png', got {label!r}"
@@ -97,10 +77,8 @@ def test_depth_combo_persists_across_launch(
     )
     try:
         combo = first.by_object_name(locators.STATUSBAR_DEPTH)
-        # Qt's QComboBox shows its dropdown via QComboBoxListView, which Mac2
-        # exposes as an XCUIElementTypeMenuButton with StaticText rows (not
-        # MenuItem). Scope the lookup to the combo's listview identifier so a
-        # stray '8' label elsewhere doesn't win.
+        # QComboBox's dropdown is a QComboBoxListView that Mac2 exposes as an XCUIElementTypeMenuButton with StaticText rows (not MenuItem);
+        # scope the lookup to the combo's listview identifier so a stray '8' label elsewhere doesn't win.
         combo.click()
         opt_8 = first.driver.find_element(
             By.XPATH,

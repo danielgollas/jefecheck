@@ -164,11 +164,7 @@ static QString googleClientFilePath() {
            QStringLiteral("/.config/jefecheck/google_client.json");
 }
 
-/**
- * Build-time secret, else the environment, else the downloaded credentials
- * file. Returns "" when none is configured; callers must treat that as
- * "sign-in unavailable".
- */
+/** Build-time secret, else the environment, else the downloaded credentials file; "" means sign-in unavailable. */
 static std::string googleClientSecret() {
     if (kBuiltInGoogleClientSecret[0] != '\0') return kBuiltInGoogleClientSecret;
 

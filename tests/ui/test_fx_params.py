@@ -22,9 +22,8 @@ def ready_app(app):
 
 @pytest.fixture(autouse=True)
 def _clean_fx_stack(app):
-    # Same isolation as test_fx.py: Add tests leak into later tests if not
-    # cleared. Retried because the AX bridge can 404 the fxstack list lookups for
-    # ~1s after a dock-state change in a prior test.
+    # Same isolation as test_fx.py (Add tests leak into later tests if not cleared);
+    # retried because the AX bridge can 404 the fxstack list lookups for ~1s after a dock-state change.
     import time
 
     app.wait_for_startup_ready()

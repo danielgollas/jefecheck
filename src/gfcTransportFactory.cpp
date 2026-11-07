@@ -22,9 +22,8 @@ TransportKind transportKindFromEnv() {
 std::unique_ptr<ITransport> makeTransport(const TransportConfig& configIn) {
     TransportConfig cfg = configIn;
 
-    // Fill coordinator details from env only when the caller already opted into
-    // coordinator mode; a bare JEFECHECK_COORDINATOR_URL must not reroute the LAN
-    // Host/Join buttons into a coordinator session. The config struct wins.
+    // Fill coordinator details from env only when the caller already opted into coordinator mode: a bare
+    // JEFECHECK_COORDINATOR_URL must not reroute LAN Host/Join into a coordinator session. The config struct wins.
     if (cfg.coordinatorMode) {
         if (cfg.coordinatorUrl.empty()) {
             if (const char* u = std::getenv("JEFECHECK_COORDINATOR_URL"))

@@ -28,9 +28,8 @@ void loadPreferences() {
     // Session behavior.
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
-    // General.
-    // RGB background. Migrate from the legacy grayscale General/bgColor: if the
-    // RGB keys are absent, each channel falls back to the old gray value.
+    // General: RGB background. Migrate from the legacy grayscale General/bgColor:
+    // if the RGB keys are absent, each channel falls back to the old gray value.
     sett.bgColor        = s.value("General/bgColor", sett.bgColor).toFloat();
     sett.bgColorR       = s.value("General/bgColorR", sett.bgColor).toFloat();
     sett.bgColorG       = s.value("General/bgColorG", sett.bgColor).toFloat();

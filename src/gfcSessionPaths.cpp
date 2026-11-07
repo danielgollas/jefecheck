@@ -167,9 +167,7 @@ bool gfcSessionPaths::rewriteMedia(const std::string& jcsXml, const std::map<std
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-// ---------------------------------------------------------------------------
+// ---- Self-test ----
 int sessionPathsSelfTest()
 {
 	using namespace gfcSessionPaths;

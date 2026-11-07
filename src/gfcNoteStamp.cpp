@@ -71,9 +71,8 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 	OIIO::ImageSpec outSpec = src;          // carries every source attribute through
 	outSpec.nchannels = outChannels;
 
-	// With per-channel formats, that array must be exactly nchannels long, or
-	// the writer reads past its end and misaligns every channel. Keep each source
-	// channel's own type; store the notes channels in the source's primary format.
+	// Per-channel formats need an array exactly nchannels long, or the writer reads past its end and misaligns channels.
+	// Keep each source channel's type; store the notes channels in the source's primary format.
 	if (!src.channelformats.empty())
 	{
 		outSpec.channelformats = src.channelformats;
@@ -180,9 +179,7 @@ std::string gfcNoteStamp::readEmbeddedJson(const std::string& exrPath)
 	return out;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-// ---------------------------------------------------------------------------
+// ---- Self-test ----
 
 namespace
 {
@@ -205,9 +202,8 @@ int noteStampSelfTest()
 	const std::string outPath = dir + "/stamped.exr";
 	std::remove(outPath.c_str());
 
-	// The source is deliberately mixed-format (R,G,B,A half, Z float, via per-channel
-	// channelformats), like a real CG render. Values vary per pixel and channel and
-	// are exactly representable in half, so the comparison can be tight.
+	// Deliberately mixed-format source (R,G,B,A half, Z float) like a real CG render;
+	// values are exactly representable in half so the comparison can be tight.
 	const int w = 8, h = 4;
 	const int srcCh = 5;
 	auto srcValue = [](int x, int y, int c) -> float

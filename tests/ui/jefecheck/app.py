@@ -69,10 +69,7 @@ class JefeCheckApp:
         open_files: Optional[list[Path]] = None,
     ) -> "JefeCheckApp":
         """Start the app under Appium and return a wrapped client.
-
-        `open_files`: paths loaded into plates 0..3 in order, so visual-diff
-        tests have known viewport content.
-        """
+        `open_files` are loaded into plates 0..3 in order so visual-diff tests have known content."""
         owns_config_dir = config_dir is None
         if config_dir is None:
             config_dir = Path(tempfile.mkdtemp(prefix="jefecheck-test-"))
@@ -147,13 +144,8 @@ class JefeCheckApp:
             "elementType == 4 AND title == 'JefeCheck'")
 
     def wait_for_startup_ready(self, timeout: float = 30.0) -> str:
-        """Block until the startup status label reaches a terminal state
-        ('Ready (X FX, Y LUT)' or 'Errors (...)') and return its text.
-
-        Re-queries the element each iteration and treats StaleElementReference /
-        NoSuchElement as "not yet terminal": the label updates every ~16ms during
-        autoload and Mac2's AX cache invalidates the reference on each change.
-        """
+        """Block until the startup status label is terminal ('Ready (X FX, Y LUT)' or 'Errors (...)') and return its text.
+        Treats StaleElementReference/NoSuchElement as not-yet-terminal: the label updates every ~16ms and Mac2's AX cache invalidates the reference."""
         from selenium.common.exceptions import (
             StaleElementReferenceException,
             NoSuchElementException,
@@ -194,11 +186,8 @@ class JefeCheckApp:
             time.sleep(self.slow_mo)
 
     def send_shortcut(self, combo: str) -> None:
-        """Send a Cmd/Ctrl/Shift/Opt-modified shortcut ('cmd+1', 'shift+f',
-        'cmd+,'; one main key) via System Events / AppleScript. Mac2's
-        `macos: keys` doesn't reliably deliver Cmd+modifier shortcuts to Qt's
-        QShortcut on macOS.
-        """
+        """Send a modified shortcut ('cmd+1', 'shift+f', 'cmd+,') via System Events / AppleScript.
+        Mac2's `macos: keys` doesn't reliably deliver Cmd+modifier shortcuts to Qt's QShortcut."""
         parts = [p.strip().lower() for p in combo.split("+")]
         modifiers: list[str] = []
         key: Optional[str] = None
@@ -218,9 +207,8 @@ class JefeCheckApp:
         using_clause = ""
         if modifiers:
             using_clause = " using {" + ", ".join(modifiers) + "}"
-        # Force the process frontmost via System Events (more immediate than
-        # `activate`), wait for the window-server handoff, then send the
-        # keystroke; the first keystroke after launch no-ops if sent too soon.
+        # Force the process frontmost via System Events and wait for the window-server handoff;
+        # the first keystroke after launch no-ops if sent too soon.
         script = (
             'tell application "System Events"\n'
             '  set frontmost of (first process whose '

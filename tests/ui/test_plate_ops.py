@@ -13,13 +13,8 @@ def _checked(widget) -> bool:
 
 @pytest.fixture(autouse=True)
 def _reset_plate_toggles_after(app):
-    """Restore every plate's flip/flop/crop to off after each test (the `app`
-    fixture is module-scoped, so a left-on toggle would leak into the next test).
-
-    Crop lives in the aspect combo's Qt::Popup, so its checkbox is only in the AX
-    tree while the popup is open: reopen it per plate. Clicking inside the popup
-    leaves it open; opening the next plate's combo dismisses it.
-    """
+    """Restore every plate's flip/flop/crop to off after each test (the `app` fixture is module-scoped).
+    Crop's checkbox is only in the AX tree while the aspect combo's Qt::Popup is open, so reopen it per plate."""
     yield
     for plate_id in range(4):
         for role in ("flip.button", "flop.button"):

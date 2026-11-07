@@ -27,9 +27,8 @@
 #include "../gfcreview.h"
 #include "../gfcrevision.h"
 
-// Test-fixture only: packageOpenSelfTest's fingerprint-relink checks need an
-// OIIO-decodable image so gfcMediaFingerprint::probe/compute succeed. Only
-// gfcMediaFingerprint touches OIIO in production.
+// Test-fixture only: packageOpenSelfTest's fingerprint-relink checks need an OIIO-decodable image for gfcMediaFingerprint::probe/compute.
+// Only gfcMediaFingerprint touches OIIO in production.
 #include <OpenImageIO/imageio.h>
 #include <vector>
 
@@ -453,11 +452,8 @@ bool isInsideDir(const std::filesystem::path& dir, const std::filesystem::path& 
     return f != full.end();
 }
 
-// Extracts `reader` into `dir`, unless a prior extraction there is complete (a
-// `.complete` marker AND every manifest-named file present). A partial or damaged
-// cache is repaired by writing the archive's entries back over the directory
-// (gfcTar::Reader::extractTo truncates or creates), not by discarding it, so a
-// reviewer's own .jnotes sidecar beside the extracted media survives.
+// Extracts `reader` into `dir` unless a prior extraction is complete (`.complete` marker AND every manifest-named file present).
+// Damaged caches are repaired by writing entries back over the directory, not discarding it, so a reviewer's own .jnotes sidecar survives.
 bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, const std::filesystem::path& dir,
                      std::string* err) {
     namespace fs = std::filesystem;
@@ -498,11 +494,8 @@ bool ensureExtracted(const gfcTar::Reader& reader, const Manifest& manifest, con
     return true;
 }
 
-// Frames of the media, in order: packaged (only when every packaged frame is
-// present) -> original path (when absolute) -> cheap file-name match under the
-// search roots -> fingerprint search under the same roots (only when
-// services.fingerprintRelink is set and the media has a fingerprint) ->
-// interactive locate. Empty when unresolved.
+// Frames of the media, in order: packaged (all frames present) -> original path (absolute) -> file-name match under search roots -> fingerprint search (if enabled and present) -> interactive locate.
+// Empty when unresolved.
 std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncluded,
                                       const std::filesystem::path& extractDir, const OpenServices& services,
                                       SequenceSearch& search) {
@@ -550,17 +543,8 @@ std::vector<std::string> resolveMedia(const ManifestMedia& media, bool mediaIncl
     return {};
 }
 
-// Loads any existing sidecar for `resolvedMedia`, merges `notesXml` into it and
-// saves when anything changed. Unreadable or unparseable `notesXml` is a
-// problem (a well-formed package always carries a parseable notes document).
-// A PRIMARY sidecar (gfcNoteStore::sidecarPathFor) that exists must load on its
-// own: gfcNoteStore::load() would otherwise fall through to a stale
-// fallback-location sidecar and merge into the wrong file, so the primary is
-// parsed directly (gfcNoteStore::fromXmlString).
-// Returns true when the packaged notes were placed (`*changed` = an actual
-// save; a missing sidecar is always created). Returns false and sets `problem`,
-// leaving the local sidecar untouched, when the notes don't parse, an existing
-// local sidecar doesn't load, or the save fails.
+// Merges `notesXml` into the existing sidecar for `resolvedMedia`; returns false and sets `problem` (local sidecar untouched) on parse/load/save failure.
+// A PRIMARY sidecar must be parsed directly (gfcNoteStore::fromXmlString): load() would fall through to a stale fallback sidecar and merge into the wrong file.
 bool mergeNotes(const std::string& resolvedMedia, const std::string& notesXml, const std::string& fallbackFingerprint,
                 std::string* problem, bool* changed) {
     if (changed) *changed = false;
@@ -713,9 +697,8 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
         if (frames.empty()) {
             ++result.missing;
             result.missingMedia.push_back(fs::path(media.originalPath).filename().string());
-            // A ref that pointed at the packaged copy (now unusable) is mapped
-            // back to alongside the original path; one that already named the
-            // original path needs no mapping entry.
+            // A ref that pointed at the packaged copy (now unusable) maps back to alongside the original path;
+            // one that already named the original path needs no entry.
             const fs::path originalDir = fs::path(media.originalPath).parent_path();
             for (const gfcSessionPaths::MediaRef& ref : refs) {
                 if (ref.path.rfind(packagedPrefix, 0) != 0) continue;
@@ -733,16 +716,14 @@ bool openPackage(const std::string& packagePath, const std::string& cacheRoot, c
             if (!ours) continue;
             const std::string name = fs::path(ref.path).filename().string();
             const auto at = std::find(media.frames.begin(), media.frames.end(), name);
-            // A reference whose file name is not in media.frames means the file
-            // vanished or the reference is a pattern; frame 0 of the same resolved
-            // sequence loads the same sequence (the range lives in session attributes).
+            // A reference whose file name is not in media.frames means the file vanished or the reference is a pattern;
+            // frame 0 of the same resolved sequence loads the same sequence (the range lives in session attributes).
             const size_t index = (at == media.frames.end()) ? 0 : size_t(at - media.frames.begin());
             mapping[ref.path] = frames[std::min(index, frames.size() - 1)];
         }
 
-        // Notes are only read here; nothing is merged or saved until the session
-        // rewrite below has succeeded. An unreadable entry stays empty so
-        // mergeNotes reports it as a problem.
+        // Notes are only read here; nothing is merged or saved until the session rewrite succeeds.
+        // An unreadable entry stays empty so mergeNotes reports it as a problem.
         std::string notesXml;
         if (!readCapped(dir / media.notes, media.notes, notesXml, nullptr)) notesXml.clear();
         pending.push_back(PendingNotes{gfcNoteStore::normalisePath(frames.front()), notesXml, media.originalPath,
@@ -1099,9 +1080,8 @@ int packageOpenSelfTest() {
     check(fs::exists(fs::path(again.extractDir) / "sentinel.txt", ec),
           "reopening a complete cache does not touch its other contents");
 
-    // A completed cache missing one packaged frame is damaged: it is repaired
-    // by writing the archive's entries back over the directory, not by discarding
-    // it, so a reviewer's own sidecar and anything else outside the package survives.
+    // A completed cache missing one packaged frame is damaged: repaired by writing entries back over the directory,
+    // not discarding it, so a reviewer's own sidecar survives.
     gfcReview sidecarBeforeDamage;
     check(gfcNoteStore::load(extractedMedia, sidecarBeforeDamage) && sidecarBeforeDamage.revisions.size() == 1,
           "a sidecar exists beside the extracted media before the cache is damaged");
@@ -1123,9 +1103,8 @@ int packageOpenSelfTest() {
           fs::exists(fs::path(noMarker.extractDir) / ".complete", ec),
           "a cache without a .complete marker is re-extracted and succeeds");
 
-    // A repair that fails part-way must not leave the old .complete marker
-    // vouching for a half-rewritten cache. A directory where the notes entry
-    // belongs makes its extraction fail.
+    // A repair that fails part-way must not leave the old .complete marker vouching for a half-rewritten cache;
+    // a directory where the notes entry belongs makes its extraction fail.
     fs::remove(extracted, ec);
     const fs::path notesEntry = fs::path(result.extractDir) / "notes" / "000.jnotes";
     fs::remove(notesEntry, ec);
@@ -1140,9 +1119,8 @@ int packageOpenSelfTest() {
           fs::exists(fs::path(result.extractDir) / ".complete", ec),
           "a repaired cache has its .complete marker again");
 
-    // LUTs load only once the rewritten session is confirmed on disk, so a
-    // session-write failure loads none. Triggered by pre-creating a directory at
-    // the path openPackage writes the rewritten session to.
+    // LUTs load only once the rewritten session is confirmed on disk, so a session-write failure loads none;
+    // triggered by pre-creating a directory at the path openPackage writes the session to.
     fs::remove(fs::path(result.extractDir) / "session.opened.jcs", ec);
     fs::create_directory(fs::path(result.extractDir) / "session.opened.jcs", ec);
     const size_t lutsLoadedBeforeWriteFailure = lutsLoaded.size();
@@ -1167,9 +1145,8 @@ int packageOpenSelfTest() {
           "an unchanged reopen leaves the sidecar's modification time unchanged");
     check(reviewsReloaded.size() == reloadsBeforeUnchangedReopen, "an unchanged reopen makes no reloadReview call");
 
-    // A PRIMARY sidecar that exists but is corrupt must not fall through to a
-    // stale fallback-location sidecar (gfcNoteStore::load() spans both, so the
-    // primary is checked directly). The fallback is set up as noteStoreSelfTest does.
+    // A corrupt PRIMARY sidecar must not fall through to a stale fallback-location sidecar (gfcNoteStore::load() spans both, so the primary is checked directly).
+    // The fallback is set up as noteStoreSelfTest does.
     fs::create_directories(dir / "src5", ec);
     const std::string fbFrame = (dir / "src5" / "fb010.0001.exr").string();
     writeText(fbFrame, "fallback-frame");
@@ -1401,9 +1378,8 @@ int packageOpenSelfTest() {
           readText(gone.sessionPath).find("filename=\"" + f1 + "\"") != std::string::npos,
           "missing media is counted and keeps its original path");
 
-    // A lean-package rewrite where the resolved path differs from the recorded
-    // one, so the rewrite is observed rather than a same-string round trip: the
-    // session names a second, non-existent frame; only the first exists.
+    // Lean-package rewrite where the resolved path differs from the recorded one, so the rewrite is observed:
+    // the session names a second, non-existent frame; only the first exists.
     fs::create_directories(dir / "src2", ec);
     const std::string rw1 = (dir / "src2" / "rw010.0001.exr").string();
     const std::string rw2 = (dir / "src2" / "rw010.0002.exr").string();   // never created
@@ -1432,9 +1408,8 @@ int packageOpenSelfTest() {
           readText(rewriteResult.sessionPath).find("filename=\"" + rw2 + "\"") == std::string::npos,
           "a lean package's rewrite is observed when the resolved path differs from the recorded reference");
 
-    // Included media whose packaged frame the archive lacks, with its original
-    // path also absent, counts as missing; the rewritten session maps the
-    // packaged-path reference back to alongside the original path, not "media/NNN/...".
+    // Included media whose packaged frame the archive lacks and whose original path is absent counts as missing;
+    // the rewritten session maps the packaged-path reference back to alongside the original path.
     {
         Manifest ghostManifest;
         ghostManifest.created = "2026-09-14T20:10:00Z";
@@ -1542,10 +1517,8 @@ int packageOpenSelfTest() {
     check(!openPackage((dir / "future.jcreview").string(), cache, services, future, &err) && err.contains("version 2"),
           "an unknown package version is refused, naming it");
 
-    // The tar reader's refusal of an unsafe entry name is what keeps the opener
-    // inside the cache root. gfcTar::Writer refuses such names, so build a ustar
-    // header by hand naming "../evil.txt" (checksum recomputed) and confirm
-    // openPackage refuses it and creates nothing outside the cache root.
+    // The tar reader's refusal of unsafe entry names keeps the opener inside the cache root: hand-build a ustar header naming "../evil.txt"
+    // (gfcTar::Writer refuses it) and confirm openPackage refuses it and creates nothing outside.
     {
         auto putOctal = [](unsigned char* field, size_t width, uint64_t value) {
             std::string digits(width - 1, '0');
@@ -1643,10 +1616,8 @@ int packageOpenSelfTest() {
               "two unresolved media under one search root walk it once");
     }
 
-    // Fingerprint relink is optional (OpenServices.fingerprintRelink, default
-    // false); a cheap file-name + frame-count match (findByName) runs instead.
-    // The lean package's media is never created at its recorded original path,
-    // so resolution can only come from the search roots below.
+    // Fingerprint relink is optional (OpenServices.fingerprintRelink, default false); a file-name + frame-count match (findByName) runs instead.
+    // The lean package's media is never at its recorded path, so resolution can only come from the search roots below.
     {
         const std::string jefOriginal = (dir / "jef39_src" / "jf010.0001.exr").string();   // never created
         ExportInput jefLean;

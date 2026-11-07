@@ -167,9 +167,8 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 void TrackStrip_Qt::refreshFromGUI() {
     refreshing_ = true;
     const auto p = jefe::qt::getTrackParams(trackIdx_);
-    // The QLineEdit always holds the LITERAL frame filename, never the
-    // foo.####.exr pattern: the loader needs a real path, and a #### text would
-    // round-trip into setTrackFilename on editingFinished and break detection.
+    // The QLineEdit always holds the LITERAL frame filename, never the foo.####.exr pattern:
+    // the loader needs a real path, and #### text would round-trip into setTrackFilename and break detection.
     displayPath_ = QString::fromStdString(p.filename);
     filename_->setText(displayPath_);
 
@@ -385,9 +384,8 @@ QStringList TrackStrip_Qt::loadRecentPaths() const {
 bool TrackStrip_Qt::eventFilter(QObject* o, QEvent* e) {
     if (o == filename_) {
         if (e->type() == QEvent::FocusIn) {
-            // Restore the full path and re-apply the cached digit-range
-            // highlight (cleared by applyElidedFilenameText: elided columns
-            // don't align with literal-text indices).
+            // Restore the full path and re-apply the cached digit-range highlight
+            // (applyElidedFilenameText clears it: elided columns don't align with literal-text indices).
             QSignalBlocker b(filename_);
             filename_->setText(displayPath_);
             if (filenameHighlightLength_ > 0) {

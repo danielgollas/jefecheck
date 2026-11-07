@@ -1,9 +1,5 @@
 """Object-name locators for JefeCheck widgets.
-
-Qt bridges `objectName` to the AXIdentifier as the full dotted parent chain;
-tests target widgets via `identifier ENDSWITH '<name>'`. Each constant is the
-trailing leaf objectName.
-"""
+Qt bridges objectName to the AXIdentifier as the full dotted parent chain; tests match `identifier ENDSWITH '<name>'` against each constant (the trailing leaf)."""
 
 BUNDLE_ID = "com.danielgollas.jefecheck.qt"
 
@@ -15,9 +11,8 @@ STATUSBAR_LAYOUT = "statusbar.layout.label"
 STATUSBAR_TRACK = "statusbar.track.label"
 STATUSBAR_LOADED = "statusbar.loaded.label"
 STATUSBAR_STARTUP = "statusbar.startup.label"
-# Default bit depth is at Preferences → Playback & Engine
-# (preferences.engine.bitdepth.combo); the status bar toggles via
-# View → Show Status Bar (menu.view.statusbar).
+# Default bit depth is at Preferences → Playback & Engine (preferences.engine.bitdepth.combo);
+# the status bar toggles via View → Show Status Bar (menu.view.statusbar).
 
 # Docks
 DOCK_PLATEMANAGER = "dock.platemanager"
@@ -30,10 +25,8 @@ TIMELINE_SCRUBBER = "timeline.scrubber"
 TIMELINE_TRACKS = "timeline.tracks"
 TIMELINE_THUMBS_TOGGLE = "transport.thumbnails.toggle"
 
-# Menus / actions. macOS folds Qt's QMenuBar into the system menu bar, a
-# separate AX tree, so `by_object_name(menu.*)` does NOT resolve via Mac2;
-# these constants document the canonical objectNames and menu tests use the
-# action's keyboard shortcut instead.
+# Menus / actions. macOS folds Qt's QMenuBar into the system menu bar (a separate AX tree), so `by_object_name(menu.*)` does NOT resolve via Mac2;
+# menu tests use the action's keyboard shortcut instead.
 MENU_FILE = "menu.file"
 MENU_FILE_LOAD = "menu.file.load"
 MENU_FILE_SAVE_SESSION = "menu.file.savesession"
@@ -68,10 +61,8 @@ MENU_PANELS_REMOTE = "menu.panels.remote"              # F5
 MENU_PANELS_RENDER = "menu.panels.render"              # F6
 MENU_PANELS_HIDECONTROLS = "menu.panels.hidecontrols"  # Ctrl+Alt+F
 MENU_HELP = "menu.help"
-# NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's
-# objectName (every item is `identifier='qt_itemFired:'` under Mac2); look
-# up menu items by `title` (see test_minspecs.py). The names below are for
-# Linux/Windows runs where AT-SPI / UIA expose them.
+# NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's objectName (every item is `qt_itemFired:` under Mac2); look up menu items by `title`.
+# The names below are for Linux/Windows runs where AT-SPI / UIA expose them.
 MENU_HELP_ABOUT = "menu.help.about"
 MENU_HELP_SPECS = "menu.help.specs"
 MENU_HELP_MANUAL = "menu.help.manual"            # F1
@@ -108,11 +99,8 @@ LUT_REFRESH = "lut.refresh.button"
 LUT_PREVIEW = "lut.preview"
 LUT_PREVIEW_TOGGLE = "lut.preview.toggle"
 
-# FX panel (combined effect controls for the active plate): "+ Add FX" menu
-# button, per-FX cards, drag-to-reorder. Per-FX object names are templated by
-# stack index N:
-#   fxparams.fx{N}.active.check, fxparams.fx{N}.remove.button,
-#   fxparams.fx{N}.param.{name}.{spin|check|combo|value}
+# FX panel: "+ Add FX" menu button, per-FX cards, drag-to-reorder. Per-FX names are templated by stack index N:
+#   fxparams.fx{N}.active.check, .remove.button, .param.{name}.{spin|check|combo|value}
 DOCK_FXPARAMS = "dock.fxparams"
 FXPARAMS_PANEL = "fxparams.panel"
 FXPARAMS_STATUS = "fxparams.status.label"
@@ -134,12 +122,8 @@ REMOTE_CLIENT_CONNECT = "remote.client.connect.button"
 REMOTE_DISCONNECT = "remote.disconnect.button"
 REMOTE_STATUS = "remote.status.label"
 
-# Playlist dock (PlaylistPanel_Qt). Button leaves follow the
-# playlist.button.* scheme. Per-card leaves (templated by item index i):
-#   playlist.card.<i>         — the PlaylistItemCard QWidget
-#   playlist.card.<i>.name    — item name label
-#   playlist.card.<i>.chevron — expand/collapse toggle
-#   playlist.card.<i>.remove  — per-card remove button
+# Playlist dock (PlaylistPanel_Qt). Button leaves follow playlist.button.*; per-card leaves are templated by item index i:
+#   playlist.card.<i> (card), .name, .chevron (expand/collapse), .remove
 DOCK_PLAYLIST           = "dock.playlist"
 PLAYLIST_PANEL          = "playlist.panel"
 PLAYLIST_LIST           = "playlist.list"
@@ -235,9 +219,8 @@ PREFS_GENERAL_THUMBNAILS = "preferences.general.thumbnails.check"
 PREFS_GENERAL_FEEDBACK_SIZE = "preferences.general.feedbacksize.spin"
 PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 
-# Preferences → Playback & Engine panel widgets, using the
-# `preferences.engine.*.combo` leaf convention. Only the queue control
-# remains; the inert engine knobs and balanceReads were removed.
+# Preferences → Playback & Engine widgets, `preferences.engine.*.combo` leaf convention;
+# only the queue control remains.
 PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
 PREFS_ENGINE_OIIO_THREADS = "preferences.engine.oiiothreads.spin"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"

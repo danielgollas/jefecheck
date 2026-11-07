@@ -6,10 +6,7 @@
 namespace jefe {
 namespace wire {
 
-// ---------------------------------------------------------------------
-// PlayPause
-// Legacy pair: gfcnetworkclient.cpp SendPlayPauseMessage / GFCNETID_PLAYPAUSEMESSAGE.
-// ---------------------------------------------------------------------
+// ---- PlayPause (legacy: gfcnetworkclient.cpp SendPlayPauseMessage / GFCNETID_PLAYPAUSEMESSAGE) ----
 void encodePlayPause(Writer& w, const gfcNetPlayPauseInfo& info) {
     w.writeBool(info.play);
     w.writeI32(info.frame);
@@ -21,10 +18,7 @@ bool decodePlayPause(Reader& r, gfcNetPlayPauseInfo& info) {
            r.readI32(info.direction);
 }
 
-// ---------------------------------------------------------------------
-// PointerInfo (client -> server; no color, no nickname)
-// Legacy pair: gfcnetworkclient.cpp SendPointerInfoMessage / gfcnetworkserver.cpp GFCNETID_POINTERINFOMESSAGE.
-// ---------------------------------------------------------------------
+// ---- PointerInfo (client -> server; no color, no nickname) (legacy: gfcnetworkclient.cpp SendPointerInfoMessage / gfcnetworkserver.cpp GFCNETID_POINTERINFOMESSAGE) ----
 void encodePointerInfo(Writer& w, const gfcNetPointerInfo& info) {
     w.writeI32(info.quadID);
     w.writeI32(info.x);
@@ -37,10 +31,7 @@ bool decodePointerInfo(Reader& r, gfcNetPointerInfo& info) {
            r.readF32(info.scale);
 }
 
-// ---------------------------------------------------------------------
-// RemotePointerInfo (server -> clients broadcast)
-// Legacy pair: gfcnetworkserver.cpp GFCNETID_POINTERINFOMESSAGE / GFCNETID_POINTERINFOBROADCASTMESSAGE.
-// ---------------------------------------------------------------------
+// ---- RemotePointerInfo (server -> clients broadcast) (legacy: gfcnetworkserver.cpp GFCNETID_POINTERINFOMESSAGE / GFCNETID_POINTERINFOBROADCASTMESSAGE) ----
 void encodeRemotePointerInfo(Writer& w, const gfcNetRemotePointerInfo& info) {
     w.writeI32(info.quadID);
     w.writeI32(info.x);
@@ -56,10 +47,7 @@ bool decodeRemotePointerInfo(Reader& r, gfcNetRemotePointerInfo& info) {
            r.readI32(info.color);
 }
 
-// ---------------------------------------------------------------------
-// Transformations
-// Legacy pair: gfcnetworkclient.cpp SendTransformations / GFCNETID_TRANSFORMATIONMESSAGE.
-// ---------------------------------------------------------------------
+// ---- Transformations (legacy: gfcnetworkclient.cpp SendTransformations / GFCNETID_TRANSFORMATIONMESSAGE) ----
 void encodeTransformations(Writer& w,
                            const std::vector<gfcNetTransformationInfo>& v) {
     w.writeU32(static_cast<uint32_t>(v.size()));
@@ -86,10 +74,7 @@ bool decodeTransformations(Reader& r,
     return true;
 }
 
-// ---------------------------------------------------------------------
-// ColorCorrections
-// Legacy pair: gfcnetworkclient.cpp SendColorCorrections / GFCNETID_COLORCORRECTIONMESSAGE.
-// ---------------------------------------------------------------------
+// ---- ColorCorrections (legacy: gfcnetworkclient.cpp SendColorCorrections / GFCNETID_COLORCORRECTIONMESSAGE) ----
 void encodeColorCorrections(
     Writer& w, const std::vector<gfcNetPlateColorCorrectionInfo>& v) {
     w.writeU32(static_cast<uint32_t>(v.size()));
@@ -121,10 +106,7 @@ bool decodeColorCorrections(Reader& r,
     return true;
 }
 
-// ---------------------------------------------------------------------
-// OtherStates
-// Legacy pair: gfcnetworkclient.cpp SendOtherStatesMessage / GFCNETID_OTHERSTATESMESSAGE.
-// ---------------------------------------------------------------------
+// ---- OtherStates (legacy: gfcnetworkclient.cpp SendOtherStatesMessage / GFCNETID_OTHERSTATESMESSAGE) ----
 void encodeOtherStates(Writer& w, const gfcNetOtherStatesInfo& info) {
     w.writeI32(info.playbackInfo.from);
     w.writeI32(info.playbackInfo.to);
@@ -195,10 +177,7 @@ bool decodeOtherStates(Reader& r, gfcNetOtherStatesInfo& info) {
     return true;
 }
 
-// ---------------------------------------------------------------------
-// FXAdd
-// Legacy pair: gfcnetworkclient.cpp SendFXAddMessage / GFCNETID_FXADDMESSAGE.
-// ---------------------------------------------------------------------
+// ---- FXAdd (legacy: gfcnetworkclient.cpp SendFXAddMessage / GFCNETID_FXADDMESSAGE) ----
 void encodeFXAdd(Writer& w, const gfcNetFXAddInfo& info) {
     w.writeI32(info.id.quadID);
     w.writeString(info.id.hash);
@@ -208,10 +187,7 @@ bool decodeFXAdd(Reader& r, gfcNetFXAddInfo& info) {
     return r.readI32(info.id.quadID) && r.readString(info.id.hash);
 }
 
-// ---------------------------------------------------------------------
-// FXCommon
-// Legacy pair: gfcnetworkclient.cpp SendFXCommonMessage / GFCNETID_FXCOMMONMESSAGE.
-// ---------------------------------------------------------------------
+// ---- FXCommon (legacy: gfcnetworkclient.cpp SendFXCommonMessage / GFCNETID_FXCOMMONMESSAGE) ----
 void encodeFXCommon(Writer& w, const gfcNetFXCommonInfo& info) {
     w.writeI32(info.id.index);
     w.writeI32(info.id.quadID);
@@ -227,10 +203,7 @@ bool decodeFXCommon(Reader& r, gfcNetFXCommonInfo& info) {
            r.readBool(info.reset) && r.readBool(info.remove);
 }
 
-// ---------------------------------------------------------------------
-// FXAttrib (lutOrCube comes FIRST of the strings)
-// Legacy pair: gfcnetworkclient.cpp SendFXAttribMessage / GFCNETID_FXATTRIBMESSAGE.
-// ---------------------------------------------------------------------
+// ---- FXAttrib (lutOrCube comes FIRST of the strings) (legacy: gfcnetworkclient.cpp SendFXAttribMessage / GFCNETID_FXATTRIBMESSAGE) ----
 void encodeFXAttrib(Writer& w, const gfcNetFXAttribInfo& info) {
     w.writeI32(info.id.index);
     w.writeI32(info.id.quadID);
@@ -249,10 +222,7 @@ bool decodeFXAttrib(Reader& r, gfcNetFXAttribInfo& info) {
            r.readString(info.groupName) && r.readString(info.variableName);
 }
 
-// ---------------------------------------------------------------------
-// FXStack (the explicit legacy length field is dropped; writeString carries it)
-// Legacy pair: gfcnetworkclient.cpp SendFXStackMessage / GFCNETID_FXSTACKMESSAGE.
-// ---------------------------------------------------------------------
+// ---- FXStack (the explicit legacy length field is dropped; writeString carries it) (legacy: gfcnetworkclient.cpp SendFXStackMessage / GFCNETID_FXSTACKMESSAGE) ----
 void encodeFXStack(Writer& w, const gfcNetFXStackMessage& msg) {
     w.writeI32(msg.quadID);
     w.writeString(msg.theStack);
@@ -262,10 +232,7 @@ bool decodeFXStack(Reader& r, gfcNetFXStackMessage& msg) {
     return r.readI32(msg.quadID) && r.readString(msg.theStack);
 }
 
-// ---------------------------------------------------------------------
-// LayerChange
-// Legacy pair: gfcnetworkclient.cpp SendLayerChangeMessage / GFCNETID_LAYERCHANGEMESSAGE.
-// ---------------------------------------------------------------------
+// ---- LayerChange (legacy: gfcnetworkclient.cpp SendLayerChangeMessage / GFCNETID_LAYERCHANGEMESSAGE) ----
 void encodeLayerChange(Writer& w, int quadID, const std::string& layerName) {
     w.writeI32(quadID);
     w.writeString(layerName);
@@ -278,10 +245,7 @@ bool decodeLayerChange(Reader& r, int& quadID, std::string& layerName) {
     return true;
 }
 
-// ---------------------------------------------------------------------
-// ChatEntry
-// Legacy pair: gfcnetworkserver.cpp sendChatMessage / GFCNETID_CHATBROADCASTMESSAGE.
-// ---------------------------------------------------------------------
+// ---- ChatEntry (legacy: gfcnetworkserver.cpp sendChatMessage / GFCNETID_CHATBROADCASTMESSAGE) ----
 void encodeChatEntry(Writer& w, const gfcChatLogEntry& entry) {
     w.writeU8(entry.type);
     w.writeString(entry.time);
@@ -296,10 +260,7 @@ bool decodeChatEntry(Reader& r, gfcChatLogEntry& entry) {
            r.readI32(entry.color);
 }
 
-// ---------------------------------------------------------------------
-// PlaylistMessage (the explicit legacy length field is dropped; writeString carries it)
-// Legacy pair: gfcnetworkclient.cpp SendPlaylistMessage / GFCNETID_SENDPLAYLIST.
-// ---------------------------------------------------------------------
+// ---- PlaylistMessage (the explicit legacy length field is dropped; writeString carries it) (legacy: gfcnetworkclient.cpp SendPlaylistMessage / GFCNETID_SENDPLAYLIST) ----
 void encodePlaylistMessage(Writer& w, const gfcNetPlaylistMessage& msg) {
     w.writeString(msg.thePlaylist);
 }
@@ -308,10 +269,7 @@ bool decodePlaylistMessage(Reader& r, gfcNetPlaylistMessage& msg) {
     return r.readString(msg.thePlaylist);
 }
 
-// ---------------------------------------------------------------------
-// PlaylistItem (item.asString() as one compressed string)
-// Legacy pair: gfcnetworkclient.cpp SendPlaylistItem / GFCNETID_PLAYLISTITEMLOADMESSAGE.
-// ---------------------------------------------------------------------
+// ---- PlaylistItem (item.asString() as one compressed string) (legacy: gfcnetworkclient.cpp SendPlaylistItem / GFCNETID_PLAYLISTITEMLOADMESSAGE) ----
 void encodePlaylistItem(Writer& w, const std::string& itemXml) {
     w.writeString(itemXml);
 }
@@ -320,10 +278,7 @@ bool decodePlaylistItem(Reader& r, std::string& itemXml) {
     return r.readString(itemXml);
 }
 
-// ---------------------------------------------------------------------
-// PlaylistEvent
-// Legacy pair: gfcnetworkclient.cpp sendPlaylistEvent / GFCNETID_PLAYLISTEVENTOTHER.
-// ---------------------------------------------------------------------
+// ---- PlaylistEvent (legacy: gfcnetworkclient.cpp sendPlaylistEvent / GFCNETID_PLAYLISTEVENTOTHER) ----
 void encodePlaylistEvent(Writer& w, const gfcNetPlaylistEvent& ev) {
     w.writeI32(ev.selectedItem);
 }
