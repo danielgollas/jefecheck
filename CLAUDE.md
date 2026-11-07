@@ -66,7 +66,7 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 
 ### Image I/O
 - **gfcImageLoaderOIIO** — OpenImageIO for all general formats (JPEG, PNG, TIFF, EXR with multi-layer support)
-- **gfcMovieReader / gfcImageLoaderMovie** — `.mov`/`.mp4` (ProRes, H.264, H.265) via linked libav* (pimpl; libav headers only in `gfcMovieReader.cpp`); GPU YUV→RGB at upload; sound via `gfcAudioEngine` + Qt Multimedia. See `developer_notes.md` §38.
+- **gfcMovieReader / gfcImageLoaderMovie** — `.mov`/`.mp4`/`.mxf` (ProRes, H.264, H.265, DNxHR) via linked libav* (pimpl; libav headers only in `gfcMovieReader.cpp`); GPU YUV→RGB at upload; sound via `gfcAudioEngine` + Qt Multimedia. See `developer_notes.md` §38.
 - **gfcImageLoaderDPX** — Custom DPX parser (kept for potential performance, uses `gfcpixelbuffer.h` for bitmap ops)
 - **gfcpixelbuffer.h** — Drop-in replacement for removed GFL SDK types (`GFL_BITMAP`, `GFL_COLOR`, `gflResize`, `gflCrop`, etc.)
 - Custom EXR loader disabled — OIIO handles EXR natively
@@ -99,7 +99,7 @@ OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so 
 
 ### Movie loading (`gfcMovieReader`, `gfcAudioEngine`)
 
-`.mov`/`.mp4` load like a sequence (one `sequencesIn` entry, timeline 1…n) with sound; libav* is **linked for reading**, export still shells out to the FFmpeg CLI. The rate is held as a rational and a movie load sets it. Headless: `--video-load-test`, `--audio-device-test`, `--video-colour-test <dir>`, `--video-perf-test <movie>`. See `developer_notes.md` §38.
+`.mov`/`.mp4`/`.mxf` load like a sequence (one `sequencesIn` entry, timeline 1…n) with sound; libav* is **linked for reading**, export still shells out to the FFmpeg CLI. The rate is held as a rational and a movie load sets it. Headless: `--video-load-test`, `--audio-device-test`, `--video-colour-test <dir>`, `--video-perf-test <movie>`. See `developer_notes.md` §38.
 
 ### Render & export (`RenderDialog_Qt`, `gfcImageSaverOIIO`, `VideoEncoder_Qt`)
 

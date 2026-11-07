@@ -289,8 +289,8 @@ void TrackStrip_Qt::onBrowse() {
     const QString path = QFileDialog::getOpenFileName(
         this, tr("Choose sequence frame for Track %1").arg(QChar('A' + trackIdx_)),
         QString(),
-        tr("Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4);;"
-           "Movies (*.mov *.mp4);;"
+        tr("Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4 *.mxf);;"
+           "Movies (*.mov *.mp4 *.mxf);;"
            "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp);;"
            "All files (*)"));
     if (path.isEmpty()) return;

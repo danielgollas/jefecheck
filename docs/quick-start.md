@@ -25,7 +25,7 @@ OR
 
 Drag and drop a single file or folder into a track in the main window.
 
-### How to Load a Movie (.mov / .mp4)
+### How to Load a Movie (.mov / .mp4 / .mxf)
 
 JefeCheck plays ProRes (422, HQ, 4444, XQ), H.264 and H.265 movies in `.mov` and `.mp4` files.
 

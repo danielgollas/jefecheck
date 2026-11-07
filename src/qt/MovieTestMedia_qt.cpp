@@ -153,6 +153,13 @@ bool generate(const QString& dir, QString* err) {
 
     for (const char* copy : {"shot_v003.mov", "a_001.mov", "a_002.mov"})
         if (!copyFile(out("prores422hq_23976.mov"), out(copy), err)) return false;
+    // MXF: the same streams rewrapped, so reads can be compared with the .mov.
+    // The MXF muxer needs the rate given, or it reads the .mov's track timescale as one.
+    const std::pair<const char*, const char*> mxfs[] = {{"prores4444_24", "24"}, {"flashbeep_23976", "24000/1001"}};
+    for (const auto& [name, rate] : mxfs)
+        if (!runFfmpeg(ffmpeg, {"-y", "-i", d.filePath(QString(name) + ".mov"), "-c", "copy", "-r", rate,
+                                d.filePath(QString(name) + ".mxf")}, err)) return false;
+    if (!copyFile(out("prores4444_24.mxf"), out("shot_v003.mxf"), err)) return false;
     if (!writeTruncated(ffmpeg, d, err)) return false;
 
     QFile empty(out("empty.mov"));

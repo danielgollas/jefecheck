@@ -441,8 +441,8 @@ void MainWindow_Qt::buildMenuBar() {
             lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
         }
         const QString filter = tr(
-            "Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4);;"
-            "Movies (*.mov *.mp4);;"
+            "Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4 *.mxf);;"
+            "Movies (*.mov *.mp4 *.mxf);;"
             "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp);;"
             "All files (*)");
         const QString chosen = QFileDialog::getOpenFileName(
@@ -3366,7 +3366,7 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
             "*.tif", "*.TIF", "*.tiff", "*.TIFF",
             "*.tga", "*.TGA",
             "*.bmp", "*.BMP",
-            "*.mov", "*.MOV", "*.mp4", "*.MP4",
+            "*.mov", "*.MOV", "*.mp4", "*.MP4", "*.mxf", "*.MXF",
         };
         QDir dir(resolved);
         const QStringList entries =

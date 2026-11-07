@@ -336,8 +336,8 @@ void PlaylistPanel_Qt::onAddFiles() {
     const QString seed = s.value(kLastDirKey, QDir::homePath()).toString();
     const QStringList chosen = QFileDialog::getOpenFileNames(
         this, "Add files to playlist", seed,
-        "Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4);;"
-        "Movies (*.mov *.mp4);;"
+        "Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4 *.mxf);;"
+        "Movies (*.mov *.mp4 *.mxf);;"
         "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp);;"
         "All files (*)");
     if (chosen.isEmpty()) return;

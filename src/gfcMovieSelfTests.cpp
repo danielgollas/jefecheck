@@ -44,7 +44,8 @@ int movieKindsSelfTest(const std::string&) {
         if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
     };
     check(gfcIsMovieFile("/x/shot.mov") && gfcIsMovieFile("/x/SHOT.MP4") && gfcIsMovieFile("a.Mov"), "mov/mp4 any case");
-    check(!gfcIsMovieFile("/x/shot.0001.exr") && !gfcIsMovieFile("/x/clip.mxf") && !gfcIsMovieFile("movie"), "others rejected");
+    check(gfcIsMovieFile("/x/clip.mxf") && gfcIsMovieFile("/x/B001C008_180327_R1ZA.MXF"), "mxf any case");
+    check(!gfcIsMovieFile("/x/shot.0001.exr") && !gfcIsMovieFile("movie"), "others rejected");
     std::printf("MOVIE-KINDS: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
@@ -85,6 +86,14 @@ int movieReaderSelfTest(const std::string& dir) {
     check(i.bitDepth==10 && i.subX==2 && i.subY==1 && i.planarYuv && i.pixFmt=="yuv422p10le", "422 10-bit planar");
     check(i.matrix==gfcYuvMatrix::BT709 && i.range==gfcYuvRange::Video && !i.variableRate && !i.hasAudio, "tags + CFR");
     gfcMovieInfo p4; check(gfcMovieReader::probe(dir+"/prores4444_24.mov", p4, &err) && p4.bitDepth==12 && p4.subX==1 && p4.subY==1 && p4.rateNum==24 && p4.rateDen==1, "4444 12-bit 444 24/1");
+    gfcMovieInfo x4; check(gfcMovieReader::probe(dir+"/prores4444_24.mxf", x4, &err) && x4.bitDepth==12 && x4.subX==1 && x4.subY==1 && x4.rateNum==24 && x4.rateDen==1 && x4.frameCount==48 && x4.width==320 && x4.height==180, "mxf: 4444 12-bit 444 24/1, 48 frames");
+    gfcMovieInfo xa; check(gfcMovieReader::probe(dir+"/flashbeep_23976.mxf", xa, &err) && xa.hasAudio && xa.audioSampleRate > 0 && xa.rateNum==24000 && xa.rateDen==1001, "mxf with sound: audio found, 24000/1001");
+    {   gfcMovieReader rm, rx; gfcMovieFrame fm, fx;
+        const bool ok = rm.open(dir+"/prores4444_24.mov", &err) && rx.open(dir+"/prores4444_24.mxf", &err)
+                     && rm.readFrame(5, fm, &err) && rx.readFrame(5, fx, &err) && rx.readFrame(47, fx, &err) && fx.index==47
+                     && rx.readFrame(5, fx, &err);
+        check(ok && fx.index==5 && !bytesOf(fm).empty() && bytesOf(fm)==bytesOf(fx), "mxf frame 5 decodes to the same bytes as the .mov");
+    }
     gfcMovieInfo h; check(gfcMovieReader::probe(dir+"/h264_25.mp4", h, &err) && h.bitDepth==8 && h.subX==2 && h.subY==2 && h.rateNum==25 && h.rateDen==1 && h.siting==gfcChromaSiting::Left, "h264 420 25/1 left-sited");
     gfcMovieInfo u; check(gfcMovieReader::probe(dir+"/bars_untagged.mp4", u, &err) && u.matrix==gfcYuvMatrix::Unspecified, "untagged reports Unspecified");
     gfcMovieInfo f; check(gfcMovieReader::probe(dir+"/bars_601full.mp4", f, &err) && f.matrix==gfcYuvMatrix::BT601 && f.range==gfcYuvRange::Full, "601 full-range tags");
@@ -157,6 +166,8 @@ int movieNumberingSelfTest(const std::string& dir) {
     std::vector<std::string> files; std::string label; int s = 0, e = 0;
     findSequence(files, dir+"/shot_v003.mov", label, s, e);
     check(files.size()==48 && s==1 && e==48 && label==dir+"/shot_v003.mov" && files[0]==files[47], "shot_v003.mov is 48 frames of one file, not frame 3");
+    findSequence(files, dir+"/shot_v003.mxf", label, s, e);
+    check(files.size()==48 && s==1 && e==48 && files[0]==files[47], "shot_v003.mxf is 48 frames of one file, not frame 3");
     findSequence(files, dir+"/a_001.mov", label, s, e);
     check(files.size()==48 && files[0]==dir+"/a_001.mov", "a_001.mov and a_002.mov are never joined");
     check(gfcNoteStore::normalisePath(dir+"/a.001.mov")==dir+"/a.001.mov", "normalisePath leaves a movie alone");

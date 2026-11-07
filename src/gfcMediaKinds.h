@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
-// Classifies a path by its container extension. Movies (.mov/.mp4) are one
+// Classifies a path by its container extension. Movies (.mov/.mp4/.mxf) are one
 // entry in a track's sequence list and are never frame-numbered.
 #include <algorithm>
 #include <cctype>
@@ -14,5 +14,5 @@ inline bool gfcIsMovieFile(const std::string& path) {
     std::string ext = path.substr(dot + 1);
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return (char)std::tolower(c); });
-    return ext == "mov" || ext == "mp4";
+    return ext == "mov" || ext == "mp4" || ext == "mxf";
 }
