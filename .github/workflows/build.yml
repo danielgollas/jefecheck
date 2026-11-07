@@ -15,7 +15,7 @@ on:
       - '.github/workflows/update-manifests.yml'
       - '.github/workflows/pages.yml'
   pull_request:
-    branches: [main]
+    branches: [main, qt-experimental]
     paths-ignore:
       - 'site/**'
       - 'docs/**'
