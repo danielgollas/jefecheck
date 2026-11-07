@@ -733,4 +733,3 @@ New `.cpp` files are picked up by CMake's `file(GLOB src/qt/*.cpp)` — re-run `
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.
 - `docs/superpowers/specs/` — design specs for major features (Qt load window, etc.).
-- `docs/superpowers/plans/` — implementation plans matching those specs.
