@@ -12,16 +12,8 @@
 #include "gfctrackmanager.h"
 #include "gfcStructures.h"
 
-// File-scope singletons defined in:
-//   - src/main.cpp                (FLTK build): pickManager, plateManager,
-//                                  playbackManager, playlistManager,
-//                                  trackManager, sett
-//   - src/qt/qt_globals.cpp       (Qt build): same six
-//   - src/gfcfxmanager.cpp        (both):     fxManager
-//   - src/gfclutmanager.cpp       (both):     lutManager
-//   - src/gfcmemorymanager.cpp    (both):     memoryManager
-//   - src/gfcnetworkmanager.cpp   (both):     networkManager
-//   - src/gfcsessionmanager.cpp   (both):     sessionManager
+// File-scope singletons, defined in qt/qt_globals.cpp and in each manager's
+// own .cpp (fxManager, lutManager, memoryManager, networkManager, sessionManager).
 extern gfcFXManager        fxManager;
 extern gfcLUTManager       lutManager;
 extern gfcMemoryManager    memoryManager;

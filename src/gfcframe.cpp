@@ -229,9 +229,8 @@ GLuint gfcFrame::generateTexture(bool captureThumbnail)
 	timer.print();
 	*/
 
-	// Capture a downsampled RGBA8 thumbnail for the timeline filmstrip
-	// while the decoder's CPU buffer is still alive (releaseMemory frees
-	// it just below). Source is BGRA, 8- or 16-bit per info.dataType.
+	// Capture a downsampled RGBA8 thumbnail for the timeline filmstrip while the
+	// decoder's CPU buffer is alive (releaseMemory frees it below). Source is BGRA.
 	if (captureThumbnail && info.dataPointer && sizeX > 0 && sizeY > 0
 	    && (info.dataType == GL_UNSIGNED_BYTE || info.dataType == GL_UNSIGNED_SHORT)) {
 		const int srcW = sizeX, srcH = sizeY;

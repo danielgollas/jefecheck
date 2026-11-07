@@ -141,10 +141,8 @@ struct LayoutTrace {
     int footerTop = 0;                     // y where the footer band starts
 };
 
-// Walks the whole document. With painter == nullptr it only measures and
-// returns the page count; with a painter it draws, using totalPages in the
-// footers. Both passes make identical break decisions because both measure
-// with the same fonts against the same device.
+// Walks the whole document. With painter == nullptr it only measures and returns the
+// page count; with a painter it draws. Both passes must break pages identically.
 int layoutSummary(QPdfWriter& pdf, QPainter* painter, const gfcReviewSummary::Doc& doc, int totalPages, LayoutTrace* trace = nullptr) {
     const Fonts fonts = makeFonts();
     const QRect area = pdf.pageLayout().paintRectPixels(kDpi);
@@ -413,10 +411,8 @@ int reviewSummaryPdfSelfTest() {
     check(!writeReviewSummaryPdf(doc, "/nonexistent_dir_jefe/x.pdf", &pages2, &err2) && !err2.isEmpty(),
           "an unwritable path reports an error");
 
-    // Test that round headers stay on the same page as their first entry.
-    // Build a document with enough content in round 1 to fill most of a page,
-    // then add round 2 with a tall first entry that would be orphaned if the
-    // reserve height is insufficient (mm(20) vs actual entry height).
+    // Round headers must stay on the same page as their first entry: fill most of a
+    // page with one round, then add a round whose tall first entry would be orphaned.
     gfcReviewSummary::Doc docHeaderTest;
     docHeaderTest.title = "Header orphan test";
     docHeaderTest.exportedAt = 1789400000;
@@ -426,7 +422,7 @@ int reviewSummaryPdfSelfTest() {
     m.mediaPath = "/test/media.exr";
     m.displayName = "media.exr";
     
-    // Round 1: many frames to fill most of the page
+    // First round: many frames to fill most of the page.
     gfcReviewSummary::Round r1;
     r1.id = "r1";
     r1.author = "Round 1";
@@ -449,7 +445,7 @@ int reviewSummaryPdfSelfTest() {
     }
     m.rounds.push_back(r1);
     
-    // Round 2: has a tall first frame to test the page reservation fix
+    // Second round: a tall first frame to test the page reservation.
     gfcReviewSummary::Round r2;
     r2.id = "r2";
     r2.author = "Round 2";
@@ -494,9 +490,8 @@ int reviewSummaryPdfSelfTest() {
     }
     check(!headerPageMismatch, "round headers on same page as first entry");
 
-    // A frame entry with more notes than one page can hold is capped to what
-    // fits next to its thumbnail, with a "+N more notes" line -- entries are
-    // never split, so an uncapped one would run past the footer line.
+    // A frame entry with more notes than fit on a page is capped with a "+N more notes"
+    // line; entries are never split.
     gfcReviewSummary::Doc docLong;
     docLong.title = "Long entry test";
     docLong.exportedAt = 1789400000;

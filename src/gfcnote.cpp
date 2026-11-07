@@ -4,9 +4,8 @@
 
 namespace
 {
-	// A 32-hex-character random id. Not a cryptographic UUID, just enough
-	// entropy that two notes drawn anywhere, ever, don't collide, and
-	// idempotent for the add/remove sync messages that will reference it.
+	// A 32-hex-character random id: not a cryptographic UUID, just enough
+	// entropy that notes don't collide, so add/remove sync messages are idempotent.
 	std::string generateNoteId()
 	{
 		static const char hexDigits[] = "0123456789abcdef";
@@ -42,15 +41,8 @@ bool gfcNote::visibleOnFrame(int frame) const
 	return frame >= from && frame <= to;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-//
-// Exercises visibleOnFrame(), note id assignment, and gfcRevision's
-// addNote()/removeNote() lock semantics. No GL and no file I/O — that is
-// Task 2 (store) and Task 3 (overlay)'s job. Wired to the --notes-test CLI
-// flag by Task 7; until then, prove it compiles and run it via a scratch
-// harness outside the repo.
-// ---------------------------------------------------------------------------
+// Self-test: visibleOnFrame(), note id assignment, and gfcRevision's
+// addNote()/removeNote() lock semantics. No GL, no file I/O.
 
 #include "gfcnotestroke.h"
 #include "gfcrevision.h"

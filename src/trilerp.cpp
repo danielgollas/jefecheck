@@ -931,9 +931,8 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
         //inputForMD5+=GetFilenameNoPath(pfilename);
         //printf("Input for MD5=%s\n",inputForMD5.c_str());
 
-        // JEF-28: hash the RAW LUT FILE BYTES (portable — same digest on any
-        // build/platform) instead of std::hash over parsed samples. Falls back
-        // to the parsed-sample hash only if the file can't be re-read here.
+        // Hash the RAW LUT FILE BYTES (portable across builds) instead of std::hash over
+        // parsed samples; fall back to the parsed-sample hash if the file can't be re-read.
         md5Hash=jefe::contentHashFile(pfilename);
         if (md5Hash.empty()) md5Hash=GetMD5Hash(inputForMD5);
 
@@ -1049,9 +1048,8 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
             //printf("%f * ",lut1D[i]);
         }
 
-        // JEF-28: hash the RAW LUT FILE BYTES (portable — same digest on any
-        // build/platform) instead of std::hash over parsed samples. Falls back
-        // to the parsed-sample hash only if the file can't be re-read here.
+        // Hash the RAW LUT FILE BYTES (portable across builds) instead of std::hash over
+        // parsed samples; fall back to the parsed-sample hash if the file can't be re-read.
         md5Hash=jefe::contentHashFile(pfilename);
         if (md5Hash.empty()) md5Hash=GetMD5Hash(inputForMD5);
         //printf("MD5HASH: %s\n",md5Hash.c_str());
@@ -1286,9 +1284,8 @@ int CubeLUT::load(const char *pfilename, float normal,Fl_Progress *pprogress, bo
             }
         }
 
-        // JEF-28: hash the RAW LUT FILE BYTES (portable — same digest on any
-        // build/platform) instead of std::hash over parsed samples. Falls back
-        // to the parsed-sample hash only if the file can't be re-read here.
+        // Hash the RAW LUT FILE BYTES (portable across builds) instead of std::hash over
+        // parsed samples; fall back to the parsed-sample hash if the file can't be re-read.
         md5Hash=jefe::contentHashFile(pfilename);
         if (md5Hash.empty()) md5Hash=GetMD5Hash(inputForMD5);
         //printf("MD5HASH: %s\n",md5Hash.c_str());

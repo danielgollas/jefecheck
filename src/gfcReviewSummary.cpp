@@ -275,9 +275,7 @@ bool gfcReviewSummary::writeFileAtomically(const std::string& path, const std::s
 	return true;
 }
 
-// ---------------------------------------------------------------------------
 // Self-test
-// ---------------------------------------------------------------------------
 int reviewSummarySelfTest()
 {
 	using namespace gfcReviewSummary;

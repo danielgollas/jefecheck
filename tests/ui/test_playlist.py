@@ -1,9 +1,5 @@
-"""Playlist dock — PR-40 smoke tests.
-
-The dock is tabified with FX Params on the left side; FX Params is
-raised by default, so we click the Playlist tab to surface its widgets
-before asserting on them.
-"""
+"""Playlist dock smoke tests. The dock is tabified behind FX Params, so click
+the Playlist tab to surface its widgets before asserting."""
 import pytest
 from appium.webdriver.common.appiumby import AppiumBy
 
@@ -16,10 +12,8 @@ def _list_items(list_widget):
 
 
 def test_playlist_dock_buttons_resolvable(app):
-    """Add / Remove / Up / Down / Clear buttons all resolve via
-    objectName. The dock starts tabified-behind FX Params but the
-    AX bridge surfaces tabified-dock children regardless of which tab
-    is raised — only AXValue is sometimes elided."""
+    """Add / Remove / Up / Down / Clear buttons resolve via objectName even
+    when the dock is tabified behind FX Params (only AXValue may be elided)."""
     app.wait_for_startup_ready()
 
     for object_name in (

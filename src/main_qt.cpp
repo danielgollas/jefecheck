@@ -1,7 +1,5 @@
-// Minimal Qt entry point for the USE_QT build. This is intentionally tiny —
-// just enough to prove the toolchain end-to-end (QApplication + a main window
-// + GlViewport_Qt + IApplication_Qt). The full feature port lives in later
-// phases (2E onward).
+// Qt entry point for the USE_QT build: QApplication, MainWindow_Qt, GlViewport_Qt, and the
+// headless --*-test harness dispatch.
 #include <QApplication>
 #include <QByteArray>
 #include <QDir>
@@ -61,10 +59,8 @@
 extern gfcSettings sett;
 
 static void applyDarkTheme(QApplication& qapp) {
-    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`)
-    // and as a fallback in the source tree (so a dev run from build/ also
-    // gets styled). Silent miss if neither exists — the skeleton is still
-    // usable without the theme.
+    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`), falling back to
+    // the source tree; silent miss if neither exists.
     const QStringList candidates = {
         QCoreApplication::applicationDirPath() + "/theme/jefecheck_dark.qss",
         QCoreApplication::applicationDirPath() + "/../src/qt/theme/jefecheck_dark.qss",
@@ -78,10 +74,8 @@ static void applyDarkTheme(QApplication& qapp) {
     }
 }
 
-// Resolve --config-dir <path> from argv, falling back to the
-// JEFECHECK_CONFIG_DIR env var. UI tests use this to keep QSettings,
-// session XML, and LUT autoload path inside a temp dir per test, so
-// they never touch the user's real preferences.
+// Resolve --config-dir <path> from argv (fallback: JEFECHECK_CONFIG_DIR). UI tests use it to
+// keep QSettings, session XML and LUT autoload inside a temp dir.
 static QString resolveConfigDir(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--config-dir") == 0) {
@@ -93,9 +87,8 @@ static QString resolveConfigDir(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve all --open-file <path> occurrences from argv. Each successive
-// occurrence loads into the next plate (plate 0, 1, 2, 3). Used by UI
-// tests to seed the viewport with a known image before screenshot diffs.
+// Resolve all --open-file <path> occurrences from argv; each loads into the next plate
+// (0..3). Used by UI tests to seed the viewport before screenshot diffs.
 static QStringList resolveOpenFiles(int argc, char* argv[]) {
     QStringList paths;
     for (int i = 1; i + 1 < argc; ++i) {
@@ -107,13 +100,8 @@ static QStringList resolveOpenFiles(int argc, char* argv[]) {
     return paths;
 }
 
-// Resolve --render-test <dir>. Headless render smoke test: once the
-// --open-file footage has loaded, render one frame of plate 0 into <dir>
-// in every output format, then exit (0 = frames written, 2 = nothing
-// written). Drives the same triggerSyncRender path the Render dialog uses,
-// so it verifies the real GL-readback → OIIO-save pipeline without a UI
-// session. Use a multi-frame sequence — a single still only populates the
-// preview frame, not the sequence frames the renderer reads.
+// Resolve --render-test <dir>. Headless smoke test: render one frame of plate 0 into <dir> in
+// every output format (0 = written, 2 = nothing). Use a multi-frame sequence, not a single still.
 static QString resolveRenderTestDir(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--render-test") == 0) {
@@ -123,9 +111,8 @@ static QString resolveRenderTestDir(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve --video-test <dir>. Headless video-export test: render the in/out
-// range to a temp PNG sequence and encode an H.264 mp4 into <dir>, then exit
-// (0 = ok, 2 = failed). Exercises the full render → FFmpeg pipeline.
+// Resolve --video-test <dir>. Headless video-export test: render the in/out range to a temp
+// PNG sequence and encode an H.264 mp4 into <dir> (0 = ok, 2 = failed).
 static QString resolveVideoTestDir(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--video-test") == 0) {
@@ -135,9 +122,8 @@ static QString resolveVideoTestDir(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve --playlist-test <image>. Headless .jpl round-trip smoke test:
-// add <image> to the playlist, save to a temp .jpl, clear, reload, and
-// verify the entry count survives. Pure data/XML path — no GL needed.
+// Resolve --playlist-test <image>. Headless .jpl round-trip: add <image>, save to a temp
+// .jpl, clear, reload, and verify the entry count survives (no GL).
 static QString resolvePlaylistTestFile(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--playlist-test") == 0) {
@@ -147,10 +133,8 @@ static QString resolvePlaylistTestFile(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve --fx-test <image>. Headless FX-stack proof: load <image> into
-// plate 0, render a baseline PNG, add a visually-obvious shader FX to the
-// active plate via the same bridge call the UI uses, render again, and
-// compare. Exits 0 if the pixels differ (FX applied), nonzero otherwise.
+// Resolve --fx-test <image>. Headless FX-stack proof: render a baseline PNG, add a shader FX
+// to the active plate via the UI's bridge call, re-render; exits 0 if the pixels differ.
 static QString resolveFXTestFile(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--fx-test") == 0) {
@@ -171,9 +155,8 @@ static QString resolveCCTestFile(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe:
-// load the image into plates 0 and 1 side-by-side, grab the framebuffer, add
-// an FX to plate 0 only, grab again, and report left/right half brightness.
+// Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe: load the image
+// into plates 0 and 1, add an FX to plate 0 only, and compare left/right brightness.
 static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--fx-multitest") == 0) {
@@ -183,47 +166,40 @@ static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     return QString();
 }
 
-// --aspect-test : headless JEF-21 regression. Pure conversion check (no GL),
-// asserts every aspect preset string maps to the renderer's height/width
-// convention. Takes no argument.
+// --aspect-test : headless regression: asserts every aspect preset string maps to the
+// renderer's height/width convention (no GL). Takes no argument.
 static bool hasAspectTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--aspect-test") == 0) return true;
     return false;
 }
 
-// --notes-test : headless JEF-39 regression. Runs the note model, sidecar
-// store, overlay geometry and EXR stamp self-tests (pure data/IO, no GL or
-// window needed). Runs all three even if an earlier one fails, so a
-// developer sees every broken area at once. Takes no argument.
+// --notes-test : headless note model, sidecar store, overlay geometry and EXR stamp
+// self-tests (no GL or window). Runs all even if one fails. Takes no argument.
 static bool hasNotesTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--notes-test") == 0) return true;
     return false;
 }
 
-// --wire-test : headless jefe::wire round-trip/bounds-safety self-test
-// (JEF-23). Pure data, no Qt/GL/rendering-chain dependency at all — takes
-// no argument. Dispatched at the very top of main(), before QApplication
-// is even constructed, since the test needs nothing that setup provides.
+// --wire-test : headless jefe::wire round-trip/bounds-safety self-test. Pure data; dispatched
+// at the top of main(), before QApplication is constructed. Takes no argument.
 static bool hasWireTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--wire-test") == 0) return true;
     return false;
 }
 
-// --signal-test : headless WebSocket signaling-stub loopback self-test
-// (JEF-24 Task 2). Like --wire-test, needs nothing setup provides, so it
-// runs and exits before QApplication is constructed.
+// --signal-test : headless WebSocket signaling-stub loopback self-test; runs and exits
+// before QApplication is constructed.
 static bool hasSignalTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--signal-test") == 0) return true;
     return false;
 }
 
-// --coord-signal-test : headless cloud-coordinator codec + loopback self-test
-// (JEF-27 Task 1). Pure codec assertions plus a bounded rtc::WebSocketServer
-// loopback; needs nothing setup provides, so it runs before QApplication.
+// --coord-signal-test : headless cloud-coordinator codec + loopback self-test; runs before
+// QApplication.
 static bool hasCoordSignalTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--coord-signal-test") == 0) return true;
@@ -246,10 +222,8 @@ static bool resolveRemotePeer(int argc, char* argv[], std::string& ip, int& port
     return false;
 }
 
-// --remote-test-webrtc : orchestrator/server role, WebRTC transport (JEF-24
-// Task 5). Identical to --remote-test but forces JEFECHECK_TRANSPORT=webrtc so
-// host + peer establish a real DTLS-encrypted libdatachannel data channel over
-// the localhost signaling stub instead of a RakNet connection.
+// --remote-test-webrtc : orchestrator/server role. Like --remote-test but forces
+// JEFECHECK_TRANSPORT=webrtc so host and peer use a real libdatachannel data channel.
 static bool hasRemoteTestWebrtc(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--remote-test-webrtc") == 0) return true;
@@ -266,30 +240,23 @@ static bool resolveRemoteWebrtcPeer(int argc, char* argv[], std::string& ip, int
     return false;
 }
 
-// --stats-test : orchestrator/server role (JEF-30 Task 1). Same two-process
-// WebRTC harness as --remote-test-webrtc, but after the session establishes +
-// traffic flows, it asserts the per-peer stats getter returns REAL WebRTC stats
-// (≥1 connected peer, bytes>0, a resolved Direct/Relay path). Forces
-// JEFECHECK_TRANSPORT=webrtc via the same top-of-main re-exec.
+// --stats-test : orchestrator role. Same two-process WebRTC harness as --remote-test-webrtc,
+// then asserts the per-peer stats getter returns REAL WebRTC stats.
 static bool hasStatsTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--stats-test") == 0) return true;
     return false;
 }
 
-// --asset-test : orchestrator role (JEF-28 Task 2). Loads a fixture LUT (and an
-// FX when a GL context exists) into the host, brings up the RakNet server,
-// spawns a peer child, and asserts the peer received + hot-loaded the asset via
-// the automatic late-join FX/LUT sync. RakNet: simplest reliable transport for
-// the gate; the sync is transport-agnostic.
+// --asset-test : orchestrator role. Loads a fixture LUT (and an FX when a GL context exists)
+// into the host and asserts a spawned peer hot-loads it via the late-join sync (over RakNet).
 static bool hasAssetTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--asset-test") == 0) return true;
     return false;
 }
-// --asset-test-peer <ip> <port> <lutHash> <fxHash> : child/joiner role. Joins,
-// lets the sync run, and asserts the fixture hashes now live in its managers.
-// fxHash "-" means "host had no usable FX" (FX scoped out — see the harness).
+// --asset-test-peer <ip> <port> <lutHash> <fxHash> : child/joiner role. Joins, lets the
+// sync run, and asserts the fixture hashes now live in its managers ("-" = no usable FX).
 static bool resolveAssetPeer(int argc, char* argv[], std::string& ip, int& port,
                              std::string& lutHash, std::string& fxHash) {
     for (int i = 1; i + 4 < argc; ++i) {
@@ -302,12 +269,8 @@ static bool resolveAssetPeer(int argc, char* argv[], std::string& ip, int& port,
     return false;
 }
 
-// --asset-test-webrtc : orchestrator role (JEF-28 Task 4). WebRTC variant of
-// --asset-test that drives a LARGE LUT (multi-MB .cube) over the WebRTC assets
-// channel so the transport-level chunking + bufferedAmount backpressure are
-// actually exercised, then asserts the joiner's received LUT content hash
-// matches the host's (byte-integrity through chunk/reassembly). Forces
-// JEFECHECK_TRANSPORT=webrtc via the re-exec above.
+// --asset-test-webrtc : orchestrator role. Drives a LARGE LUT over the WebRTC assets channel
+// (chunking/backpressure) and asserts the joiner's LUT hash matches the host's.
 static bool hasAssetTestWebrtc(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--asset-test-webrtc") == 0) return true;
@@ -326,12 +289,8 @@ static bool resolveAssetWebrtcPeer(int argc, char* argv[], std::string& ip,
     }
     return false;
 }
-// Generate a multi-MB Truelight-Cube v2.0 .cube fixture at `path` with a
-// `cubeSize`^3 identity ramp. cubeSize=45 → 91125 triads ≈ 2.4 MB, comfortably
-// past the 60 KB chunk payload AND the ~256 KB single-SCTP-message limit (≈42
-// chunks) and past the 1 MB backpressure high-water mark. Returns the file size
-// in bytes, or 0 on failure. Deterministic bytes (the peer receives them
-// verbatim, so cross-platform float formatting is irrelevant to hashmatch).
+// Generate a multi-MB Truelight-Cube v2.0 .cube fixture at `path` (`cubeSize`^3 identity ramp;
+// 45 -> ~2.4 MB, past the chunk size and backpressure mark). Returns the size in bytes, or 0.
 static long generateLargeCube(const std::string& path, int cubeSize) {
     FILE* f = std::fopen(path.c_str(), "wb");
     if (!f) return 0;
@@ -352,24 +311,15 @@ static long generateLargeCube(const std::string& path, int cubeSize) {
     return sz;
 }
 
-// --coord-test : orchestrator role, WebRTC transport through a self-contained
-// test-double coordinator (JEF-27 Task 3). Starts the coordinator on an
-// ephemeral ws port, brings up the host in coordinator mode (create-session),
-// spawns a peer child that joins by code, and asserts the P2P session mirrors
-// play. Forces JEFECHECK_TRANSPORT=webrtc via the same re-exec as the LAN
-// WebRTC harness so the host + loopback transports pick WebRtcTransport.
+// --coord-test : orchestrator role, WebRTC through a test-double coordinator. Spawns a peer
+// that joins by code and asserts the P2P session mirrors play (JEFECHECK_TRANSPORT=webrtc re-exec).
 static bool hasCoordTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--coord-test") == 0) return true;
     return false;
 }
-// --coord-test-server : runs ONLY the test-double coordinator (a
-// rtc::WebSocketServer) on an ephemeral port, in its OWN process. It prints
-// "COORD-URL=ws://127.0.0.1:<port>/" on stdout and then serves until killed.
-// The coordinator MUST be its own process: libdatachannel misroutes/drops
-// inbound messages when a WebSocketServer and multiple client rtc::WebSockets
-// (the host's coordinator socket + its loopback client's socket) share one
-// process — matching real-world usage where the coordinator is remote.
+// --coord-test-server : runs ONLY the test-double coordinator on an ephemeral port, printing
+// "COORD-URL=ws://127.0.0.1:<port>/". It MUST be its own process (libdatachannel misroutes otherwise).
 static bool hasCoordTestServer(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--coord-test-server") == 0) return true;
@@ -386,14 +336,8 @@ static bool resolveCoordTestPeer(int argc, char* argv[], std::string& url,
     return false;
 }
 
-// --coord-live-test <coordUrl> [authToken] : bring a cloud host up against a
-// REAL coordinator (local `npm run start:local`, or the deployed dev stage) and
-// assert its own loopback client reaches the participant list.
-//
-// --coord-test uses a test-double coordinator that implements only the
-// rendezvous, so it cannot see host POLICY at all. This one can: the host's
-// loopback client is itself a joiner, so if the coordinator enforces knocking
-// the host waits on a decision about itself and never has a participant.
+// --coord-live-test <coordUrl> [authToken] : bring a cloud host up against a REAL coordinator
+// and assert its loopback client reaches the participant list (sees host POLICY, unlike the test double).
 static bool resolveCoordLiveTest(int argc, char* argv[], std::string& url,
                                  std::string& token) {
     for (int i = 1; i + 1 < argc; ++i) {
@@ -407,16 +351,8 @@ static bool resolveCoordLiveTest(int argc, char* argv[], std::string& url,
 }
 
 int main(int argc, char* argv[]) {
-    // WebRTC-harness transport re-exec (JEF-24 Task 5). The transport factory
-    // reads JEFECHECK_TRANSPORT, but `networkManager` is a global whose client
-    // and server construct their transports during STATIC initialization —
-    // before main() runs. So a qputenv() here would be too late for THIS
-    // process: its transports are already RakNet. To force WebRTC for the
-    // --remote-test-webrtc host (and a manually-launched peer), set the env and
-    // re-exec: the fresh process image re-runs static init with the var already
-    // in the environment, so both client and server pick WebRtcTransport. The
-    // spawned peer child already inherits the var at spawn time, so this only
-    // ever fires once per process (guarded on the var already being "webrtc").
+    // WebRTC-harness re-exec: `networkManager` builds its transports during STATIC init, before
+    // main(), so qputenv() is too late; set JEFECHECK_TRANSPORT=webrtc and re-exec (once per process).
 #ifndef _WIN32
     {
         bool webrtcHarness = false;
@@ -427,9 +363,8 @@ int main(int argc, char* argv[]) {
                 std::strcmp(argv[i], "--asset-test-webrtc-peer") == 0 ||
                 std::strcmp(argv[i], "--coord-test") == 0 ||
                 std::strcmp(argv[i], "--coord-test-peer") == 0 ||
-                // JEF-37 live-coordinator harness: coordinator mode is WebRTC,
-                // so it needs the same re-exec (the transports are built during
-                // static init, before main can set the env var).
+                // Live-coordinator harness: coordinator mode is WebRTC, so it needs the same
+                // re-exec (transports are built during static init).
                 std::strcmp(argv[i], "--coord-live-test") == 0 ||
                 std::strcmp(argv[i], "--coord-live-peer") == 0 ||
                 std::strcmp(argv[i], "--stats-test") == 0) {
@@ -449,32 +384,25 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
-    // Headless jefe::wire self-test (--wire-test, JEF-23): pure data, no
-    // GUI/GL/Qt-application dependency, so it runs and exits before
-    // QApplication is even constructed — same "as early as possible"
-    // treatment as the other --*-test flags, just earlier since this one
-    // truly needs nothing else set up first.
+    // Headless jefe::wire self-test (--wire-test): pure data, runs and exits before
+    // QApplication is even constructed.
     if (hasWireTest(argc, argv)) {
         return jefe::wire::selfTest();
     }
 
-    // Headless PKCE codec self-test (--pkce-test, JEF-31): pure string/crypto
-    // work with no sockets and no event loop, so like --wire-test it runs and
-    // exits before QApplication exists.
+    // Headless PKCE codec self-test (--pkce-test): pure string/crypto work; runs and exits
+    // before QApplication exists.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--pkce-test") == 0) {
             return jefe::auth::pkceSelfTest();
         }
-        // --loopback-test (JEF-31): binds a real socket, so unlike --pkce-test
-        // it needs an event loop — it constructs its own QCoreApplication and
-        // still runs before QApplication/GL exist.
+        // --loopback-test: binds a real socket, so it needs an event loop; it constructs its
+        // own QCoreApplication and still runs before QApplication/GL exist.
         if (std::strcmp(argv[i], "--loopback-test") == 0) {
             return jefe::auth::loopbackSelfTest(argc, argv);
         }
-        // --tokenstore-test (JEF-31): exercises the FILE backend, which is
-        // compiled on every platform. The native Keychain/Credential Manager
-        // backends are verified by hand on their own platforms — a CI runner
-        // has no unlocked keychain to write to.
+        // --tokenstore-test: exercises the FILE backend (compiled everywhere); the native
+        // Keychain/Credential Manager backends are verified by hand.
         if (std::strcmp(argv[i], "--auth-test") == 0) {
             return jefe::auth::authSelfTest(argc, argv);
         }
@@ -483,26 +411,20 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Headless signaling-stub self-test (--signal-test, JEF-24): brings up a
-    // local WebSocket SignalingServer + SignalingClient and round-trips
-    // hello/offer JSON. Constructs rtc objects, so it brackets itself with
-    // rtc::Preload()/Cleanup() internally. Runs before QApplication.
+    // Headless signaling-stub self-test (--signal-test): round-trips hello/offer JSON through
+    // a local WebSocket SignalingServer + Client. Runs before QApplication.
     if (hasSignalTest(argc, argv)) {
         return jefe::net::signalingSelfTest();
     }
 
-    // Headless cloud-coordinator self-test (--coord-signal-test, JEF-27): pure
-    // codec round-trip for the JEF-25 envelopes plus a bounded loopback against
-    // a scripted rtc::WebSocketServer. Brackets rtc::Preload()/Cleanup()
-    // internally. Runs before QApplication, same as --signal-test.
+    // Headless cloud-coordinator self-test (--coord-signal-test): codec round-trip plus a
+    // bounded loopback against a scripted rtc::WebSocketServer. Runs before QApplication.
     if (hasCoordSignalTest(argc, argv)) {
         return jefe::net::coordinatorSignalingSelfTest();
     }
 
-    // Test-double coordinator process (--coord-test-server, JEF-27 Task 3). Runs
-    // ONLY the rtc::WebSocketServer coordinator on an ephemeral port; prints its
-    // URL and serves until killed by the --coord-test orchestrator. Its own
-    // process so it never shares libdatachannel state with the client sockets.
+    // Test-double coordinator process (--coord-test-server): runs ONLY the
+    // rtc::WebSocketServer on an ephemeral port, in its own process.
     if (hasCoordTestServer(argc, argv)) {
         jefe::net::TestCoordinator coordinator;
         if (!coordinator.start()) {
@@ -514,48 +436,32 @@ int main(int argc, char* argv[]) {
         for (;;) std::this_thread::sleep_for(std::chrono::seconds(3600));
     }
 
-    // Make Qt's accessibility bridge live before QApplication touches
-    // anything. On macOS this routes QAccessible → NSAccessibility,
-    // which is what Appium's mac2 driver introspects.
+    // Make Qt's accessibility bridge live before QApplication touches anything (on macOS
+    // it routes QAccessible to NSAccessibility, which Appium's mac2 driver introspects).
     qputenv("QT_ACCESSIBILITY", "1");
 
-    // gfcPlate's renderer relies on the fixed-function GL pipeline:
-    // (Sets the global gMacExecutablePath used by getApplicationDataPath
-    // on macOS to find the bundled Resources directory. The FLTK build
-    // does this in src/main.cpp; mirror it here so LUT/FX autoload from
-    // the install path works in the Qt build.)
+    // Sets gMacExecutablePath, which getApplicationDataPath uses on macOS to find the
+    // bundled Resources directory (LUT/FX autoload).
     if (argc > 0 && argv[0]) {
         setMacExecutablePath(argv[0]);
     }
 
-    // JEF-28: assign a real, writable per-user directory for P2P-received
-    // assets. `sett.receivedPath` was declared but never assigned, so received
-    // LUT/FX files (unserializeLUT/unserializeFX) landed in the process CWD.
-    // Point it at getApplicationDataPath()/received/ and create it. Runs here
-    // (after setMacExecutablePath primes getApplicationDataPath on macOS, and
-    // before any --remote-test/--coord-test networking dispatch below).
+    // Assign a writable per-user directory (getApplicationDataPath()/received/) for P2P-received
+    // assets; otherwise received LUT/FX files land in the CWD. Runs after setMacExecutablePath.
     {
         std::string received = getApplicationDataPath() + "received/";
         std::error_code ec;
         std::filesystem::create_directories(received, ec);
         sett.receivedPath = received;   // gfcSettings global (extern above)
     }
-    // glPipeline notes:
-    // glBegin/glEnd quads, GL_TEXTURE_RECTANGLE_ARB, glColor4f, ARB
-    // shader objects. macOS only exposes that pipeline through legacy
-    // OpenGL 2.1; Qt defaults to Core 3.2/4.1, where every fixed-
-    // function call is removed and the polygon ends up rendering an
-    // untextured white quad. NoProfile + 2.1 on macOS gives us the
-    // same context FLTK uses (Apple's deprecated compatibility GL).
+    // gfcPlate needs the fixed-function pipeline, which macOS exposes only as legacy GL 2.1;
+    // Qt's default Core profile removes it (untextured white quad). Use NoProfile + 2.1 there.
     QSurfaceFormat fmt;
     fmt.setProfile(QSurfaceFormat::NoProfile);
     fmt.setVersion(2, 1);
     fmt.setDepthBufferSize(24);
-    // Explicit vsync (1 = sync to display refresh). Qt's default on macOS
-    // is platform-dependent; spelling it out keeps swap behavior
-    // deterministic across the QOpenGLWidget FBO + window-server
-    // composite pipeline. Without this, drag pan feel was inconsistent —
-    // some frames hit vsync, others didn't.
+    // Explicit vsync (1): Qt's default on macOS is platform-dependent, and drag-pan feel was
+    // inconsistent without it.
     fmt.setSwapInterval(1);
     QSurfaceFormat::setDefaultFormat(fmt);
 
@@ -563,18 +469,16 @@ int main(int argc, char* argv[]) {
     qapp.setApplicationName("JefeCheck");
     qapp.setOrganizationName("JefeCheck");
 
-    // Test-mode isolation: redirect QSettings + LUT autoload path into a
-    // caller-supplied directory. Must run BEFORE any QSettings is
-    // constructed (MainWindow_Qt::restoreLayout creates the first one).
+    // Test-mode isolation: redirect QSettings + LUT autoload path into a caller-supplied
+    // directory. Must run BEFORE any QSettings is constructed.
     const QString configDir = resolveConfigDir(argc, argv);
     if (!configDir.isEmpty()) {
         QDir().mkpath(configDir);
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                            configDir);
-        // sett is the global gfcSettings; sett.lutPath drives the
-        // install-LUT autoload in SequenceLoadBridge_qt. Point it at
-        // the test fixture dir if one's been seeded.
+        // sett.lutPath drives the install-LUT autoload in SequenceLoadBridge_qt; point it at
+        // the test fixture dir if seeded.
         const QString fxDir = configDir + "/FX/";
         if (QFileInfo(fxDir).isDir()) {
             sett.lutPath = fxDir.toStdString();
@@ -592,10 +496,8 @@ int main(int argc, char* argv[]) {
     // the window is even shown — playlist ops are pure data, no GL.
     const QString playlistTestFile = resolvePlaylistTestFile(argc, argv);
     if (!playlistTestFile.isEmpty()) {
-        // GUI stubs must exist before addCurrentAsPlaylistItem() calls
-        // getLoadParamsFromGUI() / getPlateStateInfo(). MainWindow_Qt hasn't
-        // been constructed yet, so initialize them here (once, safe in
-        // headless mode).
+        // GUI stubs must exist before addCurrentAsPlaylistItem() calls getLoadParamsFromGUI()
+        // / getPlateStateInfo(); MainWindow_Qt isn't constructed yet.
         jefe::qt::initializeRenderingChain();
         jefe::qt::clearPlaylist();
         jefe::qt::addPlaylistFile(playlistTestFile.toStdString());
@@ -622,17 +524,14 @@ int main(int argc, char* argv[]) {
         std::_Exit(ok ? 0 : 2);
     }
 
-    // Headless aspect-conversion regression (--aspect-test, JEF-21): pure
-    // string->float check, no window or GL needed. Runs and exits.
+    // Headless aspect-conversion regression (--aspect-test): pure string->float check.
     if (hasAspectTest(argc, argv)) {
         const bool ok = jefe::qt::runAspectSelfTest();
         std::_Exit(ok ? 0 : 2);
     }
 
-    // Headless note self-tests (--notes-test, JEF-39): model, sidecar store,
-    // and overlay geometry are all pure data/arithmetic, no window or GL
-    // needed. Runs all three regardless of earlier failures, so a developer
-    // sees every broken area in one pass, then exits non-zero if any failed.
+    // Headless note self-tests (--notes-test): pure data/arithmetic. Runs all three
+    // regardless of earlier failures and exits non-zero if any failed.
     if (hasNotesTest(argc, argv)) {
         const int modelFail   = noteModelSelfTest();
         const int storeFail   = noteStoreSelfTest();
@@ -647,9 +546,8 @@ int main(int argc, char* argv[]) {
         const int mergeFail = noteMergeSelfTest();
         const int packageFail = jefe::qt::package::packageSelfTest();
         const int packageOpenFail = jefe::qt::package::packageOpenSelfTest();
-        // The self-tests print via std::printf but do not flush; std::_Exit
-        // skips stdio's normal flush-on-exit, so an unflushed buffer (e.g.
-        // stdout not a tty) would silently drop all three lines.
+        // The self-tests print via std::printf without flushing, and std::_Exit skips the
+        // stdio flush, so an unflushed buffer would drop all three lines.
         std::fflush(stdout);
         std::_Exit((modelFail == 0 && storeFail == 0 && overlayFail == 0 &&
                     stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
@@ -683,9 +581,7 @@ int main(int argc, char* argv[]) {
         QProcess peer;
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--remote-test-peer", "127.0.0.1", QString::number(port)});
-        // Forward the child's output into this process's. It used to be
-        // discarded, which made a failing two-process test impossible to
-        // diagnose from its log: only the server's half was ever visible.
+        // Forward the child's output into this process's, so a failing two-process test is diagnosable.
         peer.setProcessChannelMode(QProcess::ForwardedChannels);
         peer.start();
         if (!peer.waitForStarted(2000)) { printf("REMOTE-TEST: child failed to start: %s\n", peer.errorString().toUtf8().constData()); fflush(stdout); std::_Exit(3); }
@@ -700,11 +596,8 @@ int main(int argc, char* argv[]) {
         std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
     }
 
-    // --asset-test-peer <ip> <port> <lutHash> <fxHash>: joiner child role
-    // (JEF-28 Task 2). Connects to the host, holds while the automatic FX/LUT
-    // sync runs, then asserts the fixture hashes now live in this process's
-    // managers. Reports its result on stdout ("ASSET-PEER: lut=.. fx=..") and
-    // via exit code (0 iff the LUT transferred).
+    // --asset-test-peer <ip> <port> <lutHash> <fxHash>: joiner child role. Asserts the fixture
+    // hashes live in this process's managers; prints "ASSET-PEER: lut=.. fx=.." and exits 0 iff the LUT transferred.
     {
         std::string peerIp, lutHash, fxHash; int peerPort = 0;
         if (resolveAssetPeer(argc, argv, peerIp, peerPort, lutHash, fxHash)) {
@@ -716,9 +609,7 @@ int main(int argc, char* argv[]) {
                 fflush(stdout);
                 std::_Exit(3);
             }
-            // Connect + hold + pump; the sync fires automatically on join.
-            // RakNet connects instantly; 4 s of pumping is ample for the few
-            // handshake round-trips (FX sinc → LUT sinc → the LUT push).
+            // Connect + hold + pump; the sync fires automatically on join (4 s is ample).
             jefe::qt::remoteTestPeerConnect(peerIp, peerPort, /*holdMs=*/4000,
                                             /*play=*/false);
             const bool gotLut = jefe::qt::remoteHasLUTHash(lutHash);
@@ -733,9 +624,8 @@ int main(int argc, char* argv[]) {
     }
     if (hasAssetTest(argc, argv)) {
         jefe::qt::initializeRenderingChain();
-        // loadLUT/loadFX create GL objects (LUT: glTexImage3D; FX: ARB shader
-        // objects), so bring up an offscreen GL context first — without it the
-        // fixture loads call null GLAD pointers and crash.
+        // loadLUT/loadFX create GL objects, so bring up an offscreen GL context first or the
+        // fixture loads call null GLAD pointers.
         if (!jefe::qt::setupOffscreenTestGL()) {
             printf("ASSET-TEST: gl setup failed\n");
             fflush(stdout);
@@ -744,12 +634,8 @@ int main(int argc, char* argv[]) {
         const std::string fxDir = getApplicationDataPath() + "FX/";
         const std::string lutFixture = fxDir + "invert.lut";
         const std::string fxFixture  = fxDir + "ADD.jfx";
-        // Load the fixtures into the HOST before the peer joins. With the
-        // offscreen GL context above, loadFX compiles+links the shaders and
-        // assigns a content hash, so FX is asserted too; if a build's offscreen
-        // context can't compile the shader, the FX hash comes back empty and the
-        // harness reports fx=na (LUT stays mandatory). loadLUT assigns a portable
-        // content hash from the .lut bytes and uploads a 3D texture.
+        // Load the fixtures into the HOST before the peer joins; if the offscreen context can't
+        // compile the shader the FX hash is empty and the harness reports fx=na (LUT mandatory).
         const std::string lutHash = jefe::qt::assetTestLoadLUT(lutFixture);
         const std::string fxHash  = jefe::qt::assetTestLoadFX(fxFixture);
         printf("ASSET-TEST: host lut hash=%s (lutCount=%d) fx hash=%s (fxCount=%d)\n",
@@ -773,11 +659,8 @@ int main(int argc, char* argv[]) {
         peer.setArguments({"--asset-test-peer", "127.0.0.1", QString::number(port),
                            QString::fromStdString(lutHash),
                            QString::fromStdString(fxApplicable ? fxHash : "-")});
-        // Always CAPTURE the child's stdout (SeparateChannels, the QProcess
-        // default) so we can read back its ASSET-PEER marker — ForwardedChannels
-        // would route it to the terminal and leave readAllStandardOutput empty.
-        // For debug visibility, forward the child's STDERR to ours (the sync
-        // printfs go to stdout, which we still capture + echo below).
+        // CAPTURE the child's stdout (SeparateChannels) to read its ASSET-PEER marker;
+        // ForwardedChannels would leave readAllStandardOutput empty. Forward stderr.
         if (qEnvironmentVariableIsSet("JEFECHECK_REMOTE_TEST_DEBUG"))
             peer.setProcessChannelMode(QProcess::ForwardedErrorChannel);
         peer.start();
@@ -798,9 +681,7 @@ int main(int argc, char* argv[]) {
         peer.waitForFinished(1000);
         if (peer.state() != QProcess::NotRunning) peer.kill();
 
-        // Parse the peer's ASSET-PEER marker from its captured stdout and echo
-        // the marker line so the peer's verdict is visible in the orchestrator's
-        // own output.
+        // Parse the peer's ASSET-PEER marker from its stdout and echo it.
         int peerLut = 0, peerFx = 0;
         const QString out = QString::fromUtf8(peer.readAllStandardOutput());
         for (const QString& line : out.split('\n')) {
@@ -811,9 +692,8 @@ int main(int argc, char* argv[]) {
             }
         }
         const bool lutOk = (peerLut == 1);
-        // FX is N/A when the host had no GL context to compile it (the common
-        // headless case); only report a 0/1 verdict when the host actually had a
-        // usable FX asset to push.
+        // FX is N/A when the host had no GL context to compile it (the common headless
+        // case); report a verdict only when the host had a usable FX to push.
         if (fxApplicable)
             printf("ASSET-TEST: lut=%d fx=%d\n", lutOk ? 1 : 0, peerFx);
         else
@@ -822,15 +702,8 @@ int main(int argc, char* argv[]) {
         std::_Exit(lutOk && (!fxApplicable || peerFx == 1) ? 0 : 2);
     }
 
-    // --remote-test-webrtc-peer <ip> <port>: WebRTC child client role. The
-    // WebRTC transport is already forced by the re-exec at the top of main()
-    // (JEFECHECK_TRANSPORT=webrtc was in the environment before static init, so
-    // the client's transport is a WebRtcTransport). holdMs is much larger than
-    // the RakNet peer's (2000 ms): WebRTC needs signaling + ICE + DTLS +
-    // datachannel-open before it is connected enough to send the play toggle,
-    // and the peer only sends play once (on the toggle), so it must stay
-    // connected first — connectTimeoutMs is bumped so the toggle fires AFTER the
-    // channel opens (a pre-open send would be silently dropped).
+    // --remote-test-webrtc-peer <ip> <port>: WebRTC child client role (transport forced by the
+    // re-exec). holdMs/connectTimeoutMs are large: a send before the channel opens is dropped.
     {
         std::string peerIp; int peerPort = 0;
         if (resolveRemoteWebrtcPeer(argc, argv, peerIp, peerPort)) {
@@ -847,25 +720,19 @@ int main(int argc, char* argv[]) {
         // both run back-to-back and a socket lingers in TIME_WAIT.
         const int port = 60124;
 
-        // Phase 1: bring the host's own loopback client fully up BEFORE the peer
-        // exists. The peer's play is one-shot and the host mirrors it through the
-        // loopback; a WebRTC loopback can open its channel later than a fast peer,
-        // so if the peer played first the forward would reach 0 channels and be
-        // lost. Waiting for the loopback here closes that race. (See the bridge.)
+        // Bring the host's own loopback client fully up BEFORE the peer exists: the peer's play
+        // is one-shot, and a WebRTC loopback can open later, losing the forward.
         if (!jefe::qt::remoteTestServerStart(port, /*loopbackTimeoutMs=*/10000)) {
             printf("REMOTE-TEST-WEBRTC: loopback client failed to come up\n");
             fflush(stdout);
             std::_Exit(3);
         }
 
-        // Phase 2: now spawn the peer. It will establish its own WebRTC session,
-        // and its single play toggle is guaranteed a live loopback to mirror to.
+        // Now spawn the peer; its single play toggle is guaranteed a live loopback to mirror to.
         QProcess peer;
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--remote-test-webrtc-peer", "127.0.0.1", QString::number(port)});
-        // QProcess inherits the parent env (which already has the var set), but
-        // spell it out explicitly so the child's transport selection can never
-        // depend on inheritance semantics.
+        // Spell the env var out so the child's transport never depends on inheritance.
         QProcessEnvironment childEnv = QProcessEnvironment::systemEnvironment();
         childEnv.insert("JEFECHECK_TRANSPORT", "webrtc");
         peer.setProcessEnvironment(childEnv);
@@ -873,10 +740,8 @@ int main(int argc, char* argv[]) {
             peer.setProcessChannelMode(QProcess::ForwardedChannels);
         peer.start();
         if (!peer.waitForStarted(2000)) { printf("REMOTE-TEST-WEBRTC: child failed to start: %s\n", peer.errorString().toUtf8().constData()); fflush(stdout); std::_Exit(3); }
-        // WebRTC session establishment (signaling handshake → ICE → DTLS →
-        // SCTP datachannel open) takes far longer than RakNet's instant connect,
-        // so the settle budget is generous (10 s) to absorb the peer's own
-        // handshake plus ICE/DTLS on a loaded machine before its play arrives.
+        // WebRTC establishment (signaling, ICE, DTLS, SCTP) is far slower than RakNet, so the
+        // settle budget is generous (10 s).
         const bool sawPlay = jefe::qt::remoteTestServerSettleForPlay(/*settleMs=*/10000);
         const int  peak    = (int)jefe::qt::remoteParticipants().size();
         peer.waitForFinished(6000);
@@ -886,26 +751,20 @@ int main(int argc, char* argv[]) {
         std::_Exit((peak >= 1 && sawPlay) ? 0 : 2);
     }
 
-    // --stats-test (JEF-30 Task 1): reuse the --remote-test-webrtc two-process
-    // WebRTC harness (host + loopback + a spawned peer child) to establish a real
-    // libdatachannel session with traffic, then assert the per-peer stats getter
-    // returns REAL stats. Success requires ≥1 connected peer with bytes>0 and a
-    // resolved Direct/Relay path. rtt is NOT required (localhost rtt is often
-    // 0/nullopt → -1). WebRTC forced by the top-of-main re-exec.
+    // --stats-test: reuse the --remote-test-webrtc harness, then assert the per-peer stats
+    // getter returns REAL stats (>=1 connected peer, bytes>0, resolved path; rtt not required).
     if (hasStatsTest(argc, argv)) {
         jefe::qt::initializeRenderingChain();
         const int port = 60127;   // distinct from the other harness ports
 
-        // Phase 1: host + its loopback client fully up (a real WebRTC peer with
-        // handshake/sync traffic — enough for stats on its own).
+        // Bring the host + its loopback client fully up (handshake/sync traffic is enough for stats).
         if (!jefe::qt::remoteTestServerStart(port, /*loopbackTimeoutMs=*/10000)) {
             printf("STATS-TEST: loopback client failed to come up\n");
             fflush(stdout);
             std::_Exit(3);
         }
 
-        // Phase 2: spawn a second WebRTC peer (reuses the remote-test child role)
-        // so there is cross-process traffic + a second selected candidate pair.
+        // Spawn a second WebRTC peer (reuses the remote-test child role) for cross-process traffic.
         QProcess peer;
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--remote-test-webrtc-peer", "127.0.0.1", QString::number(port)});
@@ -925,9 +784,8 @@ int main(int argc, char* argv[]) {
         // Let the peer's session + play toggle generate traffic on the host.
         jefe::qt::remoteTestServerSettleForPlay(/*settleMs=*/10000);
 
-        // Poll the stats getter with a bounded retry so bytes counters + the
-        // selected candidate pair have settled (both populate slightly after the
-        // channel opens). Accept the first peer with real stats.
+        // Poll the stats getter with a bounded retry until the bytes counters and selected
+        // candidate pair have settled; accept the first peer with real stats.
         bool ok = false;
         int  peersReport = 0;
         long rttReport = -1;
@@ -958,12 +816,8 @@ int main(int argc, char* argv[]) {
         std::_Exit(ok ? 0 : 2);
     }
 
-    // --asset-test-webrtc-peer <ip> <port> <lutHash>: WebRTC joiner child role
-    // (JEF-28 Task 4). Joins the host over WebRTC, holds while the late-join sync
-    // pushes the LARGE LUT over the assets channel (chunked + reassembled by the
-    // transport), then asserts the host's LUT content hash now lives in this
-    // process's lutManager (byte-integrity proof). WebRTC needs the long hold to
-    // absorb signaling + ICE + DTLS + the multi-MB chunked transfer.
+    // --asset-test-webrtc-peer <ip> <port> <lutHash>: WebRTC joiner child role. Joins the
+    // host, holds for the chunked LUT transfer, then asserts the LUT hash is in lutManager.
     {
         std::string peerIp, lutHash; int peerPort = 0;
         if (resolveAssetWebrtcPeer(argc, argv, peerIp, peerPort, lutHash)) {
@@ -1013,17 +867,15 @@ int main(int argc, char* argv[]) {
         }
 
         const int port = 60126;  // distinct from the other harness ports
-        // Phase 1: bring the host + its loopback client fully up over WebRTC
-        // (the loopback shares this process's managers, so it already has the LUT
-        // and is never pushed to — it just gates that the host is live).
+        // Bring the host + its loopback client fully up over WebRTC (the loopback shares this
+        // process's managers, so it already has the LUT and is never pushed to).
         if (!jefe::qt::remoteTestServerStart(port, /*loopbackTimeoutMs=*/12000)) {
             printf("ASSET-TEST-WEBRTC: loopback client failed to come up\n");
             fflush(stdout);
             std::_Exit(3);
         }
 
-        // Phase 2: spawn the joiner; it establishes its own WebRTC session and
-        // receives the large LUT over the assets channel.
+        // Spawn the joiner; it establishes its own WebRTC session and receives the large LUT.
         QProcess peer;
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--asset-test-webrtc-peer", "127.0.0.1",
@@ -1038,9 +890,7 @@ int main(int argc, char* argv[]) {
             fflush(stdout);
             std::_Exit(3);
         }
-        // Pump the host while the peer connects + the chunked transfer runs.
-        // Bounded (20 s) so the harness always terminates; the peer holds ~12 s
-        // plus its own signaling/ICE/DTLS.
+        // Pump the host while the peer connects and the chunked transfer runs (bounded at 20 s).
         const auto deadline = std::chrono::steady_clock::now() +
                               std::chrono::milliseconds(20000);
         while (peer.state() != QProcess::NotRunning &&
@@ -1065,11 +915,8 @@ int main(int argc, char* argv[]) {
         std::_Exit((peerLut == 1 && peerHash == 1) ? 0 : 2);
     }
 
-    // --coord-test-peer <coordUrl> <code>: WebRTC joiner child role for the
-    // cloud-coordinator harness. WebRTC is already forced by the re-exec at the
-    // top of main(); this joins the coordinator by code and toggles play. holdMs
-    // + connectTimeoutMs mirror the LAN WebRTC peer (coordinator + ICE + DTLS +
-    // datachannel must all complete before the one-shot play toggle can ship).
+    // --coord-test-peer <coordUrl> <code>: WebRTC joiner child role for the coordinator
+    // harness. holdMs/connectTimeoutMs mirror the LAN WebRTC peer.
     {
         std::string coordUrl, code;
         if (resolveCoordTestPeer(argc, argv, coordUrl, code)) {
@@ -1104,22 +951,16 @@ int main(int argc, char* argv[]) {
                    jefe::qt::coordTestGetCode().c_str(), up ? 1 : 0);
             fflush(stdout);
             if (!up) {
-                // Print WHY. A refusal is a legitimate outcome here (hosting
-                // the real service anonymously earns auth-required), and it is
-                // the reason code — not the bare failure — that says whether
-                // the coordinator behaved correctly.
+                // Print WHY: a refusal (e.g. auth-required for anonymous hosting) is a
+                // legitimate outcome, and the reason code says whether the coordinator behaved.
                 printf("COORD-LIVE-TEST: refused code=[%s] message=[%s]\n",
                        jefe::qt::remoteCoordinatorErrorCode().c_str(),
                        jefe::qt::remoteCoordinatorErrorMessage().c_str());
                 fflush(stdout);
                 std::_Exit(2);
             }
-            // Hold open so a joiner can knock, then admit it. Prints 0 knocks
-            // when run alone, which is a valid outcome — the loopback assertion
-            // above is the part that runs unattended.
-            // "decided", not "admitted": with JEFE_LIVE_DENY=1 the same count
-            // is refusals, and a label that said admitted would read as a pass
-            // in exactly the run meant to prove the opposite.
+            // Hold open so a joiner can knock, then admit it. Prints "decided", not "admitted":
+            // with JEFE_LIVE_DENY=1 the same count is refusals.
             const int decided = jefe::qt::coordLiveAwaitAndAdmit(15000);
             printf("COORD-LIVE-TEST: decided=%d participants=%d\n", decided,
                    (int)jefe::qt::remoteParticipants().size());
@@ -1131,12 +972,8 @@ int main(int argc, char* argv[]) {
         // WebRTC is already forced by the re-exec at the top of main().
         jefe::qt::initializeRenderingChain();
 
-        // 1. Spawn the test-double coordinator as its OWN process (see
-        //    --coord-test-server) and read the ephemeral ws URL it prints. It
-        //    MUST be a separate process: a co-located WebSocketServer + the two
-        //    client rtc::WebSockets the host opens (its coordinator socket + the
-        //    loopback client's) trip a libdatachannel message-routing bug. A
-        //    remote coordinator is also what real usage looks like.
+        // 1. Spawn the test-double coordinator as its OWN process (see --coord-test-server):
+        //    a co-located WebSocketServer trips a libdatachannel message-routing bug.
         QProcess coord;
         coord.setProgram(QCoreApplication::applicationFilePath());
         coord.setArguments({"--coord-test-server"});
@@ -1176,10 +1013,8 @@ int main(int argc, char* argv[]) {
             std::_Exit(3);
         }
 
-        // 2. Bring the host up in coordinator mode (create-session → assigned
-        //    code) and wait for its loopback client to fully register (its P2P
-        //    channel open both ways) BEFORE the peer exists — same one-shot-play
-        //    race fix as the LAN WebRTC harness.
+        // 2. Bring the host up in coordinator mode (create-session) and wait for its loopback
+        //    client to fully register BEFORE the peer exists (one-shot-play race).
         if (!jefe::qt::coordTestHostStart(coordUrl, /*loopbackTimeoutMs=*/12000)) {
             printf("COORD-TEST: host/loopback failed to come up (code=%s)\n",
                    jefe::qt::coordTestGetCode().c_str());
@@ -1188,9 +1023,8 @@ int main(int argc, char* argv[]) {
         }
         const std::string code = jefe::qt::coordTestGetCode();
 
-        // 3. Spawn the peer child. It joins the SAME coordinator by the assigned
-        //    code and, once its P2P session is up, toggles play (mirrored to the
-        //    host over the P2P channel → forwarded to the loopback → isPlaying()).
+        // 3. Spawn the peer child: it joins the same coordinator by the assigned code and
+        //    toggles play, mirrored over the P2P channel to the loopback (isPlaying()).
         QProcess peer;
         peer.setProgram(QCoreApplication::applicationFilePath());
         peer.setArguments({"--coord-test-peer",
@@ -1218,21 +1052,17 @@ int main(int argc, char* argv[]) {
     window.setObjectName("MainWindow");
     window.show();
 
-    // Test-mode isolation (continued): also keep review-package extraction
-    // inside the caller-supplied config dir, not the developer's real
-    // AppDataLocation -- --config-dir only redirects QSettings on its own.
+    // Also keep review-package extraction inside the caller-supplied config dir
+    // (--config-dir only redirects QSettings on its own).
     if (!configDir.isEmpty()) {
         window.setPackageCacheRoot(configDir + "/packages");
     }
 
-    // --ui-preview (JEF-31/37): open the Remote dock with the Cloud and
-    // admission layouts filled with sample data, for design review before the
-    // sign-in and lobby wiring exists. Deferred so docks are laid out first.
+    // --ui-preview: open the Remote dock with the Cloud and admission layouts filled with
+    // sample data. Deferred so docks are laid out first.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--ui-preview") == 0) {
-            // Optional "knock" selects the joiner's waiting screen instead of
-            // the host's lobby. Two different people's views of the same
-            // moment; both need looking at.
+            // Optional "knock" selects the joiner's waiting screen instead of the host's lobby.
             const bool knocking =
                 i + 1 < argc && std::strcmp(argv[i + 1], "knock") == 0;
             QTimer::singleShot(0, &window, [&window, knocking]() {
@@ -1242,12 +1072,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // --auto-cloud-host / --auto-cloud-join <code> (JEF-37): drive the Remote
-    // panel from the command line so a host + joiner pair can be brought up
-    // hands-off, for screenshots and manual review. The host prints
-    // "CLOUD-CODE=<code>" once the coordinator answers, which is what the
-    // joiner process needs. Delayed 1200ms so the window and docks have
-    // actually laid out before anything is clicked.
+    // --auto-cloud-host / --auto-cloud-join <code>: drive the Remote panel from the command
+    // line; the host prints "CLOUD-CODE=<code>". Delayed 1200ms so docks have laid out.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--auto-cloud-host") == 0) {
             QTimer::singleShot(1200, &window, [&window]() {
@@ -1287,10 +1113,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // --screenshot <path> [delayMs]: save a PNG of the main window and keep
-    // running. The app photographs itself rather than the screen being grabbed
-    // around it, so the result is the window and nothing else — no overlap
-    // from a second instance, no dependence on which window is in front.
+    // --screenshot <path> [delayMs]: the app saves a PNG of its own main window and keeps
+    // running, so the result is the window alone.
     for (int i = 1; i + 1 < argc; ++i) {
         const bool whole  = std::strcmp(argv[i], "--screenshot") == 0;
         const bool remote = std::strcmp(argv[i], "--screenshot-remote") == 0;
@@ -1309,10 +1133,8 @@ int main(int argc, char* argv[]) {
         break;
     }
 
-    // Load each --open-file into the matching plate after the event
-    // loop has spun up the GL context. Deferred via QTimer::singleShot
-    // so paintGL has fired (initializing GLAD) before the bridge tries
-    // to upload a texture.
+    // Load each --open-file into the matching plate once the event loop has spun up the
+    // GL context (deferred so paintGL has initialized GLAD before the texture upload).
     const QStringList openFiles = resolveOpenFiles(argc, argv);
     for (int i = 0; i < openFiles.size() && i < 4; ++i) {
         const int plateIdx = i;
@@ -1322,28 +1144,22 @@ int main(int argc, char* argv[]) {
         });
     }
 
-    // --notes-demo: put one of each note type on plate 0 once the footage
-    // has decoded, so the annotation overlay can be seen (and screenshotted)
-    // without anyone drawing by hand. Coordinates are fixed, so the resulting
-    // frame is comparable run to run rather than merely illustrative.
+    // --notes-demo: put one of each note type on plate 0 at fixed coordinates, so the
+    // overlay can be screenshotted and compared run to run.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--notes-demo") == 0) {
             QTimer::singleShot(2500, &window, [&window]() {
                 jefe::qt::addDemoNotes(0);
-                // Real drawing refreshes the dock via the viewport's
-                // plateStateChanged on mouse-up; the demo bypasses the mouse,
-                // so it has to say so itself or the shot shows notes on the
-                // frame and an empty list beside them.
+                // The demo bypasses the mouse, so it must refresh the dock itself (real
+                // drawing does so via plateStateChanged on mouse-up).
                 window.refreshNotesForLoadedMedia();
             });
             break;
         }
     }
 
-    // --stamp-notes <out.exr>: once the footage (and any --notes-demo notes)
-    // are in place, stamp the active plate's current frame into <out.exr> and
-    // report. With --notes-demo this checks the layer path end to end, which
-    // needs the real GL context only a live window provides.
+    // --stamp-notes <out.exr>: stamp the active plate's current frame into <out.exr> and
+    // report; needs the real GL context only a live window provides.
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--stamp-notes") == 0) {
             const QString out = QString::fromUtf8(argv[i + 1]);
@@ -1483,9 +1299,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // --load-all: do what the Load Sequence Manager's Load All button does --
-    // leave preview mode and start loading every track -- so a plate filled by
-    // --open-file shows its decoded frame, not the preview and its info dump.
+    // --load-all: what the Load Sequence Manager's Load All does (leave preview mode, load
+    // every track), so a plate filled by --open-file shows its decoded frame.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--load-all") == 0) {
             QTimer::singleShot(2000, &window, []() {
@@ -1514,12 +1329,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // --demo-host <port> / --demo-join <ip> <port>: start a LAN review
-    // session without the Remote dialog. The two sides use different
-    // nicknames on purpose -- the server refuses a duplicate. The host then
-    // draws a fixed script through the real pencil draw session, so what the
-    // joiner receives is ordinary note sync; only the host's mouse input is
-    // synthesised.
+    // --demo-host <port> / --demo-join <ip> <port>: start a LAN review session without the
+    // Remote dialog. Nicknames differ on purpose (the server refuses a duplicate).
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--demo-host") != 0) continue;
         const int port = std::atoi(argv[i + 1]);
@@ -1621,11 +1432,8 @@ int main(int argc, char* argv[]) {
         break;
     }
 
-    // --grab-frames <dir> <caption> <startMs> <endMs>: save the window as a
-    // captioned JPEG every 66 ms between the two times. Files are named by
-    // wall-clock bucket, so two instances can be stitched side by side frame
-    // for frame -- and it works when the screen itself cannot be recorded
-    // (locked, asleep, no capture permission).
+    // --grab-frames <dir> <caption> <startMs> <endMs>: save the window as a captioned JPEG
+    // every 66 ms, named by wall-clock bucket so two instances can be stitched side by side.
     for (int i = 1; i + 4 < argc; ++i) {
         if (std::strcmp(argv[i], "--grab-frames") != 0) continue;
         const QString dir = QString::fromUtf8(argv[i + 1]);
@@ -1678,15 +1486,12 @@ int main(int argc, char* argv[]) {
         break;
     }
 
-    // Headless render smoke test (--render-test <dir>): after the footage
-    // has had time to decode and the GL context to initialise, render one
-    // frame of plate 0 into <dir> and quit.
+    // Headless render smoke test (--render-test <dir>): after the footage has decoded,
+    // render one frame of plate 0 into <dir> and quit.
     const QString renderTestDir = resolveRenderTestDir(argc, argv);
     if (!renderTestDir.isEmpty()) {
-        // The destination must be a usable DIRECTORY before anything renders.
-        // mkpath's result used to be discarded, so passing an image path by
-        // mistake — easy, since --fx-test next door takes exactly that —
-        // left every write failing while the run still reported success.
+        // The destination must be a usable DIRECTORY before anything renders (an image path
+        // passed by mistake would otherwise fail every write yet report success).
         if (!QDir().mkpath(renderTestDir)) {
             printf("RENDER-TEST FAIL: cannot use %s as an output directory\n",
                    renderTestDir.toLocal8Bit().constData());
@@ -1698,17 +1503,12 @@ int main(int argc, char* argv[]) {
         const QStringList before =
             QDir(renderTestDir).entryList(QDir::Files | QDir::NoDotAndDotDot);
         QTimer::singleShot(5000, &window, [&window, renderTestDir, before]() {
-            // The render (GL readback + OIIO save) lives in MainWindow's
-            // TU, which can touch the viewport's GL context and the bridge
-            // without pulling glad into this Qt entry-point TU.
+            // The render (GL readback + OIIO save) lives in MainWindow's TU, which can
+            // touch the viewport's GL context without pulling glad into this TU.
             const int claimed = window.runHeadlessRenderTest(renderTestDir);
 
-            // Count what actually landed. The old report printed the render
-            // path's OWN frame count and exited 0 on any positive number —
-            // so a run where every single OIIO write failed announced
-            // "wrote 107 frame(s)" and passed. A test that reports success
-            // without looking at the disk is worse than no test: it answers
-            // the question it was asked without ever checking.
+            // Count what actually landed on disk, not the render path's own frame count:
+            // a run where every OIIO write failed must not pass.
             const QStringList after =
                 QDir(renderTestDir).entryList(QDir::Files | QDir::NoDotAndDotDot);
             int landed = 0;
@@ -1725,32 +1525,27 @@ int main(int argc, char* argv[]) {
             else
                 printf("RENDER-TEST PASS\n");
             fflush(stdout);
-            // OIIO has already flushed/closed the output files. Skip Qt's
-            // global teardown (it trips a pre-existing trace trap in
-            // gfcPlaybackGUI's destructor on macOS) so the harness gets a
-            // deterministic exit code.
+            // Skip Qt's global teardown (trace trap in gfcPlaybackGUI's destructor on
+            // macOS) so the harness gets a deterministic exit code.
             std::_Exit((landed > 0 && landed >= claimed) ? 0 : 2);
         });
     }
 
-    // Headless FX-stack proof (--fx-test <image>): load the image, render a
-    // baseline, add a shader FX, render again, and report whether the output
-    // changed. Self-loads the image (does not rely on --open-file).
+    // Headless FX-stack proof (--fx-test <image>): load, render a baseline, add a shader
+    // FX, re-render, and report whether the output changed. Self-loads the image.
     const QString fxTestFile = resolveFXTestFile(argc, argv);
     if (!fxTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, fxTestFile]() {
             const int code = window.runHeadlessFXTest(fxTestFile);
             fflush(stdout);
-            // Skip Qt's global teardown (pre-existing trace trap in a
-            // destructor on macOS) so the harness gets a deterministic
-            // exit code — same workaround as --render-test.
+            // Skip Qt's global teardown (trace trap in a destructor on macOS) for a
+            // deterministic exit code, as in --render-test.
             std::_Exit(code);
         });
     }
 
-    // Headless colour-correction render proof (--cc-test <image>): render a
-    // baseline, apply exposure+gamma, render again, and report whether the
-    // rendered output changed (i.e. the super-shader CC/LUT reaches renders).
+    // Headless colour-correction render proof (--cc-test <image>): render a baseline,
+    // apply exposure+gamma, re-render, and report whether the output changed.
     const QString ccTestFile = resolveCCTestFile(argc, argv);
     if (!ccTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, ccTestFile]() {

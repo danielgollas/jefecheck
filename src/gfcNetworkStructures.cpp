@@ -28,12 +28,7 @@ extern gfcLUTManager lutManager;
 
 extern gfcSettings sett;
 
-// =====================================================================
-// jefe::wire overloads (JEF-23). Same field sequences as the legacy
-// RakNet-serializer versions (deleted in Task 4); see gfcNetworkStructures.h for the sanctioned wire
-// deltas (u32-prefixed strings, dropped redundant length fields, LUT
-// body as raw length-prefixed bytes).
-// =====================================================================
+// ===== jefe::wire overloads (see gfcNetworkStructures.h) =====
 
 void serializeLUT ( CubeLUT* theLUT, jefe::wire::Writer& w ) {
     //read the lut file (whatever format it is) and send the filename w/o path, and then send the binary file.
@@ -75,11 +70,8 @@ bool unserializeLUT ( jefe::wire::Reader& r ) {
 
     std::ofstream outFile;
 
-    // SECURITY (JEF-28): the filename is peer-supplied. Reduce it to its bare
-    // basename so a hostile peer can't escape receivedPath via "../.." or an
-    // absolute path. filename() strips all directory + ".." components:
-    // "../../evil" -> "evil", "/etc/passwd" -> "passwd". Skip empty results
-    // (e.g. a name that was only a directory) — never write.
+    // SECURITY: the filename is peer-supplied. Reduce it to its bare basename so a
+    // hostile peer can't escape receivedPath; skip empty results.
     std::string safeName=std::filesystem::path(filenameNoPath).filename().string();
     if ( safeName.empty() ) {
         printf ( "unserializeLUT: rejected empty/invalid filename '%s'\n",filenameNoPath.c_str() );
@@ -155,10 +147,8 @@ bool unserializeFX ( jefe::wire::Reader& r ) {
     //SAVE TO FILES
     std::ofstream outFile;
 
-    // SECURITY (JEF-28): every filename here is peer-supplied. Reduce each to
-    // its bare basename (filename() strips directories + ".." components) so a
-    // hostile peer can't write outside receivedPath. Skip the whole FX if any
-    // component sanitizes to empty — a partial write can't be loaded anyway.
+    // SECURITY: filenames are peer-supplied. Reduce each to its bare basename so a
+    // hostile peer can't write outside receivedPath; skip the FX if any is empty.
     std::string jfxSafe=std::filesystem::path(jfxFilenameNoPath).filename().string();
     std::string vertexSafe=std::filesystem::path(vertexFilenameNoPath).filename().string();
     std::string fragmentSafe=std::filesystem::path(fragmentFilenameNoPath).filename().string();

@@ -25,15 +25,8 @@ void check(bool cond, const char* what) {
     }
 }
 
-/**
- * Filename for an account.
- *
- * SHA-256 of the account string, NOT the string itself. The account is a URL
- * containing ':' and '/', and on some platforms worse; hashing sidesteps every
- * filesystem-illegal character AND makes path traversal structurally
- * impossible, rather than relying on sanitising a value that arrives from
- * configuration. Pinned by a test that uses "wss://x/../../etc/passwd".
- */
+/** Filename for an account: SHA-256 of the account string, so no
+ *  filesystem-illegal characters and no path traversal. */
 QString fileNameFor(const std::string& account) {
     const QByteArray digest = QCryptographicHash::hash(
         QByteArray::fromStdString(account), QCryptographicHash::Sha256);
@@ -147,13 +140,7 @@ int tokenStoreSelfTest() {
     QDir(dir).removeRecursively();
 
     // --- native backend ---------------------------------------------------
-    // Exercise whatever makeTokenStore() actually returns, so the Keychain /
-    // Credential Manager code is not merely compiled but run. Uses a
-    // throwaway account and erases it, so it leaves nothing behind in the
-    // user's real keychain.
-    //
-    // On Linux this is the file backend again, which is fine — it then checks
-    // that the XDG-rooted construction works, which the temp-dir cases do not.
+    // Runs what makeTokenStore() returns, on a throwaway account erased afterwards.
     {
         auto native = makeTokenStore();
         const std::string acct = "wss://tokenstore-selftest.invalid/dev";
@@ -162,9 +149,8 @@ int tokenStoreSelfTest() {
         check(native->load(acct).empty(), "native: absent account loads empty");
         check(native->save(acct, "native-A"), "native: save succeeds");
         check(native->load(acct) == "native-A", "native: round-trips");
-        // Re-saving is the COMMON path (every token refresh replaces the
-        // stored value); on macOS this is the errSecDuplicateItem branch that
-        // a naive implementation reports as a failure.
+        // Re-saving is the common path (every refresh); on macOS it is the
+        // errSecDuplicateItem branch.
         check(native->save(acct, "native-B"), "native: overwrite succeeds");
         check(native->load(acct) == "native-B", "native: overwrite replaces");
         check(native->erase(acct), "native: erase succeeds");

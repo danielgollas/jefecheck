@@ -20,11 +20,8 @@
 #include <QVBoxLayout>
 
 namespace {
-// How long after the popup dismisses we treat a button click as a "close",
-// not a fresh "open". Qt::Popup eats the press that dismisses it as an
-// outside-click; the subsequent click that reaches the button must NOT
-// reopen the popup, or it flickers shut-then-open. 150ms comfortably covers
-// the same physical click without swallowing a deliberate second click.
+// How long after the popup dismisses a click counts as a "close": Qt::Popup
+// eats the dismissing press, and the click reaching the button must not reopen it.
 constexpr qint64 kReopenGuardMs = 150;
 }  // namespace
 
@@ -35,13 +32,8 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     setMinimumWidth(60);
     setFixedHeight(20);  // match the compact button row in the card
-    // The dark VFX theme (jefecheck_dark.qss) styles QComboBox/QPushButton
-    // but NOT QToolButton, so an unstyled QToolButton would render with the
-    // native look and clash with the sibling combos/buttons in this row.
-    // Mirror the theme's QComboBox body (bg/border/radius/color + orange
-    // hover) so the control reads as a dropdown consistent with its
-    // neighbors. The `QToolButton`-typed selector keeps this off the popup's
-    // checkbox/list/line-edit children (none of which are QToolButtons).
+    // The dark theme styles QComboBox/QPushButton but not QToolButton; mirror its
+    // QComboBox body here (the selector keeps it off the popup's children).
     setStyleSheet(
         "QToolButton {"
         " background-color: #2a2a2a;"
@@ -57,18 +49,15 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     // dismissal and grabs input while shown.
     popupFrame_ = new QFrame(this, Qt::Popup);
     popupFrame_->setFrameShape(QFrame::StyledPanel);
-    // The popup's children (checkbox / list / line-edit) are NOT covered by
-    // the plate card's 10pt font stylesheet, so without this they render at
-    // the platform default (~13pt on macOS) and the popup balloons. A 10pt
-    // QFont propagates to all children and keeps rows compact.
+    // The plate card's 10pt font stylesheet does not cover the popup's
+    // children; a 10pt QFont keeps rows compact (default is ~13pt on macOS).
     {
         QFont compact = popupFrame_->font();
         compact.setPointSize(10);
         popupFrame_->setFont(compact);
     }
-    // Watch the frame's Hide events so the reopen-flicker guard is stamped
-    // for EVERY dismissal path — our own hide() calls AND the Qt::Popup
-    // outside-click that closes it without going through our code.
+    // Watch Hide events so the reopen guard is stamped for every dismissal path,
+    // including the Qt::Popup outside-click.
     popupFrame_->installEventFilter(this);
 
     auto* lay = new QVBoxLayout(popupFrame_);
@@ -91,8 +80,7 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     }
     lay->addWidget(cropCheck_);
 
-    // Custom-ratio entry lives near the top under Crop (it used to be the
-    // editable combo face). Enter commits the trimmed text as the new aspect.
+    // Custom-ratio entry under Crop; Enter commits the trimmed text as the aspect.
     customEdit_ = new QLineEdit(popupFrame_);
     customEdit_->setPlaceholderText(QStringLiteral("Custom ratio…"));
     customEdit_->setContentsMargins(0, 2, 0, 2);  // full width, like the list rows
@@ -105,9 +93,8 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
 
     ratioList_ = new QListWidget(popupFrame_);
     ratioList_->setFrameShape(QFrame::NoFrame);
-    // The list shows a fixed handful of short rows — never scroll, and don't
-    // let QListWidget's default 256x192 size hint inflate the popup. Height
-    // is pinned to the row count in setPresets(); width comes from the frame.
+    // Never scroll, and don't let QListWidget's default 256x192 size hint
+    // inflate the popup. Height is pinned in setPresets().
     ratioList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     ratioList_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     ratioList_->setUniformItemSizes(true);
@@ -161,16 +148,14 @@ AspectCropCombo_Qt::~AspectCropCombo_Qt() = default;
 void AspectCropCombo_Qt::setPresets(const QStringList& presets) {
     ratioList_->clear();
     for (const QString& p : presets) {
-        // The canonical aspect value lives in UserRole; the display text can
-        // diverge from it (the "original" row shows the derived native ratio
-        // while still meaning "original"). Default the two to be equal.
+        // The canonical aspect value lives in UserRole; the display text can differ
+        // (the "original" row shows the derived native ratio).
         auto* item = new QListWidgetItem(p, ratioList_);
         item->setData(Qt::UserRole, p);
     }
     refreshOriginalRow();
-    // Pin the list to exactly its rows so the popup is no taller than its
-    // contents (QListWidget's default size hint is 256x192). sizeHintForRow
-    // needs at least one item, which we now have.
+    // Pin the list to its rows (default size hint is 256x192); sizeHintForRow
+    // needs at least one item.
     if (ratioList_->count() > 0) {
         const int rh = ratioList_->sizeHintForRow(0);
         const int fw = ratioList_->frameWidth();
@@ -240,15 +225,8 @@ void AspectCropCombo_Qt::setCropToolTip(const QString& tip) {
 }
 
 void AspectCropCombo_Qt::onClicked() {
-    // Toggle semantics, implemented purely via the reopen guard:
-    //
-    // - Popup CLOSED, button clicked → no recent dismissal, guard inactive
-    //   → openPopup().
-    // - Popup OPEN, button clicked → the Qt::Popup mouse grab delivers the
-    //   press FIRST as an outside-click that hides the frame; the frame's
-    //   Hide event (eventFilter) stamps justClosed_. Only THEN does this
-    //   clicked() signal fire. justClosed_ is still well within the guard
-    //   window, so we ignore the open and the popup stays shut — no flicker.
+    // Toggle via the reopen guard: with the popup open, the Qt::Popup grab delivers
+    // the press as an outside-click (Hide stamps justClosed_) before clicked() fires.
     if (justClosed_.isValid() && !justClosed_.hasExpired(kReopenGuardMs)) {
         return;
     }
@@ -257,9 +235,8 @@ void AspectCropCombo_Qt::onClicked() {
 
 bool AspectCropCombo_Qt::eventFilter(QObject* watched, QEvent* event) {
     if (watched == popupFrame_ && event->type() == QEvent::Hide) {
-        // Start the guard window now: any button click arriving within
-        // kReopenGuardMs is the tail of the same physical click and must
-        // not reopen the popup.
+        // Start the guard window: a click within kReopenGuardMs is the tail of the
+        // same physical click and must not reopen the popup.
         justClosed_.start();
     }
     return QToolButton::eventFilter(watched, event);
@@ -286,11 +263,8 @@ void AspectCropCombo_Qt::openPopup() {
 
     customEdit_->clear();
 
-    // Size the frame first so we can position/flip it against the screen.
-    // Width is the wider of the combo face and a compact floor — NOT driven
-    // by QListWidget's oversized default hint. setFixedWidth keeps adjustSize
-    // from ballooning horizontally; height still follows the (now pinned)
-    // content.
+    // Size the frame first so it can be positioned/flipped against the screen; width
+    // is the wider of the combo face and a floor, not QListWidget's oversized hint.
     popupFrame_->setFixedWidth(qMax(width(), 150));
     popupFrame_->adjustSize();
     const QSize pop = popupFrame_->sizeHint().expandedTo(popupFrame_->size());
@@ -324,19 +298,13 @@ void AspectCropCombo_Qt::openPopup() {
 }
 
 void AspectCropCombo_Qt::updateFace() {
-    // Face shows the raw aspect string, EXCEPT when "original" is selected and
-    // we know the frame's native ratio — then show the computed ratio (without
-    // the drop-down-only "(native)" suffix). The stored aspect_ stays
-    // "original" so selection semantics are unchanged; this is display-only.
-    // The default ("original") canonical value is shown as "source" on the
-    // face; if the frame's native ratio is known we show that number
-    // instead. Non-default ratios show their own string.
+    // Face shows the raw aspect string; "original" shows "source", or the
+    // computed native ratio when known. The stored aspect_ stays "original".
     QString face = aspect_;
     if (aspect_ == QLatin1String("original")) {
         face = nativeAspect_.isEmpty() ? QStringLiteral("source") : nativeAspect_;
     }
     setText(face);
-    // No crop indicator on the closed face — an icon widens the fixed-width
-    // button and crowds the text. Letterbox state is shown by the checkbox
-    // in the drop-down.
+    // No crop indicator on the closed face (an icon widens the fixed-width
+    // button); letterbox state is the checkbox in the drop-down.
 }

@@ -1,11 +1,4 @@
-"""UI tests for the Load Sequence Manager (Cmd+L).
-
-The dialog mediates the four-track sequence load preparation flow.
-These tests exercise lifecycle (open, edit, dismiss vs Load All) and
-the drop-forwarding contract. The single-frame drag-drop fast path
-keeps its existing test coverage in test_load.py — those tests must
-continue to pass after this PR.
-"""
+"""UI tests for the Load Sequence Manager (Cmd+L): open/edit/dismiss vs Load All, and drop forwarding."""
 import time
 
 import pytest
@@ -117,9 +110,5 @@ def test_load_window_bad_filename_marks_error(app):
 
 
 def test_default_decode_filter_affects_scaled_preview(visual_app, multiview_sequence):
-    """Changing the Default decode filter pref changes scaled-load output.
-
-    Wired against the existing visual-diff framework but the baseline
-    PNG can't be hallucinated — capture on first manual run.
-    """
+    """Changing the Default decode filter pref changes scaled-load output (needs a baseline image)."""
     pytest.skip("requires baseline image; capture on first manual run")

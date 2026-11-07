@@ -1,6 +1,5 @@
-// JEF-27 Task 3: test-double coordinator. See gfcTestCoordinator.h for the full
-// JEF-25 contract + ordering guarantee. Built only when JEFECHECK_WEBRTC is on
-// (it needs rtc::WebSocketServer); a no-WebRTC build compiles to an empty TU.
+// Test-double coordinator; see gfcTestCoordinator.h. Built only with
+// JEFECHECK_WEBRTC (needs rtc::WebSocketServer), else an empty TU.
 #include "gfcTestCoordinator.h"
 
 #ifdef JEFECHECK_WEBRTC
@@ -26,10 +25,8 @@ namespace net {
 
 namespace {
 
-// ── Minimal flat-JSON helpers (mirrors gfcCoordinatorSignaling.cpp) ──────────
-// The coordinator only needs to read a top-level `action`/`code`/`to` string and
-// capture the raw `payload` value verbatim (it relays payloads opaquely). These
-// are file-local and never throw.
+// Minimal flat-JSON helpers (mirrors gfcCoordinatorSignaling.cpp): read the
+// top-level `action`/`code`/`to` and capture `payload` verbatim.
 
 void skipWs(const std::string& s, size_t& i) {
     while (i < s.size() &&
@@ -167,8 +164,8 @@ void appendEscaped(std::string& out, const std::string& s) {
     }
 }
 
-// A dummy public STUN entry — exercises the JEF-26 iceServers plumbing without
-// requiring a real TURN relay (harmless on localhost).
+// A dummy public STUN entry: exercises the iceServers plumbing without a real
+// TURN relay (harmless on localhost).
 const char* kIceServers =
     "[{\"urls\":\"stun:stun.l.google.com:19302\"}]";
 
@@ -196,14 +193,8 @@ struct TestCoordinator::Impl {
     std::string sessionCode = "JEFE-TEST";
     bool hasSession = false;
 
-    // ── Outbound send worker ─────────────────────────────────────────────────
-    // libdatachannel's WebSocketServer gives each client socket its own receive
-    // thread. Calling ws->send() on socket A from within socket B's receive
-    // callback (the natural place a relay does it) does NOT reliably deliver —
-    // observed: only the FIRST message a socket receives from its own callback
-    // context is delivered; cross-socket relays are dropped. So ALL outbound
-    // sends are marshalled onto ONE dedicated worker thread (neither a receive
-    // callback thread nor the app thread), which reliably flushes every message.
+    // Outbound send worker: ws->send() on socket A from socket B's receive callback
+    // is not reliably delivered, so all sends go through one dedicated worker thread.
     std::thread sendWorker;
     std::deque<std::pair<std::string, std::string>> sendQueue;  // (connId, msg)
     std::condition_variable sendCv;

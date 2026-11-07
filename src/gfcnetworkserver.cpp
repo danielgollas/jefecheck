@@ -49,12 +49,8 @@ const int kDefaultColor = packRGB(128, 128, 128);
 }  // namespace
 
 namespace {
-// JEF-39: server-side cache of the currently known open-revision notes, so a
-// joiner can be handed a snapshot the same way GFCNETID_PEERSINSESSION hands
-// them the current peer list (see the GFCNETID_NICKNAMESEND handling below).
-// File-static rather than a gfcNetworkServer member because
-// gfcnetworkserver.h is out of scope for this change -- see
-// gfcNetworkStructures.h for the full rationale.
+// Server-side cache of known open-revision notes, so a joiner can be handed a
+// snapshot (see GFCNETID_NICKNAMESEND below). File-static; see gfcNetworkStructures.h.
 std::vector<std::unique_ptr<gfcNote>> g_openRevisionNotes;
 bool g_revisionLocked = false;
 std::string g_lockedRevisionId;
@@ -94,7 +90,7 @@ int gfcNetworkServer::assignColor(int preferred) {
 }
 
 gfcNetworkServer::gfcNetworkServer() {
-    transport_ = jefe::net::makeTransport(); // kind from JEFECHECK_TRANSPORT (JEF-24)
+    transport_ = jefe::net::makeTransport(); // kind from JEFECHECK_TRANSPORT
 	middleOfSync=false;
 }
 
@@ -133,12 +129,8 @@ void gfcNetworkServer::start(gfcServerParams * params) {
 
     stop();
 
-    // JEF-27: (re)build the transport from the server params. Default
-    // (coordinatorMode=false) reproduces the JEF-24 LAN-host path exactly;
-    // coordinator mode selects the WebRTC transport, which creates a cloud
-    // session (the coordinator assigns the code, read via
-    // getAssignedSessionCode()). Rebuilt here (not in the ctor) because the
-    // config is only known once params arrive.
+    // (Re)build the transport from the server params (known only once they arrive).
+    // coordinatorMode selects WebRTC and a cloud session (code: getAssignedSessionCode()).
     {
         jefe::net::TransportConfig tcfg;
         tcfg.coordinatorMode=this->coordinatorMode;
@@ -269,8 +261,7 @@ void gfcNetworkServer::Update() {
         break;
 
         case jefe::net::TransportEventType::Data: {
-        // JEF-23: ev.bytes is a jefe::wire frame (the transport already
-        // stripped the RakNet envelope byte). Parse the frame header; a
+        // ev.bytes is a jefe::wire frame (RakNet envelope byte already stripped); a
         // truncated buffer or version mismatch is a silent drop.
         jefe::wire::Reader r ( ev.bytes.data(), ev.bytes.size() );
         uint16_t msgType = 0;
@@ -452,10 +443,8 @@ void gfcNetworkServer::Update() {
 
             for ( uint32_t i=0;i<howMany;i++ ) {
 
-                // Legacy semantics: the count is the REQUESTED count; the
-                // sender only serialized the FXs it actually had loaded, so
-                // running out of payload mid-loop is a NORMAL condition —
-                // stop reading and continue the sync flow below.
+                // The count is the REQUESTED count; running out of payload mid-loop is
+                // normal (the sender only serialized loaded FXs): stop and continue below.
                 if ( !unserializeFX ( r ) ) break; //TODO: Unserialize should not take an FX, it should use the fxManager to load the unserialized FX
             }
 
@@ -485,8 +474,8 @@ void gfcNetworkServer::Update() {
 
             clientsMissingFXsMap[ev.peer].clear();
 
-            // JEF-28: bulk FX bodies go on the dedicated assets QoS lane so a
-            // large transfer can't head-of-line-block live state traffic.
+            // Bulk FX bodies go on the dedicated assets QoS lane so a large
+            // transfer can't head-of-line-block live state traffic.
             if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), ev.peer, false, jefe::net::Channel::Assets );
 
             //if we received at least one FX, then start the FXsic process again with everybody else.
@@ -537,7 +526,7 @@ void gfcNetworkServer::Update() {
 
             clientsMissingLUTsMap[ev.peer].clear();
 
-            // JEF-28: bulk LUT bodies go on the dedicated assets QoS lane.
+            // Bulk LUT bodies go on the dedicated assets QoS lane.
             if ( outW.ok() ) transport_->send ( outW.data(), ( int ) outW.size(), ev.peer, false, jefe::net::Channel::Assets );
 
             //if we received at least one LUT, then start the LUTsinc process again with everybody else.
@@ -705,12 +694,8 @@ void gfcNetworkServer::Update() {
             startFXSinc ( ev.peer,false );
             //startLUTSinc ( ev.peer,false );
 
-            // JEF-39: hand the joiner a snapshot of the open revision, the
-            // same way GFCNETID_PEERSINSESSION above just handed them the
-            // current peer list. Each cached note goes out as an ordinary
-            // *ADDBROADCASTMESSAGE, but sent only to the new peer
-            // (broadcast=false) instead of to everyone -- nobody else needs
-            // to be told about a note they already have.
+            // Hand the joiner a snapshot of the open revision: each cached note goes out
+            // as an *ADDBROADCASTMESSAGE to the new peer only (broadcast=false).
             for ( const auto& n : g_openRevisionNotes ) {
                 RakNet::BitStream outBSNote;
                 outBSNote.Write ( ( unsigned char ) GFCNETID_NOTEADDBROADCASTMESSAGE );
@@ -762,10 +747,8 @@ void gfcNetworkServer::Update() {
 
 						//printf("Server got a GFCNETID_POINTERINFOMESSAGE\n");
 
-						// The client's pointer message ends at scale — it does not
-						// encode a nickname (SendPointerInfoMessage writes only
-						// quad/x/y/scale). Don't decode one here; the broadcast
-						// nickname comes from nickNameAddressMap below.
+						// The client's pointer message ends at scale (no nickname on
+						// the wire); the broadcast nickname comes from nickNameAddressMap.
 						gfcNetPointerInfo ptrInfo;
 						ptrInfo.color=0; //not on this wire message; broadcast color comes from colorAddressMap
 						if ( !jefe::wire::decodePointerInfo ( r, ptrInfo ) ) break; // malformed: skip silently
@@ -804,13 +787,8 @@ void gfcNetworkServer::Update() {
 
 					case GFCNETID_NOTEADDMESSAGE:
 					{
-						// Client -> server: mirrors GFCNETID_POINTERINFOMESSAGE.
-						// The server never trusts the client's claimed author --
-						// it stamps the verified nickname before caching and
-						// rebroadcasting, the same way the pointer broadcast's
-						// nickname comes from nickNameAddressMap rather than the
-						// client payload. This is what makes the author-or-host
-						// check on GFCNETID_NOTEREMOVEMESSAGE below meaningful.
+						// The server never trusts the client's claimed author: it stamps the verified
+						// nickname, which makes the author-or-host check on NOTEREMOVEMESSAGE meaningful.
 						RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),true );
 						bs.IgnoreBits ( 8 );
 						std::unique_ptr<gfcNote> note = unserializeNote ( &bs );
@@ -835,10 +813,8 @@ void gfcNetworkServer::Update() {
 						StringCompressor::Instance()->DecodeString ( idBuf,GFCNET_MAX_NOTE_ID_LENGTH,&bs );
 						std::string noteId = idBuf;
 
-						// Removal is honoured only from the note's author or the
-						// host (the server's own loopback nickname -- see
-						// gfcNetworkManager::startServer). An unknown id (already
-						// removed, or a race) is a silent no-op.
+						// Removal only from the note's author or the host (the server's loopback
+						// nickname); an unknown id is a silent no-op.
 						gfcNote* existing = findOpenRevisionNote ( noteId );
 						bool requesterIsHost = ( nickNameAddressMap[ev.peer] == this->name );
 						if ( existing && ( existing->author == nickNameAddressMap[ev.peer] || requesterIsHost ) ) {
@@ -875,10 +851,8 @@ void gfcNetworkServer::Update() {
 
 					case GFCNETID_REVISIONUNLOCKMESSAGE:
 					{
-						// Host only, like lock. Clearing g_revisionLocked matters
-						// beyond this broadcast: the joiner snapshot sends a LOCK
-						// whenever it is set, so leaving it stale would re-lock
-						// the round for everyone who joins after the unlock.
+						// Host only. Clear g_revisionLocked: the joiner snapshot sends a LOCK
+						// whenever it is set, so a stale flag would re-lock the round.
 						RakNet::BitStream bs ( (unsigned char*)ev.bytes.data(),(unsigned int)ev.bytes.size(),true );
 						bs.IgnoreBits ( 8 );
 						char idBuf[GFCNET_MAX_NOTE_ID_LENGTH];
@@ -913,11 +887,8 @@ void gfcNetworkServer::Update() {
 					case GFCNETID_SENDPLAYLIST:
 					case GFCNETID_PLAYLISTEVENTOTHER:
 					{
-						//server sends to all, except original sender
-						//printf("Server forwarding!\n");
-						// ev.bytes is already a complete jefe::wire frame; forward
-						// it UNCHANGED (the transport re-prepends the RakNet
-						// envelope byte on send).
+						// Server sends to all except the original sender; ev.bytes is a complete
+						// jefe::wire frame, forwarded UNCHANGED (the transport re-adds the envelope byte).
 						transport_->send ( ev.bytes.data(), ( int ) ev.bytes.size(), ev.peer, true );
 					}
 					break;

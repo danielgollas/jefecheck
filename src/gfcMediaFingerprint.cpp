@@ -123,12 +123,8 @@ std::map<std::string, std::vector<std::string>> gfcMediaFingerprint::sequencesIn
 		out[gfcNoteStore::normalisePath(path)].push_back(path);
 	};
 
-	// One directory at a time: skip_permission_denied only papers over
-	// permission errors, and a bare recursive_directory_iterator stops its
-	// *entire* walk on any other error (a stat race, an I/O error, a broken
-	// entry) partway through -- silently dropping everything after it. A
-	// per-directory work list means such an error only ends that one
-	// directory's listing; every other directory still gets visited.
+	// One directory at a time: a bare recursive_directory_iterator stops the
+	// whole walk on any non-permission error; a work list ends only that directory.
 	std::vector<fs::path> work = {dir};
 	while (!work.empty())
 	{
@@ -159,9 +155,7 @@ std::map<std::string, std::vector<std::string>> gfcMediaFingerprint::sequencesIn
 	return out;
 }
 
-// ---------------------------------------------------------------------------
 // Self-test
-// ---------------------------------------------------------------------------
 int mediaFingerprintSelfTest()
 {
 	int pass = 0;
@@ -239,9 +233,8 @@ int mediaFingerprintSelfTest()
 	check(deep.count(key) == 1 && deep.at(key).size() == 2 && deep.at(key)[0] < deep.at(key)[1],
 		  "a recursive search groups a sequence with its frames sorted");
 
-	// An unreadable subdirectory must not truncate the rest of the walk: `z`
-	// sorts after `locked`, so a walk that stops at the first error would
-	// miss it.
+	// An unreadable subdirectory must not truncate the walk (`z` sorts after
+	// `locked`).
 	const fs::path walk = dir / "walk";
 	const fs::path locked = walk / "locked";
 	check(writeFrame(walk / "a" / "shot.0001.exr", 1, false), "walk fixture a written");

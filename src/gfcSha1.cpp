@@ -80,9 +80,8 @@ std::string gfcSha1::hexDigest()
 {
 	if (finished) return digestHex;
 
-	// Merkle-Damgard padding: 0x80, zeros to 56 mod 64, then the ORIGINAL bit
-	// length as a big-endian 64-bit integer. Capture the length before the
-	// padding bytes go through update() and grow it.
+	// Padding: 0x80, zeros to 56 mod 64, then the ORIGINAL bit length (big-endian
+	// u64). Capture the length before update() grows it with the padding.
 	const uint64_t originalBitLen = bitLen;
 	unsigned char pad = 0x80;
 	update(&pad, 1);
@@ -122,9 +121,7 @@ std::string gfcSha1::hex(const std::string& data)
 	return sha.hexDigest();
 }
 
-// ---------------------------------------------------------------------------
 // Self-test
-// ---------------------------------------------------------------------------
 int sha1SelfTest()
 {
 	int pass = 0;

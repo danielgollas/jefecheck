@@ -5,9 +5,8 @@
 
 namespace
 {
-	// Same shape as gfcNote's id generator (see gfcnote.cpp), duplicated
-	// locally rather than shared across headers for a single ten-line
-	// helper — see the plan's Task 1 note on writing this locally.
+	// Same shape as gfcNote's id generator (see gfcnote.cpp), duplicated locally
+	// for a ten-line helper.
 	std::string generateRevisionId()
 	{
 		static const char hexDigits[] = "0123456789abcdef";
@@ -30,13 +29,8 @@ gfcRevision::gfcRevision()
 {
 }
 
-// No user-declared destructor here: notes (std::vector<std::unique_ptr<gfcNote>>)
-// cleans itself up automatically, which is what replaces the old
-// "//TODO: Delete each note pointed at in the notes vector." It also means
-// gfcRevision keeps an implicitly-generated move constructor/assignment
-// (needed since it lives by value in gfcReview::revisions), while copy stays
-// implicitly deleted because unique_ptr can't be copied — exactly right,
-// notes should never be duplicated.
+// No user-declared destructor: the notes vector cleans itself up, and gfcRevision
+// keeps implicit move (it lives by value in gfcReview::revisions) with copy deleted.
 
 bool gfcRevision::addNote(std::unique_ptr<gfcNote> n)
 {

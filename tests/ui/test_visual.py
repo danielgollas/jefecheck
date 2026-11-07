@@ -1,16 +1,5 @@
-"""Visual regression tests — pixel-diff the main window against a
-committed baseline.
-
-These tests boot JefeCheck with a known fixture image preloaded into
-plate 0, capture the main window, and assert it hasn't drifted from
-the committed baseline (within a small per-pixel tolerance).
-
-When intentionally changing the UI, regenerate the baselines:
-    pytest tests/ui/test_visual.py --update-baselines
-
-The first test on a fresh checkout will write the baseline and skip
-its assertion — re-run to verify.
-"""
+"""Visual regression tests: pixel-diff the main window against committed baselines.
+Regenerate with `pytest tests/ui/test_visual.py --update-baselines`; a fresh checkout writes the baseline and skips."""
 import time
 
 import pytest
@@ -21,14 +10,7 @@ from jefecheck.visual import assert_matches_baseline
 
 @pytest.fixture
 def settled_visual_app(visual_app):
-    """visual_app + a short settle for the deferred --open-file load.
-
-    --open-file dispatches via QTimer::singleShot(0) so paintGL has
-    fired (initialising GLAD) before the bridge uploads the texture.
-    The first paint after that runs ~one event-loop tick later. We
-    nudge it by reading the layout label (forces an AX query, which
-    pumps the event loop) and giving GL a moment to swap.
-    """
+    """visual_app + a short settle for the deferred --open-file load (the AX query pumps the event loop)."""
     visual_app.by_object_name(locators.STATUSBAR_LAYOUT)
     time.sleep(0.5)
     return visual_app

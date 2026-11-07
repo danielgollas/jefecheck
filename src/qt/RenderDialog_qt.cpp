@@ -33,16 +33,13 @@
 
 namespace {
 // The dialog talks to the core through jefe::qt::RenderParams, the mirror
-// struct in SequenceLoadBridge_qt.h. `burnInNotes` exists on the core
-// gfcRenderParams (gfcrenderparams.h) but the mirror and its copy function
+// struct in SequenceLoadBridge_qt.h.
 }  // namespace
 
 namespace {
 
-// Format combo entries — index here MUST match the gfcRenderFormats
-// enum order: 0=JPEG, 1=EXR, 2=TIFF, 3=TGA, 4=BMP, 5=PNG. The
-// secondary string is the file-extension/format-string the renderer
-// passes through CreateRenderFilename.
+// Format combo entries: index MUST match the gfcRenderFormats enum order
+// (0=JPEG, 1=EXR, 2=TIFF, 3=TGA, 4=BMP, 5=PNG); the string is the extension.
 struct FormatEntry {
     const char* label;
     const char* ext;
@@ -210,9 +207,8 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         qualityStack_->insertWidget(5, pngPage);
     }
 
-    // 6 — Video (shared by all video codecs): fps + quality. The codec is
-    // chosen by the format combo, so updateQualityPage() maps every video
-    // format index to this single page.
+    // 6 — Video (shared by all video codecs): fps + quality. The format combo
+    // picks the codec; updateQualityPage() maps every video format to this page.
     {
         auto* vpage = new QWidget(this);
         auto* l = new QHBoxLayout(vpage);
@@ -292,9 +288,8 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     paddingSpin_->setValue(4);
     form->addRow("Padding:", paddingSpin_);
 
-    // Resolution: a scale preset combo + explicit W×H spinners. The combo
-    // scales relative to the source; the spinners show (and let you override)
-    // the final output size and are what the render actually uses.
+    // Resolution: a scale preset combo (relative to the source) + explicit W×H
+    // spinners, which show the final output size and are what the render uses.
     resolutionCombo_ = new QComboBox(this);
     resolutionCombo_->setObjectName("dialog.render.resolution.combo");
     resolutionCombo_->addItems({"Source (100%)", "75%", "50%", "25%", "Custom"});
@@ -324,12 +319,8 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         "frames. Off renders the full frame without bars.");
     form->addRow("Framing:", bakeCropBarsCheck_);
 
-    // Annotations: burn the plate's notes into the output. Off by default —
-    // burn-in is the point of the feature, but a note accidentally baked into
-    // a delivery render is far worse than one you have to tick a box to get.
-    // Held by object name rather than a member: RenderDialog_qt.h is outside
-    // this change's file ownership, so the widget is looked up in
-    // startRender() with findChild() instead of stored.
+    // Annotations: burn the plate's notes into the output (off by default, so a note
+    // is never baked into a delivery by accident); found by findChild() in startRender().
     auto* burnInNotesCheck = new QCheckBox("Burn in notes", this);
     burnInNotesCheck->setObjectName("dialog.render.notes.check");
     burnInNotesCheck->setChecked(false);
@@ -345,7 +336,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     QSettings s;
     pathEdit_->setText(s.value(kRenderDirSettingKey).toString());
 
-    browseBtn_ = new QPushButton(jefe::qticons::folder(), "Browse…", this);  // JEF-19
+    browseBtn_ = new QPushButton(jefe::qticons::folder(), "Browse…", this);
     browseBtn_->setObjectName("dialog.render.browse.button");
     browseBtn_->setToolTip("Choose the output folder");
 
@@ -366,9 +357,8 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     postfixEdit_->setPlaceholderText("Optional");
     form->addRow("Postfix:", postfixEdit_);
 
-    // Preview label — first / last filename. Shows three lines
-    // (first … last), so give it room and top-align it so long output
-    // paths aren't clipped/squashed.
+    // Preview label: first / last filename on three lines; top-aligned so long
+    // paths aren't clipped.
     previewLabel_ = new QLabel(this);
     previewLabel_->setObjectName("dialog.render.preview.label");
     previewLabel_->setStyleSheet("color: #aaa; font-family: monospace;");
@@ -387,9 +377,8 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     progressBar_->setValue(0);
     progressBar_->setTextVisible(true);
     progressBar_->setVisible(false);
-    // Explicit style: the native macOS progress bar ignores setTextVisible,
-    // so the "Rendering… X/Y" / "Done" text wouldn't show. This also gives
-    // it a clear height and a green chunk when complete reads as "done".
+    // Explicit style: the native macOS progress bar ignores setTextVisible, so
+    // the "Rendering… X/Y" / "Done" text would not show.
     progressBar_->setStyleSheet(
         "QProgressBar {"
         "  border: 1px solid #555; border-radius: 3px; background: #222;"
@@ -476,9 +465,8 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     connect(doneBtn_,      &QPushButton::clicked,
             this, &QDialog::accept);
 
-    // Sensible default range from the playback in/out points, and seed the
-    // resolution from the active plate's source size (combo defaults to
-    // Source → spinners show the source dims).
+    // Default range from the playback in/out points; seed the resolution from
+    // the active plate's source size (combo defaults to Source).
     onAutoRangeClicked();
     refreshSourceSize();
     applyResolutionPreset();

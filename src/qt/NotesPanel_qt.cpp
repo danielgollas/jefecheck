@@ -93,9 +93,8 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolRow->addWidget(toolText_);
     layout->addLayout(toolRow);
 
-    // Not exclusive: an exclusive group cannot be clicked back to "no tool",
-    // which left the pencil armed with no way to return to panning except
-    // Escape. Exclusivity is kept by syncToolButtons() instead.
+    // Not exclusive: an exclusive group can't be clicked back to "no tool", so
+    // syncToolButtons() keeps exclusivity instead.
     auto* toolGroup = new QButtonGroup(this);
     toolGroup->setExclusive(false);
     toolGroup->addButton(toolFreehand_, jefe::qt::NOTETOOL_FREEHAND);
@@ -104,9 +103,8 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolGroup->addButton(toolText_,     jefe::qt::NOTETOOL_TEXT);
     connect(toolGroup, &QButtonGroup::idClicked, this,
             [this](int id) {
-                // Clicking the armed tool puts the pencil down (back to
-                // click-and-drag panning); clicking any other tool picks it
-                // up and arms drawing on the viewport.
+                // Clicking the armed tool puts the pencil down (back to panning);
+                // any other tool arms drawing on the viewport.
                 if (jefe::qt::noteDrawingArmed() && jefe::qt::activeNoteTool() == id) {
                     jefe::qt::setNoteDrawingArmed(false);
                 } else {
@@ -142,10 +140,8 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     layout->addLayout(styleRow);
     rebuildColorSwatch();
 
-    // Revision / note tree. Top-level items are revisions; children are the
-    // notes drawn on THIS plate within that revision (a review can hold a
-    // sibling plate's notes too -- see gfcNote::quadID -- notesForPlate()
-    // already filters those out).
+    // Revision / note tree: top-level items are revisions; children are the notes drawn
+    // on THIS plate (notesForPlate() filters out sibling plates' notes).
     tree_ = new QTreeWidget(this);
     tree_->setObjectName("notes.revision.list");
     tree_->setHeaderHidden(true);
@@ -246,11 +242,8 @@ void NotesPanel_Qt::updateActionButtons() {
         return;
     }
 
-    // A locked revision refuses edits in the model (gfcRevision::addNote /
-    // removeNote return false) -- but per the plan, the UI must refuse them
-    // too, not just rely on that: a disabled control beats a silently
-    // ignored click. Lock/Unlock is also gated to the session host (or solo
-    // use, no session) -- jefe::qt::isNotesHost().
+    // A locked revision refuses edits in the model; the UI disables the controls too.
+    // Lock/Unlock is gated to the session host (or solo use) via isNotesHost().
     const int lockState = jefe::qt::noteLockState(plate);
     const bool isHost = jefe::qt::isNotesHost();
     if (lockState == jefe::qt::NOTELOCK_LOCKED) {

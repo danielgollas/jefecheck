@@ -1,18 +1,10 @@
 """Pixel-diff helpers for visual regression tests.
 
-The diff strategy:
-  1. Pillow loads `actual` (PNG bytes from Appium) and `baseline`
-     (committed PNG on disk) into RGBA Images.
-  2. If sizes differ, fail loudly — that means window chrome geometry
-     changed (likely a Qt or macOS update) and the baseline is invalid.
-  3. pixelmatch compares pixel-by-pixel with a perceptual `threshold`
-     (YIQ delta) and returns the count of differing pixels.
-  4. We allow up to `max_diff_ratio` of pixels to differ before failing,
-     to absorb sub-pixel font hinting jitter and GL rasterizer noise
-     between runs (the rest of the window chrome is bit-identical).
-
-When `--update-baselines` is passed to pytest, we write the actual
-screenshot as the new baseline and skip the comparison.
+Pillow loads `actual` and `baseline` as RGBA; differing sizes fail loudly
+(window chrome changed, baseline invalid). pixelmatch counts differing pixels
+with a perceptual `threshold`, and up to `max_diff_ratio` may differ to absorb
+font hinting and GL rasterizer jitter. With `--update-baselines` the actual
+screenshot becomes the new baseline.
 """
 from __future__ import annotations
 
@@ -24,14 +16,12 @@ import pytest
 from PIL import Image
 from pixelmatch.contrib.PIL import pixelmatch
 
-# Per-pixel threshold (YIQ space, 0..1). 0.1 ≈ "barely perceptible";
-# 0.05 already catches most LUT/gamma regressions but tolerates the
-# vendor-specific GL rasterizer noise between runs.
+# Per-pixel threshold (YIQ space, 0..1). 0.1 ≈ "barely perceptible"; 0.05
+# catches most LUT/gamma regressions but tolerates GL rasterizer noise.
 DEFAULT_PIXEL_THRESHOLD = 0.1
 
-# Up to 0.5% of pixels may differ. Window chrome is bit-identical;
-# this budget covers font hinting around the layout-status label and
-# any antialiased borders Qt redraws on focus changes.
+# Up to 0.5% of pixels may differ (font hinting around the layout-status
+# label, antialiased borders Qt redraws on focus changes).
 DEFAULT_MAX_DIFF_RATIO = 0.005
 
 
@@ -54,14 +44,8 @@ def assert_matches_baseline(
 ) -> None:
     """Compare `actual_png` against `baselines/<baseline_name>`.
 
-    `update=True` writes the baseline instead of comparing — used by
-    `pytest --update-baselines` when intentionally regenerating after
-    a UI change. Comparing while updating is intentionally skipped:
-    the new baseline is the new ground truth.
-
-    A failed match writes the actual screenshot and a diff image
-    next to the baseline (suffix `.actual.png` and `.diff.png`) so
-    the developer can eyeball the regression.
+    `update=True` writes the baseline instead of comparing. A failed match writes
+    `.actual.png` and `.diff.png` next to the baseline.
     """
     baseline_path = baselines_dir() / baseline_name
     baseline_path.parent.mkdir(parents=True, exist_ok=True)
@@ -124,14 +108,9 @@ def fixtures_dir() -> Path:
 
 
 def make_test_pattern(out_path: Path, size: int = 64) -> Path:
-    """Generate the canonical 4-quadrant test pattern.
-
-    Top-left red, top-right green, bottom-left blue, bottom-right
-    yellow. This makes flip/flop/rotate regressions trivially visible
-    in a visual diff: a flip swaps top and bottom rows, flop swaps
-    left and right columns, and any of those rotates show up as a
-    very large diff ratio rather than sub-pixel jitter.
-    """
+    """Generate the canonical 4-quadrant test pattern: red, green, blue, yellow
+    (top-left, top-right, bottom-left, bottom-right), so flip/flop/rotate show up
+    as a large diff ratio."""
     if out_path.exists():
         return out_path
     out_path.parent.mkdir(parents=True, exist_ok=True)
