@@ -144,16 +144,8 @@ void initializeRenderingChain() {
         if (v > 0) frameCache.setTestBudget((int64_t)v << 20);
     }
 
-    // FLTK's readSettings populates sett.lutPath and pre-loads LUTs from
-    // the install / env path; that whole function is FLTK-gated. Until
-    // we factor a Qt-friendly version, default the path here so the LUT
-    // browser has content to show on first run. Any preferences the
-    // user saves later override this on the next launch.
-    // Defer LUT autoload — it walks every .lut/.cub on disk and each
-    // calls glGenTextures, which requires a current GL context. The
-    // viewport's QOpenGLWidget context isn't ready until after the
-    // window is shown and the first paintGL fires. MainWindow_Qt calls
-    // initializeInstallLUTs() once the GL context is alive.
+    // Default LUT path; saved preferences override it. The LUT autoload itself waits
+    // for a current GL context (MainWindow_Qt calls initializeInstallLUTs after the first paintGL).
     if (sett.lutPath.empty()) {
         sett.lutPath = ::getApplicationDataPath() + "FX/";
     }

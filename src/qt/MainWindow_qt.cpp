@@ -141,12 +141,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     timecodeStatusLabel_->setObjectName("status.timecode");
     statusBar()->addPermanentWidget(timecodeStatusLabel_);
 
-    // "Loaded: <basename>" or "Loaded: -" for the active plate's
-    // sequence. Refreshed each tick (cheap — two field reads off
-    // gfcSequence). Permanent so the transient status-bar message
-    // ("Drop an image…") doesn't clobber it. Real user value (no more
-    // "what's loaded into the active plate?" guessing) plus an
-    // AX-stable surface for behavioral tests asserting on load state.
+    // "Loaded: <name>" for the active plate. A permanent widget, so transient status
+    // messages don't clobber it; UI tests read it to assert load state.
     loadedStatusLabel_ = new QLabel(this);
     loadedStatusLabel_->setObjectName("statusbar.loaded.label");
     statusBar()->addPermanentWidget(loadedStatusLabel_);
@@ -342,9 +338,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             viewport_->doneCurrent();
         }
 
-        // ~60Hz coalescing repaint flush. Keeps at most one update() in
-        // flight per display refresh so paintGL is never starved, while a
-        // pending intent always flushes within ~16ms.
+        // ~60 Hz repaint coalescing: at most one update() in flight, so paintGL is
+        // never starved, and a pending repaint flushes within ~16 ms.
         static QElapsedTimer repaintThrottle;
         static bool repaintPending = false;
         if (!repaintThrottle.isValid()) repaintThrottle.start();
@@ -401,12 +396,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             if (timecodeStatusLabel_->text() != label)
                 timecodeStatusLabel_->setText(label);
         }
-        // Active-plate "Loaded:" readout. Reading through the bridge
-        // so the value reflects gfcSequence's actual loaded state, not
-        // a parallel mirror — bug regressions in the load path will
-        // show up as the label staying on "Loaded: -" after a
-        // successful load. Doing this in the tick sidesteps wiring
-        // change-signals from every load path.
+        // Read through the bridge each tick: it shows gfcSequence's real state, and
+        // no load path needs to signal a change.
         if (loadedStatusLabel_) {
             const int active = jefe::qt::getActivePlate();
             const std::string name = active >= 0

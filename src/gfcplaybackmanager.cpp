@@ -179,13 +179,8 @@ void gfcPlaybackManager::update() {
 // Measured-FPS readout from the wall-clock interval between frame advances
 // (`frames` = how many timeline frames this advance moved).
 void gfcPlaybackManager::recordAdvanceForFPS(int frames) {
-			// Measured-FPS readout (the on-screen "fps:" overlay reads
-			// getCurrentFPS()). Derive it from the true wall-clock interval
-			// between consecutive frame advances, smoothed with an
-			// exponential moving average. This is frame-aligned (no
-			// partial-window bias) and the EMA damps the few-ms per-frame
-			// OS-timer jitter, so the displayed value sits steady at the
-			// target instead of ticking over a fresh 2s window average.
+			// Measured FPS for the overlay: an EMA of the wall-clock interval between
+			// frame advances, so OS-timer jitter doesn't make the readout tick.
 			{
 				using dclock = std::chrono::steady_clock;
 				static dclock::time_point lastAdvance = dclock::now();

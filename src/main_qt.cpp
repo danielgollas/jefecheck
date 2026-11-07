@@ -172,9 +172,7 @@ static QString resolveArgValue(int argc, char* argv[], const char* flag) {
     return QString();
 }
 
-// Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe:
-// load the image into plates 0 and 1 side-by-side, grab the framebuffer, add
-// an FX to plate 0 only, grab again, and report left/right half brightness.
+// --fx-multitest <image>: an FX on plate 0 must not change plate 1 (state-leak probe).
 static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--fx-multitest") == 0) {
@@ -224,10 +222,8 @@ static bool hasAudioDeviceTest(int argc, char* argv[]) {
     return false;
 }
 
-// --wire-test : headless jefe::wire round-trip/bounds-safety self-test
-// (JEF-23). Pure data, no Qt/GL/rendering-chain dependency at all — takes
-// no argument. Dispatched at the very top of main(), before QApplication
-// is even constructed, since the test needs nothing that setup provides.
+// --wire-test: jefe::wire round-trip and bounds self-test. Pure data, so it runs
+// before QApplication is constructed.
 static bool hasWireTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--wire-test") == 0) return true;
@@ -513,9 +509,8 @@ int main(int argc, char* argv[]) {
     qapp.setApplicationName("JefeCheck");
     qapp.setOrganizationName("JefeCheck");
 
-    // Test-mode isolation: redirect QSettings + LUT autoload path into a
-    // caller-supplied directory. Must run BEFORE any QSettings is
-    // constructed (MainWindow_Qt::restoreLayout creates the first one).
+    // Test isolation: QSettings and the LUT path go to --config-dir. Must run before
+    // the first QSettings (MainWindow_Qt::restoreLayout).
     QString configDir = resolveConfigDir(argc, argv);
     // --cache-test writes preferences: point QSettings at a temporary dir (removed on exit) so
     // they never reach the user's real settings.

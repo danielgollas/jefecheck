@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Implementation of the QSettings <-> gfcSettings `sett` bridge declared in
-// qt_prefs_persist.h. Centralizes preference keys that used to be scattered
-// across MainWindow_qt.cpp and PreferencesWindow_qt.cpp. Later tasks append
-// their sections' keys to both functions as those sections come on-line.
+// The QSettings <-> `sett` bridge: every preference key is read and written here.
+// See developer_notes.md §27.
 #include <algorithm>
 #include "qt_prefs_persist.h"
 #include "../gfcStructures.h"
