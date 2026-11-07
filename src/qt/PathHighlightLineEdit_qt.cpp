@@ -20,9 +20,8 @@ void PathHighlightLineEdit_Qt::paintEvent(QPaintEvent* e) {
     QLineEdit::paintEvent(e);
 
     if (highlightLength_ <= 0 || highlightStart_ < 0) return;
-    // Draw only when the full literal text is showing: the elide path swaps in
-    // a middle-elided string whose indices don't match the cached digit range.
-    // The bounds check below catches that case; focus state is irrelevant.
+    // Draw only when the full literal text shows: the elide path swaps in a middle-elided string whose indices don't match the cached digit range.
+    // The bounds check below catches that; focus state is irrelevant.
     const QString full = text();
     if (highlightStart_ + highlightLength_ > full.length()) return;
 

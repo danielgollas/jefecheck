@@ -1,8 +1,5 @@
 """Pytest fixtures: Appium server lifecycle + per-test JefeCheck launch.
-
-Needs `appium` on PATH (npm i -g appium && appium driver install mac2) and
-JEFECHECK_BIN pointing at JefeCheck.app (set by the `qt-uitests` CMake target).
-"""
+Needs `appium` on PATH and JEFECHECK_BIN pointing at JefeCheck.app (set by the `qt-uitests` CMake target)."""
 from __future__ import annotations
 
 import os
@@ -131,11 +128,8 @@ def slow_mo(request) -> float:
 
 @pytest.fixture(scope="module")
 def app(appium_server, jefecheck_binary, tmp_path_factory, slow_mo):
-    """Module-scoped launch: one JefeCheck per test file, paying the ~15s WDA +
-    Mac2 cold start once. Tests in a module share state, so a test that mutates
-    app state must restore it or rely on a module-level `reset_app_state` fixture.
-    QSettings live in a per-module temp dir.
-    """
+    """Module-scoped launch: one JefeCheck per test file (pays the ~15s WDA cold start once).
+    Tests share state, so a mutating test must restore it; QSettings live in a per-module temp dir."""
     config_dir = tmp_path_factory.mktemp("jefecheck-config")
     instance = JefeCheckApp.launch(
         binary=jefecheck_binary,
@@ -156,12 +150,8 @@ def update_baselines(request) -> bool:
 
 @pytest.fixture(scope="session")
 def test_pattern_image() -> Path:
-    """4-quadrant RGB test pattern (committed under tests/ui/fixtures/).
-
-    The filename has no trailing digits: findSequenceFiles treats them as a
-    frame number and the 'Loaded:' label reads filenameGeneric (`foo_64.png`
-    becomes `foo_##.png`).
-    """
+    """4-quadrant RGB test pattern (tests/ui/fixtures/). The filename has no trailing digits:
+    findSequenceFiles would read them as a frame number and 'Loaded:' would show `foo_##.png`."""
     return make_test_pattern(fixtures_dir() / "test_pattern.png")
 
 
@@ -182,13 +172,8 @@ def visual_app(appium_server, jefecheck_binary, tmp_path,
 
 @pytest.fixture(scope="session")
 def multiview_sequence() -> Path:
-    """Path to the first frame of the committed multi-view EXR sequence.
-
-    4 frames, 64x64, two named layers: the default RGB and a `right` view
-    (`R, G, B, right.R, right.G, right.B`). Frame 0001 lets
-    gfcSequence::findSequenceFiles discover the rest; the layer-switch reload
-    test needs getNumPreviewFrames() > 1 so the bridge runs the async re-decode.
-    """
+    """First frame of the committed multi-view EXR sequence (4 frames, 64x64, default RGB + `right` view).
+    Frame 0001 lets findSequenceFiles find the rest; the layer-switch test needs getNumPreviewFrames() > 1."""
     seq_dir = fixtures_dir() / "multiview_seq"
     first_frame = seq_dir / "multiview.0001.exr"
     if not first_frame.exists():

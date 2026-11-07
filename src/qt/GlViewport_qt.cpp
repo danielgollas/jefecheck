@@ -99,10 +99,8 @@ void GlViewport_Qt::resizeGL(int w, int h) {
 
 void GlViewport_Qt::paintGL() {
     if (listener_) {
-        // QOpenGLWidget renders into its own FBO, not screen FBO 0, but gfcPlate
-        // rebinds 0 to "return to screen", sending later draws to an unpresented
-        // framebuffer (black viewport). Publish Qt's real default FBO every paint
-        // (it can change on resize).
+        // QOpenGLWidget renders into its own FBO, not 0, but gfcPlate rebinds 0 to "return to screen" (black viewport);
+        // publish Qt's real default FBO every paint (it can change on resize).
         jefe::qt::setScreenFBO(defaultFramebufferObject());
         listener_->onDraw();
         // Chat + remote-pointer overlay (ported from the FLTK GlViewport).
@@ -118,17 +116,15 @@ void GlViewport_Qt::paintGL() {
 }
 
 void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
-    // Reclaim keyboard focus on any click so viewport shortcuts work after the
-    // user was in a text field (e.g. chat input); the override doesn't get
-    // Qt's implicit click-focus.
+    // Reclaim keyboard focus on any click so viewport shortcuts work after a text field had it
+    // (the override doesn't get Qt's implicit click-focus).
     setFocus(Qt::MouseFocusReason);
     if (e->button() == Qt::LeftButton) {
         lastMouseX_ = e->position().x();
         lastMouseY_ = e->position().y();
 
-        // Give in-viewport pick overlays (the histogram sub-window) first claim
-        // on the click. doPicking needs the GL context current; update() repaints
-        // over the transient pick frame.
+        // Give in-viewport pick overlays (the histogram sub-window) first claim on the click;
+        // doPicking needs the GL context current.
         const float dpr = devicePixelRatioF();
         const int xFb = int(lastMouseX_ * dpr);
         const int yFb = int((float(height()) - lastMouseY_) * dpr);
@@ -136,9 +132,8 @@ void GlViewport_Qt::mousePressEvent(QMouseEvent* e) {
         const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
         const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
 
-        // With a note tool armed, a left-drag draws instead of panning or picking.
-        // Checked FIRST: a pick pass would consume the click, and panning would
-        // move the image out from under the stroke.
+        // With a note tool armed a left-drag draws. Checked FIRST: a pick pass would consume the click,
+        // and panning would move the image out from under the stroke.
         if (jefe::qt::noteDrawingArmed()) {
             const int plate = jefe::qt::plateAtViewportPos(
                 int(lastMouseX_), int(lastMouseY_), width(), height());
@@ -268,10 +263,8 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
 
-    // Remote pointer/trail gesture: SHIFT + left-drag over a plate (distinct from
-    // pan and W/E/Q/D/S+drag; avoids macOS right-click ambiguity). The bridge
-    // converts to image space and throttles to ~60Hz. Pointer-only: return so it
-    // doesn't also pan.
+    // Remote pointer/trail gesture: SHIFT + left-drag over a plate (avoids macOS right-click ambiguity); the bridge converts to image space, ~60Hz.
+    // Pointer-only: return so it doesn't also pan.
     if ((e->buttons() & Qt::LeftButton) &&
         e->modifiers().testFlag(Qt::ShiftModifier) && dragPlate_ >= 0) {
         const float dpr = devicePixelRatioF();
@@ -290,10 +283,8 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
         const float dpr = devicePixelRatioF();
         const bool gang = (e->modifiers() & Qt::AltModifier) != 0;
 
-        // ---- Color-correction key+drag dispatch (W/E/Q/D/S). ----
-        // Left-drag with a letter key applies (eventX - prevX) * 0.01 additively to
-        // the matching field (Alt = every plate via the *All variants). Handled
-        // before the pan path and returns early: pan and color-correct don't compose.
+        // ---- Color-correction key+drag dispatch (W/E/Q/D/S) ----
+        // Left-drag adds (eventX - prevX) * 0.01 to the matching field (Alt = every plate); returns early, pan and CC don't compose.
         const float dxLogical = float(e->position().x()) - lastMouseX_;
         const float adjust    = dxLogical * 0.01f;
         const int targetPlate = jefe::qt::getActivePlate();
@@ -342,10 +333,8 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
             return;
         }
 
-        // ---- Pan path (no color key held). ----
-        // Pans by (prevX - eventX, prevY - eventY), so dragging right shifts the
-        // plate left, as in FLTK. Multiply by dpr: pan is in framebuffer pixels
-        // but Qt mouse positions are logical.
+        // ---- Pan path (no color key held) ----
+        // Pans by (prevX - eventX, prevY - eventY) like FLTK; multiply by dpr: pan is in framebuffer pixels, Qt mouse positions are logical.
         const float dx = (lastMouseX_ - float(e->position().x())) * dpr;
         const float dy = (lastMouseY_ - float(e->position().y())) * dpr;
         // Alt-drag = gang-transform: pan every plate by the same delta.
@@ -355,8 +344,7 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
             jefe::qt::panPlate(dragPlate_, dx, dy);
         }
         update();
-        // Lightweight per-drag signal: refreshes only the dragged plate's four
-        // transform spinboxes, skipping the heavy plateStateChanged cascade.
+        // Lightweight per-drag signal: refreshes only the dragged plate's transform spinboxes, skipping the heavy plateStateChanged cascade.
         // Throttled to ~60Hz; mouseReleaseEvent emits the full plateStateChanged.
         constexpr qint64 kEmitIntervalMs = 16;
         if (!dragEmitTimer_.isValid()
@@ -435,9 +423,8 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
         return;
     }
 
-    // Track color-correction modifier keys (W/E/Q/D/S); combined with a
-    // left-drag in mouseMoveEvent they adjust the matching field. Don't gate
-    // on autoRepeat: only set membership is needed.
+    // Track CC modifier keys (W/E/Q/D/S) for left-drag in mouseMoveEvent.
+    // Don't gate on autoRepeat: only set membership is needed.
     switch (e->key()) {
         case Qt::Key_W:
         case Qt::Key_E:
@@ -477,9 +464,8 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
             if (ctrl) { jefe::qt::setFramingMode(FRAMINGQUAD_ID);       handled(); return; }
             break;
 
-        // F, H, V and T (and their Shift/Alt variants) are ApplicationShortcut
-        // bindings in MainWindow_Qt so they fire regardless of focus; a
-        // duplicate handler here would steal keystrokes from input widgets.
+        // F, H, V and T (and Shift/Alt variants) are ApplicationShortcuts in MainWindow_Qt so they fire regardless of focus;
+        // a duplicate handler here would steal keystrokes from input widgets.
 
         // Track cycling on active plate (matches FLTK's Up/Down handler).
         case Qt::Key_Up:
@@ -664,9 +650,8 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
         return;
     }
 
-    // Modal-closed branch: scale-modifier fast path (plain 1.0, Shift 0.5,
-    // Shift+Cmd 0.25). Other combos keep 1.0; Cmd-only is reserved for a
-    // future "load into a specific plate" gesture.
+    // Modal-closed branch: scale-modifier fast path (plain 1.0, Shift 0.5, Shift+Cmd 0.25).
+    // Other combos keep 1.0; Cmd-only is reserved for a future "load into a specific plate" gesture.
     const auto mods = e->keyboardModifiers();
     const bool shift = mods.testFlag(Qt::ShiftModifier);
     // Qt::ControlModifier == Cmd on macOS, Ctrl on Linux/Windows.

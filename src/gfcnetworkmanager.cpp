@@ -23,11 +23,8 @@ extern gfcTrackManager trackManager;
 #include <thread>
 
 namespace {
-/**
- * A fresh per-session secret for the host's own loopback client: 32 hex
- * characters (128 bits) from std::random_device, short enough for the
- * coordinator's display-name length cap.
- */
+/** Per-session secret for the host's own loopback client: 32 hex chars (128 bits) from std::random_device,
+ * short enough for the coordinator's display-name length cap. */
 std::string makeSelfJoinNonce() {
     static const char* kHex = "0123456789abcdef";
     std::random_device rd;

@@ -1,10 +1,5 @@
 """FX Stack panel: Available list -> active plate stack add/remove.
-
-`Available` lists every FX fxManager loaded from `src/FX/*.jfx`; `On active
-plate` lists the active plate's gfcFXStack. Add copies the selection into the
-stack; Remove deletes it. Tests wait for the startup label to reach 'Ready'
-first, or the assertion races the autoload and sees a partial list.
-"""
+Tests wait for the startup label to reach 'Ready' first, or the assertion races the autoload and sees a partial list."""
 import re
 
 import pytest
@@ -15,12 +10,7 @@ from jefecheck import locators
 
 def _list_items(list_widget):
     """Enumerate visible rows of a QListWidget via AX.
-
-    Qt exposes a QListWidget as an AXList with N AXRow children followed by a
-    trailing AXColumn placeholder that is always present, even when empty. So
-    slice off the last child (a `*` xpath would count an empty list as 1, and
-    XCUIElementType filters return 0 because Mac2 doesn't map AXRow).
-    """
+    Qt exposes an AXList with N AXRow children plus a trailing always-present AXColumn placeholder, so slice off the last child (`*` xpath and XCUIElementType filters miscount)."""
     items = list_widget.find_elements(AppiumBy.XPATH, "*")
     return items[:-1] if items else []
 
@@ -61,12 +51,8 @@ def test_startup_status_reaches_terminal_state(app):
 
 
 def test_startup_loads_all_fxs(app):
-    """Every shipped .jfx must compile and load; a failure means a GLSL shader
-    regressed and the whole FX subsystem is broken.
-
-    LUT load failures are tolerated (e.g. the Truelight Cube in
-    printFotokem.cube isn't supported by the parser); this asserts on FX only.
-    """
+    """Every shipped .jfx must compile and load; a failure means a GLSL shader regressed.
+    LUT load failures are tolerated (printFotokem.cube isn't supported by the parser); asserts on FX only."""
     final = app.wait_for_startup_ready()
     # Both formats embed the FX counts; pull them out for assertion.
     m = re.search(r"\((\d+)/(\d+) FX", final) or \

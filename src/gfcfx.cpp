@@ -781,11 +781,8 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 			//its lifetime. Resolve them all once, here, so bind() never has to.
 			prepareUniformLocations();
 
-			//calculate the FXs content hash.
-			// Hash the raw bytes of the .jfx + .vert + .frag files: portable across
-			// builds, and covers the shader source, so FX with identical metadata
-			// but different GLSL do not collide. Falls back to the metadata hash
-			// if the files cannot be re-read.
+			// Hash the raw .jfx + .vert + .frag bytes: portable, and covers shader source so same-metadata FX with different GLSL don't collide.
+			// Falls back to the metadata hash if the files can't be re-read.
 			md5Hash=jefe::contentHashFiles ( { pfilename, shaderPath+vertex, shaderPath+fragment } );
 			if ( md5Hash.empty() ) md5Hash=GetMD5Hash ( inputForHash );
 			//printf ( "\nFX Hash:lenght=%s:%i\n",md5Hash.c_str(),md5Hash.size() );

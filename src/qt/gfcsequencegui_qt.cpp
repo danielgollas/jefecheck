@@ -48,9 +48,8 @@ void gfcSequenceGUI_Qt::setFilter(int v)                { filter_ = v; }
 void gfcSequenceGUI_Qt::setCrop(int v)                  { crop_ = v; }
 void gfcSequenceGUI_Qt::setCompression(int v)           { compression_ = v; }
 void gfcSequenceGUI_Qt::setChannelOptions(std::vector<std::string> opts) {
-    // gfcSequence::loadPreview pushes the EXR layer list here on each preview
-    // decode for PlateCard_Qt's layer combo; a Qt-only side-channel (the base
-    // interface has no getter).
+    // loadPreview pushes the EXR layer list here on each preview decode for PlateCard_Qt's layer combo;
+    // a Qt-only side-channel (the base interface has no getter).
     channelOptions_ = std::move(opts);
 }
 void gfcSequenceGUI_Qt::setChannel(int v)               { channel_ = v; }

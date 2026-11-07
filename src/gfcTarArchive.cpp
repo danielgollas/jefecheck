@@ -308,9 +308,7 @@ bool gfcTar::Reader::extractTo(const Entry& entry, const std::string& destPath, 
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Self-test
-// ---------------------------------------------------------------------------
+// ---- Self-test ----
 int tarSelfTest()
 {
 	int pass = 0;

@@ -1,6 +1,5 @@
-// Windows Credential Manager backend for the refresh token. Credentials are
-// stored per-user, encrypted by the OS; the target name carries the coordinator
-// URL so hosted and self-hosted tokens stay separate.
+// Windows Credential Manager backend for the refresh token (per-user, OS-encrypted).
+// The target name carries the coordinator URL so hosted and self-hosted tokens stay separate.
 
 #include "gfcTokenStore.h"
 

@@ -88,9 +88,8 @@ struct ScopedFlag {
     ~ScopedFlag() { *flag = false; }
 };
 
-// Snapshots Recent Sessions and restores it on every return path: saving or
-// loading a session pushes its path onto the list, which a temporary or
-// extracted session must not leave behind.
+// Snapshots Recent Sessions and restores it on every return path: saving/loading a session pushes its path
+// onto the list, which a temporary or extracted session must not leave behind.
 struct RecentSessionsGuard {
     const std::vector<std::string> saved = jefe::qt::getRecentSessions();
     ~RecentSessionsGuard() { jefe::qt::setRecentSessions(saved); }
@@ -115,35 +114,30 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
 
     statusBar()->showMessage("Drop an image onto the viewport to load it.");
 
-    // Apply the persisted engine load defaults (texture bit depth, OIIO decode
-    // filter) at startup. qt_prefs_persist.cpp owns the sett <-> QSettings
-    // mapping; this call is glad-free (developer_notes.md §1).
+    // Apply persisted engine load defaults (texture bit depth, OIIO decode filter) at startup;
+    // glad-free (developer_notes.md §1).
     jefe::qt::loadPreferences();
 
-    // Permanent right-aligned label for the current framing mode. Status-bar
-    // text exposes via NSAccessibility (the QOpenGLWidget doesn't), and a
-    // permanent widget isn't clobbered by transient messages.
+    // Permanent right-aligned framing-mode label: status-bar text exposes via NSAccessibility (the QOpenGLWidget doesn't),
+    // and a permanent widget isn't clobbered by transient messages.
     layoutStatusLabel_ = new QLabel(this);
     layoutStatusLabel_->setObjectName("statusbar.layout.label");
     statusBar()->addPermanentWidget(layoutStatusLabel_);
 
-    // Mirrors the layout label for the active plate's bound track, refreshed
-    // each tick. Shows what gfcPlate::track is actually rendering; when it
-    // disagrees with the plate-card combo, the bridge has regressed.
+    // Active plate's bound track, refreshed each tick; shows what gfcPlate::track is rendering,
+    // so a mismatch with the plate-card combo means the bridge regressed.
     trackStatusLabel_ = new QLabel(this);
     trackStatusLabel_->setObjectName("statusbar.track.label");
     statusBar()->addPermanentWidget(trackStatusLabel_);
 
-    // "Loaded: <basename>" or "Loaded: -" for the active plate's sequence,
-    // refreshed each tick. Permanent so transient status messages don't clobber
-    // it; an AX-stable surface for load-state tests.
+    // "Loaded: <basename>" or "Loaded: -" for the active plate, refreshed each tick.
+    // Permanent so transient messages don't clobber it; an AX-stable surface for load-state tests.
     loadedStatusLabel_ = new QLabel(this);
     loadedStatusLabel_->setObjectName("statusbar.loaded.label");
     statusBar()->addPermanentWidget(loadedStatusLabel_);
 
-    // "Startup:" label tracks the LUT/FX autoload phase: 'Loading…' ->
-    // 'Ready (<N> FX, <M> LUT)' -> 'Errors (<details>)'. Gives tests an
-    // AX-stable surface to poll before asserting on panel contents.
+    // "Startup:" tracks the LUT/FX autoload phase ('Loading…' -> 'Ready (<N> FX, <M> LUT)' -> 'Errors (<details>)');
+    // an AX-stable surface for tests to poll.
     startupStatusLabel_ = new QLabel(this);
     startupStatusLabel_->setObjectName("statusbar.startup.label");
     startupStatusLabel_->setText("Startup: Loading…");
@@ -215,9 +209,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     bindLayout(QKeySequence(Qt::CTRL | Qt::Key_4), FRAMINGQUAD_ID);
     announceLayout(FRAMINGSINGLE_ID);
 
-    // Two shortcuts open Preferences: Cmd+P and Cmd+, (the macOS convention).
-    // macOS's system Print handler intercepts synthesized Cmd+P in some contexts
-    // (Appium / Mac2), so tests prefer Cmd+,.
+    // Cmd+P and Cmd+, both open Preferences: macOS's system Print handler intercepts synthesized Cmd+P
+    // in some contexts (Appium / Mac2), so tests prefer Cmd+,.
     auto openPrefs = [this]() {
         PreferencesWindow_Qt dlg(this);
         // Live preview: repaint the viewport as viewport-affecting settings
@@ -236,11 +229,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
 
-    // Plate-control shortcuts are ApplicationShortcut QShortcuts so they fire
-    // regardless of which widget has focus. Qt suppresses them when the focused
-    // widget consumes the key (ShortcutOverride), so typing 'f' in a combo works.
-    // Arrow keys, Space and Left/Right step stay in the viewport handler: they
-    // compete with widget-level meanings (spinbox, button, text caret).
+    // Plate-control shortcuts are ApplicationShortcuts so they fire regardless of focus; Qt suppresses them when the focused widget consumes the key (ShortcutOverride).
+    // Arrows, Space and Left/Right stay in the viewport handler: they compete with widget-level meanings.
     auto bindPlateAction = [this](QKeySequence seq, std::function<void()> action) {
         auto* sc = new QShortcut(seq, this);
         sc->setContext(Qt::ApplicationShortcut);
@@ -250,12 +240,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
         });
     };
-    // The ACTIVE-plate transforms (Fit F, Flip V, Flop M, Text T, Reset Ctrl+R,
-    // Reset-CC Shift+R) are View-menu QActions that own their shortcut (see
-    // buildMenuBar). Only the "all-plates" variants are standalone
-    // ApplicationShortcut QShortcuts here. Flop is on M so bare H toggles the
-    // help overlay. Bare `r` is NOT promoted: a printable letter at app scope
-    // would block typing 'r'.
+    // Active-plate transforms are View-menu QActions that own their shortcut (buildMenuBar); only the all-plates variants are ApplicationShortcuts here.
+    // Flop is on M so bare H toggles help; bare `r` is NOT promoted (an app-scope printable letter would block typing 'r').
     bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_F),
                     []() { jefe::qt::fitAllPlates(); });
     bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_V),
@@ -269,45 +255,34 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     bindPlateAction(QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_R),
                     []() { jefe::qt::resetAllColorCorrections(); });
 
-    // LUT + FX autoload runs after the window is shown. The 250ms delay matters:
-    // at 0ms the load fires before AppKit registers the window and the WDA
-    // driver's launch handshake gets a 404. Each step loads ONE file and
-    // re-posts via QTimer::singleShot(0) so paints and AX queries are serviced
-    // between shader compiles.
+    // LUT + FX autoload runs after show. The 250ms delay matters: at 0ms the load fires before AppKit registers the window and WDA's handshake gets a 404.
+    // Each step loads ONE file and re-posts via singleShot(0) so paints and AX queries are serviced between shader compiles.
     QTimer::singleShot(250, this, [this]() { startAutoload(); });
 
     // Session recovery runs after the GL context is alive (loadSession uploads
     // preview textures) — deferred past the autoload kick.
     QTimer::singleShot(400, this, [this]() { maybeRestoreSessionAtStartup(); });
 
-    // General prefs: apply "start in fullscreen" / "open Load window at startup"
-    // now that loadPreferences() has populated `sett`. Deferred via singleShot(0)
-    // so the event loop is pumping (main_qt.cpp already called show()). Bridged
-    // so this TU stays glad-free (developer_notes.md §1).
+    // Apply "start fullscreen" / "open Load window" once loadPreferences() has populated `sett`; deferred via singleShot(0) so the event loop is pumping.
+    // Bridged so this TU stays glad-free (developer_notes.md §1).
     QTimer::singleShot(0, this, [this]() {
         if (jefe::qt::getStartFullscreen()) showFullScreen();
         if (jefe::qt::getOpenLoadWindowAtStartup()) openLoadWindow();
     });
 
-    // Fast playback tick (~250Hz) for tight FPS pacing: the frame advance in
-    // gfcPlaybackManager accumulates wall-clock time, so a fine tick lands
-    // within a few ms of the true time (a 16ms grid made 24fps wobble). The
-    // per-tick cost stays low: makeCurrent/doneCurrent only runs when a decoded
-    // frame is waiting to upload.
+    // Fast playback tick (~250Hz): frame advance accumulates wall-clock time, so a fine tick lands within a few ms (a 16ms grid made 24fps wobble).
+    // Per-tick cost stays low: makeCurrent/doneCurrent only runs when a decoded frame is waiting to upload.
     playbackTimer_ = new QTimer(this);
     playbackTimer_->setTimerType(Qt::PreciseTimer);
     playbackTimer_->setInterval(4);
     connect(playbackTimer_, &QTimer::timeout, this, [this]() {
         if (!viewport_) return;
-        // The 4ms timer fires at 250Hz for pacing precision, but update() on
-        // every tick starves the macOS paint event loop and the viewport freezes.
-        // So collect the repaint intent and flush it through a ~60Hz coalescing
-        // throttle at the end of the tick; a skipped repaint stays pending.
+        // update() on every 250Hz tick starves the macOS paint loop and freezes the viewport: collect repaint intent
+        // and flush through a ~60Hz coalescing throttle; a skipped repaint stays pending.
         bool wantRepaint = false;
 
-        // Service the RakNet sockets on every tick so inbound messages arrive
-        // even while idle. Returns true when connection/chat state changed or an
-        // inbound packet applied mirrored state: refresh the panel and repaint.
+        // Service the RakNet sockets every tick so inbound messages arrive while idle.
+        // Returns true when state changed or mirrored state applied: refresh the panel and repaint.
         if (jefe::qt::pumpNetwork()) {
             if (remoteDialog_) remoteDialog_->refreshConnectionState();
             // pumpNetwork() also drains inbound note add/remove/lock events into
@@ -317,10 +292,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         }
         // Skip everything when nothing is playing and no raw frames are pending.
         const bool needsTick = jefe::qt::needsPlaybackTick();
-        // A time-based animation (fading pointer trail, flip/flop settle, status
-        // overlay fade) driving the repaint on its own. macOS does NOT service an
-        // async QOpenGLWidget::update() posted from a timer while the app is idle,
-        // so such animations are flushed with a synchronous repaint() instead.
+        // Time-based animations (pointer trail, flip/flop settle, overlay fade) repaint on their own; macOS does NOT service an
+        // async QOpenGLWidget::update() posted from a timer while idle, so flush with a synchronous repaint().
         const bool animActive = jefe::qt::hasActiveViewportAnimation();
         bool dirty = false;
         if (needsTick) {
@@ -336,14 +309,12 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                 dirty = true;
             }
             // Repaint on a new frame OR while a time-based animation settles:
-            // updateAnimations() advances flip/flop, pointer-trail fade and the
-            // overlay status fade without always flipping the changed flag.
+            // updateAnimations() advances flip/flop and fades without always flipping the changed flag.
             if (dirty || animActive) {
                 wantRepaint = true;
             }
         } else if (jefe::qt::consumePlateChanged()) {
-            // Stopped and nothing animating, but a bare setChanged() landed (e.g.
-            // a mirrored remote change); honor it so the viewport still refreshes.
+            // Stopped and idle, but a bare setChanged() landed (e.g. a mirrored remote change): honor it.
             // Drained here exactly once (tickPlaybackTiming drains it when needsTick).
             wantRepaint = true;
         }
@@ -394,9 +365,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                 trackStatusLabel_->setText(label);
             }
         }
-        // Active-plate "Loaded:" readout, read through the bridge so it reflects
-        // gfcSequence's actual loaded state; doing it in the tick avoids wiring
-        // change-signals from every load path.
+        // Active-plate "Loaded:" readout, read through the bridge so it reflects gfcSequence's real state;
+        // done in the tick to avoid wiring change-signals from every load path.
         if (loadedStatusLabel_) {
             const int active = jefe::qt::getActivePlate();
             const std::string name = active >= 0
@@ -424,9 +394,8 @@ void MainWindow_Qt::buildMenuBar() {
 
     auto* fileMenu = mb->addMenu("&File");
     fileMenu->setObjectName("menu.file");
-    // Pick one file via QFileDialog and route it into the active plate the way
-    // drag-drop does (loadFileIntoPlate). The dialog opens at the directory of
-    // the most recently loaded file (persisted in QSettings).
+    // Routes one QFileDialog pick into the active plate like drag-drop (loadFileIntoPlate);
+    // opens at the most recently loaded file's directory (QSettings).
     auto* loadAction = fileMenu->addAction("&Quick Load…",
                         QKeySequence(Qt::CTRL | Qt::Key_O),
                         this, [this]() {
@@ -674,10 +643,8 @@ void MainWindow_Qt::buildMenuBar() {
         });
     }
 
-    // The active-plate transforms are View-menu QActions that own their
-    // shortcut at ApplicationShortcut context (fires regardless of focus,
-    // including a floating dock). The "all-plates" variants stay as bare
-    // QShortcuts (ctor) listed in the help overlay.
+    // Active-plate transforms are View-menu QActions owning their shortcut at ApplicationShortcut context (fires regardless of focus, even a floating dock).
+    // The "all-plates" variants stay bare QShortcuts (ctor), listed in the help overlay.
     auto addPlateMenuAction = [this](QMenu* menu, const QString& text,
                                      const QKeySequence& seq,
                                      std::function<void()> fn,
@@ -714,9 +681,8 @@ void MainWindow_Qt::buildMenuBar() {
                        []() { jefe::qt::resetActiveColorCorrection(); },
                        "menu.view.resetcc");
 
-    // The "Panels" menu (not "Window", which would imply the macOS Minimize/Zoom/
-    // window-list commands we don't ship). Created empty so it sits between View
-    // and Help; populated in buildDocks() once the docks exist.
+    // "Panels" not "Window", which would imply macOS Minimize/Zoom/window-list commands we don't ship.
+    // Created empty between View and Help; populated in buildDocks() once the docks exist.
     panelsMenu_ = mb->addMenu(tr("&Panels"));
     panelsMenu_->setObjectName("menu.panels");
 
@@ -756,9 +722,8 @@ void MainWindow_Qt::buildMenuBar() {
                    "<p><a href='https://github.com/danielgollas/jefecheck'>"
                    "github.com/danielgollas/jefecheck</a></p>"
                    "<p style='font-size:small;color:gray'>Built %2 %3</p>")
-                // Hardcoded copy of gfcStructures.h's JEFE_VERSION (the header pulls
-                // glad, which can't share a TU with QtGui on macOS); keep in sync
-                // with that define and CMakeLists.txt's project() VERSION.
+                // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
+                // keep in sync with that define and CMakeLists.txt's project() VERSION.
                 .arg(QStringLiteral("1.7.0"))
                 .arg(QStringLiteral(__DATE__))
                 .arg(QStringLiteral(__TIME__)));
@@ -788,10 +753,8 @@ void MainWindow_Qt::buildDocks() {
     plateDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
 
-    // Mirror viewport-driven plate edits (drag pan, wheel zoom, shortcuts) back
-    // into the plate cards. Queued so the slot runs after mouseMoveEvent returns
-    // and repeated posts coalesce; mouseReleaseEvent fires it so the inactive
-    // plate cards and FX panel get their one-shot sync.
+    // Mirror viewport-driven plate edits back into the plate cards. Queued so the slot runs after mouseMoveEvent returns and posts coalesce;
+    // mouseReleaseEvent fires it so inactive cards and the FX panel get their one-shot sync.
     connect(viewport_, &GlViewport_Qt::plateStateChanged,
             plateManagerWidget_, &PlateManager_Qt::refreshAllCards,
             Qt::QueuedConnection);
@@ -808,10 +771,8 @@ void MainWindow_Qt::buildDocks() {
             plateManagerWidget_, &PlateManager_Qt::refreshPlateColor,
             Qt::QueuedConnection);
 
-    // The Plate Manager fixes its own size to the packed card grid, so when
-    // docked beside the Timeline QMainWindow pads it to the taller neighbor.
-    // pinPlateDock pulls the shared extent down to the panel's size hint, and
-    // the Timeline follows. Deferred a tick so the sizeHint is post-arrange.
+    // The Plate Manager fixes its size to the card grid, so beside the Timeline QMainWindow pads it to the taller neighbor;
+    // pinPlateDock pulls the shared extent down to the sizeHint. Deferred a tick so the sizeHint is post-arrange.
     auto pinPlateDock = [this]() {
         if (!plateDock_ || plateDock_->isFloating()) return;
         QTimer::singleShot(0, this, [this]() {
@@ -870,27 +831,22 @@ void MainWindow_Qt::buildDocks() {
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, lutDock_);
 
-    // FX: the combined effect-controls panel for the active plate. Left side so
-    // it doesn't compete with the LUT dock, and so value text propagates to AX
-    // (Mac's AX bridge can elide AXValue for 0-sized labels in tab-overflowed
-    // docks). See developer_notes §23.
+    // FX dock on the left so it doesn't compete with the LUT dock and value text propagates to AX
+    // (Mac's AX bridge can elide AXValue for 0-sized labels in tab-overflowed docks). See developer_notes §23.
     fxParamsDock_ = new QDockWidget("FX", this);
     fxParamsDock_->setObjectName("dock.fxparams");
     fxParamsDock_->setAccessibleName("FX parameters dock");
     fxParamPanelWidget_ = new FXParamPanel_Qt(fxParamsDock_);
     fxParamsDock_->setWidget(fxParamPanelWidget_);
     fxParamsDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
-    // Both dimensions are needed: left-area docks default to zero height when no
-    // other dock claims the area, which collapses the scroll viewport and prunes
-    // the editors from the Mac AX tree. The width floor keeps the per-FX header
-    // (drag handle, name, active checkbox, remove) fully visible.
+    // Both dimensions needed: left-area docks default to zero height when no other dock claims the area, collapsing the scroll viewport and pruning editors from the Mac AX tree.
+    // The width floor keeps the per-FX header fully visible.
     fxParamPanelWidget_->setMinimumWidth(150);
     fxParamPanelWidget_->setMinimumHeight(240);
     addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
 
-    // Playlist: left side, split below FX Params. Tabifying with FX Params
-    // destabilized the AX bridge's view of the param-panel editors (Mac2
-    // couldn't resolve fxparams.fx0.param.*.spin), so split instead.
+    // Playlist: left side, split below FX Params. Tabifying with FX Params destabilized the AX bridge's view of the editors
+    // (Mac2 couldn't resolve fxparams.fx0.param.*.spin), so split instead.
     playlistDock_ = new QDockWidget("Playlist", this);
     playlistDock_->setObjectName("dock.playlist");
     playlistDock_->setAccessibleName("Playlist dock");
@@ -902,9 +858,7 @@ void MainWindow_Qt::buildDocks() {
     addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
     splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
 
-    // Remote Session: a dockable panel (host/join forms, status, participants,
-    // collapsible chat and connection logs). Tabified with the LUTs dock on the
-    // right; remoteDialog_ is the widget the network pump refreshes.
+    // Remote Session dock, tabified with LUTs on the right; remoteDialog_ is the widget the network pump refreshes.
     remoteDock_ = new QDockWidget("Remote Session", this);
     remoteDock_->setObjectName("dock.remote");
     remoteDock_->setAccessibleName("Remote session dock");
@@ -916,9 +870,8 @@ void MainWindow_Qt::buildDocks() {
     if (lutDock_) tabifyDockWidget(lutDock_, remoteDock_);
     remoteDock_->hide();   // hidden until the user opens it from a menu
 
-    // Notes dock, right side. Qt tabifies it with the LUT (and hidden Remote)
-    // group instead of honoring a plain vertical split, so request that
-    // explicitly; toggleViewAction()'s raise() brings its tab forward on F7.
+    // Notes dock, right side. Qt tabifies it with the LUT (and hidden Remote) group instead of honoring a plain vertical split, so request that explicitly;
+    // toggleViewAction()'s raise() brings its tab forward on F7.
     notesDock_ = new QDockWidget("Notes", this);
     notesDock_->setObjectName("dock.notes");
     notesDock_->setAccessibleName("Notes dock");
@@ -948,9 +901,8 @@ void MainWindow_Qt::buildDocks() {
     connect(notesPanelWidget_, &NotesPanel_Qt::viewportRepaintRequested,
             this, [this]() { if (viewport_) viewport_->update(); });
 
-    // Populate the Panels menu now that the docks exist. Each dock contributes
-    // its checkable toggleViewAction(); the F-keys are assigned here, and "show"
-    // also raises the dock to the front of its tab group.
+    // Populate the Panels menu now that docks exist: each contributes its checkable toggleViewAction(), F-keys assigned here;
+    // "show" also raises the dock to the front of its tab group.
     if (panelsMenu_) {
         auto addDockToggle = [this](QDockWidget* dock, const QKeySequence& seq,
                                     const QString& objName) {
@@ -1043,9 +995,8 @@ void MainWindow_Qt::restoreLayout() {
         restored = restoreState(s.value(kSettingsState).toByteArray());
     }
     if (!restored) {
-        // First-launch defaults: shrink the bottom dock strip to its minimum so
-        // the viewport gets the rest (Qt otherwise splits vertical space ~half/half).
-        // Run after the event loop starts so the docks have real geometry.
+        // First-launch defaults: shrink the bottom dock strip to its minimum (Qt otherwise splits vertical space ~half/half);
+        // run after the event loop starts so docks have real geometry.
         QMetaObject::invokeMethod(this, [this]() {
             resizeDocks({plateDock_, timelineDock_},
                         {plateDock_->minimumWidth(), 9999},
@@ -1103,16 +1054,14 @@ void MainWindow_Qt::openSessionPath(const QString& path) {
 }
 
 void MainWindow_Qt::refreshAfterSessionLoad() {
-    // loadSession sets plate/track params synchronously but sequences re-decode
-    // asynchronously. Refresh the not-per-tick widgets now AND shortly after so
-    // the loaded-state UI catches up.
+    // loadSession sets plate/track params synchronously but sequences re-decode asynchronously:
+    // refresh the not-per-tick widgets now AND shortly after.
     auto refresh = [this]() {
         if (plateManagerWidget_)   plateManagerWidget_->refreshAllCards();
         if (lutPanelWidget_)       lutPanelWidget_->refreshList();
         if (timelinePanelWidget_)  timelinePanelWidget_->refreshFromPlayback();
-        // Deliberately inside the deferred lambda: this path decodes
-        // asynchronously, so the first call can run before the preview frame
-        // exists; the 250/750ms repeats below catch it.
+        // Deliberately inside the deferred lambda: this path decodes asynchronously, so the first call can run
+        // before the preview frame exists; the 250/750ms repeats below catch it.
         refreshNotesForLoadedMedia();
         if (viewport_)             viewport_->update();
     };
@@ -1240,9 +1189,8 @@ int MainWindow_Qt::runHeadlessRenderTest(const QString& dir) {
         {0, "jpg"}, {1, "exr"}, {2, "tif"},
         {3, "tga"}, {4, "bmp"}, {5, "png"},
     };
-    // The plates must be showing their tracks' content, or every render draws
-    // nothing and lands no file while still counting frames. A headless run with
-    // the Load Window off needs this said explicitly, as --cc-test and --fx-test do.
+    // Plates must show their tracks' content or every render draws nothing and lands no file while still counting frames
+    // (a headless run with the Load Window off needs this said explicitly, as --cc-test and --fx-test do).
     jefe::qt::setAllPlatesShowPreview(true);
     const int frame = jefe::qt::getCurrentFrame();
     int total = 0;
@@ -1310,9 +1258,8 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
     loadFileIntoPlate(0, imagePath);
     jefe::qt::setActivePlate(0);
 
-    // A single still only populates each track's preview frame, so put every
-    // plate in showPreview mode or the render path sees an unloaded frame and
-    // writes nothing.
+    // A single still only populates each track's preview frame: put every plate in showPreview mode
+    // or the render path sees an unloaded frame and writes nothing.
     jefe::qt::setAllPlatesShowPreview(true);
 
     const QString outDir = QDir::tempPath() + "/jefecheck_fxtest";
@@ -1342,9 +1289,8 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
         return fname;
     };
 
-    // On-screen capture: grabFramebuffer() forces paintGL, the real on-screen
-    // draw() path (forRender=false), which differs from the FBO-readback path
-    // renderOne() uses. Reports the mean channel value so a black screen is obvious.
+    // On-screen capture: grabFramebuffer() forces paintGL, the real forRender=false draw() path (unlike renderOne()'s FBO readback).
+    // Reports the mean channel value so a black screen is obvious.
     auto screenStats = [&](const char* tag) {
         QImage img = viewport_->grabFramebuffer();
         if (img.isNull()) { printf("FX-SCREEN %s: grab null\n", tag); fflush(stdout); return; }
@@ -1433,9 +1379,8 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
 }
 
 int MainWindow_Qt::runHeadlessCCTest(const QString& imagePath) {
-    // Proves that rendered frames carry the super-shader colour pipeline
-    // (gamma/exposure/BCS + LUT); the FX-stack test can't catch it because FX
-    // are baked into the FBO earlier.
+    // Proves rendered frames carry the super-shader colour pipeline (gamma/exposure/BCS + LUT);
+    // the FX-stack test can't catch it because FX are baked into the FBO earlier.
     if (!viewport_) { printf("CC-TEST FAIL: no viewport\n"); fflush(stdout); return 2; }
 
     loadFileIntoPlate(0, imagePath);
@@ -1517,10 +1462,8 @@ int MainWindow_Qt::runHeadlessCCTest(const QString& imagePath) {
            beforePath.toLocal8Bit().constData(), afterPath.toLocal8Bit().constData());
     fflush(stdout);
 
-    // --- Crop-bar bake verification ---------------------------------------
-    // Set a wide aspect + crop (aspect 0.5 = a 2:1 letterbox on the square
-    // source) and render with "Bake aspect/crop bars" OFF and ON; the top/bottom
-    // bands should change and the centre should not.
+    // ---- Crop-bar bake verification ----
+    // Render a 2:1 letterbox (aspect 0.5 on the square source) with "Bake aspect/crop bars" OFF and ON; top/bottom bands should change, centre not.
     jefe::qt::setPlateAspect(0, 0.5f);
     jefe::qt::setPlateCrop(0, true);
     if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
@@ -1798,11 +1741,8 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     // frames while notes/frames are swapped out for rendering); resume at the end.
     const bool wasPlaying = jefe::qt::isPlaying();
 
-    // In a live remote session loads, seeks and play/pause are sent to peers and
-    // the export must send nothing: it loads no playlist item (those entries count
-    // as thumbfail), starts no announcing track load, and mutes notifications
-    // around each step that changes shared state. Those steps pump no events, so
-    // an inbound message cannot unmute them halfway.
+    // In a live remote session loads, seeks and play/pause are sent to peers, so the export must send nothing: no playlist-item load, no announcing track load,
+    // and notifications muted around each shared-state step (no events pump there, so an inbound message can't unmute them halfway).
     const bool remote = jefe::qt::isRemoteConnected();
     auto quietly = [remote](const std::function<void()>& step) {
         if (remote) jefe::qt::setRemoteBroadcastsMuted(true);
@@ -1821,13 +1761,8 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     const QString restore = dir + "/restore.jcs";
     const bool saved = needsPlaylistItem && !remote && jefe::qt::saveSession(restore.toStdString());
 
-    // gfcSequence::forceLoad (the fallback for a forRender=true frame that hasn't
-    // decoded) only works once the async loader thread has reached that frame, so
-    // the export waits, bounded, draining the GL upload queue, for a track's first
-    // frame and for each frame it renders. It pumps the Qt event loop between polls
-    // (excluding user input) so timers, paints and accessibility keep running.
-    // summaryExportInProgress_ blocks a second export mid-wait; the excluded input
-    // queues any click or keystroke instead of touching a half-restored session.
+    // gfcSequence::forceLoad only works once the async loader thread has reached the frame, so the export waits (bounded, draining the GL upload queue) pumping the event loop minus user input.
+    // summaryExportInProgress_ blocks a second export; the excluded input queues clicks instead of touching a half-restored session.
     auto waitUntil = [this](const std::function<bool()>& done, int timeoutMs) {
         QElapsedTimer waitTimer;
         waitTimer.start();
@@ -1850,9 +1785,8 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
     auto waitForTrackFrame = [&](int track) {
         return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).loadedCount > 0; }, 5000);
     };
-    // Whether @a frame of @a track can be rendered. A frame the loader has not
-    // reached gets the load restarted at it, and a wait, except where that
-    // restart would be announced to remote peers.
+    // Whether @a frame of @a track can be rendered: a frame the loader hasn't reached gets the load restarted at it, and a wait,
+    // except where that restart would be announced to remote peers.
     auto frameReady = [&](int track, int frame) {
         if (jefe::qt::isTrackFrameReady(track, frame)) return true;
         bool started = false;
@@ -1876,9 +1810,8 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
                 // back from: leave the tracks alone.
                 available = false;
             } else if (loadedPlaylistItem != m.playlistItem) {
-                // Loads the item's tracks, FX stacks and program state (its
-                // reviewed look). Replacing the tracks deletes their textures,
-                // so the GL context must be current.
+                // Loads the item's tracks, FX stacks and program state (its reviewed look);
+                // replacing tracks deletes their textures, so the GL context must be current.
                 viewport_->makeCurrent();
                 jefe::qt::loadPlaylistItem(m.playlistItem);
                 viewport_->doneCurrent();
@@ -1959,9 +1892,8 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
             if (!jefe::qt::getTrackParams(t).filename.empty()) waitForTrackFrame(t);
         }
     }
-    // A session reopen does not restore the playlist selection, and every track
-    // load resets the in/out points, so those go back explicitly, with Recent
-    // Sessions, the frame and playback.
+    // A session reopen restores neither the playlist selection nor the in/out points (every track load resets them),
+    // so they go back explicitly, with Recent Sessions, the frame and playback.
     jefe::qt::setRecentSessions(savedRecents);
     quietly([&] {
         jefe::qt::restorePlaylistSelection(savedPlaylistItem, savedFromPlaylist);
@@ -2052,9 +1984,8 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     check(!QFile::exists(txt + ".partial") && !QFile::exists(csv + ".partial"), "no partial files left");
     check(!exportReviewSummary(work + "/summary.doc", &stats, &msg), "an unknown extension is refused");
 
-    // A second media whose sidecar exists but is not a notes document (valid XML,
-    // wrong shape): buildReviewSummary() should report "Notes unreadable", not
-    // "No notes". Track 1, so track 0 stays the first media for the checks below.
+    // A second media whose sidecar is valid XML but not a notes document: buildReviewSummary() should report "Notes unreadable", not "No notes".
+    // Track 1, so track 0 stays the first media for the checks below.
     const QString media2 = work + "/unreadable_" + QFileInfo(media).fileName();
     if (!QFile::copy(imagePath, media2)) {
         printf("SUMMARY-TEST FAIL cannot copy %s\n", qPrintable(imagePath));
@@ -2192,10 +2123,8 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
 
     const QString pdf = work + "/summary.pdf";
 
-    // Re-entrancy: the export's frame-decode wait pumps the event loop (excluding
-    // user input), so schedule a second export to fire from that pump, the only
-    // way it can land inside the first export's call stack, and confirm it is
-    // refused rather than running concurrently.
+    // Re-entrancy: the frame-decode wait pumps the event loop (minus user input), so schedule a second export from that pump,
+    // the only way to land inside the first call stack, and confirm it is refused.
     bool reentrantFired = false;
     bool reentrantResult = true;
     QString reentrantMsg;
@@ -2270,9 +2199,8 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
         check(!without.isNull() && diff > 0.0, "notes are burned into the thumbnail");
     }
 
-    // Media that is only in a playlist item: a three-frame clip with a note on
-    // frame 2. Rendering loads the item (replacing the tracks), so the export
-    // reopens its temporary session afterwards.
+    // Media only in a playlist item: a three-frame clip with a note on frame 2.
+    // Rendering loads the item (replacing the tracks), so the export reopens its temporary session afterwards.
     const QString clipFirst = writeSequence(work + "/playlist", "clip", 3, 30);
     check(saveStrokes(clipFirst, "Client", {2}), "playlist clip sidecar saved");
     jefe::qt::addPlaylistFiles({ clipFirst.toStdString() });
@@ -2348,9 +2276,8 @@ bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia
         return false;
     }
 
-    // A QTemporaryDir removes itself (and the session copy it holds) on every
-    // return path; the session only passes through disk because saveSession()
-    // writes a file, and is read into input.sessionXml below.
+    // A QTemporaryDir removes itself and the session copy on every return path;
+    // the session only passes through disk because saveSession() writes a file.
     QTemporaryDir tempDir;
     if (!tempDir.isValid()) {
         say(tr("Cannot create a temporary directory"));
@@ -2391,9 +2318,8 @@ bool MainWindow_Qt::gatherPackageInput(const QString& outPath, bool includeMedia
         }
         em.width = probe.width;
         em.height = probe.height;
-        // An already-stored fingerprint is always packaged; a missing one is
-        // computed (and saved back) only when the preference is on, so export
-        // otherwise never reads pixels for this.
+        // An already-stored fingerprint is always packaged; a missing one is computed (and saved back)
+        // only when the preference is on, so export otherwise never reads pixels.
         em.fingerprint = jefe::qt::reviewFingerprint(m.mediaPath);
         if (em.fingerprint.empty() && jefe::qt::getRelinkByFingerprint()) {
             em.fingerprint = gfcMediaFingerprint::compute(em.frames, &err);
@@ -2494,9 +2420,8 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     };
     if (!viewport_) { printf("PACKAGE-TEST FAIL no viewport\n"); fflush(stdout); return 2; }
 
-    // relinkByFingerprint defaults off; the checks below expect export to compute
-    // and store a fingerprint, so turn it on. The preference-off path has its own
-    // check further down.
+    // relinkByFingerprint defaults off; the checks below expect export to compute and store a fingerprint, so turn it on
+    // (the preference-off path has its own check further down).
     jefe::qt::setRelinkByFingerprint(true);
 
     const QString work = QDir::tempPath() + "/jefecheck_packagetest_" +
@@ -2509,10 +2434,8 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
     const std::string mediaKey = gfcNoteStore::normalisePath(media.toStdString());
     const std::string imageName = QFileInfo(media).fileName().toStdString();
 
-    // A LUT outside the install path, assigned to plate 0, so the with-media
-    // export also proves the LUT-packaging path. A minimal valid Truelight Cube
-    // v2.0 (the only format loadLUT's ".cube" branch reads): a header, a
-    // "# width" line, a "# Cube" marker, then edge^3 RGB triads.
+    // A LUT outside the install path on plate 0, so the with-media export also proves LUT packaging.
+    // Minimal valid Truelight Cube v2.0 (the only format loadLUT's ".cube" branch reads): header, "# width", "# Cube" marker, then edge^3 RGB triads.
     const QString lutPath = work + "/review_test.cube";
     {
         QFile f(lutPath);
@@ -2545,9 +2468,8 @@ int MainWindow_Qt::runHeadlessPackageTest(const QString& imagePath) {
         jefe::qt::applyLUTToPlate(0, int(lutPos - lutNames.begin()) + 1);
     }
 
-    // Exporting saves the session to a temporary file and opening loads the
-    // extracted one; neither may leave its path on Recent Sessions. A known,
-    // non-empty list makes the comparison meaningful.
+    // Export saves the session to a temp file and open loads the extracted one; neither may leave its path on Recent Sessions.
+    // A known, non-empty list makes the comparison meaningful.
     const std::vector<std::string> knownRecents = { (work + "/earlier.jcs").toStdString(),
                                                     (work + "/earliest.jcs").toStdString() };
     jefe::qt::setRecentSessions(knownRecents);
@@ -2827,9 +2749,8 @@ int MainWindow_Qt::runHeadlessRelinkTest(const QString& imagePath) {
     const QString work = QDir::tempPath() + "/jefecheck_relinktest_" +
                          QString::number(QDateTime::currentMSecsSinceEpoch());
 
-    // Pass 1, mode=fingerprint (relinkByFingerprint on): the media is moved AND
-    // renamed, so the always-on file-name match cannot find it; only the
-    // fingerprint search can.
+    // Pass 1, mode=fingerprint (relinkByFingerprint on): the media is moved AND renamed,
+    // so the always-on file-name match cannot find it; only the fingerprint search can.
     {
         const QString media = makePackageFixture(imagePath, work);
         if (media.isEmpty()) { printf("RELINK-TEST FAIL fixture\n"); fflush(stdout); return 2; }
@@ -2996,10 +2917,8 @@ void MainWindow_Qt::setPackageCacheRoot(const QString& dir) {
 }
 
 void MainWindow_Qt::refreshNotesForLoadedMedia() {
-    // Two halves. syncPlateNotes() lazily loads the sidecar and hands the notes
-    // to the plate, so annotated footage shows its markup on open. refresh()
-    // updates the dock, which otherwise waits for a viewport-driven
-    // plateStateChanged and meanwhile claims no media is loaded.
+    // Two halves: syncPlateNotes() lazily loads the sidecar and hands notes to the plate so footage shows its markup on open;
+    // refresh() updates the dock, which otherwise waits for plateStateChanged and claims no media is loaded.
     jefe::qt::syncPlateNotes();
     if (notesPanelWidget_) notesPanelWidget_->refresh();
 }
@@ -3015,9 +2934,8 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
 
     QString resolved = path;
 
-    // Folder drop: pick the first image-like file inside (alpha-sorted);
-    // gfcSequence::findSequenceFiles discovers the rest of the sequence. Accept
-    // anything OIIO probably handles plus DPX/EXR and leave real checks to the loader.
+    // Folder drop: pick the first image-like file (alpha-sorted); findSequenceFiles discovers the rest.
+    // Accept anything OIIO probably handles plus DPX/EXR; leave real checks to the loader.
     if (QFileInfo(resolved).isDir()) {
         static const QStringList kImageFilters{
             "*.exr", "*.EXR",
@@ -3084,9 +3002,8 @@ void MainWindow_Qt::onFileDropped(const QString& path, float scale) {
 }
 
 void MainWindow_Qt::openLoadWindow() {
-    // Non-modal (setModal(false)): the user keeps working with the main window
-    // while sequences are prepped. show() not exec(): the drop-forwarding
-    // signal/slot chain needs the main event loop pumping.
+    // Non-modal: the user keeps working while sequences are prepped. show() not exec():
+    // the drop-forwarding signal/slot chain needs the main event loop pumping.
     if (!loadWindowDialog_) {
         loadWindowDialog_ = new LoadWindowDialog_Qt(viewport_, this);
         connect(viewport_, &GlViewport_Qt::fileDroppedWhileLoadWindowOpen,
@@ -3111,10 +3028,8 @@ void MainWindow_Qt::onLoadWindowDropForwarded(int plateIdx,
 void MainWindow_Qt::startAutoload() {
     if (!viewport_) return;
 
-    // Text renderer init runs once before the LUT/FX autoload; it's cheap
-    // (FreeType reads ~170KB, no atlas bake yet). It needs the viewport's GL
-    // context current, or gfc_gl_draw calls from gfcPlate silently early-return
-    // because GfcTextRenderer::fontLoaded stays false.
+    // Text renderer init runs once before LUT/FX autoload (cheap: ~170KB FreeType read, no atlas bake yet).
+    // It needs the viewport's GL context current, or gfc_gl_draw calls from gfcPlate silently early-return (fontLoaded stays false).
     viewport_->makeCurrent();
     jefe::qt::initializeTextRenderer(viewport_->devicePixelRatioF());
     viewport_->doneCurrent();

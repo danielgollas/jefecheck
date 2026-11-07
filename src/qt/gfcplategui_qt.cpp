@@ -31,9 +31,8 @@ float aspectFromString(const std::string& s) {
     // frame's native size"; 1.0 would force a square poly and squash the image.
     if (s.empty() || s == "original") return -1.0f;
 
-    // The UI shows W:H ("2.39:1", "16:9"), but gfcPlate::calculatePolySizesCropEtc
-    // treats `aspect` as content HEIGHT/WIDTH, so parse W:H and return the
-    // reciprocal H/W. A bare number ("2.39") is read as W:1.
+    // UI shows W:H ("2.39:1"), but calculatePolySizesCropEtc treats `aspect` as content HEIGHT/WIDTH: parse W:H and return H/W.
+    // A bare number ("2.39") is read as W:1.
     const char* p = s.c_str();
     char* end = nullptr;
     const double w = std::strtod(p, &end);

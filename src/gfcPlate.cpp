@@ -173,9 +173,8 @@ gfcPlate::gfcPlate ( void )
     ssLocBrightness = ssLocContrast = ssLocSaturation = -1;
     useShader=false;
 	
-	// Colour-correction neutral defaults. Left uninitialized, gamma and lutID
-	// read as 0 (a valid-looking LUT id), the shader builds broken, and the
-	// plate renders flat gray until a CC control is touched.
+	// Neutral CC defaults: uninitialized gamma/lutID read as 0 (a valid-looking LUT id), the shader
+	// builds broken and the plate renders flat gray until a CC control is touched.
 	gamma=1.0;
 	exposure=0.0;
 	brightness=1.0;
@@ -850,8 +849,7 @@ void gfcPlate::updateAnimations() {
     //we separete it from the drawing function
     //so we can have a smooth animation but still only draw when something has changed.
     pointerStorage.updateFaders();
-    // Clamp the rotation timestep: after idle the first getTimestep() is the
-    // whole idle gap, which makes updateRot snap instead of animate.
+    // Clamp the rotation timestep: after idle the first getTimestep() is the whole idle gap, so updateRot would snap.
     // Playback pacing still uses the raw timestep.
     float animStep = playbackManager.getTimestep();
     if (animStep > 0.05f) animStep = 0.05f;
@@ -1230,16 +1228,11 @@ void gfcPlate::updateRot ( float timeStep, bool flip, bool flop ) {
 
 }
 
-// ---------------------------------------------------------------------------
-// Note overlay
-//
-// Notes are in normalised image space, (0,0) top-left with y DOWN; GL here is
-// y-up, so callers pass a rect with a top origin and NEGATIVE height.
-// Flip/flop are already in the modelview (startTransform), so do not negate
-// the rect for them or notes mirror twice.
-// ---------------------------------------------------------------------------
-// Declared in src/qt/SequenceLoadBridge_qt.h; forward-declared to keep Qt
-// headers out of this TU (developer_notes §1).
+// ---- Note overlay ----
+// Notes are image-space y-DOWN but GL is y-up: pass a top-origin rect with NEGATIVE height.
+// Flip/flop are already in the modelview (startTransform); negating for them mirrors notes twice.
+
+// Declared in src/qt/SequenceLoadBridge_qt.h; forward-declared to keep Qt headers out of this TU (developer_notes §1).
 namespace jefe { namespace qt { bool notesVisible(); } }
 
 void gfcPlate::drawNoteOverlay(float originX, float originY, float extentX, float extentY,
@@ -1334,9 +1327,7 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                     }*/
 
                     //if ( polySizeX!=fboVP.w || polySizeY!=fboVP.h )
-                    // For a render with an explicit output size, size the FBO to the
-                    // target (the source quad scales to fit); otherwise track the
-                    // source texture size.
+                    // With an explicit render output size the FBO is sized to it (the source quad scales to fit); otherwise it tracks the source texture.
                     int wantW = textureSize.w;
                     int wantH = textureSize.h;
                     if (forRender && renderParams.outWidth > 0 && renderParams.outHeight > 0) {
@@ -1475,10 +1466,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
         }
 
         if ( forRender ) {
-            // The FX result is in fboTexturev[activeFBO], but the super-shader is
-            // otherwise applied only in the on-screen last pass, after read-back.
-            // Apply it here into the other FBO buffer so renders keep colour
-            // correction and the LUT (single-buffered-FX GPUs can't ping-pong).
+            // The FX result is in fboTexturev[activeFBO]; apply the super-shader here into the other FBO buffer (it otherwise
+            // runs only in the on-screen last pass), so renders keep CC and the LUT. Single-buffered-FX GPUs can't ping-pong.
             if (!forceSingleBufferedFX) {
                 glPushAttrib(GL_ALL_ATTRIB_BITS);
                 const int fxResultTex = fboTexturev[activeFBO];
@@ -1511,9 +1500,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
                 glDisable(GL_TEXTURE_RECTANGLE_ARB);
                 stopSuperShader();
 
-                // Burn the notes in after the super-shader, never through it, and
-                // before the crop bake so a baked letterbox covers markup outside the
-                // framing. Only on the ping-pong path (single-buffered GPUs skip it).
+                // Burn notes in after the super-shader (never through it) and before the crop bake, so a baked letterbox covers markup outside the framing.
+                // Ping-pong path only.
                 if (renderParams.burnInNotes) {
                     // honorVisibilityToggle=false: this is the export path, so the
                     // on-screen hide toggle must not affect the render.
@@ -1665,8 +1653,7 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
             glBindTexture ( GL_TEXTURE_RECTANGLE_ARB,0 );
             glDisable ( GL_TEXTURE_RECTANGLE_ARB );
 
-            // Annotations go on the transformed quad so they track pan/zoom/flip/flop,
-            // and after stopSuperShader() so colour correction never shifts markup.
+            // Annotations go on the transformed quad (tracking pan/zoom/flip/flop), after stopSuperShader() so CC never shifts markup.
             // The image top is at +polySizeY/2, hence the negative height.
             drawNoteOverlay(-polySizeX/2.0f,  polySizeY/2.0f,
                              polySizeX,      -polySizeY);
