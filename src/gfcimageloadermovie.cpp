@@ -72,7 +72,9 @@ int gfcImageLoaderMovie::load(gfcLoadParams params) {
     const bool bigEndian = info.pixFmt.size() > 2 && info.pixFmt.compare(info.pixFmt.size() - 2, 2, "be") == 0;
     const bool gpuDepth = params.compressed == GFC_8BPC || params.compressed == GFC_16BPC ||
                           params.compressed == GFC_16HALF;
-    planar_ = decoded.planarYuv && (decoded.planeCount == 3 || decoded.planeCount == 4) && !bigEndian &&
+    const bool planesOk = decoded.chromaInterleaved ? decoded.planeCount == 2
+                                                    : (decoded.planeCount == 3 || decoded.planeCount == 4);
+    planar_ = decoded.planarYuv && planesOk && !bigEndian &&
               gpuDepth && decoded.bitDepth >= 8 && decoded.bitDepth <= 16;
 
     const int bytesPerPixel = 4 * (bits / 8);
@@ -124,6 +126,7 @@ int gfcImageLoaderMovie::load(gfcLoadParams params) {
     metaData.insert({"FrameRate", std::to_string(info.rateNum) + "/" + std::to_string(info.rateDen)});
     metaData.insert({"FrameCount", std::to_string(info.frameCount)});
     if (!info.startTimecode.empty()) metaData.insert({"StartTimecode", info.startTimecode});
+    metaData.insert({"Decoder", info.hardwareDecoder.empty() ? std::string("software") : info.hardwareDecoder});
 
     frameInfo = gfcGLFrameInfo();
     frameInfo.target = GL_TEXTURE_RECTANGLE_ARB;
@@ -131,6 +134,7 @@ int gfcImageLoaderMovie::load(gfcLoadParams params) {
     frameInfo.dataPointer = planar_ ? nullptr : pixels_.data();
     if (planar_) {
         frameInfo.planarYuv = true;
+        frameInfo.chromaInterleaved = frame_.chromaInterleaved;
         frameInfo.planeCount = frame_.planeCount;
         for (int p = 0; p < frame_.planeCount; ++p) {
             frameInfo.planes[p].data = frame_.plane[p].data;
@@ -139,8 +143,8 @@ int gfcImageLoaderMovie::load(gfcLoadParams params) {
             frameInfo.planes[p].strideBytes = frame_.plane[p].strideBytes;
         }
         frameInfo.bitDepth = frame_.bitDepth;
-        frameInfo.subX = std::max(1, info.subX);
-        frameInfo.subY = std::max(1, info.subY);
+        frameInfo.subX = std::max(1, frame_.subX);
+        frameInfo.subY = std::max(1, frame_.subY);
         frameInfo.matrix = int(info.matrix);
         frameInfo.range = int(info.range);
         frameInfo.siting = int(info.siting);
@@ -206,6 +210,7 @@ void gfcImageLoaderMovie::releaseMemory() {
     for (gfcGLFrameInfo::Plane& pl : frameInfo.planes) pl = gfcGLFrameInfo::Plane();
     frameInfo.planeCount = 0;
     frameInfo.planarYuv = false;
+    frameInfo.chromaInterleaved = false;
     planar_ = false;
 }
 

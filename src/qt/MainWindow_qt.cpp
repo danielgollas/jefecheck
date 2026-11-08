@@ -1587,13 +1587,18 @@ std::vector<char> interiorMask(const Rgb16Image& t) {
 }
 
 // Reference RGB for a planar clip known to be Rec.709 video range, co-sited, in double precision
-// from the decoder's planes: independent of gfcYuvConverter and of the file's tags.
+// from the software decoder's planes: independent of gfcYuvConverter, of the file's tags and of
+// hardware decoding (which the app's own load uses).
 Rgb16Image decodedReference709Video(const QString& path, int64_t index, QString& err) {
     Rgb16Image out;
     gfcMovieReader reader;
     std::string e;
     gfcMovieFrame f;
-    if (!reader.open(path.toStdString(), &e) || !reader.readFrame(index, f, &e)) {
+    const bool hardware = gfcMovieReader::hardwareDecodingAllowed();
+    gfcMovieReader::setHardwareDecodingAllowed(false);
+    const bool read = reader.open(path.toStdString(), &e) && reader.readFrame(index, f, &e);
+    gfcMovieReader::setHardwareDecodingAllowed(hardware);
+    if (!read) {
         err = QString::fromStdString(e);
         return out;
     }

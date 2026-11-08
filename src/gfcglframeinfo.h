@@ -31,6 +31,9 @@ public:
     // enums (gfcMovieReader.h) cast to int.
     bool planarYuv = false;
     int planeCount = 0;
+    // Two planes, Cb and Cr interleaved in plane 1 (NV12, P010, P416: what
+    // hardware decoders output). plane[1].width counts Cb/Cr pairs.
+    bool chromaInterleaved = false;
     struct Plane { const void* data = nullptr; int width = 0, height = 0, strideBytes = 0; } planes[4];
     int bitDepth = 8;
     int subX = 1, subY = 1;

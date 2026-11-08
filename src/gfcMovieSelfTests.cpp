@@ -13,6 +13,7 @@
 #include "UIConstants.h"
 #include "gfcframe.h"
 #include "gfcimageloadermovie.h"
+#include "gfcYuvConverter.h"
 #include "gfcStructures.h"
 #include "gfcNoteStore.h"
 #include "gfcMediaFingerprint.h"
@@ -30,6 +31,9 @@
 #include "gfcNoteStamp.h"
 #include "gfcreview.h"
 #include "qt/ReviewPackage_qt.h"
+#include "qt/qt_prefs_persist.h"
+#include <QSettings>
+#include <QVariant>
 
 extern gfcPlaybackManager playbackManager;
 extern gfcTrackManager trackManager;
@@ -206,6 +210,165 @@ int movieLoaderSelfTest(const std::string& dir) {
     p.fileName=dir+"/h264_25.mp4"; p.movieFrameIndex=-1; p.fromFrame=3; gfcFrame h; check(h.loadFrame(p)==0 && h.theImageLoader && static_cast<gfcImageLoaderMovie*>(h.theImageLoader)->movieFrame().index==2, "index defaults to fromFrame-1");
     for (gfcFrame* fr : {&f, &g, &e, &t, &h, &ao}) fr->clearFrame();
     std::printf("MOVIE-LOADER: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// Hardware decoding: used where the platform can decode the clip, never for alpha, off by preference,
+// and the same picture as software.
+int movieHardwareSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    const bool wasAllowed = gfcMovieReader::hardwareDecodingAllowed();
+    std::string err;
+    auto frameInfoOf = [](const gfcMovieFrame& fr, const gfcMovieInfo& in) {
+        gfcGLFrameInfo gi;
+        gi.planarYuv = fr.planarYuv; gi.chromaInterleaved = fr.chromaInterleaved; gi.planeCount = fr.planeCount;
+        for (int p = 0; p < fr.planeCount; ++p)
+            gi.planes[p] = {fr.plane[p].data, fr.plane[p].width, fr.plane[p].height, fr.plane[p].strideBytes};
+        gi.bitDepth = fr.bitDepth; gi.subX = fr.subX; gi.subY = fr.subY;
+        gi.matrix = int(in.matrix); gi.range = int(in.range); gi.siting = int(in.siting);
+        gi.hasAlpha = in.hasAlpha && fr.planeCount == 4;
+        return gi;
+    };
+    struct Decoded { std::string decoder; gfcMovieFrame frame; std::vector<float> rgba; };
+    // Frame `index` decoded with hardware allowed or not, as RGBA through the CPU twin of the upload shader.
+    auto decode = [&](const std::string& movie, int64_t index, bool hardware, Decoded& out) {
+        gfcMovieReader::setHardwareDecodingAllowed(hardware);
+        gfcMovieReader r;
+        if (!r.open(movie, &err) || !r.readFrame(index, out.frame, &err)) return false;
+        out.decoder = r.info().hardwareDecoder;
+        return gfcYuvConvertToRGBAF(frameInfoOf(out.frame, r.info()), out.frame.width, out.frame.height, out.rgba);
+    };
+    auto decodeWithCurrentPreference = [&](const std::string& movie, int64_t index, Decoded& out) {
+        gfcMovieReader r;
+        if (!r.open(movie, &err) || !r.readFrame(index, out.frame, &err)) return false;
+        out.decoder = r.info().hardwareDecoder;
+        return true;
+    };
+    auto worstCodes = [](const Decoded& a, const Decoded& b) {  // worst |diff| over RGB, in 16-bit codes
+        if (a.rgba.size() != b.rgba.size() || a.rgba.empty()) return 1e9;
+        double w = 0;
+        for (size_t i = 0; i < a.rgba.size(); ++i)
+            if (i % 4 != 3) w = std::max(w, std::fabs(double(a.rgba[i]) - double(b.rgba[i])) * 65535.0);
+        return w;
+    };
+
+    Decoded sw422, sw4444, swH264;
+    check(decode(dir+"/prores422hq_23976.mov", 5, false, sw422) && sw422.decoder.empty() && sw422.frame.planeCount==3 && !sw422.frame.chromaInterleaved, "hardware off: software decoder, three planes");
+    check(decode(dir+"/prores4444_24.mov", 5, false, sw4444) && decode(dir+"/h264_25.mp4", 7, false, swH264), "software reference frames decode");
+    Decoded alpha;
+    check(decode(dir+"/prores4444alpha_24.mov", 3, true, alpha) && alpha.decoder.empty() && alpha.frame.planeCount==4, "a clip with alpha stays in software, alpha plane kept");
+    Decoded odd;
+    check(decode(dir+"/bars_709tv_odd.mp4", 2, true, odd) && odd.frame.width==321 && odd.frame.height==181, "an odd-sized clip keeps its full size");
+#if defined(__APPLE__)
+    Decoded hw422, hw4444, hwH264;
+    check(decode(dir+"/prores422hq_23976.mov", 5, true, hw422) && hw422.decoder=="videotoolbox" && hw422.frame.chromaInterleaved && hw422.frame.planeCount==2 && hw422.frame.subX==2, "ProRes 422 decodes on VideoToolbox, Cb/Cr interleaved");
+    check(decode(dir+"/prores4444_24.mov", 5, true, hw4444) && hw4444.decoder=="videotoolbox" && hw4444.frame.subX==1, "ProRes 4444 without alpha decodes on VideoToolbox");
+    check(decode(dir+"/h264_25.mp4", 7, true, hwH264) && hwH264.decoder=="videotoolbox", "H.264 decodes on VideoToolbox");
+    // Decoder output: every Y, Cb and Cr code within 1 of software at the file's own depth (hardware
+    // formats are MSB-aligned 16-bit; Apple's and FFmpeg's ProRes IDCTs round differently).
+    auto worstPlaneCodes = [](const Decoded& hw, const Decoded& sw) {
+        const double toSw = std::ldexp(1.0, sw.frame.bitDepth - hw.frame.bitDepth);
+        auto at = [](const gfcMovieFrame& f, int comp, int x, int y) {
+            const int p = f.chromaInterleaved && comp == 2 ? 1 : comp;
+            const int step = f.chromaInterleaved && comp > 0 ? 2 : 1, off = f.chromaInterleaved && comp == 2 ? 1 : 0;
+            const uint8_t* row = f.plane[p].data + size_t(y) * size_t(f.plane[p].strideBytes);
+            return f.bitDepth > 8 ? double(reinterpret_cast<const uint16_t*>(row)[x * step + off]) : double(row[x * step + off]);
+        };
+        double w = 0;
+        for (int c = 0; c < 3; ++c) {
+            const gfcMoviePlane& pl = sw.frame.plane[c];
+            for (int y = 0; y < pl.height; ++y)
+                for (int x = 0; x < pl.width; ++x)
+                    w = std::max(w, std::fabs(std::round(at(hw.frame, c, x, y) * toSw) - at(sw.frame, c, x, y)));
+        }
+        return w;
+    };
+    const double c422 = worstPlaneCodes(hw422, sw422), c4444 = worstPlaneCodes(hw4444, sw4444), cH264 = worstPlaneCodes(hwH264, swH264);
+    std::printf("  hardware vs software decoder, worst |diff| in source codes: 422 %.0f, 4444 %.0f, h264 %.0f\n", c422, c4444, cH264);
+    check(c422 <= 1 && c4444 <= 1 && cH264 == 0, "hardware decodes within 1 code of software (H.264 bit-exact)");
+    {   // Interleaved chroma converts exactly like the same samples split into planes.
+        const gfcMovieFrame& f = hw422.frame;
+        const gfcMoviePlane& c = f.plane[1];
+        std::vector<uint16_t> cb(size_t(c.width) * c.height), cr(cb.size());
+        for (int y = 0; y < c.height; ++y)
+            for (int x = 0; x < c.width; ++x) {
+                const uint16_t* row = reinterpret_cast<const uint16_t*>(c.data + size_t(y) * size_t(c.strideBytes));
+                cb[size_t(y) * c.width + x] = row[2 * x];
+                cr[size_t(y) * c.width + x] = row[2 * x + 1];
+            }
+        gfcMovieInfo in; gfcMovieReader::probe(dir+"/prores422hq_23976.mov", in, &err);
+        gfcGLFrameInfo split = frameInfoOf(f, in);
+        split.chromaInterleaved = false; split.planeCount = 3;
+        split.planes[1] = {cb.data(), c.width, c.height, c.width * 2};
+        split.planes[2] = {cr.data(), c.width, c.height, c.width * 2};
+        Decoded planar; gfcYuvConvertToRGBAF(split, f.width, f.height, planar.rgba);
+        check(worstCodes(planar, hw422) == 0.0, "interleaved chroma converts exactly like split planes");
+    }
+    {   // Sequential and random reads on the hardware decoder land on the same frames.
+        gfcMovieReader::setHardwareDecodingAllowed(true);
+        gfcMovieReader r; gfcMovieFrame a, b; bool seq = r.open(dir+"/h264_25.mp4", &err);
+        for (int k = 0; seq && k <= 40; ++k) seq = r.readFrame(k, a, &err) && a.index == k;
+        Decoded s40; s40.frame = a;
+        gfcYuvConvertToRGBAF(frameInfoOf(a, r.info()), a.width, a.height, s40.rgba);
+        Decoded j40; const bool jump = r.readFrame(3, b, &err) && r.readFrame(40, j40.frame, &err) && j40.frame.index == 40;
+        gfcYuvConvertToRGBAF(frameInfoOf(j40.frame, r.info()), j40.frame.width, j40.frame.height, j40.rgba);
+        check(seq && jump && r.info().hardwareDecoder=="videotoolbox" && worstCodes(s40, j40)==0.0, "hardware: sequential 0..40 then a jump back to 40 give the same picture");
+    }
+    {   // The loader hands the interleaved planes to the GPU and names the decoder.
+        gfcMovieReader::setHardwareDecodingAllowed(true);
+        gfcLoadParams p; p.fileName=dir+"/prores422hq_23976.mov"; p.movieFrameIndex=5; p.scale=100; p.compressed=GFC_16BPC;
+        gfcFrame f; const bool loaded = f.loadFrame(p)==0 && f.loaded && f.theImageLoader;
+        const gfcGLFrameInfo gi = loaded ? f.theImageLoader->getFrameInfo() : gfcGLFrameInfo();
+        const auto md = loaded ? f.theImageLoader->metaData : std::multimap<std::string, std::string>();
+        auto dec = md.find("Decoder");
+        check(loaded && gi.planarYuv && gi.chromaInterleaved && gi.planeCount==2 && dec!=md.end() && dec->second=="videotoolbox", "loader: interleaved planes go to the GPU, metadata names the decoder");
+        // The GPU conversion of the hardware frame matches the software picture.
+        f.generateTexture();
+        std::vector<float> gpu(size_t(f.sizeX)*f.sizeY*4);
+        if (f.textureID) {
+            glBindTexture(GL_TEXTURE_RECTANGLE_ARB, f.textureID); glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glGetTexImage(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, GL_FLOAT, gpu.data()); glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
+        }
+        // The GPU conversion of the hardware frame equals its CPU twin within one half-float step plus the
+        // sampler's chroma-blend precision (the bound MOVIE-STAMP uses).
+        auto halfStep = [](double v) { int ex=0; std::frexp(std::max(std::fabs(v), 6.1035e-5), &ex); return std::ldexp(1.0, ex-11); };
+        bool gpuOk = f.textureID && hw422.rgba.size() == gpu.size();
+        double worst = 0;
+        for (size_t i = 0; gpuOk && i < gpu.size(); ++i) {
+            if (i % 4 == 3) continue;
+            const double v = hw422.rgba[i], d = std::fabs(v - gpu[i]);
+            worst = std::max(worst, d * 65535.0);
+            if (d > halfStep(v) + 2.0*1.8556/2048.0 + 1.0/65535.0) gpuOk = false;
+        }
+        std::printf("  GPU upload of the hardware frame vs its CPU twin, worst |diff| in 16-bit codes: %.1f\n", worst);
+        check(gpuOk, "GPU upload of an interleaved hardware frame matches the CPU conversion");
+        f.clearFrame();
+    }
+#else
+    Decoded any;
+    check(decode(dir+"/h264_25.mp4", 7, true, any) && (!any.decoder.empty() || any.frame.planeCount==3), "hardware allowed: decodes, in software when no hardware decoder exists");
+#endif
+    {   // The preference: on by default, saved with the others, and applied to the reader on load.
+        const char* kKey = "Engine/hardwareDecoding";
+        QVariant saved; { QSettings q; saved = q.value(kKey); }
+        const gfcSettings snapshot = sett;
+        { gfcSettings fresh; check(fresh.hardwareDecoding, "hardware decoding defaults to Auto"); }
+        sett.hardwareDecoding = false;
+        jefe::qt::writePreferences();
+        sett.hardwareDecoding = true;
+        gfcMovieReader::setHardwareDecodingAllowed(true);
+        jefe::qt::loadPreferences();
+        check(!sett.hardwareDecoding && !gfcMovieReader::hardwareDecodingAllowed(), "Off round-trips through QSettings and reaches the reader");
+        Decoded off;
+        check(decodeWithCurrentPreference(dir+"/h264_25.mp4", 7, off) && off.decoder.empty(), "with Off, a movie decodes in software");
+        { QSettings q; if (saved.isValid()) q.setValue(kKey, saved); else q.remove(kKey); }
+        sett = snapshot;
+    }
+    gfcMovieReader::setHardwareDecodingAllowed(wasAllowed);
+    std::printf("MOVIE-HARDWARE: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
 

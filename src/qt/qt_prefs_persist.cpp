@@ -5,6 +5,7 @@
 #include "qt_prefs_persist.h"
 #include "../gfcStructures.h"
 #include "../gfcTextRenderer.h"
+#include "../gfcMovieReader.h"
 #include <QSettings>
 #include <QString>
 #include <QStringList>
@@ -29,6 +30,8 @@ void loadPreferences() {
     sett.lagPolicy             = std::clamp(s.value("Engine/lagPolicy", sett.lagPolicy).toInt(), 0, 2);
     sett.oiioThreads           = s.value("Engine/oiioThreads",           sett.oiioThreads).toInt();
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply at startup
+    sett.hardwareDecoding      = s.value("Engine/hardwareDecoding", sett.hardwareDecoding).toBool();
+    gfcMovieReader::setHardwareDecodingAllowed(sett.hardwareDecoding);
     // Session behavior.
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
@@ -123,6 +126,8 @@ void writePreferences() {
     s.setValue("Engine/lagPolicy", sett.lagPolicy);
     s.setValue("Engine/oiioThreads",          sett.oiioThreads);
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply on Done
+    s.setValue("Engine/hardwareDecoding",     sett.hardwareDecoding);
+    gfcMovieReader::setHardwareDecodingAllowed(sett.hardwareDecoding);  // movies opened from now on
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);
 
     // General.

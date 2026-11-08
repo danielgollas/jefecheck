@@ -385,6 +385,24 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     oiioThreadsLabel->setToolTip(oiioTip);
     form->addRow(oiioThreadsLabel, oiioThreads);
 
+    auto* hwCombo = new QComboBox(page);
+    hwCombo->setObjectName("preferences.engine.hardwaredecoding.combo");
+    hwCombo->setAccessibleName("Hardware decoding");
+    hwCombo->addItem("Auto", true);
+    hwCombo->addItem("Off", false);
+    hwCombo->setCurrentIndex(sett.hardwareDecoding ? 0 : 1);
+    const QString hwTip =
+        "Movies: Auto decodes on the graphics hardware when it can decode the file (VideoToolbox on macOS, "
+        "D3D11VA on Windows, VAAPI or NVDEC on Linux) and in software otherwise, or if the hardware fails. "
+        "Files with alpha always decode in software. Off always decodes in software.\n\n"
+        "Applies to movies loaded after Done.";
+    hwCombo->setToolTip(hwTip);
+    connect(hwCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            page, [hwCombo](int i) { sett.hardwareDecoding = hwCombo->itemData(i).toBool(); });
+    auto* hwLabel = new QLabel("Hardware decoding", page);
+    hwLabel->setToolTip(hwTip);
+    form->addRow(hwLabel, hwCombo);
+
     // Default decode filter — shared by all tracks via the OIIO loader's
     // Filter2D resize path. In-memory only; persisted centrally on Done.
     auto* filterCombo = new QComboBox(page);

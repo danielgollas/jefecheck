@@ -9,6 +9,7 @@
 #include <deque>
 #include <filesystem>
 #include <list>
+#include <map>
 #include <mutex>
 #include <utility>
 
@@ -17,6 +18,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/hwcontext.h>
 #include <libavutil/pixdesc.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
@@ -68,6 +70,42 @@ gfcChromaSiting sitingOf(AVChromaLocation loc) {
 }
 
 std::atomic<bool> gTestFailAudioOpen{false};
+std::atomic<bool> gHardwareAllowed{true};
+
+// This platform's hardware decoders, best first.
+const AVHWDeviceType kHardwareTypes[] = {
+#if defined(__APPLE__)
+    AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+#elif defined(_WIN32)
+    AV_HWDEVICE_TYPE_D3D11VA, AV_HWDEVICE_TYPE_DXVA2,
+#else
+    AV_HWDEVICE_TYPE_VAAPI, AV_HWDEVICE_TYPE_CUDA,
+#endif
+};
+
+// One device per type for the whole process, made on first use and kept until exit. A type whose
+// device cannot be made (no GPU, no driver) is not tried again.
+AVBufferRef* hardwareDevice(AVHWDeviceType type) {
+    static std::mutex m;
+    static std::map<int, AVBufferRef*> devices;
+    std::lock_guard<std::mutex> lock(m);
+    auto it = devices.find(int(type));
+    if (it != devices.end()) return it->second;
+    AVBufferRef* dev = nullptr;
+    if (av_hwdevice_ctx_create(&dev, type, nullptr, nullptr, 0) < 0) dev = nullptr;
+    devices[int(type)] = dev;
+    return dev;
+}
+
+// get_format for a hardware decoder: its surface format when libav offers it. When it doesn't (a
+// profile the hardware can't decode) libav's software choice is taken, and decodeNext reports the
+// missing hardware frame so the reader goes back to its threaded software decoder.
+AVPixelFormat pickHardwareFormat(AVCodecContext* c, const AVPixelFormat* formats) {
+    const AVPixelFormat want = *static_cast<const AVPixelFormat*>(c->opaque);
+    for (const AVPixelFormat* f = formats; *f != AV_PIX_FMT_NONE; ++f)
+        if (*f == want) return *f;
+    return avcodec_default_get_format(c, formats);
+}
 
 struct FrameDeleter {
     void operator()(AVFrame* f) const { av_frame_free(&f); }
@@ -90,6 +128,10 @@ struct gfcMovieReader::Impl {
     // a flushed frame-threaded decoder needs about one packet per thread first.
     bool intraOnly = false;
     int64_t packetsSent = 0;         // video packets given to the decoder (self-test hook)
+    bool hardwareTried = false;      // the first readFrame() has decided hardware or software
+    bool hardwareActive = false;     // dec is a hardware decoder
+    AVPixelFormat hardwareFormat = AV_PIX_FMT_NONE;  // its surface format (dec->opaque points here)
+    std::string hardwareName;
     static constexpr int64_t kDecodeOnward = 12;   // longest forward skip decoded through rather than sought
     gfcMovieInfo info;
     std::mutex m;
@@ -141,6 +183,10 @@ struct gfcMovieReader::Impl {
         eofSent = false;
         vstream = -1;
         packetsSent = 0;
+        hardwareTried = false;
+        hardwareActive = false;
+        hardwareFormat = AV_PIX_FMT_NONE;
+        hardwareName.clear();
         if (sws) { sws_freeContext(sws); sws = nullptr; }
         av_packet_free(&pkt);
         avcodec_free_context(&dec);
@@ -159,9 +205,8 @@ struct gfcMovieReader::Impl {
                                 AV_ROUND_NEAR_INF);
     }
 
-    // Decoder setup lives here only: hardware decode (hw_device_ctx +
-    // get_format) would be added in this one place.
-    bool openDecoder(std::string* err) {
+    // Opens `dec`: software with threads, or on `device` (surface format `surface`) single-threaded.
+    bool openDecoder(std::string* err, AVBufferRef* device = nullptr, AVPixelFormat surface = AV_PIX_FMT_NONE) {
         const AVCodecParameters* par = stream()->codecpar;
         const AVCodec* codec = avcodec_find_decoder(par->codec_id);
         if (!codec) { setErr(err, "no decoder for this video codec"); return false; }
@@ -171,22 +216,92 @@ struct gfcMovieReader::Impl {
         if (ret < 0) { setErr(err, "decoder parameters: " + avErr(ret)); return false; }
         const AVCodecDescriptor* cd = avcodec_descriptor_get(par->codec_id);
         intraOnly = cd && (cd->props & AV_CODEC_PROP_INTRA_ONLY);
-        dec->thread_count = 0;
-        // Slice threads only for intra-only codecs that support them: frame threads hold back ~thread_count
-        // packets after each flush. Long-GOP and slice-less decoders keep frame threads.
-        const bool sliceOnly = intraOnly && (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS);
-        dec->thread_type = sliceOnly ? FF_THREAD_SLICE : (FF_THREAD_SLICE | FF_THREAD_FRAME);
+        if (device) {
+            dec->hw_device_ctx = av_buffer_ref(device);
+            if (!dec->hw_device_ctx) { setErr(err, "out of memory"); return false; }
+            hardwareFormat = surface;
+            dec->opaque = &hardwareFormat;
+            dec->get_format = pickHardwareFormat;
+            dec->thread_count = 1;
+        } else {
+            dec->thread_count = 0;
+            // Slice threads only for intra-only codecs that support them: frame threads hold back ~thread_count
+            // packets after each flush. Long-GOP and slice-less decoders keep frame threads.
+            const bool sliceOnly = intraOnly && (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS);
+            dec->thread_type = sliceOnly ? FF_THREAD_SLICE : (FF_THREAD_SLICE | FF_THREAD_FRAME);
+        }
         dec->pkt_timebase = stream()->time_base;
         ret = avcodec_open2(dec, codec, nullptr);
         if (ret < 0) { setErr(err, "cannot open decoder: " + avErr(ret)); return false; }
         return true;
     }
 
+    // Replaces the software decoder with the first hardware one that can decode this stream; false
+    // (software kept) when none can. Files with alpha stay in software: hardware decoders drop it
+    // (VideoToolbox decodes ProRes 4444 to P416). The caller seeks afterwards.
+    bool startHardware() {
+        if (info.hasAlpha) return false;
+        const AVCodec* codec = avcodec_find_decoder(stream()->codecpar->codec_id);
+        if (!codec) return false;
+        for (AVHWDeviceType type : kHardwareTypes) {
+            const AVCodecHWConfig* cfg = nullptr;
+            for (int k = 0; (cfg = avcodec_get_hw_config(codec, k)); ++k)
+                if (cfg->device_type == type && (cfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) break;
+            if (!cfg) continue;
+            AVBufferRef* device = hardwareDevice(type);
+            if (!device) continue;
+            AVCodecContext* software = dec;
+            dec = nullptr;
+            if (openDecoder(nullptr, device, cfg->pix_fmt)) {
+                avcodec_free_context(&software);
+                hardwareActive = true;
+                hardwareName = av_hwdevice_get_type_name(type);
+                return true;
+            }
+            avcodec_free_context(&dec);
+            dec = software;
+        }
+        return false;
+    }
+
+    // Back to a threaded software decoder for the rest of this open file. The caller seeks afterwards.
+    bool stopHardware(std::string* err) {
+        avcodec_free_context(&dec);
+        hardwareActive = false;
+        info.hardwareDecoder.clear();
+        return openDecoder(err);
+    }
+
+    // A hardware frame as a CPU-readable one: mapped in place where the platform allows it (VideoToolbox:
+    // the decoder's own buffer, no copy), else copied. Timestamps and colour tags come along.
+    static bool readableFrame(AVFrame* f, std::string* err) {
+        AVFrame* sw = av_frame_alloc();
+        if (!sw) { setErr(err, "out of memory"); return false; }
+        int ret = av_hwframe_map(sw, f, AV_HWFRAME_MAP_READ);
+        if (ret < 0) {
+            av_frame_unref(sw);
+            ret = av_hwframe_transfer_data(sw, f, 0);
+        }
+        if (ret >= 0) ret = av_frame_copy_props(sw, f);
+        if (ret < 0) {
+            av_frame_free(&sw);
+            setErr(err, "cannot read hardware frame: " + avErr(ret));
+            return false;
+        }
+        av_frame_unref(f);
+        av_frame_move_ref(f, sw);
+        av_frame_free(&sw);
+        return true;
+    }
+
     // Next frame in presentation order; false at end of stream or on a decode error (err set).
-    // A future hwaccel path would call av_hwframe_transfer_data here.
     bool decodeNext(AVFrame* out, std::string* err) {
         for (;;) {
             int ret = avcodec_receive_frame(dec, out);
+            if (ret == 0 && hardwareActive) {
+                if (out->format != hardwareFormat) { setErr(err, "hardware decoder not used"); return false; }
+                return readableFrame(out, err);
+            }
             if (ret == 0) return true;
             if (ret == AVERROR_EOF) { setErr(err, "end of stream"); return false; }
             if (ret != AVERROR(EAGAIN)) { setErr(err, "decode error: " + avErr(ret)); return false; }
@@ -372,9 +487,15 @@ struct gfcMovieReader::Impl {
         out.index = lastIndex;
         out.width = f->width;
         out.height = f->height;
-        out.bitDepth = desc ? desc->comp[0].depth : 8;
-        out.planarYuv = info.planarYuv;
+        out.bitDepth = desc ? desc->comp[0].depth + desc->comp[0].shift : 8;
         out.planeCount = std::min(av_pix_fmt_count_planes(AVPixelFormat(f->format)), 4);
+        const bool yuv = desc && (desc->flags & AV_PIX_FMT_FLAG_PLANAR) && !(desc->flags & AV_PIX_FMT_FLAG_RGB) &&
+                         desc->nb_components >= 3;
+        out.planarYuv = yuv;
+        // NV12 and friends: Cb and Cr share plane 1.
+        out.chromaInterleaved = yuv && out.planeCount == 2 && desc->comp[1].plane == 1 && desc->comp[2].plane == 1;
+        out.subX = desc ? 1 << desc->log2_chroma_w : 1;
+        out.subY = desc ? 1 << desc->log2_chroma_h : 1;
         for (int p = 0; p < out.planeCount; ++p) {
             const bool chroma = desc && (p == 1 || p == 2) && !(desc->flags & AV_PIX_FMT_FLAG_RGB);
             out.plane[p].data = f->data[p];
@@ -513,17 +634,33 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
         setErr(err, "frame " + std::to_string(index) + " out of range");
         return false;
     }
+    // The first read picks the decoder; open() decoded frame 0 in software for the stream facts.
+    if (!d.hardwareTried) {
+        d.hardwareTried = true;
+        if (gHardwareAllowed.load() && d.startHardware()) {
+            d.last.reset();
+            d.lastIndex = -1;
+        }
+    }
     if (!(d.last && index == d.lastIndex)) {
         // A short skip forward in a long-GOP stream decodes on (a seek would go
         // back to the keyframe and decode further); an intra-only stream seeks.
         const bool onward = d.last && index > d.lastIndex &&
             (index == d.lastIndex + 1 || (!d.intraOnly && index - d.lastIndex <= Impl::kDecodeOnward));
-        if (!onward && !d.seekTo(index, err)) return false;
-        if (!d.decodeUntil(index, err)) {
+        bool ok = (onward || d.seekTo(index, err)) && d.decodeUntil(index, err);
+        // A hardware frame of another size counts as a failure (a decoder that crops odd sizes).
+        if (ok && d.hardwareActive && (d.last->width != d.info.width || d.last->height != d.info.height)) {
+            setErr(err, "hardware frame size differs");
+            ok = false;
+        }
+        if (!ok && d.hardwareActive)
+            ok = d.stopHardware(err) && d.seekTo(index, err) && d.decodeUntil(index, err);
+        if (!ok) {
             d.last.reset();
             d.lastIndex = -1;
             return false;
         }
+        if (d.hardwareActive) d.info.hardwareDecoder = d.hardwareName;
     }
     d.pumpAudio(gfcAudioClip::frameStartSample(index + 1, d.info.rateNum, d.info.rateDen));
     d.fillFrame(out);
@@ -531,6 +668,9 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
 }
 
 void gfcMovieReader::testFailAudioDecoderOpen(bool fail) { gTestFailAudioOpen = fail; }
+
+void gfcMovieReader::setHardwareDecodingAllowed(bool allowed) { gHardwareAllowed = allowed; }
+bool gfcMovieReader::hardwareDecodingAllowed() { return gHardwareAllowed.load(); }
 
 int64_t gfcMovieReader::videoPacketsSent() const {
     std::lock_guard<std::mutex> lock(d_->m);

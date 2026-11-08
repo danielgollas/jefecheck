@@ -87,6 +87,10 @@ bool generate(const QString& dir, QString* err) {
         QStringList{"-y", "-f", "lavfi", "-i", kTestsrc2.arg("24"), "-frames:v", "48",
          "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv444p12le",
          "-c:v", "prores_ks", "-profile:v", "4"} + kTag709 + QStringList{out("prores4444_24.mov")},
+        // With alpha: stays in software (hardware decoders drop alpha).
+        QStringList{"-y", "-f", "lavfi", "-i", kTestsrc2.arg("24"), "-frames:v", "12",
+         "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuva444p10le",
+         "-c:v", "prores_ks", "-profile:v", "4", "-alpha_bits", "16"} + kTag709 + QStringList{out("prores4444alpha_24.mov")},
         {"-y", "-f", "lavfi", "-i", kTestsrc2.arg("25"), "-frames:v", "48",
          "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",
          "-c:v", "libx264", "-g", "12", "-colorspace", "bt709", "-color_primaries", "bt709",

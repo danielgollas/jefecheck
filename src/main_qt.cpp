@@ -707,6 +707,7 @@ int main(int argc, char* argv[]) {
         allZero &= (timecodeSelfTest(mediaDir) == 0);
         allZero &= (movieNumberingSelfTest(mediaDir) == 0);
         allZero &= (movieLoaderSelfTest(mediaDir) == 0);
+        allZero &= (movieHardwareSelfTest(mediaDir) == 0);
         allZero &= (movieRateSelfTest(mediaDir) == 0);
         allZero &= (movieFingerprintSelfTest(mediaDir) == 0);
         allZero &= (movieStampSelfTest(mediaDir) == 0);

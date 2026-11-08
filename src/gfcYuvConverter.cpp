@@ -59,13 +59,20 @@ YuvMaths mathsFor(const gfcGLFrameInfo& in) {
     return m;
 }
 
+// Samples per pixel of plane p: 2 for interleaved Cb/Cr.
+int componentsOf(const gfcGLFrameInfo& in, int p) {
+    return in.chromaInterleaved && p == 1 ? 2 : 1;
+}
+
 bool planesUsable(const gfcGLFrameInfo& in) {
-    if (!in.planarYuv || in.planeCount < 3 || in.planeCount > 4) return false;
+    if (!in.planarYuv) return false;
+    if (in.chromaInterleaved ? in.planeCount != 2 : (in.planeCount < 3 || in.planeCount > 4)) return false;
     const int bps = in.bitDepth > 8 ? 2 : 1;
     for (int p = 0; p < in.planeCount; ++p) {
         const gfcGLFrameInfo::Plane& pl = in.planes[p];
-        if (!pl.data || pl.width <= 0 || pl.height <= 0 || pl.strideBytes < pl.width * bps ||
-            pl.strideBytes % bps != 0)
+        const int bpp = bps * componentsOf(in, p);
+        if (!pl.data || pl.width <= 0 || pl.height <= 0 || pl.strideBytes < pl.width * bpp ||
+            pl.strideBytes % bpp != 0)
             return false;
     }
     return true;
@@ -103,8 +110,14 @@ const char* kFragmentSrc =
     "  vec2 st = srcRect.xy + gl_FragCoord.xy * (srcRect.zw / dstSize);\n"
     "  vec2 cst = st * chromaMap.xy + chromaMap.zw;\n"
     "  float y = (texture2DRect(planeY, st).r * codeScale - levels.x) / levels.y;\n"
+    "#ifdef CR_IN_CB\n"
+    "  vec4 cc = texture2DRect(planeCb, cst);\n"
+    "  float cb = (cc.r * codeScale - levels.z) / levels.w;\n"
+    "  float cr = (cc.CR_IN_CB * codeScale - levels.z) / levels.w;\n"
+    "#else\n"
     "  float cb = (texture2DRect(planeCb, cst).r * codeScale - levels.z) / levels.w;\n"
     "  float cr = (texture2DRect(planeCr, cst).r * codeScale - levels.z) / levels.w;\n"
+    "#endif\n"
     "  vec4 o;\n"
     "  o.r = y + coeffs.x * cr;\n"
     "  o.g = y - coeffs.y * cb - coeffs.z * cr;\n"
@@ -130,9 +143,11 @@ struct PlaneTex {
     GLint internalFormat = 0;
 };
 
-std::map<int, Program> gPrograms;  // key: bitDepth, planeCount, hasAlpha
+std::map<int, Program> gPrograms;  // key: bitDepth, planeCount, hasAlpha (planeCount 2 = interleaved)
 PlaneTex gPlaneTex[4];
 GLuint gFbo = 0;
+
+bool rgTextures() { return GLAD_GL_ARB_texture_rg || GLAD_GL_VERSION_3_0; }
 
 std::string infoLog(GLhandleARB obj) {
     GLint len = 0;
@@ -152,7 +167,10 @@ Program& programFor(const gfcGLFrameInfo& in) {
     if (it != gPrograms.end()) return it->second;
     Program& p = gPrograms[key];
 
-    const std::string frag = std::string(alpha ? "#define HAS_ALPHA 1\n" : "") + kFragmentSrc;
+    // Interleaved chroma is an RG texture (Cr in .g), or luminance-alpha (Cr in .a) without texture_rg.
+    std::string defines = alpha ? "#define HAS_ALPHA 1\n" : "";
+    if (in.chromaInterleaved) defines += rgTextures() ? "#define CR_IN_CB g\n" : "#define CR_IN_CB a\n";
+    const std::string frag = defines + kFragmentSrc;
     const char* fragSrc = frag.c_str();
     GLhandleARB vs = glCreateShaderObjectARB(GL_VERTEX_SHADER_ARB);
     glShaderSourceARB(vs, 1, &kVertexSrc, nullptr);
@@ -186,7 +204,7 @@ Program& programFor(const gfcGLFrameInfo& in) {
     glUseProgramObjectARB(p.program);
     glUniform1iARB(glGetUniformLocationARB(p.program, "planeY"), 0);
     glUniform1iARB(glGetUniformLocationARB(p.program, "planeCb"), 1);
-    glUniform1iARB(glGetUniformLocationARB(p.program, "planeCr"), 2);
+    if (!in.chromaInterleaved) glUniform1iARB(glGetUniformLocationARB(p.program, "planeCr"), 2);
     if (alpha) glUniform1iARB(glGetUniformLocationARB(p.program, "planeA"), 3);
     glUseProgramObjectARB(prev);
     p.locSrcRect = glGetUniformLocationARB(p.program, "srcRect");
@@ -200,14 +218,22 @@ Program& programFor(const gfcGLFrameInfo& in) {
     return p;
 }
 
-// Uploads one plane into its cached rectangle texture on the active unit: GL_R8/GL_R16 where
-// ARB_texture_rg exists (faster on the Metal GL layer), else luminance; both keep 16 bits.
-void uploadPlane(int index, const gfcGLFrameInfo::Plane& pl, int bitDepth, GLint filter) {
+// Uploads one plane into its cached rectangle texture on the active unit: GL_R8/GL_R16 (GL_RG8/GL_RG16
+// for interleaved chroma) where ARB_texture_rg exists (faster on the Metal GL layer), else luminance
+// (luminance-alpha); all keep 16 bits.
+void uploadPlane(int index, const gfcGLFrameInfo::Plane& pl, int bitDepth, int components, GLint filter) {
     PlaneTex& t = gPlaneTex[index];
     const bool sixteen = bitDepth > 8;
-    const bool rg = GLAD_GL_ARB_texture_rg || GLAD_GL_VERSION_3_0;
-    const GLint internal = rg ? (sixteen ? GL_R16 : GL_R8) : (sixteen ? GL_LUMINANCE16 : GL_LUMINANCE8);
-    const GLenum format = rg ? GL_RED : GL_LUMINANCE;
+    const bool rg = rgTextures();
+    GLint internal;
+    GLenum format;
+    if (components == 2) {
+        internal = rg ? (sixteen ? GL_RG16 : GL_RG8) : (sixteen ? GL_LUMINANCE16_ALPHA16 : GL_LUMINANCE8_ALPHA8);
+        format = rg ? GL_RG : GL_LUMINANCE_ALPHA;
+    } else {
+        internal = rg ? (sixteen ? GL_R16 : GL_R8) : (sixteen ? GL_LUMINANCE16 : GL_LUMINANCE8);
+        format = rg ? GL_RED : GL_LUMINANCE;
+    }
     const GLenum type = sixteen ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
     if (!t.id) glGenTextures(1, &t.id);
     glBindTexture(GL_TEXTURE_RECTANGLE_ARB, t.id);
@@ -216,7 +242,7 @@ void uploadPlane(int index, const gfcGLFrameInfo::Plane& pl, int bitDepth, GLint
     glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, filter);
     glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, filter);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, pl.strideBytes / (sixteen ? 2 : 1));
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, pl.strideBytes / ((sixteen ? 2 : 1) * components));
     if (t.w == pl.width && t.h == pl.height && t.internalFormat == internal) {
         glTexSubImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, 0, 0, pl.width, pl.height, format, type, pl.data);
     } else {
@@ -229,21 +255,23 @@ void uploadPlane(int index, const gfcGLFrameInfo::Plane& pl, int bitDepth, GLint
 
 // ---------------------------------------------------------------- CPU path
 
-inline float code(const gfcGLFrameInfo::Plane& pl, bool sixteen, int x, int y) {
+// Sample c of pixel (x, y) in a plane of `comps` interleaved samples per pixel.
+inline float code(const gfcGLFrameInfo::Plane& pl, bool sixteen, int x, int y, int comps = 1, int c = 0) {
     x = std::clamp(x, 0, pl.width - 1);
     y = std::clamp(y, 0, pl.height - 1);
     const uint8_t* row = static_cast<const uint8_t*>(pl.data) + size_t(y) * size_t(pl.strideBytes);
-    return sixteen ? float(reinterpret_cast<const uint16_t*>(row)[x]) : float(row[x]);
+    const size_t i = size_t(x) * size_t(comps) + size_t(c);
+    return sixteen ? float(reinterpret_cast<const uint16_t*>(row)[i]) : float(row[i]);
 }
 
 // Bilinear at a rectangle-texture coordinate (texel centres at i + 0.5),
 // clamped to the edge like GL_CLAMP_TO_EDGE + GL_LINEAR.
-inline float bilinear(const gfcGLFrameInfo::Plane& pl, bool sixteen, float s, float t) {
+inline float bilinear(const gfcGLFrameInfo::Plane& pl, bool sixteen, float s, float t, int comps = 1, int c = 0) {
     const float fs = s - 0.5f, ft = t - 0.5f;
     const int x0 = int(std::floor(fs)), y0 = int(std::floor(ft));
     const float ax = fs - float(x0), ay = ft - float(y0);
-    const float top = code(pl, sixteen, x0, y0) * (1 - ax) + code(pl, sixteen, x0 + 1, y0) * ax;
-    const float bot = code(pl, sixteen, x0, y0 + 1) * (1 - ax) + code(pl, sixteen, x0 + 1, y0 + 1) * ax;
+    const float top = code(pl, sixteen, x0, y0, comps, c) * (1 - ax) + code(pl, sixteen, x0 + 1, y0, comps, c) * ax;
+    const float bot = code(pl, sixteen, x0, y0 + 1, comps, c) * (1 - ax) + code(pl, sixteen, x0 + 1, y0 + 1, comps, c) * ax;
     return top * (1 - ay) + bot * ay;
 }
 
@@ -277,7 +305,7 @@ GLuint gfcYuvConvertToTexture(const gfcGLFrameInfo& info, int srcX, int srcY, in
     const GLint lumaFilter = (srcW == dstW && srcH == dstH) ? GL_NEAREST : GL_LINEAR;
     for (int p = 0; p < info.planeCount && p < (alpha ? 4 : 3); ++p) {
         glActiveTexture(GL_TEXTURE0 + p);
-        uploadPlane(p, info.planes[p], info.bitDepth, (p == 1 || p == 2) ? GL_LINEAR : lumaFilter);
+        uploadPlane(p, info.planes[p], info.bitDepth, componentsOf(info, p), (p == 1 || p == 2) ? GL_LINEAR : lumaFilter);
     }
 
     GLuint out = 0;
@@ -356,6 +384,7 @@ bool convertOnCpu(const gfcGLFrameInfo& info, int dstW, int dstH, Emit emit) {
     const YuvMaths m = mathsFor(info);
     const bool sixteen = info.bitDepth > 8;
     const bool alpha = info.hasAlpha && info.planeCount == 4;
+    const int chromaComps = componentsOf(info, 1);
     for (int y = 0; y < dstH; ++y) {
         const int sy = sy0 + int((long long)y * sh / dstH);
         const float t = float(sy) + 0.5f;
@@ -365,9 +394,11 @@ bool convertOnCpu(const gfcGLFrameInfo& info, int dstW, int dstH, Emit emit) {
             const float cs = s * m.chromaScaleX + m.chromaOffX;
             const float ct = t * m.chromaScaleY + m.chromaOffY;
             const float yv = (code(info.planes[0], sixteen, sx, sy) - m.yOff) / m.yScale;
-            const float cb = (bilinear(info.planes[1], sixteen, cs, ct) - m.cOff) / m.cScale;
-            const float cr = (bilinear(info.planes[2], sixteen, cs, ct) - m.cOff) / m.cScale;
-            emit(size_t(y) * size_t(dstW) + size_t(x), yv + m.rCr * cr, yv - m.gCb * cb - m.gCr * cr, yv + m.bCb * cb,
+            const float cb = (bilinear(info.planes[1], sixteen, cs, ct, chromaComps, 0) - m.cOff) / m.cScale;
+            const float cr = (info.chromaInterleaved ? bilinear(info.planes[1], sixteen, cs, ct, 2, 1)
+                                                     : bilinear(info.planes[2], sixteen, cs, ct)) - m.cOff;
+            const float crn = cr / m.cScale;
+            emit(size_t(y) * size_t(dstW) + size_t(x), yv + m.rCr * crn, yv - m.gCb * cb - m.gCr * crn, yv + m.bCb * cb,
                  alpha ? code(info.planes[3], sixteen, sx, sy) / m.alphaScale : 1.0f);
         }
     }

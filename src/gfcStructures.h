@@ -301,9 +301,11 @@ public:
 		defaultTextureFormat=GFC_16HALF;
 		defaultDecodeFilter = FILTERLANCZOS_ID;
 		showThumbnails=true;
+		hardwareDecoding=true;
 
 	}
     bool showThumbnails;   // timeline filmstrip thumbnails (default on)
+    bool hardwareDecoding; // movies: use the platform's hardware decoder when it can decode the file (default on)
     int startFullscreen;
     float bgColor;        // legacy grayscale (kept as the luminance of bgColorRGB)
     float bgColorR, bgColorG, bgColorB;  // RGB viewport background (General prefs)
