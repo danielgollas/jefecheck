@@ -17,6 +17,7 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 #include "gfcimagesaver.h"
 
@@ -2250,12 +2251,14 @@ void gfcPlate::toggleHistogramMode(int reset) {
 void gfcPlate::calculatePolySizesCropEtc() {
 
 
+    float drawnW, drawnH;
+    displaySize(theFrame.sizeX, theFrame.sizeY, theFrame.quadSizeX, theFrame.quadSizeY, aspect, cropOn, drawnW, drawnH);
+    polySizeX=(int)drawnW;
+    polySizeY=(int)drawnH;
+
     if (aspect==-1 || cropOn) {//Use the original size from file when aspect is -1 (file) or when we will do cropping
 		textureSize.w = theFrame.sizeX;
 		textureSize.h = theFrame.sizeY;
-
-        polySizeX=theFrame.quadSizeX;
-        polySizeY=theFrame.quadSizeY;
 
         if (cropOn && aspect!=-1) {
             switch (cropMode) {
@@ -2307,14 +2310,6 @@ void gfcPlate::calculatePolySizesCropEtc() {
             cropBarBottom.set(0,0,0,0);
         }
 
-    } else {
-           if (aspect>1) {
-            polySizeX=(int)(theFrame.sizeY/aspect);
-            polySizeY=(int)(theFrame.sizeY);
-        } else {
-            polySizeX=(int)(theFrame.sizeX);
-            polySizeY=(int)(theFrame.sizeX*aspect);
-        }
     }
 
     texCoords.x=0;
@@ -3285,54 +3280,38 @@ void gfcPlate::toggleChannelA() {
 	setRGBAGUIFromCurrentMasks();
 }
 
+void gfcPlate::displaySize(int sizeX, int sizeY, float quadSizeX, float quadSizeY, float aspect, bool cropOn, float& w, float& h) {
+    if (aspect == -1 || cropOn) {
+        w = quadSizeX;
+        h = quadSizeY;
+    } else if (aspect > 1) {
+        w = (int)(sizeY / aspect);
+        h = sizeY;
+    } else {
+        w = sizeX;
+        h = (int)(sizeX * aspect);
+    }
+}
+
+float gfcPlate::fitZoom(float vpW, float vpH, float w, float h) {
+    if (w <= 0 || h <= 0 || vpW <= 0 || vpH <= 0) return 1.0f;
+    return (std::min)(1.0f, (std::min)(vpW / w, vpH / h));
+}
+
 void gfcPlate::fitToViewport(){
-	
-
-	//for debbugging purposes
-	//printf("Use Shader: %i\n",useShader);
-	
-
 	//center the frame
 	resetTransforms();
-	
+
 	if (!theFrame.loaded || theFrame.quadSizeX<=0.0 || theFrame.quadSizeY<=0.0)
 	{
 		this->setZoom(1.0);
 		return;
 	}
-	
 
-	//figure out the best scale
 	getFrameAndSequence();
-	float sX=theFrame.quadSizeX;
-	float sY=theFrame.quadSizeY;
-	
-	float vpW=viewport.w;
-	float vpH=viewport.h;
-	
-	float ratioX=vpW/sX;
-	float ratioY=vpH/sY;
-	
-	//printf("vp:%f %f\nquadSize: %f %f\nratios: %f %f\n",vpW,vpH,sX,sY,ratioX, ratioY);
-	
-	
-	//printf("ratioX %f, ratioY %f\n",ratioX, ratioY);
-	if (ratioX>ratioY)
-	{
-		if (ratioY<=1.0 && ratioY>0)
-		{	
-			this->setZoom(ratioY);
-		}
-		
-	}
-	else
-	{
-		if (ratioX<=1.0 && ratioX>0)
-		{
-			this->setZoom(ratioX);
-		}
-		
-	}
+	float w, h;
+	displaySize(theFrame.sizeX, theFrame.sizeY, theFrame.quadSizeX, theFrame.quadSizeY, aspect, cropOn, w, h);
+	this->setZoom(fitZoom(viewport.w, viewport.h, w, h));
 
 	plateManager.setFeedbackMessage("Fit plate to viewport");
 }

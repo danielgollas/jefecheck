@@ -111,6 +111,10 @@ class gfcPlate: public gfcPickNotifee
 	void stopSuperShader();
 
 	void fitToViewport();
+	// Size the plate draws a frame at, after the aspect choice (-1 = the file's own; crop keeps it).
+	static void displaySize(int sizeX, int sizeY, float quadSizeX, float quadSizeY, float aspect, bool cropOn, float& w, float& h);
+	// Zoom that fits w x h inside the viewport, never above 1.
+	static float fitZoom(float vpW, float vpH, float w, float h);
 
         gfcPlate(void);
         ~gfcPlate(void);

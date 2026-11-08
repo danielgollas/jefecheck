@@ -1757,6 +1757,24 @@ bool runAspectSelfTest() {
     if (!origOk) pass = false;
     std::printf("  aspect \"original\": got=%.5f sentinel(-1)=%d\n",
                 gui.getAspect(), origOk ? 1 : 0);
+    // Fit uses the drawn size: 1920x1080 at 2.39:1 draws 1920x803, so a 2000x500 viewport
+    // fits it at 500/803, not 500/1080.
+    struct FitCase { const char* name; float aspect; bool crop; float vpW, vpH, expected; };
+    const FitCase fits[] = {
+        {"2.39:1 wide viewport", 1.0f / 2.39f, false, 2000, 500, 500.0f / 803.0f},
+        {"original",             -1.0f,        false, 2000, 500, 500.0f / 1080.0f},
+        {"2.39:1 cropped",       1.0f / 2.39f, true,  2000, 500, 500.0f / 1080.0f},
+        {"smaller than viewport", 1.0f / 2.39f, false, 4000, 4000, 1.0f},
+    };
+    for (const auto& c : fits) {
+        float w = 0, h = 0;
+        gfcPlate::displaySize(1920, 1080, 1920, 1080, c.aspect, c.crop, w, h);
+        const float got = gfcPlate::fitZoom(c.vpW, c.vpH, w, h);
+        const bool ok = std::fabs(got - c.expected) < 1e-3f;
+        if (!ok) pass = false;
+        std::printf("  fit %s: drawn=%gx%g zoom=%.4f expected=%.4f ok=%d\n",
+                    c.name, w, h, got, c.expected, ok ? 1 : 0);
+    }
     std::printf("ASPECT-TEST %s\n", pass ? "PASS" : "FAIL");
     std::fflush(stdout);
     return pass;
