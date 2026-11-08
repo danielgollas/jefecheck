@@ -319,26 +319,6 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     engineHeader->setProperty("role", "section");
     form->addRow(engineHeader);
 
-    auto* queue = new QSpinBox(page);
-    queue->setRange(0, 32);
-    queue->setValue(sett.maximumFramesInQueue);
-    queue->setObjectName("preferences.engine.queue.spin");
-    queue->setAccessibleName("Max frames in raw queue");
-    const QString queueTip =
-        "How many decoded frames each track may read ahead of playback and hold "
-        "in RAM before its loader pauses.\n\n"
-        "This keeps multiple sequences aligned by frame position: a track with "
-        "small, fast-loading frames can't race ahead and fill memory while a "
-        "track with large frames lags — it fills its queue and waits. Lower "
-        "values use less RAM; higher values buffer further ahead for smoother "
-        "playback of slow sources.";
-    queue->setToolTip(queueTip);
-    connect(queue, QOverload<int>::of(&QSpinBox::valueChanged),
-            page, [](int v) { sett.maximumFramesInQueue = v; });
-    auto* queueLabel = new QLabel("Frames to read ahead", page);
-    queueLabel->setToolTip(queueTip);
-    form->addRow(queueLabel, queue);
-
     auto* memLimit = new QSpinBox(page);
     memLimit->setRange(50, 100);
     memLimit->setSuffix(" %");

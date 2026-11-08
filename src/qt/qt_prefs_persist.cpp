@@ -23,9 +23,8 @@ void loadPreferences() {
     // Engine.
     sett.defaultDecodeFilter  = s.value("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter).toInt();
     sett.defaultTextureFormat = s.value("Engine/defaultTextureFormat", sett.defaultTextureFormat).toInt();
-    // Engine: only maximumFramesInQueue has a live effect and a UI control, so
-    // the other engine settings are not persisted.
-    sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
+    // Engine/maximumFramesInQueue (the decode-to-upload queue) is no longer read: it never set
+    // how far ahead frames load, and a stored 0 left a queue of one.
     sett.memoryLimitPercent    = std::clamp(s.value("Engine/memoryLimitPercent", sett.memoryLimitPercent).toInt(), 50, 100);
     sett.lagPolicy             = std::clamp(s.value("Engine/lagPolicy", sett.lagPolicy).toInt(), 0, 2);
     sett.oiioThreads           = s.value("Engine/oiioThreads",           sett.oiioThreads).toInt();
@@ -121,7 +120,6 @@ void writePreferences() {
     QSettings s;
     s.setValue("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter);
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
-    s.setValue("Engine/maximumFramesInQueue", sett.maximumFramesInQueue);
     s.setValue("Engine/memoryLimitPercent", sett.memoryLimitPercent);
     s.setValue("Engine/lagPolicy", sett.lagPolicy);
     s.setValue("Engine/oiioThreads",          sett.oiioThreads);

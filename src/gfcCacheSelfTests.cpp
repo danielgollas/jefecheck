@@ -1438,6 +1438,13 @@ int cachePrefsSelfTest(const std::string& dir) {
     sett.memoryLimitPercent = 90; sett.lagPolicy = 0;
     jefe::qt::loadPreferences();
     check(sett.memoryLimitPercent == 75 && sett.lagPolicy == 2, "both settings round-trip through QSettings");
+    {   // A stored decode-to-upload queue cap (the old "Frames to read ahead") is ignored.
+        QVariant savedQueue; { QSettings s; savedQueue = s.value("Engine/maximumFramesInQueue"); s.setValue("Engine/maximumFramesInQueue", 0); }
+        const int before = sett.maximumFramesInQueue;
+        jefe::qt::loadPreferences();
+        check(sett.maximumFramesInQueue == before && gfcSettings().maximumFramesInQueue == 5, "a stored queue cap of 0 no longer shrinks the queue");
+        { QSettings s; if (savedQueue.isValid()) s.setValue("Engine/maximumFramesInQueue", savedQueue); else s.remove("Engine/maximumFramesInQueue"); }
+    }
 
     // keepTime(): Automatic follows the sound; 1 and 2 force it.
     sett.lagPolicy = 0;
