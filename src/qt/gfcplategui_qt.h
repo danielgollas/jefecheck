@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Stateful Qt implementation of gfcPlateGUI. Replaces the previous all-
 // stubs version: each setX() updates an internal field; getX() returns
 // it. The model class (gfcPlate) reads its state through this interface,

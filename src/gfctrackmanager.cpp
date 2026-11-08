@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 
 #include "gfctrackmanager.h"
@@ -14,6 +15,10 @@ extern gfcPlaybackManager playbackManager;
 
 #include "gfcnetworkmanager.h"
 extern gfcNetworkManager networkManager;
+
+#include "gfcFrameCache.h"
+#include "gfcIOSurface.h"
+#include "gfcUploadPool.h"
 
 gfcTrackManager::gfcTrackManager()
 {
@@ -216,6 +221,12 @@ void gfcTrackManager::stopLoadingAll()
 	}
 }
 
+void gfcTrackManager::shutdown() {
+	gfcSequence::beginShutdown();   // first, so nothing restarts a thread meanwhile
+	frameCache.shutdown();          // the loaders' nextJob returns at once
+	stopLoadingAll();               // joins each loader, then its audio thread
+}
+
 void gfcTrackManager::stopLoadingSequence(int whichOne)
 {
 	if(whichOne>=numOfSequences || whichOne<0)
@@ -236,6 +247,47 @@ int gfcTrackManager::getMaxTrackLength()
 			max=sequences[i].getNumFrames();
 	}
 	return max;
+}
+
+int gfcTrackManager::residentFrameCount() const
+{
+	int n=0;
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		n+=sequences[i].residentCount();
+	return n;
+}
+
+bool gfcTrackManager::timelineFrameResident(int frame) const
+{
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		if(sequences[i].framePending(frame))
+			return false;
+	return true;
+}
+
+bool gfcTrackManager::timelineFramesResident(int from, int count, int direction) const
+{
+	const int step=direction<0?-1:1;
+	for(int k=0;k<count;k++)
+		if(!timelineFrameResident(from+k*step))
+			return false;
+	return true;
+}
+
+void gfcTrackManager::retargetAudio(int timelineFrame)
+{
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		sequences[i].setAudioTarget(timelineFrame);
+}
+
+void gfcTrackManager::syncCacheTransport(bool force)
+{
+	// A load moves the loop limits, so send the whole transport now; an offset change sends it
+	// only when the limits moved.
+	if(force)
+		playbackManager.cacheResendTransport();
+	else
+		playbackManager.cacheRefreshTransport();
 }
 
 int gfcTrackManager::getMinTrackLength()
@@ -288,6 +340,29 @@ bool gfcTrackManager::checkBounds(int whichOne, std::string functionName)
  */
 void gfcTrackManager::generateTextures()
 {
+	// Free the cache's victims first (GL thread, context current) so their memory is back before
+	// the next uploads; one atomic load when there are none.
+	if(frameCache.hasVictims()){
+		const gfcFrameCache::Victims v=frameCache.drainVictims();
+		for(const gfcFrameCache::Victim& x : v.frames){
+			// Only a frame still Evicting: anything else was reset or reloaded since.
+			if(x.track<0 || x.track>=GFC_MAX_SEQUENCES
+			   || sequences[x.track].frameTable().state(x.sourceIndex)!=gfcFrameState::Evicting)
+				continue;
+			// A draw may have put it on screen after the cache named it: keep it.
+			gfcFrameTable& table=sequences[x.track].frameTable();
+			if(table.onScreen()==x.sourceIndex){
+				if(table.setResidentFromEvicting(x.sourceIndex))
+					frameCache.evictionCancelled();
+				continue;
+			}
+			sequences[x.track].evictFrame(x.sourceIndex);
+		}
+		if(v.trimPools){
+			gfcUpload::trimIdle(0);
+			gfcSurface::trimIdle(0);
+		}
+	}
 	for(int i=0;i<GFC_MAX_SEQUENCES;i++){
 		sequences[i].generateTextures(1);
 	}
@@ -318,7 +393,7 @@ int gfcTrackManager::getTrackIDfromWidget(void* widget)
 }
 
 /**
- * Identifies the track that has the earliest first loaded frame. This includes the offset, so a track that started loading the 10th frame but is offset by -5 will have the earliest loaded frame than a track that started loading on frame 6 ie.
+ * Identifies the track whose trim range starts earliest on the timeline (gfcSequence::getRangeStart: the footage, not what is resident). Includes the offset, so a track trimmed to start at its 10th frame but offset by -5 starts before one trimmed to start at frame 6.
  * @return The timeline position of the earliest loaded frame in the tracks.
  */
 int gfcTrackManager::getFirstFirstLoaded()
@@ -335,7 +410,7 @@ int gfcTrackManager::getFirstFirstLoaded()
 }
 
 /**
- * Identifies the track that has the latest first loaded frame. That means, the track whos start is the farthest along the timeline, including the offset.
+ * Identifies the track whose trim range starts latest on the timeline, including the offset.
  * @return The timeline position of the latest first loaded frame in the tracks.
  */
 int gfcTrackManager::getLastFirstLoaded()
@@ -351,7 +426,7 @@ int gfcTrackManager::getLastFirstLoaded()
 }
 
 /**
- * Identifies the track that has the earliest last loaded frame. That means, the track who's end (loaded end, not total frames end) is the earliest on the timeline.
+ * Identifies the track whose trim range ends earliest on the timeline (the trim end, not the last resident frame), including the offset.
  * @return The timeline position of the earliest last loaded frame in the tracks.
  */
 int gfcTrackManager::getFirstLastLoaded()
@@ -367,7 +442,7 @@ int gfcTrackManager::getFirstLastLoaded()
 }
 
 /**
- * Identifies the track that has the last last loaded frame. That means, the track who's end (loaded end, not total frames end) is the latest on the timeline.
+ * Identifies the track whose trim range ends latest on the timeline (the trim end, not the last resident frame), including the offset.
  * @return The timeline position of the last last loaded frame in the tracks.
  */
 int gfcTrackManager::getLastLastLoaded()
@@ -452,32 +527,39 @@ void gfcTrackManager::setRecentBrowsed(std::vector< std::string > precentBrowsed
 	}
 }
 
+// "Load from here" on a loaded track only moves the playhead to startFrame (0-based; the timeline
+// is 1-based), since any frame loads on demand. Only an empty track starts a load there.
 void gfcTrackManager::startLoadingSequenceAt(int whichOne, int startFrame)
 {
-	
-	sessionManager.writeCrashSession();
-	if(checkBounds(whichOne,"startLoadingSequenceAt"))
+	if(!checkBounds(whichOne,"startLoadingSequenceAt"))
+		return;
+	if(!sequences[whichOne].isEmpty())
 	{
-		sequences[whichOne].startLoading(startFrame);
-	}
-	else
-	{
+		playbackManager.setCurrentFrame(startFrame+1);
 		return;
 	}
+	sequences[whichOne].startLoading(startFrame);
 	plateManager.clearAllHistogramCache();
-	sessionManager.writeCrashSession();
-	
-	
 }
 
 void gfcTrackManager::startLoadingAllAt(int startFrame)
 {
-	//when we load from the timeline (which is when we call this function), we tell the sequences that the track relative frame to start loading is 0, and give them the timeline relative frame to start loading from. This way, each track knows that it must account for their offset relative to the timeline.
-	plateManager.clearAllHistogramCache();
+	// Loaded tracks jump. An empty track loads from the timeline frame (track-relative 0 plus it),
+	// so the track accounts for its own offset.
+	bool anyLoaded=false;
+	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
+		anyLoaded|=!sequences[i].isEmpty();
+	if(anyLoaded)
+		playbackManager.setCurrentFrame(startFrame+1);
+	bool started=false;
 	for(int i=0;i<GFC_MAX_SEQUENCES;i++){
-		sequences[i].startLoading(0,startFrame); 
+		if(!sequences[i].isEmpty())
+			continue;
+		sequences[i].startLoading(0,startFrame);
+		started=true;
 	}
-	
+	if(started)
+		plateManager.clearAllHistogramCache();
 }
 
 
@@ -585,4 +667,10 @@ void gfcTrackManager::cleanForcedLoaded()
 	for (int i=0;i<size;i++) { //save info for each track
         	sequences[i].cleanForcedLoad();
         }
+}
+bool gfcTrackManager::anyTrackHasAudio() const
+{
+	for(int i=0;i<numOfSequences;i++)
+		if(sequences[i].hasAudio()) return true;
+	return false;
 }

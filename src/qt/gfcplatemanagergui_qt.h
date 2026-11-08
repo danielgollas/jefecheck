@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt skeleton for gfcPlateManagerGUI. See docs/MIGRATION.md.
 #ifndef GFCPLATEMANAGERGUI_QT_H
 #define GFCPLATEMANAGERGUI_QT_H

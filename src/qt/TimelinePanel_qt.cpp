@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "TimelinePanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "qticons.h"
@@ -24,6 +25,9 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
+#include <QFontMetrics>
+#include <QIcon>
 
 namespace {
 constexpr int kScrubberPad = 4;  // horizontal padding inside the lane area
@@ -173,6 +177,7 @@ void TimelineTracks_Qt::refresh() {
     for (int i = 0; i < 4; ++i) {
         if (states_[i].numFrames != next[i].numFrames
             || states_[i].label != next[i].label) {
+            waves_[i] = jefe::qt::WaveformPeaks{};   // new media: drop its old peaks
             const int lo = i << 24, hi = (i << 24) | 0x00FFFFFF;
             for (auto it = thumbCache_.begin(); it != thumbCache_.end(); ) {
                 if (it.key() >= lo && it.key() <= hi) it = thumbCache_.erase(it);
@@ -188,10 +193,28 @@ void TimelineTracks_Qt::refresh() {
         const auto& a = states_[i];
         const auto& b = next[i];
         changed = a.present != b.present || a.rangeStart != b.rangeStart
-               || a.rangeEnd != b.rangeEnd || a.loadedCount != b.loadedCount
-               || a.offset != b.offset || a.label != b.label;
+               || a.rangeEnd != b.rangeEnd || a.loadedVersion != b.loadedVersion
+               || a.offset != b.offset || a.label != b.label
+               || a.hasAudio != b.hasAudio || a.muted != b.muted
+               || a.audioPeaksVersion != b.audioPeaksVersion;
     }
     if (!changed) return;
+
+    // The peaks copy is a whole-vector snapshot: take it only when the version moved.
+    for (int i = 0; i < 4; ++i) {
+        if (!next[i].hasAudio) waves_[i] = jefe::qt::WaveformPeaks{};
+        else if (!waves_[i].present || waves_[i].version != next[i].audioPeaksVersion)
+            waves_[i] = jefe::qt::getTrackWaveform(i);
+    }
+
+    // The segment list is a whole-vector snapshot: take it only when the loaded
+    // set (or the offset that shifts it) moved.
+    for (int i = 0; i < 4; ++i) {
+        if (!next[i].present) segments_[i].clear();
+        else if (states_[i].loadedVersion != next[i].loadedVersion || states_[i].offset != next[i].offset
+                 || !states_[i].present)
+            segments_[i] = jefe::qt::getTrackLoadedSegments(i);
+    }
 
     from_ = from; to_ = to; current_ = cur; states_ = next;
     update();
@@ -201,6 +224,7 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
     QPainter p(this);
     const QRect r = rect();
     p.fillRect(r, QColor(28, 28, 28));
+    firstThumbDrawn_.fill(-1);
 
     const int lh = laneHeight();
     for (int i = 0; i < 4; ++i) {
@@ -226,9 +250,15 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
             paintFilmstrip(p, i, y, lh, s);
             // Label over the strip (kept for identification).
             p.setPen(QColor(230, 230, 230));
-            p.drawText(xStart + 4, y + 12,
-                       QString("%1  %2").arg(letter)
-                           .arg(QString::fromStdString(s.label)));
+            const QRect spk = speakerRect(i, s);
+            if (spk.isValid()) {
+                p.drawText(xStart + 4, y + 12, QString(letter));
+                p.drawText(spk.right() + 5, y + 12, QString::fromStdString(s.label));
+            } else {
+                p.drawText(xStart + 4, y + 12,
+                           QString("%1  %2").arg(letter)
+                               .arg(QString::fromStdString(s.label)));
+            }
         } else {
             // Sequence bar across [rangeStart, rangeEnd] in dark gray.
             const int xEnd   = xFromFrameMapped(s.rangeEnd,   width(), from_, to_);
@@ -237,22 +267,37 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
             const QRect bar(xStart, barTop, std::max(xEnd - xStart, 1), barH);
             p.fillRect(bar, QColor(85, 85, 85));
 
-            // Loaded portion (lighter), starting at firstLoadedFrame.
-            if (s.loadedCount > 0) {
-                const int loadedEndFrame = s.firstLoadedFrame + s.loadedCount - 1;
-                const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
-                const int xL1 = xFromFrameMapped(loadedEndFrame,     width(), from_, to_);
-                const QRect loaded(xL0, barTop, std::max(xL1 - xL0, 1), barH);
-                // Loaded frames: light, desaturated green (à la FLTK's intended
-                // loaded-bar color) so decoded extent reads at a glance.
-                p.fillRect(loaded, QColor(150, 185, 150));
+            // Loaded frames: light desaturated green, one rectangle per resident run (a buffer bar).
+            for (const auto& seg : segments_[i]) {
+                const int xL0 = xFromFrameMapped(seg.first,  width(), from_, to_);
+                const int xL1 = xFromFrameMapped(seg.second, width(), from_, to_);
+                p.fillRect(QRect(xL0, barTop, std::max(xL1 - xL0, 1), barH), QColor(150, 185, 150));
             }
 
             // Label (track letter + filename) over the bar.
             p.setPen(QColor(230, 230, 230));
-            p.drawText(xStart + 4, y + lh / 2 + 4,
-                       QString("%1  %2").arg(letter).arg(QString::fromStdString(s.label)));
+            const QRect spk = speakerRect(i, s);
+            if (spk.isValid()) {
+                p.drawText(xStart + 4, y + lh / 2 + 4, QString(letter));
+                p.drawText(spk.right() + 5, y + lh / 2 + 4, QString::fromStdString(s.label));
+            } else {
+                p.drawText(xStart + 4, y + lh / 2 + 4,
+                           QString("%1  %2").arg(letter).arg(QString::fromStdString(s.label)));
+            }
+            if (s.hasAudio && lh >= 24)
+                paintWaveform(p, i, QRect(xStart, y + lh - 2 - 8 - 3, std::max(xEnd - xStart, 1), 8), s);
         }
+    }
+
+    // Speaker toggles last, so they sit over the filmstrip.
+    for (int i = 0; i < 4; ++i) {
+        const QRect spk = speakerRect(i, states_[i]);
+        if (!spk.isValid()) continue;
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(20, 20, 20, 170));
+        p.drawRoundedRect(spk.adjusted(-2, -1, 2, 1), 3, 3);
+        const QIcon ic = states_[i].muted ? jefe::qticons::speakerMuted() : jefe::qticons::speaker();
+        ic.paint(&p, spk, Qt::AlignCenter, QIcon::Normal, QIcon::Off);
     }
 
     // Read-only playhead across all lanes (alignment with the scrubber;
@@ -260,6 +305,49 @@ void TimelineTracks_Qt::paintEvent(QPaintEvent*) {
     const int xCur = xFromFrameMapped(current_, width(), from_, to_);
     p.setPen(QPen(QColor(0xd4, 0x77, 0x1e), 1));
     p.drawLine(xCur, 0, xCur, r.height());
+}
+
+QRect TimelineTracks_Qt::speakerRect(int track, const jefe::qt::TrackTimelineState& s) const {
+    if (!s.present || !s.hasAudio) return QRect();
+    const int xStart = xFromFrameMapped(s.rangeStart, width(), from_, to_);
+    const int lh = laneHeight();
+    const QFontMetrics fm(font());
+    const int x = xStart + 4 + fm.horizontalAdvance(QChar('A' + track)) + 6;
+    const int y = laneTopY(track) + (jefe::qt::getThumbnailsEnabled() ? 1 : std::max(lh / 2 - 9, 1));
+    return QRect(x, y, 14, 14);
+}
+
+void TimelineTracks_Qt::paintWaveform(QPainter& p, int track, const QRect& strip,
+                                      const jefe::qt::TrackTimelineState& s) {
+    p.fillRect(strip, QColor(20, 20, 20));
+    const auto& w = waves_[track];
+    if (!w.present || w.peaks.empty() || w.rateNum <= 0) return;
+    QColor c(150, 185, 150);
+    if (s.muted) c.setAlphaF(0.35);
+    const int usable = std::max(width() - 2 * kScrubberPad, 1);
+    const double span = std::max(to_ - from_, 1);
+    const int x0 = std::max(strip.left(), kScrubberPad);
+    const int x1 = std::min(strip.right(), width() - kScrubberPad);
+    // timeline frame -> movie sample: movie frame = frame - 1 - offset; 48 kHz.
+    const double samplesPerFrame = 48000.0 * w.rateDen / w.rateNum;
+    auto binAt = [&](double px) {
+        const double frame = from_ + (px - kScrubberPad) * span / usable;
+        const double sample = (frame - 1 - s.offset) * samplesPerFrame;
+        return (sample - double(w.firstSample)) * w.binsPerSecond / 48000.0;
+    };
+    p.setPen(c);
+    const int mid = strip.center().y();
+    for (int x = x0; x <= x1; ++x) {
+        const double b0 = binAt(x), b1 = binAt(x + 1);
+        if (b1 <= 0) continue;
+        const int i0 = std::max(int(std::floor(b0)), 0);
+        const int i1 = std::min(std::max(int(std::ceil(b1)) - 1, i0), int(w.peaks.size()) - 1);
+        if (i0 > i1) continue;
+        float pk = 0.f;
+        for (int i = i0; i <= i1; ++i) pk = std::max(pk, w.peaks[size_t(i)]);
+        const int h = pk > 0.002f ? std::clamp(int(pk * strip.height() + 0.5f), 1, strip.height()) : 0;
+        if (h > 0) p.drawLine(x, mid - h / 2, x, mid - h / 2 + h - 1);
+    }
 }
 
 int TimelineTracks_Qt::trackAtY(int y) const {
@@ -296,26 +384,25 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
     const int barH = 4;
     const int gap = 1;
     const int stripTop = laneY + 2;
-    const int stripH = laneH - barH - 4;
+    const int waveH = s.hasAudio ? 8 : 0;   // waveform strip above the loaded bar
+    const int stripH = laneH - barH - 4 - waveH;
     if (stripH < 6) return;  // lane too short; nothing legible to draw
-
-    const int loadedEndFrame =
-        s.loadedCount > 0 ? s.firstLoadedFrame + s.loadedCount - 1 : s.firstLoadedFrame;
 
     // A thumbnail is always its natural width (stripH x frame aspect), never
     // squeezed or cropped. Probe one decoded thumbnail; fall back to 16:9.
     double aspect = 16.0 / 9.0;
     {
-        const QPixmap probe = thumbPixmap(track, s.firstLoadedFrame - s.rangeStart);
+        QPixmap probe = thumbPixmap(track, s.firstLoadedFrame - s.rangeStart);
+        if (probe.isNull()) probe = thumbPixmap(track, 0);   // nothing resident: try the first frame
         if (!probe.isNull() && probe.height() > 0)
             aspect = (double)probe.width() / probe.height();
     }
     const int naturalW = std::max((int)(stripH * aspect + 0.5), 2);
 
-    // Walk the visible loaded frames left to right, each centered at its tick x at
-    // natural width, skipping any that would overlap the previous thumbnail.
-    const int firstVis = std::max(s.firstLoadedFrame, from_);
-    const int lastVis  = std::min(loadedEndFrame, to_);
+    // Walk the whole visible track, not just the loaded frames: a thumbnail
+    // outlives its frame's texture, so the strip stays a map of the clip.
+    const int firstVis = std::max(s.rangeStart, from_);
+    const int lastVis  = std::min(s.rangeEnd, to_);
     const double rightLimit = width() - kScrubberPad - naturalW;
     double lastRight = -1e9;
     for (int f = firstVis; f <= lastVis; ++f) {
@@ -331,21 +418,38 @@ void TimelineTracks_Qt::paintFilmstrip(QPainter& p, int track, int laneY,
         const QPixmap scaled = pm.scaled(naturalW, stripH, Qt::IgnoreAspectRatio,
                                          Qt::SmoothTransformation);
         p.drawPixmap((int)(x + 0.5), stripTop, scaled);
+        if (firstThumbDrawn_[track] < 0) firstThumbDrawn_[track] = frameIndex;
         lastRight = x + naturalW;
     }
 
+    if (s.hasAudio) {
+        const int xA = xFromFrameMapped(s.rangeStart, width(), from_, to_);
+        const int xB = xFromFrameMapped(s.rangeEnd, width(), from_, to_);
+        paintWaveform(p, track, QRect(xA, laneY + laneH - barH - 1 - waveH, std::max(xB - xA, 1), waveH), s);
+    }
+
     // Thin loaded bar beneath the strip.
-    if (s.loadedCount > 0) {
-        const int xL0 = xFromFrameMapped(s.firstLoadedFrame, width(), from_, to_);
-        const int xL1 = xFromFrameMapped(loadedEndFrame, width(), from_, to_);
-        const QRect bar(xL0, laneY + laneH - barH - 1, std::max(xL1 - xL0, 1), barH);
-        p.fillRect(bar, QColor(150, 185, 150));
+    for (const auto& seg : segments_[track]) {
+        const int xL0 = xFromFrameMapped(seg.first,  width(), from_, to_);
+        const int xL1 = xFromFrameMapped(seg.second, width(), from_, to_);
+        p.fillRect(QRect(xL0, laneY + laneH - barH - 1, std::max(xL1 - xL0, 1), barH),
+                   QColor(150, 185, 150));
     }
 }
 
 void TimelineTracks_Qt::mousePressEvent(QMouseEvent* e) {
     if (e->button() != Qt::LeftButton) return;
     const int track = trackAtY((int)e->position().y());
+
+    // The speaker toggle is hit-tested first: it must not start an offset drag.
+    {
+        const QRect spk = speakerRect(track, states_[track]);
+        if (spk.isValid() && spk.adjusted(-2, -1, 2, 1).contains(e->position().toPoint())) {
+            jefe::qt::setTrackMuted(track, !states_[track].muted);
+            refresh();
+            return;
+        }
+    }
 
     if (e->modifiers() & Qt::AltModifier) {
         // Alt+click: load the track's sequence from the clicked frame on.
@@ -393,6 +497,13 @@ void TimelineTracks_Qt::contextMenuEvent(QContextMenuEvent* e) {
 
     QAction* setOff = menu.addAction("Set offset…");
 
+    QAction* mute = nullptr;
+    if (states_[track].hasAudio) {
+        mute = menu.addAction("Mute audio");
+        mute->setCheckable(true);
+        mute->setChecked(states_[track].muted);
+    }
+
     menu.addSeparator();
     QAction* thumbs = menu.addAction("Show frame thumbnails");
     thumbs->setCheckable(true);
@@ -401,6 +512,9 @@ void TimelineTracks_Qt::contextMenuEvent(QContextMenuEvent* e) {
     QAction* chosen = menu.exec(e->globalPos());
     if (chosen == hold) {
         jefe::qt::setTrackHoldMode(track, hold->isChecked());
+        refresh();
+    } else if (mute && chosen == mute) {
+        jefe::qt::setTrackMuted(track, mute->isChecked());
         refresh();
     } else if (chosen == thumbs) {
         jefe::qt::setThumbnailsEnabled(thumbs->isChecked());
@@ -525,9 +639,9 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     transport->addWidget(makeSmallLabel("FPS"));
     fpsSpin_ = new QDoubleSpinBox(this);
     fpsSpin_->setRange(1.0, 120.0);
-    fpsSpin_->setDecimals(2);
+    fpsSpin_->setDecimals(3);
     fpsSpin_->setValue(24.0);
-    fpsSpin_->setFixedWidth(56);
+    fpsSpin_->setFixedWidth(68);
     fpsSpin_->setAlignment(Qt::AlignRight);
     fpsSpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
     fpsSpin_->setObjectName("transport.fps.spin");
@@ -683,3 +797,16 @@ void TimelinePanel_Qt::refreshFromPlayback() {
     lastFps_ = fps; lastPlaying_ = playing;
     lastCacheValid_ = true;
 }
+
+namespace jefe { namespace qt {
+int timelineFirstThumbnailDrawn(int track) {
+    if (track < 0 || track > 3) return -1;
+    TimelineTracks_Qt w;
+    w.resize(2400, 400);
+    w.refresh();
+    QImage img(w.size(), QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::black);
+    w.render(&img);
+    return w.firstThumbnailDrawn(track);
+}
+}}  // namespace jefe::qt

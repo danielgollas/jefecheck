@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // qticons.cpp — programmatic icon factory. See qticons.h.
 #include "qticons.h"
 
@@ -247,6 +248,25 @@ void pSend(QPainter& p, qreal s, const QColor& c) {
     p.drawPolygon(plane);
 }
 
+void pSpeaker(QPainter& p, qreal s, const QColor& c, bool muted) {
+    // Speaker body (box + cone) on the left; waves on the right, or a cross when muted.
+    QPolygonF body;
+    body << QPointF(s*0.10, s*0.38) << QPointF(s*0.30, s*0.38) << QPointF(s*0.55, s*0.16)
+         << QPointF(s*0.55, s*0.84) << QPointF(s*0.30, s*0.62) << QPointF(s*0.10, s*0.62);
+    p.setPen(stroke(c, 1.2));
+    p.setBrush(c);
+    p.drawPolygon(body);
+    p.setBrush(Qt::NoBrush);
+    p.setPen(stroke(c, 1.5));
+    if (muted) {
+        p.drawLine(QPointF(s*0.68, s*0.36), QPointF(s*0.92, s*0.64));
+        p.drawLine(QPointF(s*0.92, s*0.36), QPointF(s*0.68, s*0.64));
+    } else {
+        p.drawArc(QRectF(s*0.50, s*0.34, s*0.24, s*0.32), -60*16, 120*16);
+        p.drawArc(QRectF(s*0.46, s*0.18, s*0.44, s*0.64), -60*16, 120*16);
+    }
+}
+
 void pRecent(QPainter& p, qreal s, const QColor& c) {
     // "history" clock: a full clock face with hands plus a counter-clockwise
     // arrow over the top-left. A FULL circle avoids reading as a power symbol.
@@ -327,6 +347,8 @@ QIcon save()         { return make(pSave); }
 QIcon check()        { return make(pCheck); }
 QIcon send()         { return make(pSend); }
 QIcon recent()       { return make(pRecent); }
+QIcon speaker()      { return make([](QPainter& p, qreal s, const QColor& c) { pSpeaker(p, s, c, false); }); }
+QIcon speakerMuted() { return make([](QPainter& p, qreal s, const QColor& c) { pSpeaker(p, s, c, true); }); }
 
 } // namespace qticons
 } // namespace jefe

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Implementation lives in a Qt-free TU so it can include the manager headers
 // (which pull glad) without colliding with QOpenGLWidget's system-OpenGL include.
 #include "SequenceLoadBridge_qt.h"
@@ -19,16 +20,26 @@
 #include "../gfcReviewSummary.h"
 #include "../gfcnote.h"
 #include "../gfcNoteStore.h"
+#include "../gfcMediaKinds.h"
 #include "../gfcNoteOverlay.h"
 #include "../gfcNoteStamp.h"
 #include "../gfcpickmanager.h"
 #include "../xmlParser.h"
 #include "../gfcSequence.h"
+#include "../gfcMovieReader.h"
+#include "../gfcimageloadermovie.h"
+#include "../gfcYuvConverter.h"
+#include "../gfcTimecode.h"
 #include "../gfcsequencegui.h"
 #include "../gfcTextRenderer.h"
 #include "../ui/IApplication.h"
+#include "gfcUploadPool.h"
+#include "gfcIOSurface.h"
 #include "gfcplategui_qt.h"
 #include "gfcsequencegui_qt.h"
+#include "AudioOutput_qt.h"
+#include "../gfcAudioEngine.h"
+#include "../gfcFrameCache.h"
 
 #include <algorithm>
 #include <atomic>
@@ -37,6 +48,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -73,8 +85,28 @@ bool cloudConnectInFlight() {
     return gCloudConnectInFlight.load(std::memory_order_acquire);
 }
 
+// The app's audio device (Qt Multimedia lives in AudioOutput_qt.cpp).
+static gfcAudioOutput* gAudioOutput = nullptr;
+static bool gAudioOutputEnabled = true;
+
+void setAudioOutputEnabled(bool enabled) { gAudioOutputEnabled = enabled; }
+
+// Stops the audio thread before globals tear down (it renders from
+// audioEngine, and must not run while the process unmaps on exit).
+static void shutdownAudioOutput() {
+    if (!gAudioOutput) return;
+    audioEngine.setOutput(nullptr);
+    jefe::qt::audio::destroyOutput(gAudioOutput);
+    gAudioOutput = nullptr;
+}
+
 void beginBridgeShutdown() {
     gBridgeShuttingDown.store(true, std::memory_order_release);
+    shutdownAudioOutput();
+}
+
+void shutdownTracks() {
+    trackManager.shutdown();
 }
 
 int getDefaultTextureFormat() {
@@ -103,8 +135,17 @@ void initializeRenderingChain() {
     trackManager.initializeWidgets();
     playbackManager.initializeWidgets();
 
-    // Default the LUT path for first run. Defer LUT autoload: glGenTextures needs
-    // a current GL context; MainWindow_Qt calls initializeInstallLUTs() once alive.
+    // The rolling frame cache over the four tracks' frame tables. JEFECHECK_CACHE_BUDGET_MB
+    // overrides the derived byte budget.
+    for (int i = 0; i < 4; ++i)
+        frameCache.attachTrack(i, &trackManager.getSequence(i)->frameTable());
+    if (const char* mb = std::getenv("JEFECHECK_CACHE_BUDGET_MB")) {
+        const long long v = std::atoll(mb);
+        if (v > 0) frameCache.setTestBudget((int64_t)v << 20);
+    }
+
+    // Default LUT path; saved preferences override it. The LUT autoload itself waits
+    // for a current GL context (MainWindow_Qt calls initializeInstallLUTs after the first paintGL).
     if (sett.lutPath.empty()) {
         sett.lutPath = ::getApplicationDataPath() + "FX/";
     }
@@ -114,6 +155,18 @@ void initializeRenderingChain() {
     pickManager.registerDrawee(&plateManager);
     pickManager.registerNotifee(&plateManager);
     plateManager.registerPlatesAsPickNotifees();
+
+    // Movie sound. The sink opens asynchronously; until it does (or with no device) the engine
+    // can't lead and playback keeps FPS pacing.
+    if (!gAudioOutput && gAudioOutputEnabled) {
+        gAudioOutput = jefe::qt::audio::createOutput();
+        audioEngine.setOutput(gAudioOutput);
+        if (!gAudioOutput->open(&audioEngine))
+            std::printf("Audio: no output device; movies play silently\n");
+        // Paths that std::exit() without aboutToQuit (headless tests) still stop
+        // the thread first; registered after the globals, so it runs before them.
+        std::atexit(shutdownAudioOutput);
+    }
 }
 
 namespace {
@@ -330,6 +383,23 @@ void uploadPendingTextures() {
     trackManager.generateTextures();
 }
 
+bool uploadPoolsNeedTrim() {
+    static auto lastCheck = std::chrono::steady_clock::time_point{};
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastCheck < std::chrono::seconds(1)) return false;
+    lastCheck = now;
+    const gfcUpload::Stats up = gfcUpload::stats();
+    return up.stagingBytes > 0 || up.pooledTextureBytes > 0 || gfcSurface::poolStats().pooledBytes > 0;
+}
+
+void trimUploadPools() {
+    // Bridges a cleared sequence and the next load (or a playlist advance); short enough that an
+    // idle player gives the memory back.
+    constexpr double kIdleSeconds = 2.0;
+    gfcUpload::trimIdle(kIdleSeconds);
+    gfcSurface::trimIdle(kIdleSeconds);
+}
+
 gfcPlateGUI_Qt* getPlateGUIQt(int whichPlate) {
     return dynamic_cast<gfcPlateGUI_Qt*>(plateManager.getPlateGUI(whichPlate));
 }
@@ -363,11 +433,9 @@ void setPlayDirection(int direction) {
 }
 
 void setInPointAndLoad() {
-    // Alt+I: set the in point at the current frame and restart all tracks
-    // loading from one frame earlier. Async; the per-tick texture drain uploads.
-    const int cur = playbackManager.getCurrentFrame();
-    trackManager.startLoadingAllAt(cur - 1);
-    playbackManager.setInPoint(cur);
+    // FLTK's Alt+I: set the in point at the current frame. The frame cache
+    // loads around the playhead inside the new limits, so no reload.
+    playbackManager.setInPoint(playbackManager.getCurrentFrame());
 }
 
 void fastFwdPlayback() {
@@ -430,6 +498,55 @@ float getTargetFPS() {
     return playbackManager.getTargetFPS();
 }
 
+void getTargetRate(int& num, int& den) {
+    playbackManager.getTargetRate(num, den);
+}
+
+namespace {
+// Copies what the status bar needs out of the active plate's movie. movieInfo()
+// points into a reader this sequence does not own, so nothing is kept.
+struct ActiveMovie { bool valid=false; int num=0, den=1; bool vfr=false; int64_t frameCount=0; std::string startTc; int offset=0; };
+ActiveMovie activeMovie() {
+    ActiveMovie m;
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return m;
+    const int track = plateManager.getTrackOnPlate(q);
+    if (track < 0) return m;
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq || !seq->isMovie()) return m;
+    const gfcMovieInfo* info = seq->movieInfo();
+    if (!info || info->rateNum <= 0 || info->rateDen <= 0) return m;
+    m.valid = true; m.num = info->rateNum; m.den = info->rateDen; m.vfr = info->variableRate;
+    m.frameCount = info->frameCount; m.startTc = info->startTimecode; m.offset = seq->getOffset();
+    return m;
+}
+}  // namespace
+
+std::string activeTrackSourceTimecode() {
+    const ActiveMovie m = activeMovie();
+    if (!m.valid) return {};
+    const int64_t idx = (int64_t)playbackManager.getCurrentFrame() - 1 - m.offset;
+    if (idx < 0 || idx >= m.frameCount) return {};
+    gfcTimecode start;
+    int64_t startFrames = 0;
+    bool drop = false;
+    if (!m.startTc.empty() && gfcParseTimecode(m.startTc, start)) {
+        startFrames = gfcTimecodeToFrames(start, m.num, m.den);
+        drop = start.drop;
+    }
+    return gfcFormatTimecode(gfcFramesToTimecode(startFrames + idx, m.num, m.den, drop));
+}
+
+bool activeTrackIsVariableRate() {
+    const ActiveMovie m = activeMovie();
+    return m.valid && m.vfr;
+}
+
+float activeTrackMovieAverageFPS() {
+    const ActiveMovie m = activeMovie();
+    return m.valid ? (float)m.num / (float)m.den : 0.0f;
+}
+
 int getCurrentFrame() {
     return playbackManager.getCurrentFrame();
 }
@@ -460,6 +577,10 @@ void setOutPoint(int frame) {
 
 bool isPlaying() {
     return playbackManager.isPlaying() != 0;
+}
+
+float getMeasuredFPS() {
+    return playbackManager.getCurrentFPS();
 }
 
 void autoloadLUTs(const std::string& path) {
@@ -1636,6 +1757,24 @@ bool runAspectSelfTest() {
     if (!origOk) pass = false;
     std::printf("  aspect \"original\": got=%.5f sentinel(-1)=%d\n",
                 gui.getAspect(), origOk ? 1 : 0);
+    // Fit uses the drawn size: 1920x1080 at 2.39:1 draws 1920x803, so a 2000x500 viewport
+    // fits it at 500/803, not 500/1080.
+    struct FitCase { const char* name; float aspect; bool crop; float vpW, vpH, expected; };
+    const FitCase fits[] = {
+        {"2.39:1 wide viewport", 1.0f / 2.39f, false, 2000, 500, 500.0f / 803.0f},
+        {"original",             -1.0f,        false, 2000, 500, 500.0f / 1080.0f},
+        {"2.39:1 cropped",       1.0f / 2.39f, true,  2000, 500, 500.0f / 1080.0f},
+        {"smaller than viewport", 1.0f / 2.39f, false, 4000, 4000, 1.0f},
+    };
+    for (const auto& c : fits) {
+        float w = 0, h = 0;
+        gfcPlate::displaySize(1920, 1080, 1920, 1080, c.aspect, c.crop, w, h);
+        const float got = gfcPlate::fitZoom(c.vpW, c.vpH, w, h);
+        const bool ok = std::fabs(got - c.expected) < 1e-3f;
+        if (!ok) pass = false;
+        std::printf("  fit %s: drawn=%gx%g zoom=%.4f expected=%.4f ok=%d\n",
+                    c.name, w, h, got, c.expected, ok ? 1 : 0);
+    }
     std::printf("ASPECT-TEST %s\n", pass ? "PASS" : "FAIL");
     std::fflush(stdout);
     return pass;
@@ -1765,11 +1904,15 @@ void unloadAndClearTrack(int trackIdx) {
     plateManager.setChanged();
 }
 
+namespace { bool gSessionRatePending = false; }  // a restored session's rate must survive the track loads that follow it
+
 int startLoadingAllTracks() {
     // Loading tracks directly (Load Window "Load All", Open Session) is not a
     // playlist load — disarm auto-advance so it can't hijack this content.
     gCurrentContentFromPlaylist = false;
     int started = 0;
+    playbackManager.setKeepRateOnLoad(gSessionRatePending);
+    gSessionRatePending = false;
     for (int i = 0; i < 4; ++i) {
         auto* seq = trackManager.getSequence(i);
         if (!seq || !seq->myGUI) continue;
@@ -1779,6 +1922,7 @@ int startLoadingAllTracks() {
         trackManager.startLoadingSequence(i);
         ++started;
     }
+    playbackManager.setKeepRateOnLoad(false);
     return started;
 }
 
@@ -1816,10 +1960,13 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
     s.rangeStart = seq->getRangeStart() + 1;   // offset already folded in
     s.rangeEnd   = seq->getRangeEnd() + 1;
     s.numFrames  = seq->getNumFrames();
-    s.loadedCount = seq->getLoadedFrameCount();
-    // Anchor the loaded fill at the range start; loading is sequential, so
-    // [rangeStart, rangeStart + loadedCount) is the decoded run.
-    s.firstLoadedFrame = s.rangeStart;
+    s.loadedCount = seq->residentCount();
+    s.loadedVersion = seq->loadedVersion();
+    const int firstResident = seq->frameTable().firstResident();
+    s.firstLoadedFrame = firstResident >= 0 ? firstResident + 1 + s.offset : s.rangeStart;
+    s.hasAudio = seq->hasAudio();
+    s.muted = seq->audioMuted();
+    s.audioPeaksVersion = s.hasAudio ? seq->audioPeaksVersion() : 0;
     if (seq->myGUI && !seq->myGUI->getFilename().empty()) {
         namespace fs = std::filesystem;
         s.label = fs::path(seq->filenameGeneric.empty()
@@ -1827,6 +1974,49 @@ TrackTimelineState getTrackTimelineState(int trackIdx) {
                                : seq->filenameGeneric).filename().string();
     }
     return s;
+}
+
+std::vector<std::pair<int, int>> getTrackLoadedSegments(int trackIdx) {
+    std::vector<std::pair<int, int>> segs;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return segs;
+    seq->loadedSegments(segs);
+    const int shift = 1 + seq->getOffset();   // 0-based source index -> 1-based timeline
+    for (auto& r : segs) { r.first += shift; r.second += shift; }
+    return segs;
+}
+
+TrackAudioState getTrackAudioState(int trackIdx) {
+    TrackAudioState a;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return a;
+    a.hasAudio = seq->hasAudio();
+    a.muted = seq->audioMuted();
+    return a;
+}
+
+void setTrackMuted(int trackIdx, bool muted) {
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq) return;
+    seq->setAudioMuted(muted);
+    plateManager.setChanged();
+}
+
+WaveformPeaks getTrackWaveform(int trackIdx) {
+    WaveformPeaks w;
+    auto* seq = trackManager.getSequence(trackIdx);
+    if (!seq || !seq->hasAudio()) return w;
+    gfcAudioPeaks snap = seq->audioPeaksSnapshot();
+    const gfcMovieInfo* info = seq->movieInfo();   // raw pointer into the reader: copy now
+    if (!info || info->rateNum <= 0 || info->rateDen <= 0) return w;
+    w.rateNum = info->rateNum; w.rateDen = info->rateDen;
+    w.present = true;
+    w.version = snap.version;
+    w.binsPerSecond = snap.binsPerSecond;
+    w.firstSample = snap.firstSample;
+    w.offset = seq->getOffset();
+    w.peaks = std::move(snap.peaks);
+    return w;
 }
 
 int getTrackOffset(int trackIdx) {
@@ -1938,6 +2128,7 @@ bool saveSession(const std::string& path) {
 
 bool loadSession(const std::string& path) {
     if (path.empty()) return false;
+    gSessionRatePending = true;
     sessionManager.loadSession(path);   // caller made GL context current
     plateManager.setChanged();
     return true;
@@ -1947,6 +2138,7 @@ bool getHasRecoverableSession() { return sessionManager.checkCrashedSession(); }
 
 bool loadRecoverySession() {
     if (!sessionManager.checkCrashedSession()) return false;
+    gSessionRatePending = true;
     // Load but leave the file in place (loadCrashedSession deletes; we want it
     // to also serve "reopen last session").
     sessionManager.loadSession(recoveryPath());
@@ -1961,6 +2153,8 @@ void writeRecoverySession() {
 }
 
 void removeRecoverySession() { sessionManager.removeCrashSession(); }
+
+std::string recoverySessionPath() { return sessionManager.crashSessionPath(); }
 
 std::vector<std::string> getRecentSessions() { return sett.recentSessions; }
 
@@ -2921,15 +3115,23 @@ bool isTrackFrameReady(int track, int frame) {
 bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce) {
     if (track < 0 || track >= GFC_MAX_SEQUENCES) return false;
     gfcSequence* seq = trackManager.getSequence(track);
-    if (!seq || seq->isEmpty()) return false;
-    // gfcSequence::startLoading(fromTrack) takes the 0-based track position, offset
-    // not applied; 0 is the one start the loader announces to remote peers.
-    const int index = frame - 1 - seq->getOffset();
-    if (index < 0 || index >= seq->getNumFrames()) return false;
-    if (index == 0 && !allowAnnounce) return false;
-    plateManager.clearAllHistogramCache();
-    seq->startLoading(index);
-    return true;
+    // Every frame of a loaded track can be force-loaded, so nothing restarts; a frame outside
+    // the track never can, so the caller doesn't wait for it.
+    (void)allowAnnounce;
+    return seq && !seq->isEmpty() && seq->frameReadyForRender(frame);
+}
+
+int evictTrackFrames(int track) {
+    if (track < 0 || track >= GFC_MAX_SEQUENCES) return 0;
+    gfcSequence* seq = trackManager.getSequence(track);
+    if (!seq) return 0;
+    int freed = 0;
+    for (int i = 0; i < seq->frameTable().size(); ++i) {
+        if (seq->frameTable().state(i) != gfcFrameState::Resident) continue;
+        seq->evictFrame(i);
+        ++freed;
+    }
+    return freed;
 }
 
 void restorePlaylistSelection(int index, bool contentFromPlaylist) {
@@ -2953,6 +3155,8 @@ std::vector<std::string> listSequenceFrames(const std::string& anyFramePath) {
     int startNum = 0;
     int endNum = 0;
     ::findSequence(files, anyFramePath, label, startNum, endNum);
+    // A movie is one file; findSequence pads it to frameCount copies.
+    if (gfcIsMovieFile(anyFramePath) && files.size() > 1) files.resize(1);
     return files;
 }
 
@@ -3052,6 +3256,44 @@ bool isFxLoaded(const std::string& fxName) {
 
 std::string appVersion() { return JEFE_VERSION; }
 
+bool decodeMovieFrameRGB(const std::string& path, int64_t index, int& w, int& h,
+                         std::vector<float>& rgb, std::string* err) {
+    auto fail = [&](const std::string& why) { if (err) *err = why; return false; };
+    gfcLoadParams p;
+    p.fileName = path;
+    p.movieFrameIndex = index;
+    p.scale = 100;
+    p.crop = false;
+    p.compressed = GFC_16BPC;   // planes at full precision, like a 16-bit track
+    gfcImageLoaderMovie loader;
+    if (loader.load(p) != 0) return fail(loader.loadErrorString);
+    const gfcGLFrameInfo info = loader.getFrameInfo();
+    w = loader.sizeX;
+    h = loader.sizeY;
+    const size_t px = size_t(w) * size_t(h);
+    rgb.resize(px * 3);
+    if (info.planarYuv) {
+        std::vector<float> rgba;
+        if (!gfcYuvConvertToRGBAF(info, w, h, rgba) || rgba.size() < px * 4) return fail("colour conversion failed");
+        for (size_t i = 0; i < px; ++i) {
+            rgb[i * 3 + 0] = rgba[i * 4 + 0];
+            rgb[i * 3 + 1] = rgba[i * 4 + 1];
+            rgb[i * 3 + 2] = rgba[i * 4 + 2];
+        }
+        return true;
+    }
+    // Semi-planar/packed layouts are uploaded from this BGRA64 copy, so the
+    // stamp takes the same pixels.
+    const uint16_t* src16 = static_cast<const uint16_t*>(loader.getPixelPointer());
+    if (!src16 || px == 0) return fail("no pixels decoded");
+    for (size_t i = 0; i < px; ++i) {
+        rgb[i * 3 + 0] = src16[i * 4 + 2] / 65535.0f;   // BGRA -> RGB
+        rgb[i * 3 + 1] = src16[i * 4 + 1] / 65535.0f;
+        rgb[i * 3 + 2] = src16[i * 4 + 0] / 65535.0f;
+    }
+    return true;
+}
+
 bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
                        bool writeHeader, bool writeLayer,
                        NoteStampResult& result) {
@@ -3098,7 +3340,18 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
     }
     result.noteCount = (int)notes.size();
 
-    if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
+    // A movie frame is decoded and stamped from pixels (the CPU twin of the GPU upload pass), so
+    // the stamp carries what a 16-bit track shows.
+    const bool movie = seq->isMovie();
+    std::vector<float> movieRgb;
+    if (movie) {
+        const int64_t index = int64_t(frame) - 1 - int64_t(seq->frameOffset);
+        std::string merr;
+        if (!decodeMovieFrameRGB(result.sourcePath, index, result.width, result.height, movieRgb, &merr)) {
+            return fail("cannot decode frame " + std::to_string(frame) + " of " + result.sourcePath +
+                        (merr.empty() ? "" : ": " + merr));
+        }
+    } else if (!gfcNoteStamp::imageSize(result.sourcePath, &result.width, &result.height)) {
         return fail("cannot read " + result.sourcePath);
     }
 
@@ -3120,7 +3373,10 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
         }
     }
 
-    if (!gfcNoteStamp::stamp(result.sourcePath, outExr, *review, opt, &err)) {
+    const bool stamped = movie
+        ? gfcNoteStamp::stampPixels(result.width, result.height, movieRgb.data(), outExr, *review, opt, &err)
+        : gfcNoteStamp::stamp(result.sourcePath, outExr, *review, opt, &err);
+    if (!stamped) {
         return fail(err);
     }
     return true;
@@ -3350,5 +3606,186 @@ bool noteDrawEnd() {
     return added;
 }
 void toggleNotesVisible() { g_notesVisible = !g_notesVisible; }
+
+int runUploadBench(const std::string& dir) {
+    namespace fs = std::filesystem;
+    using clock = std::chrono::steady_clock;
+    std::vector<std::string> files;
+    std::error_code ec;
+    for (const auto& e : fs::directory_iterator(dir, ec)) {
+        if (e.is_regular_file()) files.push_back(e.path().string());
+    }
+    std::sort(files.begin(), files.end());
+    if (files.empty()) {
+        std::printf("UPLOAD-BENCH FAIL no files in %s\n", dir.c_str());
+        return 2;
+    }
+
+    // IOSurface textures (macOS): check the layouts round-trip, then report per mode which path the
+    // frames took. JEFECHECK_NO_IOSURFACE=1 times the glTexImage2D path instead.
+    const int surfaceLayouts = gfcSurface::selfTest();
+
+    struct Mode { const char* name; char value; };
+    const Mode modes[] = {{"8bit", GFC_8BPC}, {"16bit", GFC_16BPC}, {"half", GFC_16HALF}};
+    float halfMax = -1.0f;
+    // Per mode, the first frame's mean red and blue from texture and thumbnail; every depth must
+    // agree with 8-bit, which catches a swapped R/B order.
+    struct Means { double texR = 0, texB = 0, thumbR = 0, thumbB = 0; };
+    std::vector<std::pair<const char*, Means>> means;
+    bool lastFramesOk = true;
+    long handedOff = 0, doubleHeld = 0;   // frames waiting with pixels in two places
+    for (const Mode& mode : modes) {
+        std::vector<double> decodeMs, uploadMs;
+        double bytes = 0;
+        const long boundBefore = gfcSurface::boundCount();
+        const gfcSurface::PoolStats poolBefore = gfcSurface::poolStats();
+        const gfcUpload::Stats uploadBefore = gfcUpload::stats();
+        for (size_t i = 0; i < files.size(); ++i) {
+            gfcFrame frame;
+            gfcLoadParams params;
+            params.fileName = files[i];
+            params.compressed = mode.value;
+            const auto t0 = clock::now();
+            if (frame.loadFrame(params) != 0) {
+                std::printf("UPLOAD-BENCH FAIL cannot load %s\n", files[i].c_str());
+                return 2;
+            }
+            const auto t1 = clock::now();
+            {
+                const gfcGLFrameInfo fi = frame.theImageLoader->getFrameInfo();
+                if (fi.ioSurface || fi.staging) {
+                    ++handedOff;
+                    if (frame.theImageLoader->getPixelPointer()) ++doubleHeld;
+                }
+            }
+            glFinish();
+            const auto t2 = clock::now();
+            frame.generateTexture(i == 0);   // thumbnail on the first frame only
+            glFinish();   // the upload is only done when the GPU has the texture
+            const auto t3 = clock::now();
+            decodeMs.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
+            uploadMs.push_back(std::chrono::duration<double, std::milli>(t3 - t2).count());
+            bytes += double(frame.sizeX) * frame.sizeY * 4 * (mode.value == GFC_8BPC ? 1 : 2);
+
+            // Read the texture back as float (what shaders see). A mode's first frame gets a fresh texture
+            // and its last comes through the pools, so both are checked.
+            auto readTexture = [&frame](float& maxV, double& r, double& b) {
+                std::vector<float> px(size_t(frame.sizeX) * frame.sizeY * 4);
+                if (frame.ioSurface) {
+                    gfcSurface::readBack(frame.textureID, frame.sizeX, frame.sizeY, px.data());
+                } else {
+                    glBindTexture(GL_TEXTURE_RECTANGLE_ARB, frame.textureID);
+                    glGetTexImage(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, GL_FLOAT, px.data());
+                }
+                maxV = 0;
+                r = b = 0;
+                for (size_t k = 0; k < px.size(); k += 4) {
+                    maxV = std::max({maxV, px[k], px[k + 1], px[k + 2]});
+                    r += std::clamp(px[k], 0.0f, 1.0f);
+                    b += std::clamp(px[k + 2], 0.0f, 1.0f);
+                }
+                r /= double(px.size() / 4);
+                b /= double(px.size() / 4);
+            };
+            if (i == 0) {
+                float maxV = 0;
+                Means m;
+                readTexture(maxV, m.texR, m.texB);
+                const auto& th = frame.thumbnail.rgba;
+                for (size_t k = 0; k + 3 < th.size(); k += 4) {
+                    m.thumbR += th[k] / 255.0;
+                    m.thumbB += th[k + 2] / 255.0;
+                }
+                if (!th.empty()) {
+                    m.thumbR /= double(th.size() / 4);
+                    m.thumbB /= double(th.size() / 4);
+                }
+                means.push_back({mode.name, m});
+                std::printf("UPLOAD-BENCH %-5s %dx%d texture max=%.3f\n", mode.name, frame.sizeX, frame.sizeY,
+                            maxV);
+                if (mode.value == GFC_16HALF) halfMax = maxV;
+            } else if (i + 1 == files.size()) {
+                float maxV = 0;
+                double r = 0, b = 0;
+                readTexture(maxV, r, b);
+                const Means& first = means.back().second;
+                const bool same = std::abs(r - first.texR) < 0.01 && std::abs(b - first.texB) < 0.01
+                                  && (mode.value != GFC_16HALF || maxV > 1.0f);
+                std::printf("UPLOAD-BENCH %s %-5s last frame matches the first (R=%.3f B=%.3f max=%.3f)\n",
+                            same ? "ok  " : "FAIL", mode.name, r, b, maxV);
+                lastFramesOk = lastFramesOk && same;
+            }
+            frame.deleteTexture();
+        }
+        auto median = [](std::vector<double> v) {
+            std::sort(v.begin(), v.end());
+            return v[v.size() / 2];
+        };
+        double uploadTotal = 0;
+        for (double ms : uploadMs) uploadTotal += ms;
+        const long bound = gfcSurface::boundCount() - boundBefore;
+        const gfcSurface::PoolStats pool = gfcSurface::poolStats();
+        std::printf("UPLOAD-BENCH %-5s frames=%zu decode median=%.1fms upload median=%.1fms upload=%.0f MB/s"
+                    " iosurface=%ld/%zu surfaces new=%ld reused=%ld\n",
+                    mode.name, files.size(), median(decodeMs), median(uploadMs),
+                    uploadTotal > 0 ? bytes / 1e6 / (uploadTotal / 1000.0) : 0.0, bound, files.size(),
+                    pool.created - poolBefore.created, pool.reused - poolBefore.reused);
+        const gfcUpload::Stats up = gfcUpload::stats();
+        std::printf("UPLOAD-BENCH %-5s staging=%s staged=%ld/%zu misses=%ld textures reused=%ld new=%ld\n",
+                    mode.name, up.level, up.stagedUploads - uploadBefore.stagedUploads, files.size(),
+                    up.stagingMisses - uploadBefore.stagingMisses, up.texturesReused - uploadBefore.texturesReused,
+                    up.texturesCreated - uploadBefore.texturesCreated);
+    }
+    bool orderOk = !means.empty();
+    for (const auto& [name, m] : means) {
+        const Means& ref = means.front().second;   // 8-bit
+        const bool ok = std::abs(m.texR - ref.texR) < 0.02 && std::abs(m.texB - ref.texB) < 0.02 &&
+                        std::abs(m.thumbR - ref.thumbR) < 0.03 && std::abs(m.thumbB - ref.thumbB) < 0.03;
+        std::printf("UPLOAD-BENCH %s %-5s matches 8-bit colour (texture R=%.3f B=%.3f, thumbnail R=%.3f B=%.3f)\n",
+                    ok ? "ok  " : "FAIL", name, m.texR, m.texB, m.thumbR, m.thumbB);
+        orderOk = orderOk && ok;
+    }
+    const bool singleCopy = doubleHeld == 0;
+    std::printf("UPLOAD-BENCH %s frames handed to a surface or staging buffer keep no CPU copy (%ld of %ld did)\n",
+                singleCopy ? "ok  " : "FAIL", doubleHeld, handedOff);
+
+    // A ticket is good for one use: abandoning a stale one must not free the
+    // buffer it once named after that buffer went to another acquire().
+    bool ticketsOk = true;
+    if (std::strcmp(gfcUpload::stats().level, "off") != 0) {
+        constexpr size_t kProbeBytes = 4096 * 3;   // no frame uses this size
+        void* data = nullptr;
+        gfcUpload::Ticket first = gfcUpload::acquire(kProbeBytes, &data);
+        if (!first) { gfcUpload::service(); first = gfcUpload::acquire(kProbeBytes, &data); }
+        gfcUpload::abandon(first);
+        const gfcUpload::Ticket second = gfcUpload::acquire(kProbeBytes, &data);
+        gfcUpload::abandon(first);   // stale: must leave `second` holding the buffer
+        const gfcUpload::Ticket third = gfcUpload::acquire(kProbeBytes, &data);
+        ticketsOk = first && second && second != first && !third;
+        gfcUpload::abandon(third);
+        gfcUpload::abandon(second);
+        std::printf("UPLOAD-BENCH %s a stale staging ticket cannot release a buffer someone else holds\n",
+                    ticketsOk ? "ok  " : "FAIL");
+    }
+
+    // Idle pools give their memory back.
+    gfcUpload::trimIdle(0.0);
+    gfcSurface::trimIdle(0.0);
+    const gfcUpload::Stats afterTrim = gfcUpload::stats();
+    const size_t surfaceBytes = gfcSurface::poolStats().pooledBytes;
+    const bool trimOk = afterTrim.stagingBytes == 0 && afterTrim.pooledTextureBytes == 0 && surfaceBytes == 0;
+    std::printf("UPLOAD-BENCH %s idle pools are freed (staging %zu, textures %zu, surfaces %zu bytes left)\n",
+                trimOk ? "ok  " : "FAIL", afterTrim.stagingBytes, afterTrim.pooledTextureBytes, surfaceBytes);
+
+    const bool surfacesOk = !gfcSurface::available() || surfaceLayouts == 3;
+    std::printf("UPLOAD-BENCH %s IOSurface layouts working: %d/3%s\n", surfacesOk ? "ok  " : "FAIL",
+                surfaceLayouts, gfcSurface::available() ? "" : " (disabled)");
+    std::printf("UPLOAD-BENCH %s half-float textures keep values above 1.0 (max=%.3f)\n",
+                halfMax > 1.0f ? "ok  " : "FAIL", halfMax);
+    const bool pass = halfMax > 1.0f && orderOk && surfacesOk && lastFramesOk
+                      && singleCopy && ticketsOk && trimOk;
+    std::printf("UPLOAD-BENCH: %s\n", pass ? "PASS" : "FAIL");
+    return pass ? 0 : 2;
+}
 
 }  // namespace jefe::qt

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Snapshot of the GL state that drives the "Host System Specs" dialog.
 //
 // Populated once during the first onGLInit() — Qt header-free so the

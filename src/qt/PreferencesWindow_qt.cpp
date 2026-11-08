@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "PreferencesWindow_qt.h"
 #include "qticons.h"
 
@@ -10,6 +11,7 @@
 #include <QTimer>
 #include <QColorDialog>
 
+#include <algorithm>
 #include <functional>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -317,25 +319,30 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     engineHeader->setProperty("role", "section");
     form->addRow(engineHeader);
 
-    auto* queue = new QSpinBox(page);
-    queue->setRange(0, 32);
-    queue->setValue(sett.maximumFramesInQueue);
-    queue->setObjectName("preferences.engine.queue.spin");
-    queue->setAccessibleName("Max frames in raw queue");
-    const QString queueTip =
-        "How many decoded frames each track may read ahead of playback and hold "
-        "in RAM before its loader pauses.\n\n"
-        "This keeps multiple sequences aligned by frame position: a track with "
-        "small, fast-loading frames can't race ahead and fill memory while a "
-        "track with large frames lags — it fills its queue and waits. Lower "
-        "values use less RAM; higher values buffer further ahead for smoother "
-        "playback of slow sources.";
-    queue->setToolTip(queueTip);
-    connect(queue, QOverload<int>::of(&QSpinBox::valueChanged),
-            page, [](int v) { sett.maximumFramesInQueue = v; });
-    auto* queueLabel = new QLabel("Frames to read ahead", page);
-    queueLabel->setToolTip(queueTip);
-    form->addRow(queueLabel, queue);
+    auto* memLimit = new QSpinBox(page);
+    memLimit->setRange(50, 100);
+    memLimit->setSuffix(" %");
+    memLimit->setValue(sett.memoryLimitPercent);
+    memLimit->setObjectName("preferences.engine.memorylimit.spin");
+    memLimit->setAccessibleName("Memory limit (% of RAM)");
+    const QString memTip = "Frames load while the whole machine's memory use stays under this share of RAM; above it, a frame is unloaded for each one that loads.";
+    memLimit->setToolTip(memTip);
+    connect(memLimit, QOverload<int>::of(&QSpinBox::valueChanged),
+            page, [](int v) { sett.memoryLimitPercent = v; });
+    auto* memLimitLabel = new QLabel("Memory limit (% of RAM)", page);
+    memLimitLabel->setToolTip(memTip);
+    form->addRow(memLimitLabel, memLimit);
+
+    auto* lagCombo = new QComboBox(page);
+    lagCombo->setObjectName("preferences.engine.lagpolicy.combo");
+    lagCombo->setAccessibleName("When loading can't keep up");
+    lagCombo->addItem("Automatic (keep time with sound, show every frame without)", 0);
+    lagCombo->addItem("Keep time (skip frames)", 1);
+    lagCombo->addItem("Show every frame (slow down)", 2);
+    lagCombo->setCurrentIndex(std::clamp(sett.lagPolicy, 0, 2));
+    connect(lagCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            page, [lagCombo](int i) { sett.lagPolicy = lagCombo->itemData(i).toInt(); });
+    form->addRow("When loading can't keep up", lagCombo);
 
     auto* oiioThreads = new QSpinBox(page);
     oiioThreads->setRange(0, 64);
@@ -357,6 +364,24 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* oiioThreadsLabel = new QLabel("OIIO decode threads", page);
     oiioThreadsLabel->setToolTip(oiioTip);
     form->addRow(oiioThreadsLabel, oiioThreads);
+
+    auto* hwCombo = new QComboBox(page);
+    hwCombo->setObjectName("preferences.engine.hardwaredecoding.combo");
+    hwCombo->setAccessibleName("Hardware decoding");
+    hwCombo->addItem("Auto", true);
+    hwCombo->addItem("Off", false);
+    hwCombo->setCurrentIndex(sett.hardwareDecoding ? 0 : 1);
+    const QString hwTip =
+        "Movies: Auto decodes on the graphics hardware when it can decode the file (VideoToolbox on macOS, "
+        "D3D11VA on Windows, VAAPI or NVDEC on Linux) and in software otherwise, or if the hardware fails. "
+        "Files with alpha always decode in software. Off always decodes in software.\n\n"
+        "Applies to movies loaded after Done.";
+    hwCombo->setToolTip(hwTip);
+    connect(hwCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            page, [hwCombo](int i) { sett.hardwareDecoding = hwCombo->itemData(i).toBool(); });
+    auto* hwLabel = new QLabel("Hardware decoding", page);
+    hwLabel->setToolTip(hwTip);
+    form->addRow(hwLabel, hwCombo);
 
     // Default decode filter — shared by all tracks via the OIIO loader's
     // Filter2D resize path. In-memory only; persisted centrally on Done.

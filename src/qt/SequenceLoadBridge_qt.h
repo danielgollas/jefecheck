@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Tiny shim between the Qt UI and the rendering chain's manager
 // singletons. Lives in its own TU because the manager headers pull glad,
 // and Qt's QOpenGLWidget headers pull system OpenGL — the two refuse to
@@ -6,6 +7,7 @@
 #ifndef JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 #define JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
@@ -20,7 +22,12 @@ namespace jefe::qt {
 // Wires up gfcPlateGUI_Qt and gfcSequenceGUI_Qt instances on every
 // plate / sequence and constructs the gfcPlateManagerGUI_Qt. Safe to
 // call once at app startup; calling again would leak the previous GUIs.
+// Also creates the audio output (jefe::qt::audio) and installs it on
+// audioEngine; it opens asynchronously on its own thread.
 void initializeRenderingChain();
+// Call before initializeRenderingChain() to skip creating the audio output
+// (headless suites that install a fake device). Default: enabled.
+void setAudioOutputEnabled(bool enabled);
 
 // Default texture format (bit depth) used by the Qt drag-drop / Cmd+O
 // load path. Mirrors gfcSettings::defaultTextureFormat. The Qt status
@@ -89,6 +96,12 @@ bool tickPlayback();
 bool tickPlaybackTiming();
 bool hasPendingTextureUploads();
 void uploadPendingTextures();
+// The upload pools (staging buffers, pooled textures, IOSurfaces) free what
+// has sat unused for 2 s. uploadPoolsNeedTrim() is cheap and true at most
+// once a second while any pool holds memory; trimUploadPools() then needs
+// the viewport's GL context current.
+bool uploadPoolsNeedTrim();
+void trimUploadPools();
 
 // Cheap predicate — true when the playback engine is actively playing
 // OR when at least one track has frames waiting in its rawFrames queue
@@ -131,6 +144,20 @@ void setLoopMode(int mode);     // 0 once, 1 loop, 2 bounce
 int  getLoopMode();
 void setTargetFPS(float fps);
 float getTargetFPS();
+// Exact rational player rate (e.g. 24000/1001); setTargetFPS maps through
+// gfcPlaybackManager::rationalFromFPS.
+void getTargetRate(int& num, int& den);
+// Source timecode of the active plate's track at the current frame
+// ("HH:MM:SS:FF", ';' before FF when drop-frame). Empty unless that track is a
+// movie and the frame maps inside it.
+std::string activeTrackSourceTimecode();
+// True when the active plate's track is a movie with variable frame rate.
+bool activeTrackIsVariableRate();
+// Average rate of the active plate's movie (0 when not a movie).
+float activeTrackMovieAverageFPS();
+// The on-screen "fps:" readout: an EMA of the real frame-advance interval
+// (reports the target exactly while within 2% of it).
+float getMeasuredFPS();
 int  getCurrentFrame();
 int  getFromFrame();
 int  getToFrame();
@@ -138,7 +165,7 @@ int  getInPoint();
 int  getOutPoint();
 void setInPoint(int frame);
 void setOutPoint(int frame);
-void setInPointAndLoad();   // FLTK Alt+I: set in point + reload tracks there
+void setInPointAndLoad();   // FLTK Alt+I: set the in point at the playhead (the cache loads there; no reload)
 bool isPlaying();
 
 // Histogram overlay (Ctrl+H active quad / Ctrl+Alt+H all plates). Toggles
@@ -432,7 +459,14 @@ bool cloudConnectInFlight();
 
 // Latches an app-shutdown flag (wire to QCoreApplication::aboutToQuit) so a
 // detached cloud-connect worker won't touch networkManager as globals tear down.
+// Also closes and destroys the audio output, so its thread stops rendering
+// from audioEngine before static teardown.
 void beginBridgeShutdown();
+
+// App quit (wired to QCoreApplication::aboutToQuit in main): joins every
+// track's loader and audio thread before static teardown, and no load starts
+// after it.
+void shutdownTracks();
 
 void disconnectRemote();
 
@@ -976,8 +1010,11 @@ TrackParams getTrackParams(int trackIdx);
 // in global-timeline coordinates (offset already folded in), so the
 // widget can map them straight through the same x<->frame transform the
 // scrubber uses. `present` is false for an empty track (draw a
-// placeholder lane). `loadedCount` frames starting at `firstLoadedFrame`
-// are decoded; the rest of [rangeStart, rangeEnd] is not-yet-loaded.
+// placeholder lane). [rangeStart, rangeEnd] is the trim range; the
+// resident frames may have holes: `loadedCount` is how many are resident,
+// `firstLoadedFrame` where the first resident run starts (rangeStart when
+// none), and getTrackLoadedSegments() returns the runs themselves.
+// `loadedVersion` moves whenever the resident set may have changed.
 struct TrackTimelineState {
     bool        present          = false;
     int         rangeStart       = 1;
@@ -986,10 +1023,37 @@ struct TrackTimelineState {
     int         numFrames        = 0;
     int         firstLoadedFrame = 1;
     int         loadedCount      = 0;
+    bool        hasAudio         = false;
+    bool        muted            = false;
+    uint64_t    audioPeaksVersion = 0;
+    uint64_t    loadedVersion    = 0;
     std::string label;
 };
 
+// Per-track sound state / mute (timeline speaker toggle). Mute is saved with the session.
+struct TrackAudioState { bool hasAudio = false; bool muted = false; };
+TrackAudioState getTrackAudioState(int trackIdx);
+void setTrackMuted(int trackIdx, bool muted);
+
+// Waveform peak summary (10 ms bins, abs peak of the stereo mix), copied out.
+// rateNum/rateDen is the movie's rate; offset the track's frame offset.
+struct WaveformPeaks {
+    bool present = false;
+    uint64_t version = 0;
+    int binsPerSecond = 100;
+    int64_t firstSample = 0;
+    int rateNum = 24, rateDen = 1;
+    int offset = 0;
+    std::vector<float> peaks;
+};
+// Copies the whole peaks vector: call only when audioPeaksVersion changed, and cache.
+WaveformPeaks getTrackWaveform(int trackIdx);
+
 TrackTimelineState getTrackTimelineState(int trackIdx);
+// The track's resident runs as inclusive 1-based timeline frames (offset
+// folded in), in order. Walks the frame table: call it only when
+// TrackTimelineState::loadedVersion changed.
+std::vector<std::pair<int, int>> getTrackLoadedSegments(int trackIdx);
 
 // Frame offset of a track on the global timeline. setTrackOffset shifts
 // the whole sequence left/right (drag / "Set offset..." popup) and flags
@@ -997,10 +1061,10 @@ TrackTimelineState getTrackTimelineState(int trackIdx);
 int  getTrackOffset(int trackIdx);
 void setTrackOffset(int trackIdx, int offset);
 
-// Begin decoding the track's assigned sequence starting at `frame`
-// (timeline coordinates). Wraps trackManager.startLoadingSequenceAt;
-// the loader thread fills rawFrames and the playback tick uploads them,
-// so no GL context is required here. No-op for an empty track.
+// "Load from here" (Alt+click on the timeline): wraps
+// trackManager.startLoadingSequenceAt, which on a loaded track is a jump
+// (the playhead moves there and the frame cache loads around it); no reload.
+// No-op for an empty track.
 void startLoadingTrackAt(int trackIdx, int frame);
 
 // Hold-last-frame mode (right-click popup). gfcSequence::getHoldMode()
@@ -1030,6 +1094,9 @@ struct ThumbPixels {
 };
 
 ThumbPixels getTrackThumbnail(int track, int frameIndex);
+// Test hook: renders the timeline tracks widget offscreen and returns the first
+// 0-based frame index whose thumbnail it drew on `track`, or -1 if none.
+int timelineFirstThumbnailDrawn(int track);
 
 bool getThumbnailsEnabled();        // reads sett.showThumbnails
 void setThumbnailsEnabled(bool on); // writes sett.showThumbnails; setChanged()
@@ -1081,6 +1148,8 @@ bool getHasRecoverableSession();
 bool loadRecoverySession();     // loads it; does NOT delete (caller decides)
 void writeRecoverySession();    // writes it unconditionally
 void removeRecoverySession();
+// The crash-recovery session file sessionManager.writeCrashSession() writes.
+std::string recoverySessionPath();
 // Recent sessions (manager keeps sett.recentSessions, cap 5).
 std::vector<std::string> getRecentSessions();
 void setRecentSessions(const std::vector<std::string>& paths);
@@ -1296,14 +1365,20 @@ bool prepareTrackForRender(int track);
 bool isTrackFrameReady(int track, int frame);
 
 /**
- * Restarts @a track's load at timeline @a frame, so the async loader reaches
- * that frame first. Unlike startLoadingTrackAt() it leaves the crash-recovery
- * session alone. A load from the track's first frame is announced to remote
- * peers (a "loaded" chat line); @a allowAnnounce = false refuses that case.
- * Clearing the track's decoded frames deletes their textures, so the viewport
- * GL context must be current. Returns whether a load was started.
+ * Whether @a track's frame at timeline @a frame can be loaded: true for any
+ * frame inside a loaded track, since every frame keeps its load parameters
+ * and a forced load decodes it; false outside the track. Nothing restarts
+ * (no reload, no announcement, no crash-session write); @a allowAnnounce is
+ * kept for the callers.
  */
 bool restartTrackLoadAtFrame(int track, int frame, bool allowAnnounce);
+
+/**
+ * Frees every resident frame of @a track, as the rolling cache does when it
+ * evicts; returns how many. The frame cache loads them back around the
+ * playhead. Deletes textures, so the viewport GL context must be current.
+ */
+int evictTrackFrames(int track);
 
 /**
  * Puts back a playlist selection read earlier with getSelectedPlaylistItem()
@@ -1381,6 +1456,16 @@ std::string appVersion();
  */
 void addDemoNotes(int plateIdx);
 
+/**
+ * Decodes frame `index` (0-based) of a movie to float RGB (w*h*3, unclamped)
+ * with the same YUV->RGB maths as the GPU upload pass (file matrix/range,
+ * chroma siting, nearest luma), i.e. the picture a 16-bit track shows. Used
+ * by Stamp Notes on movies; non-planar layouts go through the same CPU
+ * conversion their upload uses. Opens a reader of its own (sound off).
+ */
+bool decodeMovieFrameRGB(const std::string& path, int64_t index, int& w, int& h,
+                         std::vector<float>& rgb, std::string* err);
+
 /** Outcome of stampNotesIntoExr(), so the caller can report it plainly. */
 struct NoteStampResult {
     std::string sourcePath;   // the frame file on disk the stamp copied from
@@ -1408,6 +1493,14 @@ bool stampNotesIntoExr(int plateIdx, const std::string& outExr,
 bool notesVisible();
 void setNotesVisible(bool visible);
 void toggleNotesVisible();
+
+/** Decode-and-upload benchmark (--upload-bench <dir>): loads every image in
+    @a dir at each bit depth (8-bit, 16-bit, half), timing the decode and the
+    GL upload separately, and reads the first half-float texture back to check
+    that values above 1.0 survive. The GL context must be current. Prints
+    UPLOAD-BENCH lines; returns 0 when the half-float texture keeps HDR values
+    (the footage must contain some), 2 otherwise. */
+int runUploadBench(const std::string& dir);
 
 }  // namespace jefe::qt
 

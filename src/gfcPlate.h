@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPLATE_H
 #define GFCPLATE_H
 //#pragma once
@@ -110,6 +111,10 @@ class gfcPlate: public gfcPickNotifee
 	void stopSuperShader();
 
 	void fitToViewport();
+	// Size the plate draws a frame at, after the aspect choice (-1 = the file's own; crop keeps it).
+	static void displaySize(int sizeX, int sizeY, float quadSizeX, float quadSizeY, float aspect, bool cropOn, float& w, float& h);
+	// Zoom that fits w x h inside the viewport, never above 1.
+	static float fitZoom(float vpW, float vpH, float w, float h);
 
         gfcPlate(void);
         ~gfcPlate(void);
@@ -377,7 +382,10 @@ private:
     bool multiFormatFBOSupported;
     std::map<int, gfcHistogram> histogramCache; //this map stores the histogramCache, and links each frame in the timeline to a cache.
     int histogramQuality;
-    int getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result,GLuint readFormat);
+    // surfaceBacked: the texture's storage is an IOSurface, which glGetTexImage
+    // cannot read (developer_notes §39). Returns non-zero when nothing was read.
+    int getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result,GLuint readFormat,
+                                bool surfaceBacked = false);
     void updateHistogram();
     void startViewport();
     void endViewport();
@@ -385,6 +393,9 @@ private:
     void stopAlphaBackround();
     void endTransform();
     void drawText();
+        // "Loading" at the plate's centre while its frame is pending (not
+        // loaded yet, inside the track's footage). Nothing otherwise.
+        void drawLoadingLabel();
     void drawTextureRectangleWarning();
     void getFrameAndSequence();
     

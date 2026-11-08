@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "FXParamPanel_qt.h"
 #include "qticons.h"
 #include "SequenceLoadBridge_qt.h"

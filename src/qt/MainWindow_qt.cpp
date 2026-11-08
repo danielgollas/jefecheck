@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "MainWindow_qt.h"
 
 #include "FXLutPanel_qt.h"
@@ -17,6 +18,7 @@
 #include "ReviewPackageDialog_qt.h"
 #include "ReviewSummaryPdf_qt.h"
 #include "VideoEncoder_qt.h"
+#include "MovieTestMedia_qt.h"
 
 #include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
@@ -59,6 +61,9 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <set>
+#include <cmath>
+#include <cstdint>
 
 #include "../gfcReviewSummary.h"
 #include "../gfcNoteStore.h"
@@ -67,6 +72,7 @@
 #include "../gfcnotestroke.h"
 #include "../gfcnotetext.h"
 #include "../gfcMediaFingerprint.h"
+#include "../gfcMovieReader.h"
 #include "../gfcSessionPaths.h"
 #include "../gfcTarArchive.h"
 #include "../gfcUtf8.h"
@@ -130,8 +136,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     trackStatusLabel_->setObjectName("statusbar.track.label");
     statusBar()->addPermanentWidget(trackStatusLabel_);
 
-    // "Loaded: <basename>" or "Loaded: -" for the active plate, refreshed each tick.
-    // Permanent so transient messages don't clobber it; an AX-stable surface for load-state tests.
+    // Source timecode of the active plate's movie ("TC 01:00:02:13"); empty for image sequences.
+    timecodeStatusLabel_ = new QLabel(this);
+    timecodeStatusLabel_->setObjectName("status.timecode");
+    statusBar()->addPermanentWidget(timecodeStatusLabel_);
+
+    // "Loaded: <name>" for the active plate. A permanent widget, so transient status
+    // messages don't clobber it; UI tests read it to assert load state.
     loadedStatusLabel_ = new QLabel(this);
     loadedStatusLabel_->setObjectName("statusbar.loaded.label");
     statusBar()->addPermanentWidget(loadedStatusLabel_);
@@ -319,8 +330,16 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             wantRepaint = true;
         }
 
-        // ~60Hz coalescing repaint flush: at most one update() in flight per
-        // display refresh, so paintGL is never starved.
+        // Give back upload-pool memory nothing has used for a while; runs
+        // when stopped too, which is when the pools sit idle.
+        if (jefe::qt::uploadPoolsNeedTrim()) {
+            viewport_->makeCurrent();
+            jefe::qt::trimUploadPools();
+            viewport_->doneCurrent();
+        }
+
+        // ~60 Hz repaint coalescing: at most one update() in flight, so paintGL is
+        // never starved, and a pending repaint flushes within ~16 ms.
         static QElapsedTimer repaintThrottle;
         static bool repaintPending = false;
         if (!repaintThrottle.isValid()) repaintThrottle.start();
@@ -365,8 +384,20 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                 trackStatusLabel_->setText(label);
             }
         }
-        // Active-plate "Loaded:" readout, read through the bridge so it reflects gfcSequence's real state;
-        // done in the tick to avoid wiring change-signals from every load path.
+        if (timecodeStatusLabel_) {
+            QString label;
+            const std::string tc = jefe::qt::activeTrackSourceTimecode();
+            if (!tc.empty()) {
+                label = QStringLiteral("TC %1").arg(QString::fromStdString(tc));
+                if (jefe::qt::activeTrackIsVariableRate())
+                    label += QStringLiteral(" \u00b7 VFR (avg %1)")
+                                 .arg((double)jefe::qt::activeTrackMovieAverageFPS(), 0, 'f', 2);
+            }
+            if (timecodeStatusLabel_->text() != label)
+                timecodeStatusLabel_->setText(label);
+        }
+        // Read through the bridge each tick: it shows gfcSequence's real state, and
+        // no load path needs to signal a change.
         if (loadedStatusLabel_) {
             const int active = jefe::qt::getActivePlate();
             const std::string name = active >= 0
@@ -410,8 +441,10 @@ void MainWindow_Qt::buildMenuBar() {
             lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
         }
         const QString filter = tr(
-            "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff "
-            "*.tga *.bmp);;All files (*)");
+            "Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4 *.mxf);;"
+            "Movies (*.mov *.mp4 *.mxf);;"
+            "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp);;"
+            "All files (*)");
         const QString chosen = QFileDialog::getOpenFileName(
             this, tr("Load Sequence"), lastDir, filter);
         if (chosen.isEmpty()) return;
@@ -718,7 +751,7 @@ void MainWindow_Qt::buildMenuBar() {
                    "<p>Professional video frame review and color correction.</p>"
                    "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
                    "Originally written 2006-2014, modernized 2026 for "
-                   "open-source release under GPL v2.</p>"
+                   "open-source release under GPL v2 or later.</p>"
                    "<p><a href='https://github.com/danielgollas/jefecheck'>"
                    "github.com/danielgollas/jefecheck</a></p>"
                    "<p style='font-size:small;color:gray'>Built %2 %3</p>")
@@ -1378,6 +1411,15 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
     return pass ? 0 : 1;
 }
 
+int MainWindow_Qt::runHeadlessUploadBench(const QString& dir) {
+    if (!viewport_) { printf("UPLOAD-BENCH FAIL no viewport\n"); fflush(stdout); return 2; }
+    viewport_->makeCurrent();
+    const int code = jefe::qt::runUploadBench(dir.toStdString());
+    viewport_->doneCurrent();
+    fflush(stdout);
+    return code;
+}
+
 int MainWindow_Qt::runHeadlessCCTest(const QString& imagePath) {
     // Proves rendered frames carry the super-shader colour pipeline (gamma/exposure/BCS + LUT);
     // the FX-stack test can't catch it because FX are baked into the FBO earlier.
@@ -1487,6 +1529,376 @@ int MainWindow_Qt::runHeadlessCCTest(const QString& imagePath) {
     fflush(stdout);
 
     return (ccPass && cropPass) ? 0 : 1;
+}
+
+namespace {
+
+// Waits (pumping the event loop, so the idle tick keeps uploading frames)
+// until pred() holds or ms elapse. Returns pred()'s last value.
+bool waitUntilLoaded(const std::function<bool()>& pred, int ms) {
+    QElapsedTimer t;
+    t.start();
+    while (!pred()) {
+        if (t.elapsed() > ms) return false;
+        QEventLoop loop;
+        QTimer::singleShot(10, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    return true;
+}
+
+// Per-channel 16-bit RGB of an image, top row first.
+struct Rgb16Image {
+    int w = 0, h = 0;
+    std::vector<quint16> px;  // w*h*3
+    quint16 at(int x, int y, int c) const { return px[(size_t(y) * w + x) * 3 + c]; }
+};
+
+Rgb16Image loadRgb16(const QString& path) {
+    Rgb16Image out;
+    QImage img(path);
+    if (img.isNull()) return out;
+    img = img.convertToFormat(QImage::Format_RGBA64);
+    out.w = img.width();
+    out.h = img.height();
+    out.px.resize(size_t(out.w) * out.h * 3);
+    for (int y = 0; y < out.h; ++y) {
+        const quint16* row = reinterpret_cast<const quint16*>(img.constScanLine(y));
+        for (int x = 0; x < out.w; ++x)
+            for (int c = 0; c < 3; ++c) out.px[(size_t(y) * out.w + x) * 3 + c] = row[x * 4 + c];
+    }
+    return out;
+}
+
+// Truth pixels that equal all 8 neighbours within one 8-bit code: away from
+// bar edges and the chroma blur around them.
+std::vector<char> interiorMask(const Rgb16Image& t) {
+    std::vector<char> m(size_t(t.w) * t.h, 0);
+    for (int y = 1; y + 1 < t.h; ++y)
+        for (int x = 1; x + 1 < t.w; ++x) {
+            bool ok = true;
+            for (int dy = -1; dy <= 1 && ok; ++dy)
+                for (int dx = -1; dx <= 1 && ok; ++dx)
+                    for (int c = 0; c < 3 && ok; ++c)
+                        ok = std::abs(int(t.at(x, y, c) >> 8) - int(t.at(x + dx, y + dy, c) >> 8)) <= 1;
+            m[size_t(y) * t.w + x] = ok ? 1 : 0;
+        }
+    return m;
+}
+
+// Reference RGB for a planar clip known to be Rec.709 video range, co-sited, in double precision
+// from the software decoder's planes: independent of gfcYuvConverter, of the file's tags and of
+// hardware decoding (which the app's own load uses).
+Rgb16Image decodedReference709Video(const QString& path, int64_t index, QString& err) {
+    Rgb16Image out;
+    gfcMovieReader reader;
+    std::string e;
+    gfcMovieFrame f;
+    const bool hardware = gfcMovieReader::hardwareDecodingAllowed();
+    gfcMovieReader::setHardwareDecodingAllowed(false);
+    const bool read = reader.open(path.toStdString(), &e) && reader.readFrame(index, f, &e);
+    gfcMovieReader::setHardwareDecodingAllowed(hardware);
+    if (!read) {
+        err = QString::fromStdString(e);
+        return out;
+    }
+    if (!f.planarYuv || f.planeCount < 3 || f.bitDepth <= 8) { err = "not planar high-bit-depth YUV"; return out; }
+    const int subX = std::max(1, reader.info().subX), subY = std::max(1, reader.info().subY);
+    auto sample = [&](int p, int x, int y) {
+        const gfcMoviePlane& pl = f.plane[p];
+        x = std::clamp(x, 0, pl.width - 1);
+        y = std::clamp(y, 0, pl.height - 1);
+        return double(reinterpret_cast<const uint16_t*>(pl.data + size_t(y) * pl.strideBytes)[x]);
+    };
+    auto chroma = [&](int p, double cs, double ct) {  // bilinear, texel centres at i + 0.5
+        const double fs = cs - 0.5, ft = ct - 0.5;
+        const int x0 = int(std::floor(fs)), y0 = int(std::floor(ft));
+        const double ax = fs - x0, ay = ft - y0;
+        return (sample(p, x0, y0) * (1 - ax) + sample(p, x0 + 1, y0) * ax) * (1 - ay) +
+               (sample(p, x0, y0 + 1) * (1 - ax) + sample(p, x0 + 1, y0 + 1) * ax) * ay;
+    };
+    const double k = double(1 << (f.bitDepth - 8));
+    const double kr = 0.2126, kb = 0.0722, kg = 1.0 - kr - kb;
+    out.w = f.width;
+    out.h = f.height;
+    out.px.resize(size_t(out.w) * out.h * 3);
+    for (int y = 0; y < out.h; ++y)
+        for (int x = 0; x < out.w; ++x) {
+            const double s = x + 0.5, t = y + 0.5;
+            const double cs = (s - 0.5) / subX + 0.5;  // horizontally co-sited
+            const double ct = t / subY;                // vertically centred
+            const double Y = (sample(0, x, y) - 16 * k) / (219 * k);
+            const double cb = (chroma(1, cs, ct) - 128 * k) / (224 * k);
+            const double cr = (chroma(2, cs, ct) - 128 * k) / (224 * k);
+            const double rgb[3] = {Y + 2 * (1 - kr) * cr, Y - 2 * (1 - kb) * kb / kg * cb - 2 * (1 - kr) * kr / kg * cr,
+                                   Y + 2 * (1 - kb) * cb};
+            for (int c = 0; c < 3; ++c)
+                out.px[(size_t(y) * out.w + x) * 3 + c] = quint16(std::lround(std::clamp(rgb[c], 0.0, 1.0) * 65535.0));
+        }
+    return out;
+}
+
+}  // namespace
+
+int MainWindow_Qt::runHeadlessVideoColourTest(const QString& dir) {
+    if (!viewport_) { printf("VIDEO-COLOUR-TEST FAIL: no viewport\n"); fflush(stdout); return 2; }
+    QString err;
+    if (!jefe::qt::testmedia::generate(dir, &err)) {
+        printf("VIDEO-COLOUR-TEST FAIL: cannot generate media: %s\n", err.toLocal8Bit().constData());
+        fflush(stdout);
+        return 2;
+    }
+    const QString outDir = QDir(dir).filePath("colour_renders");
+    QDir(outDir).removeRecursively();
+    QDir().mkpath(outDir);
+    const int savedDepth = jefe::qt::getDefaultTextureFormat();
+    const bool savedThumbs = jefe::qt::getThumbnailsEnabled();
+    jefe::qt::setThumbnailsEnabled(true);
+    jefe::qt::setActivePlate(0);
+
+    struct Clip { const char* name; const char* truth; bool sixteen; int w, h; };
+    const Clip clips[] = {
+        {"bars_709tv.mov", "bars_truth.0003.png", true, 320, 180},
+        {"bars_601full.mp4", "bars_truth.0003.png", false, 320, 180},
+        {"bars_untagged.mp4", "bars_truth.0003.png", false, 320, 180},
+        {"bars_709tv_odd.mp4", "bars_odd_truth.0003.png", false, 321, 181},
+    };
+    int failures = 0;
+    for (const Clip& clip : clips) {
+        const QString path = QDir(dir).filePath(clip.name);
+        jefe::qt::setDefaultTextureFormat(clip.sixteen ? GFC_16HALF : GFC_8BPC);
+        loadFileIntoPlate(0, path);
+        const bool loaded = waitUntilLoaded(
+            [&] {
+                const jefe::qt::TrackTimelineState st = jefe::qt::getTrackTimelineState(0);
+                return st.loadedCount == 8 && QString::fromStdString(st.label).contains(clip.name);
+            }, 10000);
+        if (!loaded) {
+            printf("VIDEO-COLOUR-TEST %s: FAIL only %d of 8 frames loaded\n", clip.name,
+                   jefe::qt::getTrackTimelineState(0).loadedCount);
+            ++failures;
+            continue;
+        }
+        jefe::qt::seekToFrame(3);
+
+        jefe::qt::RenderParams p;
+        p.quadrant = 0;
+        p.format = 5;  // PNG
+        p.formatString = "png";
+        p.from = 3;
+        p.to = 3;
+        p.padding = 4;
+        p.scale = 1.0f;
+        p.bitsPerChannel = clip.sixteen ? 16 : 8;
+        p.path = outDir.toStdString();
+        p.prefix = QString(clip.name).replace('.', '_').toStdString() + "_";
+        const QString renderPath = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        viewport_->makeCurrent();
+        jefe::qt::triggerSyncRender(p);
+        viewport_->doneCurrent();
+
+        const Rgb16Image truth = loadRgb16(QDir(dir).filePath(clip.truth));
+        const Rgb16Image got = loadRgb16(renderPath);
+        if (truth.w == 0 || got.w == 0) {
+            printf("VIDEO-COLOUR-TEST %s: FAIL cannot read %s or %s\n", clip.name, clip.truth,
+                   renderPath.toLocal8Bit().constData());
+            ++failures;
+            continue;
+        }
+        bool ok = true;
+        if (got.w != clip.w || got.h != clip.h || truth.w != clip.w || truth.h != clip.h) {
+            printf("  %s: rendered %dx%d, truth %dx%d, expected %dx%d\n", clip.name, got.w, got.h,
+                   truth.w, truth.h, clip.w, clip.h);
+            ok = false;
+        }
+        int maxD = 0;
+        double sumD = 0;
+        long long n = 0;
+        // 16-bit: compare with the clip's own decoded planes, so ProRes compression loss cancels out
+        // and the limit measures the GPU path alone.
+        Rgb16Image ref;
+        if (ok && clip.sixteen) {
+            QString refErr;
+            ref = decodedReference709Video(path, 2, refErr);  // timeline frame 3
+            if (ref.w != got.w || ref.h != got.h) {
+                printf("  %s: FAIL no decoded-plane reference (%s)\n", clip.name, refErr.toLocal8Bit().constData());
+                ok = false;
+            } else {
+                // Sanity that the clip really is the bars: encoder loss on the
+                // interiors (max reported only; it moves with the encoder).
+                const std::vector<char> m = interiorMask(truth);
+                int encMax = 0;
+                double encSum = 0;
+                long long encN = 0;
+                for (int y = 0; y < truth.h; ++y)
+                    for (int x = 0; x < truth.w; ++x) {
+                        if (!m[size_t(y) * truth.w + x]) continue;
+                        for (int c = 0; c < 3; ++c) {
+                            const int d = std::abs(int(ref.at(x, y, c)) - int(truth.at(x, y, c)));
+                            encMax = std::max(encMax, d);
+                            encSum += d;
+                            ++encN;
+                        }
+                    }
+                const double encMean = encN ? encSum / double(encN) : 1e9;
+                const bool encOk = encMean <= 64.0;
+                printf("  %s: %s encoded clip vs RGB truth: mean |d| %.3f (<= 64.0), max |d| %d (not gated)\n",
+                       clip.name, encOk ? "ok" : "FAIL", encMean, encMax);
+                ok = encOk;
+            }
+        }
+        if (ok) {
+            const std::vector<char> mask = interiorMask(truth);
+            for (int y = 0; y < truth.h; ++y)
+                for (int x = 0; x < truth.w; ++x) {
+                    if (!mask[size_t(y) * truth.w + x]) continue;
+                    for (int c = 0; c < 3; ++c) {
+                        const int d = clip.sixteen
+                                          ? std::abs(int(got.at(x, y, c)) - int(ref.at(x, y, c)))
+                                          : std::abs(int(got.at(x, y, c) >> 8) - int(truth.at(x, y, c) >> 8));
+                        maxD = std::max(maxD, d);
+                        sumD += d;
+                        ++n;
+                    }
+                }
+            const double mean = n ? sumD / double(n) : 0.0;
+            const int maxAllowed = clip.sixteen ? 256 : 2;
+            const double meanAllowed = clip.sixteen ? 64.0 : 0.5;
+            ok = n > 0 && maxD <= maxAllowed && mean <= meanAllowed;
+            printf("  %s: %s %d interior samples, max |d| %d (<= %d), mean |d| %.3f (<= %.1f) [%s]\n",
+                   clip.name, ok ? "ok" : "FAIL", int(n), maxD, maxAllowed, mean, meanAllowed,
+                   clip.sixteen ? "16-bit" : "8-bit");
+
+            if (clip.sixteen) {
+                // Grey ramp rows: > 16 distinct values off the 8-bit grid (v % 257 != 0), >= 75% of the reference's
+                // levels and mean |d| <= 32, which catches an 8-bit texture behind the 16F FBO (developer_notes.md §38).
+                std::set<int> distinct, refDistinct;
+                int offGrid = 0;
+                double rampSum = 0;
+                long long rampN = 0;
+                for (int y = 0; y < truth.h; ++y) {
+                    std::set<int> rowLevels;
+                    for (int x = 0; x < truth.w; ++x)
+                        if (truth.at(x, y, 0) == truth.at(x, y, 1) && truth.at(x, y, 1) == truth.at(x, y, 2))
+                            rowLevels.insert(truth.at(x, y, 0));
+                    if (rowLevels.size() < 32) continue;
+                    for (int x = 0; x < truth.w; ++x) {
+                        const int t0 = truth.at(x, y, 0);
+                        if (t0 <= 0 || t0 >= 65535 || truth.at(x, y, 1) != t0) continue;
+                        const int v = got.at(x, y, 1);
+                        if (distinct.insert(v).second && v % 257 != 0) ++offGrid;
+                        refDistinct.insert(ref.at(x, y, 1));
+                        for (int c = 0; c < 3; ++c) {
+                            rampSum += std::abs(int(got.at(x, y, c)) - int(ref.at(x, y, c)));
+                            ++rampN;
+                        }
+                    }
+                }
+                const double rampMean = rampN ? rampSum / double(rampN) : 1e9;
+                const bool precise = distinct.size() > 16 && offGrid > 16 &&
+                                     distinct.size() * 4 >= refDistinct.size() * 3 && rampMean <= 32.0;
+                printf("  %s: %s ramp has %d distinct values (reference %d, need >= 75%%), %d not on the 8-bit grid "
+                       "(> 16), mean |d| %.3f vs reference (<= 32)\n",
+                       clip.name, precise ? "ok" : "FAIL", int(distinct.size()), int(refDistinct.size()), offGrid,
+                       rampMean);
+                ok = ok && precise;
+            } else {
+                // Filmstrip thumbnail vs the 8-bit render at the thumbnail's
+                // grid. Timeline frame 3 is thumbnail index 2 (0-based).
+                const jefe::qt::ThumbPixels th = jefe::qt::getTrackThumbnail(0, 2);
+                bool thumbOk = th.present && th.w > 0 && th.h > 0;
+                int tMax = 0, tN = 0;
+                if (thumbOk) {
+                    for (int y = 0; y < th.h; ++y)
+                        for (int x = 0; x < th.w; ++x) {
+                            const int sx = x * got.w / th.w, sy = y * got.h / th.h;
+                            if (!mask[size_t(sy) * truth.w + sx]) continue;
+                            for (int c = 0; c < 3; ++c) {
+                                const int d = std::abs(int(th.rgba[(size_t(y) * th.w + x) * 4 + c]) -
+                                                       int(got.at(sx, sy, c) >> 8));
+                                tMax = std::max(tMax, d);
+                            }
+                            ++tN;
+                        }
+                    thumbOk = tN > 0 && tMax <= 2;
+                }
+                printf("  %s: %s thumbnail %dx%d, %d interior samples, max |d| %d (<= 2)\n", clip.name,
+                       thumbOk ? "ok" : "FAIL", th.w, th.h, tN, tMax);
+                ok = ok && thumbOk;
+            }
+        }
+        if (!ok) ++failures;
+    }
+    jefe::qt::setDefaultTextureFormat(savedDepth);
+    jefe::qt::setThumbnailsEnabled(savedThumbs);
+    printf("VIDEO-COLOUR-TEST %s (%d of 4 clips failed)\n", failures ? "FAIL" : "PASS", failures);
+    fflush(stdout);
+    return failures ? 2 : 0;
+}
+
+int MainWindow_Qt::runHeadlessVideoPerfTest(const QString& movie) {
+    if (!viewport_) { printf("VIDEO-PERF FAIL: no viewport\n"); fflush(stdout); return 2; }
+    if (!QFileInfo(movie).isFile()) {
+        printf("VIDEO-PERF FAIL: no such movie %s\n", movie.toLocal8Bit().constData());
+        fflush(stdout);
+        return 2;
+    }
+    jefe::qt::setActivePlate(0);
+    QElapsedTimer t;
+    t.start();
+    loadFileIntoPlate(0, movie);  // starts the track's sequence load
+    const int frameCount = jefe::qt::getTrackTimelineState(0).numFrames;
+    // Done when every frame is in, or when loading stops short (memory limit):
+    // no new frame for 3 s.
+    int lastCount = -1;
+    qint64 lastChange = 0;
+    waitUntilLoaded([&] {
+        const int c = jefe::qt::getTrackTimelineState(0).loadedCount;
+        if (c != lastCount) { lastCount = c; lastChange = t.elapsed(); }
+        return (frameCount > 0 && c >= frameCount) || t.elapsed() - lastChange > 3000;
+    }, 600000);
+    const int loadedCount = std::max(lastCount, 0);
+    const double secs = (loadedCount >= frameCount ? t.elapsed() : lastChange) / 1000.0;
+    const double fps = secs > 0 ? loadedCount / secs : 0.0;
+    printf("VIDEO-PERF decode+upload: %d frames in %.2f s = %.1f fps (%d of %d frames in the track)\n",
+           loadedCount, secs, fps, loadedCount, frameCount);
+    fflush(stdout);
+
+    // Play the loaded frames for 5 s and read the on-screen (EMA) FPS.
+    const float target = jefe::qt::getTargetFPS();
+    jefe::qt::setLoopMode(1);
+    jefe::qt::seekToFrame(1);
+    if (!jefe::qt::isPlaying()) jefe::qt::togglePlayFwd();
+    waitUntilLoaded([&t, start = t.elapsed()] { return t.elapsed() - start >= 5000; }, 6000);
+    const float played = jefe::qt::getMeasuredFPS();
+    if (jefe::qt::isPlaying()) jefe::qt::togglePlayFwd();
+    const bool rateOk = target > 0 && std::abs(played - target) <= 0.02f * target;
+    printf("VIDEO-PERF playback: %.2f fps measured (EMA), target %.3f fps\n", played, target);
+
+    // Reference: the decoder alone, sequentially (no conversion, no upload),
+    // so the numbers above can be read against the decode ceiling.
+    {
+        gfcMovieReader reader;
+        std::string rerr;
+        if (reader.open(movie.toStdString(), &rerr)) {
+            const int64_t n = std::min<int64_t>(reader.info().frameCount, loadedCount);
+            QElapsedTimer d;
+            d.start();
+            int64_t decoded = 0;
+            for (int64_t i = 0; i < n; ++i) {
+                gfcMovieFrame f;
+                if (!reader.readFrame(i, f, &rerr)) break;
+                ++decoded;
+            }
+            const double ds = d.elapsed() / 1000.0;
+            printf("VIDEO-PERF decode only: %lld frames in %.2f s = %.1f fps\n", (long long)decoded, ds,
+                   ds > 0 ? decoded / ds : 0.0);
+        }
+    }
+    const bool pass = fps >= 24.0 && rateOk && loadedCount > 0;
+    printf("VIDEO-PERF %s\n", pass ? "PASS" : "FAIL");
+    fflush(stdout);
+    return pass ? 0 : 2;
 }
 
 int MainWindow_Qt::runHeadlessFXMultiTest(const QString& imagePath) {
@@ -1782,8 +2194,11 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
         }
         return done();
     };
+    // A track is ready once it has its frame list: a render force-loads any frame, resident or not.
+    // One event-loop turn per track keeps the GUI responsive.
     auto waitForTrackFrame = [&](int track) {
-        return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).loadedCount > 0; }, 5000);
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        return waitUntil([track] { return jefe::qt::getTrackTimelineState(track).numFrames > 0; }, 5000);
     };
     // Whether @a frame of @a track can be rendered: a frame the loader hasn't reached gets the load restarted at it, and a wait,
     // except where that restart would be announced to remote peers.
@@ -1864,7 +2279,7 @@ void MainWindow_Qt::renderSummaryThumbnails(const std::vector<jefe::qt::SessionM
                 const QString file = QString::fromStdString(jefe::qt::previewRenderFilename(p));
                 int rendered = 0;
                 viewport_->makeCurrent();
-                quietly([&] { rendered = jefe::qt::triggerSyncRender(p); });   // renders seek the playhead
+                quietly([&] { rendered = jefe::qt::triggerSyncRender(p); });   // renders read their frame without moving the playhead
                 viewport_->doneCurrent();
                 const QImage thumb(file);
                 if (rendered == 1 && !thumb.isNull()) {
@@ -2063,8 +2478,10 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     const QString seqFirst = writeSequence(work + "/seq", "shot", 6, 210);
     check(saveStrokes(seqFirst, "Lead", {2, 5}), "sequence sidecar saved");
     loadFileIntoPlate(2, seqFirst);
+    // The whole sequence loads: frames outside the shortest-track loop limits
+    // (frame 1 here, the image tracks are one frame) still load when they fit.
     check(pumpUntil([] { return jefe::qt::getTrackTimelineState(2).loadedCount >= 6; }, 5000),
-          "the sequence loads all six frames");
+          "the sequence loads");
 
     // The user's playlist state: the current tracks kept as playlist item 0
     // and loaded from it, so item 0 is selected and armed for auto-advance.
@@ -2078,15 +2495,15 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
           }, 5000),
           "the tracks reload from playlist item 0");
 
-    // As if the loader had been started at frame 4 (Alt+click on the timeline):
-    // frames 1-3 were never reached, so a forced render of frame 2 has no load parameters.
-    viewport_->makeCurrent();
-    const bool restarted = jefe::qt::restartTrackLoadAtFrame(2, 4, true);
-    viewport_->doneCurrent();
-    check(restarted, "the sequence's load restarts at frame 4");
-    check(pumpUntil([] { return jefe::qt::isTrackFrameReady(2, 6); }, 5000) &&
-          jefe::qt::isTrackFrameReady(2, 5) && !jefe::qt::isTrackFrameReady(2, 2),
-          "fixture: frame 5 is loaded, frame 2 has not been reached");
+    // Frames the cache doesn't hold still render; a frame outside the track never does, and the
+    // export must not wait for it.
+    check(jefe::qt::isTrackFrameReady(2, 2) && jefe::qt::restartTrackLoadAtFrame(2, 2, true),
+          "a frame of the sequence can be rendered whether or not it is resident");
+    QElapsedTimer outside;
+    outside.start();
+    check(!jefe::qt::isTrackFrameReady(2, 9) && !jefe::qt::restartTrackLoadAtFrame(2, 9, true) &&
+              outside.elapsed() < 100,
+          "a frame outside the sequence is refused at once");
 
     // What the export must put back: a frame other than the first, an in/out
     // range inside the sequence, the playlist selection, Recent Sessions and the tracks.
@@ -2136,12 +2553,21 @@ int MainWindow_Qt::runHeadlessSummaryTest(const QString& imagePath) {
     });
 
     setUserState();
+    // As if the cache evicted everything: the export waits for each track's first frame (pumping
+    // events, where the re-entrant export lands) and still renders every note's frame.
+    viewport_->makeCurrent();
+    int evicted = 0;
+    for (int t = 0; t < 3; ++t) evicted += jefe::qt::evictTrackFrames(t);
+    viewport_->doneCurrent();
+    check(evicted >= 3 && jefe::qt::getTrackTimelineState(0).loadedCount == 0 &&
+              jefe::qt::getTrackTimelineState(2).loadedCount == 0,
+          "fixture: every track's frames evicted");
     check(exportReviewSummary(pdf, &stats, &msg), "PDF summary exported");
     printf("SUMMARY-TEST pdf: %s thumbs=%d thumbfail=%d\n", qPrintable(msg), stats.thumbs, stats.thumbFail);
     // Two entries on the image (all frames, frame 1) and frames 2 and 5 of the
-    // sequence -- frame 2 only renders once the export has loaded it.
+    // sequence, none of them resident when the export started.
     check(stats.thumbs == 4 && stats.thumbFail == 0,
-          "one thumbnail per frame entry, including a frame the loader had not reached; none failed");
+          "one thumbnail per frame entry, including frames that were not resident; none failed");
     const QByteArray pdfBytes = readBytes(pdf);
     check(pdfBytes.startsWith("%PDF-") && pdfBytes.trimmed().endsWith("%%EOF"), "PDF file is complete");
     check(!QFile::exists(pdf + ".partial"), "no partial PDF left");
@@ -2945,13 +3371,14 @@ void MainWindow_Qt::loadFileIntoPlate(int plateIdx, const QString& path,
             "*.tif", "*.TIF", "*.tiff", "*.TIFF",
             "*.tga", "*.TGA",
             "*.bmp", "*.BMP",
+            "*.mov", "*.MOV", "*.mp4", "*.MP4", "*.mxf", "*.MXF",
         };
         QDir dir(resolved);
         const QStringList entries =
             dir.entryList(kImageFilters, QDir::Files, QDir::Name);
         if (entries.isEmpty()) {
             statusBar()->showMessage(
-                QString("No image files in %1").arg(resolved), 5000);
+                QString("No image or movie files in %1").arg(resolved), 5000);
             return;
         }
         resolved = dir.absoluteFilePath(entries.first());

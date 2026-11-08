@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Local WebSocket signaling stub for the WebRTC transport (LAN, no auth). Must not
 // include Qt/GL headers (developer_notes §1); callbacks fire on libdatachannel threads.
 #pragma once

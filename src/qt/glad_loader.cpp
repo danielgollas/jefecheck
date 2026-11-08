@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Loads GLAD function pointers without Qt's OpenGL headers in the same TU
 // (macOS <OpenGL/glext.h> collides with glad's ARB redefinitions).
 #include <glad/glad.h>

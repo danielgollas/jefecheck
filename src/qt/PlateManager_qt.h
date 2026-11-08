@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Plate Manager dock content. Hosts the plate cards in a single row (1×N,
 // horizontal dock) or a single column (N×1, vertical dock). Orientation is
 // driven by the dock edge (setOrientation), not by width — the panel fixes

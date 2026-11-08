@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // jefe::wire message codecs mirroring the legacy RakNet::BitStream field order. Encoders
 // append payload only (callers write the header); a decoder returns false on a bad buffer.
 

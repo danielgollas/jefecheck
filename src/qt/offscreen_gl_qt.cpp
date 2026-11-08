@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Offscreen GL context for the headless --asset-test harness. Own TU: Qt's OpenGL
 // headers cannot share a TU with glad.h (developer_notes §1).
 

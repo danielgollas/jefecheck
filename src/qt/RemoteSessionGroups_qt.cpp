@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "RemoteSessionGroups_qt.h"
 
 #include <QSettings>

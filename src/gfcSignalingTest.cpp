@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Headless loopback self-test for the signaling stub (--signal-test), in its own TU so the rtc
 // Preload/Cleanup bracketing stays away from the production wrappers.
 #include "gfcSignaling.h"

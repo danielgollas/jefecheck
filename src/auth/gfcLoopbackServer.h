@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // One-shot loopback listener for the OAuth redirect: bound to 127.0.0.1 (never Any) on an
 // OS-assigned port, one request then closed, with a hard timeout.

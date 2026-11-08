@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Notes dock: lists the revisions and notes on the active plate's footage,
 // with a tool/colour/size picker, click-to-jump-to-frame and a Lock/Unlock Round toggle.
 // MUST NOT include rendering-chain headers (gfcreview.h, gfcnote.h, ...); go

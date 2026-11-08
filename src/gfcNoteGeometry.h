@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCNOTEGEOMETRY_H
 #define GFCNOTEGEOMETRY_H
 

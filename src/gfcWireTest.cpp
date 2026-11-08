@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Self-test for jefe::wire (--wire-test): assert-count pattern like the other --*-test
 // harnesses, run before GUI/GL setup.
 

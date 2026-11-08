@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Remote-session panel for the Qt port. A dockable QWidget (hosted in a
 // QDockWidget by MainWindow, like the FX / LUT / Playlist panels) with
 // connect-as-server / connect-as-client forms, live status + participant

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. Originally written 2006-2014, modernized for open-source release in 2026 under GPL v2.
+JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. Originally written 2006-2014, modernized for open-source release in 2026 under the GNU General Public License, version 2 or (at your option) any later version (distributed binaries are effectively GPLv3; project-own sources carry `// SPDX-License-Identifier: GPL-2.0-or-later`).
 
 **GitHub:** github.com/danielgollas/jefecheck
 **Version:** 1.7.0
@@ -29,7 +29,7 @@ cmake -B build && cmake --build build -j$(nproc)
 ```
 
 ### Windows (MinGW/MSYS2 via GitHub Actions)
-Uses MSYS2 with `mingw-w64-x86_64-qt6-base`, `mingw-w64-x86_64-qt6-tools`, and `mingw-w64-x86_64-freetype`. See `.github/workflows/build.yml`.
+Uses MSYS2 (UCRT64) with `mingw-w64-ucrt-x86_64-qt6-base`, `mingw-w64-ucrt-x86_64-qt6-tools`, and `mingw-w64-ucrt-x86_64-freetype`. See `.github/workflows/build.yml`.
 
 ### Runtime Resources
 The app finds FX and fonts via `getApplicationDataPath()` (platform-specific install path). For development, symlink to the source tree:
@@ -66,6 +66,7 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 
 ### Image I/O
 - **gfcImageLoaderOIIO** — OpenImageIO for all general formats (JPEG, PNG, TIFF, EXR with multi-layer support)
+- **gfcMovieReader / gfcImageLoaderMovie** — `.mov`/`.mp4`/`.mxf` (ProRes, H.264, H.265, DNxHR) via linked libav* (pimpl; libav headers only in `gfcMovieReader.cpp`); GPU YUV→RGB at upload; sound via `gfcAudioEngine` + Qt Multimedia. See `developer_notes.md` §38.
 - **gfcImageLoaderDPX** — Custom DPX parser (kept for potential performance, uses `gfcpixelbuffer.h` for bitmap ops)
 - **gfcpixelbuffer.h** — Drop-in replacement for removed GFL SDK types (`GFL_BITMAP`, `GFL_COLOR`, `gflResize`, `gflCrop`, etc.)
 - Custom EXR loader disabled — OIIO handles EXR natively
@@ -79,7 +80,7 @@ GFC_ALIGN_LEFT=0x0004, GFC_ALIGN_RIGHT=0x0008, GFC_ALIGN_INSIDE=0x0010, GFC_ALIG
 - **Review summary and review package** (JEF-39): File → **Export Review Summary…** writes every session media's notes (media → round → frame) as PDF/TXT/CSV, with thumbnails in the PDF; File → **Export Review Package…** / **Open Review Package…** bundle the session, notes, custom LUTs and (optionally) media into a `.jcreview` (ustar) and open one with relinking (a cheap file-name match by default; fingerprint relinking is an opt-in Preferences → Search Paths toggle) and notes union-merge. See `developer_notes.md` §37.
 - Native file dialogs via `QFileDialog`.
 - Modal dialogs: About (`AboutDialog_Qt`), System Specs (`MinSpecsDialog_Qt`), Preferences (`PreferencesWindow_Qt`), Render (`RenderDialog_Qt`), Load Sequence Manager (`LoadWindowDialog_Qt`).
-- **Preferences** (`PreferencesWindow_Qt`, File → Preferences…) is a sidebar-navigated dialog with five sections: **General** (background RGB color + checkerboard toggle, default browse path with picker, start fullscreen, open Load Window at startup, crash-recovery session, on-launch session behavior, aspect-fit opacity, thumbnails, feedback-message size/fade — plus the folded Playback & Engine controls: frames-to-read-ahead queue cap, default decode filter, default bit depth), **Text** (size, color, hint mode, filter, gamma, shadow enable/offset/blur/color — live preview via `GfcTextRenderer`), **Formats** (EXR: ignore display window, ignore header aspect ratio), **Search Paths** (enable, recursive, path list with add/remove, and a review-package "Also match moved media by fingerprint" toggle — off by default), and **Remote** (nickname, chat fade/auto-fade/background/font-size/opacity/line-count, remote-pointer fade/color). Color pickers are live (real-time viewport preview) and the viewport repaints while the dialog is open. Removed as part of the JEF-16 audit: the standalone "Paths" tab, the FLTK placeholder pages, the inert engine knobs (rendering engine, vsync, decode partitions, force PBO), `balanceReads` (superseded by the read-ahead queue cap), and the send/auto-accept load-request toggles. See "Preferences System" below and `developer_notes.md` §27.
+- **Preferences** (`PreferencesWindow_Qt`, File → Preferences…) is a sidebar-navigated dialog with five sections: **General** (background RGB color + checkerboard toggle, default browse path with picker, start fullscreen, open Load Window at startup, crash-recovery session, on-launch session behavior, aspect-fit opacity, thumbnails, feedback-message size/fade — plus the folded Playback & Engine controls: memory limit (% of RAM, default 90), when loading can't keep up (Automatic / Keep time / Show every frame), hardware decoding for movies (Auto / Off), default decode filter, default bit depth), **Text** (size, color, hint mode, filter, gamma, shadow enable/offset/blur/color — live preview via `GfcTextRenderer`), **Formats** (EXR: ignore display window, ignore header aspect ratio), **Search Paths** (enable, recursive, path list with add/remove, and a review-package "Also match moved media by fingerprint" toggle — off by default), and **Remote** (nickname, chat fade/auto-fade/background/font-size/opacity/line-count, remote-pointer fade/color). Color pickers are live (real-time viewport preview) and the viewport repaints while the dialog is open. Removed as part of the JEF-16 audit: the standalone "Paths" tab, the FLTK placeholder pages, the inert engine knobs (rendering engine, vsync, decode partitions, force PBO), `balanceReads`, the "Frames to read ahead" decode-to-upload queue cap (it never set how far ahead frames load; fixed at 5), and the send/auto-accept load-request toggles. See "Preferences System" below and `developer_notes.md` §27.
 - The Remote Session dialog (`RemoteDialog_Qt`) is **modeless** (persistent, `show()`/`raise()`, owned by `MainWindow_Qt::remoteDialog_`) so status/participants/chat stay visible during a live session — see `developer_notes.md` §26.
 - Dark VFX theme at `src/qt/theme/jefecheck_dark.qss`.
 - **Button icons** are drawn programmatically (no asset files) via the shared `jefe::qticons` factory (`src/qt/qticons.{h,cpp}`, JEF-19) — dual-state light/dark `QIcon`s for the dark theme's orange `:checked` accent. Used across the Playlist, Timeline transport, FX/LUT panels and dialog Browse/Add/Remove/Send buttons. See `developer_notes.md` §29.
@@ -96,6 +97,10 @@ The Qt build's load flow has two paths:
 
 OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so the Preferences → Engine → Default decode filter setting (`nearest` / `triangle` / `mitchell` / `lanczos3`, default `lanczos3`) actually controls scale quality.
 
+### Movie loading (`gfcMovieReader`, `gfcAudioEngine`)
+
+`.mov`/`.mp4`/`.mxf` load like a sequence (one `sequencesIn` entry, timeline 1…n) with sound; libav* is **linked for reading**, export still shells out to the FFmpeg CLI. The rate is held as a rational and a movie load sets it. Headless: `--video-load-test`, `--audio-device-test`, `--video-colour-test <dir>`, `--video-perf-test <movie>`. See `developer_notes.md` §38.
+
 ### Render & export (`RenderDialog_Qt`, `gfcImageSaverOIIO`, `VideoEncoder_Qt`)
 
 The Render dialog (File → Render…, F6) renders the active plate's frame range and writes:
@@ -104,7 +109,7 @@ The Render dialog (File → Render…, F6) renders the active plate's frame rang
 
 Controls: output **resolution** (`gfcRenderParams.outWidth/outHeight` size the FBO; 0 = source), per-format quality (JPEG quality/progressive/subsampling, PNG level, TIFF/EXR compression, EXR depth, **8/16-bit** PNG/TIFF, video CRF-vs-bitrate + preset). **16-bit / EXR renders use a float (`RGBA16F`) FBO** for real precision (8-bit renders keep the 8-bit FBO). The render is incremental (`QTimer::singleShot(0)` per frame — responsive + cancellable) with a progress bar and a "Show in folder" status link.
 
-FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a GPL static build into the bundle); resolved at runtime via `$JEFECHECK_FFMPEG` → QSettings → bundled → PATH. Headless verification: `--render-test` / `--video-test` / `--playlist-test` / `--fx-test` / `--cc-test` (renders a frame, applies exposure+gamma, re-renders, asserts the output changed — proves the super-shader reaches renders). See `developer_notes.md` §18–21, §30.
+Export uses the FFmpeg **CLI** (movie reading links libav*, §38). FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a GPL static build into the bundle); resolved at runtime via `$JEFECHECK_FFMPEG` → QSettings → bundled → PATH. Headless verification: `--render-test` / `--video-test` / `--playlist-test` / `--fx-test` / `--cc-test` (renders a frame, applies exposure+gamma, re-renders, asserts the output changed — proves the super-shader reaches renders). See `developer_notes.md` §18–21, §30.
 
 ## Key Dependencies
 
@@ -116,11 +121,11 @@ FFmpeg is bundled per-platform (release packaging *and* `CMakeLists.txt` fetch a
 | GLAD | OpenGL loading (compatibility profile 3.3) | Public domain |
 | CLI11 | CLI argument parsing | BSD |
 | OpenEXR / Imath | EXR support (via OIIO) | BSD |
-| RakNet | Networking (vendored in src/) | GPL v2 |
+| RakNet | Networking (vendored in src/) | GPL v2 or later |
 | libcurl | HTTP | MIT |
 | zlib | Compression | zlib |
 | xmlParser | XML parsing (vendored in src/) | BSD |
-| FFmpeg | Video export (H.264/H.265/ProRes) — invoked as a CLI subprocess, **not linked**; bundled per-platform | GPL (bundled static build) |
+| FFmpeg | Movie reading (libav*, linked) + export CLI (H.264/H.265/ProRes); bundled per-platform | GPL v2 or later / bundled GPLv3 |
 
 **Removed dependencies:** FLTK 1.4 (replaced by Qt6 in PR-43f), GFL SDK (proprietary), FLU (proprietary), Boost, GLEW, Botan, stb_truetype
 
@@ -177,6 +182,9 @@ docs/manual-images/     Screenshots (2014, need updating)
 - §5–6 **macOS drag-perf playbook** (QueuedConnection, targeted signals, cache-gated writes, 60Hz throttle; AppKit a11y cascade fires per write).
 - §8 CBArgs enum (`LOOPMODEONCE_ID` = positional 22/23/24, translate at the bridge) · §11 plate-card orientation-aware fixed-size layout · §12 AspectCropCombo is a `QToolButton` (aspect vs crop orthogonal).
 - §13 **playback FPS pacing** (seed `targetFPS` in ctor; `steady_clock`; on-screen FPS is an EMA indicator) · §18–20 **render/export** (OIIO saver; viewport via `parentWidget()`; float FBO for 16-bit/EXR; FFmpeg CLI not libav*; incremental, never a `QThread`) · §21 **pick subsystem** (GL color-pick pass, GL context current).
+- §38 **movie loading and audio** (libav* pimpl, GPU YUV→RGB at upload, rational rate, audio clock/slices, self-test flags, GPL v2-or-later relicence).
+- §40 **rolling frame cache** (frame table + coordinator, byte budget from the RAM %, priority order, retarget on every seek, Keep time / Show every frame, audio thread, buffer-bar segments, --cache-test).
+- §39 **frame upload** (Metal-native formats, IOSurface binding on macOS, staging-buffer tickets and texture pool, idle trim, one CPU copy per queued frame, `--upload-bench`).
 - §26 **remote-session runtime** (pump always-on outside `needsPlaybackTick`; TU-safe getters for status/participants/chat/errors; `remoteDialog_` modeless lazy-created; chat+pointer overlay in `paintGL`; `--remote-test` two-process harness).
 
 ### Image Loading Flow
@@ -216,6 +224,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 - **Image-based LUT loading disabled** — `trilerp.cpp` IMAGELUT2D case returns -1 (needs OIIO image reading).
 - **Custom EXR loader disabled** — `gfcimageloaderexr.cpp` excluded from build due to OpenEXR 3.x API changes. OIIO handles EXR.
 - **Text rendering quality** — FreeType with light hinting is good but not Core Text quality on macOS. Diagonal strokes (/, 7, k) have some stairstepping at small sizes. Possible future improvement: render via Core Text on macOS.
+- **`--cache-test` needs ffmpeg** — its media (and the `--video-load-test` media it also generates, including libx265 and libvpx-vp9 clips) is made at test time with the ffmpeg CLI; without one it prints `CACHE-TEST SKIP: ffmpeg not found` and exits 3 (the ffmpeg lookup is the export's: `$JEFECHECK_FFMPEG` → QSettings → bundled → `PATH`).
 - **Preferences font dropdown z-order** — `Fl_Choice` popup may appear behind the preferences window on macOS. Workaround: make window modal.
 
 ## CI & Releases

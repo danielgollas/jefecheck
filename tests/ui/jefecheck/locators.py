@@ -221,7 +221,9 @@ PREFS_GENERAL_FEEDBACK_FADE = "preferences.general.feedbackfade.spin"
 
 # Preferences → Playback & Engine widgets, `preferences.engine.*.combo` leaf convention;
 # only the queue control remains.
-PREFS_ENGINE_QUEUE = "preferences.engine.queue.spin"
+PREFS_ENGINE_HARDWARE_DECODING = "preferences.engine.hardwaredecoding.combo"
+PREFS_ENGINE_MEMORY_LIMIT = "preferences.engine.memorylimit.spin"
+PREFS_ENGINE_LAG_POLICY = "preferences.engine.lagpolicy.combo"
 PREFS_ENGINE_OIIO_THREADS = "preferences.engine.oiiothreads.spin"
 PREFS_DEFAULT_DECODE_FILTER = "preferences.engine.decodefilter.combo"
 PREFS_DEFAULT_BIT_DEPTH = "preferences.engine.bitdepth.combo"

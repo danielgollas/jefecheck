@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt implementation of IGLViewport: a pure listener relay. paintGL,
 // initializeGL and resizeGL are forwarded to the registered IGLViewportListener.
 #include "GlViewport_qt.h"

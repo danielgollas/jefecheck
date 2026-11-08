@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include <glad/glad.h>
 #include "gfcPlate.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
 #include "gfcSequence.h"
+#include "gfcIOSurface.h"
 #include "gfcfx.h"
 #include <string>
 #include "platefxparams.h"
@@ -15,6 +17,7 @@ namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::insta
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 #include "gfcimagesaver.h"
 
@@ -1669,6 +1672,8 @@ void gfcPlate::draw3DrectWithFX(int pcurrentFrame) {
         endTransform();
 
     }
+    drawLoadingLabel();
+
     //**********DRAW THE LABEL*****************
     drawText();
 
@@ -1810,6 +1815,8 @@ void gfcPlate::draw3Drect(int pcurrentFrame) {
 
     //draw the warning in case we don't support texture rectangles
     drawTextureRectangleWarning();
+
+    drawLoadingLabel();
 
     //**********DRAW THE LABEL*****************
     drawText();
@@ -2244,12 +2251,14 @@ void gfcPlate::toggleHistogramMode(int reset) {
 void gfcPlate::calculatePolySizesCropEtc() {
 
 
+    float drawnW, drawnH;
+    displaySize(theFrame.sizeX, theFrame.sizeY, theFrame.quadSizeX, theFrame.quadSizeY, aspect, cropOn, drawnW, drawnH);
+    polySizeX=(int)drawnW;
+    polySizeY=(int)drawnH;
+
     if (aspect==-1 || cropOn) {//Use the original size from file when aspect is -1 (file) or when we will do cropping
 		textureSize.w = theFrame.sizeX;
 		textureSize.h = theFrame.sizeY;
-
-        polySizeX=theFrame.quadSizeX;
-        polySizeY=theFrame.quadSizeY;
 
         if (cropOn && aspect!=-1) {
             switch (cropMode) {
@@ -2301,14 +2310,6 @@ void gfcPlate::calculatePolySizesCropEtc() {
             cropBarBottom.set(0,0,0,0);
         }
 
-    } else {
-           if (aspect>1) {
-            polySizeX=(int)(theFrame.sizeY/aspect);
-            polySizeY=(int)(theFrame.sizeY);
-        } else {
-            polySizeX=(int)(theFrame.sizeX);
-            polySizeY=(int)(theFrame.sizeX*aspect);
-        }
     }
 
     texCoords.x=0;
@@ -2362,7 +2363,7 @@ void gfcPlate::drawTextureRectangleWarning() {
 
 }
 
-int gfcPlate::getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result, GLuint readFormat) {
+int gfcPlate::getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gfcHistogram &result, GLuint readFormat, bool surfaceBacked) {
 
     //get the texture's pixels into the
     //pixelRGBA8Bit * thePixels=new pixelRGBA8Bit[sizeX*sizeY];
@@ -2379,7 +2380,21 @@ int gfcPlate::getHistogramFromTexture(GLuint theTexture, int sizeX, int sizeY,gf
 
 
     glBindTexture ( GL_TEXTURE_RECTANGLE_ARB,theTexture );
-    glGetTexImage ( GL_TEXTURE_RECTANGLE_ARB,0,GL_RGBA,readFormat,thePixelsc );
+    if (surfaceBacked) {
+        // glGetTexImage returns nothing for an IOSurface-backed texture:
+        // draw it into a float FBO instead and bring it to 8 bits.
+        std::vector<float> rgba((size_t)sizeX * sizeY * 4);
+        if (!gfcSurface::readBack(theTexture, sizeX, sizeY, rgba.data())) {
+            delete [] thePixelsc;
+            return 1;
+        }
+        for (size_t i = 0; i < rgba.size(); ++i) {
+            const float v = rgba[i];
+            thePixelsc[i] = (unsigned char)(v <= 0.0f ? 0 : v >= 1.0f ? 255 : (int)(v * 255.0f + 0.5f));
+        }
+    } else {
+        glGetTexImage ( GL_TEXTURE_RECTANGLE_ARB,0,GL_RGBA,readFormat,thePixelsc );
+    }
     //printf("The error should follow\n");
     glPrintError();
     result.quality=histogramQuality;
@@ -2418,20 +2433,23 @@ if(histogramWindow.visible()){
                 if (histogramCache.count(currentFrame)==0) { //this means this frame has not been cached, get a new histogram.and that we are not picking, we should never cache a frame that was rendered from picking!
 
                     //TODO: Get the texture ID from the frame or from the FBOs depending on the FX stack state.
+                    int readFailed = 0;
                     switch ( drawingChoice ) {
                     case 0:
 						//printf("Getting histogram texture from textureID=%i (%ix%i)\n",theFrame.textureID, theFrame.sizeX, theFrame.sizeY);
-                        getHistogramFromTexture(theFrame.textureID, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE);
+                        readFailed = getHistogramFromTexture(theFrame.textureID, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE,
+                                                             theFrame.ioSurface != nullptr);
                         break;
                     case 1:
 						//printf("Getting histogram texture from fbo8bitTexture=%i (%ix%i)\n",fbo8bitTexture, theFrame.sizeX, theFrame.sizeY);
-                        getHistogramFromTexture(fbo8bitTexture, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE);
+                        readFailed = getHistogramFromTexture(fbo8bitTexture, theFrame.sizeX, theFrame.sizeY,theHist, GL_UNSIGNED_BYTE);
                         break;
                     }
                     //printf("caching histogram %i\n",currentFrame);
-                    caching=1;
-
-                    histogramCache[currentFrame]=theHist;
+                    // A read that failed has nothing worth keeping: try again next draw.
+                    caching = !readFailed;
+                    if (caching)
+                        histogramCache[currentFrame]=theHist;
                 } else {
                     //printf("drawing cached histogram %i\n",currentFrame);
                     theHist=histogramCache[currentFrame];
@@ -2465,6 +2483,34 @@ void gfcPlate::drawVectorscope() {
         if (showVectorscope) {
         }
     }
+}
+
+void gfcPlate::drawLoadingLabel() {
+    // A render force-loads its frame, so it never shows the label.
+    if (theFrame.loaded || showPreview || forRender || !theSequence ||
+        !theSequence->framePending(currentFrame))
+        return;
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_TEXTURE_RECTANGLE_ARB);
+    glDisable(GL_TEXTURE_2D);
+    // Same colour as the status text (drawText), feedback-message size. The
+    // renderer's size, weight and colour are put back for whoever draws next.
+    GfcTextRenderer& tr = textRenderer();
+    const float oldSize = tr.size();
+    const bool oldBold = tr.bold();
+    float oR, oG, oB, oA;
+    tr.color(oR, oG, oB, oA);
+    float lr, lg, lb;
+    tr.labelColor(lr, lg, lb);
+    gfc_gl_font(FL_HELVETICA, sett.feedbackMessageSize);
+    tr.setColor(lr, lg, lb, 1.0f);
+    gfc_gl_draw("Loading", rect.x, rect.y, rect.w, rect.h, GFC_ALIGN_CENTER);
+    tr.setSize(oldSize);
+    tr.setBold(oldBold);
+    tr.setColor(oR, oG, oB, oA);
+    glPopAttrib();
 }
 
 void gfcPlate::drawText() {
@@ -3234,54 +3280,38 @@ void gfcPlate::toggleChannelA() {
 	setRGBAGUIFromCurrentMasks();
 }
 
+void gfcPlate::displaySize(int sizeX, int sizeY, float quadSizeX, float quadSizeY, float aspect, bool cropOn, float& w, float& h) {
+    if (aspect == -1 || cropOn) {
+        w = quadSizeX;
+        h = quadSizeY;
+    } else if (aspect > 1) {
+        w = (int)(sizeY / aspect);
+        h = sizeY;
+    } else {
+        w = sizeX;
+        h = (int)(sizeX * aspect);
+    }
+}
+
+float gfcPlate::fitZoom(float vpW, float vpH, float w, float h) {
+    if (w <= 0 || h <= 0 || vpW <= 0 || vpH <= 0) return 1.0f;
+    return (std::min)(1.0f, (std::min)(vpW / w, vpH / h));
+}
+
 void gfcPlate::fitToViewport(){
-	
-
-	//for debbugging purposes
-	//printf("Use Shader: %i\n",useShader);
-	
-
 	//center the frame
 	resetTransforms();
-	
+
 	if (!theFrame.loaded || theFrame.quadSizeX<=0.0 || theFrame.quadSizeY<=0.0)
 	{
 		this->setZoom(1.0);
 		return;
 	}
-	
 
-	//figure out the best scale
 	getFrameAndSequence();
-	float sX=theFrame.quadSizeX;
-	float sY=theFrame.quadSizeY;
-	
-	float vpW=viewport.w;
-	float vpH=viewport.h;
-	
-	float ratioX=vpW/sX;
-	float ratioY=vpH/sY;
-	
-	//printf("vp:%f %f\nquadSize: %f %f\nratios: %f %f\n",vpW,vpH,sX,sY,ratioX, ratioY);
-	
-	
-	//printf("ratioX %f, ratioY %f\n",ratioX, ratioY);
-	if (ratioX>ratioY)
-	{
-		if (ratioY<=1.0 && ratioY>0)
-		{	
-			this->setZoom(ratioY);
-		}
-		
-	}
-	else
-	{
-		if (ratioX<=1.0 && ratioX>0)
-		{
-			this->setZoom(ratioX);
-		}
-		
-	}
+	float w, h;
+	displaySize(theFrame.sizeX, theFrame.sizeY, theFrame.quadSizeX, theFrame.quadSizeY, aspect, cropOn, w, h);
+	this->setZoom(fitZoom(viewport.w, viewport.h, w, h));
 
 	plateManager.setFeedbackMessage("Fit plate to viewport");
 }

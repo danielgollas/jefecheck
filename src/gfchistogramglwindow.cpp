@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfchistogramglwindow.h"
 
 
@@ -9,7 +10,7 @@ int gfcHistogramGLWindow::drawContent()
 		
 	currentHistogram->drawForPicking=this->drawForPicking;
 	currentHistogram->draw(caching);
-	
+	return 1;
 }
 
 int gfcHistogramGLWindow::draw(gfcHistogram *theHist, int pcaching)

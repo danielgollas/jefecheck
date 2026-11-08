@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfchistogram.h"
 #include "gfcTextRenderer.h"
 #include "qt/qt_fltk_stubs.h"  // FL_HELVETICA used by gfc_gl_font

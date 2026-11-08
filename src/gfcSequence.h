@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // gfcSequence.h: interface for the gfcSequence class.
 //
 //////////////////////////////////////////////////////////////////////
@@ -7,6 +8,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <atomic>
 
 #if !defined(AFX_GFCSEQUENCE_H__B640892A_60B9_471B_86DB_D6EE198B1304__INCLUDED_)
 #define AFX_GFCSEQUENCE_H__B640892A_60B9_471B_86DB_D6EE198B1304__INCLUDED_
@@ -29,8 +31,12 @@ class TrackWidget;
 #include <vector>
 #include "gfcStructures.h"
 #include "gfcloadparams.h"
+#include "gfcMovieReader.h"
+#include "gfcAudioClip.h"
+#include <memory>
 #include "gfcimageloader.h"
 #include "gfcframe.h"
+#include "gfcFrameTable.h"
 
 #include "gfcNetworkStructures.h"
 
@@ -175,8 +181,9 @@ private:
     std::vector<gfcFrame> frames;
     std::queue<gfcFrame> rawFrames;
 	std::condition_variable cond; //this condition is used to wait for the queue to go to the correct level.
-	
-    std::queue<int> loadedFrames;
+
+    // Per-frame cache state (0-based source indices), one entry per frames[].
+    gfcFrameTable frameTable_;
     gfcFrame previewFrame;
     gfcTimer previewTimer;
     gfcRectang aoi;
@@ -259,13 +266,52 @@ public:
     int loadSequence();
     int initializeSequence(gfcLoadParams params);
     int generateTextures(int howMany=1);
+    // The trim range set by initializeSequence (loadFrameRange), offset
+    // applied: the footage the track plays, not what is resident.
     int getRangeStart();
     int getRangeEnd();
     int getNumFrames();
-    // Number of frames decoded into this sequence so far. Mirrors the
-    // value FLTK fed the track-widget progress bar (loadedFrames.size()).
-    // Used by the Qt track timeline to draw the loaded-vs-unloaded fill.
+    // Number of frames resident (uploaded) right now; same as residentCount().
     int getLoadedFrameCount();
+
+    // Rolling-cache bookkeeping. Indices are 0-based source frames.
+    gfcFrameTable& frameTable() { return frameTable_; }
+    int residentCount() const { return frameTable_.residentCount(); }
+    // Moves whenever the resident set may have changed (timeline redraws on it).
+    uint64_t loadedVersion() const { return frameTable_.version(); }
+    // Inclusive runs of resident frames, 0-based source indices.
+    void loadedSegments(std::vector<std::pair<int,int>>& out) const { frameTable_.segments(out); }
+    // GL thread: frees frame index's texture (through gfcFrame::deleteTexture)
+    // and its image loader, keeps its thumbnail and load params, marks it Unloaded.
+    void evictFrame(int index);
+    // The frame getFrame() would show at this timeline frame (hold modes
+    // applied: mode 1 the held frame, mode 2 the trim edge outside the range)
+    // is inside the trim range, not resident and not Failed: it is waiting to
+    // be loaded (a Failed frame is settled; it is not retried).
+    // False where the track has no footage (the plate shows plain black).
+    bool framePending(int timelineFrame) const;
+    // GPU bytes one frame of this load is expected to take: the preview frame's
+    // size (after scale, and crop when on) times the bytes per pixel of the
+    // load's bit depth. 0 without a preview.
+    size_t estimatedFrameBytes() const;
+    int trackIndex() const { return trackID - 'A'; }
+    // Tests: a sleep before every decode on the loader threads (0 = none).
+    static void setTestDecodeDelayMs(int ms);
+    // Tests: a sleep before every 1 s block on the audio threads (0 = none).
+    static void setTestAudioBlockDelayMs(int ms);
+    // Tests: an audio read starting in [fromSample, toSample) fails as a
+    // mid-file read error would (from >= to turns it off).
+    static void setTestAudioReadErrorRange(int64_t fromSample, int64_t toSample);
+    // How many times a load was announced to the remote session (LOAD message).
+    static long loadAnnouncements();
+    // The loader thread's id, or the default id when none is running.
+    std::thread::id loaderThreadId() const;
+    // A loader or audio thread is running on this track.
+    bool threadsRunning() const;
+    // App quit: no track starts a loader or audio thread after this
+    // (gfcTrackManager::shutdown stops the running ones).
+    static void beginShutdown();
+    static bool shuttingDown();
     // Thumbnail for a decoded frame (0-based sequence index), for the
     // timeline filmstrip. Returns an empty thumbnail (w==0) when the
     // index is out of range or that frame hasn't been captured.
@@ -275,6 +321,7 @@ public:
     void startLoading(int fromTrack=0,int fromTimeLine=0);
     void clearRawQueue();
     void stopLoading();
+    // No frames: nothing has been initialised for loading (frames.empty()).
     bool isEmpty();
     // True when the loader thread has decoded frames waiting to be
     // uploaded to GL by generateTextures(). The Qt 60Hz tick uses this
@@ -293,6 +340,32 @@ public:
     void updateTrackWidget();
     std::string loadPreview();
     gfcFrame getPreviewFrame();
+
+    // Movies: the track holds one open reader shared by every frame's load
+    // (opened when the GUI filename is a .mov/.mp4, dropped by clearSequence).
+    bool isMovie() const;
+    // The loader's reader (sound off), or null. For self-tests.
+    std::shared_ptr<gfcMovieReader> loaderMovieReader() const { return currentMovieReader(); }
+    // Stream facts of the open movie, or null for an image sequence (or a
+    // movie that could not be opened). Valid until the track is reloaded/cleared.
+    const gfcMovieInfo* movieInfo() const;
+
+    // Movie sound: the track's audio thread decodes it into audioClip_ (48 kHz
+    // stereo, movie-time sample indices) with an audio-only reader, whatever
+    // picture is loaded, plus a peak summary for the timeline waveform. Null
+    // clip / false for image sequences and silent movies.
+    // hasAudio() is a lock-free relaxed read of hasAudio_ (set with the clip in
+    // resetAudio), so it is safe from the GL thread while the loader holds audioMutex_.
+    bool hasAudio() const;
+    // A jump: the audio thread fills the sound at this timeline frame first
+    // when it is not there yet. One atomic store; never called per tick.
+    void setAudioTarget(int timelineFrame);
+    std::shared_ptr<gfcAudioClip> audioClip() const;
+    gfcAudioPeaks audioPeaksSnapshot() const;
+    uint64_t audioPeaksVersion() const;
+    // Per-track mute (saved with the session); mirrored to audioEngine.
+    void setAudioMuted(bool muted);
+    bool audioMuted() const { return audioMuted_; }
     double getPreviewElapsedSecs() const;  // last loadPreview() wall-clock time
     
     gfcSequenceGUI* myGUI;
@@ -338,20 +411,15 @@ public:
     //now it's a global for each sequence std::mutex rawMutex; //mutex for the raw sequence, controls access to the raw queue for loading and generating textures.
     bool generateTexture(RawFrame *pRawFrame=NULL, gfcFrame *pFrame=NULL); //locks the raw frame queue, checks if it's empty, if not, pops first element and generates glTexture.
     
-    //Hard drive streaming variables
-    std::vector<GLuint> cacheTextures; //stores x number amount of cache textures, these textures are used to do a glTexSubImage upload.
-    bool streaming; //determines if this is a streaming track.
-    void loadForStreaming();
-    std::thread* StreamingThread;
-    void (*StreamingThreadStarterFunc)(void);
-    
      void setOffset(int offset);
      void setHoldMode(int holdMode, int holdFrame=0);
      int getHoldMode();
      int getOffset();
      void setVisibleFromAndTo(int visibleFrom, int visibleTo); ///sets the GUIs tracks widget to the correct visible range.
      
-    bool freeFrames(int numFrames); //removes the first numFrames frames from the loadedFrames queue.
+    // GL thread: evicts the first numFrames resident frames in index order.
+    // False when fewer than numFrames were resident.
+    bool freeFrames(int numFrames);
     //thread variables start with "t"
     std::string tfileName;
     int tscale;
@@ -368,14 +436,83 @@ public:
     int tchannel;
     Rectang *taoi;
     std::mutex rawQueueMutex;
-    bool loadingCanceled;
+    // Written by the GL thread (stopLoading, under rawQueueMutex) and the loader.
+    std::atomic<bool> loadingCanceled{false};
+    // Guards movieReader_ itself (the reader is internally thread-safe):
+    // loadPreview may replace it on the main thread.
+    mutable std::mutex movieReaderMutex_;
+    std::shared_ptr<gfcMovieReader> movieReader_;
+    // Forced loads (renders, review thumbnails, evicted frames) read through
+    // a reader of their own, sound off, opened on first use: a seek on the
+    // loader's reader would discard sound the loader has not taken yet, and
+    // sound decoded there with no consumer would pile up. Dropped whenever
+    // movieReader_ changes (clearSequence, reload). Guarded by movieReaderMutex_.
+    std::shared_ptr<gfcMovieReader> forcedReader_;
+    std::string forcedReaderPath_;
+    std::shared_ptr<gfcMovieReader> forcedMovieReader(const std::string& path);
+    void openMovieReaderFor(const std::string& path);
+    // Guards audioClip_ (the pointer; the clip itself is thread-safe) and audioPeaks_.
+    mutable std::mutex audioMutex_;
+    std::shared_ptr<gfcAudioClip> audioClip_;
+    std::atomic<bool> hasAudio_{false};   // mirrors audioClip_ != nullptr; written under audioMutex_
+    gfcAudioPeaks audioPeaks_;
+    bool audioMuted_ = false;
+    void resetAudio(int64_t startSample, bool withClip);
+    void publishAudioPeaks(const std::shared_ptr<gfcAudioClip>& clip);
+    // The audio thread (one per load of a movie with sound, low priority).
+    // Its reader is audio-only, opened in initializeSequence (which decides
+    // the clip). audioTarget_ is the movie-time sample of the playhead's source
+    // frame after a jump (-1 = none). Rate and fill range are fixed per load.
+    std::thread* audioThread_ = nullptr;
+    std::shared_ptr<gfcMovieReader> audioReader_;
+    std::atomic<int64_t> audioTarget_{-1};
+    std::atomic<bool> audioCanceled_{false};
+    // Wakes an idle audio thread on a jump or a cancel (both written under it).
+    std::mutex audioWakeMutex_;
+    std::condition_variable audioWake_;
+    int audioRateNum_ = 0, audioRateDen_ = 1;
+    int64_t audioBegin_ = 0, audioEnd_ = 0;   // the clip's fill range [begin, end), movie-time samples
+    void startAudioThread();
+    // Cancels and joins the audio thread. Called with no lock held.
+    void stopAudioThread();
+    void audioThreadMain(std::shared_ptr<gfcMovieReader> reader, std::shared_ptr<gfcAudioClip> clip,
+                         int64_t begin, int64_t end, int rateNum, int rateDen);
+    // The [startFrame, endFrame] frame-entry range loadSequence() will load.
+    void loadFrameRange(int& startFrame, int& endFrame) const;
+    std::shared_ptr<gfcMovieReader> currentMovieReader() const;
+    // The trim range [rangeBegin, rangeEnd] (0-based, no offset) from
+    // loadFrameRange(), set by initializeSequence and cleared by clearSequence.
     int rangeBegin;
     int rangeEnd;
-    int maxFramesToLoad; //how many frames should be loaded for this sequence, assigned dynamicaly depending on how many tracks are being loaded and how many fit in ram.
-    bool maxFramesReached();
+    // Pins (or unpins) the trim edges in frameTable_ for hold-edge mode.
+    void pinHoldEdges(bool on);
+    // Pins (or unpins) one frame, through the coordinator when this is a cache track.
+    void pinFrame(int index, bool on);
+    // Hold mode 1 pins the held frame (holdFrameCurrent-1); the pin moves with
+    // it and goes when the mode is left. heldPin_ is the index pinned, or -1.
+    void updateHeldFramePin();
+    int heldPin_ = -1;
+    // Frame i's load parameters (this load's params, file i, the movie reader).
+    gfcLoadParams frameLoadParams(int i, const std::shared_ptr<gfcMovieReader>& reader) const;
+    // This sequence's track in the frame cache, or -1 (not one of the four tracks).
+    int cacheTrack() const;
+    // GL thread: frames[i] = f, freeing a texture still there and keeping the
+    // old thumbnail when f brings none.
+    void storeFrame(int i, gfcFrame& f);
+    // The coordinator's per-frame estimate for this load, corrected once by
+    // the first real upload.
+    size_t cacheFrameBytes_ = 0;
+    bool cacheFrameBytesChecked_ = false;
     std::vector<int> luts;
 #include "gfcframe.h"
     gfcFrame forcedFrame;
+    int forcedFrameIndex = -1;   // which frames[] entry forcedFrame holds, -1 none
+    // The last frame getFrame() returned loaded (GL thread only) and the cache
+    // generation it was drawn in. Keep time shows it while the frame due is
+    // not loaded yet; a jump (new generation) stops that.
+    int lastDrawnIndex_ = -1;
+    uint64_t lastDrawnGeneration_ = 0;
+    const gfcFrame& displayFrame(int i, bool forceLoad, const gfcFrame& emptyFrame);
     void cleanForcedLoad();
     
     bool forceGFLLoading;

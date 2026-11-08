@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Timeline + transport dock content. Top row is the transport bar
 // (rewind / step-back / play-pause / step-fwd / fast-fwd / loop mode /
 // frame counter / in / out / FPS). Bottom is a custom scrubber widget
@@ -70,6 +71,7 @@ public:
     // the bridge; cache-compare and repaint only on change. Driven from
     // TimelinePanel_Qt::refreshFromPlayback. Cheap when idle.
     void refresh();
+    int firstThumbnailDrawn(int track) const { return firstThumbDrawn_[track]; }
 
 protected:
     void paintEvent(QPaintEvent* e) override;
@@ -88,11 +90,24 @@ private:
     QPixmap thumbPixmap(int track, int frameIndex);   // fetch+cache
     void paintFilmstrip(QPainter& p, int track, int laneY, int laneH,
                         const jefe::qt::TrackTimelineState& s);
+    // Thin waveform strip (peak per pixel column) inside `strip`; dim when muted.
+    void paintWaveform(QPainter& p, int track, const QRect& strip,
+                       const jefe::qt::TrackTimelineState& s);
+    // Speaker toggle rect (right of the track letter); empty when the track has no audio.
+    QRect speakerRect(int track, const jefe::qt::TrackTimelineState& s) const;
+
+    // Cached peak summaries; refetched only when audioPeaksVersion changes.
+    std::array<jefe::qt::WaveformPeaks, 4> waves_{};
 
     int from_ = 1;
     int to_ = 1;
     int current_ = 1;
     std::array<jefe::qt::TrackTimelineState, 4> states_{};
+    // Loaded runs per track (1-based inclusive timeline frames), refetched only
+    // when a track's loadedVersion or offset moves.
+    std::vector<std::pair<int, int>> segments_[4];
+
+    std::array<int, 4> firstThumbDrawn_{{-1, -1, -1, -1}};   // per paint, for the test hook
 
     // Cached thumbnail pixmaps, keyed by (track << 24) | frameIndex.
     QHash<int, QPixmap> thumbCache_;

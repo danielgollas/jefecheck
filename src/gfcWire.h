@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // jefe::wire: small, versioned, little-endian wire format, header-only.
 // Frame: [u8 version][u16 msgType LE][payload]; the Reader is bounds-checked and sticky-fails.
 

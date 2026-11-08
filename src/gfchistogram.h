@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCHISTOGRAM_H
 #define GFCHISTOGRAM_H
 

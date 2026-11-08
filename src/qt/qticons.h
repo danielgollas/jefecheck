@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // qticons.h — shared programmatic icon factory (no asset files; icons are painted with
 // QPainter, dual-state light/dark for the orange :checked accent). See developer_notes.md §29.
 #pragma once
@@ -49,6 +50,8 @@ QIcon save();                // floppy disk
 QIcon check();               // ✓ (apply)
 QIcon send();                // paper plane
 QIcon recent();              // clock
+QIcon speaker();             // speaker with sound waves
+QIcon speakerMuted();        // speaker with a cross
 
 } // namespace qticons
 } // namespace jefe

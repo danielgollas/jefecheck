@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Cloud-coordinator signaling client. See gfcCoordinatorSignaling.h for the
 // protocol contract and threading.
 #include "gfcCoordinatorSignaling.h"

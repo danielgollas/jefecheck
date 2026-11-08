@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#pragma once
+// Headless suites behind --video-load-test. Each prints "<SUITE>: pass=N fail=N"
+// and returns the failure count. No manager includes, so main_qt.cpp can use it.
+#include <string>
+
+int movieKindsSelfTest(const std::string& mediaDir);
+int movieLibavSelfTest(const std::string& mediaDir);
+int movieReaderSelfTest(const std::string& mediaDir);
+int movieNumberingSelfTest(const std::string& mediaDir);
+int movieLoaderSelfTest(const std::string& mediaDir);
+int movieHardwareSelfTest(const std::string& mediaDir);
+int movieRateSelfTest(const std::string& mediaDir);
+int movieFingerprintSelfTest(const std::string& mediaDir);
+int movieStampSelfTest(const std::string& mediaDir);
+int audioClipSelfTest(const std::string& mediaDir);
+int audioSequenceSelfTest(const std::string& mediaDir);
+int playbackAdvanceSelfTest(const std::string& mediaDir);
+int audioEngineSelfTest(const std::string& mediaDir);
+int audioSyncSelfTest(const std::string& mediaDir);
+int audioWalkSelfTest(const std::string& mediaDir);
+int audioPlaybackSelfTest(const std::string& mediaDir);
+int muteBridgeSelfTest(const std::string& mediaDir);
+int audioForcedLoadSelfTest(const std::string& mediaDir);

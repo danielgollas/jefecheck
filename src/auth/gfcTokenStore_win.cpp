@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Windows Credential Manager backend for the refresh token (per-user, OS-encrypted).
 // The target name carries the coordinator URL so hosted and self-hosted tokens stay separate.
 

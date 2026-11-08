@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Playlist dock: a list of playlist items (one card per item with collapsible
 // per-track details). See developer_notes.md §25.
 #ifndef JEFECHECK_QT_PLAYLIST_PANEL_H

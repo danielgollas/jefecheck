@@ -6,11 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find system packages
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(OpenGL REQUIRED)
 # Network: the OAuth loopback listener and the token exchange (JEF-31). Ships
 # in qt6-base, which every platform already installs (brew qt, qt6-base-dev,
 # mingw-w64-x86_64-qt6-base), so this adds no package to any CI image.
-find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets Network Multimedia)
+# libav* for movie loading (.mov/.mp4); sound goes through Qt Multimedia.
+find_package(FFmpeg REQUIRED)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -43,6 +46,12 @@ if(NOT WIN32)
 endif()
 if(WIN32)
     list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "_FindFirst")
+endif()
+# IOSurface-backed textures: the real implementation on macOS, stubs elsewhere.
+if(APPLE)
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcIOSurface_stub")
+else()
+    list(FILTER JEFECHECK_SOURCES EXCLUDE REGEX "gfcIOSurface_mac")
 endif()
 
 file(GLOB JEFECHECK_QT_SOURCES src/qt/*.cpp)
@@ -124,6 +133,12 @@ target_link_libraries(jefecheck PRIVATE
     Qt6::Widgets
     Qt6::OpenGLWidgets
     Qt6::Network
+    Qt6::Multimedia
+    FFmpeg::avformat
+    FFmpeg::avcodec
+    FFmpeg::avutil
+    FFmpeg::swresample
+    FFmpeg::swscale
     # Token store (JEF-31): Keychain on macOS, Credential Manager on Windows.
     # Both ship with their platform SDK — no third-party dependency.
     #
@@ -240,7 +255,12 @@ if(APPLE)
         "-framework IOKit"
         "-framework CoreFoundation"
         "-framework Foundation"
+        "-framework IOSurface"
+        "-framework OpenGL"
     )
+    # Apple GL headers in gfcIOSurface_mac.cpp (CGLTexImageIOSurface2D).
+    set_source_files_properties(src/gfcIOSurface_mac.cpp PROPERTIES
+        COMPILE_DEFINITIONS "GL_SILENCE_DEPRECATION")
 
     # Build a proper .app bundle. CFBundleName and CFBundleIdentifier
     # flow into the AXApplication root's title and identifier, which is

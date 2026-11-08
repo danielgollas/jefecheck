@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt entry point for the USE_QT build: QApplication, MainWindow_Qt, GlViewport_Qt, and the
 // headless --*-test harness dispatch.
 #include <QApplication>
@@ -43,6 +44,9 @@
 #include "gfcMediaFingerprint.h"
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
+#include "gfcMovieSelfTests.h"
+#include "gfcCacheSelfTests.h"
+#include "gfcTimecode.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
@@ -53,8 +57,11 @@
 #include "qt/ieventsystem_qt.h"
 #include "qt/MainWindow_qt.h"
 #include "qt/SequenceLoadBridge_qt.h"
+#include "qt/AudioOutput_qt.h"
 #include "qt/ReviewSummaryPdf_qt.h"
 #include "qt/ReviewPackage_qt.h"
+#include "qt/MovieTestMedia_qt.h"
+#include "qt/VideoEncoder_qt.h"
 
 extern gfcSettings sett;
 
@@ -155,8 +162,17 @@ static QString resolveCCTestFile(int argc, char* argv[]) {
     return QString();
 }
 
-// Resolve --fx-multitest <image>. Headless multiplate FX state-leak probe: load the image
-// into plates 0 and 1, add an FX to plate 0 only, and compare left/right brightness.
+// Resolves a flag's value: --video-colour-test <dir>, --video-perf-test <movie>, --upload-bench <dir>.
+static QString resolveArgValue(int argc, char* argv[], const char* flag) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], flag) == 0) {
+            return QString::fromLocal8Bit(argv[i + 1]);
+        }
+    }
+    return QString();
+}
+
+// --fx-multitest <image>: an FX on plate 0 must not change plate 1 (state-leak probe).
 static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--fx-multitest") == 0) {
@@ -182,8 +198,32 @@ static bool hasNotesTest(int argc, char* argv[]) {
     return false;
 }
 
-// --wire-test : headless jefe::wire round-trip/bounds-safety self-test. Pure data; dispatched
-// at the top of main(), before QApplication is constructed. Takes no argument.
+// --cache-test : headless rolling-cache suites (offscreen GL + ffmpeg).
+static bool hasCacheTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--cache-test") == 0) return true;
+    }
+    return false;
+}
+
+// --video-load-test : headless movie-loading suites (needs an offscreen GL
+// context). Later tasks append suites to the aggregator in main().
+static bool hasVideoLoadTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--video-load-test") == 0) return true;
+    return false;
+}
+
+// --audio-device-test: the real default output (quiet tone); exit 0 pass, 2 fail, 3 skip (no device).
+// Kept out of --video-load-test: it depends on hardware and wall-clock timing.
+static bool hasAudioDeviceTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--audio-device-test") == 0) return true;
+    return false;
+}
+
+// --wire-test: jefe::wire round-trip and bounds self-test. Pure data, so it runs
+// before QApplication is constructed.
 static bool hasWireTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--wire-test") == 0) return true;
@@ -469,9 +509,17 @@ int main(int argc, char* argv[]) {
     qapp.setApplicationName("JefeCheck");
     qapp.setOrganizationName("JefeCheck");
 
-    // Test-mode isolation: redirect QSettings + LUT autoload path into a caller-supplied
-    // directory. Must run BEFORE any QSettings is constructed.
-    const QString configDir = resolveConfigDir(argc, argv);
+    // Test isolation: QSettings and the LUT path go to --config-dir. Must run before
+    // the first QSettings (MainWindow_Qt::restoreLayout).
+    QString configDir = resolveConfigDir(argc, argv);
+    // --cache-test writes preferences: point QSettings at a temporary dir (removed on exit) so
+    // they never reach the user's real settings.
+    QString cacheTestConfigDir;
+    if (configDir.isEmpty() && hasCacheTest(argc, argv)) {
+        configDir = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("jefe_cache_config_%1").arg(QCoreApplication::applicationPid()));
+        cacheTestConfigDir = configDir;
+    }
     if (!configDir.isEmpty()) {
         QDir().mkpath(configDir);
         QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -553,6 +601,132 @@ int main(int argc, char* argv[]) {
                     stampFail == 0 && summaryFail == 0 && pdfFail == 0 && sha1Fail == 0 &&
                     tarFail == 0 && fingerprintFail == 0 && sessionPathsFail == 0 &&
                     mergeFail == 0 && packageFail == 0 && packageOpenFail == 0) ? 0 : 2);
+    }
+
+    // Headless movie suites (--video-load-test) need an offscreen GL context; the crash-recovery
+    // session that track loads write is removed before exiting.
+    if (hasAudioDeviceTest(argc, argv)) {
+        const int r = jefe::qt::audio::deviceSelfTest();
+        std::fflush(stdout);
+        std::_Exit(r < 0 ? 3 : (r == 0 ? 0 : 2));
+    }
+
+    if (hasCacheTest(argc, argv)) {
+        jefe::qt::setAudioOutputEnabled(false);
+        jefe::qt::initializeRenderingChain();
+        if (!jefe::qt::setupOffscreenTestGL()) {
+            printf("CACHE-TEST SKIP: no offscreen GL\n");
+            fflush(stdout);
+            if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
+            std::_Exit(3);
+        }
+        if (VideoEncoder_Qt::findFfmpeg().isEmpty()) {
+            printf("CACHE-TEST SKIP: ffmpeg not found\n");
+            fflush(stdout);
+            if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
+            std::_Exit(3);
+        }
+        const QString mediaQDir = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("jefe_cache_test_%1").arg(QCoreApplication::applicationPid()));
+        QString mediaErr;
+        if (!jefe::qt::testmedia::generate(mediaQDir, &mediaErr) ||
+            !jefe::qt::testmedia::generateCacheMedia(mediaQDir, &mediaErr)) {
+            QDir(mediaQDir).removeRecursively();
+            printf("CACHE-TEST FAIL: %s\n", mediaErr.toLocal8Bit().constData());
+            fflush(stdout);
+            if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
+            std::_Exit(2);
+        }
+        const std::string mediaDir = mediaQDir.toStdString();
+        // JEFE_CACHE_SUITES=CACHE-POLICY,CACHE-SETTLE runs only those suites (a
+        // developer's shortcut; the full run is the gate).
+        const QStringList only = QString::fromLocal8Bit(qgetenv("JEFE_CACHE_SUITES")).split(',', Qt::SkipEmptyParts);
+        auto want = [&](const char* name) { return only.isEmpty() || only.contains(QLatin1String(name)); };
+        bool allZero = true;
+        if (want("MEMORY-MEASURE")) allZero &= (memoryMeasureSelfTest(mediaDir) == 0);
+        if (want("FRAME-STATE")) allZero &= (frameStateSelfTest(mediaDir) == 0);
+        if (want("CACHE-POLICY")) allZero &= (cachePolicySelfTest() == 0);
+        if (want("CACHE-BUDGET")) allZero &= (cacheBudgetSelfTest(mediaDir) == 0);
+        if (want("CACHE-SETTLE")) allZero &= (cacheSettleSelfTest(mediaDir) == 0);
+        if (want("CACHE-LEAKS")) allZero &= (cacheLeaksSelfTest(mediaDir) == 0);
+        if (want("CACHE-HOLD")) allZero &= (cacheHoldSelfTest(mediaDir) == 0);
+        if (want("CACHE-RETARGET")) allZero &= (cacheRetargetSelfTest(mediaDir) == 0);
+        if (want("CACHE-DIRECTION")) allZero &= (cacheDirectionSelfTest(mediaDir) == 0);
+        if (want("CACHE-TRACKS")) allZero &= (cacheTracksSelfTest(mediaDir) == 0);
+        if (want("CACHE-PREFS")) allZero &= (cachePrefsSelfTest(mediaDir) == 0);
+        if (want("CACHE-DISPLAY")) allZero &= (cacheDisplaySelfTest(mediaDir) == 0);
+        if (want("CACHE-RENDER")) allZero &= (cacheRenderSelfTest(mediaDir) == 0);
+        if (want("AUDIO-HOLES")) allZero &= (audioHolesSelfTest(mediaDir) == 0);
+        if (want("CACHE-KEEPTIME")) allZero &= (cacheKeepTimeSelfTest(mediaDir) == 0);
+        if (want("CACHE-EVERYFRAME")) allZero &= (cacheEveryFrameSelfTest(mediaDir) == 0);
+        if (want("CACHE-LIMITS")) allZero &= (cacheLimitsSelfTest(mediaDir) == 0);
+        if (want("CACHE-BEHIND")) allZero &= (cacheBehindSelfTest(mediaDir) == 0);
+        if (want("CACHE-FAILED")) allZero &= (cacheFailedSelfTest(mediaDir) == 0);
+        if (want("CACHE-SHUTDOWN")) allZero &= (cacheShutdownSelfTest(mediaDir) == 0);   // last: the tracks stay shut down
+        jefe::qt::removeRecoverySession();
+        if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
+            printf("CACHE-TEST media: %s\n", mediaDir.c_str());
+        else
+            QDir(mediaQDir).removeRecursively();
+        std::fflush(stdout);
+        if (!cacheTestConfigDir.isEmpty()) QDir(cacheTestConfigDir).removeRecursively();
+        std::_Exit(allZero ? 0 : 2);
+    }
+
+    if (hasVideoLoadTest(argc, argv)) {
+        // The suites use a fake device; never open (or sound) the real one.
+        jefe::qt::setAudioOutputEnabled(false);
+        jefe::qt::initializeRenderingChain();
+        if (!jefe::qt::setupOffscreenTestGL()) {
+            printf("VIDEO-LOAD-TEST SKIP: no offscreen GL\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        // Test clips are generated fresh with the ffmpeg CLI (never committed).
+        const QString mediaQDir = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("jefe_video_test_%1").arg(QCoreApplication::applicationPid()));
+        // Only a missing ffmpeg is a skip; any other generation failure (bad
+        // command, missing encoder, unwritable dir) fails the gate.
+        if (VideoEncoder_Qt::findFfmpeg().isEmpty()) {
+            printf("VIDEO-LOAD-TEST SKIP: ffmpeg not found\n");
+            fflush(stdout);
+            std::_Exit(3);
+        }
+        QString mediaErr;
+        if (!jefe::qt::testmedia::generate(mediaQDir, &mediaErr)) {
+            QDir(mediaQDir).removeRecursively();
+            printf("VIDEO-LOAD-TEST FAIL: %s\n", mediaErr.toLocal8Bit().constData());
+            fflush(stdout);
+            std::_Exit(2);
+        }
+        const std::string mediaDir = mediaQDir.toStdString();
+        bool allZero = true;
+        allZero &= (movieKindsSelfTest(mediaDir) == 0);
+        allZero &= (movieLibavSelfTest(mediaDir) == 0);
+        allZero &= (movieReaderSelfTest(mediaDir) == 0);
+        allZero &= (timecodeSelfTest(mediaDir) == 0);
+        allZero &= (movieNumberingSelfTest(mediaDir) == 0);
+        allZero &= (movieLoaderSelfTest(mediaDir) == 0);
+        allZero &= (movieHardwareSelfTest(mediaDir) == 0);
+        allZero &= (movieRateSelfTest(mediaDir) == 0);
+        allZero &= (movieFingerprintSelfTest(mediaDir) == 0);
+        allZero &= (movieStampSelfTest(mediaDir) == 0);
+        allZero &= (audioClipSelfTest(mediaDir) == 0);
+        allZero &= (audioSequenceSelfTest(mediaDir) == 0);
+        allZero &= (playbackAdvanceSelfTest(mediaDir) == 0);
+        allZero &= (audioEngineSelfTest(mediaDir) == 0);
+        allZero &= (audioSyncSelfTest(mediaDir) == 0);
+        allZero &= (audioWalkSelfTest(mediaDir) == 0);
+        allZero &= (audioPlaybackSelfTest(mediaDir) == 0);
+        allZero &= (audioForcedLoadSelfTest(mediaDir) == 0);
+        allZero &= (muteBridgeSelfTest(mediaDir) == 0);
+        jefe::qt::removeRecoverySession();
+        if (qgetenv("JEFE_KEEP_TEST_MEDIA") == "1")
+            printf("VIDEO-LOAD-TEST media: %s\n", mediaDir.c_str());
+        else
+            QDir(mediaQDir).removeRecursively();
+        std::fflush(stdout);
+        std::_Exit(allZero ? 0 : 2);
     }
 
     // --remote-test-peer <ip> <port>: child client role. Connects, holds,
@@ -1555,6 +1729,40 @@ int main(int argc, char* argv[]) {
         });
     }
 
+    // --video-colour-test <dir>: generated SMPTE bars are rendered and compared with their RGB truth.
+    // Lift the queue cap so the loader never blocks while the harness waits (0 is not unlimited).
+    const QString videoColourDir = resolveArgValue(argc, argv, "--video-colour-test");
+    if (!videoColourDir.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, videoColourDir]() {
+            const int savedQueue = sett.maximumFramesInQueue;
+            sett.maximumFramesInQueue = 100000;
+            const int code = window.runHeadlessVideoColourTest(videoColourDir);
+            sett.maximumFramesInQueue = savedQueue;
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless movie throughput (--video-perf-test <movie>): runs with the
+    // user's real queue cap, as an interactive load would.
+    const QString videoPerfMovie = resolveArgValue(argc, argv, "--video-perf-test");
+    if (!videoPerfMovie.isEmpty()) {
+        QTimer::singleShot(5000, &window, [&window, videoPerfMovie]() {
+            const int code = window.runHeadlessVideoPerfTest(videoPerfMovie);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    const QString uploadBenchDir = resolveArgValue(argc, argv, "--upload-bench");
+    if (!uploadBenchDir.isEmpty()) {
+        QTimer::singleShot(3000, &window, [&window, uploadBenchDir]() {
+            const int code = window.runHeadlessUploadBench(uploadBenchDir);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
     const QString fxMultiTestFile = resolveFXMultiTestFile(argc, argv);
     if (!fxMultiTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, fxMultiTestFile]() {
@@ -1573,6 +1781,20 @@ int main(int argc, char* argv[]) {
             const int ok = window.runHeadlessVideoTest(videoTestDir);
             fflush(stdout);
             std::_Exit(ok ? 0 : 2);
+        });
+    }
+
+    // Quit: join every loader and audio thread while the managers they use still exist (static
+    // teardown follows main's return). Runs after closeEvent, so nothing restarts them.
+    QObject::connect(&qapp, &QCoreApplication::aboutToQuit, []() { jefe::qt::shutdownTracks(); });
+
+    // --quit-after <ms>: close and quit the way a user would, to check a clean exit; pair it
+    // with --config-dir.
+    const QString quitAfter = resolveArgValue(argc, argv, "--quit-after");
+    if (!quitAfter.isEmpty()) {
+        QTimer::singleShot(quitAfter.toInt(), &window, [&window]() {
+            window.close();
+            QCoreApplication::quit();
         });
     }
 

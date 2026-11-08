@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcpickmanager.h"
 #include <algorithm>
 #include <glad/glad.h>

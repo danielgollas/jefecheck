@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // LUT panel. A QWidget hosted inside its own QDockWidget. LUTPanel_Qt
 // lists loaded LUTs from lutManager, accepts dropped LUT files, and
 // applies a selection to the active plate.

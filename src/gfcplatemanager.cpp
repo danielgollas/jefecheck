@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcplatemanager.h"
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
@@ -1607,11 +1608,14 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
         return;
 
     gfcPlate* ptrToPlate=&plates[params.quadrant];
+    // A render is not a seek: the cache window stays at the playhead (forced loads decode the
+    // rendered frames), and the playhead goes back afterwards.
+    const int savedFrame=playbackManager.getCurrentFrame();
 
     for ( int i=params.from; i<=params.to;i++ ) {
 
         ptrToPlate->forRender=true;
-        playbackManager.setCurrentFrame(i);
+        playbackManager.setRenderFrame(i);
         params.frame=i;
         params.filename=CreateRenderFilename ( params );
 
@@ -1626,6 +1630,8 @@ void gfcPlateManager::renderPlate(gfcRenderParams params, std::vector<std::strin
 
         if ( stopRendering) break;
     }
+    playbackManager.setRenderFrame(savedFrame);
+    setChanged();
 
     printf ( "Done rendering\n\a" );
     stopRendering=true;

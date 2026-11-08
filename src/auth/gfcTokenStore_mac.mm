@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // macOS Keychain backend for the refresh token.
 //
 // Security.framework ships with the SDK, so this adds no dependency. The item

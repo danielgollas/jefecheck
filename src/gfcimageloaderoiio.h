@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCIMAGELOADEROIIO_H
 #define GFCIMAGELOADEROIIO_H
 
@@ -24,9 +25,15 @@ public:
     virtual int peek(gfcLoadParams params, gfcPeekInfo *results);
     virtual void* getPixelPointer();
     virtual void releaseMemory();
+    virtual void prepareUpload();
     virtual std::vector<std::string> getChannelNames();
 
 private:
+    size_t handOffRowBytes() const;
+    void copyRows(unsigned char* dst, size_t pitch, size_t rowBytes) const;
+    bool copyToSurface();
+    bool copyToStaging();
+
     GFL_BITMAP *theBitmap;
     gfcLoadParams params;
 };

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Test-double coordinator; see gfcTestCoordinator.h. Built only with
 // JEFECHECK_WEBRTC (needs rtc::WebSocketServer), else an empty TU.
 #include "gfcTestCoordinator.h"

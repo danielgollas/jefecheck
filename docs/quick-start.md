@@ -25,6 +25,16 @@ OR
 
 Drag and drop a single file or folder into a track in the main window.
 
+### How to Load a Movie (.mov / .mp4 / .mxf)
+
+JefeCheck plays ProRes (422, HQ, 4444, XQ), H.264 and H.265 movies in `.mov` and `.mp4` files.
+
+1. Load the movie exactly like an image sequence: Browse to it in the Load Window, Quick Load it (`Ctrl+O`), or drag and drop it onto a viewport or a track.
+2. The movie becomes one track. Range, scale, bit depth, crop, hold, offset and notes all work as they do for a sequence, and the timeline counts its frames from 1.
+3. The player's frame rate is set to the movie's own rate (for example 23.976). If you load several movies, the last one loaded sets the rate; other tracks play one frame per timeline frame at that rate.
+
+> **Note:** A movie is decoded into memory, so, like a sequence, only what fits in RAM is loaded. Very heavy 4K ProRes 4444 may load slower than real time; once it is loaded it plays at full speed. Numbers in a movie's file name are never treated as frame numbers.
+
 ### How to Load Only a Certain Range of an Image Sequence
 
 1. Follow steps 1 through 3 of [How to Load an Image Sequence into Track X](#how-to-load-an-image-sequence-into-track-x)
@@ -67,15 +77,22 @@ Click on the white X stop button next to the track in the Main Window. The X but
 
 ### How to Start Loading a Sequence from a Certain Point in the Timeline
 
-`Alt+Left Click` on the timeline to start reloading all tracks from that point forward. This is useful when you need to check a very long sequence but are not sure where the frames that you are interested in start and you cannot fit the whole sequence into RAM.
+Click anywhere on the timeline. JefeCheck loads around that frame first: the frame appears after a short wait, the frames after it load next, and playback carries on from there. You don't have to fit the whole sequence into memory to look at any part of it.
 
-OR
+`Alt+Left Click` on the timeline (or on a specific track) still works; on a track that is already loaded it now just jumps to that frame, the same as a plain click. `Alt+I` now only sets the IN point at the current frame, which is already loading.
 
-Press `Alt+I` to set the IN point for the timeline and start loading all tracks at that point.
+### How to Review a Clip Longer Than Memory
 
-OR
+1. Load it as usual. You don't need to set a range or a lower resolution to make it fit.
+2. Press play. Frames load ahead of the playhead and frames behind it are unloaded to make room, so the clip plays to the end. The sound is loaded separately and never drops out.
+3. To look at another part, click there on the timeline; that frame appears after a short wait.
+4. If loading is slower than playback (very heavy 4K, for example), **File → Preferences… → General → When loading can't keep up** chooses between keeping time with the sound (skipping frames that aren't ready) and showing every frame (playing slower). By default clips with sound keep time and clips without sound show every frame. **Memory limit (% of RAM)** on the same page sets how much of the machine's memory may be used (default 90%).
 
-`Alt+Left Click` on a specific track to start loading only that track from that point forward.
+A range or loop that fits in memory loads once and stays loaded, however many times you play or scrub it.
+
+### What the Green Segments Under a Track Mean
+
+The green segments on each track's lane are the frames that are in memory right now. They move with the playhead: frames ahead of it turn green as they load, and when memory is full, frames behind it are unloaded and lose their green. The frames just behind the playhead are unloaded last, so after playing and pausing, stepping back is instant. A gap is not an error; clicking a frame in a gap loads it. A frame that can't be read shows black, and playback carries on past it.
 
 ---
 
@@ -142,6 +159,14 @@ Toggle through the RGBA channels by pressing the RGB button, or use shortcut key
 - Click on the play/pause, rewind, fast forward, back one frame and forward one frame buttons.
 - Scrub the timeline by clicking and dragging the current frame notch on the timeline or `Shift+Click` and dragging on the viewport.
 - Click on the Playback Mode Radio Buttons to control if you want to play the sequence once (Once) (shortcut `8`), Loop it (Loop) (shortcut `9`), or play it back and forth (Swing) (shortcut `10`).
+
+### How to Hear or Mute a Movie's Sound
+
+Every loaded movie with sound plays at the same time, mixed together. Click the speaker icon on a track's lane in the timeline to mute or unmute that track (or right-click the lane and choose **Mute audio**). Muting is saved with the session, and the lane's waveform dims while muted.
+
+- At the movie's own frame rate the sound leads and the picture keeps up with it.
+- Stepping, scrubbing, or playing at another frame rate plays each frame's own slice of sound at normal pitch.
+- Playing in reverse is silent.
 
 ### How to Offset a Track on the Timeline
 

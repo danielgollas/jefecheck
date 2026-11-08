@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "PlaylistPanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "qticons.h"
@@ -335,7 +336,9 @@ void PlaylistPanel_Qt::onAddFiles() {
     const QString seed = s.value(kLastDirKey, QDir::homePath()).toString();
     const QStringList chosen = QFileDialog::getOpenFileNames(
         this, "Add files to playlist", seed,
-        "Image sequences (*.dpx *.exr *.jpg *.jpeg *.png *.tif *.tiff *.tga *.bmp);;"
+        "Media files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp *.mov *.mp4 *.mxf);;"
+        "Movies (*.mov *.mp4 *.mxf);;"
+        "Image files (*.exr *.dpx *.png *.jpg *.jpeg *.tif *.tiff *.tga *.bmp);;"
         "All files (*)");
     if (chosen.isEmpty()) return;
     s.setValue(kLastDirKey, QFileInfo(chosen.first()).absolutePath());
