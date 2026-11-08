@@ -53,7 +53,9 @@ public:
     const gfcMovieInfo& info() const;
 
     // Decodes frame `index` (0-based). Sequential reads decode forward;
-    // anything else seeks to the preceding keyframe. Thread-safe.
+    // anything else seeks to the preceding keyframe. Thread-safe. Each read
+    // also asks the OS to read the next 128 MiB of the file in the background
+    // (macOS and Linux).
     bool readFrame(int64_t index, gfcMovieFrame& out, std::string* err);
 
     // Sound (default off; takes effect at the next open()). When on and the
@@ -90,6 +92,9 @@ public:
     static void testFailAudioDecoderOpen(bool fail);
     // Self-test hook: video packets sent to the decoder since open().
     int64_t videoPacketsSent() const;
+    // Self-test hook: the file offset the OS has been asked to read ahead to
+    // (0 before the first read, and always 0 on Windows).
+    int64_t readAheadThrough() const;
 
     // YUV->BGRA with the file's matrix/range (untagged = Rec.709 video range).
     // bitsPerComponent 8 -> BGRA, 16 -> BGRA64LE; out is outW*outH pixels.

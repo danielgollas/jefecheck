@@ -13,6 +13,11 @@
 #include <mutex>
 #include <utility>
 
+#if defined(__APPLE__) || defined(__linux__)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -132,6 +137,8 @@ struct gfcMovieReader::Impl {
     bool hardwareActive = false;     // dec is a hardware decoder
     AVPixelFormat hardwareFormat = AV_PIX_FMT_NONE;  // its surface format (dec->opaque points here)
     std::string hardwareName;
+    int readAheadFd = -1;            // the movie file, opened again only to ask the OS to read ahead
+    int64_t readAheadFrom = 0, readAheadTo = 0;  // the byte range already asked for
     static constexpr int64_t kDecodeOnward = 12;   // longest forward skip decoded through rather than sought
     gfcMovieInfo info;
     std::mutex m;
@@ -187,6 +194,11 @@ struct gfcMovieReader::Impl {
         hardwareActive = false;
         hardwareFormat = AV_PIX_FMT_NONE;
         hardwareName.clear();
+#if defined(__APPLE__) || defined(__linux__)
+        if (readAheadFd >= 0) ::close(readAheadFd);
+#endif
+        readAheadFd = -1;
+        readAheadFrom = readAheadTo = 0;
         if (sws) { sws_freeContext(sws); sws = nullptr; }
         av_packet_free(&pkt);
         avcodec_free_context(&dec);
@@ -195,6 +207,30 @@ struct gfcMovieReader::Impl {
     }
 
     AVStream* stream() const { return fmt->streams[vstream]; }
+
+    // Asks the OS to read the next kReadAhead bytes after the demuxer's position in the background
+    // (F_RDADVISE / POSIX_FADV_WILLNEED), so the disk works while the decoder does instead of each
+    // frame's read waiting on it. Topped up once half the range is used; a seek starts a new range.
+    static constexpr int64_t kReadAhead = 128 << 20;
+    void readAhead() {
+#if defined(__APPLE__) || defined(__linux__)
+        if (readAheadFd < 0 || !fmt || !fmt->pb) return;
+        const int64_t pos = avio_tell(fmt->pb);
+        if (pos < 0) return;
+        if (pos < readAheadFrom || pos > readAheadTo) readAheadFrom = readAheadTo = pos;
+        if (readAheadTo - pos > kReadAhead / 2) return;
+        const int64_t from = std::max(pos, readAheadTo), to = pos + kReadAhead;
+#if defined(__APPLE__)
+        radvisory ra{};
+        ra.ra_offset = off_t(from);
+        ra.ra_count = int(to - from);
+        fcntl(readAheadFd, F_RDADVISE, &ra);
+#else
+        posix_fadvise(readAheadFd, off_t(from), off_t(to - from), POSIX_FADV_WILLNEED);
+#endif
+        readAheadTo = to;
+#endif
+    }
 
     int64_t tsOf(int64_t index) const {
         return startPts + av_rescale_q(index, av_inv_q(rate), stream()->time_base);
@@ -531,6 +567,9 @@ bool gfcMovieReader::open(const std::string& path, std::string* err) {
 
     int ret = avformat_open_input(&d.fmt, path.c_str(), nullptr, nullptr);
     if (ret < 0) { d.fmt = nullptr; return fail("cannot open " + path + ": " + avErr(ret)); }
+#if defined(__APPLE__) || defined(__linux__)
+    d.readAheadFd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+#endif
     // Audio only: skip every non-audio stream so the probe below decodes no picture (hundreds of ms
     // on 4K ProRes 4444); the container header still gives the video rate.
     if (d.audioOnly)
@@ -663,6 +702,7 @@ bool gfcMovieReader::readFrame(int64_t index, gfcMovieFrame& out, std::string* e
         if (d.hardwareActive) d.info.hardwareDecoder = d.hardwareName;
     }
     d.pumpAudio(gfcAudioClip::frameStartSample(index + 1, d.info.rateNum, d.info.rateDen));
+    d.readAhead();
     d.fillFrame(out);
     return true;
 }
@@ -671,6 +711,11 @@ void gfcMovieReader::testFailAudioDecoderOpen(bool fail) { gTestFailAudioOpen = 
 
 void gfcMovieReader::setHardwareDecodingAllowed(bool allowed) { gHardwareAllowed = allowed; }
 bool gfcMovieReader::hardwareDecodingAllowed() { return gHardwareAllowed.load(); }
+
+int64_t gfcMovieReader::readAheadThrough() const {
+    std::lock_guard<std::mutex> lock(d_->m);
+    return d_->readAheadTo;
+}
 
 int64_t gfcMovieReader::videoPacketsSent() const {
     std::lock_guard<std::mutex> lock(d_->m);
@@ -703,6 +748,7 @@ bool gfcMovieReader::readAudioUntil(int64_t sampleEnd, std::string* err) {
         if (d.pkt->stream_index == d.astream) d.decodeAudioPacket(d.pkt);
         av_packet_unref(d.pkt);  // video and every other stream: dropped
     }
+    d.readAhead();
     return true;
 }
 

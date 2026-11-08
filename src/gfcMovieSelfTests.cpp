@@ -104,6 +104,9 @@ int movieReaderSelfTest(const std::string& dir) {
     gfcMovieReader r; check(r.open(dir+"/h264_25.mp4", &err), "open h264");
     gfcMovieFrame a, b; std::vector<uint8_t> seq40, jump40;
     bool seqOk=true; for (int k=0;k<=40;++k) seqOk = seqOk && r.readFrame(k, a, &err); check(seqOk, "sequential read 0..40"); seq40=bytesOf(a);
+#if !defined(_WIN32)
+    check(r.readAheadThrough() > 0, "reads ask the OS to read the file ahead");
+#endif
     check(r.readFrame(5, b, &err) && r.readFrame(40, b, &err), "jump 5 then 40"); jump40=bytesOf(b);
     check(!seq40.empty() && seq40==jump40, "random access is bit-exact");
     check(r.readFrame(39, b, &err) && b.index==39, "backward step");
