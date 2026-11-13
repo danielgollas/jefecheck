@@ -1,4 +1,6 @@
 #include "gfcplatemanager.h"
+#include "gfcPlateLayout.h"
+#include <algorithm>
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
@@ -667,26 +669,11 @@ gfcPlateGUI* gfcPlateManager::getPlateGUI(int whichOne) {
 
 int gfcPlateManager::getPlateAtPosition(int vx, int vy, int w, int h) {
     if (w <= 0 || h <= 0) return -1;
-    // Mirror drawPlates' viewport partitioning per framingMode. Coordinates come
-    // in top-down (Qt-style); pick the plate whose viewport covers (vx, vy).
-    switch (framingMode) {
-        case FRAMINGSINGLE_ID:
-            return 0;
-        case FRAMINGDOUBLE_ID:
-            // Split horizontally: left = plate 0, right = plate 1.
-            return (vx < w / 2) ? 0 : 1;
-        case FRAMINGDOUBLEVERT_ID:
-            // Split vertically (drawPlates puts plate 0 on top).
-            return (vy < h / 2) ? 0 : 1;
-        case FRAMINGQUAD_ID:
-            // 2x2: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right.
-            if (vx < w / 2 && vy < h / 2) return 0;
-            if (vx >= w / 2 && vy < h / 2) return 1;
-            if (vx < w / 2 && vy >= h / 2) return 2;
-            return 3;
-        default:
-            return 0;
-    }
+    // Single source of truth shared with the Plate Manager mini-map; mirrors
+    // drawPlates' partitioning. Clamp so drags past the edge still pick a plate.
+    vx = std::clamp(vx, 0, w - 1);
+    vy = std::clamp(vy, 0, h - 1);
+    return jefe::platelayout::plateAtPoint(framingMode, vx, vy, w, h);
 }
 
 void gfcPlateManager::setPlateShowPreview(int whichOne, bool value) {

@@ -43,6 +43,7 @@
 #include "gfcMediaFingerprint.h"
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
+#include "gfcPlateLayout.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
@@ -173,6 +174,13 @@ static QString resolveFXMultiTestFile(int argc, char* argv[]) {
 static bool hasAspectTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--aspect-test") == 0) return true;
+    return false;
+}
+
+// --platelayout-test : headless pure plate-layout self-test (no GL/window). No argument.
+static bool hasPlateLayoutTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--platelayout-test") == 0) return true;
     return false;
 }
 
@@ -530,6 +538,10 @@ int main(int argc, char* argv[]) {
     if (hasAspectTest(argc, argv)) {
         const bool ok = jefe::qt::runAspectSelfTest();
         std::_Exit(ok ? 0 : 2);
+    }
+
+    if (hasPlateLayoutTest(argc, argv)) {
+        std::_Exit(jefe::platelayout::runPlateLayoutSelfTest() ? 0 : 2);
     }
 
     // Headless note self-tests (--notes-test): pure data/arithmetic. Runs all three
