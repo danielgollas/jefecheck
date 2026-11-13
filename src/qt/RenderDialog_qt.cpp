@@ -367,7 +367,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     // paths aren't clipped.
     previewLabel_ = new QLabel(this);
     previewLabel_->setObjectName("dialog.render.preview.label");
-    previewLabel_->setStyleSheet("color: #aaa; font-family: monospace; font-size: 13px;");
+    previewLabel_->setStyleSheet("color: #aaa; font-family: monospace;");
     previewLabel_->setWordWrap(true);
     previewLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     previewLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);

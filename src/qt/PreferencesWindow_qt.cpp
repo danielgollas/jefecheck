@@ -105,7 +105,7 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     split->addWidget(pages_, /*stretch*/ 1);
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(8, 8, 8, 8);
+    outer->setContentsMargins(jefe::qt::ui::kGap, jefe::qt::ui::kGap, jefe::qt::ui::kGap, jefe::qt::ui::kGap);
     outer->addLayout(split, /*stretch*/ 1);
     outer->addWidget(buttons);
 }
@@ -164,7 +164,7 @@ void configureForm(QFormLayout* form) {
     form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
     form->setContentsMargins(jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup);
-    form->setHorizontalSpacing(14);
+    form->setHorizontalSpacing(jefe::qt::ui::kGapGroup);
     form->setVerticalSpacing(jefe::qt::ui::kGap);
     form->setRowWrapPolicy(QFormLayout::DontWrapRows);
     form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -202,7 +202,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     auto* browseRow = new QWidget(page);
     auto* browseLay = new QHBoxLayout(browseRow);
     browseLay->setContentsMargins(0, 0, 0, 0);
-    browseLay->setSpacing(6);
+    browseLay->setSpacing(jefe::qt::ui::kGap);
     auto* browsePath = new QLineEdit(QString::fromStdString(sett.defaultBrowsePath), browseRow);
     browsePath->setObjectName("preferences.general.browsepath.edit");
     browsePath->setToolTip(QStringLiteral("The default folder that file dialogs open to when there is no more-recent location."));

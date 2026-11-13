@@ -463,8 +463,8 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
 
     auto* info = new QGridLayout();
     info->setContentsMargins(0, 0, 0, 0);
-    info->setHorizontalSpacing(8);
-    info->setVerticalSpacing(2);
+    info->setHorizontalSpacing(jefe::qt::ui::kGap);
+    info->setVerticalSpacing(jefe::qt::ui::kGapTight);
     auto mkVal = [this](const char* objName) {
         auto* l = new QLabel("—", this);
         l->setObjectName(objName);
@@ -576,13 +576,13 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
     side_ = new QWidget(this);
     auto* sideL = new QVBoxLayout(side_);
     sideL->setContentsMargins(0, 0, 0, 0);
-    sideL->setSpacing(4);
+    sideL->setSpacing(jefe::qt::ui::kGapTight);
     sideL->addLayout(info);
     sideL->addWidget(controls_);
     sideL->addStretch(1);
 
     mainBox_ = new QBoxLayout(QBoxLayout::TopToBottom, this);
-    mainBox_->setContentsMargins(0, 4, 0, 0);
+    mainBox_->setContentsMargins(0, jefe::qt::ui::kGapTight, 0, 0);
     mainBox_->setSpacing(jefe::qt::ui::kGap);
     mainBox_->addWidget(side_);
     mainBox_->addWidget(stack_, /*stretch*/ 1);

@@ -101,7 +101,7 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     auto* browser = new QWidget(this);
     auto* browserL = new QVBoxLayout(browser);
     browserL->setContentsMargins(0, 0, 0, 0);
-    browserL->setSpacing(6);
+    browserL->setSpacing(jefe::qt::ui::kGap);
     browserL->addWidget(status_);
     browserL->addWidget(table_, /*stretch*/ 1);
     browserL->addWidget(rowHost);
