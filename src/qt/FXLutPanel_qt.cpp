@@ -214,7 +214,8 @@ void LUTPanel_Qt::refreshList() {
         it->setText(1, s.is3D ? "3D" : "1D");
         it->setText(2, s.is3D ? QString("%1³").arg(s.size)
                               : QString("%1").arg(s.size));
-        it->setText(3, QString("%1→%2").arg(s.fromBits).arg(s.toBits));
+        it->setText(3, s.fromBits == 0 && s.toBits == 0 ? QString("—")
+                                                        : QString("%1→%2").arg(s.fromBits).arg(s.toBits));
         it->setData(0, kGuiIndexRole, i + 1);     // gui index (row 0 was none)
         it->setData(1, kSortIntRole, s.is3D ? 1 : 0);
         it->setData(2, kSortIntRole, s.size);

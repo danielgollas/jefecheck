@@ -641,7 +641,9 @@ void LUTPreview_Qt::setLut(const jefe::qt::LutPreviewData& d) {
     typeLbl_->setText(d.is3D ? "3D cube" : "1D");
     sizeLbl_->setText(d.is3D ? QString("%1³").arg(d.size)
                              : QString("%1 samples").arg(d.size));
-    depthLbl_->setText(QString("%1→%2 bit").arg(d.fromBits).arg(d.toBits));
+    // Both 0: the file states no bit depth.
+    depthLbl_->setText(d.fromBits == 0 && d.toBits == 0 ? QString("—")
+                                                        : QString("%1→%2 bit").arg(d.fromBits).arg(d.toBits));
     maxLbl_->setText(d.is3D ? QString("—") : QString::number(d.max1D, 'g', 4));
 
     if (d.is3D) {
