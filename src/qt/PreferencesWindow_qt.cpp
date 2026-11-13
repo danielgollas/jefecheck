@@ -213,6 +213,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     });
     auto* browseBtn = new QPushButton(jefe::qticons::folder(), "Browse…", browseRow);
     browseBtn->setObjectName("preferences.general.browsepath.button");
+    jefe::qt::ui::useWidgetRect(browseBtn);   // centred with the path field
     browseBtn->setToolTip(QStringLiteral("Browse for the default folder that file dialogs open to."));
     browseBtn->setAccessibleName("Choose default browse path");
     connect(browseBtn, &QPushButton::clicked, page, [browsePath]() {

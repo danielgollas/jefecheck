@@ -446,7 +446,11 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
 
     namespace ui = jefe::qt::ui;
     // Wrapping row: four groups that flow onto extra lines in a narrow dock.
-    auto* transport = new FlowLayout_Qt(4, ui::kGap, ui::kGapTight);
+    // The host keeps its minimum height at the wrapped height, so a short dock keeps every line.
+    auto* transportHost = new QWidget(this);
+    transportHost->setObjectName("transport.host");
+    auto* transport = new FlowLayout_Qt(transportHost, 4, ui::kGap, ui::kGapTight);
+    ui::keepMinHeightForWidth(transportHost);
 
     auto makeButton = [this](const QIcon& icon, const QString& tip,
                               const QString& objectName,
@@ -466,14 +470,17 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         return l;
     };
 
-    auto makeSpin = [this](int minVal, int maxVal, int width,
+    // Width comes from sizeHint, which covers the widest value of the range; the
+    // floor keeps 5-digit frames fitting when a short sequence narrows the range.
+    auto makeSpin = [this](int minVal, int maxVal,
                             const QString& objectName,
                             const QString& accessibleName) {
         auto* s = new QSpinBox(this);
         s->setRange(minVal, maxVal);
-        s->setFixedWidth(width);
         s->setAlignment(Qt::AlignRight);
         s->setButtonSymbols(QAbstractSpinBox::NoButtons);
+        s->ensurePolished();
+        s->setMinimumWidth(s->sizeHint().width());
         s->setObjectName(objectName);
         s->setAccessibleName(accessibleName);
         return s;
@@ -513,17 +520,16 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
                                    ui::kGapTight));
 
     loopMode_ = new QComboBox(this);
-    loopMode_->addItems({"Once", "Loop", "Bounce"});
-    loopMode_->setFixedWidth(74);
+    loopMode_->addItems({"Once", "Loop", "Bounce"});   // sized by sizeHint to the widest item
     loopMode_->setObjectName("transport.loop.combo");
     loopMode_->setAccessibleName("Loop mode");
     transport->addWidget(loopMode_);
 
-    frameSpin_ = makeSpin(1, 99999, 56,
+    frameSpin_ = makeSpin(1, 99999,
                           "transport.frame.spin", "Current frame");
-    inSpin_ = makeSpin(1, 99999, 50,
+    inSpin_ = makeSpin(1, 99999,
                        "transport.in.spin", "In point");
-    outSpin_ = makeSpin(1, 99999, 50,
+    outSpin_ = makeSpin(1, 99999,
                         "transport.out.spin", "Out point");
     transport->addWidget(makeGroup({makePair("F", frameSpin_), makePair("In", inSpin_),
                                     makePair("Out", outSpin_)}, ui::kGap));
@@ -532,7 +538,6 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     fpsSpin_->setRange(1.0, 120.0);
     fpsSpin_->setDecimals(2);
     fpsSpin_->setValue(24.0);
-    fpsSpin_->setFixedWidth(56);
     fpsSpin_->setAlignment(Qt::AlignRight);
     fpsSpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
     fpsSpin_->setObjectName("transport.fps.spin");
@@ -558,7 +563,7 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
-    outer->addLayout(transport);
+    outer->addWidget(transportHost);
     outer->addWidget(scrubber_);
     outer->addWidget(tracks_, /*stretch*/ 1);
 

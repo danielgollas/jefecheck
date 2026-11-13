@@ -18,6 +18,8 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QStyle>
 #include <QPushButton>
 #include <QSettings>
 #include <QToolButton>
@@ -31,6 +33,27 @@ constexpr const char* kLoopKey      = "Playlist/loop";
 constexpr const char* kScaleOnKey   = "Playlist/scaleOverrideOn";
 constexpr const char* kScaleValKey  = "Playlist/scaleOverridePct";
 constexpr const char* kLastDirKey   = "Playlist/lastAddDir";
+
+// Paints its text elided to its width, the full text in the tooltip; it never
+// asks the card for more width than the list gives it.
+class ElidedLabel : public QLabel {
+public:
+    ElidedLabel(const QString& text, Qt::TextElideMode mode, QWidget* parent)
+        : QLabel(text, parent), mode_(mode) {
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        setToolTip(text);
+        setProperty(jefe::qt::ui::kDensityElidedProperty, true);
+    }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        const QRect r = contentsRect();
+        style()->drawItemText(&p, r, Qt::AlignLeft | Qt::AlignVCenter, palette(), isEnabled(),
+                              fontMetrics().elidedText(text(), mode_, r.width()), foregroundRole());
+    }
+private:
+    Qt::TextElideMode mode_;
+};
 }
 
 // ---- PlaylistItemCard implementation ----
@@ -57,17 +80,15 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     idx->setMinimumWidth(18);
     header->addWidget(idx);
 
-    auto* nameLab = new QLabel(name, this);
+    auto* nameLab = new ElidedLabel(name, Qt::ElideMiddle, this);   // keeps the frame range end
     nameLab->setObjectName(QString("playlist.card.%1.name").arg(index));
-    nameLab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    nameLab->setToolTip(name);
     header->addWidget(nameLab, /*stretch*/ 1);
 
     chevron_ = new QToolButton(this);
     chevron_->setObjectName(QString("playlist.card.%1.chevron").arg(index));
     chevron_->setAutoRaise(true);
     chevron_->setIcon(jefe::qticons::chevron(expanded_));  // ▾ / ▸
-    chevron_->setIconSize(QSize(jefe::qt::ui::kIconPx, jefe::qt::ui::kIconPx));
+    makeIconButton(chevron_);
     chevron_->setToolTip(expanded_ ? "Collapse" : "Expand");
     connect(chevron_, &QToolButton::clicked, this,
             [this]() { emit toggleExpandRequested(index_); });
@@ -76,7 +97,7 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     auto* removeBtn = new QToolButton(this);
     removeBtn->setObjectName(QString("playlist.card.%1.remove").arg(index));
     removeBtn->setIcon(jefe::qticons::remove());  // ✕
-    removeBtn->setIconSize(QSize(jefe::qt::ui::kIconPx, jefe::qt::ui::kIconPx));
+    makeIconButton(removeBtn);
     removeBtn->setAutoRaise(true);
     removeBtn->setToolTip("Remove from playlist");
     connect(removeBtn, &QToolButton::clicked, this,
@@ -105,7 +126,7 @@ void PlaylistItemCard::rebuildDetail() {
     for (const auto& d : jefe::qt::getPlaylistItemDetail(index_)) {
         QString path = QString::fromStdString(d.path);
         if (!fullPaths_) path = QFileInfo(path).fileName();
-        QString line = QString("%1  %2  %3-%4 (%5)  %6%%  %7%8  %9")
+        QString line = QString("%1  %2  %3-%4 (%5)  %6%  %7%8  %9")
             .arg(QString::fromStdString(d.letter))
             .arg(path)
             .arg(d.fromFrame).arg(d.toFrame).arg(d.totalFrames)
@@ -113,7 +134,7 @@ void PlaylistItemCard::rebuildDetail() {
             .arg(QString::fromStdString(d.filter))
             .arg(d.crop ? "  crop" : "")
             .arg(QString::fromStdString(d.bitDepth));
-        auto* row = new QLabel(line, detail_);
+        auto* row = new ElidedLabel(line, Qt::ElideRight, detail_);
         row->setStyleSheet("color:#aaa;");
         detailLayout_->addWidget(row);
     }
@@ -149,6 +170,8 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
     list_->setDragDropMode(QAbstractItemView::DropOnly);
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // Re-lay the rows on every resize, so the cards narrow with the dock instead of keeping their old width.
+    list_->setResizeMode(QListView::Adjust);
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
     list_->setAcceptDrops(true);
     list_->viewport()->setAcceptDrops(true);
@@ -254,7 +277,7 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
         return box;
     };
     auto* row1Host = new QWidget(this);
-    auto* row1 = new FlowLayout_Qt(row1Host, 0, kGap, kGapTight);
+    auto* row1 = new FlowLayout_Qt(row1Host, 0, kGapTight, kGapTight);
     for (QWidget* w : {static_cast<QWidget*>(addCurBtn), static_cast<QWidget*>(addFilesBtn),
                        static_cast<QWidget*>(removeBtn), static_cast<QWidget*>(upBtn),
                        static_cast<QWidget*>(downBtn), static_cast<QWidget*>(clearBtn),
@@ -265,13 +288,22 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     auto* row2 = new FlowLayout_Qt(row2Host, 0, kGap, kGapTight);
     row2->addWidget(wrapped(row2Host, compactCheck_));
     row2->addWidget(wrapped(row2Host, fullPathsCheck_));
-    row2->addWidget(wrapped(row2Host, scaleOverrideCheck_));
-    row2->addWidget(scaleCombo_);
+    {   // The override and its percentage wrap together.
+        auto* scalePair = new QWidget(row2Host);
+        auto* h = new QHBoxLayout(scalePair);
+        applyRowMetrics(h, kGapTight);
+        useWidgetRect(scaleOverrideCheck_);   // the native layout rect is narrower than its paint
+        h->addWidget(scaleOverrideCheck_);
+        h->addWidget(scaleCombo_);
+        row2->addWidget(scalePair);
+    }
 
     auto* row3Host = new QWidget(this);
     auto* row3 = new FlowLayout_Qt(row3Host, 0, kGap, kGapTight);
     row3->addWidget(wrapped(row3Host, autoAdvanceCheck_));
     row3->addWidget(wrapped(row3Host, loopCheck_));
+
+    for (QWidget* host : {row1Host, row2Host, row3Host}) keepMinHeightForWidth(host);
 
     auto* outer = new QVBoxLayout(this);
     applyGroupMetrics(outer);

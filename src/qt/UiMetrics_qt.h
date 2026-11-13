@@ -5,8 +5,11 @@
 
 #include <QAbstractButton>
 #include <QBoxLayout>
+#include <QEvent>
 #include <QLayout>
+#include <QObject>
 #include <QSize>
+#include <QWidget>
 
 namespace jefe::qt::ui {
 
@@ -35,7 +38,10 @@ inline void applyGroupMetrics(QLayout* l) {
     l->setSpacing(kGap);
 }
 
+/** A square icon-only button. It also reports its real widget rect to layouts,
+    so it lines up with the fields beside it (see useWidgetRect). */
 inline void makeIconButton(QAbstractButton* b) {
+    b->setAttribute(Qt::WA_LayoutUsesWidgetRect);
     b->setFixedSize(kControlH, kControlH);
     b->setIconSize(QSize(kIconPx, kIconPx));
 }
@@ -45,6 +51,31 @@ inline void makeIconButton(QAbstractButton* b) {
 inline void useWidgetRect(QAbstractButton* b) {
     b->setAttribute(Qt::WA_LayoutUsesWidgetRect);
     b->setMinimumHeight(kControlH);
+}
+
+namespace detail {
+class MinHeightForWidthFilter : public QObject {
+public:
+    using QObject::QObject;
+    bool eventFilter(QObject* o, QEvent* e) override {
+        if (e->type() == QEvent::Resize || e->type() == QEvent::LayoutRequest) {
+            auto* w = static_cast<QWidget*>(o);
+            if (QLayout* l = w->layout()) {
+                const int h = l->totalHeightForWidth(w->width());
+                if (h > 0 && h != w->minimumHeight()) w->setMinimumHeight(h);
+            }
+        }
+        return false;
+    }
+};
+}  // namespace detail
+
+/** A host whose layout wraps (FlowLayout) needs more height when narrower, but a
+    dock or splitter only asks for minimumSize, not heightForWidth. This keeps the
+    host's minimum height at its layout's height for the current width, written only
+    when it changes, so a short dock cannot squeeze the wrapped lines out of it. */
+inline void keepMinHeightForWidth(QWidget* host) {
+    host->installEventFilter(new detail::MinHeightForWidthFilter(host));
 }
 
 }  // namespace jefe::qt::ui

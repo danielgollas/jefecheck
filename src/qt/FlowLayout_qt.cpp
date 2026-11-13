@@ -60,7 +60,8 @@ int FlowLayout_Qt::doLayout(const QRect& rect, bool testOnly) const {
     int lineHeight = 0;
     QList<QLayoutItem*> lineItems;
     QList<QRect> lineRects;
-    // With stretch on, each finished line shares its spare width among its items.
+    // Each finished line centres its items on the tallest one; with stretch on,
+    // the line also shares its spare width among its items.
     auto flushLine = [&]() {
         if (testOnly) { lineItems.clear(); lineRects.clear(); return; }
         int extra = 0;
@@ -69,6 +70,7 @@ int FlowLayout_Qt::doLayout(const QRect& rect, bool testOnly) const {
         for (int i = 0; i < lineItems.size(); ++i) {
             QRect r = lineRects[i];
             r.moveLeft(r.left() + extra * i);
+            r.moveTop(r.top() + (lineHeight - r.height()) / 2);
             r.setWidth(r.width() + extra);
             lineItems[i]->setGeometry(r);
         }

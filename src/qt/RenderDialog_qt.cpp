@@ -413,6 +413,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     doneBtn_ = new QPushButton("Done", this);
     doneBtn_->setObjectName("dialog.render.done.button");
 
+    for (QPushButton* b : {renderBtn_, doneBtn_}) jefe::qt::ui::useWidgetRect(b);   // centred with the status text
     auto* buttonRow = new QHBoxLayout();
     buttonRow->addWidget(statusLabel_, /*stretch*/ 1);
     buttonRow->addWidget(renderBtn_);

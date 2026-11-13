@@ -122,18 +122,25 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
             });
     syncToolButtons();
 
-    // Colour + size, on one row.
-    auto* styleRow = new QHBoxLayout();
-    jefe::qt::ui::applyRowMetrics(styleRow);
-    styleRow->addWidget(new QLabel(tr("Colour:"), this));
+    // Colour + size: two label/control pairs that wrap in a narrow dock.
+    auto* styleHost = new QWidget(this);
+    auto* styleRow = new FlowLayout_Qt(styleHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
+    auto makePair = [this, styleHost](const QString& text, QWidget* field) {
+        auto* w = new QWidget(styleHost);
+        auto* h = new QHBoxLayout(w);
+        jefe::qt::ui::applyRowMetrics(h, jefe::qt::ui::kGapTight);
+        h->addWidget(new QLabel(text, w));
+        h->addWidget(field);
+        return w;
+    };
     colorButton_ = new QPushButton(this);
     colorButton_->setObjectName("notes.color.button");
     colorButton_->setFixedSize(40, jefe::qt::ui::kControlH);
+    jefe::qt::ui::useWidgetRect(colorButton_);
     colorButton_->setAccessibleName("Note colour");
     colorButton_->setToolTip(tr("Colour used for the next note drawn with the active tool."));
     connect(colorButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onColorButtonClicked);
-    styleRow->addWidget(colorButton_);
-    styleRow->addWidget(new QLabel(tr("Size:"), this));
+    styleRow->addWidget(makePair(tr("Colour:"), colorButton_));
     sizeSpin_ = new QSpinBox(this);
     sizeSpin_->setObjectName("notes.size.spin");
     sizeSpin_->setRange(1, 20);
@@ -141,9 +148,8 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     sizeSpin_->setAccessibleName("Note stroke size");
     connect(sizeSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &NotesPanel_Qt::onSizeChanged);
-    styleRow->addWidget(sizeSpin_);
-    styleRow->addStretch(1);
-    layout->addLayout(styleRow);
+    styleRow->addWidget(makePair(tr("Size:"), sizeSpin_));
+    layout->addWidget(styleHost);
     rebuildColorSwatch();
 
     // Revision / note tree: top-level items are revisions; children are the notes drawn
@@ -175,6 +181,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
         actionHost->setSizePolicy(sp);
     }
     layout->addWidget(actionHost);
+    for (QWidget* host : {toolHost, styleHost, actionHost}) jefe::qt::ui::keepMinHeightForWidth(host);
 
     refresh();
 }

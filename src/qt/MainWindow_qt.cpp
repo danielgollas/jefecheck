@@ -856,8 +856,7 @@ void MainWindow_Qt::buildDocks() {
     playlistPanelWidget_ = new PlaylistPanel_Qt(playlistDock_);
     playlistDock_->setWidget(playlistPanelWidget_);
     playlistDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
-    playlistPanelWidget_->setMinimumWidth(220);
-    playlistPanelWidget_->setMinimumHeight(140);
+    playlistPanelWidget_->setMinimumWidth(220);   // width only: a set minimum height would override the wrapped rows' height
     addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
     splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
 
@@ -882,7 +881,6 @@ void MainWindow_Qt::buildDocks() {
     notesDock_->setWidget(notesPanelWidget_);
     notesDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     notesPanelWidget_->setMinimumWidth(220);
-    notesPanelWidget_->setMinimumHeight(160);
     addDockWidget(Qt::RightDockWidgetArea, notesDock_);
     if (lutDock_) tabifyDockWidget(lutDock_, notesDock_);
 
