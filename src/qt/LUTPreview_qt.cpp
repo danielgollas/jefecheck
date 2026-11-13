@@ -35,7 +35,7 @@
 LutCurveWidget::LutCurveWidget(QWidget* parent) : QWidget(parent) {
     setObjectName("lut.preview.curve");
     setAccessibleName("LUT curve preview");
-    setMinimumSize(160, 120);
+    setMinimumSize(LUTPreview_Qt::kCanvasMinW, LUTPreview_Qt::kCanvasMinH);
     setProperty(jefe::qt::ui::kDensityExemptProperty, true);
 }
 
@@ -75,7 +75,7 @@ void LutCurveWidget::paintEvent(QPaintEvent*) {
     const int n = (int)samples_.size();
 
     // Axis labels + numeric ticks. X (in): 0 .. n samples. Y (out): 0 .. max.
-    QFont f = p.font();
+    QFont f = p.font();   // chart-internal tick text: exempt from the 13 px rule (painted, not a widget)
     f.setPointSizeF(8.0);
     p.setFont(f);
     p.setPen(QColor(150, 150, 150));
@@ -118,7 +118,7 @@ void LutCurveWidget::paintEvent(QPaintEvent*) {
 LutCloudWidget::LutCloudWidget(QWidget* parent) : QOpenGLWidget(parent) {
     setObjectName("lut.preview.cloud");
     setAccessibleName("LUT cloud inspector");
-    setMinimumSize(160, 120);
+    setMinimumSize(LUTPreview_Qt::kCanvasMinW, LUTPreview_Qt::kCanvasMinH);
     setProperty(jefe::qt::ui::kDensityExemptProperty, true);
     setFocusPolicy(Qt::StrongFocus);   // so the F key reaches keyPressEvent
     // Optional auto-spin (off by default; the camera is the main interaction).
@@ -379,6 +379,7 @@ void LutCloudWidget::drawAxisLabels(QPainter& p, const float* proj, const float*
     (void)dpr;
     const QColor txt = (bg_ > 0.5f) ? QColor(20, 20, 20) : QColor(235, 235, 235);
     p.setPen(txt);
+    // Chart-internal axis letters: exempt from the 13 px rule (painted, not a widget).
     QFont f = p.font(); f.setPointSizeF(9.0); f.setBold(true); p.setFont(f);
     QPointF s;
     if (project(1.15f, 0.f, 0.f, s)) p.drawText(s, "R");
@@ -436,7 +437,7 @@ public:
     explicit ElidingLabel(QWidget* parent) : QLabel("—", parent) {
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         setMinimumWidth(0);
-        setProperty("jefeElided", true);
+        setProperty(jefe::qt::ui::kDensityElidedProperty, true);
     }
     void setFullText(const QString& t) {
         if (t == full_) return;
@@ -614,19 +615,49 @@ void LUTPreview_Qt::resizeEvent(QResizeEvent* e) {
         mainBox_->setDirection(dir);
         const bool wide = dir == QBoxLayout::LeftToRight;
         // Beside the canvas the side section stays within [200, 280].
-        side_->setMinimumWidth(wide ? 200 : 0);
-        side_->setMaximumWidth(wide ? 280 : QWIDGETSIZE_MAX);
+        side_->setMinimumWidth(wide ? kSideMinW : 0);
+        side_->setMaximumWidth(wide ? kSideMaxW : QWIDGETSIZE_MAX);
     }
 }
 
 QBoxLayout::Direction LUTPreview_Qt::chooseDirection(QSize size, QBoxLayout::Direction current) {
-    // Side by side needs the 200 px side section plus a 160 px canvas and a gap; narrower than
+    // Side by side needs the side section plus a canvas and a gap; narrower than
     // that it can only clip, however short the pane is.
-    if (size.width() < 200 + 160 + 8) return QBoxLayout::TopToBottom;
+    if (size.width() < kSideMinW + jefe::qt::ui::kGap + kCanvasMinW) return QBoxLayout::TopToBottom;
     // w > 1.4 h and w < 1.1 h, in exact integer arithmetic.
     if (size.width() * 10 > size.height() * 14) return QBoxLayout::LeftToRight;
     if (size.width() * 10 < size.height() * 11) return QBoxLayout::TopToBottom;
     return current;
+}
+
+bool LUTPreview_Qt::runDirectionSelfTest() {
+    using D = QBoxLayout::Direction;
+    const D L = QBoxLayout::LeftToRight, T = QBoxLayout::TopToBottom;
+    auto report = [](const char* name, bool ok) {
+        std::printf("DENSITY-SELFTEST %s %s\n", name, ok ? "PASS" : "FAIL");
+        return ok;
+    };
+    bool all = true;
+    all &= report("LUT-DIR basic", chooseDirection({800, 300}, T) == L &&
+                                   chooseDirection({500, 400}, L) == L &&
+                                   chooseDirection({500, 400}, T) == T &&
+                                   chooseDirection({300, 800}, L) == T);
+    // Below the side-by-side floor it stacks whatever the aspect or current direction.
+    const int floorW = kSideMinW + jefe::qt::ui::kGap + kCanvasMinW;
+    all &= report("LUT-DIR clamp", chooseDirection({300, 100}, L) == T &&
+                                   chooseDirection({floorW - 1, 100}, L) == T &&
+                                   chooseDirection({floorW, 100}, T) == L);
+    D dir = T; int up = 0, down = 0;
+    for (int w = 560; w <= 600; ++w) {
+        const D n = chooseDirection({w, 400}, dir);
+        if (n != dir) { ++up; if (w <= 560) up += 100; dir = n; }
+    }
+    for (int w = 600; w >= 400; --w) {
+        const D n = chooseDirection({w, 400}, dir);
+        if (n != dir) { ++down; if (w >= 440) down += 100; dir = n; }
+    }
+    all &= report("LUT-DIR pingpong", up <= 1 && down <= 1);
+    return all;
 }
 
 void LUTPreview_Qt::setLut(const jefe::qt::LutPreviewData& d) {

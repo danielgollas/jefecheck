@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Headless density checker: walks a visible widget tree and reports where it
 // breaks the shared metrics (control height, icon squares, text size, overlap,
-// clipping). Used by --ui-density-test.
+// clipping, line alignment). Used by --ui-density-test.
 #pragma once
 
 #include <QList>
@@ -13,7 +13,7 @@ namespace jefe::qt::ui {
 
 struct DensityViolation {
     QString widgetPath;  // dotted objectName chain; class name when objectName is empty
-    QString rule;        // height | square | font | overlap | clip | textclip
+    QString rule;        // height | square | font | overlap | clip | textclip | hclip | valign
     QString detail;
 };
 

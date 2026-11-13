@@ -21,6 +21,10 @@ constexpr int kIconPx = 16;
 // checker, along with its subtree (painted or custom widgets, GL canvases).
 inline constexpr const char* kDensityExemptProperty = "jefeDensityExempt";
 
+// A label or combo with this property set to true elides its own text, so the
+// checker does not report it as horizontally clipped.
+inline constexpr const char* kDensityElidedProperty = "jefeElided";
+
 inline void applyRowMetrics(QBoxLayout* row, int spacing = kGap) {
     row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(spacing);

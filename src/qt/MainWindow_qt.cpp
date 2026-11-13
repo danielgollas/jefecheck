@@ -33,6 +33,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
@@ -3154,15 +3155,18 @@ QMessageBox* MainWindow_Qt::makeAboutBox() {
 }
 
 int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
-    if (!jefe::qt::ui::runDensityCheckerSelfTest()) {
-        printf("UI-DENSITY RESULT FAIL selftest\n");
-        fflush(stdout);
-        return 1;
-    }
+    // A failing self-test still lets the surfaces run, so one run shows everything.
+    const bool lutDirOk = LUTPreview_Qt::runDirectionSelfTest();
+    const bool selfTestOk = jefe::qt::ui::runDensityCheckerSelfTest() && lutDirOk;
     if (!outDir.isEmpty()) QDir().mkpath(outDir);
 
     int failures = 0;
-    auto settle = []() { QCoreApplication::processEvents(); QCoreApplication::processEvents(); };
+    if (!selfTestOk) {
+        printf("UI-DENSITY selftest FAIL\n");
+        ++failures;
+    }
+    // Several passes: item views lay out on a zero-timer and only then move their index widgets.
+    auto settle = []() { for (int i = 0; i < 4; ++i) QCoreApplication::processEvents(); };
     auto fileSafe = [](QString s) { return s.replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_"); };
 
     // One surface: check, print, optionally save a PNG. `label` is the line text after UI-DENSITY.
@@ -3182,6 +3186,29 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                                        plateDock_, fxParamsDock_, remoteDock_};
     QMap<QDockWidget*, bool> wasVisible;
     for (auto* d : docks) wasVisible[d] = d->isVisible();
+
+    // One playlist item with its cards expanded, so the cards the list hosts are checked.
+    QTemporaryDir seedDir;
+    const int playlistBefore = int(jefe::qt::getPlaylistItemNames().size());
+    QCheckBox* compactCheck = playlistPanelWidget_ ? playlistPanelWidget_->findChild<QCheckBox*>("playlist.check.compact") : nullptr;
+    const bool compactWas = compactCheck && compactCheck->isChecked();
+    {
+        const QString seed = seedDir.path() + "/density_seed_plate_with_a_long_name.0001.png";
+        QImage img(64, 36, QImage::Format_RGB32);
+        img.fill(Qt::darkGray);
+        if (!seedDir.isValid() || !img.save(seed)) {
+            printf("    playlist-seed could not write %s\n", qPrintable(seed));
+            ++failures;
+        } else {
+            jefe::qt::addPlaylistFile(seed.toStdString());
+            if (compactCheck) compactCheck->setChecked(false);   // expanded cards: header and detail rows
+            if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
+            if (int(jefe::qt::getPlaylistItemNames().size()) != playlistBefore + 1) {
+                printf("    playlist-seed item was not added\n");
+                ++failures;
+            }
+        }
+    }
 
     const QList<QSize> windowSizes = {{1280, 800}, {1920, 1080}};
     for (const QSize& ws : windowSizes) {
@@ -3221,7 +3248,8 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                     if (d.valid) { d.name = std::string(120, 'n'); pv->setLut(d); }
                 }
             }
-            struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; };
+            // shared: a second side dock split below this one; height: a short dock.
+            struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; bool shared = false; int height = 0; };
             int minW = std::max({dock->minimumWidth(), dock->widget()->minimumWidth(),
                                  dock->widget()->minimumSizeHint().width()});
             if (name == "dock.luts" && minW > 300) {
@@ -3234,7 +3262,10 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                 {"Left", Qt::LeftDockWidgetArea, false, minW * 3 / 2},
                 {"Left", Qt::LeftDockWidgetArea, false, 120},
                 {"Floating", Qt::NoDockWidgetArea, true, 0},
+                {"LeftShared", Qt::LeftDockWidgetArea, false, minW, true},
+                {"LeftShort", Qt::LeftDockWidgetArea, false, minW, true, 240},
             };
+            QDockWidget* partner = dock == notesDock_ ? playlistDock_ : notesDock_;
             for (const Cfg& c : cfgs) {
                 dock->setFloating(false);
                 if (c.floating) {
@@ -3244,10 +3275,20 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                     addDockWidget(c.qtArea, dock);
                 }
                 dock->show();
+                if (c.shared && partner) {
+                    partner->setFloating(false);
+                    addDockWidget(c.qtArea, partner);
+                    splitDockWidget(dock, partner, Qt::Vertical);
+                    partner->show();
+                }
                 dock->raise();
                 settle();
                 if (!c.floating && c.width > 0) {
                     resizeDocks({dock}, {c.width}, Qt::Horizontal);
+                    settle();
+                }
+                if (c.height > 0) {
+                    resizeDocks({dock}, {c.height}, Qt::Vertical);
                     settle();
                 }
                 if (name == "dock.luts") {
@@ -3273,7 +3314,10 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                 }
                 if (name == "dock.luts") {
                     auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
-                    if (list) {
+                    if (!list || !list->isVisible()) {
+                        printf("    lut-list %s\n", list ? "hidden" : "not found");
+                        ++failures;
+                    } else {
                         const int nameW = list->header()->sectionSize(0);
                         const int typeRight = list->header()->sectionViewportPosition(1) + list->header()->sectionSize(1);
                         if (nameW < 80 || list->header()->sectionViewportPosition(0) < 0 ||
@@ -3285,18 +3329,27 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                     }
                 }
                 const int dockW = dock->width();
+                // Shared and short docks also name their height (the variable under test).
+                const QString hTag = c.shared ? QString(" h%1").arg(dock->height()) : QString();
                 const QString label = QString("%1 %2 %3x%4 %5").arg(name, c.area)
-                                          .arg(ws.width()).arg(ws.height()).arg(dockW);
+                                          .arg(ws.width()).arg(ws.height()).arg(dockW) + hTag;
                 record(name, label, dock->widget(),
-                       QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW),
+                       QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW) + hTag,
                        dock);
+                if (c.shared && c.height > 0 && dock->height() > c.height + 40)
+                    printf("UI-DENSITY %s short-dock note: asked for %d px, got %d (the content's minimum height)\n",
+                           qPrintable(name), c.height, dock->height());
                 if (name == "dock.timeline") {
                     // Transport expectations: spins never overlap a visible sibling,
                     // and the tracks area keeps its 96 px floor in a dock >= 200 px tall.
                     QWidget* root = dock->widget();
                     for (const char* spinName : {"transport.frame.spin", "transport.in.spin", "transport.out.spin"}) {
                         auto* spin = root->findChild<QWidget*>(spinName);
-                        if (!spin || !spin->isVisible()) continue;
+                        if (!spin || !spin->isVisible()) {
+                            printf("    transport-missing %s %s\n", spinName, spin ? "hidden" : "not found");
+                            ++failures;
+                            continue;
+                        }
                         const QRect r(spin->mapTo(root, QPoint(0, 0)), spin->size());
                         for (auto* sib : root->findChildren<QWidget*>()) {
                             if (sib == spin || !sib->isVisible() || sib->isAncestorOf(spin) || spin->isAncestorOf(sib)) continue;
@@ -3314,12 +3367,18 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                         ++failures;
                     }
                 }
+                if (c.shared && partner) partner->hide();
             }
             dock->setFloating(false);
             dock->hide();
         }
     }
     for (auto* d : docks) d->setVisible(wasVisible.value(d));
+    // Take the seed item back out and restore the card view.
+    if (int(jefe::qt::getPlaylistItemNames().size()) == playlistBefore + 1)
+        jefe::qt::removePlaylistItem(playlistBefore);
+    if (compactCheck) compactCheck->setChecked(compactWas);
+    if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
 
     // Dialogs: default size, then minimumSizeHint().
     auto checkDialog = [&](const QString& name, QDialog* dlg) {
@@ -3393,8 +3452,19 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
         }
     }
     {
+        // Every quality page: the format combo swaps the stacked page under the form.
         RenderDialog_Qt dlg(this);
-        checkDialog("dlg.render", &dlg);
+        auto* format = dlg.findChild<QComboBox*>("dialog.render.format.combo");
+        if (!format) {
+            printf("    render-format combo not found\n");
+            ++failures;
+            checkDialog("dlg.render", &dlg);
+        } else {
+            for (int i = 0; i < format->count(); ++i) {
+                format->setCurrentIndex(i);
+                checkDialog("dlg.render." + fileSafe(format->itemText(i)), &dlg);
+            }
+        }
     }
     {
         MinSpecsDialog_Qt dlg(this);

@@ -118,7 +118,14 @@ public:
     void setLut(const jefe::qt::LutPreviewData& d);
     // Beside/above flip with hysteresis: wide beyond 1.4, tall below 1.1,
     // otherwise keep `current` so a dock resize cannot ping-pong the layout.
+    // Narrower than kSideMinW + kGap + kCanvasMinW it is always stacked.
     static QBoxLayout::Direction chooseDirection(QSize size, QBoxLayout::Direction current);
+    // Prints DENSITY-SELFTEST lines for chooseDirection; true when all pass.
+    static bool runDirectionSelfTest();
+    static constexpr int kSideMinW = 200;     // side section beside the canvas
+    static constexpr int kSideMaxW = 280;
+    static constexpr int kCanvasMinW = 160;   // curve / cloud canvas
+    static constexpr int kCanvasMinH = 120;
     // Wrapped controls make the minimum height depend on the width, which
     // a splitter does not ask layouts about; report it here.
     QSize minimumSizeHint() const override;
