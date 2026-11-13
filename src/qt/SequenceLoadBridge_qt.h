@@ -165,7 +165,10 @@ int  getInPoint();
 int  getOutPoint();
 void setInPoint(int frame);
 void setOutPoint(int frame);
-void setInPointAndLoad();   // FLTK Alt+I: set the in point at the playhead (the cache loads there; no reload)
+void setInPointAndLoad();   // FLTK Alt+I: set the in point at the playhead; rolling cache off: refill from there
+bool getRollingCache();     // sett.rollingCache: the frame cache follows the playhead (true) or loads until full
+void setRollingCache(bool on);
+void loadAllFromFrame(int frame);   // FLTK Alt+click on the timeline: load every track from this timeline frame
 bool isPlaying();
 
 // Histogram overlay (Ctrl+H active quad / Ctrl+Alt+H all plates). Toggles

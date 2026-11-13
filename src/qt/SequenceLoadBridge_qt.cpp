@@ -433,9 +433,20 @@ void setPlayDirection(int direction) {
 }
 
 void setInPointAndLoad() {
-    // FLTK's Alt+I: set the in point at the current frame. The frame cache
-    // loads around the playhead inside the new limits, so no reload.
-    playbackManager.setInPoint(playbackManager.getCurrentFrame());
+    // FLTK's Alt+I: set the in point at the current frame and load from there. The rolling cache
+    // already loads around the playhead; with it off, the load refills forward from this frame.
+    const int frame = playbackManager.getCurrentFrame();
+    playbackManager.setInPoint(frame);
+    if (!playbackManager.rollingCache()) playbackManager.loadFromHere(frame);
+}
+
+bool getRollingCache() { return playbackManager.rollingCache(); }
+
+void setRollingCache(bool on) { playbackManager.setRollingCache(on); }
+
+void loadAllFromFrame(int frame) {
+    // FLTK's Alt+click on the timeline: every track loads from this timeline frame.
+    trackManager.startLoadingAllAt(frame - 1);
 }
 
 void fastFwdPlayback() {

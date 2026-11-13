@@ -659,6 +659,7 @@ int main(int argc, char* argv[]) {
         if (want("AUDIO-HOLES")) allZero &= (audioHolesSelfTest(mediaDir) == 0);
         if (want("CACHE-KEEPTIME")) allZero &= (cacheKeepTimeSelfTest(mediaDir) == 0);
         if (want("CACHE-EVERYFRAME")) allZero &= (cacheEveryFrameSelfTest(mediaDir) == 0);
+        if (want("CACHE-FILL")) allZero &= (cacheFillSelfTest(mediaDir) == 0);
         if (want("CACHE-LIMITS")) allZero &= (cacheLimitsSelfTest(mediaDir) == 0);
         if (want("CACHE-BEHIND")) allZero &= (cacheBehindSelfTest(mediaDir) == 0);
         if (want("CACHE-FAILED")) allZero &= (cacheFailedSelfTest(mediaDir) == 0);

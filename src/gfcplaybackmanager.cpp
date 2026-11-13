@@ -91,8 +91,7 @@ void gfcPlaybackManager::update() {
     const int frame0=currentFrame, dir0=currentDirection;
     auto cacheFollow=[&] {
         if (currentFrame==frame0 && currentDirection==dir0) return;
-        frameCache.advance(currentFrame, currentDirection);
-        cacheSentDir=currentDirection;
+        cacheAdvance(currentFrame, currentDirection);
     };
 
     // Native-rate forward play: the audio clock leads. Keep time drops frames to follow it and the sound
@@ -495,7 +494,10 @@ int gfcPlaybackManager::getEndLimit() {
 
     //get tracks shortest or longest track depending on the loopPriority setting (TODO: remove from the prefs window and put it in the main window controls)
     int tmpEndLimit=1;
-    switch ( effectiveLoopPriority() ) {
+    int fillStart=0, fillEnd=0;
+    if ( fillLimits(loopPriority, fillStart, fillEnd) )
+        tmpEndLimit=fillEnd;
+    else switch ( effectiveLoopPriority() ) {
     case GFC_LOOPPRIORITY_SHORTEST:
         tmpEndLimit=trackManager.getFirstLastLoaded()+1; //this includes the offset for each track, so we get the frame number of the absolutely shortest track on the window. This also obviates tracks with 0 lenght and will only return 0 if the track is in fact ending at frame 0 due to an offset, but should not happen often
         break;
@@ -524,9 +526,48 @@ int gfcPlaybackManager::effectiveLoopPriority() {
     return loopPriority;
 }
 
+// Rolling cache off: Shortest and Longest measure what is loaded, not the trim ranges. Each track
+// contributes the resident run that starts at the anchor (or at its own first frame, if that is later).
+// Returns false when the rolling cache is on or the priority is the timeline in/out.
+bool gfcPlaybackManager::fillLimits(int priority, int& start, int& end) {
+    if ( sett.rollingCache || priority==GFC_LOOPPRIORITY_TIMELINE )
+        return false;
+    int lastFirst=INT_MIN, firstLast=INT_MAX, firstFirst=INT_MAX, lastLast=INT_MIN;
+    bool any=false;
+    std::vector<std::pair<int,int>> segs;
+    for ( int i=0;i<GFC_MAX_SEQUENCES;i++ ) {
+        gfcSequence* seq=trackManager.getSequence(i);
+        if ( !seq || seq->isEmpty() )
+            continue;
+        const int offset=seq->getOffset();
+        const int from=std::max(fillAnchor_, seq->getRangeStart()+1);
+        seq->loadedSegments(segs);
+        for ( const auto& sg : segs ) {
+            const int s0=sg.first+1+offset, e0=sg.second+1+offset;
+            if ( s0>from || e0<from )
+                continue;
+            any=true;
+            lastFirst=std::max(lastFirst, from);   firstFirst=std::min(firstFirst, from);
+            firstLast=std::min(firstLast, e0);     lastLast=std::max(lastLast, e0);
+            break;
+        }
+    }
+    if ( !any ) {
+        start=end=fillAnchor_;
+    } else if ( priority==GFC_LOOPPRIORITY_SHORTEST && lastFirst<=firstLast ) {
+        start=lastFirst; end=firstLast;
+    } else {   // Longest, or Shortest with loaded runs that don't overlap
+        start=firstFirst; end=lastLast;
+    }
+    return true;
+}
+
 int gfcPlaybackManager::getStartLimit() {
     int tmpStartLimit=1;
-    switch ( effectiveLoopPriority() ) {
+    int fillStart=0, fillEnd=0;
+    if ( fillLimits(loopPriority, fillStart, fillEnd) )
+        tmpStartLimit=fillStart;
+    else switch ( effectiveLoopPriority() ) {
     case GFC_LOOPPRIORITY_SHORTEST:
         tmpStartLimit=trackManager.getLastFirstLoaded()+1; //this includes the offset for each track, so we get the frame number of the absolutely shortest track on the window. This also obviates tracks with 0 lenght and will only return 0 if the track is in fact ending at frame 0 due to an offset, but should not happen often  They are always off by 1 since the ranges start at 0
         break;
@@ -557,7 +598,7 @@ void gfcPlaybackManager::setCurrentFrame(int frame, bool audible) {
     this->currentFrame=frame;
     // A jump: the frame cache's window moves here (new generation, no reload).
     cacheSyncTransport();
-    frameCache.retarget(frame);
+    cacheRetarget(frame);
     trackManager.retargetAudio(frame);   // and the sound fills from here first
     this->myGUI->setTimelineValue(frame);
     this->myGUI->setCurrentFrame(frame);
@@ -695,7 +736,7 @@ void gfcPlaybackManager::setDirection(int direction) {
 
 void gfcPlaybackManager::updateTimelineValueFromGUI() {
     currentFrame=myGUI->getTimeLineValue();
-    frameCache.retarget(currentFrame);   // a timeline click is a jump
+    cacheRetarget(currentFrame);   // a timeline click is a jump
     trackManager.retargetAudio(currentFrame);   // and the sound fills from here first
 	
     myGUI->setCurrentFrame(currentFrame);
@@ -711,7 +752,7 @@ void gfcPlaybackManager::updateTimelineValueFromGUI() {
 
 void gfcPlaybackManager::updateCurrentFrameValueFromGUI() {
     currentFrame=myGUI->getCurrentFrame();
-    frameCache.retarget(currentFrame);   // a typed frame is a jump
+    cacheRetarget(currentFrame);   // a typed frame is a jump
     trackManager.retargetAudio(currentFrame);   // and the sound fills from here first
     myGUI->setTimelineValue(currentFrame);
     audioSeek();
@@ -923,7 +964,7 @@ void gfcPlaybackManager::setLeadSkip(bool on) {
 void gfcPlaybackManager::audioStop() {
     if (audioEngine.isLeading() && audioEngine.leaderFrame()!=currentFrame) {
         currentFrame=audioEngine.leaderFrame();   // stop on the frame heard
-        frameCache.advance(currentFrame);
+        cacheAdvance(currentFrame);
     }
     audioEngine.stopLeading();
     audioEngine.stopSlices();
@@ -962,12 +1003,56 @@ bool gfcPlaybackManager::beginBuffering() {
 // Sends the transport to the frame cache when direction/mode/limits/rate changed (the limits move
 // as tracks load). The playhead itself travels by retarget() and advance(), which take no lock.
 void gfcPlaybackManager::cacheSyncTransport(bool force) {
+    if (!sett.rollingCache) {
+        // Load until full: the cache walks forward once from the anchor to the end of the footage
+        // and never follows the playhead, so what loads first stays.
+        const int e0=std::max(fillAnchor_, trackManager.getLastLastLoaded()+1);
+        if (!force && !cacheSentRolling && cacheSentStart==fillAnchor_ && cacheSentEnd==e0 && targetFPS==cacheSentFPS)
+            return;
+        cacheSentRolling=false; cacheSentStart=fillAnchor_; cacheSentEnd=e0;
+        cacheSentMode=LOOPMODEONCE_ID; cacheSentDir=1; cacheSentFPS=targetFPS;
+        frameCache.setTransport(fillAnchor_, 1, LOOPMODEONCE_ID, fillAnchor_, e0, targetFPS);
+        return;
+    }
     const int s0=getStartLimit(), e0=getEndLimit();
-    if (!force && s0==cacheSentStart && e0==cacheSentEnd && playbackMode==cacheSentMode &&
+    if (!force && cacheSentRolling && s0==cacheSentStart && e0==cacheSentEnd && playbackMode==cacheSentMode &&
         currentDirection==cacheSentDir && targetFPS==cacheSentFPS)
         return;
+    cacheSentRolling=true;
     cacheSentStart=s0; cacheSentEnd=e0; cacheSentMode=playbackMode; cacheSentDir=currentDirection; cacheSentFPS=targetFPS;
     frameCache.setTransport(currentFrame, currentDirection, playbackMode, s0, e0, targetFPS);
+}
+
+void gfcPlaybackManager::cacheRetarget(int frame) {
+    if (sett.rollingCache) frameCache.retarget(frame);
+}
+
+void gfcPlaybackManager::cacheAdvance(int frame, int direction) {
+    if (!sett.rollingCache) return;
+    frameCache.advance(frame, direction);
+    if (direction != 0) cacheSentDir=direction;
+}
+
+bool gfcPlaybackManager::rollingCache() const {
+    return sett.rollingCache;
+}
+
+void gfcPlaybackManager::setRollingCache(bool on) {
+    if (sett.rollingCache==on) return;
+    sett.rollingCache=on;
+    if (!on) fillAnchor_=std::max(1, inPoint);
+    cacheSyncTransport(true);
+    frameCache.retarget(on ? currentFrame : fillAnchor_);   // a new walk: in-flight jobs are dropped
+    plateManager.setChanged();
+}
+
+void gfcPlaybackManager::loadFromHere(int frame) {
+    if (!sett.rollingCache) fillAnchor_=std::max(1, frame);
+    setCurrentFrame(frame);
+    if (!sett.rollingCache) {
+        cacheSyncTransport(true);
+        frameCache.retarget(fillAnchor_);
+    }
 }
 
 void gfcPlaybackManager::cacheResendTransport() {

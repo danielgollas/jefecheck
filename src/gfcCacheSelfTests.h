@@ -54,6 +54,11 @@ int cacheKeepTimeSelfTest(const std::string& mediaDir);
 // cached the sound leads with no dip at frame boundaries; a track offset past
 // the others (no overlap) does not stop playback under either loop priority.
 int cacheEveryFrameSelfTest(const std::string& mediaDir);
+// CACHE-FILL: rolling cache off: the load fills front to back from the in point
+// and stops when full; a seek does not move it; Loop + Shortest wraps at the end
+// of what is loaded; load from here refills from that frame; rolling on again
+// follows the playhead.
+int cacheFillSelfTest(const std::string& mediaDir);
 // CACHE-LIMITS: a playhead past the shorter track's end (outside the loop
 // limits) still loads its frame; ONCE with a clip that fits loads every frame
 // from a mid-clip playhead, evicts nothing and settles.

@@ -2405,6 +2405,90 @@ int cacheFailedSelfTest(const std::string& dir) {
     return fail;
 }
 
+// ---- rolling cache off: load until full ----
+
+int cacheFillSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    const int savedLag = sett.lagPolicy;
+    const bool savedRolling = sett.rollingCache;
+    sett.lagPolicy = 2;   // Show every frame: no lead skip in play
+
+    frameCache.setTestBudget(int64_t(40 * kFrame8));
+    playbackManager.setPlaybackMode(LOOPMODELOOP_ID);
+    playbackManager.setLoopPriority(GFC_LOOPPRIORITY_SHORTEST);
+    playbackManager.setInPoint(1);
+    playbackManager.setCurrentFrame(1);
+    playbackManager.setRollingCache(false);
+    gfcSequence* a = loadTrack(0, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+    auto resident = [&](int tl) { return a->frameTable().state(tl - 1) == gfcFrameState::Resident; };
+    auto runFrom = [&](int tl) { int n = 0; while (tl + n <= 240 && resident(tl + n)) ++n; return n; };
+
+    const bool full = pumpUntil([] { return trackManager.residentFrameCount() >= 36; }, 10000);
+    pump(500);
+    const int run1 = runFrom(1);
+    std::printf("CACHE-FILL: rolling off: run from 1 = %d, resident %d\n", run1, trackManager.residentFrameCount());
+    check(full && run1 >= 36, "rolling off: fills front to back from the in point");
+    check(!resident(120), "rolling off: nothing loads far past the full budget");
+
+    {   // A seek leaves the load alone.
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        playbackManager.setCurrentFrame(200);
+        pump(800);
+        const gfcFrameCache::Stats s1 = frameCache.stats();
+        check(s1.evicted == s0.evicted && runFrom(1) == run1, "rolling off: a seek neither unloads nor moves the load");
+    }
+
+    {   // Loop + Shortest: playback wraps at the end of the loaded stretch.
+        playbackManager.setCurrentFrame(1);
+        pump(100);
+        playbackManager.startPlayFwd();
+        const auto t0 = std::chrono::steady_clock::now();
+        int maxF = 0, last = playbackManager.getCurrentFrame();
+        bool wrapped = false;
+        while (std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() < 3.0) {
+            jefe::qt::tickPlaybackTiming();
+            trackManager.generateTextures();
+            const int f = playbackManager.getCurrentFrame();
+            a->getFrame(f);
+            maxF = std::max(maxF, f);
+            if (f < last) wrapped = true;
+            last = f;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        playbackManager.pause();
+        std::printf("CACHE-FILL: loop over loaded: max frame %d, wrapped %d\n", maxF, int(wrapped));
+        check(wrapped && maxF <= run1, "rolling off, Loop + Shortest: playback wraps at the end of what is loaded");
+    }
+
+    {   // Load from here: fills front to back from the new anchor.
+        playbackManager.loadFromHere(150);
+        const bool moved = pumpUntil([&] { return runFrom(150) >= 30; }, 10000);
+        pump(300);
+        std::printf("CACHE-FILL: load from 150: run %d, frame 1 resident %d\n", runFrom(150), int(resident(1)));
+        check(moved && playbackManager.getCurrentFrame() == 150, "load from here: the playhead moves and the load refills from there");
+        check(!resident(1), "load from here: the earlier stretch made room");
+    }
+
+    {   // Rolling on again: the cache follows the playhead.
+        playbackManager.setRollingCache(true);
+        playbackManager.setCurrentFrame(60);
+        const bool follows = pumpUntil([&] { return resident(60) && resident(70); }, 10000);
+        check(follows, "rolling on again: the cache follows the playhead");
+    }
+
+    sett.rollingCache = savedRolling;
+    sett.lagPolicy = savedLag;
+    clearAllTracks();
+    std::printf("CACHE-FILL: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
 // ---- app quit ----
 
 int cacheShutdownSelfTest(const std::string& dir) {
