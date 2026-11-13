@@ -1,6 +1,7 @@
 #include "MainWindow_qt.h"
 
 #include "FXLutPanel_qt.h"
+#include "LUTPreview_qt.h"
 #include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
 #include "NotesPanel_qt.h"
@@ -3199,9 +3200,22 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                     else { list->setCurrentItem(pick3D); printf("UI-DENSITY LUT-3D selected: %s (no name > 40 chars available)\n", qPrintable(pick3D->text(0))); }
                 }
             }
+            if (name == "dock.luts") {
+                // Synthetic 120-char name through the same path setLut uses: must elide, not widen.
+                auto* pv = dock->widget()->findChild<LUTPreview_Qt*>();
+                auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                if (pv && list && !list->selectedItems().isEmpty()) {
+                    auto d = jefe::qt::getLutPreview(list->selectedItems().first()->data(0, Qt::UserRole).toInt());
+                    if (d.valid) { d.name = std::string(120, 'n'); pv->setLut(d); }
+                }
+            }
             struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; };
             int minW = std::max({dock->minimumWidth(), dock->widget()->minimumWidth(),
                                  dock->widget()->minimumSizeHint().width()});
+            if (name == "dock.luts" && minW > 300) {
+                printf("    lut-longname dock minimum width %d > 300 (long name widened it)\n", minW);
+                ++failures;
+            }
             QList<Cfg> cfgs = {
                 {"Bottom", Qt::BottomDockWidgetArea, false, 0},
                 {"Left", Qt::LeftDockWidgetArea, false, minW},

@@ -428,6 +428,34 @@ void LutCloudWidget::keyPressEvent(QKeyEvent* e) {
     QOpenGLWidget::keyPressEvent(e);
 }
 
+namespace {
+// A value label that elides its text to the width it is given, so a long LUT
+// name never widens the dock. The full text stays in the tooltip.
+class ElidingLabel : public QLabel {
+public:
+    explicit ElidingLabel(QWidget* parent) : QLabel("—", parent) {
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        setMinimumWidth(0);
+        setProperty("jefeElided", true);
+    }
+    void setFullText(const QString& t) {
+        if (t == full_) return;
+        full_ = t;
+        setToolTip(t.size() > 1 ? t : QString());
+        refit();
+    }
+protected:
+    void resizeEvent(QResizeEvent* e) override { QLabel::resizeEvent(e); refit(); }
+    QSize minimumSizeHint() const override { return QSize(0, QLabel::minimumSizeHint().height()); }
+private:
+    void refit() {
+        const QString shown = fontMetrics().elidedText(full_, Qt::ElideRight, std::max(0, contentsRect().width()));
+        if (shown != text()) QLabel::setText(shown);
+    }
+    QString full_ = "—";
+};
+}  // namespace
+
 // ---- LUTPreview_Qt ----
 LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("lut.preview");
@@ -448,7 +476,10 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
         l->setStyleSheet("color:#888;");
         return l;
     };
-    nameLbl_  = mkVal("lut.preview.name");
+    auto* nameEl = new ElidingLabel(this);
+    nameEl->setObjectName("lut.preview.name");
+    nameEl->setStyleSheet("color:#ccc;");
+    nameLbl_ = nameEl;
     typeLbl_  = mkVal("lut.preview.type");
     sizeLbl_  = mkVal("lut.preview.size");
     depthLbl_ = mkVal("lut.preview.depth");
@@ -476,11 +507,13 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
 
     // A bare QCheckBox reports its pre-stylesheet size to FlowLayout, so each
     // sits in a one-item host that reports the styled size.
-    auto hosted = [this, cg](QWidget* w) {
+    int hostMinH = jefe::qt::ui::kControlH;
+    auto hosted = [this, cg, &hostMinH](QWidget* w) {
         auto* h = new QWidget(controls_);
         auto* hl = new QHBoxLayout(h);
         jefe::qt::ui::applyRowMetrics(hl);
-        hl->addWidget(w);
+        hl->addWidget(w, 0, Qt::AlignVCenter);
+        h->setMinimumHeight(hostMinH);
         cg->addWidget(h);
     };
 
@@ -517,12 +550,15 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
     auto* bgLbl = new QLabel("Bg", bgPair);
     bgLbl->setMinimumHeight(jefe::qt::ui::kControlH);
     bgLbl->setAlignment(Qt::AlignVCenter);
-    bgL->addWidget(bgLbl);
-    bgL->addWidget(bg, 1);
+    bgL->addWidget(bgLbl, 0, Qt::AlignVCenter);
+    bgL->addWidget(bg, 1, Qt::AlignVCenter);
     bgPair->setMinimumWidth(bgLbl->sizeHint().width() + jefe::qt::ui::kGapTight + 80);
 
+    // Checkbox hosts match the Bg pair's height so rows centre together.
+    const int rowH = std::max(jefe::qt::ui::kControlH, bgPair->sizeHint().height());
+    hostMinH = rowH;
     hosted(solid); hosted(grid); hosted(dots);
-    cg->addWidget(marker);
+    hosted(marker);
     hosted(deformed); hosted(autospin);
     cg->addWidget(bgPair);
 
@@ -589,13 +625,13 @@ QBoxLayout::Direction LUTPreview_Qt::chooseDirection(QSize size, QBoxLayout::Dir
 
 void LUTPreview_Qt::setLut(const jefe::qt::LutPreviewData& d) {
     if (!d.valid) {
-        nameLbl_->setText("—"); typeLbl_->setText("—");
+        static_cast<ElidingLabel*>(nameLbl_)->setFullText("—"); typeLbl_->setText("—");
         sizeLbl_->setText("—"); depthLbl_->setText("—"); maxLbl_->setText("—");
         stack_->setCurrentIndex(0);   // empty page
         controls_->setVisible(false);
         return;
     }
-    nameLbl_->setText(QString::fromStdString(d.name));
+    static_cast<ElidingLabel*>(nameLbl_)->setFullText(QString::fromStdString(d.name));
     typeLbl_->setText(d.is3D ? "3D cube" : "1D");
     sizeLbl_->setText(d.is3D ? QString("%1³").arg(d.size)
                              : QString("%1 samples").arg(d.size));

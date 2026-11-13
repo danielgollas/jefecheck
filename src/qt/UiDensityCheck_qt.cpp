@@ -99,6 +99,23 @@ void walk(const QWidget* w, const QWidget* root, QList<DensityViolation>& out) {
                                 .arg(w->fontMetrics().height()).arg(w->contentsRect().height()));
     }
 
+    // hclip: text that needs more width than the widget has.
+    if (const auto* pb = qobject_cast<const QPushButton*>(w)) {
+        if (!pb->text().isEmpty() && pb->sizeHint().width() > pb->width())
+            add("hclip", QString("button needs %1 px, has %2").arg(pb->sizeHint().width()).arg(pb->width()));
+    } else if (const auto* tb = qobject_cast<const QToolButton*>(w)) {
+        if (!tb->text().isEmpty() && tb->toolButtonStyle() != Qt::ToolButtonIconOnly &&
+            tb->sizeHint().width() > tb->width())
+            add("hclip", QString("button needs %1 px, has %2").arg(tb->sizeHint().width()).arg(tb->width()));
+    } else if (const auto* lb = qobject_cast<const QLabel*>(w)) {
+        const bool plain = lb->textFormat() == Qt::PlainText ||
+                           (lb->textFormat() == Qt::AutoText && !Qt::mightBeRichText(lb->text()));
+        if (plain && !lb->wordWrap() && !lb->text().isEmpty() && !lb->property("jefeElided").toBool() &&
+            lb->fontMetrics().horizontalAdvance(lb->text()) > lb->contentsRect().width())
+            add("hclip", QString("label text %1 px > contents width %2")
+                             .arg(lb->fontMetrics().horizontalAdvance(lb->text())).arg(lb->contentsRect().width()));
+    }
+
     if (hasInternalChildren(w)) return;
 
     // Children: collect the visible ones.
@@ -260,6 +277,28 @@ bool runDensityCheckerSelfTest() {
             if (n != dir) { ++down; if (w >= 440) down += 100; dir = n; }
         }
         all &= report("LUT-DIR pingpong", up <= 1 && down <= 1);
+    }
+    {   // hclip_button
+        QWidget root; root.setStyleSheet(base);
+        auto* lay = new QVBoxLayout(&root);
+        auto* b = new QPushButton("A very long button caption"); b->setFixedWidth(60); lay->addWidget(b);
+        settle(root);
+        const auto v = checkDensity(&root);
+        int n = 0; for (const auto& x : v) if (x.rule == "hclip") ++n;
+        all &= report("hclip_button", n == 1);
+    }
+    {   // hclip_label, and the jefeElided opt-out
+        for (bool elided : {false, true}) {
+            QWidget root; root.setStyleSheet(base);
+            auto* lay = new QVBoxLayout(&root);
+            auto* l = new QLabel("A very long label text that cannot fit"); l->setFixedWidth(60);
+            if (elided) l->setProperty("jefeElided", true);
+            lay->addWidget(l);
+            settle(root);
+            const auto v = checkDensity(&root);
+            int n = 0; for (const auto& x : v) if (x.rule == "hclip") ++n;
+            all &= report(elided ? "hclip_label_elided" : "hclip_label", n == (elided ? 0 : 1));
+        }
     }
     return all;
 }

@@ -3,6 +3,7 @@
 #include "SequenceLoadBridge_qt.h"
 #include "LUTPreview_qt.h"
 #include "UiMetrics_qt.h"
+#include "FlowLayout_qt.h"
 
 #include <QCheckBox>
 #include <QDragEnterEvent>
@@ -75,14 +76,14 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
 
     status_ = new QLabel("Drop .lut / .cube / .cub files here to load.", this);
     status_->setStyleSheet("color: #888; font-style: italic;");
+    status_->setWordWrap(true);
     status_->setObjectName("lut.status.label");
     status_->setAccessibleName("LUT status");
 
-    auto* row = new QHBoxLayout();
-    jefe::qt::ui::applyRowMetrics(row);
+    auto* rowHost = new QWidget(this);
+    auto* row = new FlowLayout_Qt(rowHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
     row->addWidget(applyBtn);
     row->addWidget(refreshBtn);
-    row->addStretch(1);
 
     previewToggle_ = new QCheckBox("Preview", this);
     previewToggle_->setChecked(true);
@@ -99,7 +100,7 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     browserL->setSpacing(6);
     browserL->addWidget(status_);
     browserL->addWidget(table_, /*stretch*/ 1);
-    browserL->addLayout(row);
+    browserL->addWidget(rowHost);
     browserL->addWidget(previewToggle_);   // toggle sits under the list/buttons
 
     table_->setMinimumHeight(60);  // let the table shrink so the splitter has travel
