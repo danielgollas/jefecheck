@@ -55,7 +55,11 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setAlternatingRowColors(true);
     table_->setSortingEnabled(true);
+    // Name stretches but never collapses: every section is at least 80 px, the
+    // numeric columns size to content, and the view scrolls only for Size/Depth.
+    table_->header()->setMinimumSectionSize(80);
     table_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (int c = 1; c < 4; ++c) table_->header()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
     table_->header()->setStretchLastSection(false);
     // Double-click is "apply"; matches the FLTK LUT browser's UX.
     connect(table_, &QTreeWidget::itemDoubleClicked,

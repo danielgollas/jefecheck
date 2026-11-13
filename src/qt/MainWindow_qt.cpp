@@ -2,6 +2,7 @@
 
 #include "FXLutPanel_qt.h"
 #include "LUTPreview_qt.h"
+#include <QHeaderView>
 #include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
 #include "NotesPanel_qt.h"
@@ -3237,6 +3238,19 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                 if (!c.floating && c.width > 0) {
                     resizeDocks({dock}, {c.width}, Qt::Horizontal);
                     settle();
+                }
+                if (name == "dock.luts") {
+                    auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                    if (list) {
+                        const int nameW = list->header()->sectionSize(0);
+                        const int typeRight = list->header()->sectionViewportPosition(1) + list->header()->sectionSize(1);
+                        if (nameW < 80 || list->header()->sectionViewportPosition(0) < 0 ||
+                            typeRight > list->viewport()->width()) {
+                            printf("    lut-list name width %d, type right edge %d of viewport %d (Name/Type must fit without scrolling)\n",
+                                   nameW, typeRight, list->viewport()->width());
+                            ++failures;
+                        }
+                    }
                 }
                 const int dockW = dock->width();
                 const QString label = QString("%1 %2 %3x%4 %5").arg(name, c.area)
