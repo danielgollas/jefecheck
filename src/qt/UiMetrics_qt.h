@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Shared density metrics for the Qt panels: one set of numbers so every dock
+// and dialog uses the same text size, control height and spacing.
+#pragma once
+
+#include <QAbstractButton>
+#include <QBoxLayout>
+#include <QLayout>
+#include <QSize>
+
+namespace jefe::qt::ui {
+
+constexpr int kGapTight = 4;
+constexpr int kGap = 8;
+constexpr int kGapGroup = 12;
+constexpr int kControlH = 24;
+constexpr int kFontPx = 13;
+constexpr int kIconPx = 16;
+
+// A widget with this dynamic property set to true is skipped by the density
+// checker, along with its subtree (painted or custom widgets, GL canvases).
+inline constexpr const char* kDensityExemptProperty = "jefeDensityExempt";
+
+inline void applyRowMetrics(QBoxLayout* row, int spacing = kGap) {
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(spacing);
+}
+
+inline void applyGroupMetrics(QLayout* l) {
+    l->setContentsMargins(kGapGroup, kGapGroup, kGapGroup, kGapGroup);
+    l->setSpacing(kGap);
+}
+
+inline void makeIconButton(QAbstractButton* b) {
+    b->setFixedSize(kControlH, kControlH);
+    b->setIconSize(QSize(kIconPx, kIconPx));
+}
+
+}  // namespace jefe::qt::ui

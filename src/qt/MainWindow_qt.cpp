@@ -21,6 +21,10 @@
 #include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
+#include "UiDensityCheck_qt.h"
+#include <QListWidget>
+#include <QMap>
+#include <QRegularExpression>
 
 #include "../UIConstants.h"
 
@@ -3124,4 +3128,127 @@ void MainWindow_Qt::autoloadStep() {
         if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
         if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
     }
+}
+
+// Surfaces whose owning plan has not landed yet: violations print but never fail the run.
+static const QStringList kDensityDeferred = {"dock.platemanager", "dock.fxparams", "dock.remote"};
+
+int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
+    if (!jefe::qt::ui::runDensityCheckerSelfTest()) {
+        printf("UI-DENSITY RESULT FAIL selftest\n");
+        fflush(stdout);
+        return 1;
+    }
+    if (!outDir.isEmpty()) QDir().mkpath(outDir);
+
+    int failures = 0;
+    auto settle = []() { QCoreApplication::processEvents(); QCoreApplication::processEvents(); };
+    auto fileSafe = [](QString s) { return s.replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_"); };
+
+    // One surface: check, print, optionally save a PNG. `label` is the line text after UI-DENSITY.
+    auto record = [&](const QString& name, const QString& label, QWidget* root, const QString& pngBase) {
+        const auto v = jefe::qt::ui::checkDensity(root);
+        const bool deferred = kDensityDeferred.contains(name);
+        const char* verdict = v.isEmpty() ? "PASS" : (deferred ? "DEFERRED" : "FAIL");
+        printf("UI-DENSITY %s %s\n", qPrintable(label), verdict);
+        for (const auto& x : v)
+            printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+        if (!v.isEmpty() && !deferred) failures += int(v.size());
+        if (!outDir.isEmpty() && !pngBase.isEmpty())
+            root->grab().save(outDir + "/" + fileSafe(pngBase) + ".png");
+    };
+
+    const QList<QDockWidget*> docks = {timelineDock_, lutDock_, playlistDock_, notesDock_,
+                                       plateDock_, fxParamsDock_, remoteDock_};
+    QMap<QDockWidget*, bool> wasVisible;
+    for (auto* d : docks) wasVisible[d] = d->isVisible();
+
+    const QList<QSize> windowSizes = {{1280, 800}, {1920, 1080}};
+    for (const QSize& ws : windowSizes) {
+        resize(ws);
+        settle();
+        for (QDockWidget* dock : docks) {
+            if (!dock || !dock->widget()) continue;
+            const QString name = dock->objectName();
+            // Only the dock under test is visible, so the others do not squeeze it.
+            for (auto* d : docks) if (d != dock) d->hide();
+
+            struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; };
+            int minW = std::max({dock->minimumWidth(), dock->widget()->minimumWidth(),
+                                 dock->widget()->minimumSizeHint().width()});
+            QList<Cfg> cfgs = {
+                {"Bottom", Qt::BottomDockWidgetArea, false, 0},
+                {"Left", Qt::LeftDockWidgetArea, false, minW},
+                {"Left", Qt::LeftDockWidgetArea, false, minW * 3 / 2},
+                {"Left", Qt::LeftDockWidgetArea, false, 120},
+                {"Floating", Qt::NoDockWidgetArea, true, 0},
+            };
+            for (const Cfg& c : cfgs) {
+                dock->setFloating(false);
+                if (c.floating) {
+                    dock->setFloating(true);
+                    dock->resize(std::max(minW, 300), 400);
+                } else {
+                    addDockWidget(c.qtArea, dock);
+                }
+                dock->show();
+                dock->raise();
+                settle();
+                if (!c.floating && c.width > 0) {
+                    resizeDocks({dock}, {c.width}, Qt::Horizontal);
+                    settle();
+                }
+                const int dockW = dock->width();
+                const QString label = QString("%1 %2 %3x%4 %5").arg(name, c.area)
+                                          .arg(ws.width()).arg(ws.height()).arg(dockW);
+                record(name, label, dock->widget(),
+                       QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW));
+            }
+            dock->setFloating(false);
+            dock->hide();
+        }
+    }
+    for (auto* d : docks) d->setVisible(wasVisible.value(d));
+
+    // Dialogs: default size, then minimumSizeHint().
+    auto checkDialog = [&](const QString& name, QDialog* dlg) {
+        dlg->show();
+        settle();
+        record(name, name + " default", dlg, "dlg-" + name + "-default");
+        dlg->resize(dlg->minimumSizeHint());
+        settle();
+        record(name, name + " min", dlg, "dlg-" + name + "-min");
+        dlg->close();
+    };
+
+    openLoadWindow();
+    if (loadWindowDialog_) {
+        loadWindowDialog_->close();
+        checkDialog("dlg.load", loadWindowDialog_);
+    }
+    {
+        PreferencesWindow_Qt dlg(this);
+        QListWidget* sidebar = dlg.findChild<QListWidget*>();
+        const int rows = sidebar ? sidebar->count() : 1;
+        for (int i = 0; i < rows; ++i) {
+            QString title = "page" + QString::number(i);
+            if (sidebar) { sidebar->setCurrentRow(i); title = sidebar->item(i)->text(); }
+            checkDialog("dlg.prefs." + title, &dlg);
+        }
+    }
+    {
+        RenderDialog_Qt dlg(this);
+        checkDialog("dlg.render", &dlg);
+    }
+    {
+        MinSpecsDialog_Qt dlg(this);
+        checkDialog("dlg.minspecs", &dlg);
+    }
+    // The About box joins the matrix when makeAboutBox exists.
+    printf("UI-DENSITY about SKIPPED (until Task 7)\n");
+
+    if (failures == 0) printf("UI-DENSITY RESULT PASS\n");
+    else printf("UI-DENSITY RESULT FAIL %d\n", failures);
+    fflush(stdout);
+    return failures == 0 ? 0 : 1;
 }

@@ -155,6 +155,9 @@ public:
     /** Headless proof of the export dialog (--package-dialog-test <image>). */
     int runHeadlessPackageDialogTest(const QString& imagePath);
 
+    /** Headless density check of every dock and dialog (--ui-density-test [outDir]). */
+    int runHeadlessUiDensityTest(const QString& outDir);
+
     /** Overrides where openReviewPackage extracts packages; empty (the default)
         falls back to <AppDataLocation>/packages. Tests point this at a temp dir
         so a --config-dir run never touches the developer's real app data. */
