@@ -51,7 +51,8 @@ int audioHolesSelfTest(const std::string& mediaDir);
 int cacheKeepTimeSelfTest(const std::string& mediaDir);
 // CACHE-EVERYFRAME: Show every frame with the same loader: playback slows to
 // it one frame at a time and every frame shown is resident; with every frame
-// cached the sound leads with no dip at frame boundaries.
+// cached the sound leads with no dip at frame boundaries; a track offset past
+// the others (no overlap) does not stop playback under either loop priority.
 int cacheEveryFrameSelfTest(const std::string& mediaDir);
 // CACHE-LIMITS: a playhead past the shorter track's end (outside the loop
 // limits) still loads its frame; ONCE with a clip that fits loads every frame

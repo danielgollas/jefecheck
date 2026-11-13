@@ -162,6 +162,7 @@ private: //private made public while debugging
 	gfcTimer fpsTimer;
 
     int getEndLimit();
+    int effectiveLoopPriority();   // Shortest falls back to Longest when the tracks do not overlap
     int getStartLimit();
     
     //auxiliary members used to update

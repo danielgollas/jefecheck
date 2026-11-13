@@ -241,7 +241,7 @@ The Timeline controls from left to right are:
 
 **Loop Priority Control** — When you have multiple tracks loaded, each with a different length, the loop priority determines at what point on the timeline the playback will loop. The options are:
 
-- **Shortest** — The playback loops around the sequence with the shortest number of loaded frames. This could mean not seeing all of the frames in the longer sequences.
+- **Shortest** — The playback loops around the sequence with the shortest number of loaded frames. This could mean not seeing all of the frames in the longer sequences. If the sequences don't overlap on the timeline at all (one is offset past the others), playback covers all of them, as with Longest.
 - **Longest** — The playback loops around the sequence with the longest number of loaded frames. This could mean seeing empty frames in the shorter sequences.
 - **Timeline** — The playback loops around the length of the timeline, no matter how many frames are loaded in any track.
 

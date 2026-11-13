@@ -495,7 +495,7 @@ int gfcPlaybackManager::getEndLimit() {
 
     //get tracks shortest or longest track depending on the loopPriority setting (TODO: remove from the prefs window and put it in the main window controls)
     int tmpEndLimit=1;
-    switch ( loopPriority ) {
+    switch ( effectiveLoopPriority() ) {
     case GFC_LOOPPRIORITY_SHORTEST:
         tmpEndLimit=trackManager.getFirstLastLoaded()+1; //this includes the offset for each track, so we get the frame number of the absolutely shortest track on the window. This also obviates tracks with 0 lenght and will only return 0 if the track is in fact ending at frame 0 due to an offset, but should not happen often
         break;
@@ -516,9 +516,17 @@ int gfcPlaybackManager::getEndLimit() {
         return outPoint;//return to;
 }
 
+// Shortest loops where every track has footage. When the tracks' ranges don't overlap (an offset
+// moved one past the others) that stretch is empty, so loop over all of them as Longest does.
+int gfcPlaybackManager::effectiveLoopPriority() {
+    if ( loopPriority==GFC_LOOPPRIORITY_SHORTEST && trackManager.getLastFirstLoaded()>trackManager.getFirstLastLoaded() )
+        return GFC_LOOPPRIORITY_LONGEST;
+    return loopPriority;
+}
+
 int gfcPlaybackManager::getStartLimit() {
     int tmpStartLimit=1;
-    switch ( loopPriority ) {
+    switch ( effectiveLoopPriority() ) {
     case GFC_LOOPPRIORITY_SHORTEST:
         tmpStartLimit=trackManager.getLastFirstLoaded()+1; //this includes the offset for each track, so we get the frame number of the absolutely shortest track on the window. This also obviates tracks with 0 lenght and will only return 0 if the track is in fact ending at frame 0 due to an offset, but should not happen often  They are always off by 1 since the ranges start at 0
         break;

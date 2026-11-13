@@ -2201,6 +2201,29 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
         check(dips == 0, "every frame, cached: no dip at frame boundaries inside a beep");
     }
 
+    {   // A second track offset past the playhead (it shows nothing there): playback still moves.
+        gfcSequence::setTestDecodeDelayMs(0);
+        frameCache.setTestBudget(int64_t(240 * kFrame8));
+        gfcSequence* b = loadTrack(1, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+        b->setOffset(300);
+        const int savedPriority = playbackManager.getLoopPriority();
+        for (int hold : {0, 2}) {
+            for (int priority : {GFC_LOOPPRIORITY_LONGEST, GFC_LOOPPRIORITY_SHORTEST}) {
+                b->setHoldMode(hold);
+                playbackManager.setLoopPriority(priority);
+                playbackManager.setCurrentFrame(1);
+                pumpUntil([] { return trackManager.timelineFramesResident(playbackManager.getCurrentFrame(), 30, 1); }, 5000);
+                const int from = playbackManager.getCurrentFrame();
+                const Run r = run(from, 1.5);
+                std::printf("CACHE-EVERYFRAME: offset 300, hold %d, priority %d: frames %d..%d\n",
+                            hold, priority, r.start, r.end);
+                check(r.end - r.start >= 20 && r.stepOne, "every frame, offset track off screen: playback moves one frame at a time");
+            }
+        }
+        b->setHoldMode(0);
+        playbackManager.setLoopPriority(savedPriority);
+    }
+
     gfcSequence::setTestDecodeDelayMs(0);
     sett.lagPolicy = savedLag;
     std::printf("CACHE-EVERYFRAME: pass=%d fail=%d\n", pass, fail);
