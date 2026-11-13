@@ -64,6 +64,7 @@ static void applyDarkTheme(QApplication& qapp) {
     const QStringList candidates = {
         QCoreApplication::applicationDirPath() + "/theme/jefecheck_dark.qss",
         QCoreApplication::applicationDirPath() + "/../src/qt/theme/jefecheck_dark.qss",
+        QStringLiteral(":/theme/jefecheck_dark.qss"),  // compiled-in copy (bundles have neither path above)
     };
     for (const QString& path : candidates) {
         QFile qss(path);

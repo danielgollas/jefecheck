@@ -169,11 +169,13 @@ QList<DensityViolation> checkDensity(const QWidget* root) {
 bool runDensityCheckerSelfTest() {
     bool all = true;
     const QString base = "QWidget { font-size: 13px; }";
+    // The app stylesheet caps every QPushButton at 24 px; a deliberately tall fixture must opt out of it.
+    const QString kTallButton = "QPushButton { min-height: 28px; max-height: 28px; }";
 
     {   // tall_button
         QWidget root; root.setStyleSheet(base);
         auto* lay = new QVBoxLayout(&root);
-        auto* b = new QPushButton("Go"); b->setFixedHeight(30); lay->addWidget(b);
+        auto* b = new QPushButton("Go"); b->setFixedHeight(30); b->setStyleSheet(kTallButton); lay->addWidget(b);
         settle(root);
         const auto v = checkDensity(&root);
         all &= report("tall_button", v.size() == 1 && v[0].rule == "height");
@@ -233,7 +235,7 @@ bool runDensityCheckerSelfTest() {
         auto* lay = new QVBoxLayout(&root);
         auto* sa = new QScrollArea; sa->setWidgetResizable(true); lay->addWidget(sa);
         auto* inner = new QWidget; auto* il = new QVBoxLayout(inner);
-        auto* b = new QPushButton("Go"); b->setFixedHeight(30); il->addWidget(b);
+        auto* b = new QPushButton("Go"); b->setFixedHeight(30); b->setStyleSheet(kTallButton); il->addWidget(b);
         sa->setWidget(inner);
         settle(root);
         const auto v = checkDensity(&root);

@@ -831,6 +831,7 @@ void MainWindow_Qt::buildDocks() {
     lutDock_->setObjectName("dock.luts");
     lutDock_->setAccessibleName("LUT browser dock");
     lutPanelWidget_ = new LUTPanel_Qt(lutDock_);
+    lutPanelWidget_->setMinimumWidth(240);
     lutDock_->setWidget(lutPanelWidget_);
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, lutDock_);
@@ -845,7 +846,7 @@ void MainWindow_Qt::buildDocks() {
     fxParamsDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     // Both dimensions needed: left-area docks default to zero height when no other dock claims the area, collapsing the scroll viewport and pruning editors from the Mac AX tree.
     // The width floor keeps the per-FX header fully visible.
-    fxParamPanelWidget_->setMinimumWidth(150);
+    fxParamPanelWidget_->setMinimumWidth(240);
     fxParamPanelWidget_->setMinimumHeight(240);
     addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
 
