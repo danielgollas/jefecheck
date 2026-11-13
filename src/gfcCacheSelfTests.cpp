@@ -1884,12 +1884,18 @@ struct LagRig {
     gfcFakeAudioOutput out;
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     int64_t pumped = 0;
+    std::vector<float>* capture = nullptr;   // when set, the device output is appended here (stereo)
     LagRig() { audioEngine.setOutput(&out); out.open(&audioEngine); }
     ~LagRig() { audioEngine.setOutput(nullptr); }
     void tick() {
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         const int64_t want = int64_t(secs * gfcAudioEngine::kRate);
-        if (want > pumped) { out.pump(int(want - pumped)); pumped = want; }
+        if (want > pumped) {
+            std::vector<float> block;
+            out.pump(int(want - pumped), capture ? &block : nullptr);
+            if (capture) capture->insert(capture->end(), block.begin(), block.end());
+            pumped = want;
+        }
         jefe::qt::tickPlaybackTiming();
         trackManager.generateTextures();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -2149,7 +2155,6 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
         const Run r = run(1, 5.0);
         std::printf("CACHE-EVERYFRAME: frames %d..%d, fps %.1f, led=%d\n", r.start, r.end, r.fps, int(r.everLed));
         check(r.stepOne, "every frame: each change is exactly +1");
-        check(!r.everLed, "every frame: the sound never leads");
         check(r.end >= 40 && r.end <= 90, "every frame: playback slowed to the loader (frame 40..90 after 5 s)");
         check(r.fps < 20.0f, "every frame: the measured fps shows the slowdown");
         check(r.allResident, "every frame: every frame shown was resident");
@@ -2159,8 +2164,41 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
         gfcSequence::setTestDecodeDelayMs(300);
         const Run r = run(150, 8.0);
         std::printf("CACHE-EVERYFRAME: 300 ms: frames %d..%d, fps %.1f\n", r.start, r.end, r.fps);
-        check(r.stepOne && !r.everLed && r.allResident, "every frame 300 ms: +1 steps, no lead, every frame resident");
+        check(r.stepOne && r.allResident, "every frame 300 ms: +1 steps, every frame resident");
         check(r.fps > 0.0f && r.fps < 6.0f, "every frame 300 ms: the measured fps drops below 6");
+    }
+
+    {   // Every frame already resident: playback keeps up, so the sound leads and plays
+        // continuously, with no dip at frame boundaries inside a beep.
+        gfcSequence::setTestDecodeDelayMs(0);
+        frameCache.setTestBudget(int64_t(240 * kFrame8));
+        playbackManager.setCurrentFrame(1);
+        const bool ready = pumpUntil([] { return trackManager.timelineFramesResident(1, 80, 1); }, 10000);
+        check(ready, "every frame, cached: frames 1..80 resident before play");
+        std::vector<float> out;
+        rig.t0 = std::chrono::steady_clock::now(); rig.pumped = 0; rig.capture = &out;
+        const Run r = run(1, 2.6);
+        rig.capture = nullptr;
+        // Left channel envelope in 0.5 ms windows; a beep is a run of loud windows,
+        // and a dip is a quiet gap shorter than 10 ms between two loud runs.
+        const int w = 24;
+        int runs = 0, dips = 0, gap = -1;
+        for (size_t i = 0; i + 2 * w <= out.size(); i += 2 * w) {
+            float m = 0.f;
+            for (int j = 0; j < w; ++j) m = std::max(m, std::fabs(out[i + 2 * j]));
+            if (m > 0.3f) {
+                if (gap < 0 || gap >= 20) ++runs; else if (gap > 0) ++dips;
+                gap = 0;
+            } else if (gap >= 0) {
+                ++gap;
+            }
+        }
+        std::printf("CACHE-EVERYFRAME: cached: frames %d..%d, fps %.1f, led=%d, beeps=%d, dips=%d\n",
+                    r.start, r.end, r.fps, int(r.everLed), runs, dips);
+        check(r.stepOne && r.allResident, "every frame, cached: +1 steps, every frame resident");
+        check(r.everLed, "every frame, cached: the sound leads while playback keeps up");
+        check(runs >= 2, "every frame, cached: the beeps are heard");
+        check(dips == 0, "every frame, cached: no dip at frame boundaries inside a beep");
     }
 
     gfcSequence::setTestDecodeDelayMs(0);

@@ -95,11 +95,32 @@ void gfcPlaybackManager::update() {
         cacheSentDir=currentDirection;
     };
 
-    // Native-rate forward play: the audio clock leads and the picture drops frames to follow; the sound
-    // never waits. FPS pacing takes over once the engine can't lead or Show every frame is on.
+    // Native-rate forward play: the audio clock leads. Keep time drops frames to follow it and the sound
+    // never waits. Show every frame follows it one frame at a time while each next frame is ready; a frame
+    // it would skip or one still loading stops the sound, and pacing holds the picture.
     if (audioEngine.isLeading()) {
         audioSyncTransport();
-        if (audioEngine.canLead() && keepTime()) {
+        if (audioEngine.canLead() && !keepTime()) {
+            const int f=audioEngine.leaderFrame();
+            int dir=audioEngine.leaderDirection();
+            const int next=advanceFrame(currentFrame, dir, playbackMode, startLimit, endLimit);
+            if (f==currentFrame || (f==next && trackManager.timelineFrameResident(next))) {
+                intraFrameCount=0;
+                if (f!=currentFrame) {
+                    recordAdvanceForFPS(1);
+                    currentFrame=f;
+                    currentDirection=dir;
+                    updateTimeCode();
+                    plateManager.setChanged();
+                    boundCurrentFrameToLimits();
+                }
+                cacheFollow();
+                return;
+            }
+            // The picture stays on the frame shown; pacing looks at the next one this tick.
+            audioEngine.stopLeading();
+            intraFrameCount=timePerFrame;
+        } else if (audioEngine.canLead() && keepTime()) {
             intraFrameCount=0;
             const int f=audioEngine.leaderFrame();
             currentDirection=audioEngine.leaderDirection();
@@ -114,10 +135,11 @@ void gfcPlaybackManager::update() {
             }
             cacheFollow();
             return;
+        } else {
+            // Leaving the audio clock: the picture carries on from the frame heard.
+            currentFrame=audioEngine.leaderFrame();
+            audioEngine.stopLeading();
         }
-        // Leaving the audio clock: the picture carries on from the frame heard.
-        currentFrame=audioEngine.leaderFrame();
-        audioEngine.stopLeading();
     }
     // Pacing leads from here. Keep time still skips ahead whichever clock leads (the cache walk
     // follows the direction); Show every frame never skips. Atomics only.
@@ -870,14 +892,18 @@ bool gfcPlaybackManager::audioTryLead() {
     audioSentStart=t.startLimit; audioSentEnd=t.endLimit; audioSentMode=t.loopMode; audioSentDir=t.direction;
     // The picture is waiting for the pre-play buffer: its end starts the lead.
     if (buffering_) { audioEngine.updateTransport(t); return false; }
-    // Reverse is silent; Show every frame never lets the sound lead (each
-    // shown frame plays its own slice instead).
-    if (currentDirection<=0 || !keepTime()) { audioEngine.updateTransport(t); return false; }
+    // Reverse is silent. Show every frame lets the sound lead only once the next
+    // ~0.25 s is resident; until then each shown frame plays its own slice.
+    if (currentDirection<=0) { audioEngine.updateTransport(t); return false; }
+    if (!keepTime() && !trackManager.timelineFramesResident(currentFrame, prePlayFrames(), currentDirection)) {
+        audioEngine.updateTransport(t);
+        return false;
+    }
     audioEngine.startLeading(t);   // a no-op unless the engine can lead
     const bool leading=audioEngine.isLeading();
-    // Keep time and not buffering (both checked above): the lead skip is on
-    // whether or not the sound took the lead.
-    setLeadSkip(playing);
+    // Not buffering (checked above): with Keep time the lead skip is on whether
+    // or not the sound took the lead; Show every frame never skips.
+    setLeadSkip(playing && keepTime());
     return leading;
 }
 
