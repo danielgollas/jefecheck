@@ -27,6 +27,7 @@ void loadPreferences() {
     // how far ahead frames load, and a stored 0 left a queue of one.
     sett.memoryLimitPercent    = std::clamp(s.value("Engine/memoryLimitPercent", sett.memoryLimitPercent).toInt(), 50, 100);
     sett.lagPolicy             = std::clamp(s.value("Engine/lagPolicy", sett.lagPolicy).toInt(), 0, 2);
+    sett.rollingCache          = s.value("Engine/rollingCache", sett.rollingCache).toBool();
     sett.oiioThreads           = s.value("Engine/oiioThreads",           sett.oiioThreads).toInt();
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply at startup
     sett.hardwareDecoding      = s.value("Engine/hardwareDecoding", sett.hardwareDecoding).toBool();
@@ -122,6 +123,7 @@ void writePreferences() {
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
     s.setValue("Engine/memoryLimitPercent", sett.memoryLimitPercent);
     s.setValue("Engine/lagPolicy", sett.lagPolicy);
+    s.setValue("Engine/rollingCache", sett.rollingCache);
     s.setValue("Engine/oiioThreads",          sett.oiioThreads);
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply on Done
     s.setValue("Engine/hardwareDecoding",     sett.hardwareDecoding);

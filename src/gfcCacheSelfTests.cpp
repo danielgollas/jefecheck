@@ -1884,12 +1884,18 @@ struct LagRig {
     gfcFakeAudioOutput out;
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     int64_t pumped = 0;
+    std::vector<float>* capture = nullptr;   // when set, the device output is appended here (stereo)
     LagRig() { audioEngine.setOutput(&out); out.open(&audioEngine); }
     ~LagRig() { audioEngine.setOutput(nullptr); }
     void tick() {
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         const int64_t want = int64_t(secs * gfcAudioEngine::kRate);
-        if (want > pumped) { out.pump(int(want - pumped)); pumped = want; }
+        if (want > pumped) {
+            std::vector<float> block;
+            out.pump(int(want - pumped), capture ? &block : nullptr);
+            if (capture) capture->insert(capture->end(), block.begin(), block.end());
+            pumped = want;
+        }
         jefe::qt::tickPlaybackTiming();
         trackManager.generateTextures();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -2149,7 +2155,6 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
         const Run r = run(1, 5.0);
         std::printf("CACHE-EVERYFRAME: frames %d..%d, fps %.1f, led=%d\n", r.start, r.end, r.fps, int(r.everLed));
         check(r.stepOne, "every frame: each change is exactly +1");
-        check(!r.everLed, "every frame: the sound never leads");
         check(r.end >= 40 && r.end <= 90, "every frame: playback slowed to the loader (frame 40..90 after 5 s)");
         check(r.fps < 20.0f, "every frame: the measured fps shows the slowdown");
         check(r.allResident, "every frame: every frame shown was resident");
@@ -2159,8 +2164,64 @@ int cacheEveryFrameSelfTest(const std::string& dir) {
         gfcSequence::setTestDecodeDelayMs(300);
         const Run r = run(150, 8.0);
         std::printf("CACHE-EVERYFRAME: 300 ms: frames %d..%d, fps %.1f\n", r.start, r.end, r.fps);
-        check(r.stepOne && !r.everLed && r.allResident, "every frame 300 ms: +1 steps, no lead, every frame resident");
+        check(r.stepOne && r.allResident, "every frame 300 ms: +1 steps, every frame resident");
         check(r.fps > 0.0f && r.fps < 6.0f, "every frame 300 ms: the measured fps drops below 6");
+    }
+
+    {   // Every frame already resident: playback keeps up, so the sound leads and plays
+        // continuously, with no dip at frame boundaries inside a beep.
+        gfcSequence::setTestDecodeDelayMs(0);
+        frameCache.setTestBudget(int64_t(240 * kFrame8));
+        playbackManager.setCurrentFrame(1);
+        const bool ready = pumpUntil([] { return trackManager.timelineFramesResident(1, 80, 1); }, 10000);
+        check(ready, "every frame, cached: frames 1..80 resident before play");
+        std::vector<float> out;
+        rig.t0 = std::chrono::steady_clock::now(); rig.pumped = 0; rig.capture = &out;
+        const Run r = run(1, 2.6);
+        rig.capture = nullptr;
+        // Left channel envelope in 0.5 ms windows; a beep is a run of loud windows,
+        // and a dip is a quiet gap shorter than 10 ms between two loud runs.
+        const int w = 24;
+        int runs = 0, dips = 0, gap = -1;
+        for (size_t i = 0; i + 2 * w <= out.size(); i += 2 * w) {
+            float m = 0.f;
+            for (int j = 0; j < w; ++j) m = std::max(m, std::fabs(out[i + 2 * j]));
+            if (m > 0.3f) {
+                if (gap < 0 || gap >= 20) ++runs; else if (gap > 0) ++dips;
+                gap = 0;
+            } else if (gap >= 0) {
+                ++gap;
+            }
+        }
+        std::printf("CACHE-EVERYFRAME: cached: frames %d..%d, fps %.1f, led=%d, beeps=%d, dips=%d\n",
+                    r.start, r.end, r.fps, int(r.everLed), runs, dips);
+        check(r.stepOne && r.allResident, "every frame, cached: +1 steps, every frame resident");
+        check(r.everLed, "every frame, cached: the sound leads while playback keeps up");
+        check(runs >= 2, "every frame, cached: the beeps are heard");
+        check(dips == 0, "every frame, cached: no dip at frame boundaries inside a beep");
+    }
+
+    {   // A second track offset past the playhead (it shows nothing there): playback still moves.
+        gfcSequence::setTestDecodeDelayMs(0);
+        frameCache.setTestBudget(int64_t(240 * kFrame8));
+        gfcSequence* b = loadTrack(1, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+        b->setOffset(300);
+        const int savedPriority = playbackManager.getLoopPriority();
+        for (int hold : {0, 2}) {
+            for (int priority : {GFC_LOOPPRIORITY_LONGEST, GFC_LOOPPRIORITY_SHORTEST}) {
+                b->setHoldMode(hold);
+                playbackManager.setLoopPriority(priority);
+                playbackManager.setCurrentFrame(1);
+                pumpUntil([] { return trackManager.timelineFramesResident(playbackManager.getCurrentFrame(), 30, 1); }, 5000);
+                const int from = playbackManager.getCurrentFrame();
+                const Run r = run(from, 1.5);
+                std::printf("CACHE-EVERYFRAME: offset 300, hold %d, priority %d: frames %d..%d\n",
+                            hold, priority, r.start, r.end);
+                check(r.end - r.start >= 20 && r.stepOne, "every frame, offset track off screen: playback moves one frame at a time");
+            }
+        }
+        b->setHoldMode(0);
+        playbackManager.setLoopPriority(savedPriority);
     }
 
     gfcSequence::setTestDecodeDelayMs(0);
@@ -2341,6 +2402,90 @@ int cacheFailedSelfTest(const std::string& dir) {
     clearAllTracks();
     fs::remove_all(broken, ec);
     std::printf("CACHE-FAILED: pass=%d fail=%d\n", pass, fail);
+    return fail;
+}
+
+// ---- rolling cache off: load until full ----
+
+int cacheFillSelfTest(const std::string& dir) {
+    int pass = 0, fail = 0;
+    auto check = [&](bool cond, const char* msg) {
+        if (cond) ++pass; else { ++fail; std::printf("  FAIL: %s\n", msg); }
+    };
+    SuiteGuard guard;
+    PlaybackGuard playback;
+    clearAllTracks();
+    const int savedLag = sett.lagPolicy;
+    const bool savedRolling = sett.rollingCache;
+    sett.lagPolicy = 2;   // Show every frame: no lead skip in play
+
+    frameCache.setTestBudget(int64_t(40 * kFrame8));
+    playbackManager.setPlaybackMode(LOOPMODELOOP_ID);
+    playbackManager.setLoopPriority(GFC_LOOPPRIORITY_SHORTEST);
+    playbackManager.setInPoint(1);
+    playbackManager.setCurrentFrame(1);
+    playbackManager.setRollingCache(false);
+    gfcSequence* a = loadTrack(0, dir + "/cache_silent_24.mp4", GFC_8BPC, 100);
+    auto resident = [&](int tl) { return a->frameTable().state(tl - 1) == gfcFrameState::Resident; };
+    auto runFrom = [&](int tl) { int n = 0; while (tl + n <= 240 && resident(tl + n)) ++n; return n; };
+
+    const bool full = pumpUntil([] { return trackManager.residentFrameCount() >= 36; }, 10000);
+    pump(500);
+    const int run1 = runFrom(1);
+    std::printf("CACHE-FILL: rolling off: run from 1 = %d, resident %d\n", run1, trackManager.residentFrameCount());
+    check(full && run1 >= 36, "rolling off: fills front to back from the in point");
+    check(!resident(120), "rolling off: nothing loads far past the full budget");
+
+    {   // A seek leaves the load alone.
+        const gfcFrameCache::Stats s0 = frameCache.stats();
+        playbackManager.setCurrentFrame(200);
+        pump(800);
+        const gfcFrameCache::Stats s1 = frameCache.stats();
+        check(s1.evicted == s0.evicted && runFrom(1) == run1, "rolling off: a seek neither unloads nor moves the load");
+    }
+
+    {   // Loop + Shortest: playback wraps at the end of the loaded stretch.
+        playbackManager.setCurrentFrame(1);
+        pump(100);
+        playbackManager.startPlayFwd();
+        const auto t0 = std::chrono::steady_clock::now();
+        int maxF = 0, last = playbackManager.getCurrentFrame();
+        bool wrapped = false;
+        while (std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() < 3.0) {
+            jefe::qt::tickPlaybackTiming();
+            trackManager.generateTextures();
+            const int f = playbackManager.getCurrentFrame();
+            a->getFrame(f);
+            maxF = std::max(maxF, f);
+            if (f < last) wrapped = true;
+            last = f;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        playbackManager.pause();
+        std::printf("CACHE-FILL: loop over loaded: max frame %d, wrapped %d\n", maxF, int(wrapped));
+        check(wrapped && maxF <= run1, "rolling off, Loop + Shortest: playback wraps at the end of what is loaded");
+    }
+
+    {   // Load from here: fills front to back from the new anchor.
+        playbackManager.loadFromHere(150);
+        const bool moved = pumpUntil([&] { return runFrom(150) >= 30; }, 10000);
+        pump(300);
+        std::printf("CACHE-FILL: load from 150: run %d, frame 1 resident %d\n", runFrom(150), int(resident(1)));
+        check(moved && playbackManager.getCurrentFrame() == 150, "load from here: the playhead moves and the load refills from there");
+        check(!resident(1), "load from here: the earlier stretch made room");
+    }
+
+    {   // Rolling on again: the cache follows the playhead.
+        playbackManager.setRollingCache(true);
+        playbackManager.setCurrentFrame(60);
+        const bool follows = pumpUntil([&] { return resident(60) && resident(70); }, 10000);
+        check(follows, "rolling on again: the cache follows the playhead");
+    }
+
+    sett.rollingCache = savedRolling;
+    sett.lagPolicy = savedLag;
+    clearAllTracks();
+    std::printf("CACHE-FILL: pass=%d fail=%d\n", pass, fail);
     return fail;
 }
 

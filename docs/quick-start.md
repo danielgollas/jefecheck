@@ -79,7 +79,16 @@ Click on the white X stop button next to the track in the Main Window. The X but
 
 Click anywhere on the timeline. JefeCheck loads around that frame first: the frame appears after a short wait, the frames after it load next, and playback carries on from there. You don't have to fit the whole sequence into memory to look at any part of it.
 
-`Alt+Left Click` on the timeline (or on a specific track) still works; on a track that is already loaded it now just jumps to that frame, the same as a plain click. `Alt+I` now only sets the IN point at the current frame, which is already loading.
+`Alt+Left Click` on the timeline (or on a specific track) jumps to that frame. `Alt+I` sets the IN point at the current frame. With the rolling cache on (the default) that frame is already loading, so nothing else happens; with it off (below), both also reload every track from that frame until memory is full.
+
+### How to Load a Fixed Stretch Instead of a Rolling One
+
+The circular-arrow button at the right of the Timeline's transport row turns the **rolling cache** on and off.
+
+- **On** (default): frames load around the playhead and unload behind it, so a clip longer than memory plays end to end.
+- **Off**: every track loads from the IN point until memory is full and keeps those frames; moving the playhead doesn't change what's loaded. Playback follows the loop mode (Once, Loop, Bounce) over what is loaded, using the loop priority: Shortest stops at the end of the track with the least loaded, Longest at the end of the track with the most, Timeline at the IN/OUT points. `Alt+Left Click` on the timeline, or `Alt+I`, loads from another frame instead.
+
+The setting is remembered between launches.
 
 ### How to Review a Clip Longer Than Memory
 

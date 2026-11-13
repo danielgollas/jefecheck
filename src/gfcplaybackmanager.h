@@ -94,6 +94,13 @@ public:
     void updateLoopPriorityFromGUI();
     /// Sends the transport to the frame cache now, changed or not (a fresh
     /// load: its limits are new, and nothing else resends them).
+    // Rolling cache (sett.rollingCache): on, the frame cache follows the playhead; off, it fills
+    // forward from an anchor (the in point, or a "load from here" frame) until full and keeps that.
+    void setRollingCache(bool on);
+    bool rollingCache() const;
+    // Load from here (timeline frame): moves the playhead; with the rolling cache off it also makes
+    // that frame the anchor, so the load refills forward from it.
+    void loadFromHere(int frame);
     void cacheResendTransport();
     /// Sends it only when direction, mode, limits or rate changed since the last send.
     void cacheRefreshTransport();
@@ -136,6 +143,11 @@ private: //private made public while debugging
     void cacheSyncTransport(bool force=false);
     int cacheSentStart=-1, cacheSentEnd=-1, cacheSentMode=-1, cacheSentDir=0;
     float cacheSentFPS=-1.0f;
+    bool cacheSentRolling=true;
+    int fillAnchor_=1;                            // rolling off: where the load fills forward from
+    void cacheRetarget(int frame);                // a jump: no-op with the rolling cache off
+    void cacheAdvance(int frame, int direction=0);
+    bool fillLimits(int priority, int& start, int& end);  // rolling off: Shortest/Longest over what is loaded
 	gfcTimer timer;
     bool allowNetworkMessages;
     void sendPlayPauseMessage();
@@ -162,6 +174,7 @@ private: //private made public while debugging
 	gfcTimer fpsTimer;
 
     int getEndLimit();
+    int effectiveLoopPriority();   // Shortest falls back to Longest when the tracks do not overlap
     int getStartLimit();
     
     //auxiliary members used to update
