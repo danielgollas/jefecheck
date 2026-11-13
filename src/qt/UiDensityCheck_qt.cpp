@@ -4,7 +4,10 @@
 #include "UiMetrics_qt.h"
 
 #include <QAbstractButton>
+#include <QAbstractItemView>
 #include <QAbstractScrollArea>
+#include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCheckBox>
@@ -60,7 +63,8 @@ void collectManaged(const QLayout* l, QSet<const QWidget*>& out) {
 // a combo's popup view) are checked as one unit, not walked.
 bool hasInternalChildren(const QWidget* w) {
     return qobject_cast<const QAbstractSpinBox*>(w) || qobject_cast<const QComboBox*>(w) ||
-           qobject_cast<const QLineEdit*>(w) || qobject_cast<const QAbstractScrollArea*>(w);
+           qobject_cast<const QLineEdit*>(w) || qobject_cast<const QAbstractItemView*>(w) ||
+           qobject_cast<const QTextEdit*>(w) || qobject_cast<const QPlainTextEdit*>(w);
 }
 
 void walk(const QWidget* w, const QWidget* root, QList<DensityViolation>& out) {
@@ -223,6 +227,17 @@ bool runDensityCheckerSelfTest() {
         b->hide();
         settle(root);
         all &= report("hidden", checkDensity(&root).isEmpty());
+    }
+    {   // scroll_tall_button: scroll-area contents are still checked
+        QWidget root; root.setStyleSheet(base);
+        auto* lay = new QVBoxLayout(&root);
+        auto* sa = new QScrollArea; sa->setWidgetResizable(true); lay->addWidget(sa);
+        auto* inner = new QWidget; auto* il = new QVBoxLayout(inner);
+        auto* b = new QPushButton("Go"); b->setFixedHeight(30); il->addWidget(b);
+        sa->setWidget(inner);
+        settle(root);
+        const auto v = checkDensity(&root);
+        all &= report("scroll_tall_button", v.size() == 1 && v[0].rule == "height");
     }
     return all;
 }

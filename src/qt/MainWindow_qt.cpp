@@ -3146,7 +3146,7 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
     auto fileSafe = [](QString s) { return s.replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_"); };
 
     // One surface: check, print, optionally save a PNG. `label` is the line text after UI-DENSITY.
-    auto record = [&](const QString& name, const QString& label, QWidget* root, const QString& pngBase) {
+    auto record = [&](const QString& name, const QString& label, QWidget* root, const QString& pngBase, QWidget* grabWidget = nullptr) {
         const auto v = jefe::qt::ui::checkDensity(root);
         const bool deferred = kDensityDeferred.contains(name);
         const char* verdict = v.isEmpty() ? "PASS" : (deferred ? "DEFERRED" : "FAIL");
@@ -3155,7 +3155,7 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
             printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
         if (!v.isEmpty() && !deferred) failures += int(v.size());
         if (!outDir.isEmpty() && !pngBase.isEmpty())
-            root->grab().save(outDir + "/" + fileSafe(pngBase) + ".png");
+            (grabWidget ? grabWidget : root)->grab().save(outDir + "/" + fileSafe(pngBase) + ".png");
     };
 
     const QList<QDockWidget*> docks = {timelineDock_, lutDock_, playlistDock_, notesDock_,
@@ -3202,7 +3202,8 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                 const QString label = QString("%1 %2 %3x%4 %5").arg(name, c.area)
                                           .arg(ws.width()).arg(ws.height()).arg(dockW);
                 record(name, label, dock->widget(),
-                       QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW));
+                       QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW),
+                       dock);
             }
             dock->setFloating(false);
             dock->hide();
