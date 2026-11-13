@@ -36,4 +36,11 @@ inline void makeIconButton(QAbstractButton* b) {
     b->setIconSize(QSize(kIconPx, kIconPx));
 }
 
+/** Buttons in a FlowLayout or beside fields: report the real widget rect (macOS
+    otherwise gives layouts a 12 px rect and the button paints ~2 px low). */
+inline void useWidgetRect(QAbstractButton* b) {
+    b->setAttribute(Qt::WA_LayoutUsesWidgetRect);
+    b->setMinimumHeight(kControlH);
+}
+
 }  // namespace jefe::qt::ui

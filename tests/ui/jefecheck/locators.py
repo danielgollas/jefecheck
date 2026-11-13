@@ -72,6 +72,7 @@ MENU_HELP_ONSCREEN = "menu.help.onscreen"        # H — on-screen help overlay 
 
 # Min Specs dialog (Help → System Specs). The dialog itself is a real
 # QDialog so its child widgets DO surface objectNames as identifiers.
+DIALOG_ABOUT = "dialog.about"
 DIALOG_MINSPECS = "dialog.minspecs"
 DIALOG_MINSPECS_GLVERSION = "dialog.minspecs.glversion"
 DIALOG_MINSPECS_GLVENDOR = "dialog.minspecs.glvendor"

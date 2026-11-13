@@ -94,8 +94,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolText_->setCheckable(true);
     toolText_->setAccessibleName("Text note tool");
     for (QToolButton* tb : {toolFreehand_, toolArrow_, toolBox_, toolText_}) {
-        tb->setAttribute(Qt::WA_LayoutUsesWidgetRect);   // flow layout must see the real height
-        tb->setMinimumHeight(jefe::qt::ui::kControlH);
+        jefe::qt::ui::useWidgetRect(tb);
         toolRow->addWidget(tb);   // wraps at narrow widths instead of eliding the label
     }
     layout->addWidget(toolHost);
@@ -163,14 +162,12 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     lockButton_ = new QPushButton(tr("Lock Round"), this);
     lockButton_->setObjectName("notes.lock.button");
     connect(lockButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onLockClicked);
-    lockButton_->setAttribute(Qt::WA_LayoutUsesWidgetRect);   // flow layout must see the real 24 px, not the macOS layout rect
-    lockButton_->setMinimumHeight(jefe::qt::ui::kControlH);
+    jefe::qt::ui::useWidgetRect(lockButton_);
     actionRow->addWidget(lockButton_);
     removeButton_ = new QPushButton(tr("Remove Note"), this);
     removeButton_->setObjectName("notes.remove.button");
     connect(removeButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onRemoveClicked);
-    removeButton_->setAttribute(Qt::WA_LayoutUsesWidgetRect);   // flow layout must see the real 24 px, not the macOS layout rect
-    removeButton_->setMinimumHeight(jefe::qt::ui::kControlH);
+    jefe::qt::ui::useWidgetRect(removeButton_);
     actionRow->addWidget(removeButton_);
     {
         QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
