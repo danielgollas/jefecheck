@@ -28,6 +28,7 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QVBoxLayout>
+#include "UiMetrics_qt.h"
 #include <QWidget>
 
 extern gfcSettings sett;
@@ -36,7 +37,7 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
     setObjectName("preferences.dialog");
     setStyleSheet(R"(
-        QLabel[role="section"] { color:#9a9a9a; font-size:11px; font-weight:600; }
+        QLabel[role="section"] { color:#9a9a9a; font-weight:600; }
         QWidget[card="true"]   { background:#232327; border:1px solid #333; border-radius:8px; }
         QPushButton[accent="true"] { border-color:#4c6577; color:#a6c0d2; font-weight:600; }
     )");
@@ -162,9 +163,9 @@ QColor liveColorDialog(QWidget* parent, const QColor& start, const QString& titl
 void configureForm(QFormLayout* form) {
     form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
-    form->setContentsMargins(14, 12, 14, 12);
+    form->setContentsMargins(jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup);
     form->setHorizontalSpacing(14);
-    form->setVerticalSpacing(8);
+    form->setVerticalSpacing(jefe::qt::ui::kGap);
     form->setRowWrapPolicy(QFormLayout::DontWrapRows);
     form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 }
@@ -178,7 +179,7 @@ void PreferencesWindow_Qt::buildGeneralPage() {
     // Background color — a pure color swatch that opens a live RGB picker
     // (the viewport repaint timer previews each intermediate color).
     auto* bgBtn = new QPushButton(page);
-    bgBtn->setFixedSize(60, 22);
+    bgBtn->setFixedSize(60, jefe::qt::ui::kControlH);
     bgBtn->setObjectName("preferences.general.bgcolor.button");
     bgBtn->setToolTip(QStringLiteral("The viewport background color, shown behind and around image plates. Opens a color picker with live preview."));
     bgBtn->setAccessibleName("Background color");
@@ -447,7 +448,7 @@ void PreferencesWindow_Qt::buildTextPage() {
 
     // Color.
     textColorBtn_ = new QPushButton(page);
-    textColorBtn_->setFixedSize(60, 22);
+    textColorBtn_->setFixedSize(60, jefe::qt::ui::kControlH);
     textColorBtn_->setObjectName("preferences.text.color.button");
     textColorBtn_->setToolTip(QStringLiteral("Color of the on-plate label text. Live preview."));
     textColorBtn_->setAccessibleName("Text color");
@@ -562,7 +563,7 @@ void PreferencesWindow_Qt::buildTextPage() {
     form->addRow("Shadow blur radius", textShadowBlurSpin_);
 
     textShadowColorBtn_ = new QPushButton(page);
-    textShadowColorBtn_->setFixedSize(60, 22);
+    textShadowColorBtn_->setFixedSize(60, jefe::qt::ui::kControlH);
     textShadowColorBtn_->setObjectName("preferences.text.shadowcolor.button");
     textShadowColorBtn_->setToolTip(QStringLiteral("Color and opacity of the text shadow. Live preview."));
     textShadowColorBtn_->setAccessibleName("Text shadow color");
@@ -871,7 +872,7 @@ void PreferencesWindow_Qt::buildRemotePage() {
     form->addRow("Fade delay (s)", pointerFade);
 
     auto* pointerColorBtn = new QPushButton(page);
-    pointerColorBtn->setFixedSize(60, 22);
+    pointerColorBtn->setFixedSize(60, jefe::qt::ui::kControlH);
     pointerColorBtn->setObjectName("preferences.remote.pointercolor.button");
     pointerColorBtn->setToolTip(QStringLiteral("The color of your pointer as seen by other participants. Live preview."));
     pointerColorBtn->setAccessibleName("Remote pointer color");

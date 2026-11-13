@@ -27,6 +27,7 @@
 #include <QStackedWidget>
 #include <QUrl>
 #include <QVBoxLayout>
+#include "UiMetrics_qt.h"
 
 #include <type_traits>
 #include <utility>
@@ -361,7 +362,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     // paths aren't clipped.
     previewLabel_ = new QLabel(this);
     previewLabel_->setObjectName("dialog.render.preview.label");
-    previewLabel_->setStyleSheet("color: #aaa; font-family: monospace;");
+    previewLabel_->setStyleSheet("color: #aaa; font-family: monospace; font-size: 13px;");
     previewLabel_->setWordWrap(true);
     previewLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     previewLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -413,8 +414,8 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     buttonRow->addWidget(doneBtn_);
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(16, 16, 16, 16);
-    outer->setSpacing(10);
+    outer->setContentsMargins(jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup);
+    outer->setSpacing(jefe::qt::ui::kGap);
     outer->addLayout(form);
     outer->addWidget(progressBar_);
     outer->addLayout(buttonRow);

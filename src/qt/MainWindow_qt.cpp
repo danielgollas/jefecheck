@@ -725,20 +725,9 @@ void MainWindow_Qt::buildMenuBar() {
     helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
         this, [this]() {
-            QMessageBox::about(this, tr("About JefeCheck"),
-                tr("<h3>JefeCheck %1</h3>"
-                   "<p>Professional video frame review and color correction.</p>"
-                   "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
-                   "Originally written 2006-2014, modernized 2026 for "
-                   "open-source release under GPL v2.</p>"
-                   "<p><a href='https://github.com/danielgollas/jefecheck'>"
-                   "github.com/danielgollas/jefecheck</a></p>"
-                   "<p style='font-size:small;color:gray'>Built %2 %3</p>")
-                // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
-                // keep in sync with that define and CMakeLists.txt's project() VERSION.
-                .arg(QStringLiteral("1.7.0"))
-                .arg(QStringLiteral(__DATE__))
-                .arg(QStringLiteral(__TIME__)));
+            QMessageBox* box = makeAboutBox();
+            box->exec();
+            delete box;
         });
     aboutAction->setObjectName("menu.help.about");
     // Suppress Qt's macOS auto-promotion of "About …" into the application menu.
@@ -3142,6 +3131,28 @@ void MainWindow_Qt::autoloadStep() {
 // Surfaces whose owning plan has not landed yet: violations print but never fail the run.
 static const QStringList kDensityDeferred = {"dock.platemanager", "dock.fxparams", "dock.remote"};
 
+QMessageBox* MainWindow_Qt::makeAboutBox() {
+    auto* box = new QMessageBox(this);
+    box->setWindowTitle(tr("About JefeCheck"));
+    box->setObjectName("dialog.about");
+    box->setTextFormat(Qt::RichText);
+    box->setIconPixmap(windowIcon().pixmap(64, 64));
+    box->setText(tr("<h3>JefeCheck %1</h3>"
+                   "<p>Professional video frame review and color correction.</p>"
+                   "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
+                   "Originally written 2006-2014, modernized 2026 for "
+                   "open-source release under GPL v2.</p>"
+                   "<p><a href='https://github.com/danielgollas/jefecheck'>"
+                   "github.com/danielgollas/jefecheck</a></p>"
+                   "<p style='font-size:small;color:gray'>Built %2 %3</p>")
+                // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
+                // keep in sync with that define and CMakeLists.txt's project() VERSION.
+                .arg(QStringLiteral("1.7.0"))
+                .arg(QStringLiteral(__DATE__))
+                .arg(QStringLiteral(__TIME__)));
+    return box;
+}
+
 int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
     if (!jefe::qt::ui::runDensityCheckerSelfTest()) {
         printf("UI-DENSITY RESULT FAIL selftest\n");
@@ -3366,8 +3377,11 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
         MinSpecsDialog_Qt dlg(this);
         checkDialog("dlg.minspecs", &dlg);
     }
-    // The About box joins the matrix when makeAboutBox exists.
-    printf("UI-DENSITY about SKIPPED (until Task 7)\n");
+    {
+        QMessageBox* about = makeAboutBox();
+        checkDialog("dlg.about", about);
+        delete about;
+    }
 
     if (failures == 0) printf("UI-DENSITY RESULT PASS\n");
     else printf("UI-DENSITY RESULT FAIL %d\n", failures);

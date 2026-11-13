@@ -22,6 +22,7 @@
 #include "SequenceLoadBridge_qt.h"
 
 class QDockWidget;
+class QMessageBox;
 class FXParamPanel_Qt;
 class GlViewport_Qt;
 class LUTPanel_Qt;
@@ -157,6 +158,9 @@ public:
 
     /** Headless density check of every dock and dialog (--ui-density-test [outDir]). */
     int runHeadlessUiDensityTest(const QString& outDir);
+
+    /** The About box (parented, non-modal until exec'd); the caller deletes it. */
+    QMessageBox* makeAboutBox();
 
     /** Overrides where openReviewPackage extracts packages; empty (the default)
         falls back to <AppDataLocation>/packages. Tests point this at a temp dir

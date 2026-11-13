@@ -1,5 +1,6 @@
 #include "NotesPanel_qt.h"
 #include "UiMetrics_qt.h"
+#include "FlowLayout_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QButtonGroup>
@@ -65,8 +66,13 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     layout->addWidget(statusLabel_);
 
     // Tool picker: freehand / arrow / box / text, exactly one active.
-    auto* toolRow = new QHBoxLayout();
-    jefe::qt::ui::applyRowMetrics(toolRow, jefe::qt::ui::kGapTight);
+    auto* toolHost = new QWidget(this);
+    auto* toolRow = new FlowLayout_Qt(toolHost, 0, jefe::qt::ui::kGapTight, jefe::qt::ui::kGapTight);
+    {
+        QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        sp.setHeightForWidth(true);
+        toolHost->setSizePolicy(sp);
+    }
     toolFreehand_ = new QToolButton(this);
     toolFreehand_->setObjectName("notes.tool.freehand");
     toolFreehand_->setText(tr("Freehand"));
@@ -87,11 +93,12 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolText_->setText(tr("Text"));
     toolText_->setCheckable(true);
     toolText_->setAccessibleName("Text note tool");
-    toolRow->addWidget(toolFreehand_);
-    toolRow->addWidget(toolArrow_);
-    toolRow->addWidget(toolBox_);
-    toolRow->addWidget(toolText_);
-    layout->addLayout(toolRow);
+    for (QToolButton* tb : {toolFreehand_, toolArrow_, toolBox_, toolText_}) {
+        tb->setAttribute(Qt::WA_LayoutUsesWidgetRect);   // flow layout must see the real height
+        tb->setMinimumHeight(jefe::qt::ui::kControlH);
+        toolRow->addWidget(tb);   // wraps at narrow widths instead of eliding the label
+    }
+    layout->addWidget(toolHost);
 
     // Not exclusive: an exclusive group can't be clicked back to "no tool", so
     // syncToolButtons() keeps exclusivity instead.
@@ -151,17 +158,26 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
             this, &NotesPanel_Qt::updateActionButtons);
     layout->addWidget(tree_, 1);
 
-    auto* actionRow = new QHBoxLayout();
-    jefe::qt::ui::applyRowMetrics(actionRow);
+    auto* actionHost = new QWidget(this);
+    auto* actionRow = new FlowLayout_Qt(actionHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
     lockButton_ = new QPushButton(tr("Lock Round"), this);
     lockButton_->setObjectName("notes.lock.button");
     connect(lockButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onLockClicked);
+    lockButton_->setAttribute(Qt::WA_LayoutUsesWidgetRect);   // flow layout must see the real 24 px, not the macOS layout rect
+    lockButton_->setMinimumHeight(jefe::qt::ui::kControlH);
     actionRow->addWidget(lockButton_);
     removeButton_ = new QPushButton(tr("Remove Note"), this);
     removeButton_->setObjectName("notes.remove.button");
     connect(removeButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onRemoveClicked);
+    removeButton_->setAttribute(Qt::WA_LayoutUsesWidgetRect);   // flow layout must see the real 24 px, not the macOS layout rect
+    removeButton_->setMinimumHeight(jefe::qt::ui::kControlH);
     actionRow->addWidget(removeButton_);
-    layout->addLayout(actionRow);
+    {
+        QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        sp.setHeightForWidth(true);
+        actionHost->setSizePolicy(sp);
+    }
+    layout->addWidget(actionHost);
 
     refresh();
 }
