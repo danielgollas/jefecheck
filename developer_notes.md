@@ -242,6 +242,7 @@ The LUT panel has an in-window preview: a QPainter 2D curve for 1D LUTs and an i
 - **Adding a new Q_OBJECT header** (e.g. `LUTPreview_qt.h`) requires wiping `build_qt/jefecheck_autogen` before `cmake -B build_qt`, or AUTOMOC won't scan it → "undefined vtable" link errors.
 - **Sortable table**: the LUT browser is a `QTreeWidget` (Name/Type/Size/Depth). Numeric columns sort via a `QTreeWidgetItem` subclass comparing an int stashed in a custom data role — plain display-text sort is lexical ("1024" < "16³").
 - **Image-based (.tga) LUTs load via OIIO** now: `gfcReadImageRGB8` (in the OIIO loader) feeds `CubeLUT`'s `IMAGELUT2D` path; the shipped `UnitCube.tga` is a handy identity-cube sanity check. Only 64×64 image LUTs are wired (Nuke 448×448 reports unsupported).
+- **Layout direction has hysteresis (density rule, §38).** `LUTPreview_Qt::chooseDirection` picks LeftToRight when width > 1.4 x height, TopToBottom when width < 1.1 x height, and otherwise keeps the current direction, so dragging a dock edge does not make the info/controls section flip back and forth. The side section is clamped to [200, 280] px, canvases have a 160x120 minimum and the name label elides.
 
 ## 17. Session save / restore
 
@@ -762,6 +763,29 @@ Encoders write payload fields only; the caller composes `beginFrame(w, GFCNETID_
 **BOM handling lives in `src/gfcUtf8.h`** (`skipUtf8Bom`). `XMLNode::writeToFile` writes a UTF-8 BOM and `parseFile` skips it, but xmlParser's `parseString` does not — any saved `.jcs`/`.jnotes` read into a string goes through it (`gfcSessionPaths` `parseRoot`, `gfcNoteStore::fromXmlString`).
 
 **Flags:** `--export-package <out> [--no-media]`, `--open-package <file>` (keeps running), `--package-test <image>`, `--relink-test <image>`, `--package-dialog-test <image>`. `--notes-test` runs the pure suites: NOTE-MODEL, NOTE-STORE, NOTE-OVERLAY, NOTE-STAMP, NOTE-SUMMARY, NOTE-SUMMARY-PDF, NOTE-SHA1, NOTE-TAR, NOTE-FINGERPRINT, NOTE-SESSIONPATHS, NOTE-MERGE, NOTE-PACKAGE, NOTE-PACKAGE-OPEN. Give every GL test a fresh `--config-dir` (it also isolates the package cache).
+
+## 38. Density rule (24 px)
+
+One density for every dock and dialog: **13 px text, 24 px controls, 4/8/12 px spacing, 16 px icons.** The numbers live in `src/qt/UiMetrics_qt.h` (`jefe::qt::ui`): `kFontPx=13`, `kControlH=24`, `kGapTight=4`, `kGap=8`, `kGapGroup=12`, `kIconPx=16`.
+
+- **QSS content-box arithmetic.** `jefecheck_dark.qss` sets a 13 px base font and gives buttons, combos, line edits and spin boxes `min-height`/`max-height: 22px` on the *content box*, plus a 1 px border each side: 22 + 2 x 1 = **24**. Change one without the other and every control drifts off 24.
+- **Don't `setFixedHeight` a control, and don't set per-widget fonts or sizes. Let the QSS size it.** Icon-only buttons are the exception and use `makeIconButton` (fixed 24x24, 16 px icon).
+- **Helpers in `UiMetrics_qt.h`:** `applyRowMetrics` (zero margins, `kGap`), `applyGroupMetrics` (12 px margins, `kGap`), `makeIconButton`, and `useWidgetRect` (for buttons inside `FlowLayout_Qt` or beside fields: sets `WA_LayoutUsesWidgetRect` and a 24 px minimum height, because macOS `QPushButton`/`QToolButton` otherwise report a 12 px layout rect and paint ~2 px low).
+- **`kDensityExemptProperty` (`"jefeDensityExempt"`).** A widget with this dynamic property set to true is skipped by the checker with its whole subtree (GL canvases, custom-painted widgets). A label that elides by design sets `jefeElided` instead, which opts it out of the `hclip` rule only.
+- **`FlowLayout_Qt`** wraps rows at narrow widths. `setStretchItems(true)` is opt-in (default off) and shares each finished line's spare width among its items.
+- **Dock minimum widths:** Timeline 360, LUTs 240, FX 240, Playlist 220, Notes 220, Remote 300.
+- **The theme is compiled in.** `applyDarkTheme` (`main_qt.cpp`) looks for `theme/jefecheck_dark.qss` next to the binary, then in the source tree, then falls back to `:/theme/jefecheck_dark.qss` from `src/qt/theme/theme.qrc`. Bundles built outside the repo find neither file path, so without the qrc copy they ran with no theme at all. Edit the `.qss`; the qrc embeds the same file.
+
+**The checker** (`src/qt/UiDensityCheck_qt.{h,cpp}`) enforces rules `height`, `square` (icon buttons), `font`, `overlap`, `clip`, `textclip`, `hclip` (a button or non-wrapping label whose text needs more width than it has). `runDensityCheckerSelfTest` proves each rule fires on a known-bad fixture.
+
+**`--ui-density-test [outDir]`** (`MainWindow_Qt::runHeadlessUiDensityTest`) prints `UI-DENSITY <surface> PASS|FAIL|DEFERRED` plus one indented line per violation, then `UI-DENSITY RESULT PASS|FAIL n` (exit 0/1). With `outDir` it saves a PNG per surface. Matrix:
+- Docks: Timeline, Playlist, Notes, LUTs, FX, Plate Manager, Remote, each in Bottom, Left and Floating placement at 1280x800 and 1920x1080 main-window sizes. Side-dock widths are the minimum, 1.5 x minimum, and a requested 120 (which the dock clamps to its minimum, so it repeats the minimum case).
+- Dialogs: Load Sequence Manager (default, min, long path, long estimates), Preferences (every section), Render, System Specs, About (`makeAboutBox`).
+- Extra per-surface assertions: Timeline transport has no overlaps and the tracks area is at least 96 px; the LUT Name column is at least 80 px; the Load window has no horizontal scrollbar at its minimum.
+- **Deferred list (`kDensityDeferred`):** `dock.platemanager`, `dock.fxparams`, `dock.remote` report violations as `DEFERRED` and do not fail the run. They are reworked later (Plate Manager, FX, Remote plans); each plan removes its own entry when its surface passes.
+- Run scaled with `QT_SCALE_FACTOR=1.5` to check DPR handling; headless Linux needs `QT_QPA_PLATFORM=offscreen`.
+
+**LUT preview layout** is covered in §16: `LUTPreview_Qt::chooseDirection` has hysteresis so the side section does not flip while a dock is dragged.
 
 ## See also
 

@@ -59,8 +59,9 @@
 extern gfcSettings sett;
 
 static void applyDarkTheme(QApplication& qapp) {
-    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`), falling back to
-    // the source tree; silent miss if neither exists.
+    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`), then the source tree,
+    // then the copy compiled in via theme.qrc, which always exists (bundles built outside the
+    // repo have neither file path).
     const QStringList candidates = {
         QCoreApplication::applicationDirPath() + "/theme/jefecheck_dark.qss",
         QCoreApplication::applicationDirPath() + "/../src/qt/theme/jefecheck_dark.qss",
