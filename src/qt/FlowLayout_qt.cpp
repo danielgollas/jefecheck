@@ -58,6 +58,23 @@ int FlowLayout_Qt::doLayout(const QRect& rect, bool testOnly) const {
     int x = effective.x();
     int y = effective.y();
     int lineHeight = 0;
+    QList<QLayoutItem*> lineItems;
+    QList<QRect> lineRects;
+    // With stretch on, each finished line shares its spare width among its items.
+    auto flushLine = [&]() {
+        if (testOnly) { lineItems.clear(); lineRects.clear(); return; }
+        int extra = 0;
+        if (stretch_ && !lineRects.isEmpty())
+            extra = qMax(0, effective.right() + 1 - lineRects.last().right() - 1) / lineRects.size();
+        for (int i = 0; i < lineItems.size(); ++i) {
+            QRect r = lineRects[i];
+            r.moveLeft(r.left() + extra * i);
+            r.setWidth(r.width() + extra);
+            lineItems[i]->setGeometry(r);
+        }
+        lineItems.clear();
+        lineRects.clear();
+    };
     for (auto* item : itemList_) {
         QWidget* w = item->widget();
         int hSp = horizontalSpacing();
@@ -72,16 +89,18 @@ int FlowLayout_Qt::doLayout(const QRect& rect, bool testOnly) const {
                                             Qt::Vertical);
         int next = x + item->sizeHint().width() + hSp;
         if (next - hSp > effective.right() && lineHeight > 0) {
+            flushLine();
             x = effective.x();
             y = y + lineHeight + vSp;
             next = x + item->sizeHint().width() + hSp;
             lineHeight = 0;
         }
-        if (!testOnly)
-            item->setGeometry(QRect(QPoint(x, y), item->sizeHint()));
+        lineItems.append(item);
+        lineRects.append(QRect(QPoint(x, y), item->sizeHint()));
         x = next;
         lineHeight = qMax(lineHeight, item->sizeHint().height());
     }
+    flushLine();
     return y + lineHeight - rect.y() + bottom;
 }
 

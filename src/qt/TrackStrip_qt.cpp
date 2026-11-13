@@ -34,6 +34,7 @@ constexpr int kStripMinW = 520;
 // A label and its control as one unit, so a pair never splits across wrapped rows.
 QWidget* makePair(QWidget* parent, const QString& text, QWidget* field) {
     auto* w = new QWidget(parent);
+    w->setProperty("stripRow", true);
     auto* h = new QHBoxLayout(w);
     jefe::qt::ui::applyRowMetrics(h, jefe::qt::ui::kGapTight);
     h->addWidget(new QLabel(text, w));
@@ -56,7 +57,9 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
         "  background-color: palette(base); "
         "  border: 1px solid palette(mid); "
         "  border-radius: 4px; "
-        "}");
+        "} "
+        // Row containers stay transparent so the strip reads as one card.
+        "QWidget[stripRow=\"true\"] { background: transparent; }");
 
     auto* outer = new QVBoxLayout(this);
     jefe::qt::ui::applyGroupMetrics(outer);
@@ -104,6 +107,7 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     // Row 2: From / To / Scale / Bit / Channels — single tight line
     // Wraps in narrow strips; each label+field pair stays together.
     auto* row2Host = new QWidget(this);
+    row2Host->setProperty("stripRow", true);
     auto* row2 = new FlowLayout_Qt(row2Host, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
 
     from_ = new QSpinBox(this);
@@ -139,6 +143,7 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     // Flow layout: the estimates text wraps below the buttons instead of
     // squeezing them in a narrow strip.
     auto* row3Host = new QWidget(this);
+    row3Host->setProperty("stripRow", true);
     auto* row3 = new FlowLayout_Qt(row3Host, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
 
     crop_ = new QCheckBox("Crop", this);
@@ -147,6 +152,7 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     // QCheckBox reports its pre-stylesheet hint to the flow layout.
     {
         auto* cropBox = new QWidget(row3Host);
+        cropBox->setProperty("stripRow", true);
         auto* ch = new QHBoxLayout(cropBox);
         jefe::qt::ui::applyRowMetrics(ch);
         ch->addWidget(crop_);
@@ -163,7 +169,8 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 
     estimates_ = new QLabel("–", this);
     estimates_->setObjectName(QString("dialog.loadwindow.strip.%1.estimates").arg(trackIdx_));
-    estimates_->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
+    estimates_->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    estimates_->setMinimumHeight(jefe::qt::ui::kControlH);
     row3->addWidget(estimates_);
 
     outer->addWidget(row3Host);

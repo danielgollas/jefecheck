@@ -26,6 +26,7 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
     auto* gridHost = new QWidget(this);
     auto* flow = new FlowLayout_Qt(gridHost, /*margin=*/4,
                                    /*hSpacing=*/jefe::qt::ui::kGapGroup, /*vSpacing=*/jefe::qt::ui::kGap);
+    flow->setStretchItems(true);
     for (int i = 0; i < 4; ++i) {
         strips_[i] = new TrackStrip_Qt(i, gridHost);
         connect(strips_[i], &TrackStrip_Qt::trackEdited,
