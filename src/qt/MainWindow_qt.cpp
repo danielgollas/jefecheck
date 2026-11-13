@@ -3205,6 +3205,30 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                 record(name, label, dock->widget(),
                        QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW),
                        dock);
+                if (name == "dock.timeline") {
+                    // Transport expectations: spins never overlap a visible sibling,
+                    // and the tracks area keeps its 96 px floor in a dock >= 200 px tall.
+                    QWidget* root = dock->widget();
+                    for (const char* spinName : {"transport.frame.spin", "transport.in.spin", "transport.out.spin"}) {
+                        auto* spin = root->findChild<QWidget*>(spinName);
+                        if (!spin || !spin->isVisible()) continue;
+                        const QRect r(spin->mapTo(root, QPoint(0, 0)), spin->size());
+                        for (auto* sib : root->findChildren<QWidget*>()) {
+                            if (sib == spin || !sib->isVisible() || sib->isAncestorOf(spin) || spin->isAncestorOf(sib)) continue;
+                            if (!qobject_cast<QLabel*>(sib) && !qobject_cast<QAbstractButton*>(sib) &&
+                                !qobject_cast<QAbstractSpinBox*>(sib) && !qobject_cast<QComboBox*>(sib)) continue;
+                            if (r.intersects(QRect(sib->mapTo(root, QPoint(0, 0)), sib->size()))) {
+                                printf("    transport-overlap %s overlaps %s\n", spinName, qPrintable(sib->objectName()));
+                                ++failures;
+                            }
+                        }
+                    }
+                    auto* tracks = root->findChild<QWidget*>("timeline.tracks");
+                    if (tracks && dock->height() >= 200 && tracks->height() < 96) {
+                        printf("    transport-tracks-height %d < 96\n", tracks->height());
+                        ++failures;
+                    }
+                }
             }
             dock->setFloating(false);
             dock->hide();

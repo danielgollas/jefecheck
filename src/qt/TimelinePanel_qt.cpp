@@ -1,6 +1,8 @@
 #include "TimelinePanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "qticons.h"
+#include "FlowLayout_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <QComboBox>
 #include <QContextMenuEvent>
@@ -442,20 +444,19 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("timeline.panel");
     setAccessibleName("Timeline and transport");
 
-    auto* transport = new QHBoxLayout();
-    transport->setContentsMargins(4, 2, 4, 2);
-    transport->setSpacing(2);
+    namespace ui = jefe::qt::ui;
+    // Wrapping row: four groups that flow onto extra lines in a narrow dock.
+    auto* transport = new FlowLayout_Qt(4, ui::kGap, ui::kGapTight);
 
     auto makeButton = [this](const QIcon& icon, const QString& tip,
                               const QString& objectName,
                               const QString& accessibleName) {
         auto* b = new QPushButton(this);   // icon transport buttons
         b->setIcon(icon);
-        b->setIconSize(QSize(16, 16));
         b->setToolTip(tip);
-        b->setFixedWidth(26);              // height unified with the row below
         b->setObjectName(objectName);
         b->setAccessibleName(accessibleName);
+        ui::makeIconButton(b);
         return b;
     };
 
@@ -478,6 +479,25 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         return s;
     };
 
+    // A label and its control as one unit, so a pair never splits across rows.
+    auto makePair = [this, &makeSmallLabel](const QString& text, QWidget* field) {
+        auto* w = new QWidget(this);
+        auto* h = new QHBoxLayout(w);
+        ui::applyRowMetrics(h, ui::kGapTight);
+        h->addWidget(makeSmallLabel(text));
+        h->addWidget(field);
+        return w;
+    };
+
+    // A group of widgets laid out on one line.
+    auto makeGroup = [this](const QList<QWidget*>& items, int spacing) {
+        auto* w = new QWidget(this);
+        auto* h = new QHBoxLayout(w);
+        ui::applyRowMetrics(h, spacing);
+        for (QWidget* i : items) h->addWidget(i);
+        return w;
+    };
+
     rewBtn_      = makeButton(jefe::qticons::rewind(), "Rewind to start",
                               "transport.rewind.button", "Rewind to start");
     stepBackBtn_ = makeButton(jefe::qticons::stepBack(), "Step back one frame",
@@ -489,40 +509,25 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     ffwdBtn_     = makeButton(jefe::qticons::fastForward(), "Fast forward to end",
                               "transport.fastforward.button", "Fast forward");
 
-    transport->addWidget(rewBtn_);
-    transport->addWidget(stepBackBtn_);
-    transport->addWidget(playBtn_);
-    transport->addWidget(stepFwdBtn_);
-    transport->addWidget(ffwdBtn_);
+    transport->addWidget(makeGroup({rewBtn_, stepBackBtn_, playBtn_, stepFwdBtn_, ffwdBtn_},
+                                   ui::kGapTight));
 
     loopMode_ = new QComboBox(this);
     loopMode_->addItems({"Once", "Loop", "Bounce"});
     loopMode_->setFixedWidth(74);
     loopMode_->setObjectName("transport.loop.combo");
     loopMode_->setAccessibleName("Loop mode");
-    transport->addSpacing(4);
     transport->addWidget(loopMode_);
 
-    transport->addSpacing(6);
-    transport->addWidget(makeSmallLabel("F"));
     frameSpin_ = makeSpin(1, 99999, 56,
                           "transport.frame.spin", "Current frame");
-    transport->addWidget(frameSpin_);
-
-    transport->addSpacing(4);
-    transport->addWidget(makeSmallLabel("In"));
     inSpin_ = makeSpin(1, 99999, 50,
                        "transport.in.spin", "In point");
-    transport->addWidget(inSpin_);
-
-    transport->addWidget(makeSmallLabel("Out"));
     outSpin_ = makeSpin(1, 99999, 50,
                         "transport.out.spin", "Out point");
-    transport->addWidget(outSpin_);
+    transport->addWidget(makeGroup({makePair("F", frameSpin_), makePair("In", inSpin_),
+                                    makePair("Out", outSpin_)}, ui::kGap));
 
-    transport->addStretch(1);
-
-    transport->addWidget(makeSmallLabel("FPS"));
     fpsSpin_ = new QDoubleSpinBox(this);
     fpsSpin_->setRange(1.0, 120.0);
     fpsSpin_->setDecimals(2);
@@ -532,35 +537,20 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     fpsSpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
     fpsSpin_->setObjectName("transport.fps.spin");
     fpsSpin_->setAccessibleName("Target FPS");
-    transport->addWidget(fpsSpin_);
 
     thumbsBtn_ = new QPushButton(this);   // filmstrip icon
     thumbsBtn_->setIcon(jefe::qticons::filmstrip());
-    thumbsBtn_->setIconSize(QSize(16, 16));
     thumbsBtn_->setCheckable(true);
     thumbsBtn_->setChecked(jefe::qt::getThumbnailsEnabled());
     thumbsBtn_->setToolTip("Show frame thumbnails on the timeline");
     thumbsBtn_->setObjectName("transport.thumbnails.toggle");
     thumbsBtn_->setAccessibleName("Show frame thumbnails");
-    thumbsBtn_->setFixedWidth(32);
-    transport->addWidget(thumbsBtn_);
+    ui::makeIconButton(thumbsBtn_);
+    transport->addWidget(makeGroup({makePair("FPS", fpsSpin_), thumbsBtn_}, ui::kGap));
     connect(thumbsBtn_, &QPushButton::toggled, this, [this](bool on) {
         jefe::qt::setThumbnailsEnabled(on);
         if (tracks_) tracks_->refresh();
     });
-
-    // Give every transport-row control the same height: match the TALLEST (the
-    // spinboxes) and poll after polishing so QSS heights are in sizeHint().
-    loopMode_->ensurePolished();
-    frameSpin_->ensurePolished();
-    fpsSpin_->ensurePolished();
-    const int rowH = std::max({loopMode_->sizeHint().height(),
-                               frameSpin_->sizeHint().height(),
-                               fpsSpin_->sizeHint().height()});
-    const QList<QWidget*> rowWidgets = {
-        rewBtn_, stepBackBtn_, playBtn_, stepFwdBtn_, ffwdBtn_,
-        loopMode_, frameSpin_, inSpin_, outSpin_, fpsSpin_, thumbsBtn_};
-    for (QWidget* w : rowWidgets) w->setFixedHeight(rowH);
 
     scrubber_ = new TimelineScrubber_Qt(this);
     tracks_   = new TimelineTracks_Qt(this);
@@ -571,11 +561,6 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     outer->addLayout(transport);
     outer->addWidget(scrubber_);
     outer->addWidget(tracks_, /*stretch*/ 1);
-
-    setStyleSheet(
-        "QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox, "
-        "QComboBox QAbstractItemView, QAbstractSpinBox { font-size: 10pt; }"
-    );
 
     setMinimumWidth(360);
 
