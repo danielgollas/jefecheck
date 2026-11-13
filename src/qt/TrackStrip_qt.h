@@ -32,6 +32,13 @@ public:
     // Called by the dialog when a drop while modal-open targets this strip.
     void setFilenameFromDrop(const QString& path);
 
+    // Elided to the strip's content width so a long string cannot widen the strip.
+    void setEstimatesText(const QString& text);
+
+    // Height is the content's height at the strip's own width: the flow rows
+    // are height-for-width, and the default hint would size them at their narrowest.
+    QSize sizeHint() const override;
+
     int trackIndex() const { return trackIdx_; }
 
 signals:

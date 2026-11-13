@@ -44,6 +44,9 @@
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include "TrackStrip_qt.h"
+#include <QScrollBar>
+#include <QScrollArea>
 #include <QPushButton>
 #include <QMenu>
 #include <QMenuBar>
@@ -3253,15 +3256,24 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
         loadWindowDialog_->close();
         checkDialog("dlg.load", loadWindowDialog_);
 
-        // A very long path in strip 0 must not crowd Browse at the minimum size.
+        // Long path, then a long estimates string, at minimumSizeHint: the strips
+        // must neither crowd Browse nor widen/clip, and nothing may need a horizontal scroll.
         QDialog* ld = loadWindowDialog_;
         ld->show();
         settle();
-        auto fail = [&](const char* what) { printf("    load-longpath %s\n", what); ++failures; };
+        auto fail = [&](const QString& what) { printf("    load-fit %s\n", qPrintable(what)); ++failures; };
+        // Default size: all four strips visible without scrolling.
+        ld->resize(620, 720);
+        settle();
+        auto* scroll = ld->findChild<QScrollArea*>("dialog.loadwindow.scroll");
+        if (!scroll || !scroll->isVisible()) fail("scroll area missing or hidden");
+        else if (scroll->verticalScrollBar()->isVisible()) fail("vertical scrollbar visible at default 620x720");
         auto* fn = ld->findChild<QLineEdit*>("dialog.loadwindow.strip.0.filename");
         auto* br = ld->findChild<QWidget*>("dialog.loadwindow.strip.0.browse");
         if (!fn) fail("filename field missing");
         else fn->setText("/Volumes/" + QString(190, 'a') + "/x.0001.exr");
+        for (auto* strip : ld->findChildren<TrackStrip_Qt*>())
+            strip->setEstimatesText(QString("123456 frames \u00b7 \u2248" + QString(200, '9') + " GB \u00b7 ~99999.9s"));
         ld->resize(ld->minimumSizeHint());
         settle();
         record("dlg.load", "dlg.load longpath", ld, "dlg-dlg.load-longpath");
@@ -3274,6 +3286,17 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                 fail("browse intersects filename");
         }
         if (fn && !fn->isVisible()) fail("filename hidden");
+        if (scroll && scroll->isVisible()) {
+            if (scroll->horizontalScrollBar()->isVisible()) fail("horizontal scrollbar visible at minimum size");
+            const QRect vp(QPoint(0, 0), scroll->viewport()->size());
+            for (int i = 0; i < 4; ++i) {
+                auto* strip = ld->findChild<QWidget*>(QString("dialog.loadwindow.strip.%1").arg(i));
+                if (!strip || !strip->isVisible()) { fail(QString("strip %1 missing or hidden").arg(i)); continue; }
+                const QRect r(strip->mapTo(scroll->viewport(), QPoint(0, 0)), strip->size());
+                if (r.left() < vp.left() || r.right() > vp.right())
+                    fail(QString("strip %1 clipped horizontally (%2..%3 of %4)").arg(i).arg(r.left()).arg(r.right()).arg(vp.width()));
+            }
+        }
         ld->close();
     }
     {

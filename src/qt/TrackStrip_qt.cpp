@@ -29,6 +29,7 @@
 
 namespace {
 constexpr int kMaxFrameNumber = 9'999'999;
+constexpr int kStripMinW = 520;
 
 // A label and its control as one unit, so a pair never splits across wrapped rows.
 QWidget* makePair(QWidget* parent, const QString& text, QWidget* field) {
@@ -47,8 +48,9 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     // Panel-style background + 1px border so stacked strips don't bleed together;
     // the selector pins the rule to the strip, children inherit the theme palette.
     setAttribute(Qt::WA_StyledBackground, true);
-    // Wide enough for the From/To/Scale/Bit/Ch row to sit on two lines at most.
-    setMinimumWidth(420);
+    // Wide enough for From/To/Scale and Bit/Ch to sit on two lines and for
+    // Crop/Reload/Unload/estimates to share one.
+    setMinimumWidth(kStripMinW);
     setStyleSheet(
         "TrackStrip_Qt { "
         "  background-color: palette(base); "
@@ -58,6 +60,8 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
 
     auto* outer = new QVBoxLayout(this);
     jefe::qt::ui::applyGroupMetrics(outer);
+    // A dense card: four stacked strips must fit the default dialog height.
+    outer->setSpacing(jefe::qt::ui::kGapTight);
 
     header_ = new QLabel(this);
     header_->setObjectName(QString("dialog.loadwindow.strip.%1.header").arg(trackIdx_));
@@ -129,7 +133,6 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     channels_->setObjectName(QString("dialog.loadwindow.strip.%1.channels").arg(trackIdx_));
     channels_->addItem("(default)");
     row2->addWidget(makePair(row2Host, "Ch:", channels_));
-    row2Host->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     outer->addWidget(row2Host);
 
     // Row 3: Crop / Reload / Unload / estimates
@@ -163,9 +166,7 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     estimates_->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
     row3->addWidget(estimates_);
 
-    row3Host->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     outer->addWidget(row3Host);
-    outer->addStretch(1);
 
     connect(filename_, &PathHighlightLineEdit_Qt::editingFinished,
             this, &TrackStrip_Qt::onFilenameChanged);
@@ -186,6 +187,11 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     connect(unload_, &QPushButton::clicked,  this, &TrackStrip_Qt::onUnload);
 
     rebuildRecentMenu();
+}
+
+QSize TrackStrip_Qt::sizeHint() const {
+    const int w = std::max(minimumWidth(), QWidget::sizeHint().width());
+    return QSize(w, layout()->totalHeightForWidth(w));
 }
 
 void TrackStrip_Qt::refreshFromGUI() {
@@ -262,14 +268,14 @@ void TrackStrip_Qt::refreshDerivedLabels() {
 
     const auto est = jefe::qt::getTrackEstimates(trackIdx_);
     if (est.frames <= 0) {
-        estimates_->setText("–");
+        setEstimatesText("–");
     } else {
         double b = (double)est.bytes;
         const char* unit = "B";
         if (b > 1024) { b /= 1024; unit = "KB"; }
         if (b > 1024) { b /= 1024; unit = "MB"; }
         if (b > 1024) { b /= 1024; unit = "GB"; }
-        estimates_->setText(
+        setEstimatesText(
             QString("%1 frames · ≈%2 %3 · ~%4s")
                 .arg(est.frames)
                 .arg(b, 0, 'f', b >= 10 ? 0 : 1)
@@ -278,12 +284,22 @@ void TrackStrip_Qt::refreshDerivedLabels() {
     }
 }
 
+void TrackStrip_Qt::setEstimatesText(const QString& text) {
+    // Strip min width less group margins and border.
+    const int maxW = kStripMinW - 2 * jefe::qt::ui::kGapGroup - 4;
+    estimates_->setMaximumWidth(maxW);
+    estimates_->setToolTip(text);
+    estimates_->setText(estimates_->fontMetrics().elidedText(text, Qt::ElideRight, maxW));
+    // A wrapped estimates line changes the strip's height; let the grid re-flow.
+    updateGeometry();
+}
+
 void TrackStrip_Qt::markError(const QString& reason) {
     header_->setText(QString("Track %1: %2")
                          .arg(QChar('A' + trackIdx_))
                          .arg(reason));
     header_->setStyleSheet("color: #d44; font-weight: bold;");
-    estimates_->setText("–");
+    setEstimatesText("–");
 }
 
 void TrackStrip_Qt::setFilenameFromDrop(const QString& path) {
