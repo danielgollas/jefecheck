@@ -1,4 +1,5 @@
 #include "NotesPanel_qt.h"
+#include "UiMetrics_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QButtonGroup>
@@ -56,8 +57,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("notes.panel");
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    jefe::qt::ui::applyGroupMetrics(layout);
 
     statusLabel_ = new QLabel(this);
     statusLabel_->setObjectName("notes.status.label");
@@ -66,7 +66,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
 
     // Tool picker: freehand / arrow / box / text, exactly one active.
     auto* toolRow = new QHBoxLayout();
-    toolRow->setSpacing(4);
+    jefe::qt::ui::applyRowMetrics(toolRow, jefe::qt::ui::kGapTight);
     toolFreehand_ = new QToolButton(this);
     toolFreehand_->setObjectName("notes.tool.freehand");
     toolFreehand_->setText(tr("Freehand"));
@@ -118,11 +118,11 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
 
     // Colour + size, on one row.
     auto* styleRow = new QHBoxLayout();
-    styleRow->setSpacing(6);
+    jefe::qt::ui::applyRowMetrics(styleRow);
     styleRow->addWidget(new QLabel(tr("Colour:"), this));
     colorButton_ = new QPushButton(this);
     colorButton_->setObjectName("notes.color.button");
-    colorButton_->setFixedSize(40, 22);
+    colorButton_->setFixedSize(40, jefe::qt::ui::kControlH);
     colorButton_->setAccessibleName("Note colour");
     colorButton_->setToolTip(tr("Colour used for the next note drawn with the active tool."));
     connect(colorButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onColorButtonClicked);
@@ -152,7 +152,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     layout->addWidget(tree_, 1);
 
     auto* actionRow = new QHBoxLayout();
-    actionRow->setSpacing(6);
+    jefe::qt::ui::applyRowMetrics(actionRow);
     lockButton_ = new QPushButton(tr("Lock Round"), this);
     lockButton_->setObjectName("notes.lock.button");
     connect(lockButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onLockClicked);
