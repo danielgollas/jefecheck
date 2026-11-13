@@ -43,6 +43,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QMenu>
 #include <QMenuBar>
@@ -3251,6 +3252,29 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
     if (loadWindowDialog_) {
         loadWindowDialog_->close();
         checkDialog("dlg.load", loadWindowDialog_);
+
+        // A very long path in strip 0 must not crowd Browse at the minimum size.
+        QDialog* ld = loadWindowDialog_;
+        ld->show();
+        settle();
+        auto fail = [&](const char* what) { printf("    load-longpath %s\n", what); ++failures; };
+        auto* fn = ld->findChild<QLineEdit*>("dialog.loadwindow.strip.0.filename");
+        auto* br = ld->findChild<QWidget*>("dialog.loadwindow.strip.0.browse");
+        if (!fn) fail("filename field missing");
+        else fn->setText("/Volumes/" + QString(190, 'a') + "/x.0001.exr");
+        ld->resize(ld->minimumSizeHint());
+        settle();
+        record("dlg.load", "dlg.load longpath", ld, "dlg-dlg.load-longpath");
+        if (!br || !br->isVisible()) fail("browse missing or hidden");
+        else {
+            if (br->width() < br->minimumSizeHint().width()) fail("browse narrower than its minimumSizeHint");
+            if (fn && fn->isVisible() &&
+                QRect(br->mapTo(ld, QPoint(0, 0)), br->size())
+                    .intersects(QRect(fn->mapTo(ld, QPoint(0, 0)), fn->size())))
+                fail("browse intersects filename");
+        }
+        if (fn && !fn->isVisible()) fail("filename hidden");
+        ld->close();
     }
     {
         PreferencesWindow_Qt dlg(this);

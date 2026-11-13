@@ -1,5 +1,7 @@
 #include "TrackStrip_qt.h"
 #include "qticons.h"
+#include "FlowLayout_qt.h"
+#include "UiMetrics_qt.h"
 
 #include "PathHighlightLineEdit_qt.h"
 #include "SequenceLoadBridge_qt.h"
@@ -27,6 +29,16 @@
 
 namespace {
 constexpr int kMaxFrameNumber = 9'999'999;
+
+// A label and its control as one unit, so a pair never splits across wrapped rows.
+QWidget* makePair(QWidget* parent, const QString& text, QWidget* field) {
+    auto* w = new QWidget(parent);
+    auto* h = new QHBoxLayout(w);
+    jefe::qt::ui::applyRowMetrics(h, jefe::qt::ui::kGapTight);
+    h->addWidget(new QLabel(text, w));
+    h->addWidget(field);
+    return w;
+}
 }
 
 TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
@@ -35,6 +47,8 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     // Panel-style background + 1px border so stacked strips don't bleed together;
     // the selector pins the rule to the strip, children inherit the theme palette.
     setAttribute(Qt::WA_StyledBackground, true);
+    // Wide enough for the From/To/Scale/Bit/Ch row to sit on two lines at most.
+    setMinimumWidth(420);
     setStyleSheet(
         "TrackStrip_Qt { "
         "  background-color: palette(base); "
@@ -43,33 +57,34 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
         "}");
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(8, 4, 8, 4);
-    outer->setSpacing(4);
+    jefe::qt::ui::applyGroupMetrics(outer);
 
     header_ = new QLabel(this);
     header_->setObjectName(QString("dialog.loadwindow.strip.%1.header").arg(trackIdx_));
     header_->setText(QString("Track %1").arg(QChar('A' + trackIdx_)));
     QFont hf = header_->font();
     hf.setBold(true);
-    hf.setPointSize(std::max(8, hf.pointSize() - 1));
     header_->setFont(hf);
+    header_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     outer->addWidget(header_);
 
     // Row 1: filename + Browse + Recent
     auto* row1 = new QHBoxLayout();
-    row1->setSpacing(6);
+    jefe::qt::ui::applyRowMetrics(row1);
     filename_ = new PathHighlightLineEdit_Qt(this);
     filename_->setObjectName(QString("dialog.loadwindow.strip.%1.filename").arg(trackIdx_));
     // Don't let the line edit grow to fit a long path; we elide to keep the strip width stable.
     filename_->setMinimumWidth(80);
+    filename_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     filename_->installEventFilter(this);
     browse_ = new QPushButton(jefe::qticons::folder(), "Browse…", this);
     browse_->setObjectName(QString("dialog.loadwindow.strip.%1.browse").arg(trackIdx_));
     browse_->setToolTip("Browse for a file or sequence for this track");
+    browse_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     recent_ = new QToolButton(this);
     recent_->setObjectName(QString("dialog.loadwindow.strip.%1.recent").arg(trackIdx_));
     recent_->setIcon(jefe::qticons::recent());
-    recent_->setIconSize(QSize(16, 16));
+    jefe::qt::ui::makeIconButton(recent_);
     recent_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     recent_->setToolTip("Pick from recently used files");
     recent_->setPopupMode(QToolButton::InstantPopup);
@@ -83,8 +98,9 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     outer->addLayout(row1);
 
     // Row 2: From / To / Scale / Bit / Channels — single tight line
-    auto* row2 = new QHBoxLayout();
-    row2->setSpacing(6);
+    // Wraps in narrow strips; each label+field pair stays together.
+    auto* row2Host = new QWidget(this);
+    auto* row2 = new FlowLayout_Qt(row2Host, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
 
     from_ = new QSpinBox(this);
     from_->setObjectName(QString("dialog.loadwindow.strip.%1.from").arg(trackIdx_));
@@ -92,41 +108,47 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     to_ = new QSpinBox(this);
     to_->setObjectName(QString("dialog.loadwindow.strip.%1.to").arg(trackIdx_));
     to_->setRange(0, kMaxFrameNumber);
-    row2->addWidget(new QLabel("From:", this));
-    row2->addWidget(from_);
-    row2->addWidget(new QLabel("To:", this));
-    row2->addWidget(to_);
+    row2->addWidget(makePair(row2Host, "From:", from_));
+    row2->addWidget(makePair(row2Host, "To:", to_));
 
     scale_ = new QComboBox(this);
     scale_->setObjectName(QString("dialog.loadwindow.strip.%1.scale").arg(trackIdx_));
     scale_->addItem("100%", 100);
     scale_->addItem("50%",  50);
     scale_->addItem("25%",  25);
-    row2->addWidget(new QLabel("Scale:", this));
-    row2->addWidget(scale_);
+    row2->addWidget(makePair(row2Host, "Scale:", scale_));
 
     bitDepth_ = new QComboBox(this);
     bitDepth_->setObjectName(QString("dialog.loadwindow.strip.%1.bitdepth").arg(trackIdx_));
     bitDepth_->addItem("8-bit",   GFC_8BPC);
     bitDepth_->addItem("16-bit",  GFC_16BPC);
     bitDepth_->addItem("16-half", GFC_16HALF);
-    row2->addWidget(new QLabel("Bit:", this));
-    row2->addWidget(bitDepth_);
+    row2->addWidget(makePair(row2Host, "Bit:", bitDepth_));
 
     channels_ = new QComboBox(this);
     channels_->setObjectName(QString("dialog.loadwindow.strip.%1.channels").arg(trackIdx_));
     channels_->addItem("(default)");
-    row2->addWidget(new QLabel("Ch:", this));
-    row2->addWidget(channels_, 1);
-    outer->addLayout(row2);
+    row2->addWidget(makePair(row2Host, "Ch:", channels_));
+    row2Host->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+    outer->addWidget(row2Host);
 
     // Row 3: Crop / Reload / Unload / estimates
-    auto* row3 = new QHBoxLayout();
-    row3->setSpacing(6);
+    // Flow layout: the estimates text wraps below the buttons instead of
+    // squeezing them in a narrow strip.
+    auto* row3Host = new QWidget(this);
+    auto* row3 = new FlowLayout_Qt(row3Host, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
 
     crop_ = new QCheckBox("Crop", this);
     crop_->setObjectName(QString("dialog.loadwindow.strip.%1.crop").arg(trackIdx_));
-    row3->addWidget(crop_);
+    // Wrapped so the row positions from the checkbox's styled size: a bare
+    // QCheckBox reports its pre-stylesheet hint to the flow layout.
+    {
+        auto* cropBox = new QWidget(row3Host);
+        auto* ch = new QHBoxLayout(cropBox);
+        jefe::qt::ui::applyRowMetrics(ch);
+        ch->addWidget(crop_);
+        row3->addWidget(cropBox);
+    }
 
     reload_ = new QPushButton("Reload", this);
     reload_->setObjectName(QString("dialog.loadwindow.strip.%1.reload").arg(trackIdx_));
@@ -139,9 +161,11 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     estimates_ = new QLabel("–", this);
     estimates_->setObjectName(QString("dialog.loadwindow.strip.%1.estimates").arg(trackIdx_));
     estimates_->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
-    row3->addWidget(estimates_, /*stretch=*/1);
+    row3->addWidget(estimates_);
 
-    outer->addLayout(row3);
+    row3Host->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+    outer->addWidget(row3Host);
+    outer->addStretch(1);
 
     connect(filename_, &PathHighlightLineEdit_Qt::editingFinished,
             this, &TrackStrip_Qt::onFilenameChanged);

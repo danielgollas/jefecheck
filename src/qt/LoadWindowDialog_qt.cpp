@@ -7,6 +7,7 @@
 
 #include <QHBoxLayout>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* parent)
@@ -30,7 +31,14 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
         flow->addWidget(strips_[i]);
     }
     gridHost->setLayout(flow);
-    outer->addWidget(gridHost, /*stretch=*/1);
+    // The strips need more height than a small screen offers when stacked, so
+    // the grid scrolls instead of clipping when the dialog is shrunk.
+    auto* scroll = new QScrollArea(this);
+    scroll->setObjectName("dialog.loadwindow.scroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidget(gridHost);
+    outer->addWidget(scroll, /*stretch=*/1);
 
     // Load All button anchored at the bottom.
     auto* row = new QHBoxLayout();
@@ -45,7 +53,8 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
 
     // Narrow + tall by default so FlowLayout stacks the four strips vertically;
     // users can widen it to reflow into 2x2.
-    resize(620, 720);
+    setMinimumSize(460, 360);
+    resize(620, 820);
 }
 
 void LoadWindowDialog_Qt::showEvent(QShowEvent* e) {
