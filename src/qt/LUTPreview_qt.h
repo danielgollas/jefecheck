@@ -119,11 +119,11 @@ public:
     // Beside/above flip with hysteresis: wide beyond 1.4, tall below 1.1,
     // otherwise keep `current` so a dock resize cannot ping-pong the layout.
     static QBoxLayout::Direction chooseDirection(QSize size, QBoxLayout::Direction current);
-protected:
-    void resizeEvent(QResizeEvent* e) override;
     // Wrapped controls make the minimum height depend on the width, which
     // a splitter does not ask layouts about; report it here.
     QSize minimumSizeHint() const override;
+protected:
+    void resizeEvent(QResizeEvent* e) override;
 private:
     int lastWidthForHint_ = -1;
     QBoxLayout* mainBox_ = nullptr;   // flips H/V by aspect

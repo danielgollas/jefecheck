@@ -785,6 +785,8 @@ One density for every dock and dialog: **13 px text, 24 px controls, 4/8/12 px s
 - **Deferred list (`kDensityDeferred`):** `dock.platemanager`, `dock.fxparams`, `dock.remote` report violations as `DEFERRED` and do not fail the run. They are reworked later (Plate Manager, FX, Remote plans); each plan removes its own entry when its surface passes.
 - Run scaled with `QT_SCALE_FACTOR=1.5` to check DPR handling; headless Linux needs `QT_QPA_PLATFORM=offscreen`.
 
+**LUT dock scrolls when short.** `LUTPanel_Qt` puts its vertical splitter (browser pane, preview pane) in a `QScrollArea` (`lut.scroll`: widgetResizable, no frame, horizontal bar off, transparent). A QSplitter sizes panes from `minimumSize()`, which ignores height-for-width, so `updateContentMinHeight()` sets the browser pane's minimum to its layout's `minimumHeightForWidth` and the splitter's minimum to that plus handle plus the preview's minimum, only when the width (or the preview's size) changes. In a tall dock there is no scrollbar and the layout is unchanged; in a short one (a 1.5x-scaled 1080p window is about 720 logical px) it scrolls instead of overlapping. `LUTPreview_Qt::chooseDirection` never picks side-by-side below 368 px wide, and `minimumSizeHint` reports width 0 while side-by-side, so a narrowing dock flips it to stacked instead of being pinned wide and clipped. The density test asserts the content is never wider than the scroll viewport and the button row never overlaps the list.
+
 **LUT preview layout** is covered in §16: `LUTPreview_Qt::chooseDirection` has hysteresis so the side section does not flip while a dock is dragged.
 
 ## See also

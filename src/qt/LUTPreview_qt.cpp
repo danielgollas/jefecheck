@@ -593,7 +593,10 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
 QSize LUTPreview_Qt::minimumSizeHint() const {
     const QSize base = QWidget::minimumSizeHint();
     if (!mainBox_ || width() <= 0 || !mainBox_->hasHeightForWidth()) return base;
-    return QSize(base.width(), std::max(base.height(), mainBox_->minimumHeightForWidth(width())));
+    // Side by side the pane may be squeezed narrower than its children need; resizeEvent then
+    // flips it to stacked. Reporting the side-by-side width would pin it wide and clip the dock.
+    const int minW = mainBox_->direction() == QBoxLayout::LeftToRight ? 0 : base.width();
+    return QSize(minW, std::max(base.height(), mainBox_->minimumHeightForWidth(width())));
 }
 
 void LUTPreview_Qt::resizeEvent(QResizeEvent* e) {
@@ -617,6 +620,9 @@ void LUTPreview_Qt::resizeEvent(QResizeEvent* e) {
 }
 
 QBoxLayout::Direction LUTPreview_Qt::chooseDirection(QSize size, QBoxLayout::Direction current) {
+    // Side by side needs the 200 px side section plus a 160 px canvas and a gap; narrower than
+    // that it can only clip, however short the pane is.
+    if (size.width() < 200 + 160 + 8) return QBoxLayout::TopToBottom;
     // w > 1.4 h and w < 1.1 h, in exact integer arithmetic.
     if (size.width() * 10 > size.height() * 14) return QBoxLayout::LeftToRight;
     if (size.width() * 10 < size.height() * 11) return QBoxLayout::TopToBottom;

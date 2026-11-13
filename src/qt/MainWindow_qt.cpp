@@ -3251,6 +3251,27 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                     settle();
                 }
                 if (name == "dock.luts") {
+                    // Short dock: the content scrolls rather than overlapping, so the button row
+                    // must never sit on top of the list (the checker's rules cover the rest).
+                    auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                    auto* lutScroll = dock->widget()->findChild<QScrollArea*>("lut.scroll");
+                    if (lutScroll && lutScroll->widget() && lutScroll->widget()->width() > lutScroll->viewport()->width()) {
+                        printf("    lut-content wider than its viewport (%d > %d; horizontal scrollbar is off)\n",
+                               lutScroll->widget()->width(), lutScroll->viewport()->width());
+                        ++failures;
+                    }
+                    auto* applyBtn = dock->widget()->findChild<QWidget*>("lut.apply.button");
+                    if (list && applyBtn && applyBtn->isVisible()) {
+                        const QRect lr(list->mapTo(dock->widget(), QPoint(0, 0)), list->size());
+                        const QRect br(applyBtn->mapTo(dock->widget(), QPoint(0, 0)), applyBtn->size());
+                        if (lr.intersects(br)) {
+                            printf("    lut-row overlaps list (list %d,%d %dx%d; button %d,%d %dx%d)\n",
+                                   lr.x(), lr.y(), lr.width(), lr.height(), br.x(), br.y(), br.width(), br.height());
+                            ++failures;
+                        }
+                    }
+                }
+                if (name == "dock.luts") {
                     auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
                     if (list) {
                         const int nameW = list->header()->sectionSize(0);
@@ -3327,6 +3348,8 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
         settle();
         auto* scroll = ld->findChild<QScrollArea*>("dialog.loadwindow.scroll");
         if (!scroll || !scroll->isVisible()) fail("scroll area missing or hidden");
+        else if (ld->height() < 720)   // the window manager clamped it to a short screen (e.g. 1.5x scale): scrolling is the design
+            printf("UI-DENSITY load-fit SKIPPED no-scrollbar check (dialog got %d px of 720)\n", ld->height());
         else if (scroll->verticalScrollBar()->isVisible()) fail("vertical scrollbar visible at default 620x720");
         auto* fn = ld->findChild<QLineEdit*>("dialog.loadwindow.strip.0.filename");
         auto* br = ld->findChild<QWidget*>("dialog.loadwindow.strip.0.browse");

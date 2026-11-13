@@ -12,7 +12,12 @@
 
 class QDragEnterEvent;
 class QDropEvent;
+class QResizeEvent;
+class QEvent;
 class QLabel;
+class QScrollArea;
+class QSplitter;
+class QVBoxLayout;
 class QTreeWidget;
 class QPushButton;
 class QCheckBox;
@@ -32,6 +37,8 @@ public slots:
 protected:
     void dragEnterEvent(QDragEnterEvent* e) override;
     void dropEvent(QDropEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
+    bool eventFilter(QObject* watched, QEvent* e) override;
 
 private:
     void applySelected();
@@ -40,6 +47,12 @@ private:
 
     QTreeWidget* table_ = nullptr;
     QLabel* status_ = nullptr;
+    QScrollArea* scroll_    = nullptr;   // the dock scrolls vertically when shorter than its content
+    QSplitter*   splitter_  = nullptr;
+    QWidget*     browser_   = nullptr;   // splitter's top pane (status, list, buttons)
+    QVBoxLayout* browserL_  = nullptr;
+    int          lastContentWidth_ = -1;
+    void updateContentMinHeight();
     QCheckBox*     previewToggle_ = nullptr;
     LUTPreview_Qt* preview_       = nullptr;
 };
