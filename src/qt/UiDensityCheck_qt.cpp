@@ -2,6 +2,7 @@
 #include "UiDensityCheck_qt.h"
 
 #include "UiMetrics_qt.h"
+#include "LUTPreview_qt.h"
 
 #include <QAbstractButton>
 #include <QAbstractItemView>
@@ -240,6 +241,25 @@ bool runDensityCheckerSelfTest() {
         settle(root);
         const auto v = checkDensity(&root);
         all &= report("scroll_tall_button", v.size() == 1 && v[0].rule == "height");
+    }
+    {   // LUT-DIR: LUT preview beside/above flip is pure and has hysteresis
+        using D = QBoxLayout::Direction;
+        const D L = QBoxLayout::LeftToRight, T = QBoxLayout::TopToBottom;
+        bool ok = LUTPreview_Qt::chooseDirection({800, 300}, T) == L &&
+                  LUTPreview_Qt::chooseDirection({500, 400}, L) == L &&
+                  LUTPreview_Qt::chooseDirection({500, 400}, T) == T &&
+                  LUTPreview_Qt::chooseDirection({300, 800}, L) == T;
+        all &= report("LUT-DIR basic", ok);
+        D dir = T; int up = 0, down = 0;
+        for (int w = 560; w <= 600; ++w) {
+            const D n = LUTPreview_Qt::chooseDirection({w, 400}, dir);
+            if (n != dir) { ++up; if (w <= 560) up += 100; dir = n; }
+        }
+        for (int w = 600; w >= 400; --w) {
+            const D n = LUTPreview_Qt::chooseDirection({w, 400}, dir);
+            if (n != dir) { ++down; if (w >= 440) down += 100; dir = n; }
+        }
+        all &= report("LUT-DIR pingpong", up <= 1 && down <= 1);
     }
     return all;
 }

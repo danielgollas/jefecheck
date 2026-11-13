@@ -1,10 +1,13 @@
 #include "LUTPreview_qt.h"
+#include "FlowLayout_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <QLabel>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QBoxLayout>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QResizeEvent>
 #include <QPainter>
 #include <QPaintEvent>
@@ -32,7 +35,8 @@
 LutCurveWidget::LutCurveWidget(QWidget* parent) : QWidget(parent) {
     setObjectName("lut.preview.curve");
     setAccessibleName("LUT curve preview");
-    setMinimumHeight(80);
+    setMinimumSize(160, 120);
+    setProperty(jefe::qt::ui::kDensityExemptProperty, true);
 }
 
 void LutCurveWidget::setCurve(const std::vector<float>& samples, float maxValue) {
@@ -114,7 +118,8 @@ void LutCurveWidget::paintEvent(QPaintEvent*) {
 LutCloudWidget::LutCloudWidget(QWidget* parent) : QOpenGLWidget(parent) {
     setObjectName("lut.preview.cloud");
     setAccessibleName("LUT cloud inspector");
-    setMinimumHeight(90);
+    setMinimumSize(160, 120);
+    setProperty(jefe::qt::ui::kDensityExemptProperty, true);
     setFocusPolicy(Qt::StrongFocus);   // so the F key reaches keyPressEvent
     // Optional auto-spin (off by default; the camera is the main interaction).
     spin_ = new QTimer(this);
@@ -467,10 +472,17 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
 
     // ---- 3D inspector controls (shown only for 3D LUTs) ----
     controls_ = new QWidget(this);
-    auto* cg = new QGridLayout(controls_);
-    cg->setContentsMargins(0, 2, 0, 2);
-    cg->setHorizontalSpacing(8);
-    cg->setVerticalSpacing(2);
+    auto* cg = new FlowLayout_Qt(controls_, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
+
+    // A bare QCheckBox reports its pre-stylesheet size to FlowLayout, so each
+    // sits in a one-item host that reports the styled size.
+    auto hosted = [this, cg](QWidget* w) {
+        auto* h = new QWidget(controls_);
+        auto* hl = new QHBoxLayout(h);
+        jefe::qt::ui::applyRowMetrics(hl);
+        hl->addWidget(w);
+        cg->addWidget(h);
+    };
 
     auto* solid = new QCheckBox("Solid", controls_);
     solid->setObjectName("lut.preview.mode.solid");
@@ -489,22 +501,30 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
     marker->addItem("Dot");          // LutCloudWidget::MarkerDot
     marker->addItem("Mini-cube");    // MarkerCube
     marker->addItem("Tetrahedron");  // MarkerTetra
+    marker->setMinimumWidth(90);
 
     auto* bg = new QSlider(Qt::Horizontal, controls_);
     bg->setObjectName("lut.preview.bg");
     bg->setRange(0, 100);
     bg->setValue(50);
     bg->setToolTip("Background brightness");
+    bg->setMinimumWidth(80);
 
-    cg->addWidget(solid,    0, 0);
-    cg->addWidget(grid,     0, 1);
-    cg->addWidget(dots,     0, 2);
-    cg->addWidget(marker,   0, 3);
-    cg->addWidget(deformed, 1, 0);
-    cg->addWidget(autospin, 1, 1);
-    cg->addWidget(new QLabel("Bg", controls_), 1, 2, Qt::AlignRight);
-    cg->addWidget(bg,       1, 3);
-    cg->setColumnStretch(3, 1);
+    // Label + slider are one pair so they never split across lines.
+    auto* bgPair = new QWidget(controls_);
+    auto* bgL = new QHBoxLayout(bgPair);
+    jefe::qt::ui::applyRowMetrics(bgL, jefe::qt::ui::kGapTight);
+    auto* bgLbl = new QLabel("Bg", bgPair);
+    bgLbl->setMinimumHeight(jefe::qt::ui::kControlH);
+    bgLbl->setAlignment(Qt::AlignVCenter);
+    bgL->addWidget(bgLbl);
+    bgL->addWidget(bg, 1);
+    bgPair->setMinimumWidth(bgLbl->sizeHint().width() + jefe::qt::ui::kGapTight + 80);
+
+    hosted(solid); hosted(grid); hosted(dots);
+    cg->addWidget(marker);
+    hosted(deformed); hosted(autospin);
+    cg->addWidget(bgPair);
 
     connect(solid,    &QCheckBox::toggled, cloud_, &LutCloudWidget::setShowSolid);
     connect(grid,     &QCheckBox::toggled, cloud_, &LutCloudWidget::setShowGrid);
@@ -527,25 +547,44 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
 
     mainBox_ = new QBoxLayout(QBoxLayout::TopToBottom, this);
     mainBox_->setContentsMargins(0, 4, 0, 0);
-    mainBox_->setSpacing(6);
+    mainBox_->setSpacing(jefe::qt::ui::kGap);
     mainBox_->addWidget(side_);
     mainBox_->addWidget(stack_, /*stretch*/ 1);
 
     controls_->setVisible(false);   // until a 3D LUT is selected
 }
 
+QSize LUTPreview_Qt::minimumSizeHint() const {
+    const QSize base = QWidget::minimumSizeHint();
+    if (!mainBox_ || width() <= 0 || !mainBox_->hasHeightForWidth()) return base;
+    return QSize(base.width(), std::max(base.height(), mainBox_->minimumHeightForWidth(width())));
+}
+
 void LUTPreview_Qt::resizeEvent(QResizeEvent* e) {
     QWidget::resizeEvent(e);
     if (!mainBox_) return;
+    if (width() != lastWidthForHint_) {   // the min height follows the width
+        lastWidthForHint_ = width();
+        updateGeometry();
+    }
     // Flow the two sections by aspect: side-by-side when the pane is wide,
     // stacked when it's tall, so neither section starves the canvas.
-    const bool wide = width() > height() * 1.25;
-    const auto dir = wide ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom;
+    // chooseDirection has hysteresis, and nothing is written unless it changes.
+    const auto dir = chooseDirection(size(), mainBox_->direction());
     if (mainBox_->direction() != dir) {
         mainBox_->setDirection(dir);
-        // Keep the side section compact when alongside the canvas.
-        side_->setMaximumWidth(wide ? 200 : QWIDGETSIZE_MAX);
+        const bool wide = dir == QBoxLayout::LeftToRight;
+        // Beside the canvas the side section stays within [200, 280].
+        side_->setMinimumWidth(wide ? 200 : 0);
+        side_->setMaximumWidth(wide ? 280 : QWIDGETSIZE_MAX);
     }
+}
+
+QBoxLayout::Direction LUTPreview_Qt::chooseDirection(QSize size, QBoxLayout::Direction current) {
+    // w > 1.4 h and w < 1.1 h, in exact integer arithmetic.
+    if (size.width() * 10 > size.height() * 14) return QBoxLayout::LeftToRight;
+    if (size.width() * 10 < size.height() * 11) return QBoxLayout::TopToBottom;
+    return current;
 }
 
 void LUTPreview_Qt::setLut(const jefe::qt::LutPreviewData& d) {

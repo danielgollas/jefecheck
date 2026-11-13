@@ -2,6 +2,7 @@
 #include "qticons.h"
 #include "SequenceLoadBridge_qt.h"
 #include "LUTPreview_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <QCheckBox>
 #include <QDragEnterEvent>
@@ -78,7 +79,7 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     status_->setAccessibleName("LUT status");
 
     auto* row = new QHBoxLayout();
-    row->setContentsMargins(0, 0, 0, 0);
+    jefe::qt::ui::applyRowMetrics(row);
     row->addWidget(applyBtn);
     row->addWidget(refreshBtn);
     row->addStretch(1);
@@ -118,8 +119,7 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
         "QSplitter::handle:hover { background: #555; }");
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(8, 8, 8, 8);
-    outer->setSpacing(6);
+    jefe::qt::ui::applyGroupMetrics(outer);
     outer->addWidget(splitter, /*stretch*/ 1);
 
     refreshList();

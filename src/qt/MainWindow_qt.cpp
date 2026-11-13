@@ -37,6 +37,8 @@
 #include <QDesktopServices>
 #include <QCoreApplication>
 #include <QDockWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QUrl>
 #include <QFile>
 #include <QFileDialog>
@@ -3178,6 +3180,25 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
             // Only the dock under test is visible, so the others do not squeeze it.
             for (auto* d : docks) if (d != dock) d->hide();
 
+            if (name == "dock.luts") {
+                // Select a 3D LUT so the (otherwise hidden) 3D controls are exercised.
+                auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                QTreeWidgetItem* pick3D = nullptr;
+                QTreeWidgetItem* pickLong = nullptr;
+                if (list) {
+                    for (int r = 0; r < list->topLevelItemCount(); ++r) {
+                        auto* it = list->topLevelItem(r);
+                        if (it->text(1) != "3D") continue;
+                        if (!pick3D) pick3D = it;
+                        if (!pickLong && it->text(0).size() > 40) pickLong = it;
+                    }
+                }
+                if (!pick3D) printf("UI-DENSITY LUT-3D SKIPPED (no 3D LUT loaded)\n");
+                else {
+                    if (pickLong) { list->setCurrentItem(pickLong); printf("UI-DENSITY LUT-3D long-name selected: %s\n", qPrintable(pickLong->text(0))); }
+                    else { list->setCurrentItem(pick3D); printf("UI-DENSITY LUT-3D selected: %s (no name > 40 chars available)\n", qPrintable(pick3D->text(0))); }
+                }
+            }
             struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; };
             int minW = std::max({dock->minimumWidth(), dock->widget()->minimumWidth(),
                                  dock->widget()->minimumSizeHint().width()});
