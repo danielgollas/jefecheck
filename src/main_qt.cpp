@@ -1318,6 +1318,15 @@ int main(int argc, char* argv[]) {
         });
     }
 
+    // --open-playlist <file.jpl>: open a playlist as File > Open Playlist would, after the
+    // GL context is up. Loading an item stays a user action.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--open-playlist") != 0) continue;
+        const QString path = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(0, &window, [&window, path]() { window.openPlaylistPath(path); });
+        break;
+    }
+
     // --notes-demo: put one of each note type on plate 0 at fixed coordinates, so the
     // overlay can be screenshotted and compared run to run.
     for (int i = 1; i < argc; ++i) {

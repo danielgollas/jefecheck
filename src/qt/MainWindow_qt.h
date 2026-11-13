@@ -77,6 +77,8 @@ public:
     // happen on the calling thread), and refreshes the status bar.
     // Used by --open-file at startup and by drag-and-drop at runtime.
     void loadFileIntoPlate(int plateIdx, const QString& path);
+    // Load a .jpl into the Playlist panel (File > Open Playlist, --open-playlist).
+    void openPlaylistPath(const QString& path);
 
     /**
      * After media changes on a plate, pull that footage's notes out of their
@@ -248,7 +250,6 @@ private:
     void rebuildRecentSessionsMenu();
     // Playlist open + recent list.
     void doOpenPlaylist();
-    void openPlaylistPath(const QString& path);   // load .jpl + refresh/raise dock
     void rebuildRecentPlaylistsMenu();
     void updateSessionTitle();
     void maybeRestoreSessionAtStartup();
