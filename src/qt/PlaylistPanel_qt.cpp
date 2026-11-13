@@ -1,5 +1,7 @@
 #include "PlaylistPanel_qt.h"
 #include "SequenceLoadBridge_qt.h"
+#include "FlowLayout_qt.h"
+#include "UiMetrics_qt.h"
 #include "qticons.h"
 
 #include <QCheckBox>
@@ -16,6 +18,8 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QStyle>
 #include <QPushButton>
 #include <QSettings>
 #include <QToolButton>
@@ -29,6 +33,27 @@ constexpr const char* kLoopKey      = "Playlist/loop";
 constexpr const char* kScaleOnKey   = "Playlist/scaleOverrideOn";
 constexpr const char* kScaleValKey  = "Playlist/scaleOverridePct";
 constexpr const char* kLastDirKey   = "Playlist/lastAddDir";
+
+// Paints its text elided to its width, the full text in the tooltip; it never
+// asks the card for more width than the list gives it.
+class ElidedLabel : public QLabel {
+public:
+    ElidedLabel(const QString& text, Qt::TextElideMode mode, QWidget* parent)
+        : QLabel(text, parent), mode_(mode) {
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        setToolTip(text);
+        setProperty(jefe::qt::ui::kDensityElidedProperty, true);
+    }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        const QRect r = contentsRect();
+        style()->drawItemText(&p, r, Qt::AlignLeft | Qt::AlignVCenter, palette(), isEnabled(),
+                              fontMetrics().elidedText(text(), mode_, r.width()), foregroundRole());
+    }
+private:
+    Qt::TextElideMode mode_;
+};
 }
 
 // ---- PlaylistItemCard implementation ----
@@ -39,15 +64,15 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     setObjectName(QString("playlist.card.%1").arg(index));
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(4, 2, 4, 2);
-    outer->setSpacing(2);
+    using namespace jefe::qt::ui;
+    outer->setContentsMargins(kGapTight, kGapTight, kGapTight, kGapTight);
+    outer->setSpacing(kGapTight);
 
     auto* header = new QHBoxLayout();
-    header->setContentsMargins(0, 0, 0, 0);
-    header->setSpacing(6);
+    applyRowMetrics(header);
 
     auto* handle = new QLabel(this);  // drag affordance
-    handle->setPixmap(jefe::qticons::dragHandle().pixmap(QSize(14, 14)));
+    handle->setPixmap(jefe::qticons::dragHandle().pixmap(QSize(jefe::qt::ui::kIconPx, jefe::qt::ui::kIconPx)));
     handle->setToolTip("Drag to reorder");
     header->addWidget(handle);
 
@@ -55,17 +80,15 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     idx->setMinimumWidth(18);
     header->addWidget(idx);
 
-    auto* nameLab = new QLabel(name, this);
+    auto* nameLab = new ElidedLabel(name, Qt::ElideMiddle, this);   // keeps the frame range end
     nameLab->setObjectName(QString("playlist.card.%1.name").arg(index));
-    nameLab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    nameLab->setToolTip(name);
     header->addWidget(nameLab, /*stretch*/ 1);
 
     chevron_ = new QToolButton(this);
     chevron_->setObjectName(QString("playlist.card.%1.chevron").arg(index));
     chevron_->setAutoRaise(true);
     chevron_->setIcon(jefe::qticons::chevron(expanded_));  // ▾ / ▸
-    chevron_->setIconSize(QSize(14, 14));
+    makeIconButton(chevron_);
     chevron_->setToolTip(expanded_ ? "Collapse" : "Expand");
     connect(chevron_, &QToolButton::clicked, this,
             [this]() { emit toggleExpandRequested(index_); });
@@ -74,7 +97,7 @@ PlaylistItemCard::PlaylistItemCard(int index, const QString& name, bool expanded
     auto* removeBtn = new QToolButton(this);
     removeBtn->setObjectName(QString("playlist.card.%1.remove").arg(index));
     removeBtn->setIcon(jefe::qticons::remove());  // ✕
-    removeBtn->setIconSize(QSize(14, 14));
+    makeIconButton(removeBtn);
     removeBtn->setAutoRaise(true);
     removeBtn->setToolTip("Remove from playlist");
     connect(removeBtn, &QToolButton::clicked, this,
@@ -103,7 +126,7 @@ void PlaylistItemCard::rebuildDetail() {
     for (const auto& d : jefe::qt::getPlaylistItemDetail(index_)) {
         QString path = QString::fromStdString(d.path);
         if (!fullPaths_) path = QFileInfo(path).fileName();
-        QString line = QString("%1  %2  %3-%4 (%5)  %6%%  %7%8  %9")
+        QString line = QString("%1  %2  %3-%4 (%5)  %6%  %7%8  %9")
             .arg(QString::fromStdString(d.letter))
             .arg(path)
             .arg(d.fromFrame).arg(d.toFrame).arg(d.totalFrames)
@@ -111,8 +134,8 @@ void PlaylistItemCard::rebuildDetail() {
             .arg(QString::fromStdString(d.filter))
             .arg(d.crop ? "  crop" : "")
             .arg(QString::fromStdString(d.bitDepth));
-        auto* row = new QLabel(line, detail_);
-        row->setStyleSheet("color:#aaa; font-size:11px;");
+        auto* row = new ElidedLabel(line, Qt::ElideRight, detail_);
+        row->setStyleSheet("color:#aaa;");
         detailLayout_->addWidget(row);
     }
 }
@@ -147,6 +170,8 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
     list_->setDragDropMode(QAbstractItemView::DropOnly);
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // Re-lay the rows on every resize, so the cards narrow with the dock instead of keeping their old width.
+    list_->setResizeMode(QListView::Adjust);
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
     list_->setAcceptDrops(true);
     list_->viewport()->setAcceptDrops(true);
@@ -240,39 +265,52 @@ PlaylistPanel_Qt::PlaylistPanel_Qt(QWidget* parent) : QWidget(parent) {
     status_->setObjectName("playlist.status.label");
     status_->setStyleSheet("color:#888; font-style:italic;");
 
-    auto* row1 = new QHBoxLayout();
-    row1->setContentsMargins(0, 0, 0, 0);
-    row1->addWidget(addCurBtn);
-    row1->addWidget(addFilesBtn);
-    row1->addWidget(removeBtn);
-    row1->addWidget(upBtn);
-    row1->addWidget(downBtn);
-    row1->addWidget(clearBtn);
-    row1->addStretch(1);
-    row1->addWidget(loadBtn);
-    row1->addWidget(saveBtn);
+    // Rows wrap (FlowLayout) so narrow docks never overlap controls.
+    using namespace jefe::qt::ui;
+    // A bare QCheckBox reports its pre-stylesheet size to a FlowLayout, so each
+    // is wrapped in a one-item row that positions from the styled size.
+    auto wrapped = [](QWidget* host, QWidget* w) {
+        auto* box = new QWidget(host);
+        auto* h = new QHBoxLayout(box);
+        applyRowMetrics(h);
+        h->addWidget(w);
+        return box;
+    };
+    auto* row1Host = new QWidget(this);
+    auto* row1 = new FlowLayout_Qt(row1Host, 0, kGapTight, kGapTight);
+    for (QWidget* w : {static_cast<QWidget*>(addCurBtn), static_cast<QWidget*>(addFilesBtn),
+                       static_cast<QWidget*>(removeBtn), static_cast<QWidget*>(upBtn),
+                       static_cast<QWidget*>(downBtn), static_cast<QWidget*>(clearBtn),
+                       static_cast<QWidget*>(loadBtn), static_cast<QWidget*>(saveBtn)})
+        row1->addWidget(w);
 
-    auto* row2 = new QHBoxLayout();
-    row2->setContentsMargins(0, 0, 0, 0);
-    row2->addWidget(compactCheck_);
-    row2->addWidget(fullPathsCheck_);
-    row2->addStretch(1);
-    row2->addWidget(scaleOverrideCheck_);
-    row2->addWidget(scaleCombo_);
+    auto* row2Host = new QWidget(this);
+    auto* row2 = new FlowLayout_Qt(row2Host, 0, kGap, kGapTight);
+    row2->addWidget(wrapped(row2Host, compactCheck_));
+    row2->addWidget(wrapped(row2Host, fullPathsCheck_));
+    {   // The override and its percentage wrap together.
+        auto* scalePair = new QWidget(row2Host);
+        auto* h = new QHBoxLayout(scalePair);
+        applyRowMetrics(h, kGapTight);
+        useWidgetRect(scaleOverrideCheck_);   // the native layout rect is narrower than its paint
+        h->addWidget(scaleOverrideCheck_);
+        h->addWidget(scaleCombo_);
+        row2->addWidget(scalePair);
+    }
 
-    auto* row3 = new QHBoxLayout();
-    row3->setContentsMargins(0, 0, 0, 0);
-    row3->addWidget(autoAdvanceCheck_);
-    row3->addWidget(loopCheck_);
-    row3->addStretch(1);
+    auto* row3Host = new QWidget(this);
+    auto* row3 = new FlowLayout_Qt(row3Host, 0, kGap, kGapTight);
+    row3->addWidget(wrapped(row3Host, autoAdvanceCheck_));
+    row3->addWidget(wrapped(row3Host, loopCheck_));
+
+    for (QWidget* host : {row1Host, row2Host, row3Host}) keepMinHeightForWidth(host);
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(8, 8, 8, 8);
-    outer->setSpacing(6);
+    applyGroupMetrics(outer);
     outer->addWidget(list_, 1);
-    outer->addLayout(row1);
-    outer->addLayout(row2);
-    outer->addLayout(row3);
+    outer->addWidget(row1Host);
+    outer->addWidget(row2Host);
+    outer->addWidget(row3Host);
     outer->addWidget(status_);
 
     applyScaleOverride();   // seed override from restored state

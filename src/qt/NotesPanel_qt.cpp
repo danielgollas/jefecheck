@@ -1,4 +1,6 @@
 #include "NotesPanel_qt.h"
+#include "UiMetrics_qt.h"
+#include "FlowLayout_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QButtonGroup>
@@ -56,8 +58,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("notes.panel");
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    jefe::qt::ui::applyGroupMetrics(layout);
 
     statusLabel_ = new QLabel(this);
     statusLabel_->setObjectName("notes.status.label");
@@ -65,8 +66,13 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     layout->addWidget(statusLabel_);
 
     // Tool picker: freehand / arrow / box / text, exactly one active.
-    auto* toolRow = new QHBoxLayout();
-    toolRow->setSpacing(4);
+    auto* toolHost = new QWidget(this);
+    auto* toolRow = new FlowLayout_Qt(toolHost, 0, jefe::qt::ui::kGapTight, jefe::qt::ui::kGapTight);
+    {
+        QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        sp.setHeightForWidth(true);
+        toolHost->setSizePolicy(sp);
+    }
     toolFreehand_ = new QToolButton(this);
     toolFreehand_->setObjectName("notes.tool.freehand");
     toolFreehand_->setText(tr("Freehand"));
@@ -87,11 +93,11 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     toolText_->setText(tr("Text"));
     toolText_->setCheckable(true);
     toolText_->setAccessibleName("Text note tool");
-    toolRow->addWidget(toolFreehand_);
-    toolRow->addWidget(toolArrow_);
-    toolRow->addWidget(toolBox_);
-    toolRow->addWidget(toolText_);
-    layout->addLayout(toolRow);
+    for (QToolButton* tb : {toolFreehand_, toolArrow_, toolBox_, toolText_}) {
+        jefe::qt::ui::useWidgetRect(tb);
+        toolRow->addWidget(tb);   // wraps at narrow widths instead of eliding the label
+    }
+    layout->addWidget(toolHost);
 
     // Not exclusive: an exclusive group can't be clicked back to "no tool", so
     // syncToolButtons() keeps exclusivity instead.
@@ -116,18 +122,25 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
             });
     syncToolButtons();
 
-    // Colour + size, on one row.
-    auto* styleRow = new QHBoxLayout();
-    styleRow->setSpacing(6);
-    styleRow->addWidget(new QLabel(tr("Colour:"), this));
+    // Colour + size: two label/control pairs that wrap in a narrow dock.
+    auto* styleHost = new QWidget(this);
+    auto* styleRow = new FlowLayout_Qt(styleHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
+    auto makePair = [this, styleHost](const QString& text, QWidget* field) {
+        auto* w = new QWidget(styleHost);
+        auto* h = new QHBoxLayout(w);
+        jefe::qt::ui::applyRowMetrics(h, jefe::qt::ui::kGapTight);
+        h->addWidget(new QLabel(text, w));
+        h->addWidget(field);
+        return w;
+    };
     colorButton_ = new QPushButton(this);
     colorButton_->setObjectName("notes.color.button");
-    colorButton_->setFixedSize(40, 22);
+    colorButton_->setFixedSize(40, jefe::qt::ui::kControlH);
+    jefe::qt::ui::useWidgetRect(colorButton_);
     colorButton_->setAccessibleName("Note colour");
     colorButton_->setToolTip(tr("Colour used for the next note drawn with the active tool."));
     connect(colorButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onColorButtonClicked);
-    styleRow->addWidget(colorButton_);
-    styleRow->addWidget(new QLabel(tr("Size:"), this));
+    styleRow->addWidget(makePair(tr("Colour:"), colorButton_));
     sizeSpin_ = new QSpinBox(this);
     sizeSpin_->setObjectName("notes.size.spin");
     sizeSpin_->setRange(1, 20);
@@ -135,9 +148,8 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     sizeSpin_->setAccessibleName("Note stroke size");
     connect(sizeSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &NotesPanel_Qt::onSizeChanged);
-    styleRow->addWidget(sizeSpin_);
-    styleRow->addStretch(1);
-    layout->addLayout(styleRow);
+    styleRow->addWidget(makePair(tr("Size:"), sizeSpin_));
+    layout->addWidget(styleHost);
     rebuildColorSwatch();
 
     // Revision / note tree: top-level items are revisions; children are the notes drawn
@@ -151,17 +163,25 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
             this, &NotesPanel_Qt::updateActionButtons);
     layout->addWidget(tree_, 1);
 
-    auto* actionRow = new QHBoxLayout();
-    actionRow->setSpacing(6);
+    auto* actionHost = new QWidget(this);
+    auto* actionRow = new FlowLayout_Qt(actionHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
     lockButton_ = new QPushButton(tr("Lock Round"), this);
     lockButton_->setObjectName("notes.lock.button");
     connect(lockButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onLockClicked);
+    jefe::qt::ui::useWidgetRect(lockButton_);
     actionRow->addWidget(lockButton_);
     removeButton_ = new QPushButton(tr("Remove Note"), this);
     removeButton_->setObjectName("notes.remove.button");
     connect(removeButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onRemoveClicked);
+    jefe::qt::ui::useWidgetRect(removeButton_);
     actionRow->addWidget(removeButton_);
-    layout->addLayout(actionRow);
+    {
+        QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        sp.setHeightForWidth(true);
+        actionHost->setSizePolicy(sp);
+    }
+    layout->addWidget(actionHost);
+    for (QWidget* host : {toolHost, styleHost, actionHost}) jefe::qt::ui::keepMinHeightForWidth(host);
 
     refresh();
 }

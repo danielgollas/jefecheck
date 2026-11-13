@@ -1,10 +1,13 @@
 #include "LUTPreview_qt.h"
+#include "FlowLayout_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <QLabel>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QBoxLayout>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QResizeEvent>
 #include <QPainter>
 #include <QPaintEvent>
@@ -32,7 +35,8 @@
 LutCurveWidget::LutCurveWidget(QWidget* parent) : QWidget(parent) {
     setObjectName("lut.preview.curve");
     setAccessibleName("LUT curve preview");
-    setMinimumHeight(80);
+    setMinimumSize(LUTPreview_Qt::kCanvasMinW, LUTPreview_Qt::kCanvasMinH);
+    setProperty(jefe::qt::ui::kDensityExemptProperty, true);
 }
 
 void LutCurveWidget::setCurve(const std::vector<float>& samples, float maxValue) {
@@ -71,7 +75,7 @@ void LutCurveWidget::paintEvent(QPaintEvent*) {
     const int n = (int)samples_.size();
 
     // Axis labels + numeric ticks. X (in): 0 .. n samples. Y (out): 0 .. max.
-    QFont f = p.font();
+    QFont f = p.font();   // chart-internal tick text: exempt from the 13 px rule (painted, not a widget)
     f.setPointSizeF(8.0);
     p.setFont(f);
     p.setPen(QColor(150, 150, 150));
@@ -114,7 +118,8 @@ void LutCurveWidget::paintEvent(QPaintEvent*) {
 LutCloudWidget::LutCloudWidget(QWidget* parent) : QOpenGLWidget(parent) {
     setObjectName("lut.preview.cloud");
     setAccessibleName("LUT cloud inspector");
-    setMinimumHeight(90);
+    setMinimumSize(LUTPreview_Qt::kCanvasMinW, LUTPreview_Qt::kCanvasMinH);
+    setProperty(jefe::qt::ui::kDensityExemptProperty, true);
     setFocusPolicy(Qt::StrongFocus);   // so the F key reaches keyPressEvent
     // Optional auto-spin (off by default; the camera is the main interaction).
     spin_ = new QTimer(this);
@@ -374,6 +379,7 @@ void LutCloudWidget::drawAxisLabels(QPainter& p, const float* proj, const float*
     (void)dpr;
     const QColor txt = (bg_ > 0.5f) ? QColor(20, 20, 20) : QColor(235, 235, 235);
     p.setPen(txt);
+    // Chart-internal axis letters: exempt from the 13 px rule (painted, not a widget).
     QFont f = p.font(); f.setPointSizeF(9.0); f.setBold(true); p.setFont(f);
     QPointF s;
     if (project(1.15f, 0.f, 0.f, s)) p.drawText(s, "R");
@@ -423,6 +429,34 @@ void LutCloudWidget::keyPressEvent(QKeyEvent* e) {
     QOpenGLWidget::keyPressEvent(e);
 }
 
+namespace {
+// A value label that elides its text to the width it is given, so a long LUT
+// name never widens the dock. The full text stays in the tooltip.
+class ElidingLabel : public QLabel {
+public:
+    explicit ElidingLabel(QWidget* parent) : QLabel("—", parent) {
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        setMinimumWidth(0);
+        setProperty(jefe::qt::ui::kDensityElidedProperty, true);
+    }
+    void setFullText(const QString& t) {
+        if (t == full_) return;
+        full_ = t;
+        setToolTip(t.size() > 1 ? t : QString());
+        refit();
+    }
+protected:
+    void resizeEvent(QResizeEvent* e) override { QLabel::resizeEvent(e); refit(); }
+    QSize minimumSizeHint() const override { return QSize(0, QLabel::minimumSizeHint().height()); }
+private:
+    void refit() {
+        const QString shown = fontMetrics().elidedText(full_, Qt::ElideRight, std::max(0, contentsRect().width()));
+        if (shown != text()) QLabel::setText(shown);
+    }
+    QString full_ = "—";
+};
+}  // namespace
+
 // ---- LUTPreview_Qt ----
 LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("lut.preview");
@@ -430,8 +464,8 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
 
     auto* info = new QGridLayout();
     info->setContentsMargins(0, 0, 0, 0);
-    info->setHorizontalSpacing(8);
-    info->setVerticalSpacing(2);
+    info->setHorizontalSpacing(jefe::qt::ui::kGap);
+    info->setVerticalSpacing(jefe::qt::ui::kGapTight);
     auto mkVal = [this](const char* objName) {
         auto* l = new QLabel("—", this);
         l->setObjectName(objName);
@@ -443,7 +477,10 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
         l->setStyleSheet("color:#888;");
         return l;
     };
-    nameLbl_  = mkVal("lut.preview.name");
+    auto* nameEl = new ElidingLabel(this);
+    nameEl->setObjectName("lut.preview.name");
+    nameEl->setStyleSheet("color:#ccc;");
+    nameLbl_ = nameEl;
     typeLbl_  = mkVal("lut.preview.type");
     sizeLbl_  = mkVal("lut.preview.size");
     depthLbl_ = mkVal("lut.preview.depth");
@@ -467,10 +504,19 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
 
     // ---- 3D inspector controls (shown only for 3D LUTs) ----
     controls_ = new QWidget(this);
-    auto* cg = new QGridLayout(controls_);
-    cg->setContentsMargins(0, 2, 0, 2);
-    cg->setHorizontalSpacing(8);
-    cg->setVerticalSpacing(2);
+    auto* cg = new FlowLayout_Qt(controls_, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
+
+    // A bare QCheckBox reports its pre-stylesheet size to FlowLayout, so each
+    // sits in a one-item host that reports the styled size.
+    int hostMinH = jefe::qt::ui::kControlH;
+    auto hosted = [this, cg, &hostMinH](QWidget* w) {
+        auto* h = new QWidget(controls_);
+        auto* hl = new QHBoxLayout(h);
+        jefe::qt::ui::applyRowMetrics(hl);
+        hl->addWidget(w, 0, Qt::AlignVCenter);
+        h->setMinimumHeight(hostMinH);
+        cg->addWidget(h);
+    };
 
     auto* solid = new QCheckBox("Solid", controls_);
     solid->setObjectName("lut.preview.mode.solid");
@@ -489,22 +535,33 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
     marker->addItem("Dot");          // LutCloudWidget::MarkerDot
     marker->addItem("Mini-cube");    // MarkerCube
     marker->addItem("Tetrahedron");  // MarkerTetra
+    marker->setMinimumWidth(90);
 
     auto* bg = new QSlider(Qt::Horizontal, controls_);
     bg->setObjectName("lut.preview.bg");
     bg->setRange(0, 100);
     bg->setValue(50);
     bg->setToolTip("Background brightness");
+    bg->setMinimumWidth(80);
 
-    cg->addWidget(solid,    0, 0);
-    cg->addWidget(grid,     0, 1);
-    cg->addWidget(dots,     0, 2);
-    cg->addWidget(marker,   0, 3);
-    cg->addWidget(deformed, 1, 0);
-    cg->addWidget(autospin, 1, 1);
-    cg->addWidget(new QLabel("Bg", controls_), 1, 2, Qt::AlignRight);
-    cg->addWidget(bg,       1, 3);
-    cg->setColumnStretch(3, 1);
+    // Label + slider are one pair so they never split across lines.
+    auto* bgPair = new QWidget(controls_);
+    auto* bgL = new QHBoxLayout(bgPair);
+    jefe::qt::ui::applyRowMetrics(bgL, jefe::qt::ui::kGapTight);
+    auto* bgLbl = new QLabel("Bg", bgPair);
+    bgLbl->setMinimumHeight(jefe::qt::ui::kControlH);
+    bgLbl->setAlignment(Qt::AlignVCenter);
+    bgL->addWidget(bgLbl, 0, Qt::AlignVCenter);
+    bgL->addWidget(bg, 1, Qt::AlignVCenter);
+    bgPair->setMinimumWidth(bgLbl->sizeHint().width() + jefe::qt::ui::kGapTight + 80);
+
+    // Checkbox hosts match the Bg pair's height so rows centre together.
+    const int rowH = std::max(jefe::qt::ui::kControlH, bgPair->sizeHint().height());
+    hostMinH = rowH;
+    hosted(solid); hosted(grid); hosted(dots);
+    hosted(marker);
+    hosted(deformed); hosted(autospin);
+    cg->addWidget(bgPair);
 
     connect(solid,    &QCheckBox::toggled, cloud_, &LutCloudWidget::setShowSolid);
     connect(grid,     &QCheckBox::toggled, cloud_, &LutCloudWidget::setShowGrid);
@@ -520,47 +577,104 @@ LUTPreview_Qt::LUTPreview_Qt(QWidget* parent) : QWidget(parent) {
     side_ = new QWidget(this);
     auto* sideL = new QVBoxLayout(side_);
     sideL->setContentsMargins(0, 0, 0, 0);
-    sideL->setSpacing(4);
+    sideL->setSpacing(jefe::qt::ui::kGapTight);
     sideL->addLayout(info);
     sideL->addWidget(controls_);
     sideL->addStretch(1);
 
     mainBox_ = new QBoxLayout(QBoxLayout::TopToBottom, this);
-    mainBox_->setContentsMargins(0, 4, 0, 0);
-    mainBox_->setSpacing(6);
+    mainBox_->setContentsMargins(0, jefe::qt::ui::kGapTight, 0, 0);
+    mainBox_->setSpacing(jefe::qt::ui::kGap);
     mainBox_->addWidget(side_);
     mainBox_->addWidget(stack_, /*stretch*/ 1);
 
     controls_->setVisible(false);   // until a 3D LUT is selected
 }
 
+QSize LUTPreview_Qt::minimumSizeHint() const {
+    const QSize base = QWidget::minimumSizeHint();
+    if (!mainBox_ || width() <= 0 || !mainBox_->hasHeightForWidth()) return base;
+    // Side by side the pane may be squeezed narrower than its children need; resizeEvent then
+    // flips it to stacked. Reporting the side-by-side width would pin it wide and clip the dock.
+    const int minW = mainBox_->direction() == QBoxLayout::LeftToRight ? 0 : base.width();
+    return QSize(minW, std::max(base.height(), mainBox_->minimumHeightForWidth(width())));
+}
+
 void LUTPreview_Qt::resizeEvent(QResizeEvent* e) {
     QWidget::resizeEvent(e);
     if (!mainBox_) return;
+    if (width() != lastWidthForHint_) {   // the min height follows the width
+        lastWidthForHint_ = width();
+        updateGeometry();
+    }
     // Flow the two sections by aspect: side-by-side when the pane is wide,
     // stacked when it's tall, so neither section starves the canvas.
-    const bool wide = width() > height() * 1.25;
-    const auto dir = wide ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom;
+    // chooseDirection has hysteresis, and nothing is written unless it changes.
+    const auto dir = chooseDirection(size(), mainBox_->direction());
     if (mainBox_->direction() != dir) {
         mainBox_->setDirection(dir);
-        // Keep the side section compact when alongside the canvas.
-        side_->setMaximumWidth(wide ? 200 : QWIDGETSIZE_MAX);
+        const bool wide = dir == QBoxLayout::LeftToRight;
+        // Beside the canvas the side section stays within [200, 280].
+        side_->setMinimumWidth(wide ? kSideMinW : 0);
+        side_->setMaximumWidth(wide ? kSideMaxW : QWIDGETSIZE_MAX);
     }
+}
+
+QBoxLayout::Direction LUTPreview_Qt::chooseDirection(QSize size, QBoxLayout::Direction current) {
+    // Side by side needs the side section plus a canvas and a gap; narrower than
+    // that it can only clip, however short the pane is.
+    if (size.width() < kSideMinW + jefe::qt::ui::kGap + kCanvasMinW) return QBoxLayout::TopToBottom;
+    // w > 1.4 h and w < 1.1 h, in exact integer arithmetic.
+    if (size.width() * 10 > size.height() * 14) return QBoxLayout::LeftToRight;
+    if (size.width() * 10 < size.height() * 11) return QBoxLayout::TopToBottom;
+    return current;
+}
+
+bool LUTPreview_Qt::runDirectionSelfTest() {
+    using D = QBoxLayout::Direction;
+    const D L = QBoxLayout::LeftToRight, T = QBoxLayout::TopToBottom;
+    auto report = [](const char* name, bool ok) {
+        std::printf("DENSITY-SELFTEST %s %s\n", name, ok ? "PASS" : "FAIL");
+        return ok;
+    };
+    bool all = true;
+    all &= report("LUT-DIR basic", chooseDirection({800, 300}, T) == L &&
+                                   chooseDirection({500, 400}, L) == L &&
+                                   chooseDirection({500, 400}, T) == T &&
+                                   chooseDirection({300, 800}, L) == T);
+    // Below the side-by-side floor it stacks whatever the aspect or current direction.
+    const int floorW = kSideMinW + jefe::qt::ui::kGap + kCanvasMinW;
+    all &= report("LUT-DIR clamp", chooseDirection({300, 100}, L) == T &&
+                                   chooseDirection({floorW - 1, 100}, L) == T &&
+                                   chooseDirection({floorW, 100}, T) == L);
+    D dir = T; int up = 0, down = 0;
+    for (int w = 560; w <= 600; ++w) {
+        const D n = chooseDirection({w, 400}, dir);
+        if (n != dir) { ++up; if (w <= 560) up += 100; dir = n; }
+    }
+    for (int w = 600; w >= 400; --w) {
+        const D n = chooseDirection({w, 400}, dir);
+        if (n != dir) { ++down; if (w >= 440) down += 100; dir = n; }
+    }
+    all &= report("LUT-DIR pingpong", up <= 1 && down <= 1);
+    return all;
 }
 
 void LUTPreview_Qt::setLut(const jefe::qt::LutPreviewData& d) {
     if (!d.valid) {
-        nameLbl_->setText("—"); typeLbl_->setText("—");
+        static_cast<ElidingLabel*>(nameLbl_)->setFullText("—"); typeLbl_->setText("—");
         sizeLbl_->setText("—"); depthLbl_->setText("—"); maxLbl_->setText("—");
         stack_->setCurrentIndex(0);   // empty page
         controls_->setVisible(false);
         return;
     }
-    nameLbl_->setText(QString::fromStdString(d.name));
+    static_cast<ElidingLabel*>(nameLbl_)->setFullText(QString::fromStdString(d.name));
     typeLbl_->setText(d.is3D ? "3D cube" : "1D");
     sizeLbl_->setText(d.is3D ? QString("%1³").arg(d.size)
                              : QString("%1 samples").arg(d.size));
-    depthLbl_->setText(QString("%1→%2 bit").arg(d.fromBits).arg(d.toBits));
+    // Both 0: the file states no bit depth.
+    depthLbl_->setText(d.fromBits == 0 && d.toBits == 0 ? QString("—")
+                                                        : QString("%1→%2 bit").arg(d.fromBits).arg(d.toBits));
     maxLbl_->setText(d.is3D ? QString("—") : QString::number(d.max1D, 'g', 4));
 
     if (d.is3D) {

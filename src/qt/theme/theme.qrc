@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/theme">
+    <file>jefecheck_dark.qss</file>
+  </qresource>
+</RCC>

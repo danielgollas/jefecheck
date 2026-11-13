@@ -59,11 +59,13 @@
 extern gfcSettings sett;
 
 static void applyDarkTheme(QApplication& qapp) {
-    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`), falling back to
-    // the source tree; silent miss if neither exists.
+    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`), then the source tree,
+    // then the copy compiled in via theme.qrc, which always exists (bundles built outside the
+    // repo have neither file path).
     const QStringList candidates = {
         QCoreApplication::applicationDirPath() + "/theme/jefecheck_dark.qss",
         QCoreApplication::applicationDirPath() + "/../src/qt/theme/jefecheck_dark.qss",
+        QStringLiteral(":/theme/jefecheck_dark.qss"),  // compiled-in copy (bundles have neither path above)
     };
     for (const QString& path : candidates) {
         QFile qss(path);
@@ -1278,6 +1280,20 @@ int main(int argc, char* argv[]) {
         const QString image = QString::fromUtf8(argv[i + 1]);
         QTimer::singleShot(5000, &window, [&window, image]() {
             const int code = window.runHeadlessPackageDialogTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --ui-density-test [outDir]: every dock and dialog against the shared density rules.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--ui-density-test") != 0) continue;
+        QString outDir;
+        if (i + 1 < argc && std::strncmp(argv[i + 1], "--", 2) != 0)
+            outDir = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [&window, outDir]() {
+            const int code = window.runHeadlessUiDensityTest(outDir);
             fflush(stdout);
             std::_Exit(code);
         });

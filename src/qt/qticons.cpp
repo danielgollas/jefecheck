@@ -298,10 +298,10 @@ QPushButton* makeIconButton(QWidget* parent, const QIcon& icon,
     b->setAccessibleName(accessibleName.isEmpty() ? tooltip : accessibleName);
     if (!text.isEmpty()) {
         b->setText(text);
-        b->setStyleSheet("QPushButton { padding: 2px 8px; }");
+        b->setStyleSheet("QPushButton { padding: 0 8px; }");
     } else {
         b->setFixedSize(kBtnSide, kBtnSide);
-        b->setStyleSheet("QPushButton { padding: 1px; }");
+        b->setStyleSheet("QPushButton { padding: 0; }");
     }
     return b;
 }

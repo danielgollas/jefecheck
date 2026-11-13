@@ -20,6 +20,8 @@ public:
     ~FlowLayout_Qt() override;
 
     void addItem(QLayoutItem* item) override;
+    // When on, each laid-out line shares its spare width equally among its items.
+    void setStretchItems(bool on) { stretch_ = on; invalidate(); }
     int  horizontalSpacing() const;
     int  verticalSpacing() const;
     Qt::Orientations expandingDirections() const override;
@@ -37,6 +39,7 @@ private:
     int  smartSpacing(QStyle::PixelMetric pm) const;
 
     QList<QLayoutItem*> itemList_;
+    bool stretch_ = false;
     int hSpace_;
     int vSpace_;
 };

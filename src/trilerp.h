@@ -53,8 +53,8 @@ void freeResources();
 std::string getNameNoPath();
 char filename[250];
 int getTypeFromExtension(const char* filename);
-int fromBits; //used if the lut is a downscaling lut, if from and to are different, then apply it before and load the image in original depth. Downscaling luts should always be applied as the first lut if more than one is going to be applied. 
-int toBits;
+int fromBits = 0; //used if the lut is a downscaling lut, if from and to are different, then apply it before and load the image in original depth. Downscaling luts should always be applied as the first lut if more than one is going to be applied. 
+int toBits = 0;   // 0 with fromBits: the file states no bit depth
 int type;
 int size;
 

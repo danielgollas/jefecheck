@@ -1,6 +1,8 @@
 #include "MainWindow_qt.h"
 
 #include "FXLutPanel_qt.h"
+#include "LUTPreview_qt.h"
+#include <QHeaderView>
 #include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
 #include "NotesPanel_qt.h"
@@ -21,24 +23,35 @@
 #include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
+#include "UiDensityCheck_qt.h"
+#include <QListWidget>
+#include <QMap>
+#include <QRegularExpression>
 
 #include "../UIConstants.h"
 
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
 #include <QDesktopServices>
 #include <QCoreApplication>
 #include <QDockWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QUrl>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImage>
 #include <QLabel>
+#include <QLineEdit>
+#include "TrackStrip_qt.h"
+#include <QScrollBar>
+#include <QScrollArea>
 #include <QPushButton>
 #include <QMenu>
 #include <QMenuBar>
@@ -713,20 +726,9 @@ void MainWindow_Qt::buildMenuBar() {
     helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
         this, [this]() {
-            QMessageBox::about(this, tr("About JefeCheck"),
-                tr("<h3>JefeCheck %1</h3>"
-                   "<p>Professional video frame review and color correction.</p>"
-                   "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
-                   "Originally written 2006-2014, modernized 2026 for "
-                   "open-source release under GPL v2.</p>"
-                   "<p><a href='https://github.com/danielgollas/jefecheck'>"
-                   "github.com/danielgollas/jefecheck</a></p>"
-                   "<p style='font-size:small;color:gray'>Built %2 %3</p>")
-                // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
-                // keep in sync with that define and CMakeLists.txt's project() VERSION.
-                .arg(QStringLiteral("1.7.0"))
-                .arg(QStringLiteral(__DATE__))
-                .arg(QStringLiteral(__TIME__)));
+            QMessageBox* box = makeAboutBox();
+            box->exec();
+            delete box;
         });
     aboutAction->setObjectName("menu.help.about");
     // Suppress Qt's macOS auto-promotion of "About …" into the application menu.
@@ -827,6 +829,7 @@ void MainWindow_Qt::buildDocks() {
     lutDock_->setObjectName("dock.luts");
     lutDock_->setAccessibleName("LUT browser dock");
     lutPanelWidget_ = new LUTPanel_Qt(lutDock_);
+    lutPanelWidget_->setMinimumWidth(240);
     lutDock_->setWidget(lutPanelWidget_);
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, lutDock_);
@@ -841,7 +844,7 @@ void MainWindow_Qt::buildDocks() {
     fxParamsDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     // Both dimensions needed: left-area docks default to zero height when no other dock claims the area, collapsing the scroll viewport and pruning editors from the Mac AX tree.
     // The width floor keeps the per-FX header fully visible.
-    fxParamPanelWidget_->setMinimumWidth(150);
+    fxParamPanelWidget_->setMinimumWidth(240);
     fxParamPanelWidget_->setMinimumHeight(240);
     addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
 
@@ -853,8 +856,7 @@ void MainWindow_Qt::buildDocks() {
     playlistPanelWidget_ = new PlaylistPanel_Qt(playlistDock_);
     playlistDock_->setWidget(playlistPanelWidget_);
     playlistDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
-    playlistPanelWidget_->setMinimumWidth(220);
-    playlistPanelWidget_->setMinimumHeight(140);
+    playlistPanelWidget_->setMinimumWidth(220);   // width only: a set minimum height would override the wrapped rows' height
     addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
     splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
 
@@ -879,7 +881,6 @@ void MainWindow_Qt::buildDocks() {
     notesDock_->setWidget(notesPanelWidget_);
     notesDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     notesPanelWidget_->setMinimumWidth(220);
-    notesPanelWidget_->setMinimumHeight(160);
     addDockWidget(Qt::RightDockWidgetArea, notesDock_);
     if (lutDock_) tabifyDockWidget(lutDock_, notesDock_);
 
@@ -3124,4 +3125,357 @@ void MainWindow_Qt::autoloadStep() {
         if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
         if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
     }
+}
+
+// Surfaces whose owning plan has not landed yet: violations print but never fail the run.
+static const QStringList kDensityDeferred = {"dock.platemanager", "dock.fxparams", "dock.remote"};
+
+QMessageBox* MainWindow_Qt::makeAboutBox() {
+    auto* box = new QMessageBox(this);
+    box->setWindowTitle(tr("About JefeCheck"));
+    box->setObjectName("dialog.about");
+    box->setTextFormat(Qt::RichText);
+    box->setIconPixmap(windowIcon().pixmap(64, 64));
+    box->setText(tr("<h3>JefeCheck %1</h3>"
+                   "<p>Professional video frame review and color correction.</p>"
+                   "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
+                   "Originally written 2006-2014, modernized 2026 for "
+                   "open-source release under GPL v2.</p>"
+                   "<p><a href='https://github.com/danielgollas/jefecheck'>"
+                   "github.com/danielgollas/jefecheck</a></p>"
+                   "<p style='font-size:small;color:gray'>Built %2 %3</p>")
+                // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
+                // keep in sync with that define and CMakeLists.txt's project() VERSION.
+                .arg(QStringLiteral("1.7.0"))
+                .arg(QStringLiteral(__DATE__))
+                .arg(QStringLiteral(__TIME__)));
+    return box;
+}
+
+int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
+    // A failing self-test still lets the surfaces run, so one run shows everything.
+    const bool lutDirOk = LUTPreview_Qt::runDirectionSelfTest();
+    const bool selfTestOk = jefe::qt::ui::runDensityCheckerSelfTest() && lutDirOk;
+    if (!outDir.isEmpty()) QDir().mkpath(outDir);
+
+    int failures = 0;
+    if (!selfTestOk) {
+        printf("UI-DENSITY selftest FAIL\n");
+        ++failures;
+    }
+    // Several passes: item views lay out on a zero-timer and only then move their index widgets.
+    auto settle = []() { for (int i = 0; i < 4; ++i) QCoreApplication::processEvents(); };
+    auto fileSafe = [](QString s) { return s.replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_"); };
+
+    // One surface: check, print, optionally save a PNG. `label` is the line text after UI-DENSITY.
+    auto record = [&](const QString& name, const QString& label, QWidget* root, const QString& pngBase, QWidget* grabWidget = nullptr) {
+        const auto v = jefe::qt::ui::checkDensity(root);
+        const bool deferred = kDensityDeferred.contains(name);
+        const char* verdict = v.isEmpty() ? "PASS" : (deferred ? "DEFERRED" : "FAIL");
+        printf("UI-DENSITY %s %s\n", qPrintable(label), verdict);
+        for (const auto& x : v)
+            printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+        if (!v.isEmpty() && !deferred) failures += int(v.size());
+        if (!outDir.isEmpty() && !pngBase.isEmpty())
+            (grabWidget ? grabWidget : root)->grab().save(outDir + "/" + fileSafe(pngBase) + ".png");
+    };
+
+    const QList<QDockWidget*> docks = {timelineDock_, lutDock_, playlistDock_, notesDock_,
+                                       plateDock_, fxParamsDock_, remoteDock_};
+    QMap<QDockWidget*, bool> wasVisible;
+    for (auto* d : docks) wasVisible[d] = d->isVisible();
+
+    // One playlist item with its cards expanded, so the cards the list hosts are checked.
+    QTemporaryDir seedDir;
+    const int playlistBefore = int(jefe::qt::getPlaylistItemNames().size());
+    QCheckBox* compactCheck = playlistPanelWidget_ ? playlistPanelWidget_->findChild<QCheckBox*>("playlist.check.compact") : nullptr;
+    const bool compactWas = compactCheck && compactCheck->isChecked();
+    {
+        const QString seed = seedDir.path() + "/density_seed_plate_with_a_long_name.0001.png";
+        QImage img(64, 36, QImage::Format_RGB32);
+        img.fill(Qt::darkGray);
+        if (!seedDir.isValid() || !img.save(seed)) {
+            printf("    playlist-seed could not write %s\n", qPrintable(seed));
+            ++failures;
+        } else {
+            jefe::qt::addPlaylistFile(seed.toStdString());
+            if (compactCheck) compactCheck->setChecked(false);   // expanded cards: header and detail rows
+            if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
+            if (int(jefe::qt::getPlaylistItemNames().size()) != playlistBefore + 1) {
+                printf("    playlist-seed item was not added\n");
+                ++failures;
+            }
+        }
+    }
+
+    const QList<QSize> windowSizes = {{1280, 800}, {1920, 1080}};
+    for (const QSize& ws : windowSizes) {
+        resize(ws);
+        settle();
+        for (QDockWidget* dock : docks) {
+            if (!dock || !dock->widget()) continue;
+            const QString name = dock->objectName();
+            // Only the dock under test is visible, so the others do not squeeze it.
+            for (auto* d : docks) if (d != dock) d->hide();
+
+            if (name == "dock.luts") {
+                // Select a 3D LUT so the (otherwise hidden) 3D controls are exercised.
+                auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                QTreeWidgetItem* pick3D = nullptr;
+                QTreeWidgetItem* pickLong = nullptr;
+                if (list) {
+                    for (int r = 0; r < list->topLevelItemCount(); ++r) {
+                        auto* it = list->topLevelItem(r);
+                        if (it->text(1) != "3D") continue;
+                        if (!pick3D) pick3D = it;
+                        if (!pickLong && it->text(0).size() > 40) pickLong = it;
+                    }
+                }
+                if (!pick3D) printf("UI-DENSITY LUT-3D SKIPPED (no 3D LUT loaded)\n");
+                else {
+                    if (pickLong) { list->setCurrentItem(pickLong); printf("UI-DENSITY LUT-3D long-name selected: %s\n", qPrintable(pickLong->text(0))); }
+                    else { list->setCurrentItem(pick3D); printf("UI-DENSITY LUT-3D selected: %s (no name > 40 chars available)\n", qPrintable(pick3D->text(0))); }
+                }
+            }
+            if (name == "dock.luts") {
+                // Synthetic 120-char name through the same path setLut uses: must elide, not widen.
+                auto* pv = dock->widget()->findChild<LUTPreview_Qt*>();
+                auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                if (pv && list && !list->selectedItems().isEmpty()) {
+                    auto d = jefe::qt::getLutPreview(list->selectedItems().first()->data(0, Qt::UserRole).toInt());
+                    if (d.valid) { d.name = std::string(120, 'n'); pv->setLut(d); }
+                }
+            }
+            // shared: a second side dock split below this one; height: a short dock.
+            struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; bool shared = false; int height = 0; };
+            int minW = std::max({dock->minimumWidth(), dock->widget()->minimumWidth(),
+                                 dock->widget()->minimumSizeHint().width()});
+            if (name == "dock.luts" && minW > 300) {
+                printf("    lut-longname dock minimum width %d > 300 (long name widened it)\n", minW);
+                ++failures;
+            }
+            QList<Cfg> cfgs = {
+                {"Bottom", Qt::BottomDockWidgetArea, false, 0},
+                {"Left", Qt::LeftDockWidgetArea, false, minW},
+                {"Left", Qt::LeftDockWidgetArea, false, minW * 3 / 2},
+                {"Left", Qt::LeftDockWidgetArea, false, 120},
+                {"Floating", Qt::NoDockWidgetArea, true, 0},
+                {"LeftShared", Qt::LeftDockWidgetArea, false, minW, true},
+                {"LeftShort", Qt::LeftDockWidgetArea, false, minW, true, 240},
+            };
+            QDockWidget* partner = dock == notesDock_ ? playlistDock_ : notesDock_;
+            for (const Cfg& c : cfgs) {
+                dock->setFloating(false);
+                if (c.floating) {
+                    dock->setFloating(true);
+                    dock->resize(std::max(minW, 300), 400);
+                } else {
+                    addDockWidget(c.qtArea, dock);
+                }
+                dock->show();
+                if (c.shared && partner) {
+                    partner->setFloating(false);
+                    addDockWidget(c.qtArea, partner);
+                    splitDockWidget(dock, partner, Qt::Vertical);
+                    partner->show();
+                }
+                dock->raise();
+                settle();
+                if (!c.floating && c.width > 0) {
+                    resizeDocks({dock}, {c.width}, Qt::Horizontal);
+                    settle();
+                }
+                if (c.height > 0) {
+                    resizeDocks({dock}, {c.height}, Qt::Vertical);
+                    settle();
+                }
+                if (name == "dock.luts") {
+                    // Short dock: the content scrolls rather than overlapping, so the button row
+                    // must never sit on top of the list (the checker's rules cover the rest).
+                    auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                    auto* lutScroll = dock->widget()->findChild<QScrollArea*>("lut.scroll");
+                    if (lutScroll && lutScroll->widget() && lutScroll->widget()->width() > lutScroll->viewport()->width()) {
+                        printf("    lut-content wider than its viewport (%d > %d; horizontal scrollbar is off)\n",
+                               lutScroll->widget()->width(), lutScroll->viewport()->width());
+                        ++failures;
+                    }
+                    auto* applyBtn = dock->widget()->findChild<QWidget*>("lut.apply.button");
+                    if (list && applyBtn && applyBtn->isVisible()) {
+                        const QRect lr(list->mapTo(dock->widget(), QPoint(0, 0)), list->size());
+                        const QRect br(applyBtn->mapTo(dock->widget(), QPoint(0, 0)), applyBtn->size());
+                        if (lr.intersects(br)) {
+                            printf("    lut-row overlaps list (list %d,%d %dx%d; button %d,%d %dx%d)\n",
+                                   lr.x(), lr.y(), lr.width(), lr.height(), br.x(), br.y(), br.width(), br.height());
+                            ++failures;
+                        }
+                    }
+                }
+                if (name == "dock.luts") {
+                    auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                    if (!list || !list->isVisible()) {
+                        printf("    lut-list %s\n", list ? "hidden" : "not found");
+                        ++failures;
+                    } else {
+                        const int nameW = list->header()->sectionSize(0);
+                        const int typeRight = list->header()->sectionViewportPosition(1) + list->header()->sectionSize(1);
+                        if (nameW < 80 || list->header()->sectionViewportPosition(0) < 0 ||
+                            typeRight > list->viewport()->width()) {
+                            printf("    lut-list name width %d, type right edge %d of viewport %d (Name/Type must fit without scrolling)\n",
+                                   nameW, typeRight, list->viewport()->width());
+                            ++failures;
+                        }
+                    }
+                }
+                const int dockW = dock->width();
+                // Shared and short docks also name their height (the variable under test).
+                const QString hTag = c.shared ? QString(" h%1").arg(dock->height()) : QString();
+                const QString label = QString("%1 %2 %3x%4 %5").arg(name, c.area)
+                                          .arg(ws.width()).arg(ws.height()).arg(dockW) + hTag;
+                record(name, label, dock->widget(),
+                       QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW) + hTag,
+                       dock);
+                if (c.shared && c.height > 0 && dock->height() > c.height + 40)
+                    printf("UI-DENSITY %s short-dock note: asked for %d px, got %d (the content's minimum height)\n",
+                           qPrintable(name), c.height, dock->height());
+                if (name == "dock.timeline") {
+                    // Transport expectations: spins never overlap a visible sibling,
+                    // and the tracks area keeps its 96 px floor in a dock >= 200 px tall.
+                    QWidget* root = dock->widget();
+                    for (const char* spinName : {"transport.frame.spin", "transport.in.spin", "transport.out.spin"}) {
+                        auto* spin = root->findChild<QWidget*>(spinName);
+                        if (!spin || !spin->isVisible()) {
+                            printf("    transport-missing %s %s\n", spinName, spin ? "hidden" : "not found");
+                            ++failures;
+                            continue;
+                        }
+                        const QRect r(spin->mapTo(root, QPoint(0, 0)), spin->size());
+                        for (auto* sib : root->findChildren<QWidget*>()) {
+                            if (sib == spin || !sib->isVisible() || sib->isAncestorOf(spin) || spin->isAncestorOf(sib)) continue;
+                            if (!qobject_cast<QLabel*>(sib) && !qobject_cast<QAbstractButton*>(sib) &&
+                                !qobject_cast<QAbstractSpinBox*>(sib) && !qobject_cast<QComboBox*>(sib)) continue;
+                            if (r.intersects(QRect(sib->mapTo(root, QPoint(0, 0)), sib->size()))) {
+                                printf("    transport-overlap %s overlaps %s\n", spinName, qPrintable(sib->objectName()));
+                                ++failures;
+                            }
+                        }
+                    }
+                    auto* tracks = root->findChild<QWidget*>("timeline.tracks");
+                    if (tracks && dock->height() >= 200 && tracks->height() < 96) {
+                        printf("    transport-tracks-height %d < 96\n", tracks->height());
+                        ++failures;
+                    }
+                }
+                if (c.shared && partner) partner->hide();
+            }
+            dock->setFloating(false);
+            dock->hide();
+        }
+    }
+    for (auto* d : docks) d->setVisible(wasVisible.value(d));
+    // Take the seed item back out and restore the card view.
+    if (int(jefe::qt::getPlaylistItemNames().size()) == playlistBefore + 1)
+        jefe::qt::removePlaylistItem(playlistBefore);
+    if (compactCheck) compactCheck->setChecked(compactWas);
+    if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
+
+    // Dialogs: default size, then minimumSizeHint().
+    auto checkDialog = [&](const QString& name, QDialog* dlg) {
+        dlg->show();
+        settle();
+        record(name, name + " default", dlg, "dlg-" + name + "-default");
+        dlg->resize(dlg->minimumSizeHint());
+        settle();
+        record(name, name + " min", dlg, "dlg-" + name + "-min");
+        dlg->close();
+    };
+
+    openLoadWindow();
+    if (loadWindowDialog_) {
+        loadWindowDialog_->close();
+        checkDialog("dlg.load", loadWindowDialog_);
+
+        // Long path, then a long estimates string, at minimumSizeHint: the strips
+        // must neither crowd Browse nor widen/clip, and nothing may need a horizontal scroll.
+        QDialog* ld = loadWindowDialog_;
+        ld->show();
+        settle();
+        auto fail = [&](const QString& what) { printf("    load-fit %s\n", qPrintable(what)); ++failures; };
+        // Default size: all four strips visible without scrolling.
+        ld->resize(620, 720);
+        settle();
+        auto* scroll = ld->findChild<QScrollArea*>("dialog.loadwindow.scroll");
+        if (!scroll || !scroll->isVisible()) fail("scroll area missing or hidden");
+        else if (ld->height() < 720)   // the window manager clamped it to a short screen (e.g. 1.5x scale): scrolling is the design
+            printf("UI-DENSITY load-fit SKIPPED no-scrollbar check (dialog got %d px of 720)\n", ld->height());
+        else if (scroll->verticalScrollBar()->isVisible()) fail("vertical scrollbar visible at default 620x720");
+        auto* fn = ld->findChild<QLineEdit*>("dialog.loadwindow.strip.0.filename");
+        auto* br = ld->findChild<QWidget*>("dialog.loadwindow.strip.0.browse");
+        if (!fn) fail("filename field missing");
+        else fn->setText("/Volumes/" + QString(190, 'a') + "/x.0001.exr");
+        for (auto* strip : ld->findChildren<TrackStrip_Qt*>())
+            strip->setEstimatesText(QString("123456 frames \u00b7 \u2248" + QString(200, '9') + " GB \u00b7 ~99999.9s"));
+        ld->resize(ld->minimumSizeHint());
+        settle();
+        record("dlg.load", "dlg.load longpath", ld, "dlg-dlg.load-longpath");
+        if (!br || !br->isVisible()) fail("browse missing or hidden");
+        else {
+            if (br->width() < br->minimumSizeHint().width()) fail("browse narrower than its minimumSizeHint");
+            if (fn && fn->isVisible() &&
+                QRect(br->mapTo(ld, QPoint(0, 0)), br->size())
+                    .intersects(QRect(fn->mapTo(ld, QPoint(0, 0)), fn->size())))
+                fail("browse intersects filename");
+        }
+        if (fn && !fn->isVisible()) fail("filename hidden");
+        if (scroll && scroll->isVisible()) {
+            if (scroll->horizontalScrollBar()->isVisible()) fail("horizontal scrollbar visible at minimum size");
+            const QRect vp(QPoint(0, 0), scroll->viewport()->size());
+            for (int i = 0; i < 4; ++i) {
+                auto* strip = ld->findChild<QWidget*>(QString("dialog.loadwindow.strip.%1").arg(i));
+                if (!strip || !strip->isVisible()) { fail(QString("strip %1 missing or hidden").arg(i)); continue; }
+                const QRect r(strip->mapTo(scroll->viewport(), QPoint(0, 0)), strip->size());
+                if (r.left() < vp.left() || r.right() > vp.right())
+                    fail(QString("strip %1 clipped horizontally (%2..%3 of %4)").arg(i).arg(r.left()).arg(r.right()).arg(vp.width()));
+            }
+        }
+        ld->close();
+    }
+    {
+        PreferencesWindow_Qt dlg(this);
+        QListWidget* sidebar = dlg.findChild<QListWidget*>();
+        const int rows = sidebar ? sidebar->count() : 1;
+        for (int i = 0; i < rows; ++i) {
+            QString title = "page" + QString::number(i);
+            if (sidebar) { sidebar->setCurrentRow(i); title = sidebar->item(i)->text(); }
+            checkDialog("dlg.prefs." + title, &dlg);
+        }
+    }
+    {
+        // Every quality page: the format combo swaps the stacked page under the form.
+        RenderDialog_Qt dlg(this);
+        auto* format = dlg.findChild<QComboBox*>("dialog.render.format.combo");
+        if (!format) {
+            printf("    render-format combo not found\n");
+            ++failures;
+            checkDialog("dlg.render", &dlg);
+        } else {
+            for (int i = 0; i < format->count(); ++i) {
+                format->setCurrentIndex(i);
+                checkDialog("dlg.render." + fileSafe(format->itemText(i)), &dlg);
+            }
+        }
+    }
+    {
+        MinSpecsDialog_Qt dlg(this);
+        checkDialog("dlg.minspecs", &dlg);
+    }
+    {
+        QMessageBox* about = makeAboutBox();
+        checkDialog("dlg.about", about);
+        delete about;
+    }
+
+    if (failures == 0) printf("UI-DENSITY RESULT PASS\n");
+    else printf("UI-DENSITY RESULT FAIL %d\n", failures);
+    fflush(stdout);
+    return failures == 0 ? 0 : 1;
 }

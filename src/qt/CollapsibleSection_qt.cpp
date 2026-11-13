@@ -1,4 +1,5 @@
 #include "CollapsibleSection_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -14,9 +15,8 @@ QToolButton#collapsible_header {
     border-top: 1px solid #34343a;
     border-bottom: 1px solid #17171a;
     color: #b8b8be;
-    font-size: 11px;
     font-weight: 600;
-    padding: 5px 8px;
+    padding: 0 8px;
     text-align: left;
 }
 QToolButton#collapsible_header:hover  { background: #2e2e34; color: #d6d6db; }
@@ -44,7 +44,8 @@ CollapsibleSection::CollapsibleSection(const QString& title, QWidget* parent)
     content_ = new QWidget(this);
     content_->setObjectName("collapsible_content");
     contentLayout_ = new QVBoxLayout(content_);
-    contentLayout_->setContentsMargins(4, 6, 4, 6);
+    contentLayout_->setContentsMargins(jefe::qt::ui::kGapGroup, jefe::qt::ui::kGap,
+                                       jefe::qt::ui::kGapGroup, jefe::qt::ui::kGap);
     contentLayout_->setSpacing(0);
     content_->setVisible(false);
 

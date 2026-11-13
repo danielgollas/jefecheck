@@ -2,7 +2,10 @@
 #include "qticons.h"
 #include "SequenceLoadBridge_qt.h"
 #include "LUTPreview_qt.h"
+#include "UiMetrics_qt.h"
+#include "FlowLayout_qt.h"
 
+#include <algorithm>
 #include <QCheckBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -12,6 +15,9 @@
 #include <QListWidget>
 #include <QMimeData>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QStyle>
 #include <QSplitter>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -53,7 +59,11 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setAlternatingRowColors(true);
     table_->setSortingEnabled(true);
+    // Name stretches but never collapses: every section is at least 80 px, the
+    // numeric columns size to content, and the view scrolls only for Size/Depth.
+    table_->header()->setMinimumSectionSize(80);
     table_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (int c = 1; c < 4; ++c) table_->header()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
     table_->header()->setStretchLastSection(false);
     // Double-click is "apply"; matches the FLTK LUT browser's UX.
     connect(table_, &QTreeWidget::itemDoubleClicked,
@@ -74,14 +84,14 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
 
     status_ = new QLabel("Drop .lut / .cube / .cub files here to load.", this);
     status_->setStyleSheet("color: #888; font-style: italic;");
+    status_->setWordWrap(true);
     status_->setObjectName("lut.status.label");
     status_->setAccessibleName("LUT status");
 
-    auto* row = new QHBoxLayout();
-    row->setContentsMargins(0, 0, 0, 0);
+    auto* rowHost = new QWidget(this);
+    auto* row = new FlowLayout_Qt(rowHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
     row->addWidget(applyBtn);
     row->addWidget(refreshBtn);
-    row->addStretch(1);
 
     previewToggle_ = new QCheckBox("Preview", this);
     previewToggle_->setChecked(true);
@@ -94,14 +104,16 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
     // the preview pane below, so the divider can give the cube room.
     auto* browser = new QWidget(this);
     auto* browserL = new QVBoxLayout(browser);
+    browser_ = browser;
+    browserL_ = browserL;
     browserL->setContentsMargins(0, 0, 0, 0);
-    browserL->setSpacing(6);
+    browserL->setSpacing(jefe::qt::ui::kGap);
     browserL->addWidget(status_);
     browserL->addWidget(table_, /*stretch*/ 1);
-    browserL->addLayout(row);
+    browserL->addWidget(rowHost);
     browserL->addWidget(previewToggle_);   // toggle sits under the list/buttons
 
-    table_->setMinimumHeight(60);  // let the table shrink so the splitter has travel
+    table_->setMinimumHeight(4 * jefe::qt::ui::kControlH);  // about 4 rows; the dock scrolls below this
 
     auto* splitter = new QSplitter(Qt::Vertical, this);
     splitter->setObjectName("lut.splitter");
@@ -117,10 +129,22 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
         "QSplitter::handle { background: #3a3a3a; }"
         "QSplitter::handle:hover { background: #555; }");
 
+    splitter_ = splitter;
+    preview_->installEventFilter(this);
+
+    // When the dock is shorter than the content needs, the content scrolls instead of overlapping.
+    scroll_ = new QScrollArea(this);
+    scroll_->setObjectName("lut.scroll");
+    scroll_->setWidgetResizable(true);
+    scroll_->setFrameShape(QFrame::NoFrame);
+    scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll_->setStyleSheet("QScrollArea { background: transparent; }");
+    scroll_->viewport()->setAutoFillBackground(false);
+    scroll_->setWidget(splitter);
+
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(8, 8, 8, 8);
-    outer->setSpacing(6);
-    outer->addWidget(splitter, /*stretch*/ 1);
+    jefe::qt::ui::applyGroupMetrics(outer);
+    outer->addWidget(scroll_, /*stretch*/ 1);
 
     refreshList();
 
@@ -138,6 +162,38 @@ int LUTPanel_Qt::selectedGuiIndex() const {
     const auto items = table_->selectedItems();
     if (items.isEmpty()) return -1;
     return items.first()->data(0, kGuiIndexRole).toInt();
+}
+
+// A QSplitter sizes its panes from minimumSize(), which ignores height-for-width, so the wrapped
+// button row and status label would be squeezed into overlap. Give the splitter a minimum height
+// that is the sum of its panes' minimums at the current width; the scroll area takes over below it.
+// Only setMinimumHeight runs here, and only when the value changes.
+void LUTPanel_Qt::updateContentMinHeight() {
+    if (!scroll_ || !splitter_ || !browser_ || !browserL_ || !preview_) return;
+    // Width the splitter gets, less a scrollbar's extent so the answer holds when one appears.
+    const int sb = scroll_->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, scroll_);
+    const int w = std::max(0, scroll_->viewport()->width() - sb);
+    const int bh = browserL_->minimumHeightForWidth(w);
+    if (browser_->minimumHeight() != bh) browser_->setMinimumHeight(bh);   // the pane's own floor
+    int h = bh;
+    if (preview_->isVisibleTo(this)) h += splitter_->handleWidth() + preview_->minimumSizeHint().height();
+    if (splitter_->minimumHeight() != h) splitter_->setMinimumHeight(h);
+}
+
+void LUTPanel_Qt::resizeEvent(QResizeEvent* e) {
+    QWidget::resizeEvent(e);
+    if (width() != lastContentWidth_) {
+        lastContentWidth_ = width();
+        updateContentMinHeight();
+    }
+}
+
+bool LUTPanel_Qt::eventFilter(QObject* watched, QEvent* e) {
+    // The preview's own minimum height follows its width, so refresh ours when it resizes or toggles.
+    if (watched == preview_ && (e->type() == QEvent::Resize || e->type() == QEvent::Show ||
+                                e->type() == QEvent::Hide))
+        updateContentMinHeight();
+    return QWidget::eventFilter(watched, e);
 }
 
 void LUTPanel_Qt::refreshList() {
@@ -158,7 +214,8 @@ void LUTPanel_Qt::refreshList() {
         it->setText(1, s.is3D ? "3D" : "1D");
         it->setText(2, s.is3D ? QString("%1³").arg(s.size)
                               : QString("%1").arg(s.size));
-        it->setText(3, QString("%1→%2").arg(s.fromBits).arg(s.toBits));
+        it->setText(3, s.fromBits == 0 && s.toBits == 0 ? QString("—")
+                                                        : QString("%1→%2").arg(s.fromBits).arg(s.toBits));
         it->setData(0, kGuiIndexRole, i + 1);     // gui index (row 0 was none)
         it->setData(1, kSortIntRole, s.is3D ? 1 : 0);
         it->setData(2, kSortIntRole, s.size);

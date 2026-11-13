@@ -18,7 +18,7 @@ QWidget {
     selection-background-color: #d4771e;
     selection-color: #1a1a1a;
     font-family: -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 QMainWindow, QDialog {
@@ -29,8 +29,8 @@ QGroupBox {
     background-color: #2a2a2a;
     border: 1px solid #3a3a3a;
     border-radius: 4px;
-    margin-top: 1.4ex;
-    padding: 0.6ex 0.6ex 0.6ex 0.6ex;
+    margin-top: 18px;
+    padding: 12px;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
@@ -47,8 +47,9 @@ QPushButton {
     background: transparent;
     border: 1px solid #3d3d3d;
     border-radius: 4px;
-    padding: 3px 11px;
-    font-size: 11px;
+    padding: 0 11px;
+    min-height: 22px;
+    max-height: 22px;
     color: #cbcbcb;
 }
 QPushButton:hover {
@@ -63,6 +64,28 @@ QPushButton:pressed, QPushButton:checked {
 }
 QPushButton:disabled { color: #666666; border-color: #2c2c2c; background: transparent; }
 
+/* Tool buttons share the push-button look and the 24 px control height. */
+QToolButton {
+    background: transparent;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 0 6px;
+    min-height: 22px;
+    max-height: 22px;
+    color: #cbcbcb;
+}
+QToolButton:hover {
+    background-color: #2d2d2d;
+    border-color: #8a5a2a;   /* muted accent hint */
+    color: #ededed;
+}
+QToolButton:pressed, QToolButton:checked {
+    background-color: #2e2620;
+    border-color: #d4771e;
+    color: #e8b884;
+}
+QToolButton:disabled { color: #666666; border-color: #2c2c2c; background: transparent; }
+
 QLineEdit, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {
     background-color: #1c1c1c;
     border: 1px solid #3d3d3d;
@@ -71,6 +94,11 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {
     color: #dcdcdc;
     selection-background-color: #7a4a1e;
     selection-color: #f0f0f0;
+}
+QLineEdit, QSpinBox, QDoubleSpinBox {
+    padding: 0 7px;
+    min-height: 22px;
+    max-height: 22px;
 }
 QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover { border-color: #4a4a4a; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QPlainTextEdit:focus, QTextEdit:focus {
@@ -104,9 +132,10 @@ QComboBox {
     background-color: #242424;
     border: 1px solid #3d3d3d;
     border-radius: 4px;
-    padding: 3px 22px 3px 8px;
+    padding: 0 22px 0 8px;
     color: #dcdcdc;
-    min-height: 20px;
+    min-height: 22px;
+    max-height: 22px;
 }
 QComboBox:hover { border-color: #4a4a4a; }
 QComboBox:focus, QComboBox:on { border-color: #a8631f; }
@@ -137,6 +166,7 @@ QCheckBox, QRadioButton {
     background: transparent;
     color: #dcdcdc;
     spacing: 7px;
+    min-height: 24px;
 }
 QCheckBox::indicator, QRadioButton::indicator {
     width: 15px;

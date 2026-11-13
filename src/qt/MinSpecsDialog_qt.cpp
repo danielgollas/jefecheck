@@ -36,7 +36,6 @@ MinSpecsDialog_Qt::MinSpecsDialog_Qt(QWidget* parent) : QDialog(parent) {
     auto* title = new QLabel(tr("JefeCheck Video Card Check"));
     QFont titleFont = title->font();
     titleFont.setBold(true);
-    titleFont.setPointSize(titleFont.pointSize() + 2);
     title->setFont(titleFont);
     root->addWidget(title);
 
