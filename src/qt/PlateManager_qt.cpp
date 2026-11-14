@@ -138,7 +138,9 @@ void PlateManager_Qt::setRowBudget(int px) {
 
 int PlateManager_Qt::rowCols() const {
     if (rowBudget_ < 0 || rowCardW_ <= 0) return kMaxRowCols;
-    return pl::rowMaxCols(rowBudget_, rowCardW_, ui::kGap);
+    // The budget covers the card block plus the grid's side margins.
+    const QMargins m = grid_->contentsMargins();
+    return pl::rowMaxCols(rowBudget_ - m.left() - m.right(), rowCardW_, ui::kGap);
 }
 
 void PlateManager_Qt::syncToViewport() {
@@ -282,6 +284,13 @@ void PlateManager_Qt::applyFixedExtent() {
         const int w = std::max(contentW + (rowScrolls ? sb : 0), headerW);
         const int h = headerH + contentH;
         setFixedSize(w, h);
+        if (shape_ == pl::DockShape::Row && cols > 1) {
+            // The window must still be able to narrow: a row may shrink to one column's
+            // width, and the narrower window's budget then re-flows it into fewer columns
+            // (a dragged edge clips the right-hand card for a tick until that lands).
+            const int oneCol = cardW + m.left() + m.right() + frame + (shown_.size() > kMaxRowRows ? sb : 0);
+            setMinimumWidth(std::max(oneCol, headerW));
+        }
         extent_ = QSize(w, h);
     }
 

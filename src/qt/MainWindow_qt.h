@@ -251,6 +251,10 @@ private:
     void restoreLayout();
     // Feeds plateRowBudget() to the Plate Manager, deferred a tick.
     void updatePlateRowBudget();
+    // Pulls a docked Plate Manager's strip to the panel's extent (a row also to its full
+    // width when the Timeline beside it can give it up), deferred a tick; retries a stale result.
+    void pinPlateDock();
+    void pinPlateDockNow(int retries);
     void saveLayout();
 
     // Session save/restore.

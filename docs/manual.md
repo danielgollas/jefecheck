@@ -325,7 +325,7 @@ The viewport controls live in the **Plate Manager** dock (`F2`), one card per vi
 
 **How the cards are arranged** depends on where the dock is:
 
-- **Bottom or top** — wide, short cards in a row, left to right. When the window is too narrow for every card (the Timeline beside the Plate Manager keeps its own width), they wrap onto a second row. The strip never grows past two rows of cards; with more cards it scrolls, and the active card is scrolled into view. The Timeline always keeps its full height. In this form, Zoom, X, Y and Rotation sit behind the zoom button (it shows the zoom, e.g. "1.00×"); click it to open them.
+- **Bottom or top** — wide, short cards in a row, left to right. When the window is too narrow for every card (the Timeline beside the Plate Manager keeps its own width), they wrap onto a second row; in a 1280-pixel-wide window two cards fit beside the Timeline, so four plates take two rows. The strip never grows past two rows of cards; with more cards it scrolls, and the active card is scrolled into view. The Timeline always keeps its full height. To fit, this form keeps a few controls behind buttons: Zoom, X, Y and Rotation behind the zoom button (it shows the zoom, e.g. "1.00×"), and Contrast, Brightness and Saturation behind the **Color** button. Click a button to open its controls. The Layer, Aspect and channel controls have no caption here; hover for their names.
 - **Left or right** — narrow, tall cards in one column, A to D. The column scrolls, and making a viewport active scrolls its card into view.
 - **Floating** — a map of the viewport layout: side by side for 2x1, stacked for 1x2, a 2×2 grid for 2x2 (and for All). The floating window resizes itself when the layout changes.
 

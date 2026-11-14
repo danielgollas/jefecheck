@@ -103,7 +103,7 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent* e) override;
-    // Stamps the Transform popup's close time (see openTransformPopup).
+    // Stamps the Transform / Color popup's close time (see openPopup).
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
@@ -114,8 +114,13 @@ private:
     void rebuildContent();
 
     // Wide-short form only: Zoom/X/Y/Rot live in a popup opened from the Transform
-    // button, whose face shows the zoom. Shows the popup under the button.
-    void openTransformPopup();
+    // button (its face shows the zoom), Con/Bri/Sat in one opened from the Color
+    // button. Shows `popup` under `anchor`, flipped above / clamped to the screen.
+    void openPopup(QFrame* popup, QToolButton* anchor);
+    // Creates a popup button and its Qt::Popup frame (parented to the card, so the
+    // spins it will hold stay findChild-able), named `<prefix>.<leaf>.button|popup`.
+    QFrame* makePopupButton(QToolButton*& btn, const char* leaf, const QString& text,
+                            const QString& accessible, const QString& tip, QElapsedTimer* closed);
     // Sets the Transform button's "1.00×" face; no widget write when the text is unchanged.
     void updateTransformButton(double scale);
 
@@ -153,6 +158,11 @@ private:
     QFrame* transformPopup_ = nullptr;
     QWidget* popupContent_ = nullptr;
     QElapsedTimer transformClosed_;
+    // Color popup (wide-short form): Con/Bri/Sat, built the same way as Transform.
+    QToolButton* colorBtn_ = nullptr;
+    QFrame* colorPopup_ = nullptr;
+    QWidget* colorPopupContent_ = nullptr;
+    QElapsedTimer colorClosed_;
     QDoubleSpinBox* zoomSpin_ = nullptr;
     QDoubleSpinBox* panXSpin_ = nullptr;
     QDoubleSpinBox* panYSpin_ = nullptr;

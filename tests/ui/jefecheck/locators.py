@@ -272,9 +272,11 @@ PREFS_TEXT_SHADOW_BLUR = "preferences.text.shadowblur.spin"
 PREFS_TEXT_SHADOW_COLOR = "preferences.text.shadowcolor.button"
 
 
-# Per-plate leaf roles (combine with plate(i, ...)). The Transform button opens the
-# popup holding the zoom/pan/rotation spins in the wide-short card.
+# Per-plate leaf roles (combine with plate(i, ...)). In the wide-short (top/bottom dock)
+# card the Transform button opens the popup holding the zoom/pan/rotation spins, and the
+# Color button the one holding the contrast/brightness/saturation spins.
 PLATE_TRANSFORM_BUTTON = "transform.button"
+PLATE_COLOR_BUTTON = "color.button"
 
 
 def plate(plate_id: int, role: str) -> str:

@@ -30,6 +30,9 @@ namespace ui = jefe::qt::ui;
 namespace {
 // Dynamic property the theme keys the grey caption colour on (jefecheck_dark.qss).
 constexpr const char* kCaptionProperty = "plateCaption";
+// Layer combo widths: "Main" / "right" fit the wide-short one; longer names elide.
+constexpr int kLayerWideShortW = 80;
+constexpr int kLayerNarrowTallW = 92;
 
 // Spin boxes keep the theme's 24 px height and their own sizeHint width.
 QDoubleSpinBox* makeSpin(QWidget* parent, double min, double max, double step,
@@ -127,13 +130,13 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     trackBox_->setCurrentIndex(gui_->getSequenceID() >= 0 ? gui_->getSequenceID() : id);
     trackBox_->setObjectName(objPrefix_ + ".track.combo");
     trackBox_->setAccessibleName("Track");
+    trackBox_->setToolTip("Track shown on this plate");
 
     // Layer picker between Track and Aspect. Always visible: "Main" plus the EXR
     // sub-layers (e.g. "right", "diffuse") of a multi-layer file.
     layerBox_ = new QComboBox(this);
-    // Fixed width so the card doesn't grow with a long EXR layer name; longer names
-    // elide (the popup shows them in full).
-    layerBox_->setFixedWidth(92);
+    // Fixed width (set per form in rebuildContent) so the card doesn't grow with a long
+    // EXR layer name; longer names elide (the popup shows them in full).
     layerBox_->setProperty(ui::kDensityElidedProperty, true);
     layerBox_->setObjectName(objPrefix_ + ".layer.combo");
     layerBox_->setAccessibleName("Layer");
@@ -146,6 +149,7 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     ui::useWidgetRect(aspectCrop_);
     aspectCrop_->setObjectName(objPrefix_ + ".aspect.combo");
     aspectCrop_->setAccessibleName("Aspect ratio");
+    aspectCrop_->setToolTip("Aspect ratio");
     aspectCrop_->setCropObjectName(objPrefix_ + ".crop.button");
     aspectCrop_->setCropAccessibleName("Letterbox");
     aspectCrop_->setCropToolTip("Letterbox to the selected aspect ratio (black bars)");
@@ -187,28 +191,12 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     // Transform button + popup (wide-short form): the face shows the zoom, the popup
     // holds Zoom/X/Y/Rot. The popup is parented to the card (Qt::Popup makes it its own
     // window), so the spins stay card descendants for findChild and UI-test locators.
-    transformBtn_ = new QToolButton(this);
-    transformBtn_->setObjectName(objPrefix_ + ".transform.button");
-    transformBtn_->setAccessibleName("Transform");
-    transformBtn_->setToolTip("Zoom, pan and rotation");
-    ui::useWidgetRect(transformBtn_);
-    transformBtn_->setText(QStringLiteral("100.00\u00d7 \u25be"));  // widest face: no jitter
-    transformBtn_->ensurePolished();
-    transformBtn_->setMinimumWidth(transformBtn_->sizeHint().width());
-    transformPopup_ = new QFrame(this, Qt::Popup);
-    transformPopup_->setObjectName(objPrefix_ + ".transform.popup");
-    transformPopup_->setFrameShape(QFrame::StyledPanel);
-    auto* popLay = new QVBoxLayout(transformPopup_);
-    popLay->setContentsMargins(0, 0, 0, 0);
-    popLay->setSpacing(0);
-    transformPopup_->installEventFilter(this);
-    connect(transformBtn_, &QToolButton::clicked, this, [this]() {
-        // With the popup open, the Qt::Popup grab turns the press into an outside click
-        // (Hide stamps transformClosed_) before clicked() fires; don't reopen on it.
-        constexpr qint64 kReopenGuardMs = 150;
-        if (transformClosed_.isValid() && !transformClosed_.hasExpired(kReopenGuardMs)) return;
-        openTransformPopup();
-    });
+    // Sized for a "10.00×" face (the card's width budget); a zoom of 100× or more widens
+    // the button by one digit.
+    transformPopup_ = makePopupButton(transformBtn_, "transform", QStringLiteral("10.00\u00d7"),
+                                      "Transform", "Zoom, pan and rotation", &transformClosed_);
+    colorPopup_ = makePopupButton(colorBtn_, "color", QStringLiteral("Color"),
+                                  "Color", "Contrast, brightness and saturation", &colorClosed_);
 
     lutBox_ = new QComboBox(this);
     lutBox_->addItem("No LUT");
@@ -332,6 +320,34 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
 
 PlateCard_Qt::~PlateCard_Qt() = default;
 
+QFrame* PlateCard_Qt::makePopupButton(QToolButton*& btn, const char* leaf, const QString& text,
+                                      const QString& accessible, const QString& tip, QElapsedTimer* closed) {
+    btn = new QToolButton(this);
+    btn->setObjectName(QString("%1.%2.button").arg(objPrefix_, leaf));
+    btn->setAccessibleName(accessible);
+    btn->setToolTip(tip);
+    ui::useWidgetRect(btn);
+    btn->setText(text);
+    btn->ensurePolished();
+    btn->setMinimumWidth(btn->sizeHint().width());
+    auto* popup = new QFrame(this, Qt::Popup);
+    popup->setObjectName(QString("%1.%2.popup").arg(objPrefix_, leaf));
+    popup->setFrameShape(QFrame::StyledPanel);
+    auto* popLay = new QVBoxLayout(popup);
+    popLay->setContentsMargins(0, 0, 0, 0);
+    popLay->setSpacing(0);
+    popup->installEventFilter(this);
+    QToolButton* b = btn;
+    connect(btn, &QToolButton::clicked, this, [this, popup, b, closed]() {
+        // With the popup open, the Qt::Popup grab turns the press into an outside click
+        // (Hide stamps `closed`) before clicked() fires; don't reopen on it.
+        constexpr qint64 kReopenGuardMs = 150;
+        if (closed->isValid() && !closed->hasExpired(kReopenGuardMs)) return;
+        openPopup(popup, b);
+    });
+    return popup;
+}
+
 void PlateCard_Qt::setVertical(bool vertical) {
     if (vertical == vertical_) return;
     vertical_ = vertical;
@@ -341,6 +357,9 @@ void PlateCard_Qt::setVertical(bool vertical) {
 void PlateCard_Qt::rebuildContent() {
     // Build the new content into a fresh child widget. Adding the shared controls to nc's
     // layouts reparents them (signal connections persist); only captions/layouts are nc's own.
+    // A popup left open across the swap would show controls that just moved into the card.
+    transformPopup_->hide();
+    colorPopup_->hide();
     auto* nc = new QWidget(this);
 
     auto* mirrorBox = new QWidget(nc);
@@ -350,23 +369,38 @@ void PlateCard_Qt::rebuildContent() {
     mirrorLay->addWidget(flopBtn_);
 
     QWidget* newPopupContent = nullptr;  // the Transform popup's captions (wide-short only)
+    QWidget* newColorContent = nullptr;  // the Color popup's captions (wide-short only)
     auto* outer = new QVBoxLayout(nc);
     outer->setContentsMargins(ui::kGap, ui::kGap, ui::kGap, ui::kGap);
     outer->setSpacing(ui::kGapTight);
 
     if (!vertical_) {
         // ---- Wide-short (horizontal dock): two 24 px rows, each caption beside its field. ----
+        // Side margins kGapTight (the dense-list exception, as on playlist cards) so two cards
+        // fit beside the Timeline at 1280.
+        outer->setContentsMargins(ui::kGapTight, ui::kGap, ui::kGapTight, ui::kGap);
         // Row 1: source, channel, Transform button and Flip/Flop (on this row so the LUT
         // combo below keeps room for its name). The "Track" caption carries the
         // `track.label` objectName as the plate-activation click target.
+        // Only Track keeps a caption here (it is the click target); Layer, Aspect and Chan
+        // read from their values and tooltips, so two cards fit beside the Timeline at 1280.
+        layerBox_->setFixedWidth(kLayerWideShortW);
         auto* row1 = new QHBoxLayout();
         ui::applyRowMetrics(row1);
+        // Two tight groups (kGapTight, controls that belong together): what the plate
+        // shows (layer, aspect, channel) and how it is placed (transform, flip, flop).
+        auto* sourceGroup = new QHBoxLayout();
+        ui::applyRowMetrics(sourceGroup, ui::kGapTight);
+        sourceGroup->addWidget(layerBox_);
+        sourceGroup->addWidget(aspectCrop_);
+        sourceGroup->addWidget(rgbaBtn_);
+        auto* placeGroup = new QHBoxLayout();
+        ui::applyRowMetrics(placeGroup, ui::kGapTight);
+        placeGroup->addWidget(transformBtn_);
+        placeGroup->addWidget(mirrorBox);
         row1->addLayout(captioned(nc, "Track",  trackBox_, objPrefix_ + ".track.label"));
-        row1->addLayout(captioned(nc, "Layer",  layerBox_));
-        row1->addLayout(captioned(nc, "Aspect", aspectCrop_));
-        row1->addLayout(captioned(nc, "Chan",   rgbaBtn_));
-        row1->addWidget(transformBtn_);
-        row1->addWidget(mirrorBox);
+        row1->addLayout(sourceGroup);
+        row1->addLayout(placeGroup);
         row1->addStretch(1);  // absorb the width difference vs the other row
         transformBtn_->show();
 
@@ -381,26 +415,37 @@ void PlateCard_Qt::rebuildContent() {
         popRow->addLayout(captioned(pc, "Rot",  rotSpin_));
         newPopupContent = pc;
 
-        // Row 2: colour correction, then LUT, which fills the row's leftover
-        // width via its Ignored size policy (no trailing stretch).
+        // Con/Bri/Sat go into the Color popup, so two cards fit beside the Timeline at 1280.
+        auto* cc = new QWidget(colorPopup_);
+        auto* colRow = new QHBoxLayout(cc);
+        colRow->setContentsMargins(ui::kGap, ui::kGap, ui::kGap, ui::kGap);
+        colRow->setSpacing(ui::kGap);
+        colRow->addLayout(captioned(cc, "Con", contrastSpin_));
+        colRow->addLayout(captioned(cc, "Bri", brightnessSpin_));
+        colRow->addLayout(captioned(cc, "Sat", saturationSpin_));
+        newColorContent = cc;
+
+        // Row 2: gamma, exposure, the Color button, then LUT, which fills the row's
+        // leftover width via its Ignored size policy (no trailing stretch).
         auto* row2 = new QHBoxLayout();
         ui::applyRowMetrics(row2);
         row2->addLayout(captioned(nc, "Gamma", gammaSpin_));
         row2->addLayout(captioned(nc, "Exp",   exposureSpin_));
-        row2->addLayout(captioned(nc, "Con",   contrastSpin_));
-        row2->addLayout(captioned(nc, "Bri",   brightnessSpin_));
-        row2->addLayout(captioned(nc, "Sat",   saturationSpin_));
+        row2->addWidget(colorBtn_);
         row2->addLayout(captioned(nc, "LUT",   lutBox_), 1);
+        colorBtn_->show();
 
         outer->addLayout(row1);
         outer->addLayout(row2);
     } else {
-        // The spins sit in the card itself here; no Transform button or popup.
-        transformPopup_->hide();
-        // Park the button on the card: left in the old content it would be deleted with it,
+        // The spins sit in the card itself here; no Transform/Color buttons or popups.
+        // Park the buttons on the card: left in the old content they would be deleted with it,
         // and the next wide-short rebuild would add a dangling pointer.
         transformBtn_->setParent(this);
         transformBtn_->hide();
+        colorBtn_->setParent(this);
+        colorBtn_->hide();
+        layerBox_->setFixedWidth(kLayerNarrowTallW);
         // ---- Narrow-tall (vertical dock): four stacked rows, labels on top; the colour row
         // sets the width. ----
         auto onTop = [nc](const QString& caption, QWidget* w, const QString& capObjectName = QString()) {
@@ -476,6 +521,13 @@ void PlateCard_Qt::rebuildContent() {
     }
     popupContent_ = newPopupContent;
     if (popupContent_) transformPopup_->layout()->addWidget(popupContent_);
+    if (colorPopupContent_) {
+        colorPopup_->layout()->removeWidget(colorPopupContent_);
+        colorPopupContent_->hide();
+        colorPopupContent_->deleteLater();
+    }
+    colorPopupContent_ = newColorContent;
+    if (colorPopupContent_) colorPopup_->layout()->addWidget(colorPopupContent_);
 
     // The card stays at its packed size and neither grows nor shrinks; the
     // Plate Manager left/top-aligns cards and scrolls the long axis.
@@ -484,32 +536,35 @@ void PlateCard_Qt::rebuildContent() {
 }
 
 bool PlateCard_Qt::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == transformPopup_ && event->type() == QEvent::Hide) transformClosed_.start();
+    if (event->type() == QEvent::Hide) {
+        if (watched == transformPopup_) transformClosed_.start();
+        else if (watched == colorPopup_) colorClosed_.start();
+    }
     return QFrame::eventFilter(watched, event);
 }
 
-void PlateCard_Qt::openTransformPopup() {
-    transformPopup_->adjustSize();
-    const QSize pop = transformPopup_->sizeHint().expandedTo(transformPopup_->size());
+void PlateCard_Qt::openPopup(QFrame* popup, QToolButton* btn) {
+    popup->adjustSize();
+    const QSize pop = popup->sizeHint().expandedTo(popup->size());
     // Under the button; flip above when it would spill off the bottom, clamp to the screen.
-    const QPoint anchor = transformBtn_->mapToGlobal(QPoint(0, transformBtn_->height()));
-    QScreen* scr = transformBtn_->screen();
+    const QPoint anchor = btn->mapToGlobal(QPoint(0, btn->height()));
+    QScreen* scr = btn->screen();
     if (!scr) scr = QGuiApplication::screenAt(anchor);
     const QRect avail = scr ? scr->availableGeometry() : QRect(anchor, pop);
     int x = anchor.x();
     int y = anchor.y();
     if (y + pop.height() > avail.bottom()) {
-        const int above = transformBtn_->mapToGlobal(QPoint(0, 0)).y() - pop.height();
+        const int above = btn->mapToGlobal(QPoint(0, 0)).y() - pop.height();
         y = above >= avail.top() ? above : avail.bottom() - pop.height();
     }
     if (x + pop.width() > avail.right()) x = avail.right() - pop.width();
     if (x < avail.left()) x = avail.left();
-    transformPopup_->move(QPoint(x, y));
-    transformPopup_->show();
+    popup->move(QPoint(x, y));
+    popup->show();
 }
 
 void PlateCard_Qt::updateTransformButton(double scale) {
-    const QString text = QStringLiteral("%1\u00d7 \u25be").arg(scale, 0, 'f', 2);
+    const QString text = QStringLiteral("%1\u00d7").arg(scale, 0, 'f', 2);
     if (transformBtn_->text() != text) transformBtn_->setText(text);
 }
 
