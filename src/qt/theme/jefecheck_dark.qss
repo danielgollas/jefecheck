@@ -340,4 +340,5 @@ QProgressBar::chunk { background: #d4771e; border-radius: 2px; }
 PlateCard_Qt QLabel[plateCaption="true"] { color: #888; }
 PlateCard_Qt[active="true"] { border: 1px solid #d4771e; }
 PlateCard_Qt[offscreen="true"] QLabel { color: #6a6a6a; }
-PlateCard_Qt[offscreen="true"] { border-style: dashed; }
+PlateCard_Qt[offscreen="true"] { border: 1px dashed #3a3a3a; }
+PlateCard_Qt[offscreen="true"][active="true"] { border-color: #d4771e; }

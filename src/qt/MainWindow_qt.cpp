@@ -1694,7 +1694,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest() {
     if (!card) { printf("PLATEMANAGER-TEST FAIL: no plate.0.card\n"); fflush(stdout); return 2; }
     // Measured on fa7b182, before the card moved to two 24 px rows (cardH=84).
     constexpr int kBaselineDockH = 202;
-    printf("PLATEMANAGER-TEST baseline cardH=%d dockH=%d (was dockH=%d)\n", card->sizeHint().height(),
+    printf("PLATEMANAGER-TEST current cardH=%d dockH=%d (baseline dockH=%d)\n", card->sizeHint().height(),
            plateDock_->height(), kBaselineDockH);
 
     namespace ui = jefe::qt::ui;
@@ -1746,15 +1746,50 @@ int MainWindow_Qt::runHeadlessPlateManagerTest() {
                                                                      : "missing " + missing.join(" "));
     }
     {   // The active cue is a dynamic property, never a stylesheet on the card.
+        // A repeat call must not re-polish: refreshAllCards runs it on every viewport event.
+        // Under the style sheet style a re-polish sends neither StyleChange nor Polish, so the
+        // property write that precedes it (DynamicPropertyChange) is counted too.
+        struct StyleEventCounter : QObject {
+            int n = 0;
+            bool eventFilter(QObject*, QEvent* e) override {
+                if (e->type() == QEvent::StyleChange || e->type() == QEvent::Polish ||
+                    e->type() == QEvent::DynamicPropertyChange) ++n;
+                return false;
+            }
+        } counter;
         card->setActiveHighlight(true);
+        card->installEventFilter(&counter);
         card->setActiveHighlight(true);
+        QCoreApplication::processEvents();
+        card->removeEventFilter(&counter);
         const bool active = card->property("active").toBool();
         const bool noSheet = card->styleSheet().isEmpty();
-        report("CARD highlight", active && noSheet,
-               QString("active=%1 styleSheet=%2 chars").arg(active).arg(card->styleSheet().size()));
+        report("CARD highlight", active && noSheet && counter.n == 0,
+               QString("active=%1 styleSheet=%2 chars, style events on repeat=%3")
+                   .arg(active).arg(card->styleSheet().size()).arg(counter.n));
         plateManagerWidget_->refreshAllCards();
     }
     printf("PLATEMANAGER-TEST card size %dx%d\n", card->sizeHint().width(), card->sizeHint().height());
+    {   // Narrow-tall form (side dock): every control 24 px tall and no density violations.
+        PlateCard_Qt narrow(0);
+        narrow.setVertical(true);
+        narrow.show();
+        settle();
+        QStringList wrong;
+        int n = 0;
+        for (QWidget* w : narrow.findChildren<QWidget*>()) {
+            if (!w->objectName().startsWith("plate.0.") || qobject_cast<QLabel*>(w) || !w->isVisibleTo(&narrow)) continue;
+            ++n;
+            if (w->height() != ui::kControlH) wrong << QString("%1=%2").arg(w->objectName()).arg(w->height());
+        }
+        const auto v = ui::checkDensity(&narrow);
+        report("CARD narrow", n > 0 && wrong.isEmpty() && v.isEmpty(),
+               QString("%1 controls, size %2x%3, %4 density violation(s)%5").arg(n)
+                   .arg(narrow.sizeHint().width()).arg(narrow.sizeHint().height()).arg(int(v.size()))
+                   .arg(wrong.isEmpty() ? QString() : " height " + wrong.join(" ")));
+        for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+        narrow.hide();
+    }
     {   // Informational: the density checker's view of the card (the dock-wide gate comes later).
         const auto v = ui::checkDensity(card);
         printf("PLATEMANAGER-TEST density %d violation(s)\n", int(v.size()));

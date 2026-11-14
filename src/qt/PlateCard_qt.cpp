@@ -168,13 +168,13 @@ PlateCard_Qt::PlateCard_Qt(int id, gfcPlateGUI_Qt* external, QWidget* parent)
     rgbaBtn_->setObjectName(objPrefix_ + ".rgba.button");
     rgbaBtn_->setAccessibleName("RGBA channel");
 
-    zoomSpin_ = makeSpin(this, 0.01,    1.0e6, 0.01, 1.0);
+    zoomSpin_ = makeSpin(this, 0.01,  100.0, 0.01, 1.0);
     zoomSpin_->setObjectName(objPrefix_ + ".zoom.spin");
     zoomSpin_->setAccessibleName("Zoom");
-    panXSpin_ = makeSpin(this, -1.0e6, 1.0e6, 1.0,  0.0);
+    panXSpin_ = makeSpin(this, -99999.0, 99999.0, 1.0, 0.0);
     panXSpin_->setObjectName(objPrefix_ + ".panx.spin");
     panXSpin_->setAccessibleName("Pan X");
-    panYSpin_ = makeSpin(this, -1.0e6, 1.0e6, 1.0,  0.0);
+    panYSpin_ = makeSpin(this, -99999.0, 99999.0, 1.0, 0.0);
     panYSpin_->setObjectName(objPrefix_ + ".pany.spin");
     panYSpin_->setAccessibleName("Pan Y");
     rotSpin_  = makeSpin(this, -360.0,  360.0,  0.01, 0.0);
