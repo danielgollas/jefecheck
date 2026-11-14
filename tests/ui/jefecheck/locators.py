@@ -19,6 +19,12 @@ DOCK_PLATEMANAGER = "dock.platemanager"
 DOCK_TIMELINE = "dock.timeline"
 DOCK_LUTS = "dock.luts"
 
+# Plate Manager header: mode switch (Active / Visible / All) and the viewport mini-map.
+PLATEMANAGER_MODE_ACTIVE = "platemanager.mode.active"
+PLATEMANAGER_MODE_VISIBLE = "platemanager.mode.visible"
+PLATEMANAGER_MODE_ALL = "platemanager.mode.all"
+PLATEMANAGER_MINIMAP = "platemanager.minimap"
+
 # Timeline widgets. The scrubber and track-rows lane are single painted
 # QWidgets, so only the container objectNames resolve.
 TIMELINE_SCRUBBER = "timeline.scrubber"

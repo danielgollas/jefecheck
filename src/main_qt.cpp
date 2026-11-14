@@ -177,11 +177,15 @@ static bool hasPlateFrameTest(int argc, char* argv[]) {
     return false;
 }
 
-// --platemanager-test : headless checks of the Plate Manager dock's plate cards.
-// Takes no argument.
-static bool hasPlateManagerTest(int argc, char* argv[]) {
-    for (int i = 1; i < argc; ++i)
-        if (std::strcmp(argv[i], "--platemanager-test") == 0) return true;
+// --platemanager-test [outDir] : headless checks of the Plate Manager dock (cards,
+// modes, arrangement, header). With outDir it also saves dock screenshots there.
+static bool hasPlateManagerTest(int argc, char* argv[], QString* outDir) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--platemanager-test") != 0) continue;
+        if (i + 1 < argc && std::strncmp(argv[i + 1], "--", 2) != 0)
+            *outDir = QString::fromUtf8(argv[i + 1]);
+        return true;
+    }
     return false;
 }
 
@@ -1618,9 +1622,10 @@ int main(int argc, char* argv[]) {
     }
 
     // Headless Plate Manager card test (--platemanager-test).
-    if (hasPlateManagerTest(argc, argv)) {
-        QTimer::singleShot(5000, &window, [&window]() {
-            const int code = window.runHeadlessPlateManagerTest();
+    QString plateManagerShots;
+    if (hasPlateManagerTest(argc, argv, &plateManagerShots)) {
+        QTimer::singleShot(5000, &window, [&window, plateManagerShots]() {
+            const int code = window.runHeadlessPlateManagerTest(plateManagerShots);
             fflush(stdout);
             std::_Exit(code);
         });

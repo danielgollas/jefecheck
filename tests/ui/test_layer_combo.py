@@ -121,6 +121,8 @@ def test_multiview_layer_switch_keeps_sequence_loaded(multiview_app):
 def test_unloaded_plate_shows_main_layer_default(multiview_app):
     """Plates without a previewed sequence still show the combo with the "Main" default."""
     _wait_for_load(multiview_app)
+    # The Plate Manager shows only the layout's plates (Visible mode); 2x2 shows plate 1.
+    multiview_app.send_shortcut("cmd+4")
     combo = _layer_combo(multiview_app, plate_id=1)
     assert combo.is_displayed(), (
         "Layer combo on plate 1 should be visible with the Main default"

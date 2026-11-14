@@ -209,10 +209,12 @@ public:
     // in a rendered frame. Returns 0 on PASS, 2 on FAIL.
     int runHeadlessPlateFrameTest();
 
-    // --platemanager-test: puts the Plate Manager in the bottom dock area at 1x1 and
+    // --platemanager-test [outDir]: puts the Plate Manager in the bottom dock area and
     // checks the wide-short plate card (height budget, two 24 px rows, locator
-    // objectNames, active highlight without a stylesheet). Returns 0 on PASS, 2 on FAIL.
-    int runHeadlessPlateManagerTest();
+    // objectNames, active highlight without a stylesheet), then the modes, the
+    // arrangement and the header (mode buttons, mini-map). With outDir it saves
+    // dock screenshots there. Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessPlateManagerTest(const QString& shotsDir = QString());
 
     /** Demo harness: hide every dock so the viewport fills the window. */
     void hideControlsForDemo();

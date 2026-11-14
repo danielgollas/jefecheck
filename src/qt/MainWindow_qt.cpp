@@ -12,6 +12,7 @@
 #include "LoadWindowDialog_qt.h"
 #include "PlateManager_qt.h"
 #include "PlateCard_qt.h"
+#include "PlateMiniMap_qt.h"
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
 #include "qt_prefs_persist.h"
@@ -68,6 +69,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QTimer>
+#include <QMouseEvent>
 #include <QToolButton>
 
 #include <algorithm>
@@ -795,24 +797,32 @@ void MainWindow_Qt::buildDocks() {
         });
     };
 
-    // Orientation follows the dock edge: left/right gives the narrow-tall
-    // column, every other edge (and floating) the wide-short row.
+    // Shape follows the dock edge: left/right gives the narrow-tall column,
+    // top/bottom the wide-short row, floating the viewport-shaped map.
+    auto shapeForArea = [](Qt::DockWidgetArea area) {
+        return (area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea)
+                   ? jefe::platelayout::DockShape::Column : jefe::platelayout::DockShape::Row;
+    };
     connect(plateDock_, &QDockWidget::dockLocationChanged,
-            plateManagerWidget_, [this, pinPlateDock](Qt::DockWidgetArea area) {
-                plateManagerWidget_->setOrientation(
-                    area == Qt::LeftDockWidgetArea ||
-                    area == Qt::RightDockWidgetArea);
+            plateManagerWidget_, [this, pinPlateDock, shapeForArea](Qt::DockWidgetArea area) {
+                // Floating also reports a location change (no area); topLevelChanged owns that case.
+                if (area == Qt::NoDockWidgetArea || plateDock_->isFloating()) return;
+                plateManagerWidget_->setDockShape(shapeForArea(area));
                 pinPlateDock();
             });
-    // Floating reads as horizontal (the dock has no edge to key off); when it
-    // re-docks, pin the row/column down to the panel again.
+    // Re-docking into the area it left does not always emit dockLocationChanged,
+    // so the shape is re-read from the area here too.
     connect(plateDock_, &QDockWidget::topLevelChanged,
-            plateManagerWidget_, [this, pinPlateDock](bool floating) {
-                if (floating) plateManagerWidget_->setOrientation(false);
-                else pinPlateDock();
+            plateManagerWidget_, [this, pinPlateDock, shapeForArea](bool floating) {
+                if (floating) {
+                    plateManagerWidget_->setDockShape(jefe::platelayout::DockShape::Floating);
+                } else {
+                    plateManagerWidget_->setDockShape(shapeForArea(dockWidgetArea(plateDock_)));
+                    pinPlateDock();
+                }
             });
-    // Initial edge is Bottom ⇒ horizontal.
-    plateManagerWidget_->setOrientation(false);
+    // Initial edge is Bottom => row.
+    plateManagerWidget_->setDockShape(jefe::platelayout::DockShape::Row);
     pinPlateDock();
 
     // Timeline + Transport — bottom-right; split alongside the plate dock.
@@ -1680,7 +1690,7 @@ int MainWindow_Qt::runHeadlessPlateFrameTest() {
     return allPass ? 0 : 2;
 }
 
-int MainWindow_Qt::runHeadlessPlateManagerTest() {
+int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
     if (!plateDock_ || !plateManagerWidget_) {
         printf("PLATEMANAGER-TEST FAIL: no plate dock\n"); fflush(stdout); return 2;
     }
@@ -1821,6 +1831,153 @@ int MainWindow_Qt::runHeadlessPlateManagerTest() {
         printf("PLATEMANAGER-TEST density %d violation(s)\n", int(v.size()));
         for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
     }
+
+    // ---- Modes, arrangement and header. Bottom dock (Row shape); framing changes go
+    // through the bridge and then refreshAllCards, never through a shortcut.
+    namespace pl = jefe::platelayout;
+    PlateManager_Qt* pm = plateManagerWidget_;
+    auto ids = [](std::initializer_list<int> l) { return QList<int>(l); };
+    auto idStr = [](const QList<int>& l) {
+        QStringList out;
+        for (int i : l) out << QString::number(i);
+        return "{" + out.join(",") + "}";
+    };
+    auto layout = [&](int framing) {
+        jefe::qt::setFramingMode(framing);
+        pm->refreshAllCards();
+        settle();
+    };
+    report("MODE default", pm->mode() == pl::PlateMode::Visible,
+           QString("mode=%1 (want 1 Visible on a fresh config)").arg(int(pm->mode())));
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        const struct { int framing; const char* name; QList<int> want; } cases[] = {
+            {FRAMINGSINGLE_ID, "S", ids({0})}, {FRAMINGDOUBLE_ID, "D", ids({0, 1})},
+            {FRAMINGDOUBLEVERT_ID, "V", ids({0, 1})}, {FRAMINGQUAD_ID, "Q", ids({0, 1, 2, 3})}};
+        bool ok = true;
+        QStringList got;
+        for (const auto& c : cases) {
+            layout(c.framing);
+            ok = ok && pm->shownPlateIds() == c.want;
+            got << QString("%1=%2").arg(c.name, idStr(pm->shownPlateIds()));
+        }
+        report("MODE visible", ok, got.join(" "));
+    }
+    {
+        pm->setMode(pl::PlateMode::Active);
+        layout(FRAMINGQUAD_ID);
+        jefe::qt::setActivePlate(3);
+        pm->refreshAllCards();
+        settle();
+        const QList<int> first = pm->shownPlateIds();
+        const pl::Cell c2 = pl::cellsFor(FRAMINGQUAD_ID, 44, 24)[2];
+        const QPointF at(c2.x + c2.w / 2.0, c2.y + c2.h / 2.0);
+        QMouseEvent press(QEvent::MouseButtonPress, at, pm->miniMap()->mapToGlobal(at),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(pm->miniMap(), &press);
+        const int activeAfter = jefe::qt::getActivePlate();
+        pm->refreshAllCards();
+        settle();
+        report("MODE active", first == ids({3}) && activeAfter == 2 && pm->shownPlateIds() == ids({2}),
+               QString("Q active 3 -> %1; minimap click cell 2 -> active %2, shown %3")
+                   .arg(idStr(first)).arg(activeAfter).arg(idStr(pm->shownPlateIds())));
+    }
+    {
+        pm->setMode(pl::PlateMode::All);
+        layout(FRAMINGDOUBLE_ID);
+        const bool off = pm->cardOffscreen(2) && pm->cardOffscreen(3) && !pm->cardOffscreen(0) && !pm->cardOffscreen(1);
+        report("MODE all", pm->shownPlateIds() == ids({0, 1, 2, 3}) && off,
+               QString("D -> %1, offscreen 0..3 = %2%3%4%5").arg(idStr(pm->shownPlateIds()))
+                   .arg(pm->cardOffscreen(0)).arg(pm->cardOffscreen(1)).arg(pm->cardOffscreen(2)).arg(pm->cardOffscreen(3)));
+        const int stored = QSettings().value("PlateManager/mode", -1).toInt();
+        report("MODE persisted", stored == 2, QString("PlateManager/mode=%1").arg(stored));
+    }
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGQUAD_ID);
+        jefe::qt::setActivePlate(2);
+        pm->refreshAllCards();
+        settle();
+        layout(FRAMINGDOUBLE_ID);
+        auto* card0 = plateDock_->findChild<PlateCard_Qt*>("plate.0.card");
+        auto* card2 = plateDock_->findChild<PlateCard_Qt*>("plate.2.card");
+        const bool hl = card0 && card0->property("active").toBool() && card2 && !card2->property("active").toBool();
+        report("ACTIVE follows layout",
+               jefe::qt::getActivePlate() == 0 && pm->miniMap()->activePlate() == 0 && hl,
+               QString("Q active 2 -> D: active %1, minimap %2, card0 active=%3")
+                   .arg(jefe::qt::getActivePlate()).arg(pm->miniMap()->activePlate())
+                   .arg(card0 ? card0->property("active").toBool() : false));
+    }
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGQUAD_ID);
+        int cardW = 0;
+        for (auto* c : plateDock_->findChildren<PlateCard_Qt*>()) cardW = std::max(cardW, c->sizeHint().width());
+        pm->setRowBudget(4000);
+        settle();
+        bool oneRow = true;
+        QStringList a;
+        for (int i = 0; i < 4; ++i) {
+            oneRow = oneRow && pm->cardCell(i) == QPoint(i, 0);
+            a << QString("%1:(%2,%3)").arg(i).arg(pm->cardCell(i).x()).arg(pm->cardCell(i).y());
+        }
+        pm->setRowBudget(2 * cardW + ui::kGap);
+        settle();
+        const QPoint c2 = pm->cardCell(2);
+        report("ROW cells", oneRow && c2 == QPoint(0, 1),
+               QString("budget 4000 [%1]; budget %2 (cardW %3) cell2=(%4,%5)")
+                   .arg(a.join(" ")).arg(2 * cardW + ui::kGap).arg(cardW).arg(c2.x()).arg(c2.y()));
+    }
+    {
+        QStringList missing;
+        for (const char* name : {"platemanager.mode.active", "platemanager.mode.visible", "platemanager.mode.all"})
+            if (!plateDock_->findChild<QToolButton*>(name)) missing << name;
+        auto* mm = plateDock_->findChild<QWidget*>("platemanager.minimap");
+        if (!mm) missing << "platemanager.minimap";
+        report("HEADER locators", missing.isEmpty() && mm && mm->size() == QSize(44, 24),
+               missing.isEmpty() ? QString("all 4 found, minimap %1x%2").arg(mm->width()).arg(mm->height())
+                                 : "missing " + missing.join(" "));
+    }
+    {   // Row -> Floating -> Row with the swapped-out card content deleted in between
+        // (a floating map re-forms cards narrow-tall): every control must survive.
+        auto flushDeletes = []() { QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); };
+        pm->setDockShape(pl::DockShape::Floating);
+        flushDeletes();
+        pm->setDockShape(pl::DockShape::Row);
+        flushDeletes();
+        settle();
+        auto* btn = plateDock_->findChild<QToolButton*>("plate.0.transform.button");
+        report("SHAPE round trip", pm->dockShape() == pl::DockShape::Row && btn && btn->isVisibleTo(pm),
+               QString("transform button %1").arg(btn ? (btn->isVisibleTo(pm) ? "shown" : "hidden") : "missing"));
+    }
+    {   // Informational: density checker over the whole panel, in each mode at 2x2.
+        layout(FRAMINGQUAD_ID);
+        for (pl::PlateMode m : {pl::PlateMode::Active, pl::PlateMode::Visible, pl::PlateMode::All}) {
+            pm->setMode(m);
+            settle();
+            const auto v = ui::checkDensity(pm);
+            printf("PLATEMANAGER-TEST panel density mode %d: %d violation(s)\n", int(m), int(v.size()));
+            for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+        }
+    }
+    if (!shotsDir.isEmpty()) {   // Bottom dock, 2x2, each mode, two cards per row.
+        QDir().mkpath(shotsDir);
+        pm->setRowBudget(1280);
+        layout(FRAMINGQUAD_ID);
+        const struct { pl::PlateMode m; const char* name; } shots[] = {
+            {pl::PlateMode::Active, "active"}, {pl::PlateMode::Visible, "visible"}, {pl::PlateMode::All, "all"}};
+        for (const auto& sh : shots) {
+            pm->setMode(sh.m);
+            layout(FRAMINGDOUBLE_ID);   // All mode: plates 2 and 3 are offscreen in 2x1
+            if (sh.m != pl::PlateMode::All) layout(FRAMINGQUAD_ID);
+            settle();
+            const QString path = QString("%1/platemanager-bottom-%2-%3.png").arg(shotsDir, sh.m == pl::PlateMode::All ? "2x1" : "2x2", sh.name);
+            plateDock_->grab().save(path);
+            printf("PLATEMANAGER-TEST shot %s (%dx%d)\n", qPrintable(path), plateDock_->width(), plateDock_->height());
+        }
+    }
+    pm->setMode(pl::PlateMode::Visible);
+    layout(FRAMINGSINGLE_ID);
 
     printf("PLATEMANAGER-TEST %s\n", allPass ? "PASS" : "FAIL");
     fflush(stdout);

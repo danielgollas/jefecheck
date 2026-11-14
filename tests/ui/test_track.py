@@ -24,6 +24,8 @@ def _activate_plate(app, plate_id: int) -> None:
 
 def test_clicking_plate_1_switches_label_to_track_b(app):
     """Activating plate 1 reads 'Track: B': each plate starts bound to its index-matching track."""
+    # The Plate Manager shows only the layout's plates (Visible mode); 2x2 shows plates 1-3.
+    app.send_shortcut("cmd+4")
     _activate_plate(app, 1)
     assert _track_label(app) == "Track: B"
 
@@ -31,6 +33,7 @@ def test_clicking_plate_1_switches_label_to_track_b(app):
 def test_each_plate_starts_on_its_matching_track(app):
     """Plates 0..3 default to tracks A..D respectively."""
     expected = ["Track: A", "Track: B", "Track: C", "Track: D"]
+    app.send_shortcut("cmd+4")
     for plate_id, want in enumerate(expected):
         _activate_plate(app, plate_id)
         assert _track_label(app) == want, (

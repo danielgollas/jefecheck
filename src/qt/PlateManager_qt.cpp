@@ -1,99 +1,240 @@
 #include "PlateManager_qt.h"
 #include "PlateCard_qt.h"
+#include "PlateMiniMap_qt.h"
 #include "SequenceLoadBridge_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <algorithm>
 
+#include <QButtonGroup>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QMargins>
-#include <QSize>
+#include <QScrollArea>
+#include <QSettings>
 #include <QStyle>
 #include <QTimer>
-#include <QWidget>
+#include <QToolButton>
+#include <QVBoxLayout>
 
-PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QScrollArea(parent) {
-    setObjectName("platemanager.scroll");
+namespace pl = jefe::platelayout;
+namespace ui = jefe::qt::ui;
+
+namespace {
+constexpr const char* kModeKey = "PlateManager/mode";
+constexpr int kMaxRowCols = 4;
+}
+
+PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QWidget(parent) {
+    setObjectName("platemanager.panel");
     setAccessibleName("Plate Manager");
-    inner_ = new QWidget(this);
+
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+
+    // Header: mode switch, stretch, mini-map. Outside the scroll area so it
+    // stays put while a side column scrolls.
+    header_ = new QWidget(this);
+    header_->setObjectName("platemanager.header");
+    auto* hl = new QHBoxLayout(header_);
+    hl->setContentsMargins(ui::kGap, ui::kGap, ui::kGap, ui::kGap);
+    hl->setSpacing(ui::kGapTight);
+    modeGroup_ = new QButtonGroup(this);
+    modeGroup_->setExclusive(true);
+    const struct { const char* text; const char* leaf; const char* tip; } modes[] = {
+        {"Active", "active", "Show only the active plate"},
+        {"Visible", "visible", "Show the plates the viewport layout shows"},
+        {"All", "all", "Show all four plates"}};
+    for (int i = 0; i < 3; ++i) {
+        auto* b = new QToolButton(header_);
+        b->setText(modes[i].text);
+        b->setObjectName(QString("platemanager.mode.%1").arg(modes[i].leaf));
+        b->setAccessibleName(QString("%1 plates").arg(modes[i].text));
+        b->setToolTip(modes[i].tip);
+        b->setCheckable(true);
+        ui::useWidgetRect(b);
+        modeGroup_->addButton(b, i);
+        hl->addWidget(b);
+        modeButtons_[i] = b;
+    }
+    hl->addStretch(1);
+    miniMap_ = new PlateMiniMap_Qt(header_);
+    hl->addWidget(miniMap_);
+    outer->addWidget(header_);
+
+    scroll_ = new QScrollArea(this);
+    scroll_->setObjectName("platemanager.scroll");
+    scroll_->setAccessibleName("Plate cards");
+    inner_ = new QWidget(scroll_);
     inner_->setObjectName("platemanager.grid");
     grid_ = new QGridLayout(inner_);
-    grid_->setContentsMargins(4, 4, 4, 4);
-    grid_->setSpacing(2);
+    grid_->setContentsMargins(ui::kGapTight, 0, ui::kGapTight, ui::kGapTight);
+    grid_->setSpacing(ui::kGap);
     inner_->setLayout(grid_);
 
+    cells_.fill(QPoint(-1, -1), 4);
     for (int i = 0; i < 4; ++i) {
         // Bind to the rendering chain's plate GUI when available (set up before the docks
         // are built); otherwise use an owned GUI so the dock renders for tests.
         auto* externalGui = jefe::qt::getPlateGUIQt(i);
         auto* card = new PlateCard_Qt(i, externalGui, inner_);
-        connect(card, &PlateCard_Qt::clicked,
-                this, [this](int id) {
-                    jefe::qt::setActivePlate(id);
-                    refreshAllCards();
-                });
+        connect(card, &PlateCard_Qt::clicked, this, &PlateManager_Qt::activatePlate);
         // A layer change writes to the shared sequence; refresh every card so
         // siblings bound to the same track show the new layer in their combo.
         connect(card, &PlateCard_Qt::layerChanged,
                 this, &PlateManager_Qt::refreshAllCards);
+        card->hide();
         cards_.append(card);
     }
 
-    setWidget(inner_);
-    setWidgetResizable(true);
-    setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll_->setWidget(inner_);
+    scroll_->setWidgetResizable(true);
+    outer->addWidget(scroll_, 1);
 
-    arrange();
+    connect(miniMap_, &PlateMiniMap_Qt::plateClicked, this, &PlateManager_Qt::activatePlate);
+
+    const int stored = QSettings().value(kModeKey, int(pl::PlateMode::Visible)).toInt();
+    mode_ = (stored >= 0 && stored <= 2) ? pl::PlateMode(stored) : pl::PlateMode::Visible;
+    modeButtons_[int(mode_)]->setChecked(true);
+    connect(modeGroup_, &QButtonGroup::idClicked, this,
+            [this](int id) { setMode(pl::PlateMode(id)); });
+
+    syncToViewport();
 }
 
-void PlateManager_Qt::setOrientation(bool vertical) {
-    vertical_ = vertical;
-    // Re-flow each card's internal layout first so its sizeHint reflects the
-    // arrangement we're about to pin the panel's cross-axis to.
-    for (auto* card : cards_) {
-        if (card) card->setVertical(vertical);
-    }
-    arrange();
+void PlateManager_Qt::activatePlate(int plate) {
+    jefe::qt::setActivePlate(plate);
+    refreshAllCards();
 }
 
-void PlateManager_Qt::arrange() {
-    // Orientation drives the grid shape: vertical ⇒ a single column (4×1,
-    // narrow-tall cards); horizontal ⇒ two columns (2×2, wide-short cards).
+void PlateManager_Qt::setMode(pl::PlateMode mode) {
+    if (auto* b = modeButtons_[int(mode)]; b && !b->isChecked()) {
+        const QSignalBlocker block(modeGroup_);
+        b->setChecked(true);
+    }
+    if (mode != mode_) {
+        mode_ = mode;
+        QSettings().setValue(kModeKey, int(mode));
+    }
+    syncToViewport();
+}
+
+void PlateManager_Qt::setDockShape(pl::DockShape shape) {
+    if (shape == shape_ && laid_) return;
+    shape_ = shape;
+    syncToViewport();
+}
+
+void PlateManager_Qt::setRowBudget(int px) {
+    if (px == rowBudget_) return;
+    rowBudget_ = px;
+    syncToViewport();
+}
+
+int PlateManager_Qt::rowCols() const {
+    if (rowBudget_ < 0 || rowCardW_ <= 0) return kMaxRowCols;
+    return pl::rowMaxCols(rowBudget_, rowCardW_, ui::kGap);
+}
+
+void PlateManager_Qt::syncToViewport() {
+    const int framing = jefe::qt::getFramingMode();
+    const int active = jefe::qt::getActivePlate();
+    const int cols = shape_ == pl::DockShape::Row ? rowCols() : kMaxRowCols;
+    if (!laid_ || framing != lastFraming_ || active != lastActive_ || mode_ != lastMode_ ||
+        shape_ != lastShape_ || cols != lastCols_) {
+        reflow(framing, active, cols);
+    } else {
+        updateHighlights(framing, active);
+    }
+}
+
+void PlateManager_Qt::updateHighlights(int framingMode, int activePlate) {
+    for (auto* card : cards_) card->setActiveHighlight(card->id() == activePlate);
+    miniMap_->setState(framingMode, activePlate);
+}
+
+void PlateManager_Qt::reflow(int framingMode, int activePlate, int cols) {
+    const bool activeMoved = activePlate != lastActive_;
+    // Cards take their narrow-tall form in a column or floating map, the
+    // wide-short form in a row. setVertical is a no-op when it already matches.
+    const bool vertical = shape_ != pl::DockShape::Row;
+    for (auto* card : cards_) card->setVertical(vertical);
+    // The wide-short width sets how many cards a row holds; measure it before
+    // arranging so the first budgeted reflow already uses it.
+    if (!vertical && rowCardW_ <= 0) {
+        for (auto* card : cards_) {
+            card->ensurePolished();
+            if (auto* L = card->layout()) L->activate();
+            rowCardW_ = std::max(rowCardW_, card->sizeHint().width());
+        }
+        if (shape_ == pl::DockShape::Row) cols = rowCols();
+    }
+
+    const auto arrangement = pl::arrange(mode_, framingMode, activePlate, shape_, cols);
+    for (auto* card : cards_) grid_->removeWidget(card);
+    for (int r = 0; r <= 4; ++r) grid_->setRowStretch(r, 0);
+    for (int c = 0; c <= 4; ++c) grid_->setColumnStretch(c, 0);
+
+    shown_.clear();
+    cells_.fill(QPoint(-1, -1), 4);
+    int rows = 0, usedCols = 0;
+    for (const auto& g : arrangement) {
+        if (g.plate < 0 || g.plate >= cards_.size()) continue;
+        grid_->addWidget(cards_[g.plate], g.row, g.col, Qt::AlignLeft | Qt::AlignTop);
+        cells_[g.plate] = QPoint(g.col, g.row);
+        shown_.append(g.plate);
+        rows = std::max(rows, g.row + 1);
+        usedCols = std::max(usedCols, g.col + 1);
+    }
+    // A trailing stretch row and column pin the cards to the top-left.
+    grid_->setRowStretch(rows, 1);
+    grid_->setColumnStretch(usedCols, 1);
+
+    const auto visible = pl::visiblePlates(framingMode);
     for (auto* card : cards_) {
-        grid_->removeWidget(card);
+        const bool isShown = shown_.contains(card->id());
+        card->setVisible(isShown);
+        card->setOffscreen(mode_ == pl::PlateMode::All &&
+                           std::find(visible.begin(), visible.end(), card->id()) == visible.end());
     }
+    updateHighlights(framingMode, activePlate);
 
-    const int n = cards_.size();
-    const int cols = vertical_ ? 1 : 2;
-    const int rows = (n + cols - 1) / cols;
-    for (int i = 0; i < n; ++i) {
-        grid_->addWidget(cards_[i], i / cols, i % cols,
-                         Qt::AlignLeft | Qt::AlignTop);
-    }
-
-    // Content rows/cols take zero stretch. Horizontal is fixed to the 2x2 content;
-    // vertical fixes width only, so a trailing spacer row pins the cards to the top.
-    for (int c = 0; c <= 2; ++c) grid_->setColumnStretch(c, 0);
-    for (int r = 0; r <= n; ++r) grid_->setRowStretch(r, 0);
-    if (vertical_) grid_->setRowStretch(rows, 1);
-
-    if (n == 0) return;
+    laid_ = true;
+    lastFraming_ = framingMode;
+    lastActive_ = activePlate;
+    lastMode_ = mode_;
+    lastShape_ = shape_;
+    lastCols_ = cols;
 
     // Pin the panel size now and again next event-loop turn: a card's sizeHint read
-    // during a dock move/undock can be stale/zero (a 0-size window).
+    // during a dock move/undock can be stale/zero (a 0-size window, §11).
     applyFixedExtent();
     QTimer::singleShot(0, this, [this]() { applyFixedExtent(); });
+
+    if (shape_ == pl::DockShape::Column && activeMoved &&
+        activePlate >= 0 && activePlate < cards_.size() && cards_[activePlate]->isVisibleTo(inner_)) {
+        inner_->layout()->activate();
+        scroll_->ensureWidgetVisible(cards_[activePlate]);
+        QTimer::singleShot(0, this, [this, activePlate]() {
+            if (shape_ == pl::DockShape::Column && lastActive_ == activePlate)
+                scroll_->ensureWidgetVisible(cards_[activePlate]);
+        });
+    }
+    emit arrangementChanged();
 }
 
 void PlateManager_Qt::applyFixedExtent() {
-    const int n = cards_.size();
-    if (n == 0) return;
-    const int cols = vertical_ ? 1 : 2;
-    const int rows = (n + cols - 1) / cols;
+    if (shown_.isEmpty()) return;
+    int rows = 0, cols = 0;
+    for (int p : shown_) {
+        rows = std::max(rows, cells_[p].y() + 1);
+        cols = std::max(cols, cells_[p].x() + 1);
+    }
 
     int cardW = 0, cardH = 0;
-    for (auto* c : cards_) {
-        if (!c) continue;
+    for (int p : shown_) {
+        PlateCard_Qt* c = cards_[p];
         c->ensurePolished();
         if (auto* L = c->layout()) L->activate();
         const QSize sh = c->sizeHint();
@@ -101,42 +242,67 @@ void PlateManager_Qt::applyFixedExtent() {
         cardH = std::max(cardH, sh.height());
     }
     // Safety floors: a transient bad sizeHint (dock/undock mid-flight) must not
-    // collapse the panel; the narrow card is ~200 wide, the wide-short ~56 tall.
+    // collapse the panel; the narrow card is ~280 wide, the wide-short 70 tall.
     cardW = std::max(cardW, 200);
     cardH = std::max(cardH, 56);
 
     const QMargins m = grid_->contentsMargins();
     const int sp = grid_->spacing();
-    const int frame = frameWidth() * 2;  // QScrollArea border on both sides
+    const int frame = scroll_->frameWidth() * 2;  // QScrollArea border on both sides
+    header_->ensurePolished();
+    if (auto* L = header_->layout()) L->activate();
+    const int headerH = std::max(header_->sizeHint().height(), ui::kControlH + 2 * ui::kGap);
+    const int headerW = header_->minimumSizeHint().width();
+    const int contentW = cols * cardW + (cols - 1) * sp + m.left() + m.right() + frame;
+    const int contentH = rows * cardH + (rows - 1) * sp + m.top() + m.bottom() + frame;
 
-    if (vertical_) {
+    scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    if (shape_ == pl::DockShape::Column) {
         // Fix width to one narrow card; height is free and scrolls. The vertical
         // scrollbar gets its own extent so it doesn't cover the controls.
         const int sb = style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 2;
-        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        setMaximumWidth(QWIDGETSIZE_MAX);
+        scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        const int w = std::max(contentW + sb, headerW);
         setMinimumHeight(0);
         setMaximumHeight(QWIDGETSIZE_MAX);
-        setFixedWidth(cardW + m.left() + m.right() + frame + sb);
+        setFixedWidth(w);
+        extent_ = QSize(w, headerH + contentH);
     } else {
-        // Fixed both ways: exactly the 2x2 block (cards plus grid spacing and
-        // margins). Scrollbars off so the area reserves no strip.
-        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        const int w = cols * cardW + (cols - 1) * sp + m.left() + m.right() + frame;
-        const int h = rows * cardH + (rows - 1) * sp + m.top() + m.bottom() + frame;
+        // Fixed both ways: exactly the header plus the card block. Scrollbars
+        // off so the area reserves no strip.
+        scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        const int w = std::max(contentW, headerW);
+        const int h = headerH + contentH;
         setFixedSize(w, h);
+        extent_ = QSize(w, h);
+    }
+
+    // The wide-short width can settle a tick late; re-flow if it changes the
+    // number of cards a budgeted row holds.
+    if (shape_ == pl::DockShape::Row && cardW != rowCardW_) {
+        rowCardW_ = cardW;
+        if (rowCols() != lastCols_)
+            QTimer::singleShot(0, this, [this]() { syncToViewport(); });
     }
 }
 
+QSize PlateManager_Qt::sizeHint() const {
+    return extent_.isValid() ? extent_ : QWidget::sizeHint();
+}
+
+QPoint PlateManager_Qt::cardCell(int plate) const {
+    if (plate < 0 || plate >= cells_.size()) return QPoint(-1, -1);
+    return cells_[plate];
+}
+
+bool PlateManager_Qt::cardOffscreen(int plate) const {
+    if (plate < 0 || plate >= cards_.size()) return false;
+    return cards_[plate]->isOffscreen();
+}
+
 void PlateManager_Qt::refreshAllCards() {
-    const int active = jefe::qt::getActivePlate();
-    for (auto* card : cards_) {
-        if (!card) continue;
-        card->refreshFromState();
-        card->setActiveHighlight(card->id() == active);
-    }
+    syncToViewport();
+    for (auto* card : cards_) card->refreshFromState();
 }
 
 void PlateManager_Qt::refreshPlateTransform(int plateIdx) {

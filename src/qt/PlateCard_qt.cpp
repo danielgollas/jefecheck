@@ -397,6 +397,9 @@ void PlateCard_Qt::rebuildContent() {
     } else {
         // The spins sit in the card itself here; no Transform button or popup.
         transformPopup_->hide();
+        // Park the button on the card: left in the old content it would be deleted with it,
+        // and the next wide-short rebuild would add a dangling pointer.
+        transformBtn_->setParent(this);
         transformBtn_->hide();
         // ---- Narrow-tall (vertical dock): four stacked rows, labels on top; the colour row
         // sets the width. ----
