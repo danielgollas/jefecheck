@@ -1434,6 +1434,11 @@ std::string getFXStackXmlOnPlate(int plateIdx) {
     return stack ? stackXml(*stack) : std::string();
 }
 
+int fxIndexOfInstanceOnPlate(int plateIdx, std::uint32_t instanceId) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    return stack && instanceId != 0 ? stack->indexOfInstance(instanceId) : -1;
+}
+
 void setFXStackXmlOnPlate(int plateIdx, const std::string& xml) {
     if (!plateManager.getFXStack(plateIdx)) return;
     gfcFXStack s;

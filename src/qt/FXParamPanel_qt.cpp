@@ -360,6 +360,11 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         const auto& fx = stack[i];
         const int fxIdx = static_cast<int>(i);
         const QString fxBase = QString("fxparams.fx%1").arg(fxIdx);
+        // Writes find this FX by instance id when they happen: the stack can change under
+        // a drag (a peer or the viewport inserts an FX before it) while the rebuild waits.
+        const auto fxNow = [active, fxIdx, fxId = fx.instanceId]() {
+            return fxId != 0 ? jefe::qt::fxIndexOfInstanceOnPlate(active, fxId) : fxIdx;
+        };
 
         auto* card = new QFrame();
         card->setObjectName(fxBase + ".card");
@@ -394,9 +399,10 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         power->setAccessibleName(QString("FX %1 active").arg(fxIdx));
         power->setToolTip("Enable / disable this effect");
         power->setChecked(fx.active);
-        connect(power, &QToolButton::toggled, this, [this, active, fxIdx](bool on) {
-            if (refreshing_) return;
-            jefe::qt::setFXActiveOnPlate(active, fxIdx, on);
+        connect(power, &QToolButton::toggled, this, [this, active, fxNow](bool on) {
+            const int at = fxNow();
+            if (refreshing_ || at < 0) return;
+            jefe::qt::setFXActiveOnPlate(active, at, on);
             emit viewportRepaintRequested();
         });
         headerLay->addWidget(power);
@@ -417,9 +423,10 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         removeBtn->setToolTip("Remove this effect");
         ui::makeIconButton(removeBtn);
         removeBtn->setStyleSheet("QToolButton { padding: 0; }");
-        connect(removeBtn, &QToolButton::clicked, this, [this, active, fxIdx]() {
-            if (refreshing_) return;
-            jefe::qt::removeFXFromPlate(active, fxIdx);
+        connect(removeBtn, &QToolButton::clicked, this, [this, active, fxNow]() {
+            const int at = fxNow();
+            if (refreshing_ || at < 0) return;
+            jefe::qt::removeFXFromPlate(active, at);
             emit viewportRepaintRequested();
             // The button lives inside the card the rebuild deletes.
             scheduleRefresh();
@@ -481,9 +488,10 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     editor->setObjectName(base + ".row");
                     editor->setValue(p.value);
                     connect(editor, &FXParamEditor_Qt::valueEdited, this,
-                            [this, active, fxIdx, group, name](float v) {
-                                if (refreshing_) return;
-                                jefe::qt::setFXParamValueOnPlate(active, fxIdx, group, name, v);
+                            [this, active, fxNow, group, name](float v) {
+                                const int at = fxNow();
+                                if (refreshing_ || at < 0) return;
+                                jefe::qt::setFXParamValueOnPlate(active, at, group, name, v);
                                 emit viewportRepaintRequested();
                             });
                     if (auto* slider = qobject_cast<FXSliderRow_Qt*>(editor)) sliders.push_back({slider, text});
@@ -495,9 +503,10 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     auto* check = new QCheckBox();
                     check->setObjectName(base + ".check");
                     check->setChecked(p.value != 0.0f);
-                    connect(check, &QCheckBox::toggled, this, [this, active, fxIdx, group, name](bool on) {
-                        if (refreshing_) return;
-                        jefe::qt::setFXParamValueOnPlate(active, fxIdx, group, name, on ? 1.0f : 0.0f);
+                    connect(check, &QCheckBox::toggled, this, [this, active, fxNow, group, name](bool on) {
+                        const int at = fxNow();
+                        if (refreshing_ || at < 0) return;
+                        jefe::qt::setFXParamValueOnPlate(active, at, group, name, on ? 1.0f : 0.0f);
                         emit viewportRepaintRequested();
                         scheduleRefresh();  // label accent follows on the next turn
                     });
@@ -521,9 +530,10 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     const int idx = static_cast<int>(p.value);
                     if (idx >= 0 && idx < combo->count()) combo->setCurrentIndex(idx);
                     connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-                            [this, active, fxIdx, group, name](int v) {
-                                if (refreshing_) return;
-                                jefe::qt::setFXParamValueOnPlate(active, fxIdx, group, name, static_cast<float>(v));
+                            [this, active, fxNow, group, name](int v) {
+                                const int at = fxNow();
+                                if (refreshing_ || at < 0) return;
+                                jefe::qt::setFXParamValueOnPlate(active, at, group, name, static_cast<float>(v));
                                 emit viewportRepaintRequested();
                                 scheduleRefresh();
                             });
@@ -552,17 +562,20 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                             combo->addItem(QString::fromStdString(lutName), globalIdx);
                         selectByData(combo, static_cast<int>(p.value));
                         connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-                                [this, active, fxIdx, group, name, combo](int v) {
-                                    if (refreshing_) return;
-                                    jefe::qt::setFXParamValueOnPlate(active, fxIdx, group, name,
+                                [this, active, fxNow, group, name, combo](int v) {
+                                    const int at = fxNow();
+                                    if (refreshing_ || at < 0) return;
+                                    jefe::qt::setFXParamValueOnPlate(active, at, group, name,
                                                                     static_cast<float>(combo->itemData(v).toInt()));
                                     emit viewportRepaintRequested();
+                                    scheduleRefresh();  // label accent follows on the next turn
                                 });
                         control = combo;
                     }
                     QLabel* label = nullptr;
                     rowWidget = makeLabelledRow(base, text, tooltip, control, &label);
                     c.control = control;
+                    c.label = label;
                     break;
                 }
                 default: {
@@ -571,14 +584,17 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     QLabel* label = nullptr;
                     rowWidget = makeLabelledRow(base, text, tooltip, value, &label);
                     c.control = value;
+                    c.label = label;
                     break;
                 }
             }
 
-            // Bool and choice/texture rows: reset menu, accent label when modified.
+            // Every non-float row: reset menu, accent label when modified, else the file's colour.
             if (c.label) {
-                attachResetMenu(rowWidget, [this, active, fxIdx, group, name, def = p.defaultValue]() {
-                    jefe::qt::setFXParamValueOnPlate(active, fxIdx, group, name, def);
+                attachResetMenu(rowWidget, [this, active, fxNow, group, name, def = p.defaultValue]() {
+                    const int at = fxNow();
+                    if (at < 0) return;
+                    jefe::qt::setFXParamValueOnPlate(active, at, group, name, def);
                     emit viewportRepaintRequested();
                     scheduleRefresh();
                 });

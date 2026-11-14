@@ -302,6 +302,11 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx);
 std::string getFXStackXmlOnPlate(int plateIdx);
 void setFXStackXmlOnPlate(int plateIdx, const std::string& xml);
 
+// Current stack index of the FX with this instance id on the plate, or -1. Cheap
+// (no metadata copy): editors resolve their FX with it at write time, because the
+// index a card was built with goes stale when the stack changes under a drag.
+int fxIndexOfInstanceOnPlate(int plateIdx, std::uint32_t instanceId);
+
 // Headless self-test (run by --fx-test): adds the BCS effect to plate 0,
 // checks the style / soft range / label colour getFXStackMetaOnPlate reports,
 // then removes it. Prints FX-META PASS|FAIL lines; returns true on pass.

@@ -54,6 +54,8 @@ constexpr qint64 kEmitIntervalMs = 16;
 constexpr int kKnobPx = ui::kControlH + ui::kGap;
 // Slider: horizontal room either side of the track for the handle.
 constexpr qreal kHandleR = 5.0;
+// Slider track cap, so a wide (bottom) dock does not stretch it across the screen.
+constexpr int kSliderMaxW = 320;
 
 const QColor kTrackColor(0x3d, 0x3d, 0x3d);
 const QColor kFillColor(0x9a, 0x9a, 0x9a);
@@ -87,6 +89,7 @@ public:
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         setFixedHeight(ui::kControlH);
         setMinimumWidth(ui::kControlH + ui::kGapGroup);
+        setMaximumWidth(kSliderMaxW);
         setCursor(Qt::PointingHandCursor);
         setContextMenuPolicy(Qt::NoContextMenu);
     }
@@ -491,6 +494,7 @@ FXSliderRow_Qt::FXSliderRow_Qt(const FXEditorSpec& spec, QWidget* parent) : FXPa
     row->addWidget(field_);
     row->addWidget(slider_, 1);
     row->addWidget(reset_);
+    row->addStretch(0);  // takes the width past the slider's cap
     refresh();
 }
 
