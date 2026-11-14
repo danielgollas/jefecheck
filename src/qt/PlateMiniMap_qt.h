@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// 44 x 24 map of the viewport layout in the Plate Manager header: one cell per
+// 44 x 24 map of the viewport layout in the Plate Manager title bar: one cell per
 // plate the layout shows, the active one in the accent colour. A click on a
 // cell asks for that plate to become active (plateClicked); the owner applies it.
 #ifndef JEFECHECK_QT_PLATE_MINIMAP_H

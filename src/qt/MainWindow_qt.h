@@ -212,7 +212,7 @@ public:
     // --platemanager-test [outDir]: puts the Plate Manager in the bottom dock area and
     // checks the wide-short plate card (height budget, two 24 px rows, locator
     // objectNames, active highlight without a stylesheet), then the modes, the
-    // arrangement and the header (mode buttons, mini-map), then the dock shapes
+    // arrangement, the title bar (mini-map, buttons, drag) and mode menus, then the dock shapes
     // (side, floating, re-dock), the Timeline height and the remote sync. With
     // outDir it saves and checks a screenshot matrix there. Returns 0 on PASS, 2 on FAIL.
     int runHeadlessPlateManagerTest(const QString& shotsDir = QString());
@@ -285,6 +285,7 @@ private:
     // The consolidated "Panels" menu, named so it doesn't claim the macOS Window-menu
     // semantics. Created empty in buildMenuBar(), populated in buildDocks().
     QMenu*  panelsMenu_ = nullptr;
+    QMenu*  plateModeMenu_ = nullptr;   // View > Plate Manager Shows
     bool    lastExitWasClean_ = true;
 
     void startAutoload();

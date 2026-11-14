@@ -13,6 +13,7 @@
 #include "PlateManager_qt.h"
 #include "PlateCard_qt.h"
 #include "PlateMiniMap_qt.h"
+#include "PlateDockTitleBar_qt.h"
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
 #include "qt_prefs_persist.h"
@@ -632,6 +633,11 @@ void MainWindow_Qt::buildMenuBar() {
         });
     }
 
+    // View → Plate Manager Shows: Active / Visible / All. The actions belong to the
+    // Plate Manager (its context menu shows the same ones); buildDocks fills this in.
+    plateModeMenu_ = viewMenu->addMenu(tr("Plate Manager Shows"));
+    plateModeMenu_->setObjectName("menu.view.platemanager");
+
     // View → Color Correction Favorites: 5 save/load slots on the active plate.
     // Menu-only (no Ctrl+1-5 shortcuts — they'd collide with the layout ones).
     viewMenu->addSeparator();
@@ -789,6 +795,11 @@ void MainWindow_Qt::buildDocks() {
     plateManagerWidget_ = new PlateManager_Qt(plateDock_);
     plateDock_->setWidget(plateManagerWidget_);
     plateDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    // Custom title bar: close/float buttons, title, and the viewport mini-map at the right
+    // (the panel has no header row). It also replaces the frame title when floating.
+    plateDock_->setTitleBarWidget(new PlateDockTitleBar_Qt(plateDock_, plateManagerWidget_->miniMap()));
+    if (plateModeMenu_)
+        for (QAction* a : plateManagerWidget_->modeActions()) plateModeMenu_->addAction(a);
     addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
 
     // Mirror viewport-driven plate edits back into the plate cards. Queued so the slot runs after mouseMoveEvent returns and posts coalesce;
@@ -2023,18 +2034,183 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         report("ROW cells", pm->cardCell(0) == QPoint(0, 0) && wide1 == QPoint(1, 0) && narrow1 == QPoint(0, 1),
                QString("2x1: budget 4000 cell1=(%1,%2); budget %3 (cardW %4) cell1=(%5,%6)")
                    .arg(wide1.x()).arg(wide1.y()).arg(oneCard).arg(cardW).arg(narrow1.x()).arg(narrow1.y()));
+        // Balanced wrap: a budget for three cards with four shown goes 2+2, never 3+1.
+        layout(FRAMINGQUAD_ID);
+        const int threeCards = 3 * cardW + 2 * ui::kGap + 2 * ui::kGapTight;
+        pm->setRowBudget(threeCards);
+        const QPoint want[4] = {QPoint(0, 0), QPoint(1, 0), QPoint(0, 1), QPoint(1, 1)};
+        bool balanced = true;
+        QStringList cells;
+        for (int i = 0; i < 4; ++i) {
+            balanced = balanced && pm->cardCell(i) == want[i];
+            cells << QString("%1:(%2,%3)").arg(i).arg(pm->cardCell(i).x()).arg(pm->cardCell(i).y());
+        }
+        report("ROW balanced", balanced, QString("2x2, budget %1 fits 3 -> [%2]").arg(threeCards).arg(cells.join(" ")));
         updatePlateRowBudget();   // back to the window's own budget
         settleFor(300);
     }
+    auto cellStr = [&]() {
+        QStringList out;
+        for (int i = 0; i < 4; ++i) out << QString("%1:(%2,%3)").arg(i).arg(pm->cardCell(i).x()).arg(pm->cardCell(i).y());
+        return out.join(" ");
+    };
+    auto bottomStrip = [&]() {   // the first-launch layout: Plate Manager left of the Timeline
+        plateDock_->setFloating(false);
+        addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
+        splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
+        settleFor(300);
+    };
+    // ---- Title bar (close, float, title, mini-map) and the mode menus. The panel has no header row.
+    auto* titleBar = plateDock_->titleBarWidget();
+    auto* closeBtn = plateDock_->findChild<QAbstractButton*>("platemanager.close");
+    auto* floatBtn = plateDock_->findChild<QAbstractButton*>("platemanager.float");
     {
-        QStringList missing;
-        for (const char* name : {"platemanager.mode.active", "platemanager.mode.visible", "platemanager.mode.all"})
-            if (!plateDock_->findChild<QToolButton*>(name)) missing << name;
         auto* mm = plateDock_->findChild<QWidget*>("platemanager.minimap");
-        if (!mm) missing << "platemanager.minimap";
-        report("HEADER locators", missing.isEmpty() && mm && mm->size() == QSize(44, 24),
-               missing.isEmpty() ? QString("all 4 found, minimap %1x%2").arg(mm->width()).arg(mm->height())
-                                 : "missing " + missing.join(" "));
+        QStringList bad;
+        if (!titleBar || titleBar->objectName() != "platemanager.titlebar") bad << "no platemanager.titlebar";
+        if (!closeBtn || !closeBtn->isVisible()) bad << "close";
+        if (!floatBtn || !floatBtn->isVisible()) bad << "float";
+        if (!mm || !titleBar || !titleBar->isAncestorOf(mm) || mm->size() != QSize(44, 24)) bad << "minimap";
+        if (pm->findChild<QWidget*>("platemanager.header")) bad << "header row still present";
+        if (titleBar && mm && closeBtn && floatBtn) {
+            const int mapRight = mm->mapTo(titleBar, QPoint(mm->width(), 0)).x();
+            const int closeX = closeBtn->mapTo(titleBar, QPoint(0, 0)).x();
+            const int floatX = floatBtn->mapTo(titleBar, QPoint(0, 0)).x();
+            if (titleBar->width() - mapRight > ui::kGap) bad << QString("map not at right (%1 px gap)").arg(titleBar->width() - mapRight);
+            if (!(closeX < floatX && floatX < titleBar->width() / 4)) bad << "buttons not at left";
+        }
+        report("TITLEBAR layout", bad.isEmpty(),
+               bad.isEmpty() ? QString("bar %1x%2, minimap 44x24 at right, close/float at left, no header row")
+                                   .arg(titleBar->width()).arg(titleBar->height())
+                             : bad.join("; "));
+    }
+    {   // Float button floats and re-docks; the title bar stays on the floating window; close hides.
+        QStringList got;
+        bool ok = closeBtn && floatBtn;
+        if (ok) {
+            floatBtn->click();
+            settleFor(300);
+            const bool floated = plateDock_->isFloating() && titleBar->isVisible();
+            floatBtn->click();
+            settleFor(300);
+            const bool docked = !plateDock_->isFloating();
+            closeBtn->click();
+            settleFor(100);
+            const bool closed = !plateDock_->isVisible();
+            plateDock_->show();
+            bottomStrip();
+            ok = floated && docked && closed && plateDock_->isVisible();
+            got << QString("float %1, re-dock %2, close %3").arg(floated ? "ok" : "FAIL").arg(docked ? "ok" : "FAIL")
+                       .arg(closed ? "ok" : "FAIL");
+        }
+        report("TITLEBAR buttons", ok, got.isEmpty() ? QString("buttons missing") : got.join(", "));
+    }
+    {   // The bar leaves presses on its title to the dock, which drags and (double-click) floats.
+        bool ok = titleBar != nullptr;
+        QString detail = "no title bar";
+        if (titleBar) {
+            const QPoint at = titleBar->rect().center();   // the centred title, not a button or the map
+            // Count the presses that reach the dock itself (an ignored press propagates to the parent).
+            struct PressCounter : QObject {
+                int n = 0;
+                bool eventFilter(QObject*, QEvent* e) override {
+                    if (e->type() == QEvent::MouseButtonPress) ++n;
+                    return false;
+                }
+            } counter;
+            plateDock_->installEventFilter(&counter);
+            QMouseEvent press(QEvent::MouseButtonPress, at, titleBar->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(titleBar, &press);
+            QMouseEvent release(QEvent::MouseButtonRelease, at, titleBar->mapToGlobal(at), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(titleBar, &release);
+            plateDock_->removeEventFilter(&counter);
+            const bool passedOn = counter.n == 1;
+            // A double-click on the title, as the dock receives it, floats the dock and another re-docks it.
+            const QPoint inDock = titleBar->mapTo(plateDock_, at);
+            auto dbl = [&]() {
+                QMouseEvent e(QEvent::MouseButtonDblClick, inDock, plateDock_->mapToGlobal(inDock), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(plateDock_, &e);
+                settleFor(300);
+            };
+            dbl();
+            const bool floated = plateDock_->isFloating();
+            dbl();
+            const bool redocked = !plateDock_->isFloating();
+            // A press-and-drag on the title, as the dock receives it, undocks the dock.
+            const QPoint g0 = plateDock_->mapToGlobal(inDock);
+            QMouseEvent dp(QEvent::MouseButtonPress, inDock, g0, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(plateDock_, &dp);
+            // Well into the viewport: a release near the dock area's edge would plug it straight back.
+            for (int k = 1; k <= 6; ++k) {
+                const QPoint d(0, -k * 50);
+                QMouseEvent mv(QEvent::MouseMove, inDock + d, g0 + d, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(plateDock_, &mv);
+                settleFor(20);
+            }
+            const QPoint d(0, -300);
+            QMouseEvent dr(QEvent::MouseButtonRelease, inDock + d, g0 + d, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(plateDock_, &dr);
+            settleFor(300);
+            const bool dragged = plateDock_->isFloating();
+            // Floating (frameless with a custom title bar): dragging the title moves the window.
+            plateDock_->setFloating(true);
+            settleFor(300);
+            const QPoint before = plateDock_->pos();
+            const QPoint fl = titleBar->mapTo(plateDock_, titleBar->rect().center());
+            const QPoint fg = plateDock_->mapToGlobal(fl);
+            QMouseEvent fp(QEvent::MouseButtonPress, fl, fg, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(plateDock_, &fp);
+            for (int k = 1; k <= 6; ++k) {
+                const QPoint d(k * 10, k * 10);
+                QMouseEvent mv(QEvent::MouseMove, plateDock_->mapFromGlobal(fg + d), fg + d, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(plateDock_, &mv);
+                settleFor(20);
+            }
+            QMouseEvent fr(QEvent::MouseButtonRelease, plateDock_->mapFromGlobal(fg + QPoint(60, 60)), fg + QPoint(60, 60),
+                           Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(plateDock_, &fr);
+            settleFor(300);
+            const QPoint moved = plateDock_->pos() - before;
+            const bool movable = plateDock_->isFloating() && moved.manhattanLength() > 0;
+            bottomStrip();
+            ok = passedOn && floated && redocked && dragged && movable;
+            detail = QString("press on title passed to dock %1; double-click float %2, again re-dock %3; drag undocks %4; "
+                             "floating window moved by (%5,%6)")
+                         .arg(passedOn ? "yes" : "NO").arg(floated ? "ok" : "FAIL").arg(redocked ? "ok" : "FAIL")
+                         .arg(dragged ? "ok" : "FAIL").arg(moved.x()).arg(moved.y());
+        }
+        report("TITLEBAR drag", ok, detail);
+    }
+    {   // View > Plate Manager Shows and the context menu share the three mode actions.
+        QStringList bad;
+        auto* sub = menuBar()->findChild<QMenu*>("menu.view.platemanager");
+        QList<QAction*> acts;
+        for (const char* leaf : {"active", "visible", "all"}) {
+            QAction* a = nullptr;
+            if (sub) for (QAction* x : sub->actions()) if (x->objectName() == QString("menu.view.platemanager.%1").arg(leaf)) a = x;
+            if (!a || !a->isCheckable()) bad << QString("menu.view.platemanager.%1").arg(leaf);
+            acts << a;
+        }
+        if (bad.isEmpty()) {
+            acts[2]->trigger();
+            const bool all = pm->mode() == pl::PlateMode::All && acts[2]->isChecked() && !acts[1]->isChecked() &&
+                             QSettings().value("PlateManager/mode").toInt() == 2;
+            pm->setMode(pl::PlateMode::Active);   // the API path must update the menu too
+            const bool follows = acts[0]->isChecked() && !acts[2]->isChecked();
+            acts[1]->trigger();
+            const bool back = pm->mode() == pl::PlateMode::Visible && QSettings().value("PlateManager/mode").toInt() == 1;
+            if (!all) bad << "All action did not switch/persist";
+            if (!follows) bad << "menu did not follow setMode";
+            if (!back) bad << "Visible action did not switch/persist";
+            QMenu* ctx = pm->buildContextMenu(this);
+            int shared = 0;
+            for (QAction* a : acts) if (ctx->actions().contains(a)) ++shared;
+            if (shared != 3) bad << QString("context menu has %1 of the 3 actions").arg(shared);
+            delete ctx;
+        }
+        report("TITLEBAR mode menus", bad.isEmpty(),
+               bad.isEmpty() ? QString("View > Plate Manager Shows: 3 exclusive actions switch and persist the mode; "
+                                       "context menu shares them") : bad.join("; "));
     }
     {   // Row -> Floating -> Row with the swapped-out card content deleted in between
         // (a floating map re-forms cards narrow-tall): every control must survive. The Color
@@ -2074,17 +2250,6 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
     }
     // ---- Dock integration. Sizes are right only a tick or two after a dock move (§11),
     // so each move is followed by settleFor(300).
-    auto cellStr = [&]() {
-        QStringList out;
-        for (int i = 0; i < 4; ++i) out << QString("%1:(%2,%3)").arg(i).arg(pm->cardCell(i).x()).arg(pm->cardCell(i).y());
-        return out.join(" ");
-    };
-    auto bottomStrip = [&]() {   // the first-launch layout: Plate Manager left of the Timeline
-        plateDock_->setFloating(false);
-        addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
-        splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
-        settleFor(300);
-    };
     {
         pm->setMode(pl::PlateMode::Visible);
         addDockWidget(Qt::LeftDockWidgetArea, plateDock_);

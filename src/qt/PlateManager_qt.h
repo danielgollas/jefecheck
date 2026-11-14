@@ -1,5 +1,6 @@
-// Plate Manager dock content: a header row (Active / Visible / All mode switch
-// and a mini-map of the viewport layout) above a scroll area of plate cards.
+// Plate Manager dock content: a scroll area of plate cards. The mode (Active /
+// Visible / All) is chosen from the View menu or this panel's context menu (the
+// same three actions); the viewport mini-map sits in the dock's title bar.
 // Which cards show and where they sit comes from jefe::platelayout::arrange,
 // driven by the mode, the viewport framing mode, the active plate and the dock
 // shape (row for a top/bottom dock, column for a side dock, map when floating).
@@ -15,10 +16,11 @@
 
 #include "../gfcPlateLayout.h"
 
-class QButtonGroup;
+class QAction;
+class QActionGroup;
+class QMenu;
 class QGridLayout;
 class QScrollArea;
-class QToolButton;
 class PlateCard_Qt;
 class PlateMiniMap_Qt;
 
@@ -52,9 +54,18 @@ public:
     // Grid cell of a plate's card (x = column, y = row); (-1,-1) when hidden.
     QPoint cardCell(int plate) const;
     bool cardOffscreen(int plate) const;
+    // Created by the panel, shown by whoever places it (the dock's title bar).
     PlateMiniMap_Qt* miniMap() const { return miniMap_; }
+    // The three exclusive, checkable mode actions (Active, Visible, All), objectNames
+    // menu.view.platemanager.active|visible|all; checked state follows setMode.
+    QList<QAction*> modeActions() const { return {modeActions_[0], modeActions_[1], modeActions_[2]}; }
+    // The right-click menu: a "Plate Manager Shows" section with the mode actions.
+    QMenu* buildContextMenu(QWidget* parent);
 
     QSize sizeHint() const override;
+
+protected:
+    void contextMenuEvent(QContextMenuEvent* e) override;
 
 signals:
     // Emitted after every reflow.
@@ -86,9 +97,8 @@ private:
     void applyFixedExtent();
     void activatePlate(int plate);
 
-    QWidget* header_ = nullptr;
-    QButtonGroup* modeGroup_ = nullptr;
-    QToolButton* modeButtons_[3] = {nullptr, nullptr, nullptr};
+    QActionGroup* modeGroup_ = nullptr;
+    QAction* modeActions_[3] = {nullptr, nullptr, nullptr};
     PlateMiniMap_Qt* miniMap_ = nullptr;
     QScrollArea* scroll_ = nullptr;
     QWidget* inner_ = nullptr;

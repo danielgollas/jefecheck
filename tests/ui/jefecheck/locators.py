@@ -19,10 +19,16 @@ DOCK_PLATEMANAGER = "dock.platemanager"
 DOCK_TIMELINE = "dock.timeline"
 DOCK_LUTS = "dock.luts"
 
-# Plate Manager header: mode switch (Active / Visible / All) and the viewport mini-map.
-PLATEMANAGER_MODE_ACTIVE = "platemanager.mode.active"
-PLATEMANAGER_MODE_VISIBLE = "platemanager.mode.visible"
-PLATEMANAGER_MODE_ALL = "platemanager.mode.all"
+# Plate Manager mode (Active / Visible / All): View > Plate Manager Shows, and the same
+# actions on right-click in the panel. The dock's custom title bar holds close, float,
+# the title and the viewport mini-map.
+MENU_VIEW_PLATEMANAGER = "menu.view.platemanager"
+MENU_VIEW_PLATEMANAGER_ACTIVE = "menu.view.platemanager.active"
+MENU_VIEW_PLATEMANAGER_VISIBLE = "menu.view.platemanager.visible"
+MENU_VIEW_PLATEMANAGER_ALL = "menu.view.platemanager.all"
+PLATEMANAGER_TITLEBAR = "platemanager.titlebar"
+PLATEMANAGER_CLOSE = "platemanager.close"
+PLATEMANAGER_FLOAT = "platemanager.float"
 PLATEMANAGER_MINIMAP = "platemanager.minimap"
 
 # Timeline widgets. The scrubber and track-rows lane are single painted

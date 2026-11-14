@@ -315,17 +315,17 @@ You can also access layouts from the keyboard or from **View > Viewport Layout**
 
 The viewport controls live in the **Plate Manager** dock (`F2`), one card per viewport ("plate"). Click a card, or click a viewport in the viewport area, to make it the active viewport; the active card has an orange border.
 
-**Which cards show.** Three buttons at the top of the dock choose the mode, and JefeCheck remembers your choice:
+**Which cards show.** Choose the mode from **View > Plate Manager Shows**, or right-click an empty part of the Plate Manager (or a card's background). JefeCheck remembers your choice:
 
 - **Active** — only the active viewport's card.
 - **Visible** (default) — one card per viewport on screen: one in 1x1, two in 2x1 or 1x2, four in 2x2. Changing the layout updates the cards straight away.
 - **All** — all four cards. Cards for viewports the current layout doesn't show have a dashed border and dimmed captions.
 
-**Mini-map.** At the right of the dock header, a small map of the current layout shows the active viewport in orange. Click a cell to make that viewport active.
+**Mini-map.** At the right of the Plate Manager's title bar, a small map of the current layout shows the active viewport in orange. Click a cell to make that viewport active. The title bar otherwise works like any dock's: the buttons at its left close and float the dock, drag it to move or undock the dock, and double-click it to float or re-dock.
 
 **How the cards are arranged** depends on where the dock is:
 
-- **Bottom or top** — wide, short cards in a row, left to right. When the window is too narrow for every card (the Timeline beside the Plate Manager keeps its own width), they wrap onto a second row; in a 1280-pixel-wide window two cards fit beside the Timeline, so four plates take two rows. The strip never grows past two rows of cards; with more cards it scrolls, and the active card is scrolled into view. The Timeline always keeps its full height. To fit, this form keeps a few controls behind buttons: Zoom, X, Y and Rotation behind the zoom button (it shows the zoom, e.g. "1.00×"), and Contrast, Brightness and Saturation behind the **Color** button. Click a button to open its controls. The Layer, Aspect and channel controls have no caption here; hover for their names.
+- **Bottom or top** — wide, short cards in a row, left to right. When the window is too narrow for every card (the Timeline beside the Plate Manager keeps its own width), they wrap onto evenly filled rows (four cards go two and two, never three and one); in a 1280-pixel-wide window two cards fit beside the Timeline, so four plates take two rows. The strip never grows past two rows of cards; with more cards it scrolls, and the active card is scrolled into view. The Timeline always keeps its full height. To fit, this form keeps a few controls behind buttons: Zoom, X, Y and Rotation behind the zoom button (it shows the zoom, e.g. "1.00×"), and Contrast, Brightness and Saturation behind the **Color** button. Click a button to open its controls. The Layer, Aspect and channel controls have no caption here; hover for their names.
 - **Left or right** — narrow, tall cards in one column, A to D. The column scrolls, and making a viewport active scrolls its card into view.
 - **Floating** — a map of the viewport layout: side by side for 2x1, stacked for 1x2, a 2×2 grid for 2x2 (and for All). The floating window resizes itself when the layout changes.
 

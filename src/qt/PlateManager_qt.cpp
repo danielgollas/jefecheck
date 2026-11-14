@@ -6,7 +6,13 @@
 
 #include <algorithm>
 
-#include <QButtonGroup>
+#include <QAction>
+#include <QActionGroup>
+#include <QAbstractButton>
+#include <QAbstractSpinBox>
+#include <QComboBox>
+#include <QContextMenuEvent>
+#include <QMenu>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QMargins>
@@ -14,7 +20,6 @@
 #include <QSettings>
 #include <QStyle>
 #include <QTimer>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace pl = jefe::platelayout;
@@ -36,35 +41,27 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QWidget(parent) {
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
-    // Header: mode switch, stretch, mini-map. Outside the scroll area so it
-    // stays put while a side column scrolls.
-    header_ = new QWidget(this);
-    header_->setObjectName("platemanager.header");
-    auto* hl = new QHBoxLayout(header_);
-    hl->setContentsMargins(ui::kGap, ui::kGapTight, ui::kGap, ui::kGapTight);
-    hl->setSpacing(ui::kGapTight);
-    modeGroup_ = new QButtonGroup(this);
+    // Mode actions: the View menu's "Plate Manager Shows" submenu and this panel's
+    // context menu share them. The mini-map lives in the dock's title bar
+    // (PlateDockTitleBar_Qt reparents it); there is no header row.
+    modeGroup_ = new QActionGroup(this);
     modeGroup_->setExclusive(true);
     const struct { const char* text; const char* leaf; const char* tip; } modes[] = {
         {"Active", "active", "Show only the active plate"},
         {"Visible", "visible", "Show the plates the viewport layout shows"},
         {"All", "all", "Show all four plates"}};
     for (int i = 0; i < 3; ++i) {
-        auto* b = new QToolButton(header_);
-        b->setText(modes[i].text);
-        b->setObjectName(QString("platemanager.mode.%1").arg(modes[i].leaf));
-        b->setAccessibleName(QString("%1 plates").arg(modes[i].text));
-        b->setToolTip(modes[i].tip);
-        b->setCheckable(true);
-        ui::useWidgetRect(b);
-        modeGroup_->addButton(b, i);
-        hl->addWidget(b);
-        modeButtons_[i] = b;
+        auto* a = new QAction(tr(modes[i].text), this);
+        a->setObjectName(QString("menu.view.platemanager.%1").arg(modes[i].leaf));
+        a->setToolTip(tr(modes[i].tip));
+        a->setStatusTip(tr(modes[i].tip));
+        a->setCheckable(true);
+        modeGroup_->addAction(a);
+        modeActions_[i] = a;
+        connect(a, &QAction::triggered, this, [this, i]() { setMode(pl::PlateMode(i)); });
     }
-    hl->addStretch(1);
-    miniMap_ = new PlateMiniMap_Qt(header_);
-    hl->addWidget(miniMap_);
-    outer->addWidget(header_);
+    miniMap_ = new PlateMiniMap_Qt(this);
+    miniMap_->hide();
 
     scroll_ = new QScrollArea(this);
     scroll_->setObjectName("platemanager.scroll");
@@ -73,7 +70,7 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QWidget(parent) {
     inner_ = new QWidget(scroll_);
     inner_->setObjectName("platemanager.grid");
     grid_ = new QGridLayout(inner_);
-    grid_->setContentsMargins(ui::kGapTight, 0, ui::kGapTight, 0);
+    grid_->setContentsMargins(ui::kGapTight, ui::kGapTight, ui::kGapTight, ui::kGapTight);
     grid_->setSpacing(ui::kGap);
     inner_->setLayout(grid_);
 
@@ -100,11 +97,33 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QWidget(parent) {
 
     const int stored = QSettings().value(kModeKey, int(pl::PlateMode::Visible)).toInt();
     mode_ = (stored >= 0 && stored <= 2) ? pl::PlateMode(stored) : pl::PlateMode::Visible;
-    modeButtons_[int(mode_)]->setChecked(true);
-    connect(modeGroup_, &QButtonGroup::idClicked, this,
-            [this](int id) { setMode(pl::PlateMode(id)); });
+    modeActions_[int(mode_)]->setChecked(true);
 
     syncToViewport();
+}
+
+QMenu* PlateManager_Qt::buildContextMenu(QWidget* parent) {
+    auto* menu = new QMenu(parent);
+    menu->setObjectName("platemanager.contextmenu");
+    menu->addSection(tr("Plate Manager Shows"));
+    for (QAction* a : modeActions_) menu->addAction(a);
+    return menu;
+}
+
+void PlateManager_Qt::contextMenuEvent(QContextMenuEvent* e) {
+    // Over the empty area, a card's background or a caption; editors, buttons and
+    // combos keep their own behaviour.
+    QWidget* under = childAt(e->pos());
+    for (QWidget* w = under; w && w != this; w = w->parentWidget()) {
+        if (qobject_cast<QAbstractSpinBox*>(w) || qobject_cast<QComboBox*>(w) || qobject_cast<QAbstractButton*>(w)) {
+            e->ignore();
+            return;
+        }
+    }
+    QMenu* menu = buildContextMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->popup(e->globalPos());
+    e->accept();
 }
 
 void PlateManager_Qt::activatePlate(int plate) {
@@ -113,10 +132,7 @@ void PlateManager_Qt::activatePlate(int plate) {
 }
 
 void PlateManager_Qt::setMode(pl::PlateMode mode) {
-    if (auto* b = modeButtons_[int(mode)]; b && !b->isChecked()) {
-        const QSignalBlocker block(modeGroup_);
-        b->setChecked(true);
-    }
+    if (auto* a = modeActions_[int(mode)]; a && !a->isChecked()) a->setChecked(true);
     if (mode != mode_) {
         mode_ = mode;
         QSettings().setValue(kModeKey, int(mode));
@@ -256,10 +272,6 @@ void PlateManager_Qt::applyFixedExtent() {
     const QMargins m = grid_->contentsMargins();
     const int sp = grid_->spacing();
     const int frame = scroll_->frameWidth() * 2;  // QScrollArea border on both sides
-    header_->ensurePolished();
-    if (auto* L = header_->layout()) L->activate();
-    const int headerH = std::max(header_->sizeHint().height(), ui::kControlH + 2 * ui::kGapTight);
-    const int headerW = header_->minimumSizeHint().width();
     const int contentW = cols * cardW + (cols - 1) * sp + m.left() + m.right() + frame;
     const bool rowScrolls = shape_ == pl::DockShape::Row && rows > kMaxRowRows;
     const int shownRows = rowScrolls ? kMaxRowRows : rows;
@@ -271,25 +283,25 @@ void PlateManager_Qt::applyFixedExtent() {
         // Fix width to one narrow card; height is free and scrolls. The vertical
         // scrollbar gets its own extent so it doesn't cover the controls.
         scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        const int w = std::max(contentW + sb, headerW);
+        const int w = contentW + sb;
         setMinimumHeight(0);
         setMaximumHeight(QWIDGETSIZE_MAX);
         setFixedWidth(w);
-        extent_ = QSize(w, headerH + contentH);
+        extent_ = QSize(w, contentH);
     } else {
-        // Fixed both ways: exactly the header plus the card block. Scrollbars
+        // Fixed both ways: exactly the card block. Scrollbars
         // off so the area reserves no strip, unless a row holds more than two
         // card rows: then it shows two and scrolls, with room for the bar.
         scroll_->setVerticalScrollBarPolicy(rowScrolls ? Qt::ScrollBarAlwaysOn : Qt::ScrollBarAlwaysOff);
-        const int w = std::max(contentW + (rowScrolls ? sb : 0), headerW);
-        const int h = headerH + contentH;
+        const int w = contentW + (rowScrolls ? sb : 0);
+        const int h = contentH;
         setFixedSize(w, h);
         if (shape_ == pl::DockShape::Row && cols > 1) {
             // The window must still be able to narrow: a row may shrink to one column's
             // width, and the narrower window's budget then re-flows it into fewer columns
             // (a dragged edge clips the right-hand card for a tick until that lands).
             const int oneCol = cardW + m.left() + m.right() + frame + (shown_.size() > kMaxRowRows ? sb : 0);
-            setMinimumWidth(std::max(oneCol, headerW));
+            setMinimumWidth(oneCol);
         }
         extent_ = QSize(w, h);
     }

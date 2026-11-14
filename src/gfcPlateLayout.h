@@ -35,6 +35,9 @@ int plateAtPoint(int framingMode, int x, int y, int w, int h);
 bool showActiveFrame(int framingMode);
 Cell activeFrameRectGL(int framingMode, int activePlate, int w, int h);
 int rowMaxCols(int budgetPx, int cardW, int gap);
+// Columns for n cards in a row that fits `fit`: n when they fit, else an even wrap
+// (ceil(n / ceil(n / fit))), so 4 cards that fit 3 go 2+2.
+int balancedRowCols(int n, int fit);
 int activeFrameThicknessPx(float dpiScale);
 
 bool runPlateLayoutSelfTest();

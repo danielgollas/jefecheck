@@ -24,19 +24,29 @@ std::vector<int> platesShown(PlateMode mode, int framingMode, int activePlate) {
     }
 }
 
+int balancedRowCols(int n, int fit) {
+    if (fit < 1) fit = 1;
+    if (n <= fit) return std::max(n, 1);
+    const int rows = (n + fit - 1) / fit;
+    return (n + rows - 1) / rows;
+}
+
 std::vector<GridPos> arrange(PlateMode mode, int framingMode, int activePlate,
                              DockShape shape, int maxCols) {
     const std::vector<int> shown = platesShown(mode, framingMode, activePlate);
     std::vector<GridPos> out;
     if (maxCols < 1) maxCols = 1;
     const int n = (int)shown.size();
+    // A row that has to wrap is balanced: as many rows as needed, then as few columns
+    // as fill them evenly (4 cards that fit 3 per row go 2+2, never 3+1).
+    const int rowCols = n > maxCols ? balancedRowCols(n, maxCols) : maxCols;
     for (int i = 0; i < n; ++i) {
         GridPos g{shown[i], 0, 0};
         switch (shape) {
             case DockShape::Column:
                 g.row = i; g.col = 0; break;
             case DockShape::Row:
-                g.row = i / maxCols; g.col = i % maxCols; break;
+                g.row = i / rowCols; g.col = i % rowCols; break;
             case DockShape::Floating:
             default:
                 if (mode == PlateMode::Active) { g.row = 0; g.col = 0; }
@@ -119,6 +129,11 @@ bool runPlateLayoutSelfTest() {
     EXPECT(arrange(PM::All, S, 0, DS::Row, 4) == (G_{{0,0,0},{1,0,1},{2,0,2},{3,0,3}}));
     EXPECT(arrange(PM::All, S, 0, DS::Row, 2) == (G_{{0,0,0},{1,0,1},{2,1,0},{3,1,1}}));
     EXPECT(arrange(PM::All, S, 0, DS::Row, 0) == (G_{{0,0,0},{1,1,0},{2,2,0},{3,3,0}}));
+    // Balanced wrap: 4 cards that fit 3 per row go 2+2, not 3+1.
+    EXPECT(arrange(PM::All, S, 0, DS::Row, 3) == (G_{{0,0,0},{1,0,1},{2,1,0},{3,1,1}}));
+    EXPECT(balancedRowCols(4, 3) == 2);  EXPECT(balancedRowCols(4, 4) == 4);
+    EXPECT(balancedRowCols(4, 1) == 1);  EXPECT(balancedRowCols(2, 3) == 2);
+    EXPECT(balancedRowCols(3, 2) == 2);
     EXPECT(arrange(PM::Visible, Q, 0, DS::Column, 4) == (G_{{0,0,0},{1,1,0},{2,2,0},{3,3,0}}));
     EXPECT(cellsFor(Q, 44, 24) == (C_{{0,0,0,22,12},{1,22,0,22,12},{2,0,12,22,12},{3,22,12,22,12}}));
     EXPECT(cellsFor(D, 45, 24) == (C_{{0,0,0,22,24},{1,22,0,23,24}}));
