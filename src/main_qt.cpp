@@ -52,6 +52,7 @@
 #include "gfcWireTest.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
+#include "qt/FXParamEditors_qt.h"
 #include "qt/MainWindow_qt.h"
 #include "qt/SequenceLoadBridge_qt.h"
 #include "qt/ReviewSummaryPdf_qt.h"
@@ -1298,6 +1299,17 @@ int main(int argc, char* argv[]) {
                 printf("PACKAGE: FAIL %s\n", qPrintable(msg));
             }
             fflush(stdout);
+        });
+        break;
+    }
+
+    // --fx-editors-test: the FX parameter editor widgets, driven by synthetic events.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--fx-editors-test") != 0) continue;
+        QTimer::singleShot(0, &window, []() {
+            const int fails = fxEditorsSelfTest();
+            std::fflush(stdout);
+            std::_Exit(fails == 0 ? 0 : 2);
         });
         break;
     }

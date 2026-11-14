@@ -49,6 +49,7 @@ QIcon save();                // floppy disk
 QIcon check();               // ✓ (apply)
 QIcon send();                // paper plane
 QIcon recent();              // clock
+QIcon power();               // ⏻ on/off; On state is the accent glyph (checked = on)
 
 } // namespace qticons
 } // namespace jefe

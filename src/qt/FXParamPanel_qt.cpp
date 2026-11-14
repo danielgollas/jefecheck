@@ -1,4 +1,5 @@
 #include "FXParamPanel_qt.h"
+#include "FXParamEditors_qt.h"
 #include "qticons.h"
 #include "SequenceLoadBridge_qt.h"
 
@@ -39,18 +40,6 @@ QString typeLabel(jefe::qt::FXParamType t) {
         case T::Unknown: return "unknown";
     }
     return "unknown";
-}
-
-// Number of decimals for a float spinbox, derived from `step` (0.001 -> 3, 1.0 -> 0)
-// and clamped so a tiny step doesn't blow up the field width.
-int decimalsForStep(float step) {
-    if (step <= 0.0f) return 3;
-    const float abs_step = std::fabs(step);
-    if (abs_step >= 1.0f) return 0;
-    int d = 1;
-    float s = abs_step;
-    while (s < 0.1f && d < 6) { s *= 10.0f; ++d; }
-    return d;
 }
 
 }  // namespace
@@ -383,7 +372,7 @@ void FXParamPanel_Qt::refresh() {
                             .arg(QString::fromStdString(p.name)));
                     spin->setRange(static_cast<double>(p.minimum),
                                    static_cast<double>(p.maximum));
-                    spin->setDecimals(decimalsForStep(p.step));
+                    spin->setDecimals(jefe::qt::decimalsForStep(p.step));
                     spin->setSingleStep(p.step > 0 ? p.step : 0.001);
                     spin->setValue(static_cast<double>(p.value));
                     spin->setKeyboardTracking(false);

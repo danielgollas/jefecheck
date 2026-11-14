@@ -278,6 +278,16 @@ void pRecent(QPainter& p, qreal s, const QColor& c) {
     p.drawPolygon(head);
 }
 
+void pPower(QPainter& p, qreal s, const QColor& c) {
+    // IEC power symbol: a ring open at the top with a bar through the gap.
+    const QPointF ctr(s*0.5, s*0.54);
+    const qreal R = s*0.28;
+    p.setPen(stroke(c, 1.7));
+    p.setBrush(Qt::NoBrush);
+    p.drawArc(QRectF(ctr.x() - R, ctr.y() - R, 2*R, 2*R), 125 * 16, 290 * 16);
+    p.drawLine(QPointF(s*0.5, s*0.16), QPointF(s*0.5, s*0.5));
+}
+
 } // namespace
 
 QIcon make(const PaintFn& paint, int side) {
@@ -327,6 +337,15 @@ QIcon save()         { return make(pSave); }
 QIcon check()        { return make(pCheck); }
 QIcon send()         { return make(pSend); }
 QIcon recent()       { return make(pRecent); }
+
+QIcon power() {
+    // The theme's :checked fill is a dark accent tint, so "on" shows the glyph in
+    // the accent colour rather than make()'s dark On glyph.
+    QIcon icon;
+    icon.addPixmap(render(pPower, kIconPx, QColor(0xE0, 0xE0, 0xE0)), QIcon::Normal, QIcon::Off);
+    icon.addPixmap(render(pPower, kIconPx, QColor(0xD4, 0x77, 0x1E)), QIcon::Normal, QIcon::On);
+    return icon;
+}
 
 } // namespace qticons
 } // namespace jefe
