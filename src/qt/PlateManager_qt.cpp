@@ -23,6 +23,9 @@ namespace ui = jefe::qt::ui;
 namespace {
 constexpr const char* kModeKey = "PlateManager/mode";
 constexpr int kMaxRowCols = 4;
+// A row dock shows at most two card rows (about the old bottom dock's height);
+// more rows scroll, so a narrow window never grows the strip past that.
+constexpr int kMaxRowRows = 2;
 }
 
 PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QWidget(parent) {
@@ -38,7 +41,7 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QWidget(parent) {
     header_ = new QWidget(this);
     header_->setObjectName("platemanager.header");
     auto* hl = new QHBoxLayout(header_);
-    hl->setContentsMargins(ui::kGap, ui::kGap, ui::kGap, ui::kGap);
+    hl->setContentsMargins(ui::kGap, ui::kGapTight, ui::kGap, ui::kGapTight);
     hl->setSpacing(ui::kGapTight);
     modeGroup_ = new QButtonGroup(this);
     modeGroup_->setExclusive(true);
@@ -66,10 +69,11 @@ PlateManager_Qt::PlateManager_Qt(QWidget* parent) : QWidget(parent) {
     scroll_ = new QScrollArea(this);
     scroll_->setObjectName("platemanager.scroll");
     scroll_->setAccessibleName("Plate cards");
+    scroll_->setFrameShape(QFrame::NoFrame);   // the cards carry their own border
     inner_ = new QWidget(scroll_);
     inner_->setObjectName("platemanager.grid");
     grid_ = new QGridLayout(inner_);
-    grid_->setContentsMargins(ui::kGapTight, 0, ui::kGapTight, ui::kGapTight);
+    grid_->setContentsMargins(ui::kGapTight, 0, ui::kGapTight, 0);
     grid_->setSpacing(ui::kGap);
     inner_->setLayout(grid_);
 
@@ -212,12 +216,13 @@ void PlateManager_Qt::reflow(int framingMode, int activePlate, int cols) {
     applyFixedExtent();
     QTimer::singleShot(0, this, [this]() { applyFixedExtent(); });
 
-    if (shape_ == pl::DockShape::Column && activeMoved &&
+    // A scrolling column (or a row past two card rows) brings the active card into view.
+    if (shape_ != pl::DockShape::Floating && activeMoved &&
         activePlate >= 0 && activePlate < cards_.size() && cards_[activePlate]->isVisibleTo(inner_)) {
         inner_->layout()->activate();
         scroll_->ensureWidgetVisible(cards_[activePlate]);
         QTimer::singleShot(0, this, [this, activePlate]() {
-            if (shape_ == pl::DockShape::Column && lastActive_ == activePlate)
+            if (shape_ != pl::DockShape::Floating && lastActive_ == activePlate)
                 scroll_->ensureWidgetVisible(cards_[activePlate]);
         });
     }
@@ -251,16 +256,18 @@ void PlateManager_Qt::applyFixedExtent() {
     const int frame = scroll_->frameWidth() * 2;  // QScrollArea border on both sides
     header_->ensurePolished();
     if (auto* L = header_->layout()) L->activate();
-    const int headerH = std::max(header_->sizeHint().height(), ui::kControlH + 2 * ui::kGap);
+    const int headerH = std::max(header_->sizeHint().height(), ui::kControlH + 2 * ui::kGapTight);
     const int headerW = header_->minimumSizeHint().width();
     const int contentW = cols * cardW + (cols - 1) * sp + m.left() + m.right() + frame;
-    const int contentH = rows * cardH + (rows - 1) * sp + m.top() + m.bottom() + frame;
+    const bool rowScrolls = shape_ == pl::DockShape::Row && rows > kMaxRowRows;
+    const int shownRows = rowScrolls ? kMaxRowRows : rows;
+    const int contentH = shownRows * cardH + (shownRows - 1) * sp + m.top() + m.bottom() + frame;
+    const int sb = style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 2;
 
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     if (shape_ == pl::DockShape::Column) {
         // Fix width to one narrow card; height is free and scrolls. The vertical
         // scrollbar gets its own extent so it doesn't cover the controls.
-        const int sb = style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 2;
         scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         const int w = std::max(contentW + sb, headerW);
         setMinimumHeight(0);
@@ -269,9 +276,10 @@ void PlateManager_Qt::applyFixedExtent() {
         extent_ = QSize(w, headerH + contentH);
     } else {
         // Fixed both ways: exactly the header plus the card block. Scrollbars
-        // off so the area reserves no strip.
-        scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        const int w = std::max(contentW, headerW);
+        // off so the area reserves no strip, unless a row holds more than two
+        // card rows: then it shows two and scrolls, with room for the bar.
+        scroll_->setVerticalScrollBarPolicy(rowScrolls ? Qt::ScrollBarAlwaysOn : Qt::ScrollBarAlwaysOff);
+        const int w = std::max(contentW + (rowScrolls ? sb : 0), headerW);
         const int h = headerH + contentH;
         setFixedSize(w, h);
         extent_ = QSize(w, h);

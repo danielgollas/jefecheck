@@ -123,11 +123,14 @@ def test_unloaded_plate_shows_main_layer_default(multiview_app):
     _wait_for_load(multiview_app)
     # The Plate Manager shows only the layout's plates (Visible mode); 2x2 shows plate 1.
     multiview_app.send_shortcut("cmd+4")
-    combo = _layer_combo(multiview_app, plate_id=1)
-    assert combo.is_displayed(), (
-        "Layer combo on plate 1 should be visible with the Main default"
-    )
-    assert _combo_text(combo) == "Main", (
-        f"Unloaded plate should default to 'Main', got "
-        f"{_combo_text(combo)!r}"
-    )
+    try:
+        combo = _layer_combo(multiview_app, plate_id=1)
+        assert combo.is_displayed(), (
+            "Layer combo on plate 1 should be visible with the Main default"
+        )
+        assert _combo_text(combo) == "Main", (
+            f"Unloaded plate should default to 'Main', got "
+            f"{_combo_text(combo)!r}"
+        )
+    finally:
+        multiview_app.send_shortcut("cmd+1")   # module-scoped fixture: put the layout back

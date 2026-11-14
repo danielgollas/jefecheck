@@ -38,7 +38,8 @@ public:
     jefe::platelayout::DockShape dockShape() const { return shape_; }
 
     // Width available to a Row; sets how many cards fit per row (1..4).
-    // Until it is set (or when px < 0) a Row holds 4 cards.
+    // Until it is set (or when px < 0) a Row holds 4 cards. A Row shows at
+    // most two card rows; more scroll.
     void setRowBudget(int px);
 
     // Reflows when the framing mode, active plate, mode, shape or row column

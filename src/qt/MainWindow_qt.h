@@ -212,9 +212,19 @@ public:
     // --platemanager-test [outDir]: puts the Plate Manager in the bottom dock area and
     // checks the wide-short plate card (height budget, two 24 px rows, locator
     // objectNames, active highlight without a stylesheet), then the modes, the
-    // arrangement and the header (mode buttons, mini-map). With outDir it saves
-    // dock screenshots there. Returns 0 on PASS, 2 on FAIL.
+    // arrangement and the header (mode buttons, mini-map), then the dock shapes
+    // (side, floating, re-dock), the Timeline height and the remote sync. With
+    // outDir it saves and checks a screenshot matrix there. Returns 0 on PASS, 2 on FAIL.
     int runHeadlessPlateManagerTest(const QString& shotsDir = QString());
+
+    // Width a bottom/top Plate Manager row may fill: the window width, less the
+    // Timeline's minimum width (and a gap) when the Timeline shares the strip
+    // side by side.
+    int plateRowBudget() const;
+    // Runs after pumpNetwork() reports that remote state changed or was applied:
+    // refreshes the Remote dialog, the Notes dock and the Plate Manager (a peer
+    // can change the viewport layout).
+    void onRemoteStateApplied();
 
     /** Demo harness: hide every dock so the viewport fills the window. */
     void hideControlsForDemo();
@@ -228,6 +238,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
 
 private slots:
     void onFileDropped(const QString& path, float scale);
@@ -238,6 +249,8 @@ private:
     void buildMenuBar();
     void buildDocks();
     void restoreLayout();
+    // Feeds plateRowBudget() to the Plate Manager, deferred a tick.
+    void updatePlateRowBudget();
     void saveLayout();
 
     // Session save/restore.

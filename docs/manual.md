@@ -313,7 +313,21 @@ The **Viewport Controls** allow you to specify and control what viewports will b
 
 You can also access layouts from the keyboard or from **View > Viewport Layout** in the Menu Bar.
 
-The controls shown correspond to the active viewport. To activate a viewport, select it in the Active Viewport checkboxes or click on it in the viewport area.
+The viewport controls live in the **Plate Manager** dock (`F2`), one card per viewport ("plate"). Click a card, or click a viewport in the viewport area, to make it the active viewport; the active card has an orange border.
+
+**Which cards show.** Three buttons at the top of the dock choose the mode, and JefeCheck remembers your choice:
+
+- **Active** — only the active viewport's card.
+- **Visible** (default) — one card per viewport on screen: one in 1x1, two in 2x1 or 1x2, four in 2x2. Changing the layout updates the cards straight away.
+- **All** — all four cards. Cards for viewports the current layout doesn't show have a dashed border and dimmed captions.
+
+**Mini-map.** At the right of the dock header, a small map of the current layout shows the active viewport in orange. Click a cell to make that viewport active.
+
+**How the cards are arranged** depends on where the dock is:
+
+- **Bottom or top** — wide, short cards in a row, left to right. When the window is too narrow for every card (the Timeline beside the Plate Manager keeps its own width), they wrap onto a second row. The strip never grows past two rows of cards; with more cards it scrolls, and the active card is scrolled into view. The Timeline always keeps its full height. In this form, Zoom, X, Y and Rotation sit behind the zoom button (it shows the zoom, e.g. "1.00×"); click it to open them.
+- **Left or right** — narrow, tall cards in one column, A to D. The column scrolls, and making a viewport active scrolls its card into view.
+- **Floating** — a map of the viewport layout: side by side for 2x1, stacked for 1x2, a 2×2 grid for 2x2 (and for All). The floating window resizes itself when the layout changes.
 
 ![Single viewport control panel](manual-images/SingleViewportControl.png)
 
@@ -364,7 +378,7 @@ If you use a color correction frequently, you can save it as a **Color Correctio
 
 The central area of the Main Window is the **Viewports Area**. This is where the image sequences and other bits of information are drawn. The viewport area will be divided into up to four sections, depending on the layout chosen.
 
-The sections are not divided by a visible divider, but each viewport has a text overlay that shows valuable information on what is being shown at the moment.
+The sections are not divided by a visible divider, but each viewport has a text overlay that shows valuable information on what is being shown at the moment. When more than one viewport is on screen, a thin orange frame marks the active one. The frame is never drawn in 1x1 and never appears in renders, stamped notes or review thumbnails.
 
 #### Viewport Behavior
 

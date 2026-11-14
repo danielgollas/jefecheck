@@ -37,6 +37,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QResizeEvent>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
@@ -303,10 +304,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         // Service the RakNet sockets every tick so inbound messages arrive while idle.
         // Returns true when state changed or mirrored state applied: refresh the panel and repaint.
         if (jefe::qt::pumpNetwork()) {
-            if (remoteDialog_) remoteDialog_->refreshConnectionState();
-            // pumpNetwork() also drains inbound note add/remove/lock events into
-            // the review store; refresh the dock so a remote peer's markup shows up.
-            if (notesPanelWidget_) notesPanelWidget_->refresh();
+            onRemoteStateApplied();
             wantRepaint = true;
         }
         // Skip everything when nothing is playing and no raw frames are pending.
@@ -809,6 +807,7 @@ void MainWindow_Qt::buildDocks() {
                 if (area == Qt::NoDockWidgetArea || plateDock_->isFloating()) return;
                 plateManagerWidget_->setDockShape(shapeForArea(area));
                 pinPlateDock();
+                updatePlateRowBudget();
             });
     // Re-docking into the area it left does not always emit dockLocationChanged,
     // so the shape is re-read from the area here too.
@@ -820,7 +819,17 @@ void MainWindow_Qt::buildDocks() {
                     plateManagerWidget_->setDockShape(shapeForArea(dockWidgetArea(plateDock_)));
                     pinPlateDock();
                 }
+                updatePlateRowBudget();
             });
+    // A new arrangement changes the panel's extent: a floating dock resizes its
+    // window to it (shrinking too, e.g. 2x2 -> 1x1), a docked one re-pins its
+    // strip. Deferred a tick so the sizeHint is the settled one (§11).
+    connect(plateManagerWidget_, &PlateManager_Qt::arrangementChanged, this, [this, pinPlateDock]() {
+        if (!plateDock_->isFloating()) { pinPlateDock(); return; }
+        QTimer::singleShot(0, this, [this]() {
+            if (plateDock_ && plateDock_->isFloating()) plateDock_->adjustSize();
+        });
+    });
     // Initial edge is Bottom => row.
     plateManagerWidget_->setDockShape(jefe::platelayout::DockShape::Row);
     pinPlateDock();
@@ -837,6 +846,11 @@ void MainWindow_Qt::buildDocks() {
     // Place the timeline to the right of the plate manager so they share the
     // bottom strip side-by-side.
     splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
+    // The Timeline beside or away from the Plate Manager changes the row budget.
+    connect(timelineDock_, &QDockWidget::dockLocationChanged, this, [this]() { updatePlateRowBudget(); });
+    connect(timelineDock_, &QDockWidget::topLevelChanged, this, [this]() { updatePlateRowBudget(); });
+    connect(timelineDock_, &QDockWidget::visibilityChanged, this, [this]() { updatePlateRowBudget(); });
+    updatePlateRowBudget();
 
     // LUTs — right side.
     lutDock_ = new QDockWidget("LUTs", this);
@@ -998,6 +1012,45 @@ int MainWindow_Qt::autoAdmitPending() {
 
 QString MainWindow_Qt::cloudSessionCode() const {
     return QString::fromStdString(jefe::qt::remoteSessionCode());
+}
+
+void MainWindow_Qt::onRemoteStateApplied() {
+    if (remoteDialog_) remoteDialog_->refreshConnectionState();
+    // pumpNetwork() also drains inbound note add/remove/lock events into
+    // the review store; refresh the dock so a remote peer's markup shows up.
+    if (notesPanelWidget_) notesPanelWidget_->refresh();
+    // A peer can change the viewport layout (gfcnetworkclient sets the framing
+    // mode); costs a few int compares when nothing changed.
+    if (plateManagerWidget_) plateManagerWidget_->syncToViewport();
+}
+
+int MainWindow_Qt::plateRowBudget() const {
+    if (!plateDock_ || !timelineDock_ || !timelinePanelWidget_) return width();
+    if (plateDock_->isFloating() || timelineDock_->isFloating() || timelineDock_->isHidden() ||
+        dockWidgetArea(timelineDock_) != dockWidgetArea(plateDock_))
+        return width();
+    // Same area: side by side when their vertical extents overlap (stacked docks don't).
+    const QRect p = plateDock_->geometry(), t = timelineDock_->geometry();
+    const bool sideBySide = p.top() < t.bottom() && t.top() < p.bottom();
+    if (!sideBySide) return width();
+    // The Timeline's real floor is its explicit minimum width (360) when that
+    // exceeds the layout's minimumSizeHint; using the hint alone let two cards
+    // claim width the Timeline cannot give up, which widened the window.
+    const int timelineMin = std::max(timelinePanelWidget_->minimumWidth(),
+                                     timelinePanelWidget_->minimumSizeHint().width());
+    return width() - (timelineMin + jefe::qt::ui::kGap);
+}
+
+void MainWindow_Qt::updatePlateRowBudget() {
+    // Dock geometry settles a tick after a move or a resize (§11).
+    QTimer::singleShot(0, this, [this]() {
+        if (plateManagerWidget_) plateManagerWidget_->setRowBudget(plateRowBudget());
+    });
+}
+
+void MainWindow_Qt::resizeEvent(QResizeEvent* e) {
+    QMainWindow::resizeEvent(e);
+    updatePlateRowBudget();
 }
 
 void MainWindow_Qt::restoreLayout() {
@@ -1960,21 +2013,175 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
         }
     }
-    if (!shotsDir.isEmpty()) {   // Bottom dock, 2x2, each mode, two cards per row.
-        QDir().mkpath(shotsDir);
-        pm->setRowBudget(1280);
+    // ---- Dock integration. Sizes are right only a tick or two after a dock move (§11),
+    // so each move is followed by settleFor(300).
+    auto settleFor = [](int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    };
+    auto cellStr = [&]() {
+        QStringList out;
+        for (int i = 0; i < 4; ++i) out << QString("%1:(%2,%3)").arg(i).arg(pm->cardCell(i).x()).arg(pm->cardCell(i).y());
+        return out.join(" ");
+    };
+    auto bottomStrip = [&]() {   // the first-launch layout: Plate Manager left of the Timeline
+        plateDock_->setFloating(false);
+        addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
+        splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
+        settleFor(300);
+    };
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        addDockWidget(Qt::LeftDockWidgetArea, plateDock_);
+        settleFor(300);
         layout(FRAMINGQUAD_ID);
-        const struct { pl::PlateMode m; const char* name; } shots[] = {
+        settleFor(300);
+        bool column = pm->dockShape() == pl::DockShape::Column;
+        for (int i = 0; i < 4; ++i) column = column && pm->cardCell(i) == QPoint(0, i);
+        jefe::qt::setActivePlate(3);
+        pm->refreshAllCards();
+        settleFor(300);
+        auto* card3 = plateDock_->findChild<PlateCard_Qt*>("plate.3.card");
+        const bool seen = card3 && !card3->visibleRegion().isEmpty();
+        report("DOCK side", column && seen,
+               QString("shape %1 [%2]; active 3 card visible region %3")
+                   .arg(int(pm->dockShape())).arg(cellStr()).arg(seen ? "non-empty" : "empty"));
+    }
+    {
+        plateDock_->setFloating(true);
+        settleFor(300);
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGSINGLE_ID);
+        settleFor(300);
+        layout(FRAMINGQUAD_ID);
+        settleFor(300);
+        const QPoint want[4] = {QPoint(0, 0), QPoint(1, 0), QPoint(0, 1), QPoint(1, 1)};
+        bool map = pm->dockShape() == pl::DockShape::Floating;
+        for (int i = 0; i < 4; ++i) map = map && pm->cardCell(i) == want[i];
+        const QSize hint = pm->sizeHint();
+        const bool fits = plateDock_->width() >= hint.width() && plateDock_->height() >= hint.height() &&
+                          pm->width() >= hint.width() && pm->height() >= hint.height();
+        report("DOCK floating", map && fits,
+               QString("shape %1 [%2]; dock %3x%4, panel %5x%6, hint %7x%8").arg(int(pm->dockShape())).arg(cellStr())
+                   .arg(plateDock_->width()).arg(plateDock_->height()).arg(pm->width()).arg(pm->height())
+                   .arg(hint.width()).arg(hint.height()));
+        // Back to 1x1: the floating window shrinks to the one card.
+        const QSize quad = plateDock_->size();
+        layout(FRAMINGSINGLE_ID);
+        settleFor(300);
+        report("DOCK floating shrink", plateDock_->width() < quad.width() && plateDock_->height() < quad.height() &&
+                                           plateDock_->height() >= pm->sizeHint().height(),
+               QString("2x2 dock %1x%2 -> 1x1 dock %3x%4 (hint %5x%6)").arg(quad.width()).arg(quad.height())
+                   .arg(plateDock_->width()).arg(plateDock_->height())
+                   .arg(pm->sizeHint().width()).arg(pm->sizeHint().height()));
+    }
+    {
+        bottomStrip();
+        report("DOCK redock", pm->dockShape() == pl::DockShape::Row && pm->height() >= 2 * ui::kControlH,
+               QString("shape %1, panel %2x%3").arg(int(pm->dockShape())).arg(pm->width()).arg(pm->height()));
+    }
+    auto timelineOk = [&]() {
+        return timelinePanelWidget_->height() >= timelinePanelWidget_->minimumSizeHint().height();
+    };
+    {
+        resize(1280, 800);
+        settleFor(300);
+        pm->setMode(pl::PlateMode::All);
+        layout(FRAMINGQUAD_ID);
+        settleFor(300);
+        report("TIMELINE height", width() == 1280 && timelineOk() && plateDock_->height() <= kBaselineDockH,
+               QString("window %1x%2, budget %3; timeline %4 (min %5); plate dock %6x%7 (<= %8) [%9]")
+                   .arg(width()).arg(height()).arg(plateRowBudget())
+                   .arg(timelinePanelWidget_->height()).arg(timelinePanelWidget_->minimumSizeHint().height())
+                   .arg(plateDock_->width()).arg(plateDock_->height()).arg(kBaselineDockH).arg(cellStr()));
+    }
+    {
+        resize(900, 800);
+        settleFor(300);
+        bool apart = true;
+        QList<PlateCard_Qt*> shownCards;
+        for (int p : pm->shownPlateIds()) shownCards << plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p));
+        for (int a = 0; a < shownCards.size(); ++a)
+            for (int b = a + 1; b < shownCards.size(); ++b)
+                if (!shownCards[a] || !shownCards[b] || shownCards[a]->geometry().intersects(shownCards[b]->geometry())) apart = false;
+        report("TIMELINE narrow", pm->cardCell(3).y() >= 1 && apart && timelineOk(),
+               QString("window %1x%2, budget %3 [%4]; overlap %5; timeline %6 (min %7)")
+                   .arg(width()).arg(height()).arg(plateRowBudget()).arg(cellStr()).arg(apart ? "none" : "yes")
+                   .arg(timelinePanelWidget_->height()).arg(timelinePanelWidget_->minimumSizeHint().height()));
+        resize(1280, 800);
+        settleFor(300);
+    }
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGSINGLE_ID);
+        jefe::qt::setFramingMode(FRAMINGDOUBLE_ID);   // as a remote peer's layout change lands
+        onRemoteStateApplied();
+        report("SYNC remote", pm->shownPlateIds() == ids({0, 1}), QString("shown %1").arg(idStr(pm->shownPlateIds())));
+    }
+    if (!shotsDir.isEmpty()) {
+        // Screenshot matrix: dock placement x window size x layout x mode. Docked shots grab the
+        // whole window, floating ones the dock window. Each shot also checks that no shown card
+        // overlaps another or spills out of the card area, that the panel gets its full extent,
+        // and that a Timeline sharing the strip keeps its minimum height.
+        QDir().mkpath(shotsDir);
+        const struct { const char* name; Qt::DockWidgetArea area; bool floating; } places[] = {
+            {"bottom", Qt::BottomDockWidgetArea, false}, {"left", Qt::LeftDockWidgetArea, false},
+            {"right", Qt::RightDockWidgetArea, false}, {"floating", Qt::BottomDockWidgetArea, true}};
+        const QSize sizes[] = {QSize(1280, 800), QSize(1920, 1080)};
+        const struct { int framing; const char* name; } framings[] = {
+            {FRAMINGSINGLE_ID, "1x1"}, {FRAMINGDOUBLE_ID, "2x1"}, {FRAMINGDOUBLEVERT_ID, "1x2"}, {FRAMINGQUAD_ID, "2x2"}};
+        const struct { pl::PlateMode m; const char* name; } modes[] = {
             {pl::PlateMode::Active, "active"}, {pl::PlateMode::Visible, "visible"}, {pl::PlateMode::All, "all"}};
-        for (const auto& sh : shots) {
-            pm->setMode(sh.m);
-            layout(FRAMINGDOUBLE_ID);   // All mode: plates 2 and 3 are offscreen in 2x1
-            if (sh.m != pl::PlateMode::All) layout(FRAMINGQUAD_ID);
-            settle();
-            const QString path = QString("%1/platemanager-bottom-%2-%3.png").arg(shotsDir, sh.m == pl::PlateMode::All ? "2x1" : "2x2", sh.name);
-            plateDock_->grab().save(path);
-            printf("PLATEMANAGER-TEST shot %s (%dx%d)\n", qPrintable(path), plateDock_->width(), plateDock_->height());
+        int bad = 0, total = 0;
+        for (const auto& pc : places) {
+            bottomStrip();
+            if (pc.floating) plateDock_->setFloating(true);
+            else if (pc.area != Qt::BottomDockWidgetArea) addDockWidget(pc.area, plateDock_);
+            settleFor(300);
+            for (const QSize& sz : sizes) {
+                resize(sz);
+                settleFor(300);
+                for (const auto& fr : framings) {
+                    for (const auto& md : modes) {
+                        pm->setMode(md.m);
+                        layout(fr.framing);
+                        settleFor(250);
+                        QStringList why;
+                        QList<PlateCard_Qt*> cs;
+                        for (int p : pm->shownPlateIds())
+                            if (auto* c = plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p))) cs << c;
+                        for (int a = 0; a < cs.size(); ++a) {
+                            if (!cs[a]->parentWidget()->rect().contains(cs[a]->geometry())) why << QString("card%1 spills").arg(cs[a]->id());
+                            for (int b = a + 1; b < cs.size(); ++b)
+                                if (cs[a]->geometry().intersects(cs[b]->geometry()))
+                                    why << QString("cards %1/%2 overlap").arg(cs[a]->id()).arg(cs[b]->id());
+                        }
+                        const QSize hint = pm->sizeHint();
+                        if (pm->width() < hint.width() || (pc.area != Qt::LeftDockWidgetArea && pc.area != Qt::RightDockWidgetArea &&
+                                                           pm->height() < hint.height()))
+                            why << QString("panel %1x%2 < hint %3x%4").arg(pm->width()).arg(pm->height()).arg(hint.width()).arg(hint.height());
+                        if (!plateDock_->rect().contains(pm->geometry())) why << "panel outside dock";
+                        if (!pc.floating && pc.area == Qt::BottomDockWidgetArea && !timelineOk())
+                            why << QString("timeline %1 < min %2").arg(timelinePanelWidget_->height())
+                                       .arg(timelinePanelWidget_->minimumSizeHint().height());
+                        const QString path = QString("%1/pm-%2-%3x%4-%5-%6.png").arg(shotsDir, pc.name).arg(sz.width()).arg(sz.height())
+                                                 .arg(fr.name, md.name);
+                        (pc.floating ? plateDock_->grab() : grab()).save(path);
+                        ++total;
+                        if (!why.isEmpty()) ++bad;
+                        printf("PLATEMANAGER-TEST shot %s window %dx%d dock %dx%d %s%s\n", qPrintable(QFileInfo(path).fileName()),
+                               width(), height(), plateDock_->width(), plateDock_->height(), why.isEmpty() ? "ok" : "BAD ",
+                               qPrintable(why.join("; ")));
+                        fflush(stdout);
+                    }
+                }
+            }
         }
+        report("SHOTS checked", bad == 0, QString("%1 of %2 shots with a problem").arg(bad).arg(total));
+        bottomStrip();
+        resize(1280, 800);
+        settleFor(300);
     }
     pm->setMode(pl::PlateMode::Visible);
     layout(FRAMINGSINGLE_ID);
@@ -3553,7 +3760,7 @@ void MainWindow_Qt::autoloadStep() {
 }
 
 // Surfaces whose owning plan has not landed yet: violations print but never fail the run.
-static const QStringList kDensityDeferred = {"dock.platemanager", "dock.fxparams", "dock.remote"};
+static const QStringList kDensityDeferred = {"dock.fxparams", "dock.remote"};
 
 QMessageBox* MainWindow_Qt::makeAboutBox() {
     auto* box = new QMessageBox(this);
