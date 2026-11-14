@@ -244,23 +244,6 @@ void FXParamPanel_Qt::refresh() {
 
 namespace {
 
-fxui::Kind kindOf(jefe::qt::FXParamType t) {
-    using T = jefe::qt::FXParamType;
-    switch (t) {
-        case T::Float:   return fxui::Kind::Float;
-        case T::Bool:    return fxui::Kind::Bool;
-        case T::Choice:  return fxui::Kind::Choice;
-        case T::Texture: return fxui::Kind::Texture;
-        case T::Cube:    return fxui::Kind::Cube;
-        case T::LUT:     return fxui::Kind::Lut;
-        case T::Spacer:  return fxui::Kind::Spacer;
-        case T::Newline: return fxui::Kind::NewLine;
-        case T::Other:
-        case T::Unknown: break;
-    }
-    return fxui::Kind::Other;
-}
-
 bool isLayoutOnly(jefe::qt::FXParamType t) {
     return t == jefe::qt::FXParamType::Spacer || t == jefe::qt::FXParamType::Newline;
 }
@@ -320,7 +303,6 @@ QComboBox* makeCombo() {
     // Size to a short minimum, not the longest option, so a picker fits a narrow dock.
     combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     combo->setMinimumContentsLength(8);
-    combo->setFixedHeight(ui::kControlH);
     combo->setProperty(ui::kDensityElidedProperty, true);
     return combo;
 }
@@ -341,6 +323,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
     list_->clear();
     rowCache_.clear();
     sliderLabels_.clear();
+    powerButtons_.clear();
     lastCardWidth_ = -1;
 
     if (active < 0) {
@@ -399,6 +382,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         power->setAccessibleName(QString("FX %1 active").arg(fxIdx));
         power->setToolTip("Enable / disable this effect");
         power->setChecked(fx.active);
+        powerButtons_.push_back(power);
         connect(power, &QToolButton::toggled, this, [this, active, fxNow](bool on) {
             const int at = fxNow();
             if (refreshing_ || at < 0) return;
@@ -439,7 +423,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         items.reserve(fx.params.size());
         std::vector<std::string> groups;
         for (const auto& p : fx.params) {
-            items.push_back({kindOf(p.type), p.style, p.group});
+            items.push_back({jefe::qt::fxKindOf(p.type), p.style, p.group});
             if (std::find(groups.begin(), groups.end(), p.group) == groups.end()) groups.push_back(p.group);
         }
         const std::vector<fxui::Row> rows = fxui::layoutRows(items, /*showGroupHeadings=*/groups.size() > 1);
@@ -457,7 +441,6 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
             const QString tooltip = QString::fromStdString(p.tooltip);
             const std::string group = p.group, name = p.name;
             CachedRow c;
-            c.fxIdx = fxIdx;
             c.group = p.group;
             c.name = p.name;
             c.paramType = static_cast<int>(p.type);
@@ -725,7 +708,15 @@ bool FXParamPanel_Qt::refreshValuesOnly(const std::vector<jefe::qt::FXMeta>& sta
     for (const auto& fx : stack)
         for (const auto& p : fx.params)
             if (!isLayoutOnly(p.type)) flat.push_back(&p);
-    if (flat.size() != rowCache_.size()) return false;
+    if (flat.size() != rowCache_.size() || stack.size() != powerButtons_.size()) return false;
+
+    // Active state can change outside the panel (a peer, a favourite, the bridge).
+    for (size_t i = 0; i < stack.size(); ++i) {
+        QToolButton* power = powerButtons_[i].data();
+        if (!power || power->isChecked() == stack[i].active) continue;  // cache-gated (§5c)
+        const QSignalBlocker b(power);
+        power->setChecked(stack[i].active);
+    }
 
     using jefe::qt::FXParamType;
     for (size_t i = 0; i < rowCache_.size(); ++i) {

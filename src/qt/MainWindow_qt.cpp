@@ -25,6 +25,7 @@
 #include "TimelinePanel_qt.h"
 #include "UiDensityCheck_qt.h"
 #include "UiMetrics_qt.h"
+#include <QAbstractButton>
 #include <QListWidget>
 #include <QMap>
 #include <QMouseEvent>
@@ -1851,6 +1852,27 @@ int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QStrin
             if (!off.isValid() || off == accent) bad << "choice label after reset " + off.name();
         }
         check("bool and choice modified and reset", bad.isEmpty(), bad.join("; "));
+    }
+
+    // An FX switched off outside the panel (peer, favourite, bridge) shows it on the
+    // values-only refresh: same power button, now unchecked, no rebuild.
+    {
+        QStringList bad;
+        QPointer<QAbstractButton> power = qobject_cast<QAbstractButton*>(child("fxparams.fx2.active.check"));
+        if (!power || !power->isChecked()) bad << "setup: no checked power toggle on fx2";
+        else {
+            jefe::qt::setFXActiveOnPlate(0, 2, false);
+            panel.refresh();
+            settle();
+            if (!power) bad << "power button rebuilt";
+            else if (power->isChecked()) bad << "still checked after the FX was switched off";
+            jefe::qt::setFXActiveOnPlate(0, 2, true);
+            panel.refresh();
+            settle();
+            if (power && !power->isChecked()) bad << "not checked again after the FX was switched on";
+            if (!jefe::qt::getFXStackMetaOnPlate(0)[2].active) bad << "the button wrote the state back";
+        }
+        check("power toggle follows the stack", bad.isEmpty(), bad.join("; "));
     }
 
     // Dock screenshots for the PR, before the stack is changed below.

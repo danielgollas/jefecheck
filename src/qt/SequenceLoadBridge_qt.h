@@ -276,6 +276,9 @@ struct FXParamMeta {
     int labelR = 255, labelG = 255, labelB = 255;
 };
 
+// The fxui layout kind of a parameter type (the one mapping the bridge and panel share).
+fxui::Kind fxKindOf(FXParamType t);
+
 struct FXMeta {
     std::string name;
     std::string menuName;

@@ -756,6 +756,23 @@ std::vector<std::pair<int, std::string>> getLut1DChoices() {
     return result;
 }
 
+// Derived from the FXParamType so a new widget type is mapped once, in mapWidgetType.
+fxui::Kind fxKindOf(FXParamType t) {
+    switch (t) {
+        case FXParamType::Float:   return fxui::Kind::Float;
+        case FXParamType::Bool:    return fxui::Kind::Bool;
+        case FXParamType::Choice:  return fxui::Kind::Choice;
+        case FXParamType::Texture: return fxui::Kind::Texture;
+        case FXParamType::Cube:    return fxui::Kind::Cube;
+        case FXParamType::LUT:     return fxui::Kind::Lut;
+        case FXParamType::Spacer:  return fxui::Kind::Spacer;
+        case FXParamType::Newline: return fxui::Kind::NewLine;
+        case FXParamType::Unknown:
+        case FXParamType::Other:   return fxui::Kind::Other;
+    }
+    return fxui::Kind::Other;
+}
+
 namespace {
 FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
     switch (t) {
@@ -770,23 +787,6 @@ FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
         case FX_GUI_UNKNOWN: return FXParamType::Unknown;
         default:             return FXParamType::Other;
     }
-}
-
-// Derived from the FXParamType so a new widget type is mapped once, in mapWidgetType.
-fxui::Kind kindOf(FXParamType t) {
-    switch (t) {
-        case FXParamType::Float:   return fxui::Kind::Float;
-        case FXParamType::Bool:    return fxui::Kind::Bool;
-        case FXParamType::Choice:  return fxui::Kind::Choice;
-        case FXParamType::Texture: return fxui::Kind::Texture;
-        case FXParamType::Cube:    return fxui::Kind::Cube;
-        case FXParamType::LUT:     return fxui::Kind::Lut;
-        case FXParamType::Spacer:  return fxui::Kind::Spacer;
-        case FXParamType::Newline: return fxui::Kind::NewLine;
-        case FXParamType::Unknown:
-        case FXParamType::Other:   return fxui::Kind::Other;
-    }
-    return fxui::Kind::Other;
 }
 
 fxui::Range softRangeOf(const gfcFXWidget& w) {
@@ -1244,7 +1244,7 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
                 p.step         = w.step;
                 p.defaultValue = w.defaultValue;
                 p.options      = w.options;
-                p.style        = fxui::resolveStyle(kindOf(p.type), w.ui.declared);
+                p.style        = fxui::resolveStyle(fxKindOf(p.type), w.ui.declared);
                 const fxui::Range soft = softRangeOf(w);
                 p.softMinimum  = soft.lo;
                 p.softMaximum  = soft.hi;

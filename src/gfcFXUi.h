@@ -36,7 +36,8 @@ Style resolveStyle(Kind kind, Style declared);
 
 struct Range { float lo = 0.f, hi = 0.f; };
 
-// The slider range for a float. Appends a warning to ui.warnings on fallback.
+// The slider range for a float. Appends a warning to ui.warnings on fallback, and
+// when an explicit soft end is clamped to the hard range.
 Range softRange(float hardMin, float hardMax, float defaultValue, WidgetUi& ui);
 
 // Rounds v to a multiple of step when step > 0.

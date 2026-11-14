@@ -16,6 +16,7 @@
 #include <QPixmap>
 #include <QTimer>
 
+#include <clocale>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -482,6 +483,10 @@ int main(int argc, char* argv[]) {
     QSurfaceFormat::setDefaultFormat(fmt);
 
     QApplication qapp(argc, argv);
+    // QApplication applies the system locale (setlocale(LC_ALL, "")). With a comma-decimal
+    // locale (de_DE, fr_FR, ...) atof/strtof/sscanf would read "0.5" in .jfx, session and
+    // playlist files as 0, so numbers stay in the C locale. Qt's own QLocale is unaffected.
+    std::setlocale(LC_NUMERIC, "C");
     qapp.setApplicationName("JefeCheck");
     qapp.setOrganizationName("JefeCheck");
 

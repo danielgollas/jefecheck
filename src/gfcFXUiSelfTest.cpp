@@ -216,6 +216,11 @@ int fxUiSelfTest(const std::string& fxDir)
 {
     g_fails = 0;
 
+    // .jfx and session files store "0.5"; a comma-decimal system locale must not change
+    // how atof/strtof (gfcfx.cpp, xmlParser users, readWidgetUi) read them.
+    check("C numeric locale: strtof(\"0.5\") == 0.5 and atof(\"0.5\") == 0.5",
+          std::strtof("0.5", nullptr) == 0.5f && std::atof("0.5") == 0.5);
+
     // readWidgetUi
     check("readWidgetUi Knob -> Knob", readWidgetUi("Knob", nullptr, nullptr).declared == Style::Knob);
     {
@@ -274,7 +279,16 @@ int fxUiSelfTest(const std::string& fxDir)
         ui.hasSoftMin = ui.hasSoftMax = true;
         ui.softMin = -5; ui.softMax = 5;
         Range r = softRange(0, 10, 1, ui);
-        check("softRange explicit (-5, 5) on hard (0, 10) -> (0, 5)", rangeIs(r, 0, 5) && ui.warnings.empty());
+        check("softRange explicit (-5, 5) on hard (0, 10) -> (0, 5)", rangeIs(r, 0, 5));
+        check("softRange explicit (-5, 5) on hard (0, 10) -> one clamped warning",
+              ui.warnings.size() == 1 && hasWarning(ui, "soft range clamped to hard range"));
+    }
+    {
+        WidgetUi ui;
+        ui.hasSoftMin = ui.hasSoftMax = true;
+        ui.softMin = 0; ui.softMax = 10;
+        Range r = softRange(0, 10, 1, ui);
+        check("softRange explicit ends on the hard limits -> no warning", rangeIs(r, 0, 10) && ui.warnings.empty());
     }
     {
         WidgetUi ui;

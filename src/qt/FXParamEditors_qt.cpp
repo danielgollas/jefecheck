@@ -616,7 +616,7 @@ void report(bool ok, const char* name, const QString& detail = QString()) {
     }
 }
 
-bool near(float a, float b, float tol = 1e-3f) { return std::fabs(a - b) <= tol; }
+bool approx(float a, float b, float tol = 1e-3f) { return std::fabs(a - b) <= tol; }
 
 void mouse(QWidget* w, QEvent::Type type, QPointF pos, Qt::KeyboardModifiers mods = Qt::NoModifier) {
     const Qt::MouseButtons buttons =
@@ -703,10 +703,10 @@ int fxEditorsSelfTest() {
         row.setValue(1.f);
         Recorder rec(&row);
         typeInto(row.field(), "5");
-        const bool emittedOk = rec.values.size() == 1 && near(rec.values[0], 5.f);
+        const bool emittedOk = rec.values.size() == 1 && approx(rec.values[0], 5.f);
         row.setValue(5.f);
         const float handle = sliderHandlePosition(row.slider());
-        const bool ok = emittedOk && row.field()->text() == "5.000" && near(handle, 1.f) && near(row.value(), 5.f);
+        const bool ok = emittedOk && row.field()->text() == "5.000" && approx(handle, 1.f) && approx(row.value(), 5.f);
         report(ok, "typed past soft range",
                QString("%1 field '%2' handle %3 value %4").arg(emitted(rec), row.field()->text())
                    .arg(handle).arg(row.value()));
@@ -719,7 +719,7 @@ int fxEditorsSelfTest() {
         row.setValue(1.f);
         Recorder rec(&row);
         typeInto(row.field(), "12000");
-        const bool ok = rec.values.size() == 1 && near(rec.values[0], 9999.f, 0.01f);
+        const bool ok = rec.values.size() == 1 && approx(rec.values[0], 9999.f, 0.01f);
         report(ok, "typed past hard range", emitted(rec));
     }
 
@@ -734,7 +734,7 @@ int fxEditorsSelfTest() {
         row.setValue(1.f);
         drag(row.field(), QPointF(5, 10), QPointF(105, 10), Qt::ShiftModifier);
         const float fine = rec.last();
-        report(near(coarse, 2.f) && near(fine, 1.1f), "field scrub",
+        report(approx(coarse, 2.f) && approx(fine, 1.1f), "field scrub",
                QString("coarse %1 fine %2").arg(coarse).arg(fine));
     }
 
@@ -747,7 +747,7 @@ int fxEditorsSelfTest() {
         QWidget* dial = knob.knob();
         const QPointF c(dial->width() / 2.0, dial->height() / 2.0);
         drag(dial, c, c - QPointF(0, 100));
-        report(near(rec.last(), 2.f), "knob turn", emitted(rec));
+        report(approx(rec.last(), 2.f), "knob turn", emitted(rec));
     }
 
     // reset (dot and context-menu action)
@@ -758,12 +758,12 @@ int fxEditorsSelfTest() {
         const bool modifiedLook = row.resetButton()->text() == QString(QChar(0x25CF)) && labelIsAccent(row);
         Recorder rec(&row);
         row.resetButton()->click();
-        const bool dotOk = rec.values.size() == 1 && near(rec.values[0], 1.f);
+        const bool dotOk = rec.values.size() == 1 && approx(rec.values[0], 1.f);
         row.setValue(3.f);
         auto* action = row.findChild<QAction*>("t.slider.resetDefault");
         if (action) action->trigger();
         const bool menuOk = action && action->text() == "Reset to default" && rec.values.size() == 2 &&
-                            near(rec.values[1], 1.f);
+                            approx(rec.values[1], 1.f);
         report(modifiedLook && dotOk && menuOk, "reset",
                QString("modifiedLook %1 dot %2 menu %3 %4").arg(modifiedLook).arg(dotOk).arg(menuOk)
                    .arg(emitted(rec)));
@@ -880,7 +880,7 @@ int fxEditorsSelfTest() {
         key(row.field(), Qt::Key_Return);
         const bool enter = row.field()->isEditing();
         key(row.field(), Qt::Key_Escape);
-        report(f2 && enter && rec.values.size() == 1 && near(rec.values[0], 3.f), "keyboard starts edit",
+        report(f2 && enter && rec.values.size() == 1 && approx(rec.values[0], 3.f), "keyboard starts edit",
                QString("f2 %1 enter %2 ").arg(f2).arg(enter) + emitted(rec));
     }
 
@@ -897,7 +897,7 @@ int fxEditorsSelfTest() {
         const bool sliderBusy = row.isInteracting();
         const float handleDuring = sliderHandlePosition(sl);
         row.setValue(0.3f);
-        const bool sliderHeld = near(sliderHandlePosition(sl), handleDuring) && !near(row.value(), 0.3f);
+        const bool sliderHeld = approx(sliderHandlePosition(sl), handleDuring) && !approx(row.value(), 0.3f);
         mouse(sl, QEvent::MouseButtonRelease, QPointF(sl->width() * 0.75, y));
         row.setValue(0.3f);
         const bool sliderAfter = !row.isInteracting() && row.field()->text() == "0.300";
@@ -912,7 +912,7 @@ int fxEditorsSelfTest() {
         const bool knobBusy = knob.isInteracting();
         const QString knobDuring = knob.field()->text();
         knob.setValue(0.3f);
-        const bool knobHeld = knob.field()->text() == knobDuring && !near(knob.value(), 0.3f);
+        const bool knobHeld = knob.field()->text() == knobDuring && !approx(knob.value(), 0.3f);
         mouse(dial, QEvent::MouseButtonRelease, c - QPointF(0, 50));
         knob.setValue(0.3f);
         const bool knobAfter = !knob.isInteracting() && knob.field()->text() == "0.300";
@@ -940,7 +940,7 @@ int fxEditorsSelfTest() {
             }
             menu->close();
         }
-        report(seen == "Reset to default;" && rec.values.size() == 1 && near(rec.values[0], 1.f),
+        report(seen == "Reset to default;" && rec.values.size() == 1 && approx(rec.values[0], 1.f),
                "right-click reset menu", QString("menu '%1' ").arg(seen) + emitted(rec));
     }
 

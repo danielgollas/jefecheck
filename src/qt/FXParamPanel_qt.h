@@ -130,7 +130,6 @@ private:
     // One entry per editable/display parameter of the last rebuild, in stack and
     // declaration order (spacers and newLines skipped).
     struct CachedRow {
-        int fxIdx = 0;
         std::string group;
         std::string name;
         int paramType = -1;  // FXParamType cast to int
@@ -150,6 +149,8 @@ private:
         QString text;  // the full label; shown elided when the column is narrower
     };
     std::vector<std::vector<SliderLabel>> sliderLabels_;
+    // Each card's header power toggle, in stack order; the fast path syncs them.
+    std::vector<QPointer<QToolButton>> powerButtons_;
     int lastCardWidth_ = -1;
 };
 

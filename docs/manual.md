@@ -1118,7 +1118,7 @@ Each `widget` node must contain these attributes (italic = optional):
 | *`style`* | How a `float` widget is drawn: `slider` (the default), `knob` or `field` (not case-sensitive). An unknown style draws a slider and prints one warning when the FX loads |
 | *`softMinimum`*, *`softMaximum`* | The slider and scrub range of a `float` widget, inside `minimum`–`maximum`. Typed values may still go anywhere between `minimum` and `maximum` |
 
-Without `softMinimum`/`softMaximum`, the soft range is the full `minimum`–`maximum` range when that spans 100 or less; for a wider range it becomes `minimum` to twice the default (at least `minimum` + 1) when `minimum` ≥ 0, else the default ± max(|default|, 1). An unreadable soft end is skipped, and an empty or reversed soft range is ignored; each prints one warning when the FX loads.
+Without `softMinimum`/`softMaximum`, the soft range is the full `minimum`–`maximum` range when that spans 100 or less; for a wider range it becomes `minimum` to twice the default (at least `minimum` + 1) when `minimum` ≥ 0, else the default ± max(|default|, 1). An unreadable soft end is skipped, a soft end outside `minimum`–`maximum` is clamped to it, and an empty or reversed soft range is ignored; each prints one warning when the FX loads.
 
 **`shaders` node:** Specifies the names of the shader files:
 - `vertex` — Filename of the vertex shader (e.g., `"fixed.vert"`).

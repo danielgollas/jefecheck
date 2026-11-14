@@ -90,6 +90,8 @@ Range softRange(float hardMin, float hardMax, float defaultValue, WidgetUi& ui)
     Range r = rule;
     if (ui.hasSoftMin) r.lo = clampTo(ui.softMin, hardMin, hardMax);
     if (ui.hasSoftMax) r.hi = clampTo(ui.softMax, hardMin, hardMax);
+    if ((ui.hasSoftMin && r.lo != ui.softMin) || (ui.hasSoftMax && r.hi != ui.softMax))
+        ui.warnings.push_back("soft range clamped to hard range");
     if (r.lo >= r.hi) {
         ui.warnings.push_back("soft range ignored");
         return rule;
