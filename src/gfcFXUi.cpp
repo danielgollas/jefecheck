@@ -18,12 +18,13 @@ bool equalsNoCase(const char* a, const char* b)
     return *a == *b;
 }
 
-// Parses a whole attribute as a float. False for empty or trailing junk.
+// Parses a whole attribute as a finite float. False for empty, trailing junk,
+// NaN or infinity.
 bool parseFloat(const char* text, float& out)
 {
     char* end = nullptr;
     const float v = std::strtof(text, &end);
-    if (end == text) return false;
+    if (end == text || !std::isfinite(v)) return false;
     while (*end && std::isspace(static_cast<unsigned char>(*end))) ++end;
     if (*end) return false;
     out = v;

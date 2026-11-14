@@ -23,9 +23,9 @@ void check(const std::string& name, bool cond)
     if (!cond) ++g_fails;
 }
 
-bool near(float a, float b, float eps = 1e-5f) { return std::fabs(a - b) <= eps; }
+bool approx(float a, float b, float eps = 1e-5f) { return std::fabs(a - b) <= eps; }
 
-bool rangeIs(Range r, float lo, float hi) { return near(r.lo, lo) && near(r.hi, hi); }
+bool rangeIs(Range r, float lo, float hi) { return approx(r.lo, lo) && approx(r.hi, hi); }
 
 bool hasWarning(const WidgetUi& ui, const std::string& text)
 {
@@ -105,6 +105,15 @@ int fxUiSelfTest(const std::string& fxDir)
         check("readWidgetUi softMinimum abc -> absent", !ui.hasSoftMin);
         check("readWidgetUi softMinimum abc -> one warning", ui.warnings.size() == 1);
     }
+    {
+        WidgetUi ui = readWidgetUi(nullptr, "nan", nullptr);
+        check("readWidgetUi softMinimum nan -> absent", !ui.hasSoftMin);
+        check("readWidgetUi softMinimum nan -> one warning", ui.warnings.size() == 1);
+    }
+    {
+        WidgetUi ui = readWidgetUi(nullptr, nullptr, "inf");
+        check("readWidgetUi softMaximum inf -> absent, one warning", !ui.hasSoftMax && ui.warnings.size() == 1);
+    }
 
     // resolveStyle
     check("resolveStyle Float/Default -> Slider", resolveStyle(Kind::Float, Style::Default) == Style::Slider);
@@ -140,6 +149,22 @@ int fxUiSelfTest(const std::string& fxDir)
         Range r = softRange(0, 10, 1, ui);
         check("softRange explicit (-5, 5) on hard (0, 10) -> (0, 5)", rangeIs(r, 0, 5) && ui.warnings.empty());
     }
+    {
+        WidgetUi ui;
+        ui.hasSoftMax = true;
+        ui.softMax = 1.5f;
+        Range r = softRange(0, 9999, 1, ui);
+        check("softRange only softMax 1.5 on hard (0, 9999) def 1 -> (0, 1.5)",
+              rangeIs(r, 0, 1.5f) && ui.warnings.empty());
+    }
+    {
+        WidgetUi ui;
+        ui.hasSoftMin = true;
+        ui.softMin = 3;
+        Range r = softRange(0, 9999, 1, ui);
+        check("softRange only softMin 3 on hard (0, 9999) def 1 -> rule (0, 2)", rangeIs(r, 0, 2));
+        check("softRange only softMin 3 inverts -> warning", hasWarning(ui, "soft range ignored"));
+    }
 
     // quantise
     check("quantise 0.12349 step 0.001 -> 0.123", std::fabs(quantise(0.12349f, 0.001f) - 0.123f) <= 1e-6f);
@@ -149,14 +174,14 @@ int fxUiSelfTest(const std::string& fxDir)
     check("toNormalized 5 in (0, 2) -> 1", toNormalized(5, {0, 2}) == 1.f);
     check("toNormalized 1 in (0, 2) -> 0.5", toNormalized(1, {0, 2}) == 0.5f);
     check("toNormalized 1 in (1, 1) -> 0", toNormalized(1, {1, 1}) == 0.f);
-    check("fromNormalized 0.5 -> 1", near(fromNormalized(0.5f, {0, 2}, 0, 9999, 0.001f), 1));
-    check("fromNormalized 1.7 -> 2", near(fromNormalized(1.7f, {0, 2}, 0, 9999, 0.001f), 2));
-    check("fromNormalized 0 hard min 0.5 -> 0.5", near(fromNormalized(0, {0, 2}, 0.5f, 9999, 0.001f), 0.5f));
+    check("fromNormalized 0.5 -> 1", approx(fromNormalized(0.5f, {0, 2}, 0, 9999, 0.001f), 1));
+    check("fromNormalized 1.7 -> 2", approx(fromNormalized(1.7f, {0, 2}, 0, 9999, 0.001f), 2));
+    check("fromNormalized 0 hard min 0.5 -> 0.5", approx(fromNormalized(0, {0, 2}, 0.5f, 9999, 0.001f), 0.5f));
 
     // scrub
-    check("scrub +100px -> 2", near(scrub(1, 100, {0, 2}, 0, 9999, 0.001f, false), 2));
-    check("scrub +100px fine -> 1.1", near(scrub(1, 100, {0, 2}, 0, 9999, 0.001f, true), 1.1f));
-    check("scrub -100px from 0.2 -> 0 (hard clamp)", near(scrub(0.2f, -100, {0, 2}, 0, 9999, 0.001f, false), 0));
+    check("scrub +100px -> 2", approx(scrub(1, 100, {0, 2}, 0, 9999, 0.001f, false), 2));
+    check("scrub +100px fine -> 1.1", approx(scrub(1, 100, {0, 2}, 0, 9999, 0.001f, true), 1.1f));
+    check("scrub -100px from 0.2 -> 0 (hard clamp)", approx(scrub(0.2f, -100, {0, 2}, 0, 9999, 0.001f, false), 0));
 
     // isModified / isWhite
     check("isModified 1.0005 vs 1 step 0.001 -> false", !isModified(1.0005f, 1, 0.001f));
