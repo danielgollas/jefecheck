@@ -61,6 +61,7 @@
 #include <QPushButton>
 #include <QMenu>
 #include <QMenuBar>
+#include <QSet>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
@@ -537,7 +538,7 @@ void MainWindow_Qt::buildMenuBar() {
         rebuildRecentPlaylistsMenu();
     });
 
-    // Render… and Remote Session… live in the Panels menu, not File.
+    // Render… and Remote Session… live in the Window menu, not File.
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
@@ -704,10 +705,9 @@ void MainWindow_Qt::buildMenuBar() {
                        []() { jefe::qt::resetActiveColorCorrection(); },
                        "menu.view.resetcc");
 
-    // "Panels" not "Window", which would imply macOS Minimize/Zoom/window-list commands we don't ship.
-    // Created empty between View and Help; populated in buildDocks() once the docks exist.
-    panelsMenu_ = mb->addMenu(tr("&Panels"));
-    panelsMenu_->setObjectName("menu.panels");
+    // Window: created empty between View and Help; populated in buildDocks() once the docks exist.
+    windowMenu_ = mb->addMenu(tr("&Window"));
+    windowMenu_->setObjectName("menu.window");
 
     auto* helpMenu = mb->addMenu("&Help");
     helpMenu->setObjectName("menu.help");
@@ -957,49 +957,65 @@ void MainWindow_Qt::buildDocks() {
     connect(notesPanelWidget_, &NotesPanel_Qt::viewportRepaintRequested,
             this, [this]() { if (viewport_) viewport_->update(); });
 
-    // Populate the Panels menu now that docks exist: each contributes its checkable toggleViewAction(), F-keys assigned here;
-    // "show" also raises the dock to the front of its tab group.
-    if (panelsMenu_) {
+    // Populate the Window menu now that docks exist: each panel contributes its checkable toggleViewAction() with an
+    // F-key; "show" also raises the dock to the front of its tab group.
+    if (windowMenu_) {
         auto addDockToggle = [this](QDockWidget* dock, const QKeySequence& seq,
                                     const QString& objName) {
             if (!dock) return;
             QAction* a = dock->toggleViewAction();
-            if (!seq.isEmpty()) {
-                a->setShortcut(seq);
-                a->setShortcutContext(Qt::ApplicationShortcut);
-            }
+            a->setShortcut(seq);
+            a->setShortcutContext(Qt::ApplicationShortcut);
             a->setObjectName(objName);
             // Bringing a hidden/tabbed dock back should also raise it forward.
             connect(a, &QAction::toggled, this,
                     [dock](bool on) { if (on) dock->raise(); });
-            panelsMenu_->addAction(a);
+            windowMenu_->addAction(a);
         };
-        addDockToggle(plateDock_,    QKeySequence(Qt::Key_F2), "menu.panels.platemanager");
-        addDockToggle(timelineDock_, QKeySequence(),           "menu.panels.timeline");
-        addDockToggle(fxParamsDock_, QKeySequence(Qt::Key_F3), "menu.panels.fxparams");
-        addDockToggle(lutDock_,      QKeySequence(Qt::Key_F4), "menu.panels.lut");
-        addDockToggle(playlistDock_, QKeySequence(),           "menu.panels.playlist");
-        addDockToggle(notesDock_,    QKeySequence(Qt::Key_F7), "menu.panels.notes");
+        addDockToggle(plateDock_,    QKeySequence(Qt::Key_F2), "menu.window.platemanager");
+        addDockToggle(fxParamsDock_, QKeySequence(Qt::Key_F3), "menu.window.fxparams");
+        addDockToggle(lutDock_,      QKeySequence(Qt::Key_F4), "menu.window.lut");
+        addDockToggle(notesDock_,    QKeySequence(Qt::Key_F7), "menu.window.notes");
+        addDockToggle(timelineDock_, QKeySequence(Qt::Key_F8), "menu.window.timeline");
+        addDockToggle(playlistDock_, QKeySequence(Qt::Key_F9), "menu.window.playlist");
 
-        panelsMenu_->addSeparator();
+        windowMenu_->addSeparator();
         // Remote Session… (F5): the modeless persistent dock, lazy-created;
         // show()/raise() brings it forward.
-        panelsMenu_->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
+        windowMenu_->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
                                this, [this]() {
             if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
             if (remoteDialog_) remoteDialog_->refreshConnectionState();
-        })->setObjectName("menu.panels.remote");
+        })->setObjectName("menu.window.remote");
         // Render… (F6): modal RenderDialog_Qt.
-        panelsMenu_->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
+        windowMenu_->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
                                this, [this]() {
             RenderDialog_Qt dlg(this);
             dlg.exec();
-        })->setObjectName("menu.panels.render");
-        panelsMenu_->addSeparator();
-        panelsMenu_->addAction(tr("Hide Controls"),
+        })->setObjectName("menu.window.render");
+        windowMenu_->addSeparator();
+        windowMenu_->addAction(tr("Hide Controls"),
                                QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
                                this, [this]() { toggleHideControls(); })
-            ->setObjectName("menu.panels.hidecontrols");
+            ->setObjectName("menu.window.hidecontrols");
+#ifdef Q_OS_MACOS
+        // The standard macOS Window-menu commands, so the title promises nothing we lack.
+        // Qt::CTRL is Cmd on macOS.
+        windowMenu_->addSeparator();
+        windowMenu_->addAction(tr("Minimize"), QKeySequence(Qt::CTRL | Qt::Key_M),
+                               this, [this]() { showMinimized(); })
+            ->setObjectName("menu.window.minimize");
+        windowMenu_->addAction(tr("Zoom"), this, [this]() {
+            if (isMaximized()) showNormal(); else showMaximized();
+        })->setObjectName("menu.window.zoom");
+        windowMenu_->addAction(tr("Bring All to Front"), this, []() {
+            for (QWidget* w : QApplication::topLevelWidgets()) {
+                if (!w->isVisible()) continue;
+                w->raise();
+                w->activateWindow();
+            }
+        })->setObjectName("menu.window.bringalltofront");
+#endif
     }
 }
 
@@ -2433,6 +2449,40 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         bottomStrip();
         resize(1280, 800);
         settleFor(300);
+    }
+    {   // Window menu: every panel has a shortcut, and no two menu-bar actions share one.
+        QStringList bad;
+        auto* wm = menuBar()->findChild<QMenu*>("menu.window");
+        if (!wm || wm->title() != tr("&Window")) bad << "no menu.window titled Window";
+        const char* panels[] = {"platemanager", "fxparams", "lut", "remote", "render", "notes", "timeline", "playlist"};
+        QStringList keys;
+        for (const char* leaf : panels) {
+            QAction* a = nullptr;
+            if (wm) for (QAction* x : wm->actions()) if (x->objectName() == QString("menu.window.%1").arg(leaf)) a = x;
+            if (!a) { bad << QString("menu.window.%1 missing").arg(leaf); continue; }
+            if (a->shortcut().isEmpty()) bad << QString("menu.window.%1 has no shortcut").arg(leaf);
+            keys << QString("%1=%2").arg(leaf, a->shortcut().toString());
+        }
+        QMap<QString, QString> seen;
+        QSet<QAction*> visited;
+        std::function<void(QMenu*)> walk = [&](QMenu* m) {
+            for (QAction* a : m->actions()) {
+                if (visited.contains(a)) continue;
+                visited.insert(a);
+                if (a->menu()) { walk(a->menu()); continue; }
+                for (const QKeySequence& k : a->shortcuts()) {
+                    const QString key = k.toString();
+                    if (key.isEmpty()) continue;
+                    const QString name = a->objectName().isEmpty() ? a->text() : a->objectName();
+                    if (seen.contains(key)) bad << QString("%1 shared by %2 and %3").arg(key, seen[key], name);
+                    else seen[key] = name;
+                }
+            }
+        };
+        for (QAction* top : menuBar()->actions()) if (top->menu()) walk(top->menu());
+        report("WINDOW menu", bad.isEmpty(),
+               bad.isEmpty() ? QString("8 panel shortcuts [%1]; %2 menu-bar shortcuts, all distinct").arg(keys.join(" ")).arg(seen.size())
+                             : bad.join("; "));
     }
     pm->setMode(pl::PlateMode::Visible);
     layout(FRAMINGSINGLE_ID);

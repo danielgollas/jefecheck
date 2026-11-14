@@ -282,9 +282,10 @@ private:
     bool summaryExportInProgress_ = false;
     QMenu*  recentMenu_ = nullptr;
     QMenu*  recentPlaylistMenu_ = nullptr;   // File → Recent Playlists
-    // The consolidated "Panels" menu, named so it doesn't claim the macOS Window-menu
-    // semantics. Created empty in buildMenuBar(), populated in buildDocks().
-    QMenu*  panelsMenu_ = nullptr;
+    // The Window menu: every panel's show/hide toggle with its F-key, Remote, Render,
+    // Hide Controls, and on macOS the standard Minimize / Zoom / Bring All to Front.
+    // Created empty in buildMenuBar(), populated in buildDocks().
+    QMenu*  windowMenu_ = nullptr;
     QMenu*  plateModeMenu_ = nullptr;   // View > Plate Manager Shows
     bool    lastExitWasClean_ = true;
 

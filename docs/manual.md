@@ -519,17 +519,21 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 - **Reset All Color Corrections** (`Shift+Alt+R`) — Resets all viewport color corrections.
 - **Show Histogram** (`Ctrl+H`) — Shows an RGB histogram for the current viewport. You can drag and resize the histogram within the viewport.
 - **Fullscreen** (`Ctrl+F`) — Toggles full-screen mode on or off. If you have two monitors, full-screen mode activates on the monitor where the JefeCheck main window is located.
-- **Hide Controls** (`Ctrl+Alt+F`) — Hides the control and menu bars. Most keyboard shortcuts will work when in this mode. To return to normal mode, press `Ctrl+Alt+F` again.
 
-#### Dialogs Menu
+#### Window Menu
 
-- **Load Manager** (`Ctrl+L`) — Opens the Load Manager Window.
-- **Playlist Manager** (`Ctrl+P`) — Opens the Playlist Window.
-- **FX Stack Manager** (`F2`) — Opens the FX Stack Manager Window. See Section 2: Process.
-- **FX Manager** (`F3`) — Opens the FX Manager Window. See Section 2: Process.
-- **LUT Manager** (`F4`) — Opens the LUT Manager Window. See Section 2: Process.
-- **Remote Session Manager** (`F5`) — Opens the Remote Session Manager Window. See Section 3: Share.
-- **Render Manager** (`F6`) — Opens the Render Manager Window. See Section 4: Other Stuff.
+The **Window** menu shows and hides every panel. A checkmark means the panel is showing; showing a panel also brings it to the front of its tab group.
+
+- **Plate Manager** (`F2`) — the per-viewport controls.
+- **FX** (`F3`) — the effect controls for the active viewport. See Section 2: Process.
+- **LUTs** (`F4`) — the LUT browser. See Section 2: Process.
+- **Notes** (`F7`) — review notes for the active viewport's media.
+- **Timeline** (`F8`) — transport, frame range and the track lanes.
+- **Playlist** (`F9`) — the playlist.
+- **Remote Session…** (`F5`) — the remote session panel. See Section 3: Share.
+- **Render…** (`F6`) — the Render window. See Section 4: Other Stuff.
+- **Hide Controls** (`Ctrl+Alt+F`) — hides the menu bar, status bar and every panel; press it again to bring them back.
+- On macOS, the standard **Minimize** (`Cmd+M`), **Zoom** and **Bring All to Front** commands.
 
 #### Help Menu
 
@@ -553,7 +557,7 @@ For example, you might be reviewing a series of shots for a show. Say for shot 1
 
 > **Power Tip:** You can think of a playlist item as a snapshot of the current state of JefeCheck.
 
-To open the Playlist Window, use `Ctrl+P` or use the Dialogs Menu.
+To open the Playlist panel, use `F9` or **Window > Playlist**.
 
 You add items to a playlist in three ways:
 
@@ -609,7 +613,7 @@ To load a LUT, be it 3D or 1D, you use the **LUT Manager**.
 
 ![The LUT Manager Window](manual-images/LUTManager.png)
 
-From the **LUT Manager** (`F4` or **Dialogs > LUT Manager**) you can load and unload LUTs.
+From the **LUTs** panel (`F4` or **Window > LUTs**) you can load and unload LUTs.
 
 The first time you open the LUT Manager, it will be empty, so you need to load whatever LUTs you intend to use. To load a LUT, click the **Browse** button — this opens a file browser where you can select any supported LUT format. You can select multiple LUTs at once by dragging or `Ctrl`-clicking. The LUT browser navigates by default to the FX folder in your JefeCheck installation, which is where your LUTs should be stored.
 
@@ -647,7 +651,7 @@ Real Time modifications are called **FXs** within JefeCheck. Each FX comes in th
 
 ![The FX Manager Window](manual-images/FXManager.png)
 
-From the **FX Manager** (`F3` or **Dialogs > FX Manager**) you can load and unload FXs.
+From the **FX** panel (`F3` or **Window > FX**) you can load and unload FXs.
 
 When you first open the FX Manager, it will be empty. To load an FX, click the **Browse** button. This opens a file browser in the default FX folder within your JefeCheck installation. Select one or more `.jfx` files and click OK. If everything goes OK, a confirmation message appears and the FX will be listed in the Loaded section. Check the **Auto-Load** checkbox next to each FX to have them load automatically next time you use JefeCheck. To unload an FX, click its Unload button.
 
@@ -734,7 +738,7 @@ Everything involved in setting up or joining a Remote Session is done from the *
 
 ![The Remote Session Manager Window](manual-images/RemoteSessionManager.png)
 
-To start or join a remote session, open the **Remote Session Manager** (`F5` or **Dialogs > Remote Session Manager**).
+To start or join a remote session, open the **Remote Session** panel (`F5` or **Window > Remote Session…**).
 
 #### Connecting to a Server
 
@@ -899,7 +903,7 @@ The Preferences Window is organized by tabs:
 
 Although JefeCheck is not a finishing tool, you can output high-quality images of your on-screen results in a variety of formats, including JPEG, BMP, TIFF, TGA, PNG, and OpenEXR. On Linux, you can even create an AVI movie file if you have `mencoder` installed.
 
-The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render Manager** (`F6` or **Dialogs > Render Manager**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render).
+The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render Manager** (`F6` or **Window > Render Manager**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render).
 
 ### The Render Window
 
