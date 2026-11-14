@@ -1600,6 +1600,20 @@ int main(int argc, char* argv[]) {
         });
     }
 
+    // Headless FX panel layout test (--fx-panel-test <image> [shotDir]).
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--fx-panel-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QString shotDir;
+        if (i + 2 < argc && std::strncmp(argv[i + 2], "--", 2) != 0) shotDir = QString::fromUtf8(argv[i + 2]);
+        QTimer::singleShot(5000, &window, [&window, image, shotDir]() {
+            const int code = window.runHeadlessFXPanelTest(image, shotDir);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
     // Headless colour-correction render proof (--cc-test <image>): render a baseline,
     // apply exposure+gamma, re-render, and report whether the output changed.
     const QString ccTestFile = resolveCCTestFile(argc, argv);

@@ -285,6 +285,9 @@ struct FXMeta {
     bool active = false;
     bool loadedAndCompiled = false;
     std::uint32_t instanceId = 0;
+    // Content hash of the effect's files: with instanceId, it tells two stacks apart
+    // even when a loaded stack reuses ids.
+    std::string hash;
     std::vector<FXParamMeta> params;
 };
 
@@ -292,6 +295,12 @@ struct FXMeta {
 // Walks gfcFXStack copies, so this is a snapshot — refresh on
 // plateStateChanged or after add/remove. Empty for invalid plate idx.
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx);
+
+// The plate's FX stack as stack XML (what a session saves), and replacing the whole
+// stack from such XML the way favourites and .fxs files load (name fallback on, saved
+// instance ids kept). Empty string / no-op for an invalid plate idx.
+std::string getFXStackXmlOnPlate(int plateIdx);
+void setFXStackXmlOnPlate(int plateIdx, const std::string& xml);
 
 // Headless self-test (run by --fx-test): adds the BCS effect to plate 0,
 // checks the style / soft range / label colour getFXStackMetaOnPlate reports,

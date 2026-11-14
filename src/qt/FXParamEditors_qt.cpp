@@ -6,7 +6,10 @@
 #include "qticons.h"
 
 #include <QAction>
+#include <QContextMenuEvent>
 #include <QCoreApplication>
+#include <QIcon>
+#include <QImage>
 #include <QFocusEvent>
 #include <QFontMetrics>
 #include <QHBoxLayout>
@@ -16,6 +19,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPixmap>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -82,7 +86,7 @@ public:
         setProperty(ui::kDensityExemptProperty, true);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         setFixedHeight(ui::kControlH);
-        setMinimumWidth(2 * ui::kControlH);
+        setMinimumWidth(ui::kControlH + ui::kGapGroup);
         setCursor(Qt::PointingHandCursor);
         setContextMenuPolicy(Qt::NoContextMenu);
     }
@@ -321,10 +325,13 @@ void FXScrubField_Qt::commitEdit() {
     }
     v = clampTo(v, hardMin_, hardMax_);
     v = clampTo(fxui::quantise(v, step_), hardMin_, hardMax_);
+    const bool changed = v != value_;
     value_ = v;
     lastEmitted_ = v;
     showValue();
-    emit valueEdited(v);
+    // Enter or a click away on an untouched value is not an edit. This can run from
+    // focusOutEvent, so receivers must not delete the field synchronously.
+    if (changed) emit valueEdited(v);
 }
 
 void FXScrubField_Qt::cancelEdit() {
@@ -384,6 +391,14 @@ void FXScrubField_Qt::keyPressEvent(QKeyEvent* e) {
             case Qt::Key_Return:
             case Qt::Key_Enter: commitEdit(); return;
             case Qt::Key_Escape: cancelEdit(); return;
+            default: break;
+        }
+    } else if (!dragging_) {
+        // Keyboard access to the read-only field: Enter or F2 starts typing.
+        switch (e->key()) {
+            case Qt::Key_Return:
+            case Qt::Key_Enter:
+            case Qt::Key_F2: beginEdit(); return;
             default: break;
         }
     }
@@ -471,7 +486,7 @@ FXSliderRow_Qt::FXSliderRow_Qt(const FXEditorSpec& spec, QWidget* parent) : FXPa
     connect(reset_, &QToolButton::clicked, this, [this] { edited(spec_.defaultValue); });
 
     auto* row = new QHBoxLayout(this);
-    ui::applyRowMetrics(row);
+    ui::applyRowMetrics(row, ui::kGapTight);
     row->addWidget(label_);
     row->addWidget(field_);
     row->addWidget(slider_, 1);
@@ -558,10 +573,14 @@ void attachResetMenu(QWidget* w, std::function<void()> reset) {
     action->setObjectName(w->objectName() + ".resetDefault");
     QObject::connect(action, &QAction::triggered, w, [reset = std::move(reset)] { reset(); });
     w->setContextMenuPolicy(Qt::CustomContextMenu);
+    // popup(), not exec(): no nested event loop in which a panel rebuild could delete w
+    // under the open menu. The menu is a child of w and deletes itself on close.
     QObject::connect(w, &QWidget::customContextMenuRequested, w, [w, action](const QPoint& pos) {
-        QMenu menu(w);
-        menu.addAction(action);
-        menu.exec(w->mapToGlobal(pos));
+        auto* menu = new QMenu(w);
+        menu->setObjectName(w->objectName() + ".menu");
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+        menu->addAction(action);
+        menu->popup(w->mapToGlobal(pos));
     });
 }
 
@@ -812,6 +831,129 @@ int fxEditorsSelfTest() {
                b ? QString("%1x%2 checkable %3 checked %4").arg(b->width()).arg(b->height())
                        .arg(b->isCheckable()).arg(b->isChecked())
                  : QString("null"));
+    }
+
+    // Enter, or focus loss, on an unchanged value sends nothing
+    {
+        FXSliderRow_Qt row(testSpec("t.slider"), nullptr);
+        row.show();
+        row.setValue(1.f);
+        Recorder rec(&row);
+        typeInto(row.field(), QString());  // double-click, no typing, Enter
+        mouse(row.field(), QEvent::MouseButtonDblClick, QPointF(5, 10));
+        mouse(row.field(), QEvent::MouseButtonRelease, QPointF(5, 10));
+        QFocusEvent out(QEvent::FocusOut, Qt::OtherFocusReason);
+        QCoreApplication::sendEvent(row.field(), &out);
+        report(rec.values.empty() && !row.field()->isEditing(), "unchanged commit sends nothing",
+               emitted(rec) + QString(" editing %1").arg(row.field()->isEditing()));
+    }
+
+    // Esc cancels an edit
+    {
+        FXSliderRow_Qt row(testSpec("t.slider"), nullptr);
+        row.show();
+        row.setValue(1.f);
+        Recorder rec(&row);
+        mouse(row.field(), QEvent::MouseButtonDblClick, QPointF(5, 10));
+        mouse(row.field(), QEvent::MouseButtonRelease, QPointF(5, 10));
+        key(row.field(), Qt::Key_7, "7");
+        key(row.field(), Qt::Key_Escape);
+        report(rec.values.empty() && row.field()->text() == "1.000" && !row.field()->isEditing(), "Esc cancels",
+               emitted(rec) + QString(" field '%1'").arg(row.field()->text()));
+    }
+
+    // Enter or F2 on the focused field starts an edit
+    {
+        FXSliderRow_Qt row(testSpec("t.slider"), nullptr);
+        row.show();
+        row.setValue(1.f);
+        Recorder rec(&row);
+        key(row.field(), Qt::Key_F2);
+        const bool f2 = row.field()->isEditing();
+        row.field()->selectAll();
+        key(row.field(), Qt::Key_3, "3");
+        key(row.field(), Qt::Key_Return);
+        key(row.field(), Qt::Key_Return);
+        const bool enter = row.field()->isEditing();
+        key(row.field(), Qt::Key_Escape);
+        report(f2 && enter && rec.values.size() == 1 && near(rec.values[0], 3.f), "keyboard starts edit",
+               QString("f2 %1 enter %2 ").arg(f2).arg(enter) + emitted(rec));
+    }
+
+    // setValue ignored while the slider or the knob is dragged
+    {
+        FXSliderRow_Qt row(testSpec("t.slider"), nullptr);
+        row.resize(300, ui::kControlH);
+        row.show();
+        row.setValue(1.f);
+        QWidget* sl = row.slider();
+        const qreal y = sl->height() / 2.0;
+        mouse(sl, QEvent::MouseButtonPress, QPointF(sl->width() * 0.25, y));
+        mouse(sl, QEvent::MouseMove, QPointF(sl->width() * 0.75, y));
+        const bool sliderBusy = row.isInteracting();
+        const float handleDuring = sliderHandlePosition(sl);
+        row.setValue(0.3f);
+        const bool sliderHeld = near(sliderHandlePosition(sl), handleDuring) && !near(row.value(), 0.3f);
+        mouse(sl, QEvent::MouseButtonRelease, QPointF(sl->width() * 0.75, y));
+        row.setValue(0.3f);
+        const bool sliderAfter = !row.isInteracting() && row.field()->text() == "0.300";
+
+        FXKnob_Qt knob(testSpec("t.knob"), nullptr);
+        knob.show();
+        knob.setValue(1.f);
+        QWidget* dial = knob.knob();
+        const QPointF c(dial->width() / 2.0, dial->height() / 2.0);
+        mouse(dial, QEvent::MouseButtonPress, c);
+        mouse(dial, QEvent::MouseMove, c - QPointF(0, 50));
+        const bool knobBusy = knob.isInteracting();
+        const QString knobDuring = knob.field()->text();
+        knob.setValue(0.3f);
+        const bool knobHeld = knob.field()->text() == knobDuring && !near(knob.value(), 0.3f);
+        mouse(dial, QEvent::MouseButtonRelease, c - QPointF(0, 50));
+        knob.setValue(0.3f);
+        const bool knobAfter = !knob.isInteracting() && knob.field()->text() == "0.300";
+        report(sliderBusy && sliderHeld && sliderAfter && knobBusy && knobHeld && knobAfter,
+               "setValue ignored while slider or knob dragged",
+               QString("slider %1 %2 %3 knob %4 %5 %6").arg(sliderBusy).arg(sliderHeld).arg(sliderAfter)
+                   .arg(knobBusy).arg(knobHeld).arg(knobAfter));
+    }
+
+    // Right-click on the field opens the editor's Reset menu
+    {
+        FXSliderRow_Qt row(testSpec("t.slider"), nullptr);
+        row.show();
+        row.setValue(3.f);
+        Recorder rec(&row);
+        const QPoint at(5, 10);
+        QContextMenuEvent ev(QContextMenuEvent::Mouse, at, row.field()->mapToGlobal(at));
+        QCoreApplication::sendEvent(row.field(), &ev);
+        QString seen = "no menu";
+        if (auto* menu = row.findChild<QMenu*>("t.slider.menu")) {
+            seen.clear();
+            for (QAction* a : menu->actions()) {
+                seen += a->text() + ";";
+                if (a->text() == "Reset to default") a->trigger();
+            }
+            menu->close();
+        }
+        report(seen == "Reset to default;" && rec.values.size() == 1 && near(rec.values[0], 1.f),
+               "right-click reset menu", QString("menu '%1' ").arg(seen) + emitted(rec));
+    }
+
+    // A checked qticons glyph is drawn light enough to see on the dark checked fill
+    {
+        const QImage img = jefe::qticons::add().pixmap(QSize(ui::kIconPx, ui::kIconPx), QIcon::Normal, QIcon::On)
+                               .toImage().convertToFormat(QImage::Format_ARGB32);
+        QColor strongest;
+        int bestAlpha = -1;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x) {
+                const QColor c = img.pixelColor(x, y);
+                if (c.alpha() > bestAlpha) { bestAlpha = c.alpha(); strongest = c; }
+            }
+        const int peak = std::max({strongest.red(), strongest.green(), strongest.blue()});
+        report(bestAlpha > 0 && peak > 100, "checked icon glyph visible",
+               QString("alpha %1 colour %2").arg(bestAlpha).arg(strongest.name()));
     }
 
     std::printf("FX-EDIT RESULT %s %d\n", gFails == 0 ? "PASS" : "FAIL", gFails);

@@ -505,7 +505,7 @@ std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXS
                 tmpFX=fxManager.getFXbyName(fxName);
             }
             if(tmpFX.loadedAndCompiled)
-                printf("FX %s: matched by %s (file changed since saved)\n",fxName.c_str(),matchedBy);
+                printf("FX %s: matched by %s as %s (file changed since saved)\n",fxName.c_str(),matchedBy,tmpFX.menuName.c_str());
         }
         //if it is not found (indicated by a NOT loaded and compiled status) skip this node and add it to the not loaded string.
         if(!tmpFX.loadedAndCompiled)

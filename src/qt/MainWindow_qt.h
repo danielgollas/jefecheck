@@ -189,6 +189,14 @@ public:
     // mean absolute pixel difference.
     int runHeadlessFXTest(const QString& imagePath);
 
+    // Headless FX panel layout test (--fx-panel-test <image> [shotDir]). Loads the
+    // image into plate 0, adds BCS, Fun, Convolution 3x3 and Chroma Key (Blue), and
+    // checks a standalone FXParamPanel_Qt: slider rows, knobs sharing a row, narrow
+    // wrapping, label colours, the value-only refresh and the stack fingerprint.
+    // With shotDir, also saves PNGs of the FX dock docked left (250/360 px), bottom and
+    // floating (600 px). Prints FX-PANEL PASS|FAIL|XFAIL lines; 0 on pass, else 7.
+    int runHeadlessFXPanelTest(const QString& imagePath, const QString& shotDir = QString());
+
     // Headless colour-correction render proof (--cc-test <image>). Loads the
     // image into plate 0, renders a baseline PNG, applies a strong exposure +
     // gamma correction (the super-shader path), renders again, and compares.

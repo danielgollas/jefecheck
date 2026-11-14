@@ -101,7 +101,8 @@ LUT_PREVIEW = "lut.preview"
 LUT_PREVIEW_TOGGLE = "lut.preview.toggle"
 
 # FX panel: "+ Add FX" menu button, per-FX cards, drag-to-reorder. Per-FX names are templated by stack index N:
-#   fxparams.fx{N}.active.check, .remove.button, .param.{name}.{spin|check|combo|value}
+#   fxparams.fx{N}.card, .header, .handle, .name, .active.check (power toggle), .remove.button
+#   fxparams.fx{N}.param.{varName}.{row|label|field|slider|reset|knob|check|combo|texture|cube|lut|value}
 DOCK_FXPARAMS = "dock.fxparams"
 FXPARAMS_PANEL = "fxparams.panel"
 FXPARAMS_STATUS = "fxparams.status.label"

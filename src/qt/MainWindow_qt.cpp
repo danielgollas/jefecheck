@@ -26,6 +26,9 @@
 #include "UiDensityCheck_qt.h"
 #include <QListWidget>
 #include <QMap>
+#include <QMouseEvent>
+#include <QPointer>
+#include <QSet>
 #include <QRegularExpression>
 
 #include "../UIConstants.h"
@@ -1391,6 +1394,307 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
            afterPath.toLocal8Bit().constData());
     fflush(stdout);
     return pass ? 0 : 1;
+}
+
+int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QString& shotDir) {
+    int fails = 0;
+    auto check = [&](const char* name, bool ok, const QString& detail = QString()) {
+        printf("FX-PANEL %s %s%s%s\n", ok ? "PASS" : "FAIL", name, detail.isEmpty() ? "" : " ",
+               qPrintable(detail));
+        if (!ok) ++fails;
+    };
+    // Item views lay out on a zero-timer; cards removed by a rebuild go through deleteLater.
+    auto settle = []() {
+        for (int i = 0; i < 4; ++i) {
+            QCoreApplication::processEvents();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        }
+    };
+
+    loadFileIntoPlate(0, imagePath);
+    jefe::qt::setActivePlate(0);
+    jefe::qt::clearFXStackOnPlate(0);
+
+    auto fxIndexOf = [](const std::string& menuName) {
+        for (const auto& entry : jefe::qt::getAvailableFXMenu())
+            if (entry.second == menuName) return entry.first;
+        return -1;
+    };
+    const std::vector<std::string> wanted = {"Color/Brightness, Contrast, Saturation", "Fun/Fun",
+                                             "Special/Convolution 3x3", "Comp/Chroma Key (Blue)"};
+    for (const std::string& m : wanted) {
+        const int idx = fxIndexOf(m);
+        if (idx < 0) {
+            printf("FX-PANEL FAIL setup: '%s' not loaded\n", m.c_str());
+            fflush(stdout);
+            return 7;
+        }
+        jefe::qt::addFXToActivePlate(idx);
+    }
+
+    FXParamPanel_Qt panel;
+    panel.resize(360, 900);
+    panel.show();
+    panel.refresh();
+    settle();
+
+    auto child = [&panel](const QString& name) { return panel.findChild<QWidget*>(name); };
+    auto yOf = [&panel](QWidget* w) { return w ? w->mapTo(&panel, QPoint(0, 0)).y() : -1; };
+    auto textColour = [](QWidget* w) {
+        if (!w) return QColor();
+        w->ensurePolished();
+        return w->palette().color(w->foregroundRole());
+    };
+
+    // bcs sliders
+    {
+        QStringList missing;
+        QSet<int> ys;
+        for (const char* n : {"Brightness", "Contrast", "AvgLuminance", "Saturation"}) {
+            QWidget* s = child(QString("fxparams.fx0.param.%1.slider").arg(n));
+            if (!s) missing << n;
+            else ys.insert(yOf(s));
+        }
+        check("bcs sliders", missing.isEmpty() && ys.size() == 4,
+              QString("missing [%1] distinct rows %2").arg(missing.join(",")).arg(ys.size()));
+    }
+
+    // no type hints
+    {
+        QStringList hints;
+        for (QLabel* l : panel.findChildren<QLabel*>())
+            if (l->text().contains(QRegularExpression("^\\((float|bool|choice|texture|cube|lut|other)")) ||
+                l->text().contains("<span style='color:#666'>("))
+                hints << l->text();
+        check("no type hints", hints.isEmpty(), hints.join(" | "));
+    }
+
+    // knobs share a row (FUN's Control 1 / Control 2 are varNames zoom / curve)
+    QWidget* knob1 = child("fxparams.fx1.param.zoom.knob");
+    QWidget* knob2 = child("fxparams.fx1.param.curve.knob");
+    if (!knob1 || !knob2)
+        printf("FX-PANEL XFAIL knobs share a row (FUN's zoom/curve are not knob-styled yet)\n");
+    else
+        check("knobs share a row", yOf(knob1) == yOf(knob2), QString("y %1 vs %2").arg(yOf(knob1)).arg(yOf(knob2)));
+
+    // Every param row in a card, in card coordinates.
+    auto cardRows = [&panel](int fx) {
+        QList<QWidget*> rows;
+        auto* card = panel.findChild<QWidget*>(QString("fxparams.fx%1.card").arg(fx));
+        if (!card) return rows;
+        for (QWidget* w : card->findChildren<QWidget*>())
+            if (w->objectName().endsWith(".row") && w->isVisible()) rows << w;
+        return rows;
+    };
+    auto overlaps = [&](int width) {
+        QStringList bad;
+        for (int fx = 0; fx < int(wanted.size()); ++fx) {
+            auto* card = panel.findChild<QWidget*>(QString("fxparams.fx%1.card").arg(fx));
+            const QList<QWidget*> rows = cardRows(fx);
+            for (int a = 0; a < rows.size(); ++a)
+                for (int b = a + 1; b < rows.size(); ++b) {
+                    const QRect ra(rows[a]->mapTo(card, QPoint(0, 0)), rows[a]->size());
+                    const QRect rb(rows[b]->mapTo(card, QPoint(0, 0)), rows[b]->size());
+                    if (ra.intersects(rb)) bad << rows[a]->objectName() + " x " + rows[b]->objectName();
+                }
+        }
+        if (!bad.isEmpty()) bad.prepend(QString("at %1 px:").arg(width));
+        return bad;
+    };
+
+    // narrow wraps, never overlaps
+    {
+        QStringList bad = overlaps(360);
+        const int chromaRows360 = int(cardRows(3).size());
+        panel.resize(150, 900);
+        settle();
+        bad += overlaps(150);
+        QSet<int> boolYs;
+        for (const char* n : {"ShowMatte", "ShowClean", "spillSupress"})
+            if (QWidget* w = child(QString("fxparams.fx3.param.%1.row").arg(n))) boolYs.insert(yOf(w));
+        if (boolYs.size() < 2) bad << QString("Chroma Key bools did not wrap (%1 rows)").arg(boolYs.size());
+        if (knob1 && knob2 && yOf(knob1) == yOf(knob2)) bad << "FUN knobs still share a row at 150 px";
+        if (!knob1 || !knob2) printf("FX-PANEL XFAIL narrow knobs wrap (no FUN knobs yet)\n");
+        if (chromaRows360 == 0) bad << "no Chroma Key rows";
+        check("narrow wraps, never overlaps", bad.isEmpty(), bad.join("; "));
+        panel.resize(360, 900);
+        settle();
+    }
+
+    // dimmed label kept
+    {
+        const QColor c = textColour(child("fxparams.fx0.param.AvgLuminance.label"));
+        check("dimmed label kept", c == QColor(150, 150, 150), c.isValid() ? c.name() : QString("no label"));
+    }
+
+    // value refresh keeps widgets
+    {
+        QPointer<QWidget> before = child("fxparams.fx0.param.Brightness.slider");
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.5f);
+        panel.refresh();
+        settle();
+        auto* field = qobject_cast<QLineEdit*>(child("fxparams.fx0.param.Brightness.field"));
+        const QString text = field ? field->text() : QString("no field");
+        check("value refresh keeps widgets",
+              before && before == child("fxparams.fx0.param.Brightness.slider") && text == "1.500",
+              QString("same %1 field '%2'").arg(bool(before) && before == child("fxparams.fx0.param.Brightness.slider")).arg(text));
+    }
+
+    // modified label
+    {
+        const QColor edited = textColour(child("fxparams.fx0.param.Brightness.label"));
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+        panel.refresh();
+        settle();
+        const QColor reset = textColour(child("fxparams.fx0.param.Brightness.label"));
+        check("modified label", edited == QColor("#d4771e") && reset.isValid() && reset != QColor("#d4771e"),
+              QString("edited %1 reset %2").arg(edited.name(), reset.name()));
+    }
+
+    // height
+    {
+        QStringList bad;
+        for (int fx = 0; fx < int(wanted.size()); ++fx) {
+            QWidget* header = child(QString("fxparams.fx%1.header").arg(fx));
+            if (!header) bad << QString("fx%1 no header").arg(fx);
+            else if (header->height() != 24) bad << QString("fx%1.header h=%2").arg(fx).arg(header->height());
+            for (QWidget* row : cardRows(fx)) {
+                const bool knobRow = row->findChild<QWidget*>(row->objectName().chopped(4) + ".knob") != nullptr;
+                if (!knobRow && row->height() != 24) bad << QString("%1 h=%2").arg(row->objectName()).arg(row->height());
+            }
+        }
+        check("height", bad.isEmpty(), bad.join("; "));
+    }
+
+    // editors take their own presses, so dragging one never starts a card drag
+    {
+        QStringList bad;
+        for (const QString& n : {QString("fxparams.fx0.param.Brightness.slider"),
+                                 QString("fxparams.fx0.param.Brightness.field")}) {
+            QWidget* w = child(n);
+            if (!w) { bad << n + " missing"; continue; }
+            const QPointF at(4, w->height() / 2.0);
+            QMouseEvent press(QEvent::MouseButtonPress, at, w->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            press.setAccepted(false);
+            QCoreApplication::sendEvent(w, &press);
+            if (!press.isAccepted()) bad << n + " ignored the press";
+            QMouseEvent release(QEvent::MouseButtonRelease, at, w->mapToGlobal(at), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(w, &release);
+        }
+        settle();
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+        panel.refresh();
+        settle();
+        check("editors take their presses", bad.isEmpty(), bad.join("; "));
+    }
+
+    // refresh while dragging: no write into the dragged editor, no rebuild until release
+    {
+        QPointer<QWidget> slider = child("fxparams.fx0.param.Brightness.slider");
+        auto* field = qobject_cast<QLineEdit*>(child("fxparams.fx0.param.Brightness.field"));
+        QStringList bad;
+        if (!slider || !field) bad << "no Brightness slider/field";
+        else {
+            const qreal y = slider->height() / 2.0;
+            auto send = [&](QEvent::Type t, qreal x) {
+                const QPointF at(x, y);
+                QMouseEvent e(t, at, slider->mapToGlobal(at), t == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                              t == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::MouseButtons(Qt::LeftButton), Qt::NoModifier);
+                QCoreApplication::sendEvent(slider, &e);
+            };
+            send(QEvent::MouseButtonPress, slider->width() * 0.2);
+            send(QEvent::MouseMove, slider->width() * 0.3);
+            const QString during = field->text();
+            jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.75f);
+            panel.refresh();
+            settle();
+            if (!slider) bad << "slider deleted by a value refresh mid-drag";
+            else if (field->text() != during) bad << QString("field written mid-drag '%1' -> '%2'").arg(during, field->text());
+            jefe::qt::addFXToActivePlate(fxIndexOf("Fun/Fun"));   // the stack changes mid-drag
+            panel.refresh();
+            settle();
+            if (!slider) bad << "cards rebuilt mid-drag";
+            if (slider) send(QEvent::MouseButtonRelease, slider->width() * 0.3);
+            QElapsedTimer t;
+            t.start();
+            while (slider && t.elapsed() < 1000) settle();
+            if (slider) bad << "cards not rebuilt after the drag ended";
+            if (!child("fxparams.fx4.card")) bad << "no card for the FX added mid-drag";
+        }
+        jefe::qt::removeFXFromPlate(0, 4);
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+        panel.refresh();
+        settle();
+        check("refresh while dragging", bad.isEmpty(), bad.join("; "));
+    }
+
+    // Dock screenshots for the PR, before the stack is changed below.
+    if (!shotDir.isEmpty() && fxParamsDock_) {
+        QDir().mkpath(shotDir);
+        fxParamPanelWidget_->refresh();
+        const QList<QDockWidget*> others = findChildren<QDockWidget*>();
+        for (QDockWidget* d : others) if (d != fxParamsDock_) d->hide();
+        resize(1600, 1000);
+        struct Shot { const char* name; Qt::DockWidgetArea area; bool floating; int size; };
+        const QList<Shot> shots = {{"left-250", Qt::LeftDockWidgetArea, false, 250},
+                                   {"left-360", Qt::LeftDockWidgetArea, false, 360},
+                                   {"bottom", Qt::BottomDockWidgetArea, false, 420},
+                                   {"floating-600", Qt::NoDockWidgetArea, true, 600}};
+        for (const Shot& sh : shots) {
+            fxParamsDock_->setFloating(false);
+            if (sh.floating) {
+                fxParamsDock_->setFloating(true);
+                fxParamsDock_->resize(sh.size, 900);
+            } else {
+                addDockWidget(sh.area, fxParamsDock_);
+            }
+            fxParamsDock_->show();
+            settle();
+            if (!sh.floating)
+                resizeDocks({fxParamsDock_}, {sh.size}, sh.area == Qt::BottomDockWidgetArea ? Qt::Vertical : Qt::Horizontal);
+            for (int i = 0; i < 3; ++i) settle();
+            const QString path = shotDir + "/fx-" + sh.name + ".png";
+            const bool ok = fxParamsDock_->grab().save(path);
+            printf("FX-PANEL SHOT %s %dx%d ok=%d\n", qPrintable(path), fxParamsDock_->width(), fxParamsDock_->height(), ok);
+        }
+        fxParamsDock_->setFloating(false);
+        addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
+    }
+
+    // fingerprint: a stack that reuses an instance id with a different effect rebuilds
+    {
+        QStringList bad;
+        jefe::qt::clearFXStackOnPlate(0);
+        jefe::qt::addFXToActivePlate(fxIndexOf("Special/Average Blur"));
+        const std::string blurXml = jefe::qt::getFXStackXmlOnPlate(0);
+        jefe::qt::clearFXStackOnPlate(0);
+        jefe::qt::addFXToActivePlate(fxIndexOf(wanted[0]));
+        panel.refresh();
+        settle();
+        const auto bcs = jefe::qt::getFXStackMetaOnPlate(0);
+        QPointer<QWidget> bcsSlider = child("fxparams.fx0.param.Brightness.slider");
+        if (bcs.size() != 1 || !bcsSlider) bad << "setup: no BCS card";
+        else {
+            const QString id = QString::number(bcs[0].instanceId);
+            const QString reused = QString::fromStdString(blurXml)
+                                       .replace(QRegularExpression("instanceId=\"[0-9]+\""), "instanceId=\"" + id + "\"");
+            jefe::qt::setFXStackXmlOnPlate(0, reused.toStdString());
+            const auto now = jefe::qt::getFXStackMetaOnPlate(0);
+            if (now.size() != 1 || now[0].instanceId != bcs[0].instanceId || now[0].menuName != "Special/Average Blur")
+                bad << QString("setup: replacement stack is not [Average Blur#%1]").arg(id);
+            panel.refresh();
+            settle();
+            if (bcsSlider) bad << "old BCS slider still there";
+            if (child("fxparams.fx0.param.Brightness.row")) bad << "BCS rows still shown";
+            if (!child("fxparams.fx0.param.amount.row")) bad << "no Average Blur amount row";
+        }
+        check("fingerprint by id and hash", bad.isEmpty(), bad.join("; "));
+    }
+
+    jefe::qt::clearFXStackOnPlate(0);
+    printf("FX-PANEL RESULT %s %d\n", fails == 0 ? "PASS" : "FAIL", fails);
+    fflush(stdout);
+    return fails == 0 ? 0 : 7;
 }
 
 int MainWindow_Qt::runHeadlessCCTest(const QString& imagePath) {

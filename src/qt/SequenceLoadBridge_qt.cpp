@@ -1221,6 +1221,7 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
         meta.active            = fx.active;
         meta.loadedAndCompiled = fx.loadedAndCompiled;
         meta.instanceId        = fx.instanceId;
+        meta.hash              = fx.md5Hash;
         // Walk groups in insertion order: gfcFX stores widgetsOrder per group, but
         // std::map iterates group names alphabetically.
         for (auto& kv : fx.groups) {
@@ -1427,6 +1428,18 @@ std::vector<std::uint32_t> stackIds(gfcFXStack& stack) {
     return ids;
 }
 }  // namespace
+
+std::string getFXStackXmlOnPlate(int plateIdx) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    return stack ? stackXml(*stack) : std::string();
+}
+
+void setFXStackXmlOnPlate(int plateIdx, const std::string& xml) {
+    if (!plateManager.getFXStack(plateIdx)) return;
+    gfcFXStack s;
+    s.loadStackFromString(xml, /*matchByName=*/true);
+    plateManager.setFXStack(s, plateIdx);
+}
 
 bool fxParamIdentitySelfTest() {
     int fails = 0;

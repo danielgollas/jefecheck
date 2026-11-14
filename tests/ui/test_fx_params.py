@@ -135,8 +135,8 @@ def test_fx_params_bcs_produces_editable_count(ready_app):
     )
 
 
-def test_fx_params_brightness_spinbox_resolvable(ready_app):
-    """Adding BCS surfaces a QDoubleSpinBox at `fxparams.fx0.param.Brightness.spin`
+def test_fx_params_brightness_field_resolvable(ready_app):
+    """Adding BCS surfaces the slider row's value field at `fxparams.fx0.param.Brightness.field`
     (bridge metadata -> panel editor -> Qt AX layer). The find is retried because
     the Mac2 AX cache can lag one tick behind the panel rebuild."""
     import time
@@ -153,18 +153,18 @@ def test_fx_params_brightness_spinbox_resolvable(ready_app):
     )
 
     last_err = None
-    spin = None
+    field = None
     for _ in range(10):
         try:
-            spin = ready_app.driver.find_element(
+            field = ready_app.driver.find_element(
                 AppiumBy.IOS_PREDICATE,
-                "identifier ENDSWITH 'fxparams.fx0.param.Brightness.spin'",
+                "identifier ENDSWITH 'fxparams.fx0.param.Brightness.field'",
             )
             break
         except Exception as e:
             last_err = e
             time.sleep(0.2)
-    assert spin is not None, (
-        f"Brightness spinbox not found after BCS add. status={text!r}\n"
+    assert field is not None, (
+        f"Brightness field not found after BCS add. status={text!r}\n"
         f"last_err={last_err}"
     )
