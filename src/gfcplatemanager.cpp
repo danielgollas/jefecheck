@@ -1130,7 +1130,45 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 	
     drawPlates(w,h,resized);
 
-	
+    // ACTIVE-PLATE FRAME: an accent border just inside the active plate's cell in
+    // multi-plate layouts. Screen-only (renders go through renderPlate, not here).
+    if (jefe::platelayout::showActiveFrame(framingMode)) {
+        namespace pl = jefe::platelayout;
+        const pl::Cell c = pl::activeFrameRectGL(framingMode, activeQuad, w, h);
+        if (c.plate >= 0) {
+            const int t = pl::activeFrameThicknessPx(gfc_gl_dpiscale());
+            glPushAttrib(GL_ALL_ATTRIB_BITS);
+            GLhandleARB prevProgram = glGetHandleARB(GL_PROGRAM_OBJECT_ARB);
+            glUseProgramObjectARB(0);
+            glDisable(GL_TEXTURE_2D);
+            glDisable(GL_TEXTURE_RECTANGLE_ARB);
+            glDisable(GL_BLEND);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_SCISSOR_TEST);
+            glViewport(0, 0, w, h);
+            glMatrixMode(GL_PROJECTION);
+            glPushMatrix();
+            glLoadIdentity();
+            glOrtho(0, w, 0, h, -1, 1);
+            glMatrixMode(GL_MODELVIEW);
+            glPushMatrix();
+            glLoadIdentity();
+            glColor4f(pl::kAccentR / 255.0f, pl::kAccentG / 255.0f, pl::kAccentB / 255.0f, 1.0f);
+            const float x0 = c.x, y0 = c.y, x1 = c.x + c.w, y1 = c.y + c.h;
+            glRectf(x0, y1 - t, x1, y1);          // top
+            glRectf(x0, y0, x1, y0 + t);          // bottom
+            glRectf(x0, y0 + t, x0 + t, y1 - t);  // left
+            glRectf(x1 - t, y0 + t, x1, y1 - t);  // right
+            glMatrixMode(GL_PROJECTION);
+            glPopMatrix();
+            glMatrixMode(GL_MODELVIEW);
+            glPopMatrix();
+            glUseProgramObjectARB(prevProgram);
+            glPopAttrib();
+        }
+    }
+
+
 	
 
     //DRAW HELP OR OTHER 2D OVERLAYS

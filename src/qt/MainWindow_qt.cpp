@@ -29,6 +29,7 @@
 #include <QRegularExpression>
 
 #include "../UIConstants.h"
+#include "../gfcPlateLayout.h"
 
 #include <QAction>
 #include <QApplication>
@@ -1557,6 +1558,123 @@ int MainWindow_Qt::runHeadlessFXMultiTest(const QString& imagePath) {
     printf("FX-MULTI %s: siblingNotBlack&Stable=%d  fxAppliedOnScreen=%d\n",
            pass ? "PASS" : "FAIL", (int)siblingOk, (int)fxApplied); fflush(stdout);
     return pass ? 0 : 1;
+}
+
+int MainWindow_Qt::runHeadlessPlateFrameTest() {
+    namespace pl = jefe::platelayout;
+    if (!viewport_) { printf("PLATE-FRAME-TEST FAIL: no viewport\n"); fflush(stdout); return 2; }
+
+    QTemporaryDir tmp;
+    if (!tmp.isValid()) { printf("PLATE-FRAME-TEST FAIL: no temp dir\n"); fflush(stdout); return 2; }
+    const QString grey = tmp.path() + "/grey.png";
+    QImage greyImg(256, 256, QImage::Format_RGB888);
+    greyImg.fill(QColor(128, 128, 128));
+    if (!greyImg.save(grey)) { printf("PLATE-FRAME-TEST FAIL: cannot write %s\n", grey.toLocal8Bit().constData()); fflush(stdout); return 2; }
+    for (int i = 0; i < 4; ++i) loadFileIntoPlate(i, grey);
+    jefe::qt::setAllPlatesShowPreview(true);
+
+    auto isAccent = [](const uchar* px) {
+        return std::abs(int(px[0]) - pl::kAccentR) <= 16 && std::abs(int(px[1]) - pl::kAccentG) <= 16
+            && std::abs(int(px[2]) - pl::kAccentB) <= 16;
+    };
+    // Repaint at the current framing/active plate, then grab (device pixels, top-down).
+    auto grabAt = [&](int framing, int active) -> QImage {
+        jefe::qt::setFramingMode(framing);
+        jefe::qt::setActivePlate(active);
+        viewport_->update();
+        QCoreApplication::processEvents();
+        viewport_->repaint();
+        QCoreApplication::processEvents();
+        QImage img = viewport_->grabFramebuffer();
+        return img.isNull() ? img : img.convertToFormat(QImage::Format_RGBA8888);
+    };
+    // Fraction of accent pixels along a horizontal run [x0,x1) at row y, or a vertical run [y0,y1) at column x.
+    auto rowFrac = [&](const QImage& img, int y, int x0, int x1) {
+        int n = 0, hit = 0;
+        if (y < 0 || y >= img.height()) return -1.0;
+        const uchar* r = img.constScanLine(y);
+        for (int x = std::max(0, x0); x < std::min(img.width(), x1); ++x, ++n) hit += isAccent(r + x * 4);
+        return n ? double(hit) / n : -1.0;
+    };
+    auto colFrac = [&](const QImage& img, int x, int y0, int y1) {
+        int n = 0, hit = 0;
+        if (x < 0 || x >= img.width()) return -1.0;
+        for (int y = std::max(0, y0); y < std::min(img.height(), y1); ++y, ++n) hit += isAccent(img.constScanLine(y) + x * 4);
+        return n ? double(hit) / n : -1.0;
+    };
+    auto cellOf = [](const std::vector<pl::Cell>& cells, int plate) {
+        for (const pl::Cell& c : cells) if (c.plate == plate) return c;
+        return pl::Cell{-1, 0, 0, 0, 0};
+    };
+    const int t = pl::activeFrameThicknessPx(float(viewport_->devicePixelRatioF()));
+    bool allPass = true;
+    auto report = [&](const char* name, bool pass, const QString& detail) {
+        printf("PLATE-FRAME-TEST %s: %s (%s)\n", name, pass ? "PASS" : "FAIL", detail.toLocal8Bit().constData());
+        fflush(stdout);
+        allPass = allPass && pass;
+    };
+
+    {   // 2x2, active plate 1: top row of plate 1's cell is accent, plate 0's is not.
+        const QImage img = grabAt(FRAMINGQUAD_ID, 1);
+        const auto cells = pl::cellsFor(FRAMINGQUAD_ID, img.width(), img.height());
+        const pl::Cell a = cellOf(cells, 1), o = cellOf(cells, 0);
+        const double fa = rowFrac(img, a.y, a.x + t, a.x + a.w - t);
+        const double fo = rowFrac(img, o.y, o.x + t, o.x + o.w - t);
+        report("FRAME 2x2", !img.isNull() && a.plate == 1 && o.plate == 0 && fa >= 0.9 && fo >= 0.0 && fo <= 0.01,
+               QString("fraction=%1 other=%2 t=%3 %4x%5").arg(fa).arg(fo).arg(t).arg(img.width()).arg(img.height()));
+    }
+    {   // 2x1, active plate 0: left column of the left cell is accent, right column of the right cell is not.
+        const QImage img = grabAt(FRAMINGDOUBLE_ID, 0);
+        const auto cells = pl::cellsFor(FRAMINGDOUBLE_ID, img.width(), img.height());
+        const pl::Cell a = cellOf(cells, 0), o = cellOf(cells, 1);
+        const double fa = colFrac(img, 0, a.y + t, a.y + a.h - t);
+        const double fo = colFrac(img, o.x + o.w - 1, o.y + t, o.y + o.h - t);
+        report("FRAME 2x1", !img.isNull() && a.plate == 0 && o.plate == 1 && fa >= 0.9 && fo >= 0.0 && fo <= 0.01,
+               QString("fraction=%1 other=%2").arg(fa).arg(fo));
+    }
+    {   // 1x1: no accent on the outer 3-pixel border.
+        const QImage img = grabAt(FRAMINGSINGLE_ID, 0);
+        int hits = 0;
+        for (int y = 0; y < img.height(); ++y) {
+            const uchar* r = img.constScanLine(y);
+            for (int x = 0; x < img.width(); ++x) {
+                const bool border = x < 3 || y < 3 || x >= img.width() - 3 || y >= img.height() - 3;
+                if (border && isAccent(r + x * 4)) ++hits;
+            }
+        }
+        report("FRAME 1x1", !img.isNull() && hits == 0, QString("accentBorderPixels=%1").arg(hits));
+    }
+    {   // render: the frame is screen-only; a rendered frame of the active plate carries none.
+        grabAt(FRAMINGQUAD_ID, 1);
+        jefe::qt::RenderParams p;
+        p.quadrant     = 1;
+        p.format       = 5;        // PNG (8-bit FBO)
+        p.formatString = "png";
+        const int frame = jefe::qt::getCurrentFrame();
+        p.from = frame; p.to = frame;
+        p.padding = 4; p.scale = 1.0f;
+        p.path   = tmp.path().toStdString();
+        p.prefix = "plateframe_";
+        const QString fname = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        viewport_->makeCurrent();
+        jefe::qt::triggerSyncRender(p);
+        viewport_->doneCurrent();
+        QImage img(fname);
+        int hits = 0;
+        if (!img.isNull()) {
+            img = img.convertToFormat(QImage::Format_RGBA8888);
+            for (int y = 0; y < img.height(); ++y) {
+                const uchar* r = img.constScanLine(y);
+                for (int x = 0; x < img.width(); ++x) hits += isAccent(r + x * 4);
+            }
+        }
+        report("FRAME render", !img.isNull() && hits == 0,
+               QString("accentPixels=%1 %2x%3").arg(hits).arg(img.width()).arg(img.height()));
+    }
+
+    printf("PLATE-FRAME-TEST %s\n", allPass ? "PASS" : "FAIL");
+    fflush(stdout);
+    return allPass ? 0 : 2;
 }
 
 void MainWindow_Qt::updateSessionTitle() {

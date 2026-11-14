@@ -204,6 +204,11 @@ public:
     // draw3DrectWithFX into the next plate's draw.
     int runHeadlessFXMultiTest(const QString& imagePath);
 
+    // --plate-frame-test: loads a flat grey still into all four plates and checks the
+    // orange active-plate frame appears in 2x2/2x1 layouts, never in 1x1, and never
+    // in a rendered frame. Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessPlateFrameTest();
+
     /** Demo harness: hide every dock so the viewport fills the window. */
     void hideControlsForDemo();
     /**

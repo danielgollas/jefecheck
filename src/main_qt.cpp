@@ -169,6 +169,14 @@ static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// --plate-frame-test : headless check that the orange active-plate frame shows in
+// multi-plate layouts only and never reaches a rendered frame. Takes no argument.
+static bool hasPlateFrameTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--plate-frame-test") == 0) return true;
+    return false;
+}
+
 // --aspect-test : headless regression: asserts every aspect preset string maps to the
 // renderer's height/width convention (no GL). Takes no argument.
 static bool hasAspectTest(int argc, char* argv[]) {
@@ -1587,6 +1595,15 @@ int main(int argc, char* argv[]) {
     if (!fxMultiTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, fxMultiTestFile]() {
             const int code = window.runHeadlessFXMultiTest(fxMultiTestFile);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless active-plate frame test (--plate-frame-test).
+    if (hasPlateFrameTest(argc, argv)) {
+        QTimer::singleShot(5000, &window, [&window]() {
+            const int code = window.runHeadlessPlateFrameTest();
             fflush(stdout);
             std::_Exit(code);
         });
