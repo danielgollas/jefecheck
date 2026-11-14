@@ -40,7 +40,9 @@ public:
 	
 	void savePlaylistItemParameters(XMLNode &entryNode) const;
 	std::string asString() const;
-	void loadPlaylistItemParameters(XMLNode &entryNode);
+	// matchByName is passed to gfcFXStack::loadStackFromNode: true for files,
+	// false for items received from a peer (exact effect match only).
+	void loadPlaylistItemParameters(XMLNode &entryNode, bool matchByName=true);
 	void appendTracks(const std::vector<std::string> &files);
 	void fixWindowsPaths();
 	

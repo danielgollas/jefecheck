@@ -41,6 +41,20 @@ std::string attributeOrEmpty(XMLNode& node, const char* name) {
     return v ? std::string(v) : std::string();
 }
 
+// The "type" attribute saveStackToNode writes for a widget of this kind; "" for
+// kinds it never saves.
+const char* savedWidgetType(GFC_FX_GUI_TYPE t) {
+    switch (t) {
+        case FX_GUI_FLOAT:   return "float";
+        case FX_GUI_CHOICE:  return "choice";
+        case FX_GUI_BOOL:    return "bool";
+        case FX_GUI_TEXTURE: return "texture";
+        case FX_GUI_CUBE:    return "cube";
+        case FX_GUI_LUT:     return "lut";
+        default:             return "";
+    }
+}
+
 // The widget with this varName: in the named group when it is there, else in any group.
 gfcFXWidget* findWidgetByVarName(gfcFX& fx, const std::string& group, const std::string& varName) {
     if (varName.empty()) return nullptr;
@@ -483,11 +497,15 @@ std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXS
         //same menu name, else the same name. Peers pass matchByName=false: their assets must match exactly.
         if(!tmpFX.loadedAndCompiled && matchByName)
         {
+            const char* matchedBy="menu name";
             tmpFX=fxManager.getFXbyMenuName(attributeOrEmpty(fxNode,"menuName"));
             if(!tmpFX.loadedAndCompiled)
+            {
+                matchedBy="name";
                 tmpFX=fxManager.getFXbyName(fxName);
+            }
             if(tmpFX.loadedAndCompiled)
-                printf("FX %s: matched by name (file changed since saved)\n",fxName.c_str());
+                printf("FX %s: matched by %s (file changed since saved)\n",fxName.c_str(),matchedBy);
         }
         //if it is not found (indicated by a NOT loaded and compiled status) skip this node and add it to the not loaded string.
         if(!tmpFX.loadedAndCompiled)
@@ -514,6 +532,10 @@ std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXS
                                                         attributeOrEmpty(widgetNode,"group"),
                                                         attributeOrEmpty(widgetNode,"varName"));
                 if(!widget)
+                    continue;
+                //A widget whose kind changed (say float -> choice) keeps its default:
+                //the saved number means something else now.
+                if(!type.empty() && type!=savedWidgetType(widget->type))
                     continue;
 
                 //Cubes and luts are handled differently.

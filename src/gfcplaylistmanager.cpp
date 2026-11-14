@@ -367,22 +367,22 @@ std::string gfcPlaylistManager::getPlaylistAsString(){
 	return xMainNode.createXMLString();
 }
 
-void gfcPlaylistManager::setPlaylistFromString(std::string s, int replace){
+void gfcPlaylistManager::setPlaylistFromString(std::string s, int replace, bool matchByName){
 	XMLNode rootNode=XMLNode::parseString(s.c_str());
 	XMLNode realRoot = rootNode.getChildNode("root");
 	XMLNode entriesNode = realRoot.getChildNode("entries");
-	this->loadPlaylistParameters(entriesNode, replace);
+	this->loadPlaylistParameters(entriesNode, replace, 0, matchByName);
 
 }
 
-void gfcPlaylistManager::mergePlaylist(std::string s)
+void gfcPlaylistManager::mergePlaylist(std::string s, bool matchByName)
 {
 	//for now, just append the old playlist to the new one.
 	XMLNode xmlDoc=XMLNode::parseString(s.c_str());
 	XMLNode realRoot = xmlDoc.getChildNode("root");
 	XMLNode entriesNode = realRoot.getChildNode("entries");
 
-	this->loadPlaylistParameters(entriesNode, 0, 1); //we send 0 and 1 to not replace and avoid repeats
+	this->loadPlaylistParameters(entriesNode, 0, 1, matchByName); //we send 0 and 1 to not replace and avoid repeats
 	printf("Our new playlist has %i entries\n",this->entries.size());
 }
 
@@ -428,7 +428,7 @@ void gfcPlaylistManager::loadPlaylist(std::string filename)
 	this->loadPlaylistParameters(entriesNode);
 }
 
-void gfcPlaylistManager::loadPlaylistParameters(XMLNode &plNode, int replace, int noRepeats)
+void gfcPlaylistManager::loadPlaylistParameters(XMLNode &plNode, int replace, int noRepeats, bool matchByName)
 {
 	//1. Iterate through all the entries
 	int esize=plNode.nChildNode("e");
@@ -445,7 +445,7 @@ void gfcPlaylistManager::loadPlaylistParameters(XMLNode &plNode, int replace, in
 	{
 		gfcPlaylistItem item;
 		XMLNode entryNode=plNode.getChildNode("e",&eiterator);
-		item.loadPlaylistItemParameters(entryNode);
+		item.loadPlaylistItemParameters(entryNode, matchByName);
 		this->addItemlist(item,noRepeats);
 	}
 

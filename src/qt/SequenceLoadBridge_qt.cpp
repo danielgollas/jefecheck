@@ -1576,6 +1576,11 @@ bool fxParamIdentitySelfTest() {
         check("compat exact hash loads with its values", loadsBcs(exact, true));
         check("compat bogus hash loads by menuName with its values", loadsBcs(badHash, true));
         check("compat bogus hash and menuName loads by name", loadsBcs(badMenu, true));
+        // Only the menuName step can match this one.
+        const std::string onlyMenu = withAttribute(badHash, "name", "Brightness, Contrast, Saturation",
+                                                   "No Such Effect");
+        check("compat bogus hash and name, valid menuName loads by menu name",
+              onlyMenu != badHash && loadsBcs(onlyMenu, true));
         {
             gfcFXStack s;
             const std::vector<std::string> errors = s.loadStackFromString(badName, true);
@@ -1595,6 +1600,30 @@ bool fxParamIdentitySelfTest() {
                   loaded && approx(widgetValue(s.fxAt(0), "Brightness"), 0.7f) &&
                       approx(widgetValue(s.fxAt(0), "Contrast"), 1.f) &&
                       std::isnan(widgetValue(s.fxAt(0), "ContrastRemoved")));
+        }
+        {
+            const std::string needle = "varName=\"Contrast\" type=\"float\"";
+            std::string retyped = badHash;
+            const size_t at = retyped.find(needle);
+            if (at != std::string::npos)
+                retyped.replace(at, needle.size(), "varName=\"Contrast\" type=\"choice\"");
+            gfcFXStack s;
+            s.loadStackFromString(retyped, true);
+            check("compat a saved widget whose type changed keeps its default",
+                  at != std::string::npos && s.getNumOfFXs() == 1 &&
+                      approx(widgetValue(s.fxAt(0), "Brightness"), 0.7f) &&
+                      approx(widgetValue(s.fxAt(0), "Contrast"), 1.f));
+        }
+        {
+            // A playlist entry from a peer: the network handlers pass matchByName=false.
+            XMLNode entry = XMLNode::parseString(badHash.c_str());
+            gfcPlaylistItem fromPeer, fromFile;
+            fromPeer.loadPlaylistItemParameters(entry, false);
+            fromFile.loadPlaylistItemParameters(entry, true);
+            check("compat network playlist item with bogus hash: not loaded",
+                  fromPeer.fxstacks.size() == 1 && fromPeer.fxstacks[0].getNumOfFXs() == 0);
+            check("compat file playlist item with bogus hash: loads by menu name",
+                  fromFile.fxstacks.size() == 1 && fromFile.fxstacks[0].getNumOfFXs() == 1);
         }
         {
             const std::string savedId = std::to_string(src.fxAt(0).instanceId);
