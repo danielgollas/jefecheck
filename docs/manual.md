@@ -179,7 +179,7 @@ This option box lets you choose between any available channels present in the im
 
 Once you have selected what tracks you want to load, adjusted their load-time parameters (if needed), and you are sure of what you want to load, hit the **START** button. This will start loading the track in the background and you can continue using the Load Window to load another sequence into another track. If you set up all the tracks and want to start loading them all at the same time, click the **Start All** button at the bottom of the Load Window. This closes the Load Window and the sequences will start loading into the tracks. If you decide you don't want to do anything, you can simply click the **Done** button to close the Load Window.
 
-The **Add to Playlist** button adds the current setup to the playlist. To display the playlist, press `Ctrl+P`.
+The **Add to Playlist** button adds the current setup to the playlist. To display the playlist, press `F9` or use **Window > Playlist**.
 
 > **Summary:** You use the Load Window to select what tracks you want to load, adjust how you want them to be loaded, and then click the START button to start loading. All parameters have the most common values as defaults, so loading can be as fast as selecting a sequence and clicking START. Remember you can also drag a frame of the sequence onto any viewport in the Main Window to load the sequence.
 
@@ -347,7 +347,7 @@ When you activate the **Crop Bars** control and the Aspect Ratio is set to anyth
 
 ![Flip/flop controls](manual-images/FlipFlopControls.png)
 
-**Flip/Flop Controls** — Reflects the viewport vertically (Flip) or horizontally (Flop) or both. Shortcuts: `Ctrl+8` (flip) and `Ctrl+9` (flop).
+**Flip/Flop Controls** — Reflects the viewport vertically (Flip) or horizontally (Flop) or both. Shortcuts: `V` (flip) and `M` (flop); add `Shift` for every viewport.
 
 ![RGBA channel mask controls](manual-images/ChannelMaskControls.png)
 
@@ -490,10 +490,11 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 
 #### File Menu
 
-- **Load Manager** (`Ctrl+L`) — Opens the Load Manager Window.
-- **Playlist Manager** (`Ctrl+P`) — Opens the Playlist Window.
+- **Quick Load…** (`Ctrl+O`) — Loads a file straight into the active plate.
+- **Load Sequence Manager…** (`Ctrl+L`) — Opens the Load Sequence Manager.
+- **Open Playlist…** — Opens a saved playlist (the Playlist panel itself is **Window > Playlist**, `F9`).
 - **Save Session** (`Ctrl+S`) — Saves a complete JefeCheck session including loaded tracks, load-time parameters, and viewport configurations into a single file for later recall.
-- **Open Session** (`Ctrl+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
+- **Open Session…** (`Ctrl+Shift+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
 - **Export Review Summary…** — Writes the notes on everything in the current session to a PDF, text or CSV file, organized by shot, review round and frame. The PDF also shows a thumbnail of each noted frame with its markup. Use it to send feedback to people who don't have JefeCheck.
 - **Export Review Package…** — Bundles the current session, its notes and any LUTs you loaded yourself into a single `.jcreview` file you can hand to someone else. Leave **Include media** ticked to copy the footage into the package so it opens anywhere; untick it when everyone can reach the same storage, and JefeCheck will find the footage by its content instead.
 - **Open Review Package…** — Opens a `.jcreview` file. JefeCheck loads its session and LUTs, finds the footage (inside the package, where it was originally, by searching your Search Paths, or by asking you to locate it), and adds the package's notes to any notes you already have on that footage — nothing of yours is removed. When it's done, it lists anything it couldn't find or load.
@@ -504,21 +505,21 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 
 #### View Menu
 
-- **Viewport Layout** — Change the layout of the viewports.
+- **Plate Manager Shows** — Active, Visible or All plate cards in the Plate Manager (also on right-click in the panel).
 - **Zoom Filtering** — Choose between a **Point Filter** (see every pixel when zoomed in) or a **Bilinear Filter** that smoothes the image.
 - **Aspect bar opacity** — Select the opacity for aspect bars overlaid on the image when the aspect ratio is modified.
 - **Fit to viewport** (`F`) — Find the best fit for the current frame in the viewport. Smaller images will not be enlarged, but large images will be zoomed out.
-- **Fit all to viewport** (`Alt+F`) — Fit frames in all viewports.
-- **Flip** (`Ctrl+8`) — Flip viewport vertically.
-- **Flop** (`Ctrl+9`) — Flop viewport horizontally.
-- **Flip All** (`Alt+Ctrl+8`) — Flip all viewports vertically.
-- **Flop All** (`Alt+Ctrl+9`) — Flop all viewports horizontally.
+- **Fit all to viewport** (`Shift+F`) — Fit frames in all viewports.
+- **Flip** (`V`) — Flip viewport vertically.
+- **Flop** (`M`) — Flop viewport horizontally.
+- **Flip All** (`Shift+V`) — Flip all viewports vertically.
+- **Flop All** (`Shift+M`) — Flop all viewports horizontally.
 - **Reset Current View** (`Ctrl+R`) — Resets the current viewport's transformations.
 - **Reset All Views** (`Ctrl+Alt+R`) — Resets all viewport transformations.
 - **Reset Current Color Correction** (`Shift+R`) — Resets the current viewport's color corrections.
 - **Reset All Color Corrections** (`Shift+Alt+R`) — Resets all viewport color corrections.
 - **Show Histogram** (`Ctrl+H`) — Shows an RGB histogram for the current viewport. You can drag and resize the histogram within the viewport.
-- **Fullscreen** (`Ctrl+F`) — Toggles full-screen mode on or off. If you have two monitors, full-screen mode activates on the monitor where the JefeCheck main window is located.
+- **Fullscreen** (`F11` or `Cmd+Ctrl+F`) — Toggles full-screen mode on or off. If you have two monitors, full-screen mode activates on the monitor where the JefeCheck main window is located.
 
 #### Window Menu
 

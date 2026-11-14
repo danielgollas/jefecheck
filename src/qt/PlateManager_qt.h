@@ -46,6 +46,8 @@ public:
     // Until it is set (or when px < 0) a Row holds 4 cards. A Row shows at
     // most two card rows; more scroll.
     void setRowBudget(int px);
+    // Columns the current budget allows (before the panel's own width caps them).
+    int budgetCols() const { return rowCols(); }
 
     // Reflows when the framing mode, active plate, mode, shape or row column
     // count differ from the last layout; otherwise only updates the active

@@ -846,7 +846,7 @@ void MainWindow_Qt::buildDocks() {
                 if (area == Qt::NoDockWidgetArea || plateDock_->isFloating()) return;
                 plateManagerWidget_->setDockShape(shapeForArea(area));
                 pinPlateDock();
-                updatePlateRowBudget();
+                updatePlateRowBudget(true);
             });
     // Re-docking into the area it left does not always emit dockLocationChanged,
     // so the shape is re-read from the area here too.
@@ -858,7 +858,7 @@ void MainWindow_Qt::buildDocks() {
                     plateManagerWidget_->setDockShape(shapeForArea(dockWidgetArea(plateDock_)));
                     pinPlateDock();
                 }
-                updatePlateRowBudget();
+                updatePlateRowBudget(true);
             });
     // A new arrangement changes the panel's extent: a floating dock resizes its
     // window to it (shrinking too, e.g. 2x2 -> 1x1), a docked one re-pins its
@@ -867,7 +867,13 @@ void MainWindow_Qt::buildDocks() {
         // A reflow that came from the panel's own resize (the user squeezing or widening the
         // dock) re-pins only the height, so the drag sticks; any other reflow (layout, mode,
         // budget) also gives the row its full width back when there is room.
-        if (!plateDock_->isFloating()) { pinPlateDock(!plateManagerWidget_->lastReflowFromResize()); return; }
+        if (!plateDock_->isFloating()) {
+            const bool fromResize = plateManagerWidget_->lastReflowFromResize();
+            // A resize reflow while the window kept its width is the user dragging the separator.
+            rowSqueezedByUser_ = fromResize && width() == budgetWindowW_;
+            pinPlateDock(!fromResize);
+            return;
+        }
         QTimer::singleShot(0, this, [this]() {
             if (plateDock_ && plateDock_->isFloating()) plateDock_->adjustSize();
         });
@@ -889,10 +895,10 @@ void MainWindow_Qt::buildDocks() {
     // bottom strip side-by-side.
     splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
     // The Timeline beside or away from the Plate Manager changes the row budget.
-    connect(timelineDock_, &QDockWidget::dockLocationChanged, this, [this]() { updatePlateRowBudget(); });
-    connect(timelineDock_, &QDockWidget::topLevelChanged, this, [this]() { updatePlateRowBudget(); });
-    connect(timelineDock_, &QDockWidget::visibilityChanged, this, [this]() { updatePlateRowBudget(); });
-    updatePlateRowBudget();
+    connect(timelineDock_, &QDockWidget::dockLocationChanged, this, [this]() { updatePlateRowBudget(true); });
+    connect(timelineDock_, &QDockWidget::topLevelChanged, this, [this]() { updatePlateRowBudget(true); });
+    connect(timelineDock_, &QDockWidget::visibilityChanged, this, [this]() { updatePlateRowBudget(true); });
+    updatePlateRowBudget(true);
 
     // LUTs — right side.
     lutDock_ = new QDockWidget("LUTs", this);
@@ -1094,13 +1100,25 @@ int MainWindow_Qt::plateRowBudget() const {
     return width() - (timelineMinWidth() + jefe::qt::ui::kGap);
 }
 
-void MainWindow_Qt::updatePlateRowBudget() {
-    // Dock geometry settles a tick after a move or a resize (§11).
+void MainWindow_Qt::updatePlateRowBudget(bool dockMoved) {
+    // Dock geometry settles a tick after a move or a resize (§11). A burst of resize events
+    // schedules one update.
+    budgetDockMoved_ = budgetDockMoved_ || dockMoved;
+    if (budgetUpdatePending_) return;
+    budgetUpdatePending_ = true;
     QTimer::singleShot(0, this, [this]() {
+        budgetUpdatePending_ = false;
+        const bool moved = budgetDockMoved_;
+        budgetDockMoved_ = false;
         if (!plateManagerWidget_) return;
+        const int before = plateManagerWidget_->budgetCols();
         plateManagerWidget_->setRowBudget(plateRowBudget());
-        // A window resize or dock move gives a row its full width back when there is room.
-        pinPlateDock(true);
+        budgetWindowW_ = width();
+        // Give a row its full width back when the dock moved, when the window's budget now holds
+        // a different number of columns, or when the window (not the user) squeezed it; a plain
+        // resize keeps a separator the user dragged. Nothing to do when it is already full.
+        const bool wanted = moved || plateManagerWidget_->budgetCols() != before || !rowSqueezedByUser_;
+        if (wanted && plateDock_ && plateDock_->width() < plateManagerWidget_->sizeHint().width()) pinPlateDock(true);
     });
 }
 
@@ -1868,7 +1886,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
     {   // Two cards side by side beside the Timeline in a 1280 window: the card limit is the
         // 1280 row budget less the grid's side margins and one gap, halved. Zoom/X/Y/Rot live
         // in the Transform popup, Con/Bri/Sat in the Color popup.
-        const int timelineMin = std::max(timelinePanelWidget_->minimumWidth(), timelinePanelWidget_->minimumSizeHint().width());
+        const int timelineMin = timelineMinWidth();
         const int budget1280 = 1280 - (timelineMin + ui::kGap);
         const int maxCardW = (budget1280 - 2 * ui::kGapTight - ui::kGap) / 2;
         const int w = card->sizeHint().width();
@@ -1969,7 +1987,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
     }
 
-    // ---- Modes, arrangement and header. Bottom dock (Row shape); framing changes go
+    // ---- Modes and arrangement. Bottom dock (Row shape); framing changes go
     // through the bridge and then refreshAllCards, never through a shortcut.
     namespace pl = jefe::platelayout;
     PlateManager_Qt* pm = plateManagerWidget_;
@@ -2070,7 +2088,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
                    .arg(panelW).arg(width()));
         // Balanced wrap, in a window wide enough for three cards per row beside the Timeline:
         // four shown go 2+2, never 3+1.
-        updatePlateRowBudget();
+        updatePlateRowBudget(true);
         resize(1920, 1080);
         layout(FRAMINGQUAD_ID);
         settleFor(400);
@@ -2086,7 +2104,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
                QString("2x2 in a %1 px window (budget %2, three cards need %3) -> [%4]")
                    .arg(width()).arg(plateRowBudget()).arg(fit3).arg(cells.join(" ")));
         resize(1280, 800);
-        updatePlateRowBudget();   // back to the window's own budget
+        updatePlateRowBudget(true);   // back to the window's own budget
         settleFor(300);
     }
     auto cellStr = [&]() {
@@ -2458,6 +2476,38 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
                        "back to %7 px -> cell1=(%8,%9)")
                    .arg(before.x()).arg(before.y()).arg(squeezedW).arg(squeezed.x()).arg(squeezed.y())
                    .arg(inside ? "yes" : "NO").arg(plateDock_->width()).arg(restored.x()).arg(restored.y()));
+
+        // A squeeze survives a window resize that keeps the budget's column count (1400 -> 1350:
+        // two columns either way), and a layout change gives the row its full width back.
+        resize(1400, 800);
+        settleFor(300);
+        split(pm->minimumWidth());
+        const int keptBefore = plateDock_->width();
+        resize(1350, 800);
+        settleFor(300);
+        const int keptAfter = plateDock_->width();
+        bool stillInside = scroll != nullptr;
+        if (scroll) {
+            const int right = scroll->viewport()->width();
+            for (int p : pm->shownPlateIds()) {
+                auto* c = plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p));
+                if (!c || c->mapTo(scroll->viewport(), QPoint(c->width(), 0)).x() > right) stillInside = false;
+            }
+        }
+        const QPoint keptCell = pm->cardCell(1);
+        layout(FRAMINGDOUBLE_ID);
+        settleFor(300);
+        const QPoint afterLayout = pm->cardCell(1);
+        const int afterLayoutW = plateDock_->width();
+        report("ROW squeeze kept", std::abs(width() - 1350) <= 1 &&   // 1.5x rounds the window to whole device px keptAfter <= keptBefore + 1 && keptCell == QPoint(0, 1) && stillInside &&
+                                       afterLayout == QPoint(1, 0) && afterLayoutW >= pm->sizeHint().width(),
+               QString("squeezed %1 px at 1400 -> %2 px at %3 (cell1=(%4,%5), inside %6); 2x1 layout -> %7 px "
+                       "(full %8), cell1=(%9,%10)")
+                   .arg(keptBefore).arg(keptAfter).arg(width()).arg(keptCell.x()).arg(keptCell.y())
+                   .arg(stillInside ? "yes" : "NO").arg(afterLayoutW).arg(pm->sizeHint().width())
+                   .arg(afterLayout.x()).arg(afterLayout.y()));
+        resize(1280, 800);
+        settleFor(300);
     }
     {   // Narrowing the window wraps the row from two columns to one: plate 1 moves from
         // beside plate 0 to below it, nothing overlaps, and the Timeline keeps its height.

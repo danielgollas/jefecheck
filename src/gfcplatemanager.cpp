@@ -1149,6 +1149,8 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
             glDisable(GL_BLEND);
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_SCISSOR_TEST);
+            glDisable(GL_LIGHTING);
+            glDisable(GL_COLOR_LOGIC_OP);
             glViewport(0, 0, w, h);
             glMatrixMode(GL_PROJECTION);
             glPushMatrix();

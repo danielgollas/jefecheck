@@ -178,7 +178,8 @@ static bool hasPlateFrameTest(int argc, char* argv[]) {
 }
 
 // --platemanager-test [outDir] : headless checks of the Plate Manager dock (cards,
-// modes, arrangement, header). With outDir it also saves dock screenshots there.
+// modes, arrangement, title bar and mode menus, dock shapes, Timeline height, Window
+// menu). With outDir it also saves and checks a screenshot matrix there.
 static bool hasPlateManagerTest(int argc, char* argv[], QString* outDir) {
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--platemanager-test") != 0) continue;

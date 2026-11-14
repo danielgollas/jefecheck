@@ -250,7 +250,13 @@ private:
     void buildDocks();
     void restoreLayout();
     // Feeds plateRowBudget() to the Plate Manager, deferred a tick.
-    void updatePlateRowBudget();
+    // dockMoved: a dock moved, floated or showed/hid (re-widens the row); otherwise only a
+    // changed column count for the window's budget does.
+    void updatePlateRowBudget(bool dockMoved = false);
+    bool budgetUpdatePending_ = false;
+    bool budgetDockMoved_ = false;
+    int budgetWindowW_ = -1;            // window width at the last budget update
+    bool rowSqueezedByUser_ = false;    // the row's last resize reflow came from a separator drag
     // Pulls a docked Plate Manager's strip to the panel's extent (a row also to its full
     // width when the Timeline beside it can give it up), deferred a tick; retries a stale result.
     void pinPlateDock(bool restoreWidth = true);
