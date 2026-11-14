@@ -139,6 +139,22 @@ void stackInstanceIds()
         check("ids duplicate id: first keeps it, second is fresh", kept == 7 && clash == 8);
     }
     {
+        gfcFXStack s;
+        s.addFX(namedFX("a"));
+        const std::uint32_t big = s.addFX(namedFX("big", 4294967294u));
+        const std::uint32_t after = s.addFX(namedFX("after"));
+        check("ids out-of-range id 4294967294 replaced by a fresh one", big == 2 && after == 3);
+    }
+    {
+        gfcFXStack s;
+        const std::uint32_t top = s.addFX(namedFX("top", 0x7FFFFFFFu));
+        const std::uint32_t next = s.addFX(namedFX("next"));
+        const std::uint32_t third = s.addFX(namedFX("third"));
+        check("ids at the top of the range stay valid, non-zero and distinct",
+              top == 0x7FFFFFFFu && next != 0 && next < 0x80000000u && third != 0 && third < 0x80000000u &&
+                  next != top && third != top && third != next);
+    }
+    {
         // The Qt bridge removes an FX by clearing the stack and re-adding the rest.
         gfcFXStack s;
         s.addFX(namedFX("a"));

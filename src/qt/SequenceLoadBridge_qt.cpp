@@ -1403,6 +1403,24 @@ std::string stackXml(const gfcFXStack& stack) {
     return xml;
 }
 
+// xml with the first `attr="from"` replaced by `attr="to"`; unchanged when absent.
+std::string withAttribute(std::string xml, const std::string& attr, const std::string& from,
+                          const std::string& to) {
+    const std::string needle = attr + "=\"" + from + "\"";
+    const size_t at = xml.find(needle);
+    if (at != std::string::npos) xml.replace(at, needle.size(), attr + "=\"" + to + "\"");
+    return xml;
+}
+
+// The value of the widget with this varName in any group; NaN when absent.
+float widgetValue(const gfcFX& fx, const std::string& varName) {
+    for (const auto& kv : fx.groups) {
+        auto it = kv.second.widgets.find(varName);
+        if (it != kv.second.widgets.end()) return it->second.value;
+    }
+    return std::nanf("");
+}
+
 std::vector<std::uint32_t> stackIds(gfcFXStack& stack) {
     std::vector<std::uint32_t> ids;
     for (int i = 0; i < stack.getNumOfFXs(); ++i) ids.push_back(stack.fxAt(i).instanceId);
@@ -1493,6 +1511,101 @@ bool fxParamIdentitySelfTest() {
         reloaded.loadStackFromString(legacy);
         check("legacy XML gets fresh ids 1, 2, 3",
               stackIds(reloaded) == std::vector<std::uint32_t>({1, 2, 3}));
+    }
+
+    // Bool and Choice through the normalised setter/getter.
+    int chromaIndex = -1, channelIndex = -1;
+    for (const auto& entry : getAvailableFXMenu()) {
+        if (entry.second == "Comp/Chroma Key (Blue)") chromaIndex = entry.first;
+        if (entry.second == "Color/Channel") channelIndex = entry.first;
+    }
+    check("Chroma Key (Blue) and Channel found in the FX menu", chromaIndex >= 0 && channelIndex >= 0);
+    if (chromaIndex >= 0 && channelIndex >= 0) {
+        const std::uint32_t chroma = stack->addFX(fxManager.getFX(chromaIndex));
+        const std::uint32_t channel = stack->addFX(fxManager.getFX(channelIndex));
+        const FXParamRef matte{0, chroma, "ShowMatte"};
+        auto stored = [&](std::uint32_t id, const std::string& varName) {
+            return widgetValue(stack->fxAt(stack->indexOfInstance(id)), varName);
+        };
+        const bool lowOk = setFXParamNormalized(matte, 0.49f);
+        const std::optional<float> low = getFXParamNormalized(matte);
+        check("bool t 0.49 -> false", lowOk && stored(chroma, "ShowMatte") == 0.f && low && *low == 0.f);
+        const bool highOk = setFXParamNormalized(matte, 0.5f);
+        const std::optional<float> high = getFXParamNormalized(matte);
+        check("bool t 0.5 -> true", highOk && stored(chroma, "ShowMatte") == 1.f && high && *high == 1.f);
+
+        const FXParamRef chan{0, channel, "channel"};
+        const int options = (int)stack->fxAt(stack->indexOfInstance(channel)).groups.begin()->second
+                                .widgets["channel"].options.size();
+        check("Channel has 4 options", options == 4);
+        bool roundTrip = options > 1;
+        for (int k = 0; roundTrip && k < options; ++k) {
+            const float t = (float)k / (float)(options - 1);
+            const bool ok = setFXParamNormalized(chan, t);
+            const std::optional<float> got = getFXParamNormalized(chan);
+            roundTrip = ok && stored(channel, "channel") == (float)k && got && approx(*got, t);
+        }
+        check("choice round-trips every option index", roundTrip);
+        const bool nearOk = setFXParamNormalized(chan, 0.4f);   // 0.4 * 3 = 1.2 -> option 1
+        check("choice t 0.4 -> option 1", nearOk && stored(channel, "channel") == 1.f);
+    }
+
+    // Loading a stack whose effect file changed since it was saved.
+    {
+        gfcFXStack src;
+        src.addFX(fxManager.getFX(bcsIndex));
+        src.setWidgetValue(0, "Parameters", "Brightness", 0.7f);
+        src.setWidgetValue(0, "Parameters", "Contrast", 1.3f);
+        const std::string hash = src.fxAt(0).md5Hash;
+        const std::string exact = stackXml(src);
+        const std::string badHash = withAttribute(exact, "hash", hash, "0000000000bogus0");
+        const std::string badMenu = withAttribute(badHash, "menuName", "Color/Brightness, Contrast, Saturation",
+                                                  "Color/No Such Menu");
+        const std::string badName = withAttribute(badMenu, "name", "Brightness, Contrast, Saturation",
+                                                  "No Such Effect");
+        check("compat fixtures differ from the saved stack",
+              badHash != exact && badMenu != badHash && badName != badMenu);
+
+        auto loadsBcs = [&](const std::string& xml, bool matchByName) {
+            gfcFXStack s;
+            s.loadStackFromString(xml, matchByName);
+            return s.getNumOfFXs() == 1 && s.fxAt(0).name == "Brightness, Contrast, Saturation" &&
+                   approx(widgetValue(s.fxAt(0), "Brightness"), 0.7f) &&
+                   approx(widgetValue(s.fxAt(0), "Contrast"), 1.3f);
+        };
+        check("compat exact hash loads with its values", loadsBcs(exact, true));
+        check("compat bogus hash loads by menuName with its values", loadsBcs(badHash, true));
+        check("compat bogus hash and menuName loads by name", loadsBcs(badMenu, true));
+        {
+            gfcFXStack s;
+            const std::vector<std::string> errors = s.loadStackFromString(badName, true);
+            check("compat bogus hash and unknown names: not loaded, reported",
+                  s.getNumOfFXs() == 0 && !errors.empty());
+        }
+        {
+            gfcFXStack s;
+            s.loadStackFromString(badHash, false);
+            check("compat network path (no name fallback) with bogus hash: not loaded", s.getNumOfFXs() == 0);
+        }
+        {
+            gfcFXStack s;
+            s.loadStackFromString(withAttribute(badHash, "varName", "Contrast", "ContrastRemoved"), true);
+            const bool loaded = s.getNumOfFXs() == 1;
+            check("compat a saved widget the effect lacks is skipped, the rest restore",
+                  loaded && approx(widgetValue(s.fxAt(0), "Brightness"), 0.7f) &&
+                      approx(widgetValue(s.fxAt(0), "Contrast"), 1.f) &&
+                      std::isnan(widgetValue(s.fxAt(0), "ContrastRemoved")));
+        }
+        {
+            const std::string savedId = std::to_string(src.fxAt(0).instanceId);
+            gfcFXStack s;
+            s.loadStackFromString(withAttribute(exact, "instanceId", savedId, "4294967294"), true);
+            const std::uint32_t loadedId = s.getNumOfFXs() == 1 ? s.fxAt(0).instanceId : 0;
+            const std::uint32_t nextId = s.addFX(fxManager.getFX(bcsIndex));
+            check("compat instanceId 4294967294 is replaced by a fresh id, the next is distinct",
+                  loadedId != 0 && loadedId < 0x80000000u && nextId != 0 && nextId < 0x80000000u &&
+                      nextId != loadedId);
+        }
     }
 
     clearFXStackOnPlate(0);

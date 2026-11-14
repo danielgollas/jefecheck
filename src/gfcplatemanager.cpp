@@ -1419,7 +1419,8 @@ void gfcPlateManager::processNetFXCommonInfo(gfcNetFXCommonInfo &info) {
 void gfcPlateManager::processNetFXStackMessage(gfcNetFXStackMessage &message)
 {
 	gfcFXStack tmpStack;
-	tmpStack.loadStackFromString(message.theStack);
+	// No name fallback: a peer's stack must use exactly the effect files it names.
+	tmpStack.loadStackFromString(message.theStack, false);
 	this->setFXStack(tmpStack,message.quadID);
 }
 
@@ -1550,7 +1551,8 @@ void gfcPlateManager::setPlateFXStacksFromString(std::string s){
 		XMLNode stackNode=node.getChildNode("Stack",&iterator);
 	
 		gfcFXStack tmpStack;
-		tmpStack.loadStackFromNode(stackNode);
+		// Network-only (GFCNETID_SENDFXTACKS): no name fallback, peers need exact effect files.
+		tmpStack.loadStackFromNode(stackNode, NULL, false);
 		stacks.push_back(tmpStack);	
 		
 	}
