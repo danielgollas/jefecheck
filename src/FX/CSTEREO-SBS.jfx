@@ -6,9 +6,9 @@
       <widget type="newLine" varName="0" />
       <widget labelColorR="0" labelColorB="255" type="texture" default="0" label="Left" labelColorG="255" varName="Source" />
       <widget type="newLine" varName="0" />
-      <widget labelColorR="0" labelColorB="255" type="float" step="0.001" default="1" label="Cyan" minimum="0" labelColorG="255" maximum="1.0" varName="Cyan" />
+      <widget labelColorR="0" labelColorB="255" type="float" style="slider" step="0.001" default="1" label="Cyan" minimum="0" labelColorG="255" maximum="1.0" varName="Cyan" />
       <widget width="10" type="spacer" label="" varName="spacer1" />
-      <widget labelColorR="255" labelColorB="0" type="float" step="0.001" default="0.8" label="Red" minimum="0" labelColorG="0" maximum="1.0" varName="Red" />
+      <widget labelColorR="255" labelColorB="0" type="float" style="slider" step="0.001" default="0.8" label="Red" minimum="0" labelColorG="0" maximum="1.0" varName="Red" />
       <widget type="newLine" varName="0" />
     </group>
   </groups>

@@ -24,6 +24,7 @@
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
 #include "UiDensityCheck_qt.h"
+#include "UiMetrics_qt.h"
 #include <QListWidget>
 #include <QMap>
 #include <QMouseEvent>
@@ -70,6 +71,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -1393,7 +1395,119 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
            beforePath.toLocal8Bit().constData(),
            afterPath.toLocal8Bit().constData());
     fflush(stdout);
-    return pass ? 0 : 1;
+    if (!pass) return 1;
+    return runOldFXSessionCheck(outDir) ? 0 : 7;
+}
+
+namespace {
+
+// A session saved before the bundled effects gained control styles and slider ranges:
+// no instanceId, and the content hashes of BCS.jfx, PCC.jfx and CONVOLUTION_3x3.jfx (with
+// their shaders) as they were then. Every value differs from the effect's default.
+const char* const kOldFXSession = R"XML(<?xml version="1.0"?>
+<root comment="This is a JefeCheck XML formated Session File">
+	<settings framingMode="0" bgColor="48" filtering="-9728" loopMode="1" loopPriority="0" targetFPS="24" from="1" to="1"/>
+	<plates>
+		<plate plateID="0" trackID="0" tX="0" tY="0" rZ="0" scale="1" flip="0" flop="0" crop="0" aspect="original" r="1" g="1" b="1" a="0" gamma="1" exposure="0" brightness="1" contrast="1" saturation="1" lut="No LUT">
+			<stack>
+				<FXS>
+					<FX name="Brightness, Contrast, Saturation" menuName="Color/Brightness, Contrast, Saturation" hash="1f2788ffc7dbc69d" active="1.0">
+						<widget varName="Brightness" type="float" value="1.250000" group="Parameters"/>
+						<widget varName="Contrast" type="float" value="0.800000" group="Parameters"/>
+						<widget varName="AvgLuminance" type="float" value="0.400000" group="Parameters"/>
+						<widget varName="Saturation" type="float" value="1.500000" group="Parameters"/>
+					</FX>
+					<FX name="Primary Color Correction" menuName="Color/Primary Color Correction" hash="7770d72d4c08ec6f" active="1.0">
+						<widget varName="BrightnessR" type="float" value="1.100000" group="Parameters"/>
+						<widget varName="BrightnessG" type="float" value="0.900000" group="Parameters"/>
+						<widget varName="BrightnessB" type="float" value="1.050000" group="Parameters"/>
+						<widget varName="ContrastR" type="float" value="1.200000" group="Parameters"/>
+						<widget varName="ContrastG" type="float" value="1.300000" group="Parameters"/>
+						<widget varName="ContrastB" type="float" value="0.850000" group="Parameters"/>
+						<widget varName="AvgLuminance" type="float" value="0.450000" group="Parameters"/>
+						<widget varName="SaturationR" type="float" value="1.300000" group="Parameters"/>
+						<widget varName="SaturationG" type="float" value="0.700000" group="Parameters"/>
+						<widget varName="SaturationB" type="float" value="1.400000" group="Parameters"/>
+					</FX>
+					<FX name="Convolution 3x3" menuName="Special/Convolution 3x3" hash="5241dba13f2d73c2" active="0.0">
+						<widget varName="presets" type="choice" value="5.000000" group="Options"/>
+						<widget varName="k00" type="float" value="-1.000000" group="Options"/>
+						<widget varName="k01" type="float" value="0.500000" group="Options"/>
+						<widget varName="k02" type="float" value="0.250000" group="Options"/>
+						<widget varName="k10" type="float" value="2.000000" group="Options"/>
+						<widget varName="k11" type="float" value="-0.250000" group="Options"/>
+						<widget varName="k12" type="float" value="1.000000" group="Options"/>
+						<widget varName="k20" type="float" value="0.125000" group="Options"/>
+						<widget varName="k21" type="float" value="0.750000" group="Options"/>
+						<widget varName="k22" type="float" value="-1.500000" group="Options"/>
+					</FX>
+				</FXS>
+			</stack>
+		</plate>
+	</plates>
+	<tracks>
+		<track trackID="0" filename="" from="1" to="1" mode="0" scale="100" filter="0" crop="0" aoiX="-1" aoiY="-1" aoiW="-1" aoiH="-1" depth="0" offset="0" holdMode="0" holdFrame="0"/>
+	</tracks>
+	<playlist/>
+	<ccFavorites/>
+</root>
+)XML";
+
+}  // namespace
+
+bool MainWindow_Qt::runOldFXSessionCheck(const QString& outDir) {
+    int fails = 0;
+    auto check = [&](const QString& name, bool ok) {
+        printf("FX-OLD-SESSION %s %s\n", ok ? "PASS" : "FAIL", qPrintable(name));
+        if (!ok) ++fails;
+    };
+    const QString path = outDir + "/old-fx-session.jcs";
+    {
+        QFile f(path);
+        const bool written = f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(kOldFXSession) > 0;
+        check("fixture written to " + path, written);
+        if (!written) return false;
+    }
+    viewport_->makeCurrent();
+    jefe::qt::loadSession(path.toStdString());
+    viewport_->doneCurrent();
+
+    struct Want { const char* menuName; const char* savedHash; bool active; std::vector<std::pair<const char*, float>> values; };
+    const std::vector<Want> wants = {
+        {"Color/Brightness, Contrast, Saturation", "1f2788ffc7dbc69d", true,
+         {{"Brightness", 1.25f}, {"Contrast", 0.8f}, {"AvgLuminance", 0.4f}, {"Saturation", 1.5f}}},
+        {"Color/Primary Color Correction", "7770d72d4c08ec6f", true,
+         {{"BrightnessR", 1.1f}, {"BrightnessG", 0.9f}, {"BrightnessB", 1.05f}, {"ContrastR", 1.2f},
+          {"ContrastG", 1.3f}, {"ContrastB", 0.85f}, {"AvgLuminance", 0.45f}, {"SaturationR", 1.3f},
+          {"SaturationG", 0.7f}, {"SaturationB", 1.4f}}},
+        {"Special/Convolution 3x3", "5241dba13f2d73c2", false,
+         {{"presets", 5.f}, {"k00", -1.f}, {"k01", 0.5f}, {"k02", 0.25f}, {"k10", 2.f}, {"k11", -0.25f},
+          {"k12", 1.f}, {"k20", 0.125f}, {"k21", 0.75f}, {"k22", -1.5f}}},
+    };
+    const std::vector<jefe::qt::FXMeta> stack = jefe::qt::getFXStackMetaOnPlate(0);
+    check(QString("plate 0 has the 3 saved effects (got %1)").arg(stack.size()), stack.size() == wants.size());
+    for (size_t i = 0; i < wants.size() && i < stack.size(); ++i) {
+        const Want& want = wants[i];
+        const jefe::qt::FXMeta& fx = stack[i];
+        check(QString("fx%1 is %2 (got %3)").arg(i).arg(want.menuName, QString::fromStdString(fx.menuName)),
+              fx.menuName == want.menuName);
+        // The effect file changed since the session was saved, so it loaded by menu name.
+        check(QString("fx%1 file changed since saved (hash %2 -> %3)")
+                  .arg(i).arg(want.savedHash, QString::fromStdString(fx.hash)),
+              fx.hash != want.savedHash);
+        check(QString("fx%1 active %2").arg(i).arg(want.active), fx.active == want.active);
+        QStringList wrong;
+        for (const auto& [varName, value] : want.values) {
+            auto p = std::find_if(fx.params.begin(), fx.params.end(),
+                                  [&](const jefe::qt::FXParamMeta& m) { return m.varName == varName; });
+            if (p == fx.params.end()) wrong << QString("%1 missing").arg(varName);
+            else if (std::fabs(p->value - value) > 1e-5f) wrong << QString("%1 %2 != %3").arg(varName).arg(p->value).arg(value);
+        }
+        check(QString("fx%1 keeps its saved values %2").arg(i).arg(wrong.join(", ")), wrong.isEmpty());
+    }
+    jefe::qt::clearFXStackOnPlate(0);
+    fflush(stdout);
+    return fails == 0;
 }
 
 int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QString& shotDir) {
@@ -1472,10 +1586,8 @@ int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QStrin
     // knobs share a row (FUN's Control 1 / Control 2 are varNames zoom / curve)
     QWidget* knob1 = child("fxparams.fx1.param.zoom.knob");
     QWidget* knob2 = child("fxparams.fx1.param.curve.knob");
-    if (!knob1 || !knob2)
-        printf("FX-PANEL XFAIL knobs share a row (FUN's zoom/curve are not knob-styled yet)\n");
-    else
-        check("knobs share a row", yOf(knob1) == yOf(knob2), QString("y %1 vs %2").arg(yOf(knob1)).arg(yOf(knob2)));
+    check("knobs share a row", knob1 && knob2 && yOf(knob1) == yOf(knob2),
+          knob1 && knob2 ? QString("y %1 vs %2").arg(yOf(knob1)).arg(yOf(knob2)) : QString("no FUN zoom/curve knobs"));
 
     // Every param row in a card, in card coordinates.
     auto cardRows = [&panel](int fx) {
@@ -1513,10 +1625,30 @@ int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QStrin
         for (const char* n : {"ShowMatte", "ShowClean", "spillSupress"})
             if (QWidget* w = child(QString("fxparams.fx3.param.%1.row").arg(n))) boolYs.insert(yOf(w));
         if (boolYs.size() < 2) bad << QString("Chroma Key bools did not wrap (%1 rows)").arg(boolYs.size());
-        if (knob1 && knob2 && yOf(knob1) == yOf(knob2)) bad << "FUN knobs still share a row at 150 px";
-        if (!knob1 || !knob2) printf("FX-PANEL XFAIL narrow knobs wrap (no FUN knobs yet)\n");
         if (chromaRows360 == 0) bad << "no Chroma Key rows";
         check("narrow wraps, never overlaps", bad.isEmpty(), bad.join("; "));
+
+        // Narrow knobs wrap. The panel's own minimum width (about 200 px) still fits both
+        // FUN knobs, so ask their row's flow layout directly: with room to spare they share
+        // one line; given less than the two knobs need side by side, they take two.
+        QStringList knobBad;
+        QWidget* e1 = child("fxparams.fx1.param.zoom.row");
+        QWidget* e2 = child("fxparams.fx1.param.curve.row");
+        QLayout* flow = e1 && e1->parentWidget() ? e1->parentWidget()->layout() : nullptr;
+        if (!knob1 || !knob2 || !e1 || !e2 || !flow || e2->parentWidget() != e1->parentWidget())
+            knobBad << "no FUN zoom/curve knobs in one row";
+        else {
+            const QMargins m = flow->contentsMargins();
+            const int sideBySide = m.left() + e1->width() + jefe::qt::ui::kGap + e2->width() + m.right();
+            const int roomy = sideBySide + jefe::qt::ui::kGap;
+            const int oneLine = flow->heightForWidth(roomy);
+            const int squeezed = flow->heightForWidth(sideBySide - 1);
+            if (!(squeezed > oneLine)) knobBad << QString("height %1 at %2 px, %3 at %4 px").arg(oneLine).arg(roomy)
+                                                      .arg(squeezed).arg(sideBySide - 1);
+            printf("FX-PANEL narrow knobs: %d px tall at %d px wide, %d px tall at %d px\n", oneLine, roomy,
+                   squeezed, sideBySide - 1);
+        }
+        check("narrow knobs wrap", knobBad.isEmpty(), knobBad.join("; "));
         panel.resize(360, 900);
         settle();
     }
@@ -1628,6 +1760,99 @@ int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QStrin
         check("refresh while dragging", bad.isEmpty(), bad.join("; "));
     }
 
+    // A drag writes to the effect it started on, even when another copy is inserted
+    // before it mid-drag (the stack index the card was built with is stale by then).
+    {
+        QStringList bad;
+        auto brightnessOf = [](std::uint32_t id) -> float {
+            for (const auto& fx : jefe::qt::getFXStackMetaOnPlate(0))
+                if (fx.instanceId == id)
+                    for (const auto& p : fx.params)
+                        if (p.varName == "Brightness") return p.value;
+            return -1.f;
+        };
+        const auto before = jefe::qt::getFXStackMetaOnPlate(0);
+        QWidget* slider = child("fxparams.fx0.param.Brightness.slider");
+        if (before.empty() || before[0].menuName != wanted[0] || !slider) bad << "setup: no BCS card at fx0";
+        else {
+            const std::uint32_t a = before[0].instanceId;
+            const qreal y = slider->height() / 2.0;
+            auto send = [&](QEvent::Type t, qreal x) {
+                const QPointF at(x, y);
+                QMouseEvent e(t, at, slider->mapToGlobal(at), t == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                              t == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::MouseButtons(Qt::LeftButton), Qt::NoModifier);
+                QCoreApplication::sendEvent(slider, &e);
+            };
+            send(QEvent::MouseButtonPress, slider->width() * 0.2);
+            send(QEvent::MouseMove, slider->width() * 0.3);
+            jefe::qt::addFXToActivePlate(fxIndexOf(wanted[0]));
+            const int last = int(jefe::qt::getFXStackMetaOnPlate(0).size()) - 1;
+            jefe::qt::moveFXOnPlate(0, last, 0);
+            panel.refresh();
+            settle();
+            send(QEvent::MouseMove, slider->width() * 0.6);
+            send(QEvent::MouseButtonRelease, slider->width() * 0.6);
+            const auto now = jefe::qt::getFXStackMetaOnPlate(0);
+            if (now.size() != before.size() + 1 || now[1].instanceId != a)
+                bad << "setup: the new BCS is not in front of BCS#A";
+            else {
+                const std::uint32_t inserted = now[0].instanceId;
+                const float onA = brightnessOf(a), onNew = brightnessOf(inserted);
+                if (!(onA > 1.05f)) bad << QString("BCS#A Brightness %1 (the drag did not land on it)").arg(onA);
+                if (onNew != 1.f) bad << QString("inserted BCS Brightness %1 (the drag wrote to it)").arg(onNew);
+            }
+            QElapsedTimer t;
+            t.start();
+            while (t.elapsed() < 300) settle();
+            jefe::qt::removeFXFromPlate(0, 0);
+            jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+            panel.refresh();
+            settle();
+        }
+        check("drag writes follow the instance", bad.isEmpty(), bad.join("; "));
+    }
+
+    // Bool and choice rows: the label turns the accent colour when changed, and the
+    // row's "Reset to default" action puts the value and the label back.
+    {
+        QStringList bad;
+        auto resetRow = [&](const QString& row) {
+            QWidget* w = child(row);
+            QAction* reset = w ? w->findChild<QAction*>(row + ".resetDefault") : nullptr;
+            if (!reset) { bad << row + " has no reset action"; return; }
+            reset->trigger();
+            settle();
+        };
+        const QColor accent("#d4771e");
+        auto* matte = qobject_cast<QCheckBox*>(child("fxparams.fx3.param.ShowMatte.check"));
+        if (!matte) bad << "no ShowMatte check";
+        else {
+            matte->click();
+            settle();
+            const QColor on = textColour(child("fxparams.fx3.param.ShowMatte.label"));
+            if (on != accent) bad << "bool label after change " + on.name();
+            resetRow("fxparams.fx3.param.ShowMatte.row");
+            matte = qobject_cast<QCheckBox*>(child("fxparams.fx3.param.ShowMatte.check"));
+            const QColor off = textColour(child("fxparams.fx3.param.ShowMatte.label"));
+            if (!matte || matte->isChecked()) bad << "bool not reset";
+            if (!off.isValid() || off == accent) bad << "bool label after reset " + off.name();
+        }
+        auto* combo = qobject_cast<QComboBox*>(child("fxparams.fx2.param.presets.combo"));
+        if (!combo) bad << "no Convolution presets combo";
+        else {
+            combo->setCurrentIndex(3);
+            settle();
+            const QColor on = textColour(child("fxparams.fx2.param.presets.label"));
+            if (on != accent) bad << "choice label after change " + on.name();
+            resetRow("fxparams.fx2.param.presets.row");
+            combo = qobject_cast<QComboBox*>(child("fxparams.fx2.param.presets.combo"));
+            const QColor off = textColour(child("fxparams.fx2.param.presets.label"));
+            if (!combo || combo->currentIndex() != 0) bad << "choice not reset";
+            if (!off.isValid() || off == accent) bad << "choice label after reset " + off.name();
+        }
+        check("bool and choice modified and reset", bad.isEmpty(), bad.join("; "));
+    }
+
     // Dock screenshots for the PR, before the stack is changed below.
     if (!shotDir.isEmpty() && fxParamsDock_) {
         QDir().mkpath(shotDir);
@@ -1659,6 +1884,27 @@ int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QStrin
         }
         fxParamsDock_->setFloating(false);
         addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
+
+        // One card per loaded effect, with its defaults, in a 300 px left dock.
+        const std::string stackBefore = jefe::qt::getFXStackXmlOnPlate(0);
+        QDir().mkpath(shotDir + "/effects");
+        for (const auto& [idx, menuName] : jefe::qt::getAvailableFXMenu()) {
+            jefe::qt::clearFXStackOnPlate(0);
+            jefe::qt::addFXToActivePlate(idx);
+            fxParamPanelWidget_->refresh();
+            fxParamsDock_->show();
+            settle();
+            resizeDocks({fxParamsDock_}, {300}, Qt::Horizontal);
+            for (int i = 0; i < 3; ++i) settle();
+            QString file = QString::fromStdString(menuName);
+            file.replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_");
+            const QString path = shotDir + "/effects/" + file + ".png";
+            const bool ok = fxParamsDock_->grab().save(path);
+            printf("FX-PANEL SHOT %s %dx%d ok=%d\n", qPrintable(path), fxParamsDock_->width(), fxParamsDock_->height(), ok);
+        }
+        jefe::qt::setFXStackXmlOnPlate(0, stackBefore);
+        fxParamPanelWidget_->refresh();
+        settle();
     }
 
     // fingerprint: a stack that reuses an instance id with a different effect rebuilds
@@ -3446,7 +3692,7 @@ void MainWindow_Qt::autoloadStep() {
 }
 
 // Surfaces whose owning plan has not landed yet: violations print but never fail the run.
-static const QStringList kDensityDeferred = {"dock.platemanager", "dock.fxparams", "dock.remote"};
+static const QStringList kDensityDeferred = {"dock.platemanager", "dock.remote"};
 
 QMessageBox* MainWindow_Qt::makeAboutBox() {
     auto* box = new QMessageBox(this);
@@ -3563,6 +3809,31 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
                     auto d = jefe::qt::getLutPreview(list->selectedItems().first()->data(0, Qt::UserRole).toInt());
                     if (d.valid) { d.name = std::string(120, 'n'); pv->setLut(d); }
                 }
+            }
+            // The FX dock is checked with real cards: sliders, knobs, a field grid, bools and pickers.
+            int fxPlateBefore = -1;
+            std::string fxStackBefore;
+            if (name == "dock.fxparams") {
+                fxPlateBefore = jefe::qt::getActivePlate();
+                jefe::qt::setActivePlate(0);
+                fxStackBefore = jefe::qt::getFXStackXmlOnPlate(0);
+                jefe::qt::clearFXStackOnPlate(0);
+                QStringList missing;
+                for (const char* menuName : {"Color/Brightness, Contrast, Saturation", "Fun/Fun",
+                                             "Special/Convolution 3x3", "Comp/Chroma Key (Blue)"}) {
+                    int idx = -1;
+                    for (const auto& entry : jefe::qt::getAvailableFXMenu())
+                        if (entry.second == menuName) idx = entry.first;
+                    if (idx < 0) missing << menuName;
+                    else jefe::qt::addFXToActivePlate(idx);
+                }
+                if (!missing.isEmpty()) {
+                    printf("    fx-seed effects not loaded: %s\n", qPrintable(missing.join(", ")));
+                    ++failures;
+                }
+                if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
+                printf("UI-DENSITY dock.fxparams seeded with %d FX on plate 0\n",
+                       int(jefe::qt::getFXStackMetaOnPlate(0).size()));
             }
             // shared: a second side dock split below this one; height: a short dock.
             struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; bool shared = false; int height = 0; };
@@ -3687,6 +3958,11 @@ int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
             }
             dock->setFloating(false);
             dock->hide();
+            if (name == "dock.fxparams") {
+                jefe::qt::setFXStackXmlOnPlate(0, fxStackBefore);
+                if (fxPlateBefore >= 0) jefe::qt::setActivePlate(fxPlateBefore);
+                if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
+            }
         }
     }
     for (auto* d : docks) d->setVisible(wasVisible.value(d));

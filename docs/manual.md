@@ -662,11 +662,21 @@ All FXs have a set of common controls:
 - **Reset** — Returns all FX parameters to their default values.
 - **Move Up/Down** — Moves the FX up or down the stack.
 
-Most FXs have parameters you can customize. As with almost all other numeric input fields in JefeCheck, an FX's numeric parameters can be modified in two ways: by typing a number, or by clicking and dragging with the mouse. The value changes based on mouse movement at a rate dependent on which button you click:
+Most FXs have parameters you can customize. The effect's `.jfx` file decides how each number is drawn:
 
-- **Left mouse button** — Finest precision (smallest decimal step)
-- **Middle mouse button** — 10× rate
-- **Right mouse button** — 100× rate
+- **Slider row** — label, value field, slider and a reset dot, one per line. The slider covers the effect's usual range (its *soft range*); you can still type a value past it, and the slider then stays pinned at its end.
+- **Knob** — label above a small rotary knob, value field below. Drag up or down on the knob to turn it. Knobs sit side by side.
+- **Field** — label and value field only, side by side with other fields (for example X and Y, or the nine cells of a 3×3 matrix).
+
+Every value field works the same way:
+
+- **Drag left or right** on the field to scrub the value. Dragging across about 200 pixels covers the whole slider range.
+- Hold **Shift** while dragging (field, knob or slider) for fine adjustment, at a tenth of the speed.
+- **Double-click** the field (or press **Enter** or **F2** when it has focus) to type a value; **Enter** commits it and **Esc** cancels.
+- The **reset dot** at the end of a slider row returns that parameter to its default. Every parameter also has a right-click **Reset to default** menu.
+- A parameter's label turns **orange** while its value differs from the default.
+
+When the FX dock is narrow, controls that share a line wrap onto the next line instead of being cut off.
 
 #### Performance
 
@@ -1091,6 +1101,8 @@ The `.jfx` is an XML tree with the following structure:
 - `newline` — Makes the following widgets appear on the next line.
 - `spacer` — Creates a space between the previous widget and the next. Must have a `width` attribute specifying how much space is added.
 
+How controls are laid out: a slider always takes a line of its own. Every other control (knobs, fields, checkboxes, selection boxes) shares a line with its neighbours until the next `newline`, and that line wraps when the panel is too narrow to fit them. A `spacer` adds a fixed gap inside such a line.
+
 Each `widget` node must contain these attributes (italic = optional):
 
 | Attribute | Description |
@@ -1103,6 +1115,10 @@ Each `widget` node must contain these attributes (italic = optional):
 | `step` | Decimal precision for `float` type widgets (`0.1`, `0.01`, `1.0`, etc.) |
 | `default` | The default value for the widget |
 | `labelColorR`, `labelColorG`, `labelColorB` | Together define the label color (0–255 each) |
+| *`style`* | How a `float` widget is drawn: `slider` (the default), `knob` or `field` (not case-sensitive). An unknown style draws a slider and prints one warning when the FX loads |
+| *`softMinimum`*, *`softMaximum`* | The slider and scrub range of a `float` widget, inside `minimum`–`maximum`. Typed values may still go anywhere between `minimum` and `maximum` |
+
+Without `softMinimum`/`softMaximum`, the soft range is the full `minimum`–`maximum` range when that spans 100 or less; for a wider range it becomes `minimum` to twice the default (at least `minimum` + 1) when `minimum` ≥ 0, else the default ± max(|default|, 1). An unreadable soft end is skipped, and an empty or reversed soft range is ignored; each prints one warning when the FX loads.
 
 **`shaders` node:** Specifies the names of the shader files:
 - `vertex` — Filename of the vertex shader (e.g., `"fixed.vert"`).

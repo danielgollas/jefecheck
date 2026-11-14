@@ -4,7 +4,7 @@
   <groups>
     <group name="Parameters" >
       <widget type="newLine" varName="0" />
-	<widget type="float" step="1" default="5" step="1.0" label="Amount" minimum="0" maximum="9999" varName="amount" />
+	<widget type="float" style="slider" softMinimum="0" softMaximum="20" step="1" default="5" step="1.0" label="Amount" minimum="0" maximum="9999" varName="amount" />
 	<widget type="newLine" varName="1" />
 
     </group>

@@ -5,8 +5,9 @@
     <group name="Ratio" >
       <widget type="newLine" varName="0" />
 	<widget type="texture" step="1" default="0.0" label="image" varName="theImage" />
-	  <widget  type="float" step="0.001" default="2.35" label="Width  :" minimum="-9999" maximum="9999" varName="width" />
-      <widget  type="float" step="0.001" default="1" label="Height" minimum="-9999" maximum="9999" varName="height" />
+      <widget type="newLine" varName="0" />
+	  <widget  type="float" style="field" softMinimum="1" softMaximum="3" step="0.001" default="2.35" label="Width  :" minimum="-9999" maximum="9999" varName="width" />
+      <widget  type="float" style="field" softMinimum="0.5" softMaximum="2" step="0.001" default="1" label="Height" minimum="-9999" maximum="9999" varName="height" />
       <widget type="newLine" varName="0" />
     </group>
   </groups>

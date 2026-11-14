@@ -59,6 +59,9 @@ void bundledFiles(const std::string& fxDir)
     std::sort(files.begin(), files.end());
     check("bundled: found .jfx files in " + fxDir, !files.empty());
 
+    // Every bundled float names its control style, and its slider range is usable:
+    // explicit soft ends sit inside the hard limits, lo < hi, and the default is on the slider.
+    std::string unstyled, badRange;
     for (const fs::path& p : files) {
         const std::string name = p.filename().string();
         XMLNode top = XMLNode::openFileHelper(p.string().c_str());
@@ -78,12 +81,38 @@ void bundledFiles(const std::string& fxDir)
                                            widget.getAttribute("softMinimum"),
                                            widget.getAttribute("softMaximum"));
                 warnings.insert(warnings.end(), ui.warnings.begin(), ui.warnings.end());
+
+                const char* type = widget.getAttribute("type");
+                if (!type || std::string(type) != "float") continue;
+                const char* varName = widget.getAttribute("varName");
+                const std::string where = " " + name + " " + (varName ? varName : "?");
+                if (!widget.getAttribute("style")) unstyled += where;
+                // The loader's defaults when an attribute is absent (gfcFXWidget).
+                auto number = [&](const char* attr, float fallback) {
+                    const char* v = widget.getAttribute(attr);
+                    return v ? static_cast<float>(std::atof(v)) : fallback;
+                };
+                const float hardMin = number("minimum", -999.f), hardMax = number("maximum", 999.f);
+                const float def = number("default", 0.f);
+                WidgetUi checked = ui;
+                const Range soft = softRange(hardMin, hardMax, def, checked);
+                const bool endsInside = (!ui.hasSoftMin || (ui.softMin >= hardMin && ui.softMin <= hardMax)) &&
+                                        (!ui.hasSoftMax || (ui.softMax >= hardMin && ui.softMax <= hardMax));
+                if (!endsInside || !(soft.lo < soft.hi) || def < soft.lo || def > soft.hi ||
+                    checked.warnings.size() != ui.warnings.size()) {
+                    char buf[160];
+                    std::snprintf(buf, sizeof buf, " (soft %g..%g, hard %g..%g, default %g)", soft.lo, soft.hi,
+                                  hardMin, hardMax, def);
+                    badRange += where + buf;
+                }
             }
         }
         std::string detail;
         for (const std::string& w : warnings) detail += " [" + w + "]";
         check("bundled: " + name + " has no widget warnings" + detail, warnings.empty());
     }
+    check("bundled floats styled:" + unstyled, unstyled.empty());
+    check("bundled defaults inside soft range:" + badRange, badRange.empty());
 }
 
 gfcFX namedFX(const std::string& name, std::uint32_t id = 0)

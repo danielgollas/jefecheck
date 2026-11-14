@@ -1600,7 +1600,8 @@ int main(int argc, char* argv[]) {
         });
     }
 
-    // Headless FX panel layout test (--fx-panel-test <image> [shotDir]).
+    // FX panel layout test (--fx-panel-test <image> [shotDir]). It shows the panel and the
+    // FX dock in a real window, so it needs a display: it does not run in headless CI.
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--fx-panel-test") != 0) continue;
         const QString image = QString::fromUtf8(argv[i + 1]);

@@ -186,15 +186,22 @@ public:
     // call the UI uses, renders again, and compares the two PNGs.
     // Returns 0 if the images differ (FX applied — PASS), nonzero on FAIL
     // (identical output) or setup error. Prints a PASS/FAIL line with the
-    // mean absolute pixel difference.
+    // mean absolute pixel difference. Then runs runOldFXSessionCheck (exit 7 on fail).
     int runHeadlessFXTest(const QString& imagePath);
+
+    // Loads a session saved before the bundled effects gained styles and slider ranges
+    // (BCS, PCC, Convolution 3x3 with their old content hashes) and checks every effect
+    // loads by menu name with its saved values. Prints FX-OLD-SESSION lines; leaves
+    // plate 0's stack empty.
+    bool runOldFXSessionCheck(const QString& outDir);
 
     // Headless FX panel layout test (--fx-panel-test <image> [shotDir]). Loads the
     // image into plate 0, adds BCS, Fun, Convolution 3x3 and Chroma Key (Blue), and
     // checks a standalone FXParamPanel_Qt: slider rows, knobs sharing a row, narrow
     // wrapping, label colours, the value-only refresh and the stack fingerprint.
     // With shotDir, also saves PNGs of the FX dock docked left (250/360 px), bottom and
-    // floating (600 px). Prints FX-PANEL PASS|FAIL|XFAIL lines; 0 on pass, else 7.
+    // floating (600 px). Prints FX-PANEL PASS|FAIL lines; 0 on pass, else 7.
+    // Needs a real window (it shows the panel and the dock), so not headless CI.
     int runHeadlessFXPanelTest(const QString& imagePath, const QString& shotDir = QString());
 
     // Headless colour-correction render proof (--cc-test <image>). Loads the
