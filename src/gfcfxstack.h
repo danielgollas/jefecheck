@@ -2,6 +2,7 @@
 #define GFCFXSTACK_H
 
 #include "gfcfx.h"
+#include <cstdint>
 #include <map>
 #include <vector>
 #include "gfcNetworkStructures.h"
@@ -37,7 +38,12 @@ public:
     
     public:
     void clearStack();
-    void addFX(gfcFX theFX);
+    // Appends theFX and returns its instance id: the FX's own id when it is
+    // non-zero and not already used in this stack, otherwise a fresh one.
+    // Ids are never reused within a stack's life, even after a remove or clear.
+    std::uint32_t addFX(gfcFX theFX);
+    // Stack index of the FX with this instance id; -1 when absent (or id 0).
+    int indexOfInstance(std::uint32_t id) const;
     gfcFX getFX(int index);
     gfcFX& fxAt(int index);
     std::vector< gfcFX > getAllFXs();
@@ -101,6 +107,7 @@ private:
 std::vector<gfcFX> fxs;
 std::map<void*, fxParamInfo> guiToFX; // map keyed by opaque widget handle (see API doc).
 int numOfActiveFX;
+std::uint32_t nextInstanceId_ = 1; // always above every id in fxs
 };
 
 #endif

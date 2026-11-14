@@ -1,4 +1,9 @@
 #include "gfcfxstack.h"
+
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
+#include <string>
 //#include "network.h"
 
 // fxcontrolwindow.h pulls in the widget headers used by handleGUICB below.
@@ -15,6 +20,19 @@ extern gfcFXManager fxManager;
 
 //extern std::vector<CubeLUT> lutArray; //contains loaded LUTs
 
+namespace {
+// An instanceId attribute as a positive 32-bit id; absent, malformed or out of
+// range reads 0 (meaning: assign a fresh one).
+std::uint32_t parseInstanceId(const char* text) {
+    if (!text || !*text) return 0;
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long v = std::strtoull(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || text[0] == '-' || v >= UINT32_MAX) return 0;
+    return static_cast<std::uint32_t>(v);
+}
+}  // namespace
+
 gfcFXStack::gfcFXStack() {
     numOfActiveFX=0;
 }
@@ -23,10 +41,26 @@ gfcFXStack::gfcFXStack() {
 gfcFXStack::~gfcFXStack() {
 }
 
-void gfcFXStack::addFX(gfcFX theFX) {
+std::uint32_t gfcFXStack::addFX(gfcFX theFX) {
+    // Keep the FX's id when it is set and free in this stack; otherwise give it
+    // a fresh one. nextInstanceId_ only grows, so a removed FX's id is never
+    // handed out again (clearStack keeps it too: the bridge removes by clearing
+    // and re-adding the survivors).
+    if (theFX.instanceId == 0 || indexOfInstance(theFX.instanceId) >= 0)
+        theFX.instanceId = nextInstanceId_;
+    if (theFX.instanceId >= nextInstanceId_)
+        nextInstanceId_ = theFX.instanceId + 1;
     fxs.push_back(theFX);
     if (theFX.active)
         numOfActiveFX++;
+    return theFX.instanceId;
+}
+
+int gfcFXStack::indexOfInstance(std::uint32_t id) const {
+    if (id == 0) return -1;
+    for (int i = 0; i < (int)fxs.size(); ++i)
+        if (fxs[i].instanceId == id) return i;
+    return -1;
 }
 
 int gfcFXStack::getNumOfFXs() {
@@ -247,6 +281,7 @@ void gfcFXStack::saveStackToNode(XMLNode &pnode) const {
         fxNode.addAttribute("name",tmpFX->name.c_str());
         fxNode.addAttribute("menuName",tmpFX->menuName.c_str());
         fxNode.addAttribute("hash",tmpFX->md5Hash.c_str());
+        fxNode.addAttribute("instanceId",std::to_string(tmpFX->instanceId).c_str());
         if (tmpFX->active)
             fxNode.addAttribute("active","1.0");
         else
@@ -506,8 +541,10 @@ std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXS
             if(fxNode.getAttribute("active")!=NULL)
                 tmpFX.active=atof(fxNode.getAttribute("active"));
 
-            this->numOfActiveFX+=tmpFX.active;
-            fxs.push_back(tmpFX);
+            // A stack saved before instance ids existed, or a bad value, reads
+            // 0; addFX then assigns a fresh id (and dedupes repeated ones).
+            tmpFX.instanceId=parseInstanceId(fxNode.getAttribute("instanceId"));
+            addFX(tmpFX);
 
         }//closes the else on fxArrayIndex==-1
 
@@ -584,9 +621,9 @@ std::vector< gfcFX > gfcFXStack::getAllFXs()
 
 void gfcFXStack::appendFXStack(gfcFXStack otherStack)
 {
-	std::vector< gfcFX > tmp=otherStack.getAllFXs();
-	fxs.insert(fxs.end(),tmp.begin(),tmp.end());
-
+	// Through addFX so an appended FX whose id is already taken here gets a fresh one.
+	for (const gfcFX& fx : otherStack.getAllFXs())
+		addFX(fx);
 }
 
 std::string gfcFXStack::getDescriptionString()

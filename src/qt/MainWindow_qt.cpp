@@ -1270,6 +1270,13 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
         return 5;
     }
 
+    // FX instance ids: copies, reorders and save/load keep parameter references.
+    if (!jefe::qt::fxParamIdentitySelfTest()) {
+        printf("FX-TEST FAIL: FX-ID self-test failed\n");
+        fflush(stdout);
+        return 6;
+    }
+
     const QString outDir = QDir::tempPath() + "/jefecheck_fxtest";
     QDir().mkpath(outDir);
 

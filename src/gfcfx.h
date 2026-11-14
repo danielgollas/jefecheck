@@ -9,6 +9,7 @@
 enum GFC_FX_GUI_TYPE{FX_GUI_UNKNOWN=0, FX_GUI_FLOAT,FX_GUI_TEXTURE,FX_GUI_CUBE,FX_GUI_LUT,FX_GUI_BOOL, FX_GUI_CHOICE,FX_GUI_SPACER,FX_GUI_NEWLINE, FX_ACTIVATE,FX_ADDTOACTIVE,FX_DELETE,FX_RESET,FX_MOVEUP, FX_MOVEDOWN};
 
 #include <glad/glad.h>
+#include <cstdint>
 #include <map>
 #include <vector>
 #include <string>
@@ -153,6 +154,9 @@ public:
     bool autoload;
     bool active;
     bool guiOpen;
+    //identifies this FX within its plate's stack and survives reorder, save
+    //and reload; 0 until gfcFXStack::addFX assigns one.
+    std::uint32_t instanceId = 0;
 
     //contains all the groups
     std::map<std::string, gfcFXWidgetGroup> groups;

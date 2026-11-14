@@ -3,12 +3,15 @@
 #include "gfcFXUi.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdlib>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
 
+#include "gfcfxstack.h"
 #include "xmlParser.h"
 
 using namespace fxui;
@@ -80,6 +83,85 @@ void bundledFiles(const std::string& fxDir)
         std::string detail;
         for (const std::string& w : warnings) detail += " [" + w + "]";
         check("bundled: " + name + " has no widget warnings" + detail, warnings.empty());
+    }
+}
+
+gfcFX namedFX(const std::string& name, std::uint32_t id = 0)
+{
+    gfcFX fx;
+    fx.name = name;
+    fx.instanceId = id;
+    return fx;
+}
+
+std::vector<std::uint32_t> idsOf(gfcFXStack& stack)
+{
+    std::vector<std::uint32_t> ids;
+    for (int i = 0; i < stack.getNumOfFXs(); ++i) ids.push_back(stack.fxAt(i).instanceId);
+    return ids;
+}
+
+// FX instance ids on plain gfcFX objects: no shaders, no fxManager.
+void stackInstanceIds()
+{
+    using Ids = std::vector<std::uint32_t>;
+    {
+        gfcFXStack s;
+        const std::uint32_t a = s.addFX(namedFX("a"));
+        const std::uint32_t b = s.addFX(namedFX("b"));
+        const std::uint32_t c = s.addFX(namedFX("c"));
+        check("ids assigned 1, 2, 3", idsOf(s) == Ids({1, 2, 3}));
+        check("ids addFX returns the id it assigned", a == 1 && b == 2 && c == 3);
+        check("ids indexOfInstance finds 2 at index 1", s.indexOfInstance(2) == 1);
+        check("ids indexOfInstance of an absent id is -1", s.indexOfInstance(9) == -1 && s.indexOfInstance(0) == -1);
+    }
+    {
+        gfcFXStack s;
+        const gfcFX same = namedFX("same");
+        s.addFX(same);
+        s.addFX(same);
+        const Ids ids = idsOf(s);
+        check("ids copy of same FX distinct", ids.size() == 2 && ids[0] != 0 && ids[1] != 0 && ids[0] != ids[1]);
+    }
+    {
+        gfcFXStack x, y;
+        x.addFX(namedFX("x1"));
+        x.addFX(namedFX("x2"));
+        y.addFX(namedFX("y1"));
+        x.appendFXStack(y);
+        check("ids append dedupes ids -> 1, 2, 3", idsOf(x) == Ids({1, 2, 3}));
+        check("ids append keeps the appended FX last", x.getNumOfFXs() == 3 && x.fxAt(2).name == "y1");
+    }
+    {
+        gfcFXStack s;
+        const std::uint32_t kept = s.addFX(namedFX("kept", 7));
+        const std::uint32_t clash = s.addFX(namedFX("clash", 7));
+        check("ids duplicate id: first keeps it, second is fresh", kept == 7 && clash == 8);
+    }
+    {
+        // The Qt bridge removes an FX by clearing the stack and re-adding the rest.
+        gfcFXStack s;
+        s.addFX(namedFX("a"));
+        s.addFX(namedFX("b"));
+        s.addFX(namedFX("c"));
+        std::vector<gfcFX> all = s.getAllFXs();
+        s.clearStack();
+        for (int i = 0; i < (int)all.size(); ++i)
+            if (i != 2) s.addFX(all[i]);
+        const std::uint32_t added = s.addFX(namedFX("d"));
+        check("ids no reuse after remove -> 4", added == 4 && idsOf(s) == Ids({1, 2, 4}));
+    }
+    {
+        gfcFXStack s;
+        s.addFX(namedFX("a"));
+        s.addFX(namedFX("b"));
+        XMLNode top = XMLNode::createXMLTopNode("stack");
+        s.saveStackToNode(top);
+        int size = 0;
+        XMLSTR text = top.createXMLString(0, &size);
+        const std::string xml = text ? std::string(text, static_cast<size_t>(size)) : std::string();
+        free(text);  // xmlParser allocates with malloc
+        check("ids saved: second FX has instanceId=\"2\"", xml.find("instanceId=\"2\"") != std::string::npos);
     }
 }
 
@@ -220,6 +302,8 @@ int fxUiSelfTest(const std::string& fxDir)
         check("layoutRows groups without headings",
               rowsAre(noHead, {{RowKind::Flow, "A", {0}}, {RowKind::Slider, "A", {1}}, {RowKind::Flow, "B", {2}}}));
     }
+
+    stackInstanceIds();
 
     bundledFiles(fxDir);
 

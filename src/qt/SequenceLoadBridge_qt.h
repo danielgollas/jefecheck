@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -296,6 +297,31 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx);
 // checks the style / soft range / label colour getFXStackMetaOnPlate reports,
 // then removes it. Prints FX-META PASS|FAIL lines; returns true on pass.
 bool fxMetaSelfTest();
+
+// Names one FX parameter by the FX's persistent instance id rather than its
+// stack position, so the reference survives reorders, saves and reloads.
+struct FXParamRef {
+    int plate = -1;
+    std::uint32_t instanceId = 0;
+    std::string varName;
+};
+
+// Sets the parameter from a normalised t in [0, 1] (clamped). Float: mapped over
+// the soft range by fxui::fromNormalized; Bool: t >= 0.5; Choice: the option at
+// round(t * (options - 1)). Texture, cube, LUT and other kinds return false, as
+// does a ref that names no FX or parameter. Repaints through setChanged().
+bool setFXParamNormalized(const FXParamRef& ref, float t);
+
+// The parameter's normalised position, the inverse of setFXParamNormalized: a
+// Float past its soft range reads 0 or 1. Empty for the kinds and refs that
+// setFXParamNormalized rejects.
+std::optional<float> getFXParamNormalized(const FXParamRef& ref);
+
+// Headless self-test (run by --fx-test): instance ids on plate 0 survive copies,
+// reorders and a save/load round trip, legacy stacks get fresh ids, and the
+// normalised setter/getter follow the id. Prints FX-ID PASS|FAIL lines; returns
+// true on pass. Leaves plate 0's stack empty.
+bool fxParamIdentitySelfTest();
 
 // Mutates an FX widget value on `plateIdx`'s stack. The Qt FX param
 // panel's editor widgets call this on user edit; gfcFX::bind reads
