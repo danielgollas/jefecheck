@@ -48,6 +48,7 @@
 #include "gfcNoteOverlay.h"
 #include "gfcNoteStamp.h"
 #include "gfcReviewSummary.h"
+#include "gfcFXUi.h"
 #include "gfcWireTest.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
@@ -181,6 +182,18 @@ static bool hasAspectTest(int argc, char* argv[]) {
 static bool hasNotesTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--notes-test") == 0) return true;
+    return false;
+}
+
+// --fx-ui-test <fxDir> : headless FX UI model self-test (styles, soft ranges, row
+// layout) plus a parse check of every bundled .jfx in fxDir. No GL or window.
+// Returns true when the flag is present; dir is empty if no directory followed it.
+static bool resolveFXUiTestDir(int argc, char* argv[], std::string& dir) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--fx-ui-test") == 0) {
+            dir = (i + 1 < argc) ? argv[i + 1] : "";
+            return true;
+        }
     return false;
 }
 
@@ -530,6 +543,21 @@ int main(int argc, char* argv[]) {
     if (hasAspectTest(argc, argv)) {
         const bool ok = jefe::qt::runAspectSelfTest();
         std::_Exit(ok ? 0 : 2);
+    }
+
+    // Headless FX UI model self-test (--fx-ui-test <fxDir>): pure, before the window.
+    {
+        std::string fxUiDir;
+        if (resolveFXUiTestDir(argc, argv, fxUiDir)) {
+            if (fxUiDir.empty()) {
+                std::printf("FX-UI FAIL --fx-ui-test needs an FX directory\n");
+                std::fflush(stdout);
+                std::_Exit(2);
+            }
+            const int fails = fxUiSelfTest(fxUiDir);
+            std::fflush(stdout);
+            std::_Exit(fails == 0 ? 0 : 2);
+        }
     }
 
     // Headless note self-tests (--notes-test): pure data/arithmetic. Runs all three
