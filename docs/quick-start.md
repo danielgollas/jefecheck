@@ -201,7 +201,7 @@ If the track has a DPX image sequence loaded, you can display the DPX metadata f
 
 1. Open the FX panel (`F3` or **Window > FX**)
 2. Click on the Viewport where you want to apply the FX
-3. Select the FX you want to apply from the Available FXs menu in the FX Stack Manager Window.
+3. Select the FX you want to apply from the **+ Add FX** menu in the FX panel.
 4. Turn the FX on or off by clicking on the on/off checkbox on the FX's controls.
 5. Repeat steps 3 and 4 for each FX you want to add.
 

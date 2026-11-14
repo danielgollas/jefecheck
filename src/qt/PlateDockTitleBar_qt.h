@@ -36,7 +36,7 @@ private:
 class PlateDockTitleBar_Qt : public QWidget {
     Q_OBJECT
 public:
-    // `map` is reparented into the bar, at its right edge.
+    // `map` is reparented into the bar, at its right edge, and resized to fit the bar.
     PlateDockTitleBar_Qt(QDockWidget* dock, QWidget* map);
 
     QAbstractButton* closeButton() const { return close_; }
@@ -53,6 +53,7 @@ private:
     DockTitleButton_Qt* close_ = nullptr;
     DockTitleButton_Qt* float_ = nullptr;
     QLabel* title_ = nullptr;
+    int nativeH_ = 22;   // a native dock title's height in this style, measured in the ctor
 };
 
 #endif

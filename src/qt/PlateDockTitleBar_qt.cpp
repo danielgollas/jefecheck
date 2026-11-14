@@ -77,12 +77,20 @@ PlateDockTitleBar_Qt::PlateDockTitleBar_Qt(QDockWidget* dock, QWidget* map) : QW
     // Equal-width blocks either side keep the title centred on the bar, as on a native title
     // bar. Plain layouts and spacing, no container widgets: the theme paints every QWidget's
     // background, which showed as lighter boxes behind the buttons and the map.
+    // Match the native title height (QDockWidgetLayout::titleHeight: the taller of the
+    // title buttons + 2 and the dock font + 2 x PM_DockWidgetTitleMargin), and fit the map
+    // inside it: about 44x24 scaled to the bar, never below 36x20.
+    const int mw = dock_->style()->pixelMetric(QStyle::PM_DockWidgetTitleMargin, nullptr, dock_);
+    nativeH_ = std::max(close_->sizeHint().height() + 2, dock_->fontMetrics().height() + 2 * mw);
+    const int mapH = std::clamp(nativeH_ - 3, 20, 24);
+    map->setFixedSize(std::max(36, (mapH * 44 + 12) / 24), mapH);
     map->setParent(this);
     map->show();
     const int buttonsW = close_->sizeHint().width() + float_->sizeHint().width();
     const int side = std::max(buttonsW, map->sizeHint().width());
     auto* row = new QHBoxLayout(this);
-    row->setContentsMargins(2, 1, ui::kGapTight, 2);   // bottom: room for the separator line
+    // Bottom: room for the separator line. Right: a gap before a neighbouring dock's buttons.
+    row->setContentsMargins(2, 1, ui::kGap, 2);
     row->setSpacing(0);
     row->addWidget(close_);
     row->addWidget(float_);
@@ -90,6 +98,7 @@ PlateDockTitleBar_Qt::PlateDockTitleBar_Qt(QDockWidget* dock, QWidget* map) : QW
     row->addWidget(title_, 1);
     row->addSpacing(side - map->sizeHint().width());
     row->addWidget(map);
+    setFixedHeight(nativeH_);
 
     const auto syncButtons = [this]() {
         const auto f = dock_->features();
@@ -110,9 +119,9 @@ void PlateDockTitleBar_Qt::paintEvent(QPaintEvent*) {
 }
 
 QSize PlateDockTitleBar_Qt::sizeHint() const {
-    return layout()->sizeHint();
+    return QSize(layout()->sizeHint().width(), nativeH_);
 }
 
 QSize PlateDockTitleBar_Qt::minimumSizeHint() const {
-    return layout()->minimumSize();
+    return QSize(layout()->minimumSize().width(), nativeH_);
 }

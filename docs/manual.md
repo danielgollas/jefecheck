@@ -661,11 +661,11 @@ When you first open the FX Manager, it will be empty. To load an FX, click the *
 
 ![The FX Stack Manager (FX Control Window)](manual-images/FXStackManager.png)
 
-You use FXs by applying them to viewports. A viewport can have no FX applied, or as many as your graphics card performance will allow while maintaining a desired playback frame rate. To apply an FX, use the **FX Stack Manager** (`F2` or **Dialogs > FX Stack Manager**). You can also click the FX button on the Main Window's Control Bar.
+You use FXs by applying them to viewports. A viewport can have no FX applied, or as many as your graphics card performance will allow while maintaining a desired playback frame rate. To apply an FX, use the **FX** panel (`F3` or **Window > FX**).
 
 FXs are applied to each viewport independently — you can have one viewport playing back the unprocessed sequence while on another viewport you have the sequence playing with a LUT or Primary Color Correction applied.
 
-To apply an FX to a viewport, open the FX Stack Manager (`F2`) and click on the viewport you wish to use. The FX Stack Manager title will change to show what viewport is selected (e.g., **FX Controls Plate 1** means you are working on Viewport 1). An **Available FX** submenu will appear on the window's menu bar from which you can select what FX you wish to apply. To switch viewports, simply click on the desired viewport.
+To apply an FX to a viewport, open the FX panel (`F3`) and click on the viewport you wish to use. The FX Stack Manager title will change to show what viewport is selected (e.g., **FX Controls Plate 1** means you are working on Viewport 1). An **Available FX** submenu will appear on the window's menu bar from which you can select what FX you wish to apply. To switch viewports, simply click on the desired viewport.
 
 Once you click on an FX from the Available FX menu, it appears on the **FX Stack**. FXs are applied in the order they were added to the stack, so the output of one FX is passed to the one below it.
 
@@ -903,7 +903,7 @@ The Preferences Window is organized by tabs:
 
 Although JefeCheck is not a finishing tool, you can output high-quality images of your on-screen results in a variety of formats, including JPEG, BMP, TIFF, TGA, PNG, and OpenEXR. On Linux, you can even create an AVI movie file if you have `mencoder` installed.
 
-The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render Manager** (`F6` or **Window > Render Manager**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render).
+The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render** window (`F6` or **Window > Render…**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render).
 
 ### The Render Window
 

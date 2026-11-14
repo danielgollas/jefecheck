@@ -253,8 +253,10 @@ private:
     void updatePlateRowBudget();
     // Pulls a docked Plate Manager's strip to the panel's extent (a row also to its full
     // width when the Timeline beside it can give it up), deferred a tick; retries a stale result.
-    void pinPlateDock();
-    void pinPlateDockNow(int retries);
+    void pinPlateDock(bool restoreWidth = true);
+    void pinPlateDockNow(int retries);   // retries < 0: height only
+    // The Timeline panel's effective minimum width (explicit minimum vs layout hint).
+    int timelineMinWidth() const;
     void saveLayout();
 
     // Session save/restore.

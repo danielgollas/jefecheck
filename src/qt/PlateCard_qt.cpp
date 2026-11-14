@@ -358,8 +358,9 @@ void PlateCard_Qt::rebuildContent() {
     // Build the new content into a fresh child widget. Adding the shared controls to nc's
     // layouts reparents them (signal connections persist); only captions/layouts are nc's own.
     // A popup left open across the swap would show controls that just moved into the card.
-    transformPopup_->hide();
-    colorPopup_->hide();
+    // Only an open one is hidden: a Hide stamps the 150 ms reopen guard.
+    if (transformPopup_->isVisible()) transformPopup_->hide();
+    if (colorPopup_->isVisible()) colorPopup_->hide();
     auto* nc = new QWidget(this);
 
     auto* mirrorBox = new QWidget(nc);

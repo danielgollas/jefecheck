@@ -120,6 +120,7 @@ void PlateManager_Qt::contextMenuEvent(QContextMenuEvent* e) {
             return;
         }
     }
+    if (contextMenuHook_) { contextMenuHook_(); e->accept(); return; }
     QMenu* menu = buildContextMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
     menu->popup(e->globalPos());
@@ -148,8 +149,12 @@ void PlateManager_Qt::setDockShape(pl::DockShape shape) {
 
 void PlateManager_Qt::setRowBudget(int px) {
     if (px == rowBudget_) return;
+    const int before = lastCols_;
     rowBudget_ = px;
     syncToViewport();
+    // The panel's width may still cap the columns (no reflow), but the full-row extent the
+    // dock can be widened to follows the budget: refresh it so pinPlateDock sees it.
+    if (laid_ && shape_ == pl::DockShape::Row && lastCols_ == before) applyFixedExtent();
 }
 
 int PlateManager_Qt::rowCols() const {
@@ -159,10 +164,34 @@ int PlateManager_Qt::rowCols() const {
     return pl::rowMaxCols(rowBudget_ - m.left() - m.right(), rowCardW_, ui::kGap);
 }
 
+int PlateManager_Qt::widthCols() const {
+    // Only a shown panel has a real width; before that the budget alone decides.
+    if (!isVisible() || width() <= 0 || rowCardW_ <= 0) return kMaxRowCols;
+    const QMargins m = grid_->contentsMargins();
+    const int avail = width() - m.left() - m.right() - scroll_->frameWidth() * 2;
+    return pl::rowMaxCols(avail, rowCardW_, ui::kGap);
+}
+
+int PlateManager_Qt::effectiveRowCols() const {
+    return std::min(rowCols(), widthCols());
+}
+
+void PlateManager_Qt::resizeEvent(QResizeEvent* e) {
+    QWidget::resizeEvent(e);
+    // A dock squeezed by its separator (or by the window, at an unchanged budget) gets
+    // fewer columns, and a widened one gets them back; re-place the cards only when the
+    // column count actually changes.
+    if (shape_ == pl::DockShape::Row && laid_ && effectiveRowCols() != lastCols_) {
+        reflowFromResize_ = true;
+        syncToViewport();
+        reflowFromResize_ = false;
+    }
+}
+
 void PlateManager_Qt::syncToViewport() {
     const int framing = jefe::qt::getFramingMode();
     const int active = jefe::qt::getActivePlate();
-    const int cols = shape_ == pl::DockShape::Row ? rowCols() : kMaxRowCols;
+    const int cols = shape_ == pl::DockShape::Row ? effectiveRowCols() : kMaxRowCols;
     if (!laid_ || framing != lastFraming_ || active != lastActive_ || mode_ != lastMode_ ||
         shape_ != lastShape_ || cols != lastCols_) {
         reflow(framing, active, cols);
@@ -173,7 +202,7 @@ void PlateManager_Qt::syncToViewport() {
 
 void PlateManager_Qt::updateHighlights(int framingMode, int activePlate) {
     for (auto* card : cards_) card->setActiveHighlight(card->id() == activePlate);
-    miniMap_->setState(framingMode, activePlate);
+    if (miniMap_) miniMap_->setState(framingMode, activePlate);
 }
 
 void PlateManager_Qt::reflow(int framingMode, int activePlate, int cols) {
@@ -190,7 +219,7 @@ void PlateManager_Qt::reflow(int framingMode, int activePlate, int cols) {
             if (auto* L = card->layout()) L->activate();
             rowCardW_ = std::max(rowCardW_, card->sizeHint().width());
         }
-        if (shape_ == pl::DockShape::Row) cols = rowCols();
+        if (shape_ == pl::DockShape::Row) cols = effectiveRowCols();
     }
 
     const auto arrangement = pl::arrange(mode_, framingMode, activePlate, shape_, cols);
@@ -244,6 +273,7 @@ void PlateManager_Qt::reflow(int framingMode, int activePlate, int cols) {
                 scroll_->ensureWidgetVisible(cards_[activePlate]);
         });
     }
+    lastReflowFromResize_ = reflowFromResize_;
     emit arrangementChanged();
 }
 
@@ -295,22 +325,33 @@ void PlateManager_Qt::applyFixedExtent() {
         scroll_->setVerticalScrollBarPolicy(rowScrolls ? Qt::ScrollBarAlwaysOn : Qt::ScrollBarAlwaysOff);
         const int w = contentW + (rowScrolls ? sb : 0);
         const int h = contentH;
-        setFixedSize(w, h);
-        if (shape_ == pl::DockShape::Row && cols > 1) {
-            // The window must still be able to narrow: a row may shrink to one column's
-            // width, and the narrower window's budget then re-flows it into fewer columns
-            // (a dragged edge clips the right-hand card for a tick until that lands).
-            const int oneCol = cardW + m.left() + m.right() + frame + (shown_.size() > kMaxRowRows ? sb : 0);
-            setMinimumWidth(oneCol);
+        if (shape_ == pl::DockShape::Row) {
+            // Height is fixed to the placed rows. Width ranges from one column (so the window
+            // can narrow and the separator can squeeze the dock; resizeEvent then re-places
+            // the cards in fewer columns) to the full row the budget allows (the extent, so
+            // pinPlateDock can widen the dock back to it).
+            const int n = int(shown_.size());
+            const int budgetCols = std::max(1, std::min(rowCols(), n));
+            const int fullCols = n > budgetCols ? pl::balancedRowCols(n, budgetCols) : std::max(n, 1);
+            const int fullRows = (n + fullCols - 1) / fullCols;
+            const int fullW = std::max(w, fullCols * cardW + (fullCols - 1) * sp + m.left() + m.right() + frame +
+                                              (fullRows > kMaxRowRows ? sb : 0));
+            const int oneCol = cardW + m.left() + m.right() + frame + (n > kMaxRowRows ? sb : 0);
+            setFixedHeight(h);
+            setMinimumWidth(std::min(oneCol, fullW));
+            setMaximumWidth(fullW);
+            extent_ = QSize(fullW, h);
+        } else {
+            setFixedSize(w, h);
+            extent_ = QSize(w, h);
         }
-        extent_ = QSize(w, h);
     }
 
     // The wide-short width can settle a tick late; re-flow if it changes the
     // number of cards a budgeted row holds.
     if (shape_ == pl::DockShape::Row && cardW != rowCardW_) {
         rowCardW_ = cardW;
-        if (rowCols() != lastCols_)
+        if (effectiveRowCols() != lastCols_)
             QTimer::singleShot(0, this, [this]() { syncToViewport(); });
     }
 }

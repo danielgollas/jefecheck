@@ -9,6 +9,9 @@
 #define JEFECHECK_QT_PLATE_MANAGER_H
 
 #include <QList>
+#include <QPointer>
+
+#include <functional>
 #include <QPoint>
 #include <QSize>
 #include <QVector>
@@ -61,11 +64,17 @@ public:
     QList<QAction*> modeActions() const { return {modeActions_[0], modeActions_[1], modeActions_[2]}; }
     // The right-click menu: a "Plate Manager Shows" section with the mode actions.
     QMenu* buildContextMenu(QWidget* parent);
+    // Tests: called instead of popping up the context menu (empty restores the menu).
+    void setContextMenuTestHook(std::function<void()> hook) { contextMenuHook_ = std::move(hook); }
 
     QSize sizeHint() const override;
+    // True when the last reflow came from the panel's own resize (its dock squeezed or
+    // widened), not from a layout, mode, shape or budget change.
+    bool lastReflowFromResize() const { return lastReflowFromResize_; }
 
 protected:
     void contextMenuEvent(QContextMenuEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
 
 signals:
     // Emitted after every reflow.
@@ -92,6 +101,10 @@ private:
     void updateHighlights(int framingMode, int activePlate);
     // Columns a Row may use: 4 until a budget is set, else rowMaxCols.
     int rowCols() const;
+    // Columns the panel's current width holds (4 until it is shown); a Row uses the
+    // smaller of this and rowCols(), so a squeezed dock re-places its cards.
+    int widthCols() const;
+    int effectiveRowCols() const;
     // Pins the panel's fixed extent to the packed cards (called by reflow, and
     // deferred a tick to re-measure after dock transitions settle, §11).
     void applyFixedExtent();
@@ -99,7 +112,11 @@ private:
 
     QActionGroup* modeGroup_ = nullptr;
     QAction* modeActions_[3] = {nullptr, nullptr, nullptr};
-    PlateMiniMap_Qt* miniMap_ = nullptr;
+    // Owned by the dock's title bar once placed there.
+    QPointer<PlateMiniMap_Qt> miniMap_;
+    std::function<void()> contextMenuHook_;
+    bool reflowFromResize_ = false;
+    bool lastReflowFromResize_ = false;
     QScrollArea* scroll_ = nullptr;
     QWidget* inner_ = nullptr;
     QGridLayout* grid_ = nullptr;
