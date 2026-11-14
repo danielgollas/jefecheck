@@ -266,6 +266,11 @@ PREFS_TEXT_SHADOW_BLUR = "preferences.text.shadowblur.spin"
 PREFS_TEXT_SHADOW_COLOR = "preferences.text.shadowcolor.button"
 
 
+# Per-plate leaf roles (combine with plate(i, ...)). The Transform button opens the
+# popup holding the zoom/pan/rotation spins in the wide-short card.
+PLATE_TRANSFORM_BUTTON = "transform.button"
+
+
 def plate(plate_id: int, role: str) -> str:
     """Build a per-plate locator: plate(0, 'gamma.spin') -> 'plate.0.gamma.spin'."""
     return f"plate.{plate_id}.{role}"

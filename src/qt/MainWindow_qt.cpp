@@ -68,6 +68,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QTimer>
+#include <QToolButton>
 
 #include <algorithm>
 #include <cstdlib>
@@ -1734,6 +1735,31 @@ int MainWindow_Qt::runHeadlessPlateManagerTest() {
         for (int y : rows) ys << QString::number(y);
         report("CARD rows", n > 0 && wrong.isEmpty() && rows.size() == 2,
                QString("%1 controls, rows y=[%2]%3").arg(n).arg(ys.join(",")).arg(wrong.isEmpty() ? QString() : " height " + wrong.join(" ")));
+    }
+    {   // Two cards side by side at 1280 (kGap apart); the transform spins live in a popup.
+        constexpr int kMaxCardW = 620;
+        const int w = card->sizeHint().width();
+        auto* btn = card->findChild<QToolButton*>("plate.0.transform.button");
+        auto* popup = card->findChild<QWidget*>("plate.0.transform.popup");
+        QStringList wrong;
+        bool shown = false;
+        if (btn && popup) {
+            btn->click();
+            settle();
+            shown = popup->isVisible();
+            for (const char* leaf : {"zoom.spin", "panx.spin", "pany.spin", "rotation.spin"}) {
+                auto* sp = card->findChild<QWidget*>(QString("plate.0.%1").arg(leaf));
+                if (!sp || !popup->isAncestorOf(sp) || !sp->isVisible() || sp->height() != ui::kControlH)
+                    wrong << QString("%1=%2").arg(leaf).arg(sp ? sp->height() : -1);
+            }
+            const auto v = ui::checkDensity(popup);
+            for (const auto& x : v) wrong << QString("%1:%2").arg(x.rule, x.widgetPath);
+            popup->hide();
+            settle();
+        }
+        report("CARD width", w <= kMaxCardW && btn && shown && wrong.isEmpty(),
+               QString("sizeHint %1 <= %2, popup %3%4").arg(w).arg(kMaxCardW).arg(shown ? "shown" : "not shown")
+                   .arg(wrong.isEmpty() ? QString(", 4 spins 24 px") : " bad " + wrong.join(" ")));
     }
     {   // UI-test locators keep resolving.
         const char* leaves[] = {"track.combo", "track.label", "layer.combo", "aspect.combo", "flip.button", "flop.button",

@@ -12,6 +12,7 @@
 #ifndef JEFECHECK_QT_PLATE_CARD_H
 #define JEFECHECK_QT_PLATE_CARD_H
 
+#include <QElapsedTimer>
 #include <QFrame>
 #include <QString>
 
@@ -23,6 +24,7 @@ class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QPushButton;
+class QToolButton;
 
 class AspectCropCombo_Qt;
 class gfcPlateGUI_Qt;
@@ -101,6 +103,8 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent* e) override;
+    // Stamps the Transform popup's close time (see openTransformPopup).
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     // (Re)builds the content widget for the current `vertical_` value. The
@@ -108,6 +112,12 @@ private:
     // content_ (caption labels + layout containers only) is deleted after
     // the new one is fully built so it can't drag the controls with it.
     void rebuildContent();
+
+    // Wide-short form only: Zoom/X/Y/Rot live in a popup opened from the Transform
+    // button, whose face shows the zoom. Shows the popup under the button.
+    void openTransformPopup();
+    // Sets the Transform button's "1.00×" face; no widget write when the text is unchanged.
+    void updateTransformButton(double scale);
 
     int id_;
     // Object-name prefix `plate.<idx>` — shared between the constructor and
@@ -136,6 +146,13 @@ private:
     QPushButton* flipBtn_ = nullptr;
     QPushButton* flopBtn_ = nullptr;
     QPushButton* rgbaBtn_ = nullptr;
+    // Transform popup (wide-short form): a Qt::Popup frame parented to the card, so the
+    // four spins stay findChild-able card descendants. popupContent_ holds the captions
+    // and is rebuilt (like content_) on each orientation change.
+    QToolButton* transformBtn_ = nullptr;
+    QFrame* transformPopup_ = nullptr;
+    QWidget* popupContent_ = nullptr;
+    QElapsedTimer transformClosed_;
     QDoubleSpinBox* zoomSpin_ = nullptr;
     QDoubleSpinBox* panXSpin_ = nullptr;
     QDoubleSpinBox* panYSpin_ = nullptr;
