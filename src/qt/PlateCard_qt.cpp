@@ -84,13 +84,13 @@ QPixmap makeMirrorPixmap(bool vertical, const QColor& color) {
     return pm;
 }
 
-// QIcon with both check states: light glyph when unchecked (dark bg), dark
-// glyph when checked (the theme's orange QPushButton:checked background).
+// QIcon with both check states: light glyph when unchecked, accent glyph when
+// checked (the theme's :checked fill is a dark accent tint, #2e2620).
 QIcon makeMirrorIcon(bool vertical) {
     QIcon icon;
     icon.addPixmap(makeMirrorPixmap(vertical, QColor(0xe0, 0xe0, 0xe0)),
                    QIcon::Normal, QIcon::Off);
-    icon.addPixmap(makeMirrorPixmap(vertical, QColor(0x1a, 0x1a, 0x1a)),
+    icon.addPixmap(makeMirrorPixmap(vertical, QColor(0xd4, 0x77, 0x1e)),
                    QIcon::Normal, QIcon::On);
     return icon;
 }

@@ -1,5 +1,5 @@
 // qticons.h — shared programmatic icon factory (no asset files; icons are painted with
-// QPainter, dual-state light/dark for the orange :checked accent). See developer_notes.md §29.
+// QPainter, dual-state: light glyph off, accent glyph on the dark :checked tint). See developer_notes.md §29.
 #pragma once
 
 #include <QIcon>
@@ -17,7 +17,7 @@ namespace qticons {
 // stroke/fill tint. Coordinates are in logical pixels (0..side).
 using PaintFn = std::function<void(QPainter& p, qreal side, const QColor& color)>;
 
-// Build a dual-state icon (Off = light glyph, On = dark glyph) from a painter.
+// Build a dual-state icon (Off = light glyph, On = accent #d4771e glyph) from a painter.
 QIcon make(const PaintFn& paint, int side = 16);
 
 // Compact icon button (QPushButton). A tooltip is REQUIRED — icon-only buttons

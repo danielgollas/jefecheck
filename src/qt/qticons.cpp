@@ -291,9 +291,11 @@ void pPower(QPainter& p, qreal s, const QColor& c) {
 } // namespace
 
 QIcon make(const PaintFn& paint, int side) {
+    // The theme's :checked fill is a dark accent tint (#2e2620), so "on" draws the
+    // glyph in the accent colour; a dark glyph would vanish into it.
     QIcon icon;
     icon.addPixmap(render(paint, side, QColor(0xE0, 0xE0, 0xE0)), QIcon::Normal, QIcon::Off);
-    icon.addPixmap(render(paint, side, QColor(0x1A, 0x1A, 0x1A)), QIcon::Normal, QIcon::On);
+    icon.addPixmap(render(paint, side, QColor(0xD4, 0x77, 0x1E)), QIcon::Normal, QIcon::On);
     return icon;
 }
 
@@ -338,14 +340,7 @@ QIcon check()        { return make(pCheck); }
 QIcon send()         { return make(pSend); }
 QIcon recent()       { return make(pRecent); }
 
-QIcon power() {
-    // The theme's :checked fill is a dark accent tint, so "on" shows the glyph in
-    // the accent colour rather than make()'s dark On glyph.
-    QIcon icon;
-    icon.addPixmap(render(pPower, kIconPx, QColor(0xE0, 0xE0, 0xE0)), QIcon::Normal, QIcon::Off);
-    icon.addPixmap(render(pPower, kIconPx, QColor(0xD4, 0x77, 0x1E)), QIcon::Normal, QIcon::On);
-    return icon;
-}
+QIcon power() { return make(pPower, kIconPx); }
 
 } // namespace qticons
 } // namespace jefe
