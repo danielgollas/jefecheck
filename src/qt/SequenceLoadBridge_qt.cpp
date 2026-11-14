@@ -770,6 +770,20 @@ FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
         default:             return FXParamType::Other;
     }
 }
+
+fxui::Kind kindOf(GFC_FX_GUI_TYPE t) {
+    switch (t) {
+        case FX_GUI_FLOAT:   return fxui::Kind::Float;
+        case FX_GUI_BOOL:    return fxui::Kind::Bool;
+        case FX_GUI_CHOICE:  return fxui::Kind::Choice;
+        case FX_GUI_TEXTURE: return fxui::Kind::Texture;
+        case FX_GUI_CUBE:    return fxui::Kind::Cube;
+        case FX_GUI_LUT:     return fxui::Kind::Lut;
+        case FX_GUI_SPACER:  return fxui::Kind::Spacer;
+        case FX_GUI_NEWLINE: return fxui::Kind::NewLine;
+        default:             return fxui::Kind::Other;
+    }
+}
 }  // namespace
 
 void setFXParamValueOnPlate(int plateIdx,
@@ -1219,12 +1233,81 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
                 p.step         = w.step;
                 p.defaultValue = w.defaultValue;
                 p.options      = w.options;
+                p.style        = fxui::resolveStyle(kindOf(w.type), w.ui.declared);
+                fxui::WidgetUi uiCopy = w.ui;   // softRange appends warnings; those were printed at load
+                const fxui::Range soft = fxui::softRange(w.minimum, w.maximum, w.defaultValue, uiCopy);
+                p.softMinimum  = soft.lo;
+                p.softMaximum  = soft.hi;
+                p.labelR       = static_cast<int>(std::lround(w.labelColor.x));
+                p.labelG       = static_cast<int>(std::lround(w.labelColor.y));
+                p.labelB       = static_cast<int>(std::lround(w.labelColor.z));
                 meta.params.push_back(std::move(p));
             }
         }
         result.push_back(std::move(meta));
     }
     return result;
+}
+
+bool fxMetaSelfTest() {
+    int fails = 0;
+    auto check = [&](const std::string& name, bool cond) {
+        std::printf("FX-META %s %s\n", cond ? "PASS" : "FAIL", name.c_str());
+        if (!cond) ++fails;
+    };
+    auto approx = [](float a, float b) { return std::fabs(a - b) <= 1e-5f; };
+
+    const std::string bcsMenu = "Color/Brightness, Contrast, Saturation";
+    int fxIndex = -1;
+    for (const auto& entry : getAvailableFXMenu())
+        if (entry.second == bcsMenu) { fxIndex = entry.first; break; }
+    check("BCS found in the FX menu", fxIndex >= 0);
+    auto* stack = plateManager.getFXStack(0);
+    check("plate 0 has an FX stack", stack != nullptr);
+    if (fxIndex < 0 || !stack) {
+        std::fflush(stdout);
+        return false;
+    }
+
+    stack->addFX(fxManager.getFX(fxIndex));
+    const int stackIndex = stack->getNumOfFXs() - 1;
+    const std::vector<FXMeta> metas = getFXStackMetaOnPlate(0);
+    removeFXFromPlate(0, stackIndex);
+
+    if (stackIndex < 0 || stackIndex >= (int)metas.size()) {
+        check("BCS appears in plate 0's stack metadata", false);
+        std::fflush(stdout);
+        return false;
+    }
+    const FXMeta& bcs = metas[stackIndex];
+    auto find = [&](const std::string& name) -> const FXParamMeta* {
+        for (const FXParamMeta& p : bcs.params)
+            if (p.name == name) return &p;
+        return nullptr;
+    };
+
+    const FXParamMeta* brightness = find("Brightness");
+    check("Brightness present", brightness != nullptr);
+    if (brightness) {
+        check("Brightness style Slider", brightness->style == fxui::Style::Slider);
+        check("Brightness soft (0, 2)",
+              approx(brightness->softMinimum, 0.f) && approx(brightness->softMaximum, 2.f));
+        check("Brightness label 255/255/255",
+              brightness->labelR == 255 && brightness->labelG == 255 && brightness->labelB == 255);
+    }
+    const FXParamMeta* avg = find("AvgLuminance");
+    check("AvgLuminance present", avg != nullptr);
+    if (avg) {
+        check("AvgLuminance soft (0, 1)", approx(avg->softMinimum, 0.f) && approx(avg->softMaximum, 1.f));
+        check("AvgLuminance label 150/150/150", avg->labelR == 150 && avg->labelG == 150 && avg->labelB == 150);
+    }
+    const auto newlines = std::count_if(bcs.params.begin(), bcs.params.end(),
+                                        [](const FXParamMeta& p) { return p.type == FXParamType::Newline; });
+    check("BCS keeps its four Newline entries", newlines == 4);
+    check("BCS removed afterwards", (int)getFXStackOnPlate(0).size() == stackIndex);
+
+    std::fflush(stdout);
+    return fails == 0;
 }
 
 std::vector<std::string> getLutNames() {

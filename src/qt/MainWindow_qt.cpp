@@ -1263,6 +1263,13 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
     // or the render path sees an unloaded frame and writes nothing.
     jefe::qt::setAllPlatesShowPreview(true);
 
+    // FX parameter metadata reaches the UI (style, soft range, label colour).
+    if (!jefe::qt::fxMetaSelfTest()) {
+        printf("FX-TEST FAIL: FX-META self-test failed\n");
+        fflush(stdout);
+        return 5;
+    }
+
     const QString outDir = QDir::tempPath() + "/jefecheck_fxtest";
     QDir().mkpath(outDir);
 

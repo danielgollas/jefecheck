@@ -15,6 +15,7 @@ enum GFC_FX_GUI_TYPE{FX_GUI_UNKNOWN=0, FX_GUI_FLOAT,FX_GUI_TEXTURE,FX_GUI_CUBE,F
 #include "qt/qt_fltk_stubs.h"
 #include "platefxparams.h"
 #include "vec3d.h"
+#include "gfcFXUi.h"
 //#include "gfcStructures.h"
 #include "UIConstants.h"
 
@@ -75,6 +76,8 @@ std::string varName;
 std::string tooltip;
 
 std::vector<std::string> options; //when the widgets is a choice, it has a vector of options.
+
+fxui::WidgetUi ui; //declared style and soft range, from the style/softMinimum/softMaximum attributes.
 
 };
 

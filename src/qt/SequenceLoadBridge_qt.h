@@ -6,11 +6,13 @@
 #ifndef JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 #define JEFECHECK_QT_SEQUENCE_LOAD_BRIDGE_H
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "../gfcFXUi.h"
 #include "../gfcReviewSummary.h"
 
 class gfcPlateGUI_Qt;
@@ -266,6 +268,11 @@ struct FXParamMeta {
     float step = 0.0f;
     float defaultValue = 0.0f;
     std::vector<std::string> options;
+    // Resolved widget style: a Float is never Default (it becomes Slider).
+    fxui::Style style = fxui::Style::Default;
+    // Slider range inside [minimum, maximum], from fxui::softRange.
+    float softMinimum = 0.0f, softMaximum = 0.0f;
+    int labelR = 255, labelG = 255, labelB = 255;
 };
 
 struct FXMeta {
@@ -276,6 +283,7 @@ struct FXMeta {
     std::string description;
     bool active = false;
     bool loadedAndCompiled = false;
+    std::uint32_t instanceId = 0;
     std::vector<FXParamMeta> params;
 };
 
@@ -283,6 +291,11 @@ struct FXMeta {
 // Walks gfcFXStack copies, so this is a snapshot — refresh on
 // plateStateChanged or after add/remove. Empty for invalid plate idx.
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx);
+
+// Headless self-test (run by --fx-test): adds the BCS effect to plate 0,
+// checks the style / soft range / label colour getFXStackMetaOnPlate reports,
+// then removes it. Prints FX-META PASS|FAIL lines; returns true on pass.
+bool fxMetaSelfTest();
 
 // Mutates an FX widget value on `plateIdx`'s stack. The Qt FX param
 // panel's editor widgets call this on user edit; gfcFX::bind reads
