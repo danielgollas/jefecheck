@@ -31,9 +31,9 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     // beside it. Clicking it opens the popup (see onClicked / openPopup).
     setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     setMinimumWidth(60);
-    setFixedHeight(20);  // match the compact button row in the card
-    // The dark theme styles QComboBox/QPushButton but not QToolButton; mirror its
-    // QComboBox body here (the selector keeps it off the popup's children).
+    // Keep the combo-like body (darker fill than the theme's transparent tool buttons);
+    // the selector keeps it off the popup's children. 22 px content + 1 px border = the
+    // theme's 24 px control height.
     setStyleSheet(
         "QToolButton {"
         " background-color: #2a2a2a;"
@@ -41,7 +41,9 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
         " border-radius: 3px;"
         " color: #e0e0e0;"
         " text-align: left;"
-        " padding: 2px 4px;"
+        " padding: 0 4px;"
+        " min-height: 22px;"
+        " max-height: 22px;"
         " }"
         "QToolButton:hover { border-color: #d4771e; }");
 

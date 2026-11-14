@@ -78,7 +78,14 @@ public:
     // Toggles the active-plate styling. Called by the parent dock when
     // it knows the active plate index has changed (either from a click
     // on a different card or via plateManager.setActiveQuad()).
+    // Sets the `active` dynamic property the theme draws the orange border from;
+    // re-polishes only when the value changes.
     void setActiveHighlight(bool on);
+
+    // Marks a card whose plate the current viewport layout doesn't show: dashed
+    // border, dimmed captions (theme rules on the `offscreen` property).
+    void setOffscreen(bool on);
+    bool isOffscreen() const;
 
 signals:
     // Emitted on left-click anywhere on the card body that isn't

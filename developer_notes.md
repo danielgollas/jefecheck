@@ -177,8 +177,10 @@ When a plate-card control "doesn't do anything," the diagnostic is always: did w
 ## 11. Plate-card layout: orientation-aware, fixed-size, content-swap
 
 The plate card (`PlateCard_qt.cpp`) has **two internal layouts**, switched by `setVertical(bool)`:
-- **wide-short** (horizontal dock / floating): two rows, labels-on-top.
-- **narrow-tall** (vertical/side dock): four rows, ~200px wide.
+- **wide-short** (horizontal dock / floating): two 24 px rows with each caption *beside* its field (`kGapTight` between caption and field, `kGap` between pairs, `kGapTight` between the rows, `kGap` card margins). Row 1: Track · Layer · Aspect · Chan · Zoom · X · Y · Rot; row 2: Gamma · Exp · Con · Bri · Sat · Flip/Flop (24 x 24 icon buttons) · LUT (fills the rest). Height budget: 2 x 24 + 4 + 2 x 8 + 2 (frame) = **70 px**; `--platemanager-test` checks it, the two rows, the `plate.0.*` locators and the active highlight.
+- **narrow-tall** (vertical/side dock): four rows, labels-on-top.
+
+**No stylesheet on the card.** The theme sizes the controls (§41). The grey captions are a QSS rule on the `plateCaption` property; the active plate's orange border is `PlateCard_Qt[active="true"]` (`setActiveHighlight` sets the property and re-polishes only when it changes, so the per-event `refreshAllCards` stays cheap); `setOffscreen` sets `offscreen` (dashed border, dimmed captions). The old content widget is hidden before its `deleteLater()`: in a headless run (no return to the event loop) it otherwise lingered and painted over the new content.
 
 **Swap mechanism — rebuild a content widget, don't recreate controls.** `rebuildContent()` builds a fresh `QWidget` (`nc`), re-flows the *existing* control widgets into it (adding a widget to `nc`'s layouts reparents it — members survive, signal connections persist), then swaps `nc` for the old `content_` and `deleteLater()`s the old one. Order matters: build `nc` fully (reparenting the controls out of the old content) **before** deleting the old content, or the deletion takes the controls with it. Caption `QLabel`s are created per-rebuild parented to `nc`, so they die with the old content — no orphans.
 

@@ -334,3 +334,10 @@ QProgressBar {
     color: #e0e0e0;
 }
 QProgressBar::chunk { background: #d4771e; border-radius: 2px; }
+
+/* Plate Manager cards: grey captions beside their fields, the orange active-plate
+   border, and the offscreen look for a plate the viewport layout doesn't show. */
+PlateCard_Qt QLabel[plateCaption="true"] { color: #888; }
+PlateCard_Qt[active="true"] { border: 1px solid #d4771e; }
+PlateCard_Qt[offscreen="true"] QLabel { color: #6a6a6a; }
+PlateCard_Qt[offscreen="true"] { border-style: dashed; }

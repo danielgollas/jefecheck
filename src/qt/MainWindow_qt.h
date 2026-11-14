@@ -209,6 +209,11 @@ public:
     // in a rendered frame. Returns 0 on PASS, 2 on FAIL.
     int runHeadlessPlateFrameTest();
 
+    // --platemanager-test: puts the Plate Manager in the bottom dock area at 1x1 and
+    // checks the wide-short plate card (height budget, two 24 px rows, locator
+    // objectNames, active highlight without a stylesheet). Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessPlateManagerTest();
+
     /** Demo harness: hide every dock so the viewport fills the window. */
     void hideControlsForDemo();
     /**

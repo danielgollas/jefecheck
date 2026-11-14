@@ -11,6 +11,7 @@
 #include "ImageLoadBridge_qt.h"
 #include "LoadWindowDialog_qt.h"
 #include "PlateManager_qt.h"
+#include "PlateCard_qt.h"
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
 #include "qt_prefs_persist.h"
@@ -24,6 +25,7 @@
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
 #include "UiDensityCheck_qt.h"
+#include "UiMetrics_qt.h"
 #include <QListWidget>
 #include <QMap>
 #include <QRegularExpression>
@@ -1673,6 +1675,93 @@ int MainWindow_Qt::runHeadlessPlateFrameTest() {
     }
 
     printf("PLATE-FRAME-TEST %s\n", allPass ? "PASS" : "FAIL");
+    fflush(stdout);
+    return allPass ? 0 : 2;
+}
+
+int MainWindow_Qt::runHeadlessPlateManagerTest() {
+    if (!plateDock_ || !plateManagerWidget_) {
+        printf("PLATEMANAGER-TEST FAIL: no plate dock\n"); fflush(stdout); return 2;
+    }
+    // Bottom dock area, 1x1: the wide-short card form.
+    auto settle = []() { for (int i = 0; i < 4; ++i) QCoreApplication::processEvents(); };
+    jefe::qt::setFramingMode(FRAMINGSINGLE_ID);
+    plateDock_->setFloating(false);
+    addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
+    plateDock_->show();
+    settle();
+    auto* card = plateDock_->findChild<PlateCard_Qt*>("plate.0.card");
+    if (!card) { printf("PLATEMANAGER-TEST FAIL: no plate.0.card\n"); fflush(stdout); return 2; }
+    // Measured on fa7b182, before the card moved to two 24 px rows (cardH=84).
+    constexpr int kBaselineDockH = 202;
+    printf("PLATEMANAGER-TEST baseline cardH=%d dockH=%d (was dockH=%d)\n", card->sizeHint().height(),
+           plateDock_->height(), kBaselineDockH);
+
+    namespace ui = jefe::qt::ui;
+    bool allPass = true;
+    auto report = [&](const char* name, bool pass, const QString& detail) {
+        printf("PLATEMANAGER-TEST %s: %s (%s)\n", name, pass ? "PASS" : "FAIL", qPrintable(detail));
+        fflush(stdout);
+        allPass = allPass && pass;
+    };
+
+    {   // Two rows of controls, a row gap and the card margins, plus a 1 px frame each side;
+        // every card, so the active (bordered) and inactive cards are both measured.
+        plateManagerWidget_->refreshAllCards();
+        settle();
+        const int budget = 2 * ui::kControlH + ui::kGapTight + 2 * ui::kGap + 2;
+        int h = 0;
+        QStringList each;
+        for (auto* c : plateDock_->findChildren<PlateCard_Qt*>()) {
+            h = std::max(h, c->sizeHint().height());
+            each << QString("%1:%2%3").arg(c->id()).arg(c->sizeHint().height()).arg(c->property("active").toBool() ? "*" : "");
+        }
+        report("CARD height", h > 0 && h <= budget, QString("max sizeHint %1 <= %2 [%3]").arg(h).arg(budget).arg(each.join(" ")));
+    }
+    {   // Every named control is 24 px tall and sits on one of exactly two rows.
+        QStringList wrong;
+        QList<int> rows;
+        int n = 0;
+        for (QWidget* w : card->findChildren<QWidget*>()) {
+            if (!w->objectName().startsWith("plate.0.") || qobject_cast<QLabel*>(w) || !w->isVisibleTo(card)) continue;
+            ++n;
+            const int y = w->mapTo(card, QPoint(0, 0)).y();
+            if (!rows.contains(y)) rows.append(y);
+            if (w->height() != ui::kControlH) wrong << QString("%1=%2").arg(w->objectName()).arg(w->height());
+        }
+        std::sort(rows.begin(), rows.end());
+        QStringList ys;
+        for (int y : rows) ys << QString::number(y);
+        report("CARD rows", n > 0 && wrong.isEmpty() && rows.size() == 2,
+               QString("%1 controls, rows y=[%2]%3").arg(n).arg(ys.join(",")).arg(wrong.isEmpty() ? QString() : " height " + wrong.join(" ")));
+    }
+    {   // UI-test locators keep resolving.
+        const char* leaves[] = {"track.combo", "track.label", "layer.combo", "aspect.combo", "flip.button", "flop.button",
+                                "rgba.button", "zoom.spin", "panx.spin", "pany.spin", "rotation.spin", "lut.combo",
+                                "gamma.spin", "exposure.spin", "contrast.spin", "brightness.spin", "saturation.spin"};
+        QStringList missing;
+        for (const char* leaf : leaves)
+            if (!card->findChild<QWidget*>(QString("plate.0.%1").arg(leaf))) missing << leaf;
+        report("CARD locators", missing.isEmpty(), missing.isEmpty() ? QString("all %1 found").arg(int(std::size(leaves)))
+                                                                     : "missing " + missing.join(" "));
+    }
+    {   // The active cue is a dynamic property, never a stylesheet on the card.
+        card->setActiveHighlight(true);
+        card->setActiveHighlight(true);
+        const bool active = card->property("active").toBool();
+        const bool noSheet = card->styleSheet().isEmpty();
+        report("CARD highlight", active && noSheet,
+               QString("active=%1 styleSheet=%2 chars").arg(active).arg(card->styleSheet().size()));
+        plateManagerWidget_->refreshAllCards();
+    }
+    printf("PLATEMANAGER-TEST card size %dx%d\n", card->sizeHint().width(), card->sizeHint().height());
+    {   // Informational: the density checker's view of the card (the dock-wide gate comes later).
+        const auto v = ui::checkDensity(card);
+        printf("PLATEMANAGER-TEST density %d violation(s)\n", int(v.size()));
+        for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+    }
+
+    printf("PLATEMANAGER-TEST %s\n", allPass ? "PASS" : "FAIL");
     fflush(stdout);
     return allPass ? 0 : 2;
 }

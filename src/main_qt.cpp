@@ -177,6 +177,14 @@ static bool hasPlateFrameTest(int argc, char* argv[]) {
     return false;
 }
 
+// --platemanager-test : headless checks of the Plate Manager dock's plate cards.
+// Takes no argument.
+static bool hasPlateManagerTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--platemanager-test") == 0) return true;
+    return false;
+}
+
 // --aspect-test : headless regression: asserts every aspect preset string maps to the
 // renderer's height/width convention (no GL). Takes no argument.
 static bool hasAspectTest(int argc, char* argv[]) {
@@ -1604,6 +1612,15 @@ int main(int argc, char* argv[]) {
     if (hasPlateFrameTest(argc, argv)) {
         QTimer::singleShot(5000, &window, [&window]() {
             const int code = window.runHeadlessPlateFrameTest();
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless Plate Manager card test (--platemanager-test).
+    if (hasPlateManagerTest(argc, argv)) {
+        QTimer::singleShot(5000, &window, [&window]() {
+            const int code = window.runHeadlessPlateManagerTest();
             fflush(stdout);
             std::_Exit(code);
         });
