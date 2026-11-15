@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0  # feature notes quote code at old commits
       - name: Fetch PR heads (notes pin squash-merged PR heads)
         run: git fetch origin '+refs/pull/*/head:refs/remotes/origin/pr/*'
-      - name: Build feature notes into site/features
+      - name: Build feature notes (unlisted)
         run: python3 tools/feature-notes/feature_notes.py build
         env:
           GH_TOKEN: ${{ github.token }}

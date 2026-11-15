@@ -19,10 +19,10 @@ The per-PR "release notes" pages (FX Panel, Plate Manager, Panel Polish, PR #137
 
 - Run `dw:feature-notes` set-up. That creates `feature-notes.yml`, `site/_notes/areas.yml`, and vendors `tools/feature-notes/`.
 - Config:
-  - `repo: danielgollas/jefecheck`, `notes_dir: site/_notes`, `out_dir: site/features`, `base_url: /jefecheck/features/`
+  - `repo: danielgollas/jefecheck`, `notes_dir: site/_notes`, `out_dir: site/n-0626ddbbe3c3`, `base_url: /jefecheck/n-0626ddbbe3c3/`, `unlisted: true`
   - the theme links `site/assets/css/main.css`, with the accent `#e8a020` on black
   - `tests:` names the headless test commands
-- Add a "What's new" link to the nav in `index.html` and `docs.html`.
+- Link nothing to it: the site is unlisted (noindex on every page, a hard-to-guess path, no nav link), reached only by its URL.
 - `pages.yml` gains full history, the PR-ref fetch, and the build step before upload.
 - Port the four existing pages into notes as the first content.
 - Starting areas: Viewer, Plates, FX, Colour, Timeline, Load, Playlist, Review, Remote, Render.

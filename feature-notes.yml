@@ -2,8 +2,8 @@
 # Built by tools/feature-notes/feature_notes.py (vendored from the dw:feature-notes skill).
 repo: danielgollas/jefecheck
 notes_dir: site/_notes
-out_dir: site/features
-base_url: /jefecheck/features/
+out_dir: site/n-0626ddbbe3c3
+base_url: /jefecheck/n-0626ddbbe3c3/
 title: JefeCheck — What's new
 theme:
   tokens: {accent: "#e8a020", bg: "#000", card: "#0e0e0e", border: "#1e1e1e", font: "Roboto, system-ui, sans-serif"}
@@ -11,3 +11,4 @@ quote_refs: [main]
 preview_refs: [qt-experimental]
 releases_order: date
 deny: ["JEF-\\d+", "atlassian\\.net", "/Volumes/", "styleseat"]
+unlisted: true

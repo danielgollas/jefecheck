@@ -7,4 +7,4 @@ vendor/
 Gemfile.lock
 
 # Generated feature-notes site (tools/feature-notes)
-features/
+n-*/

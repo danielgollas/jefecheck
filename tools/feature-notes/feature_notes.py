@@ -318,6 +318,7 @@ class Config:
     releases_order: Literal["semver", "date"]
     tests: dict[str, TestDef]
     deny: list[str]
+    unlisted: bool = False
 
 
 @dataclass
@@ -436,6 +437,9 @@ def load_config(root: Path) -> Config:
         deny = _str_list(data.get("deny"), "deny")
     except NotesError as exc:
         raise bad(str(exc)) from None
+    unlisted = data.get("unlisted", False)
+    if not isinstance(unlisted, bool):
+        raise bad("unlisted must be true or false")
     for pattern in deny:
         try:
             re.compile(pattern)
@@ -455,6 +459,7 @@ def load_config(root: Path) -> Config:
         releases_order=order,
         tests=tests,
         deny=deny,
+        unlisted=unlisted,
     )
 
 
@@ -1091,6 +1096,8 @@ def _token_css(cfg: Config) -> str:
 
 def _page(cfg: Config, title: str, description: str, content: str, *, draft: bool) -> str:
     head = []
+    if cfg.unlisted:
+        head.append('<meta name="robots" content="noindex, nofollow">')
     if cfg.theme_css:
         head.append(f'<link rel="stylesheet" href="{_esc(cfg.base_url)}site.css">')
     head.append(_token_css(cfg))
