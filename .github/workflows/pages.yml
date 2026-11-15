@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
   pages: write
   id-token: write
 
@@ -23,6 +24,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # feature notes quote code at old commits
+      - name: Fetch PR heads (notes pin squash-merged PR heads)
+        run: git fetch origin '+refs/pull/*/head:refs/remotes/origin/pr/*'
+      - name: Build feature notes into site/features
+        run: python3 tools/feature-notes/feature_notes.py build
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
         with:
