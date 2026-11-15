@@ -149,6 +149,14 @@ private:
         QString text;  // the full label; shown elided when the column is narrower
     };
     std::vector<std::vector<SliderLabel>> sliderLabels_;
+    // Labels of lines holding one non-float control, per card: they share the slider
+    // label column so every control in a card starts at the same x.
+    struct ColumnLabel {
+        QPointer<QLabel> label;
+        QPointer<QWidget> control;
+        QString text;  // the full label; shown elided when the column is narrower
+    };
+    std::vector<std::vector<ColumnLabel>> columnLabels_;
     // Each card's header power toggle, in stack order; the fast path syncs them.
     std::vector<QPointer<QToolButton>> powerButtons_;
     int lastCardWidth_ = -1;

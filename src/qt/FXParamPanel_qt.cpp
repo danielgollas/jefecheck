@@ -277,14 +277,22 @@ protected:
     }
 };
 
-// One non-float parameter in a flow row: label, then the control, 24 px tall.
+// The widest a combo grows on a column row: the slider track's cap, so a bottom dock
+// does not stretch a LUT picker across the screen.
+constexpr int kColumnComboMaxW = 320;
+
+// One non-float parameter: label, then the control, 24 px tall. In a flow row (several
+// controls sharing a line) the row is packed to its content. A column row (the line's
+// only control) spans the card: the label sits in the card's right-aligned label column,
+// sized in relayoutCards(), so the control starts where the slider rows' value fields
+// start; a combo stretches up to the slider cap.
 QWidget* makeLabelledRow(const QString& objectBase, const QString& text, const QString& tooltip,
-                         QWidget* control, QLabel** labelOut) {
+                         QWidget* control, QLabel** labelOut, bool column = false) {
     auto* row = new QWidget();
     row->setObjectName(objectBase + ".row");
     row->setToolTip(tooltip);
     row->setFixedHeight(ui::kControlH);
-    row->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    row->setSizePolicy(column ? QSizePolicy::Expanding : QSizePolicy::Fixed, QSizePolicy::Fixed);
     auto* lay = new QHBoxLayout(row);
     ui::applyRowMetrics(lay, ui::kGapTight);
     auto* label = new QLabel(text, row);
@@ -293,7 +301,15 @@ QWidget* makeLabelledRow(const QString& objectBase, const QString& text, const Q
     control->setParent(row);
     control->setToolTip(tooltip);
     control->setAccessibleName(text);
-    lay->addWidget(control);
+    if (column) {
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        const bool combo = qobject_cast<QComboBox*>(control) != nullptr;
+        if (combo) control->setMaximumWidth(kColumnComboMaxW);
+        lay->addWidget(control, combo ? 1 : 0);
+        lay->addStretch(0);  // takes the width past the combo's cap, or right of a checkbox
+    } else {
+        lay->addWidget(control);
+    }
     *labelOut = label;
     return row;
 }
@@ -323,6 +339,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
     list_->clear();
     rowCache_.clear();
     sliderLabels_.clear();
+    columnLabels_.clear();
     powerButtons_.clear();
     lastCardWidth_ = -1;
 
@@ -432,6 +449,9 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         std::vector<CachedRow> cacheByParam(fx.params.size());
         std::vector<bool> cached(fx.params.size(), false);
         std::vector<SliderLabel> sliders;
+        std::vector<ColumnLabel> columnLabels;
+        // Set while building a line's only labelled control: its label joins the column.
+        bool columnRow = false;
 
         // Builds the editor for param pi; returns the widget for the row.
         auto buildParam = [&](int pi) -> QWidget* {
@@ -494,7 +514,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                         scheduleRefresh();  // label accent follows on the next turn
                     });
                     QLabel* label = nullptr;
-                    rowWidget = makeLabelledRow(base, text, tooltip, check, &label);
+                    rowWidget = makeLabelledRow(base, text, tooltip, check, &label, columnRow);
                     c.control = check;
                     c.label = label;
                     break;
@@ -521,7 +541,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                                 scheduleRefresh();
                             });
                     QLabel* label = nullptr;
-                    rowWidget = makeLabelledRow(base, text, tooltip, combo, &label);
+                    rowWidget = makeLabelledRow(base, text, tooltip, combo, &label, columnRow);
                     c.control = combo;
                     c.label = label;
                     break;
@@ -556,7 +576,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                         control = combo;
                     }
                     QLabel* label = nullptr;
-                    rowWidget = makeLabelledRow(base, text, tooltip, control, &label);
+                    rowWidget = makeLabelledRow(base, text, tooltip, control, &label, columnRow);
                     c.control = control;
                     c.label = label;
                     break;
@@ -565,7 +585,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     auto* value = new QLabel(QString::number(static_cast<double>(p.value), 'g', 6));
                     value->setObjectName(base + ".value");
                     QLabel* label = nullptr;
-                    rowWidget = makeLabelledRow(base, text, tooltip, value, &label);
+                    rowWidget = makeLabelledRow(base, text, tooltip, value, &label, columnRow);
                     c.control = value;
                     c.label = label;
                     break;
@@ -582,6 +602,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     scheduleRefresh();
                 });
             }
+            if (columnRow && c.label) columnLabels.push_back({c.label, c.control, text});
             if (c.floatEditor || qobject_cast<QCheckBox*>(c.control) || qobject_cast<QComboBox*>(c.control))
                 ++editableCount;
             cacheByParam[pi] = std::move(c);
@@ -604,6 +625,16 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     cardLay->addWidget(buildParam(row.items.front()));
                     break;
                 case fxui::RowKind::Flow: {
+                    // A line holding one labelled control lines up with the slider rows;
+                    // several controls on a line stay packed so they can wrap.
+                    const fxui::Kind k = items[row.items.front()].kind;
+                    if (row.items.size() == 1 && k != fxui::Kind::Float && k != fxui::Kind::Spacer &&
+                        k != fxui::Kind::NewLine) {
+                        columnRow = true;
+                        cardLay->addWidget(buildParam(row.items.front()));
+                        columnRow = false;
+                        break;
+                    }
                     auto* host = new QWidget(card);
                     auto* flow = new FlowLayout_Qt(host, 0, ui::kGap, ui::kGapTight);
                     for (int pi : row.items) flow->addWidget(buildParam(pi));
@@ -624,6 +655,7 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         for (size_t pi = 0; pi < cacheByParam.size(); ++pi)
             if (cached[pi] && !isLayoutOnly(fx.params[pi].type)) rowCache_.push_back(std::move(cacheByParam[pi]));
         sliderLabels_.push_back(std::move(sliders));
+        columnLabels_.push_back(std::move(columnLabels));
 
         // Host the card as a list item so InternalMove can drag-reorder.
         auto* item = new QListWidgetItem(list_);
@@ -665,33 +697,57 @@ void FXParamPanel_Qt::relayoutCards() {
         QWidget* card = list_->itemWidget(item);
         if (!card) continue;
 
-        // Slider label column: as wide as the card's longest label when the slider can
-        // keep its minimum width, else narrower with the labels elided (full text in the
-        // tooltip). Never more than 45 % of the card.
-        if (cardWidth != lastCardWidth_ && i < int(sliderLabels_.size()) && !sliderLabels_[i].empty()) {
-            const auto& rows = sliderLabels_[i];
-            const FXSliderRow_Qt* first = rows.front().row;
-            if (!first) continue;
-            first->label()->ensurePolished();  // the theme's 13 px font, not the default
-            const QFontMetrics fm(first->label()->font());
-            int widest = 0, field = 0;
-            for (const SliderLabel& s : rows) {
-                widest = std::max(widest, fm.horizontalAdvance(s.text) + 1);
-                if (s.row) field = std::max(field, s.row->field()->sizeHint().width());
-            }
-            const QMargins m = card->layout()->contentsMargins();
-            const int inner = cardWidth - m.left() - m.right() - 2;  // 1 px card border each side
-            const int spacing = first->layout() ? first->layout()->spacing() : ui::kGapTight;
-            const int room = inner - field - first->slider()->minimumWidth() - ui::kControlH - 3 * spacing;
-            const int column = std::max(ui::kControlH, std::min({widest, room, inner * 45 / 100}));
-            for (const SliderLabel& s : rows) {
-                if (!s.row) continue;
-                s.row->setLabelColumnWidth(column);
-                QLabel* label = s.row->label();
-                const QString shown = fm.elidedText(s.text, Qt::ElideRight, column);
-                if (shown != label->text()) label->setText(shown);
-                label->setToolTip(shown == s.text ? QString() : s.text);
-                label->setProperty(ui::kDensityElidedProperty, true);
+        // Label column: as wide as the card's longest slider or column-row label when
+        // every control keeps its minimum width, else narrower with the labels elided
+        // (full text in the tooltip). Never more than 45 % of the card.
+        const bool haveRows = i < int(sliderLabels_.size()) && i < int(columnLabels_.size()) &&
+                              (!sliderLabels_[i].empty() || !columnLabels_[i].empty());
+        if (cardWidth != lastCardWidth_ && haveRows) {
+            const auto& sliders = sliderLabels_[i];
+            const auto& columns = columnLabels_[i];
+            QLabel* probe = nullptr;  // any live label: the theme's 13 px font, not the default
+            for (const SliderLabel& s : sliders)
+                if (s.row) { probe = s.row->label(); break; }
+            if (!probe)
+                for (const ColumnLabel& c : columns)
+                    if (c.label) { probe = c.label; break; }
+            if (probe) {
+                probe->ensurePolished();
+                const QFontMetrics fm(probe->font());
+                const QMargins m = card->layout()->contentsMargins();
+                const int inner = cardWidth - m.left() - m.right() - 2;  // 1 px card border each side
+                int widest = 0;
+                int room = inner;
+                for (const SliderLabel& s : sliders) {
+                    if (!s.row) continue;
+                    widest = std::max(widest, fm.horizontalAdvance(s.text) + 1);
+                    const int spacing = s.row->layout() ? s.row->layout()->spacing() : ui::kGapTight;
+                    room = std::min(room, inner - s.row->field()->sizeHint().width() -
+                                              s.row->slider()->minimumWidth() - ui::kControlH - 3 * spacing);
+                }
+                for (const ColumnLabel& c : columns) {
+                    if (!c.label) continue;
+                    widest = std::max(widest, fm.horizontalAdvance(c.text) + 1);
+                    if (c.control) room = std::min(room, inner - c.control->minimumSizeHint().width() - ui::kGapTight);
+                }
+                const int column = std::max(ui::kControlH, std::min({widest, room, inner * 45 / 100}));
+                const auto fit = [&](QLabel* label, const QString& text) {
+                    const QString shown = fm.elidedText(text, Qt::ElideRight, column);
+                    if (shown != label->text()) label->setText(shown);
+                    label->setProperty(ui::kDensityElidedProperty, true);
+                    return shown == text;
+                };
+                for (const SliderLabel& s : sliders) {
+                    if (!s.row) continue;
+                    s.row->setLabelColumnWidth(column);
+                    QLabel* label = s.row->label();
+                    label->setToolTip(fit(label, s.text) ? QString() : s.text);
+                }
+                for (const ColumnLabel& c : columns) {
+                    if (!c.label) continue;
+                    c.label->setFixedWidth(column);
+                    c.label->setToolTip(fit(c.label, c.text) ? QString() : c.text);
+                }
             }
         }
 
