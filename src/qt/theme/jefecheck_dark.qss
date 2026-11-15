@@ -169,20 +169,20 @@ QCheckBox, QRadioButton {
     min-height: 24px;
 }
 QCheckBox::indicator, QRadioButton::indicator {
-    width: 15px;
-    height: 15px;
+    width: 12px;   /* 14 px with the border: about the 13 px text's cap height plus a little */
+    height: 12px;
     background-color: #242424;
     border: 1px solid #4a4a4a;
 }
-QCheckBox::indicator { border-radius: 4px; }
-QRadioButton::indicator { border-radius: 8px; }
+QCheckBox::indicator { border-radius: 3px; }
+QRadioButton::indicator { border-radius: 7px; }
 QCheckBox::indicator:hover, QRadioButton::indicator:hover {
     border-color: #8a5a2a; background-color: #2a2622;
 }
 /* Checked: a muted accent fill, not the hard bright square. (A checkmark SVG
    can be dropped in via image: url(:/...) for extra polish.) */
 QCheckBox::indicator:checked {
-    background-color: #c07429; border-color: #d4771e; border-radius: 4px;
+    background-color: #c07429; border-color: #d4771e; border-radius: 3px;
 }
 QRadioButton::indicator:checked {
     background-color: #c07429; border-color: #d4771e;

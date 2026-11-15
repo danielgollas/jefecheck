@@ -594,8 +594,14 @@ QToolButton* makePowerToggle(QWidget* parent) {
     b->setIcon(jefe::qticons::power());
     b->setToolTip(QObject::tr("Effect on/off"));
     b->setAccessibleName(QObject::tr("Effect on/off"));
-    ui::makeIconButton(b);
-    b->setStyleSheet("QToolButton { padding: 0; }");
+    ui::makeIconButton(b);  // keeps the 24 x 24 hit target
+    b->setIconSize(QSize(14, 14));
+    // No box: a bordered 24 px square read larger than the 13 px name beside it. The
+    // transparent border keeps the theme's metrics; hover still shows the target.
+    b->setStyleSheet(
+        "QToolButton, QToolButton:checked, QToolButton:pressed {"
+        " padding: 0; background: transparent; border: 1px solid transparent; }"
+        " QToolButton:hover { background: #333333; border-radius: 4px; }");
     return b;
 }
 

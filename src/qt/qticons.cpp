@@ -340,7 +340,15 @@ QIcon check()        { return make(pCheck); }
 QIcon send()         { return make(pSend); }
 QIcon recent()       { return make(pRecent); }
 
-QIcon power() { return make(pPower, kIconPx); }
+QIcon power() {
+    // Drawn without a button box, so the glyph alone says on or off: accent when on,
+    // a dim grey when off (the bright default would read as "on" at a glance).
+    constexpr int side = 14;
+    QIcon icon;
+    icon.addPixmap(render(pPower, side, QColor(0x80, 0x80, 0x80)), QIcon::Normal, QIcon::Off);
+    icon.addPixmap(render(pPower, side, QColor(0xD4, 0x77, 0x1E)), QIcon::Normal, QIcon::On);
+    return icon;
+}
 
 } // namespace qticons
 } // namespace jefe
