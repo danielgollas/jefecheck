@@ -70,6 +70,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QTimer>
+#include <QToolButton>
 
 #include <algorithm>
 #include <cmath>
@@ -1697,6 +1698,40 @@ int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QStrin
             }
         }
         check("height", bad.isEmpty(), bad.join("; "));
+    }
+
+    // collapse: the card shrinks to its header, stays collapsed through a rebuild, expands back
+    {
+        auto* chevron = qobject_cast<QToolButton*>(child("fxparams.fx0.collapse.button"));
+        QWidget* card = child("fxparams.fx0.card");
+        const int open = card ? card->height() : -1;
+        if (chevron) chevron->click();
+        settle();
+        card = child("fxparams.fx0.card");
+        QWidget* body = child("fxparams.fx0.body");
+        const int shut = card ? card->height() : -1;
+        const bool hidden = body && !body->isVisible();
+        // A stack change rebuilds every card (a values-only refresh would keep them).
+        const int fun = fxIndexOf("Fun/Fun");
+        jefe::qt::addFXToActivePlate(fun);
+        panel.refresh();
+        settle();
+        body = child("fxparams.fx0.body");
+        const bool keptAfterRebuild = body && !body->isVisible();
+        if (!shotDir.isEmpty()) panel.grab().save(shotDir + "/fx-collapsed.png");
+        jefe::qt::removeFXFromPlate(0, int(wanted.size()));
+        panel.refresh();
+        settle();
+        chevron = qobject_cast<QToolButton*>(child("fxparams.fx0.collapse.button"));
+        if (chevron) chevron->click();
+        settle();
+        card = child("fxparams.fx0.card");
+        body = child("fxparams.fx0.body");
+        const int reopened = card ? card->height() : -1;
+        check("collapse", chevron && hidden && shut > 0 && shut <= 24 + 2 * 4 + 4 && keptAfterRebuild &&
+                              body && body->isVisible() && reopened == open,
+              QString("open %1 shut %2 rebuilt-collapsed %3 reopened %4")
+                  .arg(open).arg(shut).arg(keptAfterRebuild).arg(reopened));
     }
 
     // editors take their own presses, so dragging one never starts a card drag

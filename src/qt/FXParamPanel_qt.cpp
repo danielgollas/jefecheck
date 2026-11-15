@@ -384,6 +384,22 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         auto* headerLay = new QHBoxLayout(header);
         ui::applyRowMetrics(headerLay, ui::kGapTight);
 
+        // Collapse: the card shrinks to this header. Kept per FX instance (and its content
+        // hash, since a loaded stack can reuse ids), so it survives rebuilds (adding,
+        // removing or reordering effects) for the rest of the run.
+        const CollapseKey collapseKey{active, fx.instanceId != 0 ? fx.instanceId : (0x80000000u | std::uint32_t(fxIdx)),
+                                      fx.hash};
+        const bool collapsed = collapsed_.count(collapseKey) != 0;
+        auto* chevron = new QToolButton(header);
+        chevron->setObjectName(fxBase + ".collapse.button");
+        chevron->setAccessibleName(QString("Collapse FX %1").arg(fxIdx));
+        chevron->setToolTip(collapsed ? "Show this effect's controls" : "Hide this effect's controls");
+        chevron->setIcon(jefe::qticons::chevron(!collapsed));
+        chevron->setAutoRaise(true);
+        ui::makeIconButton(chevron);
+        chevron->setStyleSheet("QToolButton { padding: 0; }");
+        headerLay->addWidget(chevron);
+
         // The handle and the empty card area ignore presses, so they reach the list
         // and start a card drag; the editors accept theirs.
         auto* handle = new QLabel(header);
@@ -434,6 +450,24 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         });
         headerLay->addWidget(removeBtn);
         cardLay->addWidget(header);
+
+        // Every row below the header lives in one body widget, so collapsing hides them all.
+        auto* body = new QWidget(card);
+        body->setObjectName(fxBase + ".body");
+        auto* bodyLay = new QVBoxLayout(body);
+        bodyLay->setContentsMargins(0, 0, 0, 0);
+        bodyLay->setSpacing(ui::kGapTight);
+        cardLay->addWidget(body);
+        body->setVisible(!collapsed);
+        connect(chevron, &QToolButton::clicked, this, [this, chevron, body, collapseKey]() {
+            const bool nowCollapsed = body->isVisible();
+            if (nowCollapsed) collapsed_.insert(collapseKey);
+            else collapsed_.erase(collapseKey);
+            body->setVisible(!nowCollapsed);
+            chevron->setIcon(jefe::qticons::chevron(!nowCollapsed));
+            chevron->setToolTip(nowCollapsed ? "Show this effect's controls" : "Hide this effect's controls");
+            relayoutCards();  // the list item takes the card's new height
+        });
 
         // --- Body: rows from the .jfx layout -----------------------------------------
         std::vector<fxui::Item> items;
@@ -614,15 +648,15 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
         for (const fxui::Row& row : rows) {
             switch (row.kind) {
                 case fxui::RowKind::Heading: {
-                    auto* heading = new QLabel(QString::fromStdString(row.group), card);
+                    auto* heading = new QLabel(QString::fromStdString(row.group), body);
                     heading->setObjectName(QString("%1.group.%2").arg(fxBase, QString::fromStdString(row.group)));
                     heading->setStyleSheet("color: #777; font-style: italic;");
                     heading->setFixedHeight(ui::kControlH);
-                    cardLay->addWidget(heading);
+                    bodyLay->addWidget(heading);
                     break;
                 }
                 case fxui::RowKind::Slider:
-                    cardLay->addWidget(buildParam(row.items.front()));
+                    bodyLay->addWidget(buildParam(row.items.front()));
                     break;
                 case fxui::RowKind::Flow: {
                     // A line holding one labelled control lines up with the slider rows;
@@ -631,14 +665,14 @@ void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& s
                     if (row.items.size() == 1 && k != fxui::Kind::Float && k != fxui::Kind::Spacer &&
                         k != fxui::Kind::NewLine) {
                         columnRow = true;
-                        cardLay->addWidget(buildParam(row.items.front()));
+                        bodyLay->addWidget(buildParam(row.items.front()));
                         columnRow = false;
                         break;
                     }
-                    auto* host = new QWidget(card);
+                    auto* host = new QWidget(body);
                     auto* flow = new FlowLayout_Qt(host, 0, ui::kGap, ui::kGapTight);
                     for (int pi : row.items) flow->addWidget(buildParam(pi));
-                    cardLay->addWidget(host);
+                    bodyLay->addWidget(host);
                     break;
                 }
             }

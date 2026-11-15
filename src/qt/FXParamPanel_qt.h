@@ -30,7 +30,9 @@
 #include <QWidget>
 
 #include <cstdint>
+#include <set>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -160,6 +162,9 @@ private:
     // Each card's header power toggle, in stack order; the fast path syncs them.
     std::vector<QPointer<QToolButton>> powerButtons_;
     int lastCardWidth_ = -1;
+    // Collapsed cards, by (plate, FX instance id, content hash): the choice outlives rebuilds.
+    using CollapseKey = std::tuple<int, std::uint32_t, std::string>;
+    std::set<CollapseKey> collapsed_;
 };
 
 #endif
