@@ -71,21 +71,22 @@ bash build_linux.sh
 
 ### Prerequisites
 
-Install [MSYS2](https://www.msys2.org/), then from the MSYS2 MinGW 64-bit shell:
+Install [MSYS2](https://www.msys2.org/), then from the MSYS2 UCRT64 shell:
 
 ```bash
 pacman -S --noconfirm \
-  mingw-w64-x86_64-cmake \
-  mingw-w64-x86_64-toolchain \
-  mingw-w64-x86_64-fltk \
-  mingw-w64-x86_64-openimageio \
-  mingw-w64-x86_64-openexr \
-  mingw-w64-x86_64-imath \
-  mingw-w64-x86_64-curl \
-  mingw-w64-x86_64-zlib \
-  mingw-w64-x86_64-freeglut \
-  mingw-w64-x86_64-freetype \
-  mingw-w64-x86_64-fmt
+  mingw-w64-ucrt-x86_64-cmake \
+  mingw-w64-ucrt-x86_64-ninja \
+  mingw-w64-ucrt-x86_64-toolchain \
+  mingw-w64-ucrt-x86_64-fltk \
+  mingw-w64-ucrt-x86_64-openimageio \
+  mingw-w64-ucrt-x86_64-openexr \
+  mingw-w64-ucrt-x86_64-imath \
+  mingw-w64-ucrt-x86_64-curl \
+  mingw-w64-ucrt-x86_64-zlib \
+  mingw-w64-ucrt-x86_64-freeglut \
+  mingw-w64-ucrt-x86_64-freetype \
+  mingw-w64-ucrt-x86_64-fmt
 ```
 
 ### Build
@@ -93,7 +94,7 @@ pacman -S --noconfirm \
 ```bash
 git clone https://github.com/danielgollas/jefecheck.git
 cd jefecheck
-cmake -B build -G "MinGW Makefiles"
+cmake -B build -G Ninja
 cmake --build build
 ```
 
