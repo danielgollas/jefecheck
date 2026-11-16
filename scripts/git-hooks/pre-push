@@ -10,17 +10,19 @@
 #   - Tag push     → builds the Qt app and runs the full Appium suite
 #                    via `cmake --build build_qt --target qt-uitests`.
 #                    A failed test or build aborts the push.
+#   - website-v*   → no-op. These tags only deploy the website (pages.yml)
+#                    and ship no app code.
 #
 # Tag-push detection: git supplies the refs being pushed on stdin, one
 # line per ref: `<local-ref> <local-sha> <remote-ref> <remote-sha>`.
-# We treat any `refs/tags/...` ref as triggering the gate (release tags
-# are the primary use case, but pushing any tag warrants UI verification).
+# Any `refs/tags/...` ref other than `refs/tags/website-v*` triggers the gate.
 
 set -euo pipefail
 
 is_tag_push=0
 while read -r _local_ref _local_sha remote_ref _remote_sha; do
     case "$remote_ref" in
+        refs/tags/website-v*) ;;
         refs/tags/*) is_tag_push=1 ;;
     esac
 done
