@@ -78,25 +78,26 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-qt6-base
-            mingw-w64-x86_64-qt6-tools
-            mingw-w64-x86_64-openimageio
-            mingw-w64-x86_64-openexr
-            mingw-w64-x86_64-imath
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-fmt
-            mingw-w64-x86_64-freetype
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-openimageio
+            mingw-w64-ucrt-x86_64-openexr
+            mingw-w64-ucrt-x86_64-imath
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-fmt
+            mingw-w64-ucrt-x86_64-freetype
             zip
 
       - name: Build
         run: |
-          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j$(nproc)
 
       - name: Package
@@ -112,8 +113,8 @@ jobs:
           curl -fL -o "$PACKAGE/ffmpeg.exe" \
             "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64"
           cp packaging/ffmpeg-NOTICE.txt "$PACKAGE/" || true
-          # Bundle MinGW runtime DLLs
-          ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
+          # Bundle the UCRT64 runtime DLLs (they live in /ucrt64/bin)
+          ldd build/jefecheck.exe | grep -i /ucrt64/ | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
           # MSYS2 ships zip; use it instead of 7z which isn't installed by default
           zip -r jefecheck-windows-x64.zip "$PACKAGE"
 
