@@ -382,19 +382,19 @@
       </div>
 
       <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 26px 0 8px;">Windows (MSYS2 / MinGW)</h3>
-      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Install <a href="https://www.msys2.org/" style="color: var(--accent, #e8a020); text-decoration: none;">MSYS2</a>, then from the MinGW 64-bit shell:</p>
+      <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 8px;">Install <a href="https://www.msys2.org/" style="color: var(--accent, #e8a020); text-decoration: none;">MSYS2</a>, then from the UCRT64 shell:</p>
       <div style="background: #0e0e0e; border: 1px solid #232323; border-radius: 8px; padding: 18px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; color: #e6e6e6; overflow-x: auto; margin: 0 0 8px;">
         <div><span style="color: #6c6c6c;"># Install dependencies via pacman</span></div>
         <div><span style="color: var(--accent, #e8a020);">$ </span>pacman -S --noconfirm \</div>
-        <div style="padding-left:18px;">mingw-w64-x86_64-cmake mingw-w64-x86_64-toolchain \</div>
-        <div style="padding-left:18px;">mingw-w64-x86_64-fltk mingw-w64-x86_64-openimageio \</div>
-        <div style="padding-left:18px;">mingw-w64-x86_64-openexr mingw-w64-x86_64-imath \</div>
-        <div style="padding-left:18px;">mingw-w64-x86_64-curl mingw-w64-x86_64-zlib \</div>
-        <div style="padding-left:18px;">mingw-w64-x86_64-freeglut mingw-w64-x86_64-freetype \</div>
-        <div style="padding-left:18px;">mingw-w64-x86_64-fmt</div>
+        <div style="padding-left:18px;">mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-toolchain \</div>
+        <div style="padding-left:18px;">mingw-w64-ucrt-x86_64-fltk mingw-w64-ucrt-x86_64-openimageio \</div>
+        <div style="padding-left:18px;">mingw-w64-ucrt-x86_64-openexr mingw-w64-ucrt-x86_64-imath \</div>
+        <div style="padding-left:18px;">mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-zlib \</div>
+        <div style="padding-left:18px;">mingw-w64-ucrt-x86_64-freeglut mingw-w64-ucrt-x86_64-freetype \</div>
+        <div style="padding-left:18px;">mingw-w64-ucrt-x86_64-fmt</div>
         <div style="margin-top:8px;"><span style="color: #6c6c6c;"># Clone and build</span></div>
         <div><span style="color: var(--accent, #e8a020);">$ </span>git clone https://github.com/danielgollas/jefecheck.git &amp;&amp; cd jefecheck</div>
-        <div><span style="color: var(--accent, #e8a020);">$ </span>cmake -B build -G "MinGW Makefiles" &amp;&amp; cmake --build build</div>
+        <div><span style="color: var(--accent, #e8a020);">$ </span>cmake -B build -G Ninja &amp;&amp; cmake --build build</div>
       </div>
       <p style="font-size: 1rem; line-height: 1.7; color: #c2c2c2; margin: 0 0 18px;">The Windows build uses <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">-fpermissive</span> for FLTK callback casts. CI builds are automated via GitHub Actions — see <span style="font-family: 'JetBrains Mono', monospace; color: #cfcfcf;">.github/workflows/build.yml</span>.</p>
 

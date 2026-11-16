@@ -84,6 +84,7 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-toolchain
             mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-fltk
             mingw-w64-ucrt-x86_64-openimageio
             mingw-w64-ucrt-x86_64-openexr
@@ -97,7 +98,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j$(nproc)
 
       - name: Package
