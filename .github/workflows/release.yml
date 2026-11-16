@@ -108,8 +108,8 @@ jobs:
           cp build/jefecheck.exe "$PACKAGE/"
           cp -r src/FX "$PACKAGE/"
           cp -r src/fonts "$PACKAGE/"
-          # Bundle MinGW runtime DLLs
-          ldd build/jefecheck.exe | grep mingw | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
+          # Bundle the UCRT64 runtime DLLs (they live in /ucrt64/bin)
+          ldd build/jefecheck.exe | grep -i /ucrt64/ | awk '{print $3}' | xargs -I{} cp {} "$PACKAGE/"
           # MSYS2 ships zip; use it instead of 7z which isn't installed by default
           zip -r jefecheck-windows-x64.zip "$PACKAGE"
 
