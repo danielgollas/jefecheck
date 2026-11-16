@@ -1,0 +1,35 @@
+- id: viewer
+  title: Viewer
+  blurb: The viewport, overlays and the status bar.
+- id: fx
+  title: Effects
+  blurb: The FX stack, its panel and the shader engine.
+- id: render
+  title: Render & export
+  blurb: Rendering the active plate to stills or video.
+- id: render/stills
+  title: Stills
+  blurb: JPEG, PNG, TIFF and EXR output.
+  parent: render
+- id: render/video
+  title: Video
+  blurb: H.264, H.265 and ProRes output through FFmpeg.
+  parent: render
+- id: playlist
+  title: Playlist
+  blurb: Building, saving and playing a list of shots.
+- id: review
+  title: Review
+  blurb: Notes, review summaries and review packages.
+- id: remote
+  title: Remote sessions
+  blurb: Reviewing together from different places.
+- id: preferences
+  title: Preferences
+  blurb: Settings that persist between sessions.
+- id: website
+  title: Website
+  blurb: The project site and its demo.
+- id: build
+  title: Building & packaging
+  blurb: Building JefeCheck from source and what ships with it.
