@@ -79,20 +79,20 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-fltk
-            mingw-w64-x86_64-openimageio
-            mingw-w64-x86_64-openexr
-            mingw-w64-x86_64-imath
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-freeglut
-            mingw-w64-x86_64-fmt
-            mingw-w64-x86_64-freetype
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-fltk
+            mingw-w64-ucrt-x86_64-openimageio
+            mingw-w64-ucrt-x86_64-openexr
+            mingw-w64-ucrt-x86_64-imath
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-freeglut
+            mingw-w64-ucrt-x86_64-fmt
+            mingw-w64-ucrt-x86_64-freetype
             zip
 
       - name: Build
