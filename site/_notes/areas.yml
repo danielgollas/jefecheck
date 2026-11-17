@@ -33,3 +33,6 @@
 - id: build
   title: Building & packaging
   blurb: Building JefeCheck from source and what ships with it.
+- id: panels
+  title: Panels & layout
+  blurb: Docks, dialogs and how they size and arrange themselves.

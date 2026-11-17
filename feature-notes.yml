@@ -8,7 +8,7 @@ title: JefeCheck — What's new
 theme:
   tokens: {accent: "#e8a020", bg: "#000", card: "#0e0e0e", border: "#1e1e1e", font: "Roboto, system-ui, sans-serif"}
 quote_refs: [main]
-preview_refs: [qt-experimental]
+preview_refs: [qt-experimental, feature/video-loading, feature/playback-audio-rolling-toggle, feature/panel-polish, feature/panel-polish-B, feature/panel-polish-C]
 releases_order: date
 deny: ["JEF-\\d+", "atlassian\\.net", "/Volumes/", "styleseat"]
 unlisted: true
