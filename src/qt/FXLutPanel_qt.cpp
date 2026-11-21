@@ -73,13 +73,15 @@ LUTPanel_Qt::LUTPanel_Qt(QWidget* parent) : QWidget(parent) {
                                      "Apply to active plate", this);
     applyBtn->setObjectName("lut.apply.button");
     applyBtn->setAccessibleName("Apply LUT to active plate");
-    applyBtn->setToolTip("Apply the selected LUT to the active plate");
+    applyBtn->setToolTip("Apply the selected LUT to the active plate (or double-click it)");
+    jefe::qt::ui::useWidgetRect(applyBtn);   // shares a flow line with an icon button
     connect(applyBtn, &QPushButton::clicked, this, [this]() { applySelected(); });
 
-    auto* refreshBtn = new QPushButton(jefe::qticons::refresh(), "Refresh", this);
+    // Icon-only beside the panel's main action (Apply keeps its label). The accessible
+    // name stays "Refresh LUT list": UI tests assert it as the AX title.
+    auto* refreshBtn = jefe::qticons::makeIconButton(this, jefe::qticons::refresh(),
+        "Refresh — rescan the LUT folders and rebuild the list", "Refresh LUT list");
     refreshBtn->setObjectName("lut.refresh.button");
-    refreshBtn->setAccessibleName("Refresh LUT list");
-    refreshBtn->setToolTip("Rescan the LUT folders and rebuild the list");
     connect(refreshBtn, &QPushButton::clicked, this, &LUTPanel_Qt::refreshList);
 
     status_ = new QLabel("Drop .lut / .cube / .cub files here to load.", this);

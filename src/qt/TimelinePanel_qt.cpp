@@ -505,15 +505,15 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         return w;
     };
 
-    rewBtn_      = makeButton(jefe::qticons::rewind(), "Rewind to start",
+    rewBtn_      = makeButton(jefe::qticons::rewind(), "Rewind to start (Home)",
                               "transport.rewind.button", "Rewind to start");
-    stepBackBtn_ = makeButton(jefe::qticons::stepBack(), "Step back one frame",
+    stepBackBtn_ = makeButton(jefe::qticons::stepBack(), "Step back one frame (Left)",
                               "transport.stepback.button", "Step back");
-    playBtn_     = makeButton(jefe::qticons::play(), "Play / Pause",
+    playBtn_     = makeButton(jefe::qticons::play(), "Play / Pause (Space)",
                               "transport.play.button", "Play / Pause");
-    stepFwdBtn_  = makeButton(jefe::qticons::stepForward(), "Step forward one frame",
+    stepFwdBtn_  = makeButton(jefe::qticons::stepForward(), "Step forward one frame (Right)",
                               "transport.stepforward.button", "Step forward");
-    ffwdBtn_     = makeButton(jefe::qticons::fastForward(), "Fast forward to end",
+    ffwdBtn_     = makeButton(jefe::qticons::fastForward(), "Fast forward to end (End)",
                               "transport.fastforward.button", "Fast forward");
 
     transport->addWidget(makeGroup({rewBtn_, stepBackBtn_, playBtn_, stepFwdBtn_, ffwdBtn_},
