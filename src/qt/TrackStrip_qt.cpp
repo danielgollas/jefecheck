@@ -84,10 +84,10 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
     filename_->setMinimumWidth(80);
     filename_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     filename_->installEventFilter(this);
-    browse_ = new QPushButton(jefe::qticons::folder(), "Browse…", this);
+    // Icon-only: four strips share the dialog, so the path field gets the width.
+    browse_ = jefe::qticons::makeIconButton(this, jefe::qticons::folder(),
+        "Browse… — pick a file or sequence for this track", "Browse…");
     browse_->setObjectName(QString("dialog.loadwindow.strip.%1.browse").arg(trackIdx_));
-    browse_->setToolTip("Browse for a file or sequence for this track");
-    browse_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     recent_ = new QToolButton(this);
     recent_->setObjectName(QString("dialog.loadwindow.strip.%1.recent").arg(trackIdx_));
     recent_->setIcon(jefe::qticons::recent());
@@ -159,11 +159,13 @@ TrackStrip_Qt::TrackStrip_Qt(int trackIdx, QWidget* parent)
         row3->addWidget(cropBox);
     }
 
-    reload_ = new QPushButton("Reload", this);
+    reload_ = jefe::qticons::makeIconButton(this, jefe::qticons::refresh(),
+        "Reload — read this track's frames from disk again", "Reload");
     reload_->setObjectName(QString("dialog.loadwindow.strip.%1.reload").arg(trackIdx_));
     row3->addWidget(reload_);
 
-    unload_ = new QPushButton("Unload && Clear", this);
+    unload_ = jefe::qticons::makeIconButton(this, jefe::qticons::trash(),
+        "Unload & Clear — unload this track and clear its fields", "Unload & Clear");
     unload_->setObjectName(QString("dialog.loadwindow.strip.%1.unload").arg(trackIdx_));
     row3->addWidget(unload_);
 
