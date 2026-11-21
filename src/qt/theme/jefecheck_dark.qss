@@ -18,7 +18,7 @@ QWidget {
     selection-background-color: #d4771e;
     selection-color: #1a1a1a;
     font-family: -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 QMainWindow, QDialog {
@@ -29,8 +29,8 @@ QGroupBox {
     background-color: #2a2a2a;
     border: 1px solid #3a3a3a;
     border-radius: 4px;
-    margin-top: 1.4ex;
-    padding: 0.6ex 0.6ex 0.6ex 0.6ex;
+    margin-top: 18px;
+    padding: 12px;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
@@ -47,8 +47,9 @@ QPushButton {
     background: transparent;
     border: 1px solid #3d3d3d;
     border-radius: 4px;
-    padding: 3px 11px;
-    font-size: 11px;
+    padding: 0 11px;
+    min-height: 22px;
+    max-height: 22px;
     color: #cbcbcb;
 }
 QPushButton:hover {
@@ -63,6 +64,31 @@ QPushButton:pressed, QPushButton:checked {
 }
 QPushButton:disabled { color: #666666; border-color: #2c2c2c; background: transparent; }
 
+/* Tool buttons share the push-button look and the 24 px control height. */
+QToolButton {
+    background: transparent;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 0 6px;
+    min-height: 22px;
+    max-height: 22px;
+    color: #cbcbcb;
+}
+QToolButton:hover {
+    background-color: #2d2d2d;
+    border-color: #8a5a2a;   /* muted accent hint */
+    color: #ededed;
+}
+QToolButton:pressed, QToolButton:checked {
+    background-color: #2e2620;
+    border-color: #d4771e;
+    color: #e8b884;
+}
+QToolButton:disabled { color: #666666; border-color: #2c2c2c; background: transparent; }
+/* Icon-only buttons (jefe::qt::ui::makeIconButton): no side padding, so the
+   16 px glyph is not squeezed into the 24 px button's content box. */
+QToolButton[iconOnly="true"], QPushButton[iconOnly="true"] { padding: 0; }
+
 QLineEdit, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {
     background-color: #1c1c1c;
     border: 1px solid #3d3d3d;
@@ -71,6 +97,11 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {
     color: #dcdcdc;
     selection-background-color: #7a4a1e;
     selection-color: #f0f0f0;
+}
+QLineEdit, QSpinBox, QDoubleSpinBox {
+    padding: 0 7px;
+    min-height: 22px;
+    max-height: 22px;
 }
 QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover { border-color: #4a4a4a; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QPlainTextEdit:focus, QTextEdit:focus {
@@ -104,9 +135,10 @@ QComboBox {
     background-color: #242424;
     border: 1px solid #3d3d3d;
     border-radius: 4px;
-    padding: 3px 22px 3px 8px;
+    padding: 0 22px 0 8px;
     color: #dcdcdc;
-    min-height: 20px;
+    min-height: 22px;
+    max-height: 22px;
 }
 QComboBox:hover { border-color: #4a4a4a; }
 QComboBox:focus, QComboBox:on { border-color: #a8631f; }
@@ -137,22 +169,23 @@ QCheckBox, QRadioButton {
     background: transparent;
     color: #dcdcdc;
     spacing: 7px;
+    min-height: 24px;
 }
 QCheckBox::indicator, QRadioButton::indicator {
-    width: 15px;
-    height: 15px;
+    width: 12px;   /* 14 px with the border: about the 13 px text's cap height plus a little */
+    height: 12px;
     background-color: #242424;
     border: 1px solid #4a4a4a;
 }
-QCheckBox::indicator { border-radius: 4px; }
-QRadioButton::indicator { border-radius: 8px; }
+QCheckBox::indicator { border-radius: 3px; }
+QRadioButton::indicator { border-radius: 7px; }
 QCheckBox::indicator:hover, QRadioButton::indicator:hover {
     border-color: #8a5a2a; background-color: #2a2622;
 }
 /* Checked: a muted accent fill, not the hard bright square. (A checkmark SVG
    can be dropped in via image: url(:/...) for extra polish.) */
 QCheckBox::indicator:checked {
-    background-color: #c07429; border-color: #d4771e; border-radius: 4px;
+    background-color: #c07429; border-color: #d4771e; border-radius: 3px;
 }
 QRadioButton::indicator:checked {
     background-color: #c07429; border-color: #d4771e;
@@ -304,3 +337,11 @@ QProgressBar {
     color: #e0e0e0;
 }
 QProgressBar::chunk { background: #d4771e; border-radius: 2px; }
+
+/* Plate Manager cards: grey captions beside their fields, the orange active-plate
+   border, and the offscreen look for a plate the viewport layout doesn't show. */
+PlateCard_Qt QLabel[plateCaption="true"] { color: #888; }
+PlateCard_Qt[active="true"] { border: 1px solid #d4771e; }
+PlateCard_Qt[offscreen="true"] QLabel { color: #6a6a6a; }
+PlateCard_Qt[offscreen="true"] { border: 1px dashed #3a3a3a; }
+PlateCard_Qt[offscreen="true"][active="true"] { border-color: #d4771e; }

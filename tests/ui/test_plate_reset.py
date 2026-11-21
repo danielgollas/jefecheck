@@ -17,11 +17,14 @@ def _restore_plate_toggles_after(app):
     Cmd+R can't leak into the next test.
     """
     yield
+    # Visible mode shows only the layout's plates; 2x2 brings plates 1-3 into the dock.
+    app.send_shortcut("cmd+4")
     for plate_id in range(4):
         for role in ("flip.button", "flop.button"):
             btn = app.by_object_name(locators.plate(plate_id, role))
             if _checked(btn):
                 btn.click()
+    app.send_shortcut("cmd+1")
 
 
 def test_cmd_r_clears_flip_on_active_plate(app):
@@ -38,6 +41,8 @@ def test_cmd_alt_r_clears_flips_on_all_plates(app):
     0 and plate 1 to prove it reaches a non-active plate (clicking a card's flip
     button doesn't make it active).
     """
+    # The Plate Manager shows only the layout's plates (Visible mode); 2x2 shows plate 1.
+    app.send_shortcut("cmd+4")
     flip0 = app.by_object_name(locators.plate(0, "flip.button"))
     flip1 = app.by_object_name(locators.plate(1, "flip.button"))
     flip0.click()

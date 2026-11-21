@@ -1,4 +1,7 @@
 #include "NotesPanel_qt.h"
+#include "UiMetrics_qt.h"
+#include "FlowLayout_qt.h"
+#include "qticons.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QButtonGroup>
@@ -8,6 +11,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QSignalBlocker>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -56,8 +60,7 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("notes.panel");
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    jefe::qt::ui::applyGroupMetrics(layout);
 
     statusLabel_ = new QLabel(this);
     statusLabel_->setObjectName("notes.status.label");
@@ -65,33 +68,37 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     layout->addWidget(statusLabel_);
 
     // Tool picker: freehand / arrow / box / text, exactly one active.
-    auto* toolRow = new QHBoxLayout();
-    toolRow->setSpacing(4);
-    toolFreehand_ = new QToolButton(this);
-    toolFreehand_->setObjectName("notes.tool.freehand");
-    toolFreehand_->setText(tr("Freehand"));
-    toolFreehand_->setCheckable(true);
-    toolFreehand_->setAccessibleName("Freehand note tool");
-    toolArrow_ = new QToolButton(this);
-    toolArrow_->setObjectName("notes.tool.arrow");
-    toolArrow_->setText(tr("Arrow"));
-    toolArrow_->setCheckable(true);
-    toolArrow_->setAccessibleName("Arrow note tool");
-    toolBox_ = new QToolButton(this);
-    toolBox_->setObjectName("notes.tool.box");
-    toolBox_->setText(tr("Box"));
-    toolBox_->setCheckable(true);
-    toolBox_->setAccessibleName("Box note tool");
-    toolText_ = new QToolButton(this);
-    toolText_->setObjectName("notes.tool.text");
-    toolText_->setText(tr("Text"));
-    toolText_->setCheckable(true);
-    toolText_->setAccessibleName("Text note tool");
-    toolRow->addWidget(toolFreehand_);
-    toolRow->addWidget(toolArrow_);
-    toolRow->addWidget(toolBox_);
-    toolRow->addWidget(toolText_);
-    layout->addLayout(toolRow);
+    auto* toolHost = new QWidget(this);
+    auto* toolRow = new FlowLayout_Qt(toolHost, 0, jefe::qt::ui::kGapTight, jefe::qt::ui::kGapTight);
+    {
+        QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        sp.setHeightForWidth(true);
+        toolHost->setSizePolicy(sp);
+    }
+    // Icon-only tool toggles (pencil / arrow / box / T); the checked tool draws its
+    // glyph in the accent colour. Accessible names keep the old labels.
+    auto makeTool = [this](const char* obj, const QIcon& icon, const QString& name,
+                           const QString& tip) {
+        auto* tb = new QToolButton(this);
+        tb->setObjectName(obj);
+        tb->setIcon(icon);
+        tb->setCheckable(true);
+        tb->setToolTip(tip);
+        tb->setAccessibleName(name);
+        jefe::qt::ui::makeIconButton(tb);
+        return tb;
+    };
+    toolFreehand_ = makeTool("notes.tool.freehand", jefe::qticons::pencil(),
+                             "Freehand note tool", tr("Freehand — draw a free stroke"));
+    toolArrow_ = makeTool("notes.tool.arrow", jefe::qticons::arrowTool(),
+                          "Arrow note tool", tr("Arrow — drag to draw an arrow"));
+    toolBox_ = makeTool("notes.tool.box", jefe::qticons::boxTool(),
+                        "Box note tool", tr("Box — drag to draw a rectangle"));
+    toolText_ = makeTool("notes.tool.text", jefe::qticons::textTool(),
+                         "Text note tool", tr("Text — click to place a text note"));
+    for (QToolButton* tb : {toolFreehand_, toolArrow_, toolBox_, toolText_})
+        toolRow->addWidget(tb);
+    layout->addWidget(toolHost);
 
     // Not exclusive: an exclusive group can't be clicked back to "no tool", so
     // syncToolButtons() keeps exclusivity instead.
@@ -116,18 +123,25 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
             });
     syncToolButtons();
 
-    // Colour + size, on one row.
-    auto* styleRow = new QHBoxLayout();
-    styleRow->setSpacing(6);
-    styleRow->addWidget(new QLabel(tr("Colour:"), this));
+    // Colour + size: two label/control pairs that wrap in a narrow dock.
+    auto* styleHost = new QWidget(this);
+    auto* styleRow = new FlowLayout_Qt(styleHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
+    auto makePair = [this, styleHost](const QString& text, QWidget* field) {
+        auto* w = new QWidget(styleHost);
+        auto* h = new QHBoxLayout(w);
+        jefe::qt::ui::applyRowMetrics(h, jefe::qt::ui::kGapTight);
+        h->addWidget(new QLabel(text, w));
+        h->addWidget(field);
+        return w;
+    };
     colorButton_ = new QPushButton(this);
     colorButton_->setObjectName("notes.color.button");
-    colorButton_->setFixedSize(40, 22);
+    colorButton_->setFixedSize(40, jefe::qt::ui::kControlH);
+    jefe::qt::ui::useWidgetRect(colorButton_);
     colorButton_->setAccessibleName("Note colour");
     colorButton_->setToolTip(tr("Colour used for the next note drawn with the active tool."));
     connect(colorButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onColorButtonClicked);
-    styleRow->addWidget(colorButton_);
-    styleRow->addWidget(new QLabel(tr("Size:"), this));
+    styleRow->addWidget(makePair(tr("Colour:"), colorButton_));
     sizeSpin_ = new QSpinBox(this);
     sizeSpin_->setObjectName("notes.size.spin");
     sizeSpin_->setRange(1, 20);
@@ -135,9 +149,8 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
     sizeSpin_->setAccessibleName("Note stroke size");
     connect(sizeSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &NotesPanel_Qt::onSizeChanged);
-    styleRow->addWidget(sizeSpin_);
-    styleRow->addStretch(1);
-    layout->addLayout(styleRow);
+    styleRow->addWidget(makePair(tr("Size:"), sizeSpin_));
+    layout->addWidget(styleHost);
     rebuildColorSwatch();
 
     // Revision / note tree: top-level items are revisions; children are the notes drawn
@@ -151,17 +164,32 @@ NotesPanel_Qt::NotesPanel_Qt(QWidget* parent) : QWidget(parent) {
             this, &NotesPanel_Qt::updateActionButtons);
     layout->addWidget(tree_, 1);
 
-    auto* actionRow = new QHBoxLayout();
-    actionRow->setSpacing(6);
-    lockButton_ = new QPushButton(tr("Lock Round"), this);
+    auto* actionHost = new QWidget(this);
+    auto* actionRow = new FlowLayout_Qt(actionHost, 0, jefe::qt::ui::kGap, jefe::qt::ui::kGapTight);
+    // Lock is a state toggle: checked (accent closed padlock) while the round is locked,
+    // open padlock while it is open. updateActionButtons() keeps the check state, tooltip
+    // and accessible name ("Lock Round" / "Unlock Round") in step with the model.
+    lockButton_ = new QPushButton(this);
     lockButton_->setObjectName("notes.lock.button");
+    lockButton_->setIcon(jefe::qticons::lockToggle());
+    lockButton_->setCheckable(true);
+    lockButton_->setAccessibleName(tr("Lock Round"));
+    lockButton_->setToolTip(tr("Lock Round — freeze this round's notes"));
+    jefe::qt::ui::makeIconButton(lockButton_);
     connect(lockButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onLockClicked);
     actionRow->addWidget(lockButton_);
-    removeButton_ = new QPushButton(tr("Remove Note"), this);
+    removeButton_ = jefe::qticons::makeIconButton(this, jefe::qticons::remove(),
+        tr("Remove Note — delete the selected note"), tr("Remove Note"));
     removeButton_->setObjectName("notes.remove.button");
     connect(removeButton_, &QPushButton::clicked, this, &NotesPanel_Qt::onRemoveClicked);
     actionRow->addWidget(removeButton_);
-    layout->addLayout(actionRow);
+    {
+        QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        sp.setHeightForWidth(true);
+        actionHost->setSizePolicy(sp);
+    }
+    layout->addWidget(actionHost);
+    for (QWidget* host : {toolHost, styleHost, actionHost}) jefe::qt::ui::keepMinHeightForWidth(host);
 
     refresh();
 }
@@ -236,7 +264,7 @@ void NotesPanel_Qt::updateActionButtons() {
     const bool hasMedia = plate >= 0 && jefe::qt::notesAvailableForPlate(plate);
 
     if (!hasMedia) {
-        lockButton_->setText(tr("Lock Round"));
+        setLockButtonState(false);
         lockButton_->setEnabled(false);
         removeButton_->setEnabled(false);
         return;
@@ -247,10 +275,10 @@ void NotesPanel_Qt::updateActionButtons() {
     const int lockState = jefe::qt::noteLockState(plate);
     const bool isHost = jefe::qt::isNotesHost();
     if (lockState == jefe::qt::NOTELOCK_LOCKED) {
-        lockButton_->setText(tr("Unlock Round"));
+        setLockButtonState(true);
         lockButton_->setEnabled(isHost);
     } else {
-        lockButton_->setText(tr("Lock Round"));
+        setLockButtonState(false);
         lockButton_->setEnabled(isHost && lockState == jefe::qt::NOTELOCK_OPEN);
     }
 
@@ -298,7 +326,17 @@ void NotesPanel_Qt::onLockClicked() {
     if (ok) {
         refresh();
         emit viewportRepaintRequested();
+    } else {
+        updateActionButtons();   // undo the click's own check toggle
     }
+}
+
+void NotesPanel_Qt::setLockButtonState(bool locked) {
+    const QSignalBlocker block(lockButton_);
+    lockButton_->setChecked(locked);
+    lockButton_->setAccessibleName(locked ? tr("Unlock Round") : tr("Lock Round"));
+    lockButton_->setToolTip(locked ? tr("Unlock Round — this round is locked; click to reopen it")
+                                   : tr("Lock Round — freeze this round's notes"));
 }
 
 void NotesPanel_Qt::onRemoveClicked() {

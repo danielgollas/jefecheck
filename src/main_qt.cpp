@@ -16,6 +16,7 @@
 #include <QPixmap>
 #include <QTimer>
 
+#include <clocale>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -43,14 +44,17 @@
 #include "gfcMediaFingerprint.h"
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
+#include "gfcPlateLayout.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
 #include "gfcNoteStamp.h"
 #include "gfcReviewSummary.h"
+#include "gfcFXUi.h"
 #include "gfcWireTest.h"
 #include "qt/iapplication_qt.h"
 #include "qt/ieventsystem_qt.h"
+#include "qt/FXParamEditors_qt.h"
 #include "qt/MainWindow_qt.h"
 #include "qt/SequenceLoadBridge_qt.h"
 #include "qt/ReviewSummaryPdf_qt.h"
@@ -59,11 +63,13 @@
 extern gfcSettings sett;
 
 static void applyDarkTheme(QApplication& qapp) {
-    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`), falling back to
-    // the source tree; silent miss if neither exists.
+    // Look for the theme next to the binary (`./theme/jefecheck_dark.qss`), then the source tree,
+    // then the copy compiled in via theme.qrc, which always exists (bundles built outside the
+    // repo have neither file path).
     const QStringList candidates = {
         QCoreApplication::applicationDirPath() + "/theme/jefecheck_dark.qss",
         QCoreApplication::applicationDirPath() + "/../src/qt/theme/jefecheck_dark.qss",
+        QStringLiteral(":/theme/jefecheck_dark.qss"),  // compiled-in copy (bundles have neither path above)
     };
     for (const QString& path : candidates) {
         QFile qss(path);
@@ -166,6 +172,27 @@ static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// --plate-frame-test : headless check that the orange active-plate frame shows in
+// multi-plate layouts only and never reaches a rendered frame. Takes no argument.
+static bool hasPlateFrameTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--plate-frame-test") == 0) return true;
+    return false;
+}
+
+// --platemanager-test [outDir] : headless checks of the Plate Manager dock (cards,
+// modes, arrangement, title bar and mode menus, dock shapes, Timeline height, Window
+// menu). With outDir it also saves and checks a screenshot matrix there.
+static bool hasPlateManagerTest(int argc, char* argv[], QString* outDir) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--platemanager-test") != 0) continue;
+        if (i + 1 < argc && std::strncmp(argv[i + 1], "--", 2) != 0)
+            *outDir = QString::fromUtf8(argv[i + 1]);
+        return true;
+    }
+    return false;
+}
+
 // --aspect-test : headless regression: asserts every aspect preset string maps to the
 // renderer's height/width convention (no GL). Takes no argument.
 static bool hasAspectTest(int argc, char* argv[]) {
@@ -174,11 +201,30 @@ static bool hasAspectTest(int argc, char* argv[]) {
     return false;
 }
 
+// --platelayout-test : headless pure plate-layout self-test (no GL/window). No argument.
+static bool hasPlateLayoutTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--platelayout-test") == 0) return true;
+    return false;
+}
+
 // --notes-test : headless note model, sidecar store, overlay geometry and EXR stamp
 // self-tests (no GL or window). Runs all even if one fails. Takes no argument.
 static bool hasNotesTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--notes-test") == 0) return true;
+    return false;
+}
+
+// --fx-ui-test <fxDir> : headless FX UI model self-test (styles, soft ranges, row
+// layout) plus a parse check of every bundled .jfx in fxDir. No GL or window.
+// Returns true when the flag is present; dir is empty if no directory followed it.
+static bool resolveFXUiTestDir(int argc, char* argv[], std::string& dir) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--fx-ui-test") == 0) {
+            dir = (i + 1 < argc) ? argv[i + 1] : "";
+            return true;
+        }
     return false;
 }
 
@@ -466,6 +512,10 @@ int main(int argc, char* argv[]) {
     QSurfaceFormat::setDefaultFormat(fmt);
 
     QApplication qapp(argc, argv);
+    // QApplication applies the system locale (setlocale(LC_ALL, "")). With a comma-decimal
+    // locale (de_DE, fr_FR, ...) atof/strtof/sscanf would read "0.5" in .jfx, session and
+    // playlist files as 0, so numbers stay in the C locale. Qt's own QLocale is unaffected.
+    std::setlocale(LC_NUMERIC, "C");
     qapp.setApplicationName("JefeCheck");
     qapp.setOrganizationName("JefeCheck");
 
@@ -528,6 +578,25 @@ int main(int argc, char* argv[]) {
     if (hasAspectTest(argc, argv)) {
         const bool ok = jefe::qt::runAspectSelfTest();
         std::_Exit(ok ? 0 : 2);
+    }
+
+    // Headless FX UI model self-test (--fx-ui-test <fxDir>): pure, before the window.
+    {
+        std::string fxUiDir;
+        if (resolveFXUiTestDir(argc, argv, fxUiDir)) {
+            if (fxUiDir.empty()) {
+                std::printf("FX-UI FAIL --fx-ui-test needs an FX directory\n");
+                std::fflush(stdout);
+                std::_Exit(2);
+            }
+            const int fails = fxUiSelfTest(fxUiDir);
+            std::fflush(stdout);
+            std::_Exit(fails == 0 ? 0 : 2);
+        }
+    }
+
+    if (hasPlateLayoutTest(argc, argv)) {
+        std::_Exit(jefe::platelayout::runPlateLayoutSelfTest() ? 0 : 2);
     }
 
     // Headless note self-tests (--notes-test): pure data/arithmetic. Runs all three
@@ -1272,12 +1341,37 @@ int main(int argc, char* argv[]) {
         break;
     }
 
+    // --fx-editors-test: the FX parameter editor widgets, driven by synthetic events.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--fx-editors-test") != 0) continue;
+        QTimer::singleShot(0, &window, []() {
+            const int fails = fxEditorsSelfTest();
+            std::fflush(stdout);
+            std::_Exit(fails == 0 ? 0 : 2);
+        });
+        break;
+    }
+
     // --package-dialog-test <image>: the export dialog writes, cancels and refuses.
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--package-dialog-test") != 0) continue;
         const QString image = QString::fromUtf8(argv[i + 1]);
         QTimer::singleShot(5000, &window, [&window, image]() {
             const int code = window.runHeadlessPackageDialogTest(image);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --ui-density-test [outDir]: every dock and dialog against the shared density rules.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--ui-density-test") != 0) continue;
+        QString outDir;
+        if (i + 1 < argc && std::strncmp(argv[i + 1], "--", 2) != 0)
+            outDir = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [&window, outDir]() {
+            const int code = window.runHeadlessUiDensityTest(outDir);
             fflush(stdout);
             std::_Exit(code);
         });
@@ -1544,6 +1638,21 @@ int main(int argc, char* argv[]) {
         });
     }
 
+    // FX panel layout test (--fx-panel-test <image> [shotDir]). It shows the panel and the
+    // FX dock in a real window, so it needs a display: it does not run in headless CI.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--fx-panel-test") != 0) continue;
+        const QString image = QString::fromUtf8(argv[i + 1]);
+        QString shotDir;
+        if (i + 2 < argc && std::strncmp(argv[i + 2], "--", 2) != 0) shotDir = QString::fromUtf8(argv[i + 2]);
+        QTimer::singleShot(5000, &window, [&window, image, shotDir]() {
+            const int code = window.runHeadlessFXPanelTest(image, shotDir);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
     // Headless colour-correction render proof (--cc-test <image>): render a baseline,
     // apply exposure+gamma, re-render, and report whether the output changed.
     const QString ccTestFile = resolveCCTestFile(argc, argv);
@@ -1559,6 +1668,25 @@ int main(int argc, char* argv[]) {
     if (!fxMultiTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, fxMultiTestFile]() {
             const int code = window.runHeadlessFXMultiTest(fxMultiTestFile);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless active-plate frame test (--plate-frame-test).
+    if (hasPlateFrameTest(argc, argv)) {
+        QTimer::singleShot(5000, &window, [&window]() {
+            const int code = window.runHeadlessPlateFrameTest();
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless Plate Manager card test (--platemanager-test).
+    QString plateManagerShots;
+    if (hasPlateManagerTest(argc, argv, &plateManagerShots)) {
+        QTimer::singleShot(5000, &window, [&window, plateManagerShots]() {
+            const int code = window.runHeadlessPlateManagerTest(plateManagerShots);
             fflush(stdout);
             std::_Exit(code);
         });

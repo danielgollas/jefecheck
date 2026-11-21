@@ -42,6 +42,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <regex>
 #include <thread>
 
 extern gfcPlateManager plateManager;
@@ -755,6 +756,23 @@ std::vector<std::pair<int, std::string>> getLut1DChoices() {
     return result;
 }
 
+// Derived from the FXParamType so a new widget type is mapped once, in mapWidgetType.
+fxui::Kind fxKindOf(FXParamType t) {
+    switch (t) {
+        case FXParamType::Float:   return fxui::Kind::Float;
+        case FXParamType::Bool:    return fxui::Kind::Bool;
+        case FXParamType::Choice:  return fxui::Kind::Choice;
+        case FXParamType::Texture: return fxui::Kind::Texture;
+        case FXParamType::Cube:    return fxui::Kind::Cube;
+        case FXParamType::LUT:     return fxui::Kind::Lut;
+        case FXParamType::Spacer:  return fxui::Kind::Spacer;
+        case FXParamType::Newline: return fxui::Kind::NewLine;
+        case FXParamType::Unknown:
+        case FXParamType::Other:   return fxui::Kind::Other;
+    }
+    return fxui::Kind::Other;
+}
+
 namespace {
 FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
     switch (t) {
@@ -769,6 +787,11 @@ FXParamType mapWidgetType(GFC_FX_GUI_TYPE t) {
         case FX_GUI_UNKNOWN: return FXParamType::Unknown;
         default:             return FXParamType::Other;
     }
+}
+
+fxui::Range softRangeOf(const gfcFXWidget& w) {
+    fxui::WidgetUi uiCopy = w.ui;   // softRange appends warnings; those were printed at load
+    return fxui::softRange(w.minimum, w.maximum, w.defaultValue, uiCopy);
 }
 }  // namespace
 
@@ -1197,6 +1220,8 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
         meta.description       = fx.description;
         meta.active            = fx.active;
         meta.loadedAndCompiled = fx.loadedAndCompiled;
+        meta.instanceId        = fx.instanceId;
+        meta.hash              = fx.md5Hash;
         // Walk groups in insertion order: gfcFX stores widgetsOrder per group, but
         // std::map iterates group names alphabetically.
         for (auto& kv : fx.groups) {
@@ -1219,12 +1244,422 @@ std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx) {
                 p.step         = w.step;
                 p.defaultValue = w.defaultValue;
                 p.options      = w.options;
+                p.style        = fxui::resolveStyle(fxKindOf(p.type), w.ui.declared);
+                const fxui::Range soft = softRangeOf(w);
+                p.softMinimum  = soft.lo;
+                p.softMaximum  = soft.hi;
+                p.labelR       = static_cast<int>(std::lround(w.labelColor.x));
+                p.labelG       = static_cast<int>(std::lround(w.labelColor.y));
+                p.labelB       = static_cast<int>(std::lround(w.labelColor.z));
                 meta.params.push_back(std::move(p));
             }
         }
         result.push_back(std::move(meta));
     }
     return result;
+}
+
+bool fxMetaSelfTest() {
+    int fails = 0;
+    auto check = [&](const std::string& name, bool cond) {
+        std::printf("FX-META %s %s\n", cond ? "PASS" : "FAIL", name.c_str());
+        if (!cond) ++fails;
+    };
+    auto approx = [](float a, float b) { return std::fabs(a - b) <= 1e-5f; };
+
+    const std::string bcsMenu = "Color/Brightness, Contrast, Saturation";
+    int fxIndex = -1;
+    for (const auto& entry : getAvailableFXMenu())
+        if (entry.second == bcsMenu) { fxIndex = entry.first; break; }
+    check("BCS found in the FX menu", fxIndex >= 0);
+    auto* stack = plateManager.getFXStack(0);
+    check("plate 0 has an FX stack", stack != nullptr);
+    if (fxIndex < 0 || !stack) {
+        std::fflush(stdout);
+        return false;
+    }
+
+    stack->addFX(fxManager.getFX(fxIndex));
+    const int stackIndex = stack->getNumOfFXs() - 1;
+    const std::vector<FXMeta> metas = getFXStackMetaOnPlate(0);
+    removeFXFromPlate(0, stackIndex);
+
+    if (stackIndex < 0 || stackIndex >= (int)metas.size()) {
+        check("BCS appears in plate 0's stack metadata", false);
+        std::fflush(stdout);
+        return false;
+    }
+    const FXMeta& bcs = metas[stackIndex];
+    auto find = [&](const std::string& name) -> const FXParamMeta* {
+        for (const FXParamMeta& p : bcs.params)
+            if (p.name == name) return &p;
+        return nullptr;
+    };
+
+    const FXParamMeta* brightness = find("Brightness");
+    check("Brightness present", brightness != nullptr);
+    if (brightness) {
+        check("Brightness style Slider", brightness->style == fxui::Style::Slider);
+        check("Brightness soft (0, 2)",
+              approx(brightness->softMinimum, 0.f) && approx(brightness->softMaximum, 2.f));
+        check("Brightness label 255/255/255",
+              brightness->labelR == 255 && brightness->labelG == 255 && brightness->labelB == 255);
+    }
+    const FXParamMeta* avg = find("AvgLuminance");
+    check("AvgLuminance present", avg != nullptr);
+    if (avg) {
+        check("AvgLuminance soft (0, 1)", approx(avg->softMinimum, 0.f) && approx(avg->softMaximum, 1.f));
+        check("AvgLuminance label 150/150/150", avg->labelR == 150 && avg->labelG == 150 && avg->labelB == 150);
+    }
+    const auto newlines = std::count_if(bcs.params.begin(), bcs.params.end(),
+                                        [](const FXParamMeta& p) { return p.type == FXParamType::Newline; });
+    check("BCS keeps its four Newline entries", newlines == 4);
+    check("BCS removed afterwards", (int)getFXStackOnPlate(0).size() == stackIndex);
+
+    std::fflush(stdout);
+    return fails == 0;
+}
+
+namespace {
+// The widget `ref` names, with what setFXWidgetValue needs to write it. Null
+// widget when the plate, instance id or varName is unknown.
+struct ResolvedParam {
+    int fxIndex = -1;
+    std::string group;
+    const gfcFXWidget* widget = nullptr;
+};
+
+ResolvedParam resolveParam(const FXParamRef& ref) {
+    ResolvedParam r;
+    auto* stack = plateManager.getFXStack(ref.plate);
+    if (!stack) return r;
+    r.fxIndex = stack->indexOfInstance(ref.instanceId);
+    if (r.fxIndex < 0) return r;
+    const gfcFX& fx = stack->fxAt(r.fxIndex);
+    for (const auto& kv : fx.groups) {
+        auto it = kv.second.widgets.find(ref.varName);
+        if (it == kv.second.widgets.end()) continue;
+        r.group = kv.first;
+        r.widget = &it->second;
+        break;
+    }
+    return r;
+}
+}  // namespace
+
+bool setFXParamNormalized(const FXParamRef& ref, float t) {
+    const ResolvedParam r = resolveParam(ref);
+    if (!r.widget) return false;
+    const gfcFXWidget& w = *r.widget;
+    const float tc = std::clamp(t, 0.f, 1.f);
+    float value = 0.f;
+    switch (mapWidgetType(w.type)) {
+        case FXParamType::Float:
+            value = fxui::fromNormalized(tc, softRangeOf(w), w.minimum, w.maximum, w.step);
+            break;
+        case FXParamType::Bool:
+            value = tc >= 0.5f ? 1.f : 0.f;
+            break;
+        case FXParamType::Choice: {
+            const int last = std::max(0, (int)w.options.size() - 1);
+            value = (float)std::lround(tc * (float)last);
+            break;
+        }
+        default:
+            return false;
+    }
+    // Copy the names out: setFXWidgetValue writes the widget r.widget points into.
+    const std::string group = r.group, varName = ref.varName;
+    setFXParamValueOnPlate(ref.plate, r.fxIndex, group, varName, value);
+    return true;
+}
+
+std::optional<float> getFXParamNormalized(const FXParamRef& ref) {
+    const ResolvedParam r = resolveParam(ref);
+    if (!r.widget) return std::nullopt;
+    const gfcFXWidget& w = *r.widget;
+    switch (mapWidgetType(w.type)) {
+        case FXParamType::Float:
+            return fxui::toNormalized(w.value, softRangeOf(w));
+        case FXParamType::Bool:
+            return w.value >= 0.5f ? 1.f : 0.f;
+        case FXParamType::Choice: {
+            const int last = (int)w.options.size() - 1;
+            if (last <= 0) return 0.f;
+            return std::clamp(w.value / (float)last, 0.f, 1.f);
+        }
+        default:
+            return std::nullopt;
+    }
+}
+
+namespace {
+std::string stackXml(const gfcFXStack& stack) {
+    XMLNode top = XMLNode::createXMLTopNode("Stack");
+    stack.saveStackToNode(top);
+    int size = 0;
+    XMLSTR text = top.createXMLString(0, &size);
+    std::string xml = text ? std::string(text, static_cast<size_t>(size)) : std::string();
+    std::free(text);   // this xmlParser allocates with malloc
+    return xml;
+}
+
+// xml with the first `attr="from"` replaced by `attr="to"`; unchanged when absent.
+std::string withAttribute(std::string xml, const std::string& attr, const std::string& from,
+                          const std::string& to) {
+    const std::string needle = attr + "=\"" + from + "\"";
+    const size_t at = xml.find(needle);
+    if (at != std::string::npos) xml.replace(at, needle.size(), attr + "=\"" + to + "\"");
+    return xml;
+}
+
+// The value of the widget with this varName in any group; NaN when absent.
+float widgetValue(const gfcFX& fx, const std::string& varName) {
+    for (const auto& kv : fx.groups) {
+        auto it = kv.second.widgets.find(varName);
+        if (it != kv.second.widgets.end()) return it->second.value;
+    }
+    return std::nanf("");
+}
+
+std::vector<std::uint32_t> stackIds(gfcFXStack& stack) {
+    std::vector<std::uint32_t> ids;
+    for (int i = 0; i < stack.getNumOfFXs(); ++i) ids.push_back(stack.fxAt(i).instanceId);
+    return ids;
+}
+}  // namespace
+
+std::string getFXStackXmlOnPlate(int plateIdx) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    return stack ? stackXml(*stack) : std::string();
+}
+
+int fxIndexOfInstanceOnPlate(int plateIdx, std::uint32_t instanceId) {
+    auto* stack = plateManager.getFXStack(plateIdx);
+    return stack && instanceId != 0 ? stack->indexOfInstance(instanceId) : -1;
+}
+
+void setFXStackXmlOnPlate(int plateIdx, const std::string& xml) {
+    if (!plateManager.getFXStack(plateIdx)) return;
+    gfcFXStack s;
+    s.loadStackFromString(xml, /*matchByName=*/true);
+    plateManager.setFXStack(s, plateIdx);
+}
+
+bool fxParamIdentitySelfTest() {
+    int fails = 0;
+    auto check = [&](const std::string& name, bool cond) {
+        std::printf("FX-ID %s %s\n", cond ? "PASS" : "FAIL", name.c_str());
+        if (!cond) ++fails;
+    };
+    auto approx = [](float a, float b) { return std::fabs(a - b) <= 1e-5f; };
+
+    int bcsIndex = -1, flipIndex = -1;
+    for (const auto& entry : getAvailableFXMenu()) {
+        if (entry.second == "Color/Brightness, Contrast, Saturation") bcsIndex = entry.first;
+        if (entry.second == "Comp/Flip Horizontal") flipIndex = entry.first;
+    }
+    check("BCS and Flip Horizontal found in the FX menu", bcsIndex >= 0 && flipIndex >= 0);
+    auto* stack = plateManager.getFXStack(0);
+    if (bcsIndex < 0 || flipIndex < 0 || !stack) {
+        std::fflush(stdout);
+        return false;
+    }
+
+    clearFXStackOnPlate(0);
+    stack->addFX(fxManager.getFX(bcsIndex));
+    stack->addFX(fxManager.getFX(bcsIndex));
+    stack->addFX(fxManager.getFX(flipIndex));
+
+    std::vector<FXMeta> metas = getFXStackMetaOnPlate(0);
+    check("three FX on plate 0", metas.size() == 3);
+    if (metas.size() != 3) {
+        clearFXStackOnPlate(0);
+        std::fflush(stdout);
+        return false;
+    }
+    const std::uint32_t firstBcs = metas[0].instanceId, secondBcs = metas[1].instanceId;
+    const std::uint32_t flip = metas[2].instanceId;
+    check("copies distinct", firstBcs != 0 && secondBcs != 0 && firstBcs != secondBcs);
+    check("every id distinct and non-zero", flip != 0 && flip != firstBcs && flip != secondBcs);
+
+    auto brightnessOf = [](const FXMeta& m) -> float {
+        for (const FXParamMeta& p : m.params)
+            if (p.varName == "Brightness") return p.value;
+        return -1.f;
+    };
+
+    const FXParamRef ref{0, secondBcs, "Brightness"};
+    check("set second BCS Brightness to 0.25", setFXParamNormalized(ref, 0.25f));
+    moveFXOnPlate(0, 1, 0);
+    {
+        const std::optional<float> got = getFXParamNormalized(ref);
+        check("reorder keeps ref: reads 0.25", got && approx(*got, 0.25f));
+        metas = getFXStackMetaOnPlate(0);
+        check("reorder keeps ref: the FX with that id moved to index 0, Brightness 0.5",
+              metas.size() == 3 && metas[0].instanceId == secondBcs && approx(brightnessOf(metas[0]), 0.5f));
+        check("reorder keeps ref: the other BCS is untouched",
+              metas.size() == 3 && metas[1].instanceId == firstBcs && approx(brightnessOf(metas[1]), 1.f));
+    }
+
+    setFXParamValueOnPlate(0, stack->indexOfInstance(secondBcs), "Parameters", "Brightness", 5.f);
+    {
+        const std::optional<float> got = getFXParamNormalized(ref);
+        check("normalised clamps: Brightness 5 reads 1.0", got && approx(*got, 1.f));
+        metas = getFXStackMetaOnPlate(0);
+        check("normalised clamps: stored value still 5", metas.size() == 3 && approx(brightnessOf(metas[0]), 5.f));
+    }
+
+    check("texture param rejected", !setFXParamNormalized({0, flip, "theImage"}, 0.5f) &&
+                                        !getFXParamNormalized({0, flip, "theImage"}));
+    check("unknown varName rejected", !setFXParamNormalized({0, secondBcs, "NoSuchParam"}, 0.5f) &&
+                                          !getFXParamNormalized({0, secondBcs, "NoSuchParam"}));
+    check("unknown instance id rejected", !setFXParamNormalized({0, 999999u, "Brightness"}, 0.5f));
+
+    const std::string saved = stackXml(*stack);
+    {
+        gfcFXStack reloaded;
+        reloaded.loadStackFromString(saved);
+        check("round-trip keeps ids", stackIds(reloaded) == stackIds(*stack));
+    }
+    {
+        const std::string legacy = std::regex_replace(saved, std::regex(" instanceId=\"[^\"]*\""), "");
+        check("legacy XML has no instanceId", legacy.find("instanceId") == std::string::npos);
+        gfcFXStack reloaded;
+        reloaded.loadStackFromString(legacy);
+        check("legacy XML gets fresh ids 1, 2, 3",
+              stackIds(reloaded) == std::vector<std::uint32_t>({1, 2, 3}));
+    }
+
+    // Bool and Choice through the normalised setter/getter.
+    int chromaIndex = -1, channelIndex = -1;
+    for (const auto& entry : getAvailableFXMenu()) {
+        if (entry.second == "Comp/Chroma Key (Blue)") chromaIndex = entry.first;
+        if (entry.second == "Color/Channel") channelIndex = entry.first;
+    }
+    check("Chroma Key (Blue) and Channel found in the FX menu", chromaIndex >= 0 && channelIndex >= 0);
+    if (chromaIndex >= 0 && channelIndex >= 0) {
+        const std::uint32_t chroma = stack->addFX(fxManager.getFX(chromaIndex));
+        const std::uint32_t channel = stack->addFX(fxManager.getFX(channelIndex));
+        const FXParamRef matte{0, chroma, "ShowMatte"};
+        auto stored = [&](std::uint32_t id, const std::string& varName) {
+            return widgetValue(stack->fxAt(stack->indexOfInstance(id)), varName);
+        };
+        const bool lowOk = setFXParamNormalized(matte, 0.49f);
+        const std::optional<float> low = getFXParamNormalized(matte);
+        check("bool t 0.49 -> false", lowOk && stored(chroma, "ShowMatte") == 0.f && low && *low == 0.f);
+        const bool highOk = setFXParamNormalized(matte, 0.5f);
+        const std::optional<float> high = getFXParamNormalized(matte);
+        check("bool t 0.5 -> true", highOk && stored(chroma, "ShowMatte") == 1.f && high && *high == 1.f);
+
+        const FXParamRef chan{0, channel, "channel"};
+        const int options = (int)stack->fxAt(stack->indexOfInstance(channel)).groups.begin()->second
+                                .widgets["channel"].options.size();
+        check("Channel has 4 options", options == 4);
+        bool roundTrip = options > 1;
+        for (int k = 0; roundTrip && k < options; ++k) {
+            const float t = (float)k / (float)(options - 1);
+            const bool ok = setFXParamNormalized(chan, t);
+            const std::optional<float> got = getFXParamNormalized(chan);
+            roundTrip = ok && stored(channel, "channel") == (float)k && got && approx(*got, t);
+        }
+        check("choice round-trips every option index", roundTrip);
+        const bool nearOk = setFXParamNormalized(chan, 0.4f);   // 0.4 * 3 = 1.2 -> option 1
+        check("choice t 0.4 -> option 1", nearOk && stored(channel, "channel") == 1.f);
+    }
+
+    // Loading a stack whose effect file changed since it was saved.
+    {
+        gfcFXStack src;
+        src.addFX(fxManager.getFX(bcsIndex));
+        src.setWidgetValue(0, "Parameters", "Brightness", 0.7f);
+        src.setWidgetValue(0, "Parameters", "Contrast", 1.3f);
+        const std::string hash = src.fxAt(0).md5Hash;
+        const std::string exact = stackXml(src);
+        const std::string badHash = withAttribute(exact, "hash", hash, "0000000000bogus0");
+        const std::string badMenu = withAttribute(badHash, "menuName", "Color/Brightness, Contrast, Saturation",
+                                                  "Color/No Such Menu");
+        const std::string badName = withAttribute(badMenu, "name", "Brightness, Contrast, Saturation",
+                                                  "No Such Effect");
+        check("compat fixtures differ from the saved stack",
+              badHash != exact && badMenu != badHash && badName != badMenu);
+
+        auto loadsBcs = [&](const std::string& xml, bool matchByName) {
+            gfcFXStack s;
+            s.loadStackFromString(xml, matchByName);
+            return s.getNumOfFXs() == 1 && s.fxAt(0).name == "Brightness, Contrast, Saturation" &&
+                   approx(widgetValue(s.fxAt(0), "Brightness"), 0.7f) &&
+                   approx(widgetValue(s.fxAt(0), "Contrast"), 1.3f);
+        };
+        check("compat exact hash loads with its values", loadsBcs(exact, true));
+        check("compat bogus hash loads by menuName with its values", loadsBcs(badHash, true));
+        check("compat bogus hash and menuName loads by name", loadsBcs(badMenu, true));
+        // Only the menuName step can match this one.
+        const std::string onlyMenu = withAttribute(badHash, "name", "Brightness, Contrast, Saturation",
+                                                   "No Such Effect");
+        check("compat bogus hash and name, valid menuName loads by menu name",
+              onlyMenu != badHash && loadsBcs(onlyMenu, true));
+        {
+            gfcFXStack s;
+            const std::vector<std::string> errors = s.loadStackFromString(badName, true);
+            check("compat bogus hash and unknown names: not loaded, reported",
+                  s.getNumOfFXs() == 0 && !errors.empty());
+        }
+        {
+            gfcFXStack s;
+            s.loadStackFromString(badHash, false);
+            check("compat network path (no name fallback) with bogus hash: not loaded", s.getNumOfFXs() == 0);
+        }
+        {
+            gfcFXStack s;
+            s.loadStackFromString(withAttribute(badHash, "varName", "Contrast", "ContrastRemoved"), true);
+            const bool loaded = s.getNumOfFXs() == 1;
+            check("compat a saved widget the effect lacks is skipped, the rest restore",
+                  loaded && approx(widgetValue(s.fxAt(0), "Brightness"), 0.7f) &&
+                      approx(widgetValue(s.fxAt(0), "Contrast"), 1.f) &&
+                      std::isnan(widgetValue(s.fxAt(0), "ContrastRemoved")));
+        }
+        {
+            const std::string needle = "varName=\"Contrast\" type=\"float\"";
+            std::string retyped = badHash;
+            const size_t at = retyped.find(needle);
+            if (at != std::string::npos)
+                retyped.replace(at, needle.size(), "varName=\"Contrast\" type=\"choice\"");
+            gfcFXStack s;
+            s.loadStackFromString(retyped, true);
+            check("compat a saved widget whose type changed keeps its default",
+                  at != std::string::npos && s.getNumOfFXs() == 1 &&
+                      approx(widgetValue(s.fxAt(0), "Brightness"), 0.7f) &&
+                      approx(widgetValue(s.fxAt(0), "Contrast"), 1.f));
+        }
+        {
+            // A playlist entry from a peer: the network handlers pass matchByName=false.
+            XMLNode entry = XMLNode::parseString(badHash.c_str());
+            gfcPlaylistItem fromPeer, fromFile;
+            fromPeer.loadPlaylistItemParameters(entry, false);
+            fromFile.loadPlaylistItemParameters(entry, true);
+            check("compat network playlist item with bogus hash: not loaded",
+                  fromPeer.fxstacks.size() == 1 && fromPeer.fxstacks[0].getNumOfFXs() == 0);
+            check("compat file playlist item with bogus hash: loads by menu name",
+                  fromFile.fxstacks.size() == 1 && fromFile.fxstacks[0].getNumOfFXs() == 1);
+        }
+        {
+            const std::string savedId = std::to_string(src.fxAt(0).instanceId);
+            gfcFXStack s;
+            s.loadStackFromString(withAttribute(exact, "instanceId", savedId, "4294967294"), true);
+            const std::uint32_t loadedId = s.getNumOfFXs() == 1 ? s.fxAt(0).instanceId : 0;
+            const std::uint32_t nextId = s.addFX(fxManager.getFX(bcsIndex));
+            check("compat instanceId 4294967294 is replaced by a fresh id, the next is distinct",
+                  loadedId != 0 && loadedId < 0x80000000u && nextId != 0 && nextId < 0x80000000u &&
+                      nextId != loadedId);
+        }
+    }
+
+    clearFXStackOnPlate(0);
+    check("plate 0 empty afterwards", getFXStackOnPlate(0).empty());
+
+    std::fflush(stdout);
+    return fails == 0;
 }
 
 std::vector<std::string> getLutNames() {
@@ -1436,6 +1871,10 @@ int plateAtViewportPos(int x, int y, int viewportW, int viewportH) {
 void setFramingMode(int framingMode) {
     plateManager.setFramingMode(framingMode);
     plateManager.setChanged();
+}
+
+int getFramingMode() {
+    return plateManager.getFramingMode();
 }
 
 void setScreenFBO(unsigned fbo) {

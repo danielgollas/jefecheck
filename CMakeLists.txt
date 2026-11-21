@@ -65,6 +65,9 @@ elseif(WIN32)
 endif()
 list(APPEND JEFECHECK_SOURCES ${JEFECHECK_AUTH_SOURCES})
 
+# The dark theme is compiled in (AUTORCC) so every packaged layout finds it.
+list(APPEND JEFECHECK_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/qt/theme/theme.qrc)
+
 if(APPLE)
     find_library(JEFECHECK_SECURITY_FRAMEWORK Security REQUIRED)
     find_library(JEFECHECK_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)

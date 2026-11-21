@@ -4,9 +4,12 @@
 #include "GlViewport_qt.h"
 #include "SequenceLoadBridge_qt.h"
 #include "TrackStrip_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <QHBoxLayout>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QStyle>
 #include <QVBoxLayout>
 
 LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* parent)
@@ -22,7 +25,8 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
     // Strip grid: FlowLayout so 2x2 default reflows to 4x1 at narrow widths.
     auto* gridHost = new QWidget(this);
     auto* flow = new FlowLayout_Qt(gridHost, /*margin=*/4,
-                                   /*hSpacing=*/12, /*vSpacing=*/12);
+                                   /*hSpacing=*/jefe::qt::ui::kGapGroup, /*vSpacing=*/jefe::qt::ui::kGap);
+    flow->setStretchItems(true);
     for (int i = 0; i < 4; ++i) {
         strips_[i] = new TrackStrip_Qt(i, gridHost);
         connect(strips_[i], &TrackStrip_Qt::trackEdited,
@@ -30,7 +34,14 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
         flow->addWidget(strips_[i]);
     }
     gridHost->setLayout(flow);
-    outer->addWidget(gridHost, /*stretch=*/1);
+    // The strips need more height than a small screen offers when stacked, so
+    // the grid scrolls instead of clipping when the dialog is shrunk.
+    auto* scroll = new QScrollArea(this);
+    scroll->setObjectName("dialog.loadwindow.scroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidget(gridHost);
+    outer->addWidget(scroll, /*stretch=*/1);
 
     // Load All button anchored at the bottom.
     auto* row = new QHBoxLayout();
@@ -45,6 +56,13 @@ LoadWindowDialog_Qt::LoadWindowDialog_Qt(GlViewport_Qt* viewport, QWidget* paren
 
     // Narrow + tall by default so FlowLayout stacks the four strips vertically;
     // users can widen it to reflow into 2x2.
+    // Minimum width = the strips' minimum (plus flow margin) + the vertical
+    // scrollbar + dialog margins, so no horizontal scrollbar appears at the minimum.
+    const QMargins om = outer->contentsMargins();
+    const int minW = gridHost->minimumSizeHint().width() +
+                     style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, this) +
+                     om.left() + om.right() + 2 * scroll->frameWidth();
+    setMinimumSize(minW, 360);
     resize(620, 720);
 }
 

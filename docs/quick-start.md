@@ -185,23 +185,23 @@ If the track has a DPX image sequence loaded, you can display the DPX metadata f
 
 ### How to Load a JefeCheck FX
 
-1. Open the FX Manager Window (`F3` or menu > Dialogs > FX Manager).
+1. Open the FX panel (`F3` or **Window > FX**).
 2. Click the Browse Button
 3. Select one or more `.jfx` files
 4. If you want to have the FX autoload next time you start JefeCheck, click on the auto-load checkbox next to the FX's name (on by default).
 
 ### How to Load a LUT
 
-1. Open the LUT Manager Window (`F4` or menu > Dialogs > LUT Manager).
+1. Open the LUTs panel (`F4` or **Window > LUTs**).
 2. Click the Browse Button
 3. Select a `.cube`, `.cub`, `.lut`, or `.tga` file.
 4. If you want to have the LUT load automatically next time you start JefeCheck, click on the auto-load checkbox next to the LUT's name (on by default).
 
 ### How to Apply One or More FXs to a Viewport's FX Stack
 
-1. Open the FX Control Window (`F2` or menu > Dialogs > FX Stack Manager)
+1. Open the FX panel (`F3` or **Window > FX**)
 2. Click on the Viewport where you want to apply the FX
-3. Select the FX you want to apply from the Available FXs menu in the FX Stack Manager Window.
+3. Select the FX you want to apply from the **+ Add FX** menu in the FX panel.
 4. Turn the FX on or off by clicking on the on/off checkbox on the FX's controls.
 5. Repeat steps 3 and 4 for each FX you want to add.
 
@@ -217,7 +217,7 @@ Click on the Up or Down button on the FX's controls.
 
 ### How to Start a JefeCheck Remote Session Server
 
-1. Open the Remote Session Manager Window (`F6` or menu > Remote Session > Session Manager).
+1. Open the Remote Session panel (`F5` or **Window > Remote Session…**).
 2. In the Start Server section of the Manager fill in the necessary information:
    - Type the server's name in the Server Name Text Box
    - Type the port the server should listen on (32000 and above recommended) in the Port Text Box
@@ -226,7 +226,7 @@ Click on the Up or Down button on the FX's controls.
 
 ### How to Join a JefeCheck Remote Session Server
 
-1. Open the Remote Session Manager Window (`F6` or menu > Remote Session > Session Manager).
+1. Open the Remote Session panel (`F5` or **Window > Remote Session…**).
 2. In the Connect to Server section of the Manager fill in the necessary information:
    - Type the server's IP address
    - Type the port where the server you are connecting to is listening

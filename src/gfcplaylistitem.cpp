@@ -191,7 +191,7 @@ void gfcPlaylistItem::savePlaylistItemParameters(XMLNode &entryNode) const
 
 }
 
-void gfcPlaylistItem::loadPlaylistItemParameters(XMLNode &entryNode)
+void gfcPlaylistItem::loadPlaylistItemParameters(XMLNode &entryNode, bool matchByName)
 {
 	//2. Iterate through all the tracks in the entryNode
 	int tsize=entryNode.nChildNode("t");
@@ -237,7 +237,7 @@ void gfcPlaylistItem::loadPlaylistItemParameters(XMLNode &entryNode)
 	for (int f=0;f<fsize;f++)
 	{
 		gfcFXStack fxs;
-		fxs.loadStackFromNode(entryNode,&fiterator);
+		fxs.loadStackFromNode(entryNode,&fiterator,matchByName);
 		fxstacks.push_back(fxs);
 	}
 

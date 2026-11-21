@@ -1,6 +1,8 @@
 // qticons.cpp — programmatic icon factory. See qticons.h.
 #include "qticons.h"
 
+#include "UiMetrics_qt.h"
+
 #include <cmath>
 
 #include <QColor>
@@ -17,7 +19,6 @@ namespace qticons {
 namespace {
 
 constexpr qreal kDpr = 2.0;         // retina-crisp
-constexpr int   kBtnSide = 24;      // matches the plate-card icon buttons
 constexpr int   kIconPx  = 16;      // logical glyph size
 
 // A round-capped/joined stroke pen in the given tint.
@@ -278,12 +279,110 @@ void pRecent(QPainter& p, qreal s, const QColor& c) {
     p.drawPolygon(head);
 }
 
+void pPower(QPainter& p, qreal s, const QColor& c) {
+    // IEC power symbol: a ring open at the top with a bar through the gap.
+    const QPointF ctr(s*0.5, s*0.54);
+    const qreal R = s*0.28;
+    p.setPen(stroke(c, 1.7));
+    p.setBrush(Qt::NoBrush);
+    p.drawArc(QRectF(ctr.x() - R, ctr.y() - R, 2*R, 2*R), 125 * 16, 290 * 16);
+    p.drawLine(QPointF(s*0.5, s*0.16), QPointF(s*0.5, s*0.5));
+}
+
+void pLock(QPainter& p, qreal s, const QColor& c, bool open) {
+    // Padlock: a filled body with a keyhole, and a shackle that is closed, or
+    // lifted and swung off to the left when unlocked.
+    p.setPen(stroke(c, 1.5));
+    p.setBrush(Qt::NoBrush);
+    QPainterPath shackle;
+    const qreal lift = open ? s*0.08 : 0.0;
+    const qreal shift = open ? -s*0.18 : 0.0;
+    shackle.moveTo(s*0.34 + shift, s*0.46 - lift);
+    shackle.lineTo(s*0.34 + shift, s*0.34 - lift);
+    shackle.arcTo(QRectF(s*0.34 + shift, s*0.16 - lift, s*0.32, s*0.32), 180, -180);
+    shackle.lineTo(s*0.66 + shift, open ? s*0.36 - lift : s*0.46);
+    p.drawPath(shackle);
+    p.setPen(Qt::NoPen);
+    p.setBrush(c);
+    QPainterPath body;
+    body.addRoundedRect(QRectF(s*0.24, s*0.46, s*0.52, s*0.38), s*0.05, s*0.05);
+    // keyhole cut out of the body
+    QPainterPath hole;
+    hole.addEllipse(QPointF(s*0.5, s*0.6), s*0.055, s*0.055);
+    hole.addRect(QRectF(s*0.475, s*0.6, s*0.05, s*0.13));
+    p.drawPath(body.subtracted(hole));
+}
+
+void pPencil(QPainter& p, qreal s, const QColor& c) {
+    // Freehand: a pencil on a 45-degree slant, tip at the bottom-left.
+    p.setPen(stroke(c, 1.4));
+    p.setBrush(Qt::NoBrush);
+    QPolygonF body({QPointF(s*0.66, s*0.18), QPointF(s*0.82, s*0.34),
+                    QPointF(s*0.38, s*0.78), QPointF(s*0.22, s*0.62)});
+    p.drawPolygon(body);
+    p.drawLine(QPointF(s*0.58, s*0.26), QPointF(s*0.74, s*0.42));    // ferrule
+    p.setPen(Qt::NoPen);
+    p.setBrush(c);
+    QPolygonF tip({QPointF(s*0.22, s*0.62), QPointF(s*0.38, s*0.78), QPointF(s*0.16, s*0.84)});
+    p.drawPolygon(tip);
+}
+
+void pArrowTool(QPainter& p, qreal s, const QColor& c) {
+    // Arrow note tool: a diagonal shaft with a filled head at the top-right.
+    p.setPen(stroke(c, 1.7));
+    p.drawLine(QPointF(s*0.2, s*0.8), QPointF(s*0.66, s*0.34));
+    p.setPen(Qt::NoPen);
+    p.setBrush(c);
+    QPolygonF head({QPointF(s*0.82, s*0.18), QPointF(s*0.76, s*0.5), QPointF(s*0.5, s*0.24)});
+    p.drawPolygon(head);
+}
+
+void pBoxTool(QPainter& p, qreal s, const QColor& c) {
+    // Box note tool: an outlined rectangle with corner handles.
+    p.setPen(stroke(c, 1.5));
+    p.setBrush(Qt::NoBrush);
+    const QRectF r(s*0.2, s*0.28, s*0.6, s*0.44);
+    p.drawRect(r);
+    p.setPen(Qt::NoPen);
+    p.setBrush(c);
+    const qreal h = s*0.12;
+    for (const QPointF& pt : {r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()})
+        p.drawRect(QRectF(pt.x() - h/2, pt.y() - h/2, h, h));
+}
+
+void pTextTool(QPainter& p, qreal s, const QColor& c) {
+    // Text note tool: a serif capital T.
+    p.setPen(stroke(c, 1.8));
+    p.drawLine(QPointF(s*0.22, s*0.22), QPointF(s*0.78, s*0.22));
+    p.drawLine(QPointF(s*0.5, s*0.22), QPointF(s*0.5, s*0.8));
+    p.setPen(stroke(c, 1.4));
+    p.drawLine(QPointF(s*0.22, s*0.22), QPointF(s*0.22, s*0.32));
+    p.drawLine(QPointF(s*0.78, s*0.22), QPointF(s*0.78, s*0.32));
+    p.drawLine(QPointF(s*0.4, s*0.8), QPointF(s*0.6, s*0.8));
+}
+
+void pCopy(QPainter& p, qreal s, const QColor& c) {
+    // Two overlapping sheets: the back one peeks out at the top-left.
+    p.setPen(stroke(c, 1.4));
+    p.setBrush(Qt::NoBrush);
+    QPainterPath back;
+    back.moveTo(s*0.3, s*0.72);
+    back.lineTo(s*0.2, s*0.72);
+    back.lineTo(s*0.2, s*0.18);
+    back.lineTo(s*0.6, s*0.18);
+    back.lineTo(s*0.6, s*0.3);
+    p.drawPath(back);
+    p.drawRoundedRect(QRectF(s*0.4, s*0.32, s*0.4, s*0.52), s*0.04, s*0.04);
+}
+
 } // namespace
 
 QIcon make(const PaintFn& paint, int side) {
+    // The theme's :checked fill is a dark accent tint (#2e2620), so "on" draws the
+    // glyph in the accent colour; a dark glyph would vanish into it.
     QIcon icon;
     icon.addPixmap(render(paint, side, QColor(0xE0, 0xE0, 0xE0)), QIcon::Normal, QIcon::Off);
-    icon.addPixmap(render(paint, side, QColor(0x1A, 0x1A, 0x1A)), QIcon::Normal, QIcon::On);
+    icon.addPixmap(render(paint, side, QColor(0xD4, 0x77, 0x1E)), QIcon::Normal, QIcon::On);
     return icon;
 }
 
@@ -298,10 +397,12 @@ QPushButton* makeIconButton(QWidget* parent, const QIcon& icon,
     b->setAccessibleName(accessibleName.isEmpty() ? tooltip : accessibleName);
     if (!text.isEmpty()) {
         b->setText(text);
-        b->setStyleSheet("QPushButton { padding: 2px 8px; }");
+        b->setStyleSheet("QPushButton { padding: 0 8px; }");
     } else {
-        b->setFixedSize(kBtnSide, kBtnSide);
-        b->setStyleSheet("QPushButton { padding: 1px; }");
+        // Same metrics as every other icon-only button (24 x 24, 16 px glyph,
+        // real widget rect for layouts): see UiMetrics_qt.h.
+        jefe::qt::ui::makeIconButton(b);
+        b->setStyleSheet("QPushButton { padding: 0; }");
     }
     return b;
 }
@@ -326,7 +427,34 @@ QIcon folder()       { return make(pFolder); }
 QIcon save()         { return make(pSave); }
 QIcon check()        { return make(pCheck); }
 QIcon send()         { return make(pSend); }
+QIcon lock()         { return make([](QPainter& p, qreal s, const QColor& c){ pLock(p, s, c, false); }); }
+QIcon unlock()       { return make([](QPainter& p, qreal s, const QColor& c){ pLock(p, s, c, true); }); }
+QIcon lockToggle() {
+    // Unlike make(), the two states draw different glyphs: open when unchecked,
+    // closed (in the accent colour) when checked.
+    QIcon icon;
+    auto open = [](QPainter& p, qreal s, const QColor& c) { pLock(p, s, c, true); };
+    auto closed = [](QPainter& p, qreal s, const QColor& c) { pLock(p, s, c, false); };
+    icon.addPixmap(render(open, kIconPx, QColor(0xE0, 0xE0, 0xE0)), QIcon::Normal, QIcon::Off);
+    icon.addPixmap(render(closed, kIconPx, QColor(0xD4, 0x77, 0x1E)), QIcon::Normal, QIcon::On);
+    return icon;
+}
+QIcon pencil()       { return make(pPencil); }
+QIcon arrowTool()    { return make(pArrowTool); }
+QIcon boxTool()      { return make(pBoxTool); }
+QIcon textTool()     { return make(pTextTool); }
+QIcon copy()         { return make(pCopy); }
 QIcon recent()       { return make(pRecent); }
+
+QIcon power() {
+    // Drawn without a button box, so the glyph alone says on or off: accent when on,
+    // a dim grey when off (the bright default would read as "on" at a glance).
+    constexpr int side = 14;
+    QIcon icon;
+    icon.addPixmap(render(pPower, side, QColor(0x80, 0x80, 0x80)), QIcon::Normal, QIcon::Off);
+    icon.addPixmap(render(pPower, side, QColor(0xD4, 0x77, 0x1E)), QIcon::Normal, QIcon::On);
+    return icon;
+}
 
 } // namespace qticons
 } // namespace jefe

@@ -7,8 +7,8 @@
       <widget labelColorR="255" labelColorB="255" type="texture" default="1" label="Source" labelColorG="255" varName="first" />
       <widget labelColorR="255" labelColorB="255" type="texture" default="2" label="Target" labelColorG="255" varName="second" />
       <widget type="newLine" varName="0" />
-	<widget labelColorR="255" labelColorB="255" type="float" default="0" label="Start" labelColorG="255" step="0.01" varName="start" />
-	<widget labelColorR="255" labelColorB="255" type="float" default="24" label="Duration" labelColorG="255" step="0.01" varName="duration" />
+	<widget labelColorR="255" labelColorB="255" type="float" style="field" softMinimum="0" softMaximum="240" default="0" label="Start" labelColorG="255" step="0.01" varName="start" />
+	<widget labelColorR="255" labelColorB="255" type="float" style="field" softMinimum="0" softMaximum="240" default="24" label="Duration" labelColorG="255" step="0.01" varName="duration" />
 	<widget type="newLine" varName="0" />
     </group>
   </groups>

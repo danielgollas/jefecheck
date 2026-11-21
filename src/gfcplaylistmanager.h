@@ -44,14 +44,15 @@ public:
 	void appendTracksToItem(const std::vector<std::string> &files, int index);
 
 	 void savePlaylistParameters(XMLNode &plNode);
-	 void loadPlaylistParameters(XMLNode &plNode, int replace=0, int noRepeats=0);
+	 // matchByName: name fallback for changed effects (files); peers pass false.
+	 void loadPlaylistParameters(XMLNode &plNode, int replace=0, int noRepeats=0, bool matchByName=true);
 
 	 std::string getPlaylistAsString();
-	 void setPlaylistFromString(std::string s, int replace=0);
+	 void setPlaylistFromString(std::string s, int replace=0, bool matchByName=true);
 	
 	
 
-	 void mergePlaylist(std::string s);
+	 void mergePlaylist(std::string s, bool matchByName=true);
 
 	 void loadPlaylist(std::string filename);
 	 void savePlaylist(std::string filename);
