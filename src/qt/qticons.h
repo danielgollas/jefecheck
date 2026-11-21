@@ -50,6 +50,14 @@ QIcon check();               // ✓ (apply)
 QIcon send();                // paper plane
 QIcon recent();              // clock
 QIcon power();               // ⏻ on/off; On state is the accent glyph (checked = on)
+QIcon lock();                // closed padlock (locked / lock it)
+QIcon unlock();              // open padlock (unlocked / unlock it)
+QIcon lockToggle();          // state toggle: Off = light open padlock, On = accent closed padlock
+QIcon pencil();              // pencil (freehand drawing tool)
+QIcon arrowTool();           // diagonal arrow (arrow drawing tool)
+QIcon boxTool();             // rectangle with corner handles (box drawing tool)
+QIcon textTool();            // serif T (text tool)
+QIcon copy();                // two overlapping sheets (copy to clipboard)
 
 } // namespace qticons
 } // namespace jefe

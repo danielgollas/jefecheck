@@ -85,6 +85,9 @@ QToolButton:pressed, QToolButton:checked {
     color: #e8b884;
 }
 QToolButton:disabled { color: #666666; border-color: #2c2c2c; background: transparent; }
+/* Icon-only buttons (jefe::qt::ui::makeIconButton): no side padding, so the
+   16 px glyph is not squeezed into the 24 px button's content box. */
+QToolButton[iconOnly="true"], QPushButton[iconOnly="true"] { padding: 0; }
 
 QLineEdit, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {
     background-color: #1c1c1c;

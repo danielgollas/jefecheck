@@ -41,6 +41,9 @@ inline void applyGroupMetrics(QLayout* l) {
 /** A square icon-only button. It also reports its real widget rect to layouts,
     so it lines up with the fields beside it (see useWidgetRect). */
 inline void makeIconButton(QAbstractButton* b) {
+    // The theme's QToolButton padding (0 6px) would leave a 10 px content box and
+    // shrink the 16 px glyph; the [iconOnly="true"] QSS rule zeroes it.
+    b->setProperty("iconOnly", true);
     b->setAttribute(Qt::WA_LayoutUsesWidgetRect);
     b->setFixedSize(kControlH, kControlH);
     b->setIconSize(QSize(kIconPx, kIconPx));
