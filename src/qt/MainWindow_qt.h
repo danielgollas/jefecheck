@@ -219,6 +219,28 @@ public:
     // draw3DrectWithFX into the next plate's draw.
     int runHeadlessFXMultiTest(const QString& imagePath);
 
+    // --plate-frame-test: loads a flat grey still into all four plates and checks the
+    // orange active-plate frame appears in 2x2/2x1 layouts, never in 1x1, and never
+    // in a rendered frame. Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessPlateFrameTest();
+
+    // --platemanager-test [outDir]: puts the Plate Manager in the bottom dock area and
+    // checks the wide-short plate card (height budget, two 24 px rows, locator
+    // objectNames, active highlight without a stylesheet), then the modes, the
+    // arrangement, the title bar (mini-map, buttons, drag) and mode menus, then the dock shapes
+    // (side, floating, re-dock), the Timeline height and the remote sync. With
+    // outDir it saves and checks a screenshot matrix there. Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessPlateManagerTest(const QString& shotsDir = QString());
+
+    // Width a bottom/top Plate Manager row may fill: the window width, less the
+    // Timeline's minimum width (and a gap) when the Timeline shares the strip
+    // side by side.
+    int plateRowBudget() const;
+    // Runs after pumpNetwork() reports that remote state changed or was applied:
+    // refreshes the Remote dialog, the Notes dock and the Plate Manager (a peer
+    // can change the viewport layout).
+    void onRemoteStateApplied();
+
     /** Demo harness: hide every dock so the viewport fills the window. */
     void hideControlsForDemo();
     /**
@@ -231,6 +253,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
 
 private slots:
     void onFileDropped(const QString& path, float scale);
@@ -241,6 +264,20 @@ private:
     void buildMenuBar();
     void buildDocks();
     void restoreLayout();
+    // Feeds plateRowBudget() to the Plate Manager, deferred a tick.
+    // dockMoved: a dock moved, floated or showed/hid (re-widens the row); otherwise only a
+    // changed column count for the window's budget does.
+    void updatePlateRowBudget(bool dockMoved = false);
+    bool budgetUpdatePending_ = false;
+    bool budgetDockMoved_ = false;
+    int budgetWindowW_ = -1;            // window width at the last budget update
+    bool rowSqueezedByUser_ = false;    // the row's last resize reflow came from a separator drag
+    // Pulls a docked Plate Manager's strip to the panel's extent (a row also to its full
+    // width when the Timeline beside it can give it up), deferred a tick; retries a stale result.
+    void pinPlateDock(bool restoreWidth = true);
+    void pinPlateDockNow(int retries);   // retries < 0: height only
+    // The Timeline panel's effective minimum width (explicit minimum vs layout hint).
+    int timelineMinWidth() const;
     void saveLayout();
 
     // Session save/restore.
@@ -268,9 +305,11 @@ private:
     bool summaryExportInProgress_ = false;
     QMenu*  recentMenu_ = nullptr;
     QMenu*  recentPlaylistMenu_ = nullptr;   // File → Recent Playlists
-    // The consolidated "Panels" menu, named so it doesn't claim the macOS Window-menu
-    // semantics. Created empty in buildMenuBar(), populated in buildDocks().
-    QMenu*  panelsMenu_ = nullptr;
+    // The Window menu: every panel's show/hide toggle with its F-key, Remote, Render,
+    // Hide Controls, and on macOS the standard Minimize / Zoom / Bring All to Front.
+    // Created empty in buildMenuBar(), populated in buildDocks().
+    QMenu*  windowMenu_ = nullptr;
+    QMenu*  plateModeMenu_ = nullptr;   // View > Plate Manager Shows
     bool    lastExitWasClean_ = true;
 
     void startAutoload();

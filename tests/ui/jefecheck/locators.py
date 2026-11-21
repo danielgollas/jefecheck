@@ -19,6 +19,18 @@ DOCK_PLATEMANAGER = "dock.platemanager"
 DOCK_TIMELINE = "dock.timeline"
 DOCK_LUTS = "dock.luts"
 
+# Plate Manager mode (Active / Visible / All): View > Plate Manager Shows, and the same
+# actions on right-click in the panel. The dock's custom title bar holds close, float,
+# the title and the viewport mini-map.
+MENU_VIEW_PLATEMANAGER = "menu.view.platemanager"
+MENU_VIEW_PLATEMANAGER_ACTIVE = "menu.view.platemanager.active"
+MENU_VIEW_PLATEMANAGER_VISIBLE = "menu.view.platemanager.visible"
+MENU_VIEW_PLATEMANAGER_ALL = "menu.view.platemanager.all"
+PLATEMANAGER_TITLEBAR = "platemanager.titlebar"
+PLATEMANAGER_CLOSE = "platemanager.close"
+PLATEMANAGER_FLOAT = "platemanager.float"
+PLATEMANAGER_MINIMAP = "platemanager.minimap"
+
 # Timeline widgets. The scrubber and track-rows lane are single painted
 # QWidgets, so only the container objectNames resolve.
 TIMELINE_SCRUBBER = "timeline.scrubber"
@@ -49,17 +61,21 @@ MENU_VIEW_FLOP = "menu.view.flop"                      # M  (horizontal mirror; 
 MENU_VIEW_TEXTMODE = "menu.view.textmode"              # T  (Alt+T = all plates)
 MENU_VIEW_RESETPLATE = "menu.view.resetplate"          # Ctrl+R
 MENU_VIEW_RESETCC = "menu.view.resetcc"                # Shift+R
-# The "Panels" menu is the single home for every dock toggle + the
-# Remote/Render launchers.
-MENU_PANELS = "menu.panels"
-MENU_PANELS_PLATEMANAGER = "menu.panels.platemanager"  # F2 (dock toggleViewAction)
-MENU_PANELS_TIMELINE = "menu.panels.timeline"          # dock toggleViewAction
-MENU_PANELS_FXPARAMS = "menu.panels.fxparams"          # F3 (dock toggleViewAction)
-MENU_PANELS_LUT = "menu.panels.lut"                    # F4 (dock toggleViewAction)
-MENU_PANELS_PLAYLIST = "menu.panels.playlist"          # dock toggleViewAction
-MENU_PANELS_REMOTE = "menu.panels.remote"              # F5
-MENU_PANELS_RENDER = "menu.panels.render"              # F6
-MENU_PANELS_HIDECONTROLS = "menu.panels.hidecontrols"  # Ctrl+Alt+F
+# The Window menu is the single home for every panel toggle (each with an F-key), plus
+# Remote, Render and Hide Controls; on macOS also Minimize / Zoom / Bring All to Front.
+MENU_WINDOW = "menu.window"
+MENU_WINDOW_PLATEMANAGER = "menu.window.platemanager"  # F2 (dock toggleViewAction)
+MENU_WINDOW_FXPARAMS = "menu.window.fxparams"          # F3 (dock toggleViewAction)
+MENU_WINDOW_LUT = "menu.window.lut"                    # F4 (dock toggleViewAction)
+MENU_WINDOW_REMOTE = "menu.window.remote"              # F5
+MENU_WINDOW_RENDER = "menu.window.render"              # F6
+MENU_WINDOW_NOTES = "menu.window.notes"                # F7 (dock toggleViewAction)
+MENU_WINDOW_TIMELINE = "menu.window.timeline"          # F8 (dock toggleViewAction)
+MENU_WINDOW_PLAYLIST = "menu.window.playlist"          # F9 (dock toggleViewAction)
+MENU_WINDOW_HIDECONTROLS = "menu.window.hidecontrols"  # Ctrl+Alt+F
+MENU_WINDOW_MINIMIZE = "menu.window.minimize"          # Cmd+M, macOS only
+MENU_WINDOW_ZOOM = "menu.window.zoom"                  # macOS only
+MENU_WINDOW_BRINGALLTOFRONT = "menu.window.bringalltofront"  # macOS only
 MENU_HELP = "menu.help"
 # NOTE: Qt's macOS NSMenuItem AX bridge does NOT propagate QAction's objectName (every item is `qt_itemFired:` under Mac2); look up menu items by `title`.
 # The names below are for Linux/Windows runs where AT-SPI / UIA expose them.
@@ -266,6 +282,13 @@ PREFS_TEXT_SHADOW_OFFSET_X = "preferences.text.shadowoffx.spin"
 PREFS_TEXT_SHADOW_OFFSET_Y = "preferences.text.shadowoffy.spin"
 PREFS_TEXT_SHADOW_BLUR = "preferences.text.shadowblur.spin"
 PREFS_TEXT_SHADOW_COLOR = "preferences.text.shadowcolor.button"
+
+
+# Per-plate leaf roles (combine with plate(i, ...)). In the wide-short (top/bottom dock)
+# card the Transform button opens the popup holding the zoom/pan/rotation spins, and the
+# Color button the one holding the contrast/brightness/saturation spins.
+PLATE_TRANSFORM_BUTTON = "transform.button"
+PLATE_COLOR_BUTTON = "color.button"
 
 
 def plate(plate_id: int, role: str) -> str:

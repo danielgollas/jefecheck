@@ -44,6 +44,7 @@
 #include "gfcMediaFingerprint.h"
 #include "gfcSessionPaths.h"
 #include "gfcnote.h"
+#include "gfcPlateLayout.h"
 #include "gfcNoteStore.h"
 #include "gfcNoteMerge.h"
 #include "gfcNoteOverlay.h"
@@ -171,11 +172,39 @@ static QString resolveFXMultiTestFile(int argc, char* argv[]) {
     return QString();
 }
 
+// --plate-frame-test : headless check that the orange active-plate frame shows in
+// multi-plate layouts only and never reaches a rendered frame. Takes no argument.
+static bool hasPlateFrameTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--plate-frame-test") == 0) return true;
+    return false;
+}
+
+// --platemanager-test [outDir] : headless checks of the Plate Manager dock (cards,
+// modes, arrangement, title bar and mode menus, dock shapes, Timeline height, Window
+// menu). With outDir it also saves and checks a screenshot matrix there.
+static bool hasPlateManagerTest(int argc, char* argv[], QString* outDir) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--platemanager-test") != 0) continue;
+        if (i + 1 < argc && std::strncmp(argv[i + 1], "--", 2) != 0)
+            *outDir = QString::fromUtf8(argv[i + 1]);
+        return true;
+    }
+    return false;
+}
+
 // --aspect-test : headless regression: asserts every aspect preset string maps to the
 // renderer's height/width convention (no GL). Takes no argument.
 static bool hasAspectTest(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--aspect-test") == 0) return true;
+    return false;
+}
+
+// --platelayout-test : headless pure plate-layout self-test (no GL/window). No argument.
+static bool hasPlateLayoutTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--platelayout-test") == 0) return true;
     return false;
 }
 
@@ -564,6 +593,10 @@ int main(int argc, char* argv[]) {
             std::fflush(stdout);
             std::_Exit(fails == 0 ? 0 : 2);
         }
+    }
+
+    if (hasPlateLayoutTest(argc, argv)) {
+        std::_Exit(jefe::platelayout::runPlateLayoutSelfTest() ? 0 : 2);
     }
 
     // Headless note self-tests (--notes-test): pure data/arithmetic. Runs all three
@@ -1635,6 +1668,25 @@ int main(int argc, char* argv[]) {
     if (!fxMultiTestFile.isEmpty()) {
         QTimer::singleShot(5000, &window, [&window, fxMultiTestFile]() {
             const int code = window.runHeadlessFXMultiTest(fxMultiTestFile);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless active-plate frame test (--plate-frame-test).
+    if (hasPlateFrameTest(argc, argv)) {
+        QTimer::singleShot(5000, &window, [&window]() {
+            const int code = window.runHeadlessPlateFrameTest();
+            fflush(stdout);
+            std::_Exit(code);
+        });
+    }
+
+    // Headless Plate Manager card test (--platemanager-test).
+    QString plateManagerShots;
+    if (hasPlateManagerTest(argc, argv, &plateManagerShots)) {
+        QTimer::singleShot(5000, &window, [&window, plateManagerShots]() {
+            const int code = window.runHeadlessPlateManagerTest(plateManagerShots);
             fflush(stdout);
             std::_Exit(code);
         });

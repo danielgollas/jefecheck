@@ -1873,6 +1873,10 @@ void setFramingMode(int framingMode) {
     plateManager.setChanged();
 }
 
+int getFramingMode() {
+    return plateManager.getFramingMode();
+}
+
 void setScreenFBO(unsigned fbo) {
     gScreenFBO = (GLuint)fbo;
 }

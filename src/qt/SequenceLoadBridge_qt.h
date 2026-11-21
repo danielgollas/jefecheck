@@ -926,6 +926,8 @@ void setScreenFBO(unsigned fbo);
 // plate (or all plates when the *All variant is used). All of them
 // flag plateManager dirty so the next paintGL picks up the change.
 void setFramingMode(int framingMode);
+// Current FRAMING*_ID value of the plate manager.
+int getFramingMode();
 void fitActivePlate();
 void fitAllPlates();
 void toggleFlipActive();

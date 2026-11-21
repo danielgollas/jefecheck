@@ -1,4 +1,6 @@
 #include "gfcplatemanager.h"
+#include "gfcPlateLayout.h"
+#include <algorithm>
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "gfcTextRenderer.h"
@@ -47,6 +49,10 @@ gfcPlateManager::gfcPlateManager() : myGUI(nullptr) {
         "Toggle this Help - H\n"
         "Show Histogram (active / all plates) - Ctrl+H / Ctrl+Alt+H\n"
         "Preferences - Ctrl+P\n\n"
+        "WINDOW MENU  (show / hide)\n"
+        "Plate Manager - F2   FX - F3   LUTs - F4\n"
+        "Remote Session - F5   Render - F6   Notes - F7\n"
+        "Timeline - F8   Playlist - F9\n\n"
         "PLAYBACK\n"
         "Play / Pause - Space\n"
         "Play Direction (reverse / forward) - < / >\n"
@@ -667,26 +673,11 @@ gfcPlateGUI* gfcPlateManager::getPlateGUI(int whichOne) {
 
 int gfcPlateManager::getPlateAtPosition(int vx, int vy, int w, int h) {
     if (w <= 0 || h <= 0) return -1;
-    // Mirror drawPlates' viewport partitioning per framingMode. Coordinates come
-    // in top-down (Qt-style); pick the plate whose viewport covers (vx, vy).
-    switch (framingMode) {
-        case FRAMINGSINGLE_ID:
-            return 0;
-        case FRAMINGDOUBLE_ID:
-            // Split horizontally: left = plate 0, right = plate 1.
-            return (vx < w / 2) ? 0 : 1;
-        case FRAMINGDOUBLEVERT_ID:
-            // Split vertically (drawPlates puts plate 0 on top).
-            return (vy < h / 2) ? 0 : 1;
-        case FRAMINGQUAD_ID:
-            // 2x2: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right.
-            if (vx < w / 2 && vy < h / 2) return 0;
-            if (vx >= w / 2 && vy < h / 2) return 1;
-            if (vx < w / 2 && vy >= h / 2) return 2;
-            return 3;
-        default:
-            return 0;
-    }
+    // Single source of truth shared with the Plate Manager mini-map; mirrors
+    // drawPlates' partitioning. Clamp so drags past the edge still pick a plate.
+    vx = std::clamp(vx, 0, w - 1);
+    vy = std::clamp(vy, 0, h - 1);
+    return jefe::platelayout::plateAtPoint(framingMode, vx, vy, w, h);
 }
 
 void gfcPlateManager::setPlateShowPreview(int whichOne, bool value) {
@@ -1143,7 +1134,47 @@ void gfcPlateManager::draw(int w, int h, bool resized) {
 	
     drawPlates(w,h,resized);
 
-	
+    // ACTIVE-PLATE FRAME: an accent border just inside the active plate's cell in
+    // multi-plate layouts. Screen-only (renders go through renderPlate, not here).
+    if (jefe::platelayout::showActiveFrame(framingMode)) {
+        namespace pl = jefe::platelayout;
+        const pl::Cell c = pl::activeFrameRectGL(framingMode, activeQuad, w, h);
+        if (c.plate >= 0) {
+            const int t = pl::activeFrameThicknessPx(gfc_gl_dpiscale());
+            glPushAttrib(GL_ALL_ATTRIB_BITS);
+            GLhandleARB prevProgram = glGetHandleARB(GL_PROGRAM_OBJECT_ARB);
+            glUseProgramObjectARB(0);
+            glDisable(GL_TEXTURE_2D);
+            glDisable(GL_TEXTURE_RECTANGLE_ARB);
+            glDisable(GL_BLEND);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_SCISSOR_TEST);
+            glDisable(GL_LIGHTING);
+            glDisable(GL_COLOR_LOGIC_OP);
+            glViewport(0, 0, w, h);
+            glMatrixMode(GL_PROJECTION);
+            glPushMatrix();
+            glLoadIdentity();
+            glOrtho(0, w, 0, h, -1, 1);
+            glMatrixMode(GL_MODELVIEW);
+            glPushMatrix();
+            glLoadIdentity();
+            glColor4f(pl::kAccentR / 255.0f, pl::kAccentG / 255.0f, pl::kAccentB / 255.0f, 1.0f);
+            const float x0 = c.x, y0 = c.y, x1 = c.x + c.w, y1 = c.y + c.h;
+            glRectf(x0, y1 - t, x1, y1);          // top
+            glRectf(x0, y0, x1, y0 + t);          // bottom
+            glRectf(x0, y0 + t, x0 + t, y1 - t);  // left
+            glRectf(x1 - t, y0 + t, x1, y1 - t);  // right
+            glMatrixMode(GL_PROJECTION);
+            glPopMatrix();
+            glMatrixMode(GL_MODELVIEW);
+            glPopMatrix();
+            glUseProgramObjectARB(prevProgram);
+            glPopAttrib();
+        }
+    }
+
+
 	
 
     //DRAW HELP OR OTHER 2D OVERLAYS
