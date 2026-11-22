@@ -5,8 +5,9 @@
     <group name="Parameters" >
       <widget type="newLine" varName="0" />
 <widget type="texture" step="1" default="0.0" label="image" varName="theImage" />
-      <widget labelColorR="255" labelColorB="255" type="float" step="1" default="0.0" label="X" minimum="-9999" labelColorG="255" maximum="9999" varName="moveX" />
-	<widget labelColorR="255" labelColorB="255" type="float" step="1" default="0.0" label="Y" minimum="-9999" labelColorG="255" maximum="9999" varName="moveY" />
+      <widget type="newLine" varName="0" />
+      <widget labelColorR="255" labelColorB="255" type="float" style="field" softMinimum="-500" softMaximum="500" step="1" default="0.0" label="X" minimum="-9999" labelColorG="255" maximum="9999" varName="moveX" />
+	<widget labelColorR="255" labelColorB="255" type="float" style="field" softMinimum="-500" softMaximum="500" step="1" default="0.0" label="Y" minimum="-9999" labelColorG="255" maximum="9999" varName="moveY" />
       <widget type="newLine" varName="0" />
     </group>
   </groups>

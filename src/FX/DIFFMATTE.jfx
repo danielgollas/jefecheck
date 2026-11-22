@@ -5,7 +5,7 @@
     <group name="Parameters" >
       <widget type="newLine" varName="0" />
       <widget labelColorR="255" labelColorB="255" type="texture" label="Source 1" default="0" labelColorG="255" varName="first" />
-      <widget labelColorR="255" labelColorB="255" type="float" step="1" minimum="0" label="Multiplier" default="255" maximum="255" labelColorG="255" varName="Multiplier" />
+      <widget labelColorR="255" labelColorB="255" type="float" style="slider" step="1" minimum="0" label="Multiplier" default="255" maximum="255" labelColorG="255" varName="Multiplier" />
       <widget labelColorR="255" labelColorB="255" type="texture" label="Source 2" default="0" labelColorG="255" varName="second" />
       <widget type="newLine" varName="0" />
     </group>

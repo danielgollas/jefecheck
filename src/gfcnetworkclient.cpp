@@ -509,7 +509,7 @@ void gfcNetworkClient::Update() {
 				//we only overwrite ours if we already sent it before, otherwise, we might get a merged playlist and ours will be left in oblivion.
 				//printf("Client received this pl:\n%s***",thePl.c_str());
 				networkManager.setTakeNotifications(false);
-				playlistManager.setPlaylistFromString(thePl,1);
+				playlistManager.setPlaylistFromString(thePl,1,false); // peer playlist: exact effect match only
 				networkManager.setTakeNotifications(true);
 				
 				//we should send a reply to notify the server so that it can tell that we are ready.
@@ -785,7 +785,7 @@ void gfcNetworkClient::Update() {
 			if ( !jefe::wire::decodePlaylistMessage ( r, plMessage ) ) break; // malformed: skip silently
 
 			networkManager.setTakeNotifications(false);
-			playlistManager.setPlaylistFromString(plMessage.thePlaylist,1);
+			playlistManager.setPlaylistFromString(plMessage.thePlaylist,1,false); // peer playlist: exact effect match only
 			networkManager.setTakeNotifications(true);
 		}
 		break;
@@ -802,7 +802,7 @@ void gfcNetworkClient::Update() {
 				tmpNode= XMLNode::parseString(itemXml.c_str());
 				//printf("NODE STRING: \n%s\n",tmpNode.createXMLString());
 				
-				tmpItem.loadPlaylistItemParameters(tmpNode);
+				tmpItem.loadPlaylistItemParameters(tmpNode, false); // peer item: exact effect match only
 				networkManager.setTakeNotifications(false);
 				trackManager.setPlaylistItem(tmpItem, true);
 				networkManager.setTakeNotifications(true);

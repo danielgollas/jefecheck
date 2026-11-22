@@ -317,7 +317,8 @@ QWidget* makeCloudPage(QComboBox*& groupOut, QPushButton*& newGroupOut,
     codeOut->setObjectName("remote.cloud.sessionCode");
     codeOut->setReadOnly(true);
     codeOut->setPlaceholderText("Session code appears here");
-    copyBtnOut = new QPushButton("Copy", resultBoxOut);
+    copyBtnOut = jefe::qticons::makeIconButton(resultBoxOut, jefe::qticons::copy(),
+        "Copy the session code to the clipboard", "Copy");
     copyBtnOut->setObjectName("remote.cloud.copyBtn");
     auto* codeRow = new QHBoxLayout();
     codeRow->setContentsMargins(0, 0, 0, 0);
@@ -562,9 +563,9 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     chatInput_->setClearButtonEnabled(true);
     // Dedicated Send button next to the input — the native chat pattern, and it
     // makes the send affordance obvious (Enter also sends).
-    auto* sendBtn = new QPushButton(jefe::qticons::send(), "Send", this);
+    auto* sendBtn = jefe::qticons::makeIconButton(this, jefe::qticons::send(),
+        "Send the message (Enter)", "Send");
     sendBtn->setObjectName("remote.chat.send");
-    sendBtn->setToolTip("Send the message (Enter also sends)");
     sendBtn->setProperty("accent", true);
     auto* chatInputRow = new QHBoxLayout();
     chatInputRow->setContentsMargins(0, 0, 0, 0);
@@ -596,7 +597,8 @@ RemoteDialog_Qt::RemoteDialog_Qt(QWidget* parent) : QWidget(parent) {
     cloudCodeBannerLabel_ = new QLabel(QString(), cloudCodeBanner_);
     cloudCodeBannerLabel_->setObjectName("remote.cloud.codeBanner.label");
     cloudCodeBannerLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    auto* bannerCopyBtn = new QPushButton("Copy", cloudCodeBanner_);
+    auto* bannerCopyBtn = jefe::qticons::makeIconButton(cloudCodeBanner_, jefe::qticons::copy(),
+        "Copy the session code to the clipboard", "Copy");
     bannerCopyBtn->setObjectName("remote.cloud.codeBanner.copyBtn");
     auto* bannerLay = new QHBoxLayout(cloudCodeBanner_);
     bannerLay->setContentsMargins(10, 6, 8, 6);

@@ -45,6 +45,7 @@ private:
     void rebuildColorSwatch();
     void syncToolButtons();       // checked = armed && that tool is active
     void updateActionButtons();   // lock/unlock + remove enabled state
+    void setLockButtonState(bool locked);   // check state, tooltip, accessible name
 
     QLabel* statusLabel_ = nullptr;
     QToolButton* toolFreehand_ = nullptr;

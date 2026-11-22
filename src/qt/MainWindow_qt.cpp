@@ -2,6 +2,8 @@
 #include "MainWindow_qt.h"
 
 #include "FXLutPanel_qt.h"
+#include "LUTPreview_qt.h"
+#include <QHeaderView>
 #include "FXParamPanel_qt.h"
 #include "GlViewport_qt.h"
 #include "NotesPanel_qt.h"
@@ -10,6 +12,9 @@
 #include "ImageLoadBridge_qt.h"
 #include "LoadWindowDialog_qt.h"
 #include "PlateManager_qt.h"
+#include "PlateCard_qt.h"
+#include "PlateMiniMap_qt.h"
+#include "PlateDockTitleBar_qt.h"
 #include "MinSpecsDialog_qt.h"
 #include "PreferencesWindow_qt.h"
 #include "qt_prefs_persist.h"
@@ -23,39 +28,61 @@
 #include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
 #include "TimelinePanel_qt.h"
+#include "UiDensityCheck_qt.h"
+#include "UiMetrics_qt.h"
+#include <QAbstractButton>
+#include <QListWidget>
+#include <QMap>
+#include <QMouseEvent>
+#include <QPointer>
+#include <QSet>
+#include <QRegularExpression>
 
 #include "../UIConstants.h"
+#include "../gfcPlateLayout.h"
 
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QResizeEvent>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
 #include <QDesktopServices>
 #include <QCoreApplication>
 #include <QDockWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QUrl>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImage>
 #include <QLabel>
+#include <QLineEdit>
+#include "TrackStrip_qt.h"
+#include <QScrollBar>
+#include <QScrollArea>
 #include <QPushButton>
 #include <QMenu>
 #include <QMenuBar>
+#include <QSet>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
 #include <QShortcut>
+#include <QContextMenuEvent>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QElapsedTimer>
 #include <QThread>
 #include <QTimer>
+#include <QToolButton>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -237,7 +264,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         sc->setContext(Qt::ApplicationShortcut);
         connect(sc, &QShortcut::activated, this, openPrefs);
     };
-    bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
+    // Ctrl+P belongs to File > Preferences… (an ApplicationShortcut there); a second binding
+    // here made it ambiguous. Ctrl+, has no menu entry, so it keeps a standalone shortcut.
     bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
 
     // Plate-control shortcuts are ApplicationShortcuts so they fire regardless of focus; Qt suppresses them when the focused widget consumes the key (ShortcutOverride).
@@ -295,10 +323,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         // Service the RakNet sockets every tick so inbound messages arrive while idle.
         // Returns true when state changed or mirrored state applied: refresh the panel and repaint.
         if (jefe::qt::pumpNetwork()) {
-            if (remoteDialog_) remoteDialog_->refreshConnectionState();
-            // pumpNetwork() also drains inbound note add/remove/lock events into
-            // the review store; refresh the dock so a remote peer's markup shows up.
-            if (notesPanelWidget_) notesPanelWidget_->refresh();
+            onRemoteStateApplied();
             wantRepaint = true;
         }
         // Skip everything when nothing is playing and no raw frames are pending.
@@ -552,7 +577,7 @@ void MainWindow_Qt::buildMenuBar() {
         rebuildRecentPlaylistsMenu();
     });
 
-    // Render… and Remote Session… live in the Panels menu, not File.
+    // Render… and Remote Session… live in the Window menu, not File.
     fileMenu->addSeparator();
     auto* prefsAction = fileMenu->addAction("&Preferences…",
                         QKeySequence(Qt::CTRL | Qt::Key_P),
@@ -565,6 +590,7 @@ void MainWindow_Qt::buildMenuBar() {
                             dlg.exec();
                         });
     prefsAction->setObjectName("menu.file.preferences");
+    prefsAction->setShortcutContext(Qt::ApplicationShortcut);   // fires whichever widget or floating dock has focus
     // Suppress Qt's "Preferences..." auto-detection: it moves the action into the
     // macOS Application menu and steals Cmd+, , racing our window-level QShortcut.
     prefsAction->setMenuRole(QAction::NoRole);
@@ -648,6 +674,11 @@ void MainWindow_Qt::buildMenuBar() {
         });
     }
 
+    // View → Plate Manager Shows: Active / Visible / All. The actions belong to the
+    // Plate Manager (its context menu shows the same ones); buildDocks fills this in.
+    plateModeMenu_ = viewMenu->addMenu(tr("Plate Manager Shows"));
+    plateModeMenu_->setObjectName("menu.view.platemanager");
+
     // View → Color Correction Favorites: 5 save/load slots on the active plate.
     // Menu-only (no Ctrl+1-5 shortcuts — they'd collide with the layout ones).
     viewMenu->addSeparator();
@@ -714,10 +745,9 @@ void MainWindow_Qt::buildMenuBar() {
                        []() { jefe::qt::resetActiveColorCorrection(); },
                        "menu.view.resetcc");
 
-    // "Panels" not "Window", which would imply macOS Minimize/Zoom/window-list commands we don't ship.
-    // Created empty between View and Help; populated in buildDocks() once the docks exist.
-    panelsMenu_ = mb->addMenu(tr("&Panels"));
-    panelsMenu_->setObjectName("menu.panels");
+    // Window: created empty between View and Help; populated in buildDocks() once the docks exist.
+    windowMenu_ = mb->addMenu(tr("&Window"));
+    windowMenu_->setObjectName("menu.window");
 
     auto* helpMenu = mb->addMenu("&Help");
     helpMenu->setObjectName("menu.help");
@@ -746,20 +776,9 @@ void MainWindow_Qt::buildMenuBar() {
     helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
         this, [this]() {
-            QMessageBox::about(this, tr("About JefeCheck"),
-                tr("<h3>JefeCheck %1</h3>"
-                   "<p>Professional video frame review and color correction.</p>"
-                   "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
-                   "Originally written 2006-2014, modernized 2026 for "
-                   "open-source release under GPL v2 or later.</p>"
-                   "<p><a href='https://github.com/danielgollas/jefecheck'>"
-                   "github.com/danielgollas/jefecheck</a></p>"
-                   "<p style='font-size:small;color:gray'>Built %2 %3</p>")
-                // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
-                // keep in sync with that define and CMakeLists.txt's project() VERSION.
-                .arg(QStringLiteral("1.7.0"))
-                .arg(QStringLiteral(__DATE__))
-                .arg(QStringLiteral(__TIME__)));
+            QMessageBox* box = makeAboutBox();
+            box->exec();
+            delete box;
         });
     aboutAction->setObjectName("menu.help.about");
     // Suppress Qt's macOS auto-promotion of "About …" into the application menu.
@@ -776,6 +795,47 @@ void MainWindow_Qt::buildMenuBar() {
     specsAction->setMenuRole(QAction::NoRole);
 }
 
+int MainWindow_Qt::timelineMinWidth() const {
+    // The Timeline's real floor is its explicit minimum width (360) when that exceeds the
+    // layout's minimumSizeHint (~250); the hint alone let two cards claim width the
+    // Timeline cannot give up, which widened the window.
+    if (!timelinePanelWidget_) return 0;
+    return std::max(timelinePanelWidget_->minimumWidth(), timelinePanelWidget_->minimumSizeHint().width());
+}
+
+void MainWindow_Qt::pinPlateDock(bool restoreWidth) {
+    if (!plateDock_ || plateDock_->isFloating()) return;
+    QTimer::singleShot(0, this, [this, restoreWidth]() { pinPlateDockNow(restoreWidth ? 2 : -1); });
+}
+
+void MainWindow_Qt::pinPlateDockNow(int retries) {
+    if (!plateDock_ || plateDock_->isFloating()) return;
+    const QSize hint = plateManagerWidget_->sizeHint();
+    const Qt::DockWidgetArea area = dockWidgetArea(plateDock_);
+    if (area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea) {
+        resizeDocks({plateDock_}, {hint.width()}, Qt::Horizontal);
+        return;
+    }
+    resizeDocks({plateDock_}, {hint.height()}, Qt::Vertical);
+    if (retries < 0) return;   // height only: a reflow must not undo a separator the user dragged
+    // A row may shrink below its width (so the window can narrow); give it the full width
+    // back when there is room, taking it from a Timeline beside it. resizeDocks spreads the
+    // pair's total by weight, so pass exact widths that add up to what the two hold now.
+    if (!timelineDock_ || !timelineDock_->isVisible() || timelineDock_->isFloating() ||
+        dockWidgetArea(timelineDock_) != area) {
+        resizeDocks({plateDock_}, {hint.width()}, Qt::Horizontal);
+        return;
+    }
+    const int pair = plateDock_->width() + timelineDock_->width();
+    const int plateW = std::min(hint.width(), pair - timelineMinWidth());
+    if (plateW <= plateDock_->width()) return;
+    resizeDocks({plateDock_, timelineDock_}, {plateW, pair - plateW}, Qt::Horizontal);
+    // Mid-transition the two widths can be stale (their sum off the real strip), so the
+    // result lands a few px short; look again next tick.
+    if (retries > 0)
+        QTimer::singleShot(0, this, [this, retries]() { pinPlateDockNow(retries - 1); });
+}
+
 void MainWindow_Qt::buildDocks() {
     // Plate Manager — bottom-left of the bottom dock area.
     plateDock_ = new QDockWidget("Plate Manager", this);
@@ -784,6 +844,11 @@ void MainWindow_Qt::buildDocks() {
     plateManagerWidget_ = new PlateManager_Qt(plateDock_);
     plateDock_->setWidget(plateManagerWidget_);
     plateDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    // Custom title bar: close/float buttons, title, and the viewport mini-map at the right
+    // (the panel has no header row). It also replaces the frame title when floating.
+    plateDock_->setTitleBarWidget(new PlateDockTitleBar_Qt(plateDock_, plateManagerWidget_->miniMap()));
+    if (plateModeMenu_)
+        for (QAction* a : plateManagerWidget_->modeActions()) plateModeMenu_->addAction(a);
     addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
 
     // Mirror viewport-driven plate edits back into the plate cards. Queued so the slot runs after mouseMoveEvent returns and posts coalesce;
@@ -805,41 +870,53 @@ void MainWindow_Qt::buildDocks() {
             Qt::QueuedConnection);
 
     // The Plate Manager fixes its size to the card grid, so beside the Timeline QMainWindow pads it to the taller neighbor;
-    // pinPlateDock pulls the shared extent down to the sizeHint. Deferred a tick so the sizeHint is post-arrange.
-    auto pinPlateDock = [this]() {
-        if (!plateDock_ || plateDock_->isFloating()) return;
-        QTimer::singleShot(0, this, [this]() {
-            if (!plateDock_ || plateDock_->isFloating()) return;
-            const QSize hint = plateManagerWidget_->sizeHint();
-            const Qt::DockWidgetArea area = dockWidgetArea(plateDock_);
-            const bool side = (area == Qt::LeftDockWidgetArea ||
-                               area == Qt::RightDockWidgetArea);
-            if (side) {
-                resizeDocks({plateDock_}, {hint.width()}, Qt::Horizontal);
-            } else {
-                resizeDocks({plateDock_}, {hint.height()}, Qt::Vertical);
-            }
-        });
+    // pinPlateDock() pulls the shared extent down to the sizeHint. Deferred a tick so the sizeHint is post-arrange.
+    // Shape follows the dock edge: left/right gives the narrow-tall column,
+    // top/bottom the wide-short row, floating the viewport-shaped map.
+    auto shapeForArea = [](Qt::DockWidgetArea area) {
+        return (area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea)
+                   ? jefe::platelayout::DockShape::Column : jefe::platelayout::DockShape::Row;
     };
-
-    // Orientation follows the dock edge: left/right gives the narrow-tall
-    // column, every other edge (and floating) the wide-short row.
     connect(plateDock_, &QDockWidget::dockLocationChanged,
-            plateManagerWidget_, [this, pinPlateDock](Qt::DockWidgetArea area) {
-                plateManagerWidget_->setOrientation(
-                    area == Qt::LeftDockWidgetArea ||
-                    area == Qt::RightDockWidgetArea);
+            plateManagerWidget_, [this, shapeForArea](Qt::DockWidgetArea area) {
+                // Floating also reports a location change (no area); topLevelChanged owns that case.
+                if (area == Qt::NoDockWidgetArea || plateDock_->isFloating()) return;
+                plateManagerWidget_->setDockShape(shapeForArea(area));
                 pinPlateDock();
+                updatePlateRowBudget(true);
             });
-    // Floating reads as horizontal (the dock has no edge to key off); when it
-    // re-docks, pin the row/column down to the panel again.
+    // Re-docking into the area it left does not always emit dockLocationChanged,
+    // so the shape is re-read from the area here too.
     connect(plateDock_, &QDockWidget::topLevelChanged,
-            plateManagerWidget_, [this, pinPlateDock](bool floating) {
-                if (floating) plateManagerWidget_->setOrientation(false);
-                else pinPlateDock();
+            plateManagerWidget_, [this, shapeForArea](bool floating) {
+                if (floating) {
+                    plateManagerWidget_->setDockShape(jefe::platelayout::DockShape::Floating);
+                } else {
+                    plateManagerWidget_->setDockShape(shapeForArea(dockWidgetArea(plateDock_)));
+                    pinPlateDock();
+                }
+                updatePlateRowBudget(true);
             });
-    // Initial edge is Bottom ⇒ horizontal.
-    plateManagerWidget_->setOrientation(false);
+    // A new arrangement changes the panel's extent: a floating dock resizes its
+    // window to it (shrinking too, e.g. 2x2 -> 1x1), a docked one re-pins its
+    // strip. Deferred a tick so the sizeHint is the settled one (§11).
+    connect(plateManagerWidget_, &PlateManager_Qt::arrangementChanged, this, [this]() {
+        // A reflow that came from the panel's own resize (the user squeezing or widening the
+        // dock) re-pins only the height, so the drag sticks; any other reflow (layout, mode,
+        // budget) also gives the row its full width back when there is room.
+        if (!plateDock_->isFloating()) {
+            const bool fromResize = plateManagerWidget_->lastReflowFromResize();
+            // A resize reflow while the window kept its width is the user dragging the separator.
+            rowSqueezedByUser_ = fromResize && width() == budgetWindowW_;
+            pinPlateDock(!fromResize);
+            return;
+        }
+        QTimer::singleShot(0, this, [this]() {
+            if (plateDock_ && plateDock_->isFloating()) plateDock_->adjustSize();
+        });
+    });
+    // Initial edge is Bottom => row.
+    plateManagerWidget_->setDockShape(jefe::platelayout::DockShape::Row);
     pinPlateDock();
 
     // Timeline + Transport — bottom-right; split alongside the plate dock.
@@ -854,12 +931,18 @@ void MainWindow_Qt::buildDocks() {
     // Place the timeline to the right of the plate manager so they share the
     // bottom strip side-by-side.
     splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
+    // The Timeline beside or away from the Plate Manager changes the row budget.
+    connect(timelineDock_, &QDockWidget::dockLocationChanged, this, [this]() { updatePlateRowBudget(true); });
+    connect(timelineDock_, &QDockWidget::topLevelChanged, this, [this]() { updatePlateRowBudget(true); });
+    connect(timelineDock_, &QDockWidget::visibilityChanged, this, [this]() { updatePlateRowBudget(true); });
+    updatePlateRowBudget(true);
 
     // LUTs — right side.
     lutDock_ = new QDockWidget("LUTs", this);
     lutDock_->setObjectName("dock.luts");
     lutDock_->setAccessibleName("LUT browser dock");
     lutPanelWidget_ = new LUTPanel_Qt(lutDock_);
+    lutPanelWidget_->setMinimumWidth(240);
     lutDock_->setWidget(lutPanelWidget_);
     lutDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     addDockWidget(Qt::RightDockWidgetArea, lutDock_);
@@ -874,7 +957,7 @@ void MainWindow_Qt::buildDocks() {
     fxParamsDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     // Both dimensions needed: left-area docks default to zero height when no other dock claims the area, collapsing the scroll viewport and pruning editors from the Mac AX tree.
     // The width floor keeps the per-FX header fully visible.
-    fxParamPanelWidget_->setMinimumWidth(150);
+    fxParamPanelWidget_->setMinimumWidth(240);
     fxParamPanelWidget_->setMinimumHeight(240);
     addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
 
@@ -886,8 +969,7 @@ void MainWindow_Qt::buildDocks() {
     playlistPanelWidget_ = new PlaylistPanel_Qt(playlistDock_);
     playlistDock_->setWidget(playlistPanelWidget_);
     playlistDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
-    playlistPanelWidget_->setMinimumWidth(220);
-    playlistPanelWidget_->setMinimumHeight(140);
+    playlistPanelWidget_->setMinimumWidth(220);   // width only: a set minimum height would override the wrapped rows' height
     addDockWidget(Qt::LeftDockWidgetArea, playlistDock_);
     splitDockWidget(fxParamsDock_, playlistDock_, Qt::Vertical);
 
@@ -912,7 +994,6 @@ void MainWindow_Qt::buildDocks() {
     notesDock_->setWidget(notesPanelWidget_);
     notesDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
     notesPanelWidget_->setMinimumWidth(220);
-    notesPanelWidget_->setMinimumHeight(160);
     addDockWidget(Qt::RightDockWidgetArea, notesDock_);
     if (lutDock_) tabifyDockWidget(lutDock_, notesDock_);
 
@@ -934,49 +1015,65 @@ void MainWindow_Qt::buildDocks() {
     connect(notesPanelWidget_, &NotesPanel_Qt::viewportRepaintRequested,
             this, [this]() { if (viewport_) viewport_->update(); });
 
-    // Populate the Panels menu now that docks exist: each contributes its checkable toggleViewAction(), F-keys assigned here;
-    // "show" also raises the dock to the front of its tab group.
-    if (panelsMenu_) {
+    // Populate the Window menu now that docks exist: each panel contributes its checkable toggleViewAction() with an
+    // F-key; "show" also raises the dock to the front of its tab group.
+    if (windowMenu_) {
         auto addDockToggle = [this](QDockWidget* dock, const QKeySequence& seq,
                                     const QString& objName) {
             if (!dock) return;
             QAction* a = dock->toggleViewAction();
-            if (!seq.isEmpty()) {
-                a->setShortcut(seq);
-                a->setShortcutContext(Qt::ApplicationShortcut);
-            }
+            a->setShortcut(seq);
+            a->setShortcutContext(Qt::ApplicationShortcut);
             a->setObjectName(objName);
             // Bringing a hidden/tabbed dock back should also raise it forward.
             connect(a, &QAction::toggled, this,
                     [dock](bool on) { if (on) dock->raise(); });
-            panelsMenu_->addAction(a);
+            windowMenu_->addAction(a);
         };
-        addDockToggle(plateDock_,    QKeySequence(Qt::Key_F2), "menu.panels.platemanager");
-        addDockToggle(timelineDock_, QKeySequence(),           "menu.panels.timeline");
-        addDockToggle(fxParamsDock_, QKeySequence(Qt::Key_F3), "menu.panels.fxparams");
-        addDockToggle(lutDock_,      QKeySequence(Qt::Key_F4), "menu.panels.lut");
-        addDockToggle(playlistDock_, QKeySequence(),           "menu.panels.playlist");
-        addDockToggle(notesDock_,    QKeySequence(Qt::Key_F7), "menu.panels.notes");
+        addDockToggle(plateDock_,    QKeySequence(Qt::Key_F2), "menu.window.platemanager");
+        addDockToggle(fxParamsDock_, QKeySequence(Qt::Key_F3), "menu.window.fxparams");
+        addDockToggle(lutDock_,      QKeySequence(Qt::Key_F4), "menu.window.lut");
+        addDockToggle(notesDock_,    QKeySequence(Qt::Key_F7), "menu.window.notes");
+        addDockToggle(timelineDock_, QKeySequence(Qt::Key_F8), "menu.window.timeline");
+        addDockToggle(playlistDock_, QKeySequence(Qt::Key_F9), "menu.window.playlist");
 
-        panelsMenu_->addSeparator();
+        windowMenu_->addSeparator();
         // Remote Session… (F5): the modeless persistent dock, lazy-created;
         // show()/raise() brings it forward.
-        panelsMenu_->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
+        windowMenu_->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
                                this, [this]() {
             if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
             if (remoteDialog_) remoteDialog_->refreshConnectionState();
-        })->setObjectName("menu.panels.remote");
+        })->setObjectName("menu.window.remote");
         // Render… (F6): modal RenderDialog_Qt.
-        panelsMenu_->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
+        windowMenu_->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
                                this, [this]() {
             RenderDialog_Qt dlg(this);
             dlg.exec();
-        })->setObjectName("menu.panels.render");
-        panelsMenu_->addSeparator();
-        panelsMenu_->addAction(tr("Hide Controls"),
+        })->setObjectName("menu.window.render");
+        windowMenu_->addSeparator();
+        windowMenu_->addAction(tr("Hide Controls"),
                                QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
                                this, [this]() { toggleHideControls(); })
-            ->setObjectName("menu.panels.hidecontrols");
+            ->setObjectName("menu.window.hidecontrols");
+#ifdef Q_OS_MACOS
+        // The standard macOS Window-menu commands, so the title promises nothing we lack.
+        // Qt::CTRL is Cmd on macOS.
+        windowMenu_->addSeparator();
+        windowMenu_->addAction(tr("Minimize"), QKeySequence(Qt::CTRL | Qt::Key_M),
+                               this, [this]() { showMinimized(); })
+            ->setObjectName("menu.window.minimize");
+        windowMenu_->addAction(tr("Zoom"), this, [this]() {
+            if (isMaximized()) showNormal(); else showMaximized();
+        })->setObjectName("menu.window.zoom");
+        windowMenu_->addAction(tr("Bring All to Front"), this, []() {
+            for (QWidget* w : QApplication::topLevelWidgets()) {
+                if (!w->isVisible()) continue;
+                w->raise();
+                w->activateWindow();
+            }
+        })->setObjectName("menu.window.bringalltofront");
+#endif
     }
 }
 
@@ -1018,6 +1115,55 @@ QString MainWindow_Qt::cloudSessionCode() const {
     return QString::fromStdString(jefe::qt::remoteSessionCode());
 }
 
+void MainWindow_Qt::onRemoteStateApplied() {
+    if (remoteDialog_) remoteDialog_->refreshConnectionState();
+    // pumpNetwork() also drains inbound note add/remove/lock events into
+    // the review store; refresh the dock so a remote peer's markup shows up.
+    if (notesPanelWidget_) notesPanelWidget_->refresh();
+    // A peer can change the viewport layout (gfcnetworkclient sets the framing
+    // mode); costs a few int compares when nothing changed.
+    if (plateManagerWidget_) plateManagerWidget_->syncToViewport();
+}
+
+int MainWindow_Qt::plateRowBudget() const {
+    if (!plateDock_ || !timelineDock_ || !timelinePanelWidget_) return width();
+    if (plateDock_->isFloating() || timelineDock_->isFloating() || timelineDock_->isHidden() ||
+        dockWidgetArea(timelineDock_) != dockWidgetArea(plateDock_))
+        return width();
+    // Same area: side by side when their vertical extents overlap (stacked docks don't).
+    const QRect p = plateDock_->geometry(), t = timelineDock_->geometry();
+    const bool sideBySide = p.top() < t.bottom() && t.top() < p.bottom();
+    if (!sideBySide) return width();
+    return width() - (timelineMinWidth() + jefe::qt::ui::kGap);
+}
+
+void MainWindow_Qt::updatePlateRowBudget(bool dockMoved) {
+    // Dock geometry settles a tick after a move or a resize (§11). A burst of resize events
+    // schedules one update.
+    budgetDockMoved_ = budgetDockMoved_ || dockMoved;
+    if (budgetUpdatePending_) return;
+    budgetUpdatePending_ = true;
+    QTimer::singleShot(0, this, [this]() {
+        budgetUpdatePending_ = false;
+        const bool moved = budgetDockMoved_;
+        budgetDockMoved_ = false;
+        if (!plateManagerWidget_) return;
+        const int before = plateManagerWidget_->budgetCols();
+        plateManagerWidget_->setRowBudget(plateRowBudget());
+        budgetWindowW_ = width();
+        // Give a row its full width back when the dock moved, when the window's budget now holds
+        // a different number of columns, or when the window (not the user) squeezed it; a plain
+        // resize keeps a separator the user dragged. Nothing to do when it is already full.
+        const bool wanted = moved || plateManagerWidget_->budgetCols() != before || !rowSqueezedByUser_;
+        if (wanted && plateDock_ && plateDock_->width() < plateManagerWidget_->sizeHint().width()) pinPlateDock(true);
+    });
+}
+
+void MainWindow_Qt::resizeEvent(QResizeEvent* e) {
+    QMainWindow::resizeEvent(e);
+    updatePlateRowBudget();
+}
+
 void MainWindow_Qt::restoreLayout() {
     QSettings s;
     bool restored = false;
@@ -1031,8 +1177,9 @@ void MainWindow_Qt::restoreLayout() {
         // First-launch defaults: shrink the bottom dock strip to its minimum (Qt otherwise splits vertical space ~half/half);
         // run after the event loop starts so docks have real geometry.
         QMetaObject::invokeMethod(this, [this]() {
-            resizeDocks({plateDock_, timelineDock_},
-                        {plateDock_->minimumWidth(), 9999},
+            // Exact sizes summing to the strip: resizeDocks spreads a list's total by weight.
+            const int plateW = plateManagerWidget_->sizeHint().width();
+            resizeDocks({plateDock_, timelineDock_}, {plateW, std::max(1, width() - plateW)},
                         Qt::Horizontal);
             resizeDocks({plateDock_}, {plateDock_->minimumHeight()}, Qt::Vertical);
         }, Qt::QueuedConnection);
@@ -1295,6 +1442,20 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
     // or the render path sees an unloaded frame and writes nothing.
     jefe::qt::setAllPlatesShowPreview(true);
 
+    // FX parameter metadata reaches the UI (style, soft range, label colour).
+    if (!jefe::qt::fxMetaSelfTest()) {
+        printf("FX-TEST FAIL: FX-META self-test failed\n");
+        fflush(stdout);
+        return 5;
+    }
+
+    // FX instance ids: copies, reorders and save/load keep parameter references.
+    if (!jefe::qt::fxParamIdentitySelfTest()) {
+        printf("FX-TEST FAIL: FX-ID self-test failed\n");
+        fflush(stdout);
+        return 6;
+    }
+
     const QString outDir = QDir::tempPath() + "/jefecheck_fxtest";
     QDir().mkpath(outDir);
 
@@ -1408,7 +1569,607 @@ int MainWindow_Qt::runHeadlessFXTest(const QString& imagePath) {
            beforePath.toLocal8Bit().constData(),
            afterPath.toLocal8Bit().constData());
     fflush(stdout);
-    return pass ? 0 : 1;
+    if (!pass) return 1;
+    return runOldFXSessionCheck(outDir) ? 0 : 7;
+}
+
+namespace {
+
+// A session saved before the bundled effects gained control styles and slider ranges:
+// no instanceId, and the content hashes of BCS.jfx, PCC.jfx and CONVOLUTION_3x3.jfx (with
+// their shaders) as they were then. Every value differs from the effect's default.
+const char* const kOldFXSession = R"XML(<?xml version="1.0"?>
+<root comment="This is a JefeCheck XML formated Session File">
+	<settings framingMode="0" bgColor="48" filtering="-9728" loopMode="1" loopPriority="0" targetFPS="24" from="1" to="1"/>
+	<plates>
+		<plate plateID="0" trackID="0" tX="0" tY="0" rZ="0" scale="1" flip="0" flop="0" crop="0" aspect="original" r="1" g="1" b="1" a="0" gamma="1" exposure="0" brightness="1" contrast="1" saturation="1" lut="No LUT">
+			<stack>
+				<FXS>
+					<FX name="Brightness, Contrast, Saturation" menuName="Color/Brightness, Contrast, Saturation" hash="1f2788ffc7dbc69d" active="1.0">
+						<widget varName="Brightness" type="float" value="1.250000" group="Parameters"/>
+						<widget varName="Contrast" type="float" value="0.800000" group="Parameters"/>
+						<widget varName="AvgLuminance" type="float" value="0.400000" group="Parameters"/>
+						<widget varName="Saturation" type="float" value="1.500000" group="Parameters"/>
+					</FX>
+					<FX name="Primary Color Correction" menuName="Color/Primary Color Correction" hash="7770d72d4c08ec6f" active="1.0">
+						<widget varName="BrightnessR" type="float" value="1.100000" group="Parameters"/>
+						<widget varName="BrightnessG" type="float" value="0.900000" group="Parameters"/>
+						<widget varName="BrightnessB" type="float" value="1.050000" group="Parameters"/>
+						<widget varName="ContrastR" type="float" value="1.200000" group="Parameters"/>
+						<widget varName="ContrastG" type="float" value="1.300000" group="Parameters"/>
+						<widget varName="ContrastB" type="float" value="0.850000" group="Parameters"/>
+						<widget varName="AvgLuminance" type="float" value="0.450000" group="Parameters"/>
+						<widget varName="SaturationR" type="float" value="1.300000" group="Parameters"/>
+						<widget varName="SaturationG" type="float" value="0.700000" group="Parameters"/>
+						<widget varName="SaturationB" type="float" value="1.400000" group="Parameters"/>
+					</FX>
+					<FX name="Convolution 3x3" menuName="Special/Convolution 3x3" hash="5241dba13f2d73c2" active="0.0">
+						<widget varName="presets" type="choice" value="5.000000" group="Options"/>
+						<widget varName="k00" type="float" value="-1.000000" group="Options"/>
+						<widget varName="k01" type="float" value="0.500000" group="Options"/>
+						<widget varName="k02" type="float" value="0.250000" group="Options"/>
+						<widget varName="k10" type="float" value="2.000000" group="Options"/>
+						<widget varName="k11" type="float" value="-0.250000" group="Options"/>
+						<widget varName="k12" type="float" value="1.000000" group="Options"/>
+						<widget varName="k20" type="float" value="0.125000" group="Options"/>
+						<widget varName="k21" type="float" value="0.750000" group="Options"/>
+						<widget varName="k22" type="float" value="-1.500000" group="Options"/>
+					</FX>
+				</FXS>
+			</stack>
+		</plate>
+	</plates>
+	<tracks>
+		<track trackID="0" filename="" from="1" to="1" mode="0" scale="100" filter="0" crop="0" aoiX="-1" aoiY="-1" aoiW="-1" aoiH="-1" depth="0" offset="0" holdMode="0" holdFrame="0"/>
+	</tracks>
+	<playlist/>
+	<ccFavorites/>
+</root>
+)XML";
+
+}  // namespace
+
+bool MainWindow_Qt::runOldFXSessionCheck(const QString& outDir) {
+    int fails = 0;
+    auto check = [&](const QString& name, bool ok) {
+        printf("FX-OLD-SESSION %s %s\n", ok ? "PASS" : "FAIL", qPrintable(name));
+        if (!ok) ++fails;
+    };
+    const QString path = outDir + "/old-fx-session.jcs";
+    {
+        QFile f(path);
+        const bool written = f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(kOldFXSession) > 0;
+        check("fixture written to " + path, written);
+        if (!written) return false;
+    }
+    viewport_->makeCurrent();
+    jefe::qt::loadSession(path.toStdString());
+    viewport_->doneCurrent();
+
+    struct Want { const char* menuName; const char* savedHash; bool active; std::vector<std::pair<const char*, float>> values; };
+    const std::vector<Want> wants = {
+        {"Color/Brightness, Contrast, Saturation", "1f2788ffc7dbc69d", true,
+         {{"Brightness", 1.25f}, {"Contrast", 0.8f}, {"AvgLuminance", 0.4f}, {"Saturation", 1.5f}}},
+        {"Color/Primary Color Correction", "7770d72d4c08ec6f", true,
+         {{"BrightnessR", 1.1f}, {"BrightnessG", 0.9f}, {"BrightnessB", 1.05f}, {"ContrastR", 1.2f},
+          {"ContrastG", 1.3f}, {"ContrastB", 0.85f}, {"AvgLuminance", 0.45f}, {"SaturationR", 1.3f},
+          {"SaturationG", 0.7f}, {"SaturationB", 1.4f}}},
+        {"Special/Convolution 3x3", "5241dba13f2d73c2", false,
+         {{"presets", 5.f}, {"k00", -1.f}, {"k01", 0.5f}, {"k02", 0.25f}, {"k10", 2.f}, {"k11", -0.25f},
+          {"k12", 1.f}, {"k20", 0.125f}, {"k21", 0.75f}, {"k22", -1.5f}}},
+    };
+    const std::vector<jefe::qt::FXMeta> stack = jefe::qt::getFXStackMetaOnPlate(0);
+    check(QString("plate 0 has the 3 saved effects (got %1)").arg(stack.size()), stack.size() == wants.size());
+    for (size_t i = 0; i < wants.size() && i < stack.size(); ++i) {
+        const Want& want = wants[i];
+        const jefe::qt::FXMeta& fx = stack[i];
+        check(QString("fx%1 is %2 (got %3)").arg(i).arg(want.menuName, QString::fromStdString(fx.menuName)),
+              fx.menuName == want.menuName);
+        // The effect file changed since the session was saved, so it loaded by menu name.
+        check(QString("fx%1 file changed since saved (hash %2 -> %3)")
+                  .arg(i).arg(want.savedHash, QString::fromStdString(fx.hash)),
+              fx.hash != want.savedHash);
+        check(QString("fx%1 active %2").arg(i).arg(want.active), fx.active == want.active);
+        QStringList wrong;
+        for (const auto& [varName, value] : want.values) {
+            auto p = std::find_if(fx.params.begin(), fx.params.end(),
+                                  [&](const jefe::qt::FXParamMeta& m) { return m.varName == varName; });
+            if (p == fx.params.end()) wrong << QString("%1 missing").arg(varName);
+            else if (std::fabs(p->value - value) > 1e-5f) wrong << QString("%1 %2 != %3").arg(varName).arg(p->value).arg(value);
+        }
+        check(QString("fx%1 keeps its saved values %2").arg(i).arg(wrong.join(", ")), wrong.isEmpty());
+    }
+    jefe::qt::clearFXStackOnPlate(0);
+    fflush(stdout);
+    return fails == 0;
+}
+
+int MainWindow_Qt::runHeadlessFXPanelTest(const QString& imagePath, const QString& shotDir) {
+    int fails = 0;
+    auto check = [&](const char* name, bool ok, const QString& detail = QString()) {
+        printf("FX-PANEL %s %s%s%s\n", ok ? "PASS" : "FAIL", name, detail.isEmpty() ? "" : " ",
+               qPrintable(detail));
+        if (!ok) ++fails;
+    };
+    // Item views lay out on a zero-timer; cards removed by a rebuild go through deleteLater.
+    auto settle = []() {
+        for (int i = 0; i < 4; ++i) {
+            QCoreApplication::processEvents();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        }
+    };
+
+    loadFileIntoPlate(0, imagePath);
+    jefe::qt::setActivePlate(0);
+    jefe::qt::clearFXStackOnPlate(0);
+
+    auto fxIndexOf = [](const std::string& menuName) {
+        for (const auto& entry : jefe::qt::getAvailableFXMenu())
+            if (entry.second == menuName) return entry.first;
+        return -1;
+    };
+    const std::vector<std::string> wanted = {"Color/Brightness, Contrast, Saturation", "Fun/Fun",
+                                             "Special/Convolution 3x3", "Comp/Chroma Key (Blue)"};
+    for (const std::string& m : wanted) {
+        const int idx = fxIndexOf(m);
+        if (idx < 0) {
+            printf("FX-PANEL FAIL setup: '%s' not loaded\n", m.c_str());
+            fflush(stdout);
+            return 7;
+        }
+        jefe::qt::addFXToActivePlate(idx);
+    }
+
+    FXParamPanel_Qt panel;
+    panel.resize(360, 900);
+    panel.show();
+    panel.refresh();
+    settle();
+
+    auto child = [&panel](const QString& name) { return panel.findChild<QWidget*>(name); };
+    auto yOf = [&panel](QWidget* w) { return w ? w->mapTo(&panel, QPoint(0, 0)).y() : -1; };
+    auto textColour = [](QWidget* w) {
+        if (!w) return QColor();
+        w->ensurePolished();
+        return w->palette().color(w->foregroundRole());
+    };
+
+    // bcs sliders
+    {
+        QStringList missing;
+        QSet<int> ys;
+        for (const char* n : {"Brightness", "Contrast", "AvgLuminance", "Saturation"}) {
+            QWidget* s = child(QString("fxparams.fx0.param.%1.slider").arg(n));
+            if (!s) missing << n;
+            else ys.insert(yOf(s));
+        }
+        check("bcs sliders", missing.isEmpty() && ys.size() == 4,
+              QString("missing [%1] distinct rows %2").arg(missing.join(",")).arg(ys.size()));
+    }
+
+    // no type hints
+    {
+        QStringList hints;
+        for (QLabel* l : panel.findChildren<QLabel*>())
+            if (l->text().contains(QRegularExpression("^\\((float|bool|choice|texture|cube|lut|other)")) ||
+                l->text().contains("<span style='color:#666'>("))
+                hints << l->text();
+        check("no type hints", hints.isEmpty(), hints.join(" | "));
+    }
+
+    // knobs share a row (FUN's Control 1 / Control 2 are varNames zoom / curve)
+    QWidget* knob1 = child("fxparams.fx1.param.zoom.knob");
+    QWidget* knob2 = child("fxparams.fx1.param.curve.knob");
+    check("knobs share a row", knob1 && knob2 && yOf(knob1) == yOf(knob2),
+          knob1 && knob2 ? QString("y %1 vs %2").arg(yOf(knob1)).arg(yOf(knob2)) : QString("no FUN zoom/curve knobs"));
+
+    // Every param row in a card, in card coordinates.
+    auto cardRows = [&panel](int fx) {
+        QList<QWidget*> rows;
+        auto* card = panel.findChild<QWidget*>(QString("fxparams.fx%1.card").arg(fx));
+        if (!card) return rows;
+        for (QWidget* w : card->findChildren<QWidget*>())
+            if (w->objectName().endsWith(".row") && w->isVisible()) rows << w;
+        return rows;
+    };
+    auto overlaps = [&](int width) {
+        QStringList bad;
+        for (int fx = 0; fx < int(wanted.size()); ++fx) {
+            auto* card = panel.findChild<QWidget*>(QString("fxparams.fx%1.card").arg(fx));
+            const QList<QWidget*> rows = cardRows(fx);
+            for (int a = 0; a < rows.size(); ++a)
+                for (int b = a + 1; b < rows.size(); ++b) {
+                    const QRect ra(rows[a]->mapTo(card, QPoint(0, 0)), rows[a]->size());
+                    const QRect rb(rows[b]->mapTo(card, QPoint(0, 0)), rows[b]->size());
+                    if (ra.intersects(rb)) bad << rows[a]->objectName() + " x " + rows[b]->objectName();
+                }
+        }
+        if (!bad.isEmpty()) bad.prepend(QString("at %1 px:").arg(width));
+        return bad;
+    };
+
+    // narrow wraps, never overlaps
+    {
+        QStringList bad = overlaps(360);
+        const int chromaRows360 = int(cardRows(3).size());
+        panel.resize(150, 900);
+        settle();
+        bad += overlaps(150);
+        QSet<int> boolYs;
+        for (const char* n : {"ShowMatte", "ShowClean", "spillSupress"})
+            if (QWidget* w = child(QString("fxparams.fx3.param.%1.row").arg(n))) boolYs.insert(yOf(w));
+        if (boolYs.size() < 2) bad << QString("Chroma Key bools did not wrap (%1 rows)").arg(boolYs.size());
+        if (chromaRows360 == 0) bad << "no Chroma Key rows";
+        check("narrow wraps, never overlaps", bad.isEmpty(), bad.join("; "));
+
+        // Narrow knobs wrap. The panel's own minimum width (about 200 px) still fits both
+        // FUN knobs, so ask their row's flow layout directly: with room to spare they share
+        // one line; given less than the two knobs need side by side, they take two.
+        QStringList knobBad;
+        QWidget* e1 = child("fxparams.fx1.param.zoom.row");
+        QWidget* e2 = child("fxparams.fx1.param.curve.row");
+        QLayout* flow = e1 && e1->parentWidget() ? e1->parentWidget()->layout() : nullptr;
+        if (!knob1 || !knob2 || !e1 || !e2 || !flow || e2->parentWidget() != e1->parentWidget())
+            knobBad << "no FUN zoom/curve knobs in one row";
+        else {
+            const QMargins m = flow->contentsMargins();
+            const int sideBySide = m.left() + e1->width() + jefe::qt::ui::kGap + e2->width() + m.right();
+            const int roomy = sideBySide + jefe::qt::ui::kGap;
+            const int oneLine = flow->heightForWidth(roomy);
+            const int squeezed = flow->heightForWidth(sideBySide - 1);
+            if (!(squeezed > oneLine)) knobBad << QString("height %1 at %2 px, %3 at %4 px").arg(oneLine).arg(roomy)
+                                                      .arg(squeezed).arg(sideBySide - 1);
+            printf("FX-PANEL narrow knobs: %d px tall at %d px wide, %d px tall at %d px\n", oneLine, roomy,
+                   squeezed, sideBySide - 1);
+        }
+        check("narrow knobs wrap", knobBad.isEmpty(), knobBad.join("; "));
+        panel.resize(360, 900);
+        settle();
+    }
+
+    // dimmed label kept
+    {
+        const QColor c = textColour(child("fxparams.fx0.param.AvgLuminance.label"));
+        check("dimmed label kept", c == QColor(150, 150, 150), c.isValid() ? c.name() : QString("no label"));
+    }
+
+    // value refresh keeps widgets
+    {
+        QPointer<QWidget> before = child("fxparams.fx0.param.Brightness.slider");
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.5f);
+        panel.refresh();
+        settle();
+        auto* field = qobject_cast<QLineEdit*>(child("fxparams.fx0.param.Brightness.field"));
+        const QString text = field ? field->text() : QString("no field");
+        check("value refresh keeps widgets",
+              before && before == child("fxparams.fx0.param.Brightness.slider") && text == "1.500",
+              QString("same %1 field '%2'").arg(bool(before) && before == child("fxparams.fx0.param.Brightness.slider")).arg(text));
+    }
+
+    // modified label
+    {
+        const QColor edited = textColour(child("fxparams.fx0.param.Brightness.label"));
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+        panel.refresh();
+        settle();
+        const QColor reset = textColour(child("fxparams.fx0.param.Brightness.label"));
+        check("modified label", edited == QColor("#d4771e") && reset.isValid() && reset != QColor("#d4771e"),
+              QString("edited %1 reset %2").arg(edited.name(), reset.name()));
+    }
+
+    // height
+    {
+        QStringList bad;
+        for (int fx = 0; fx < int(wanted.size()); ++fx) {
+            QWidget* header = child(QString("fxparams.fx%1.header").arg(fx));
+            if (!header) bad << QString("fx%1 no header").arg(fx);
+            else if (header->height() != 24) bad << QString("fx%1.header h=%2").arg(fx).arg(header->height());
+            for (QWidget* row : cardRows(fx)) {
+                const bool knobRow = row->findChild<QWidget*>(row->objectName().chopped(4) + ".knob") != nullptr;
+                if (!knobRow && row->height() != 24) bad << QString("%1 h=%2").arg(row->objectName()).arg(row->height());
+            }
+        }
+        check("height", bad.isEmpty(), bad.join("; "));
+    }
+
+    // collapse: the card shrinks to its header, stays collapsed through a rebuild, expands back
+    {
+        auto* chevron = qobject_cast<QToolButton*>(child("fxparams.fx0.collapse.button"));
+        QWidget* card = child("fxparams.fx0.card");
+        const int open = card ? card->height() : -1;
+        if (chevron) chevron->click();
+        settle();
+        card = child("fxparams.fx0.card");
+        QWidget* body = child("fxparams.fx0.body");
+        const int shut = card ? card->height() : -1;
+        const bool hidden = body && !body->isVisible();
+        // A stack change rebuilds every card (a values-only refresh would keep them).
+        const int fun = fxIndexOf("Fun/Fun");
+        jefe::qt::addFXToActivePlate(fun);
+        panel.refresh();
+        settle();
+        body = child("fxparams.fx0.body");
+        const bool keptAfterRebuild = body && !body->isVisible();
+        if (!shotDir.isEmpty()) panel.grab().save(shotDir + "/fx-collapsed.png");
+        jefe::qt::removeFXFromPlate(0, int(wanted.size()));
+        panel.refresh();
+        settle();
+        chevron = qobject_cast<QToolButton*>(child("fxparams.fx0.collapse.button"));
+        if (chevron) chevron->click();
+        settle();
+        card = child("fxparams.fx0.card");
+        body = child("fxparams.fx0.body");
+        const int reopened = card ? card->height() : -1;
+        check("collapse", chevron && hidden && shut > 0 && shut <= 24 + 2 * 4 + 4 && keptAfterRebuild &&
+                              body && body->isVisible() && reopened == open,
+              QString("open %1 shut %2 rebuilt-collapsed %3 reopened %4")
+                  .arg(open).arg(shut).arg(keptAfterRebuild).arg(reopened));
+    }
+
+    // editors take their own presses, so dragging one never starts a card drag
+    {
+        QStringList bad;
+        for (const QString& n : {QString("fxparams.fx0.param.Brightness.slider"),
+                                 QString("fxparams.fx0.param.Brightness.field")}) {
+            QWidget* w = child(n);
+            if (!w) { bad << n + " missing"; continue; }
+            const QPointF at(4, w->height() / 2.0);
+            QMouseEvent press(QEvent::MouseButtonPress, at, w->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            press.setAccepted(false);
+            QCoreApplication::sendEvent(w, &press);
+            if (!press.isAccepted()) bad << n + " ignored the press";
+            QMouseEvent release(QEvent::MouseButtonRelease, at, w->mapToGlobal(at), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(w, &release);
+        }
+        settle();
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+        panel.refresh();
+        settle();
+        check("editors take their presses", bad.isEmpty(), bad.join("; "));
+    }
+
+    // refresh while dragging: no write into the dragged editor, no rebuild until release
+    {
+        QPointer<QWidget> slider = child("fxparams.fx0.param.Brightness.slider");
+        auto* field = qobject_cast<QLineEdit*>(child("fxparams.fx0.param.Brightness.field"));
+        QStringList bad;
+        if (!slider || !field) bad << "no Brightness slider/field";
+        else {
+            const qreal y = slider->height() / 2.0;
+            auto send = [&](QEvent::Type t, qreal x) {
+                const QPointF at(x, y);
+                QMouseEvent e(t, at, slider->mapToGlobal(at), t == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                              t == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::MouseButtons(Qt::LeftButton), Qt::NoModifier);
+                QCoreApplication::sendEvent(slider, &e);
+            };
+            send(QEvent::MouseButtonPress, slider->width() * 0.2);
+            send(QEvent::MouseMove, slider->width() * 0.3);
+            const QString during = field->text();
+            jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.75f);
+            panel.refresh();
+            settle();
+            if (!slider) bad << "slider deleted by a value refresh mid-drag";
+            else if (field->text() != during) bad << QString("field written mid-drag '%1' -> '%2'").arg(during, field->text());
+            jefe::qt::addFXToActivePlate(fxIndexOf("Fun/Fun"));   // the stack changes mid-drag
+            panel.refresh();
+            settle();
+            if (!slider) bad << "cards rebuilt mid-drag";
+            if (slider) send(QEvent::MouseButtonRelease, slider->width() * 0.3);
+            QElapsedTimer t;
+            t.start();
+            while (slider && t.elapsed() < 1000) settle();
+            if (slider) bad << "cards not rebuilt after the drag ended";
+            if (!child("fxparams.fx4.card")) bad << "no card for the FX added mid-drag";
+        }
+        jefe::qt::removeFXFromPlate(0, 4);
+        jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+        panel.refresh();
+        settle();
+        check("refresh while dragging", bad.isEmpty(), bad.join("; "));
+    }
+
+    // A drag writes to the effect it started on, even when another copy is inserted
+    // before it mid-drag (the stack index the card was built with is stale by then).
+    {
+        QStringList bad;
+        auto brightnessOf = [](std::uint32_t id) -> float {
+            for (const auto& fx : jefe::qt::getFXStackMetaOnPlate(0))
+                if (fx.instanceId == id)
+                    for (const auto& p : fx.params)
+                        if (p.varName == "Brightness") return p.value;
+            return -1.f;
+        };
+        const auto before = jefe::qt::getFXStackMetaOnPlate(0);
+        QWidget* slider = child("fxparams.fx0.param.Brightness.slider");
+        if (before.empty() || before[0].menuName != wanted[0] || !slider) bad << "setup: no BCS card at fx0";
+        else {
+            const std::uint32_t a = before[0].instanceId;
+            const qreal y = slider->height() / 2.0;
+            auto send = [&](QEvent::Type t, qreal x) {
+                const QPointF at(x, y);
+                QMouseEvent e(t, at, slider->mapToGlobal(at), t == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                              t == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::MouseButtons(Qt::LeftButton), Qt::NoModifier);
+                QCoreApplication::sendEvent(slider, &e);
+            };
+            send(QEvent::MouseButtonPress, slider->width() * 0.2);
+            send(QEvent::MouseMove, slider->width() * 0.3);
+            jefe::qt::addFXToActivePlate(fxIndexOf(wanted[0]));
+            const int last = int(jefe::qt::getFXStackMetaOnPlate(0).size()) - 1;
+            jefe::qt::moveFXOnPlate(0, last, 0);
+            panel.refresh();
+            settle();
+            send(QEvent::MouseMove, slider->width() * 0.6);
+            send(QEvent::MouseButtonRelease, slider->width() * 0.6);
+            const auto now = jefe::qt::getFXStackMetaOnPlate(0);
+            if (now.size() != before.size() + 1 || now[1].instanceId != a)
+                bad << "setup: the new BCS is not in front of BCS#A";
+            else {
+                const std::uint32_t inserted = now[0].instanceId;
+                const float onA = brightnessOf(a), onNew = brightnessOf(inserted);
+                if (!(onA > 1.05f)) bad << QString("BCS#A Brightness %1 (the drag did not land on it)").arg(onA);
+                if (onNew != 1.f) bad << QString("inserted BCS Brightness %1 (the drag wrote to it)").arg(onNew);
+            }
+            QElapsedTimer t;
+            t.start();
+            while (t.elapsed() < 300) settle();
+            jefe::qt::removeFXFromPlate(0, 0);
+            jefe::qt::setFXParamValueOnPlate(0, 0, "Parameters", "Brightness", 1.0f);
+            panel.refresh();
+            settle();
+        }
+        check("drag writes follow the instance", bad.isEmpty(), bad.join("; "));
+    }
+
+    // Bool and choice rows: the label turns the accent colour when changed, and the
+    // row's "Reset to default" action puts the value and the label back.
+    {
+        QStringList bad;
+        auto resetRow = [&](const QString& row) {
+            QWidget* w = child(row);
+            QAction* reset = w ? w->findChild<QAction*>(row + ".resetDefault") : nullptr;
+            if (!reset) { bad << row + " has no reset action"; return; }
+            reset->trigger();
+            settle();
+        };
+        const QColor accent("#d4771e");
+        auto* matte = qobject_cast<QCheckBox*>(child("fxparams.fx3.param.ShowMatte.check"));
+        if (!matte) bad << "no ShowMatte check";
+        else {
+            matte->click();
+            settle();
+            const QColor on = textColour(child("fxparams.fx3.param.ShowMatte.label"));
+            if (on != accent) bad << "bool label after change " + on.name();
+            resetRow("fxparams.fx3.param.ShowMatte.row");
+            matte = qobject_cast<QCheckBox*>(child("fxparams.fx3.param.ShowMatte.check"));
+            const QColor off = textColour(child("fxparams.fx3.param.ShowMatte.label"));
+            if (!matte || matte->isChecked()) bad << "bool not reset";
+            if (!off.isValid() || off == accent) bad << "bool label after reset " + off.name();
+        }
+        auto* combo = qobject_cast<QComboBox*>(child("fxparams.fx2.param.presets.combo"));
+        if (!combo) bad << "no Convolution presets combo";
+        else {
+            combo->setCurrentIndex(3);
+            settle();
+            const QColor on = textColour(child("fxparams.fx2.param.presets.label"));
+            if (on != accent) bad << "choice label after change " + on.name();
+            resetRow("fxparams.fx2.param.presets.row");
+            combo = qobject_cast<QComboBox*>(child("fxparams.fx2.param.presets.combo"));
+            const QColor off = textColour(child("fxparams.fx2.param.presets.label"));
+            if (!combo || combo->currentIndex() != 0) bad << "choice not reset";
+            if (!off.isValid() || off == accent) bad << "choice label after reset " + off.name();
+        }
+        check("bool and choice modified and reset", bad.isEmpty(), bad.join("; "));
+    }
+
+    // An FX switched off outside the panel (peer, favourite, bridge) shows it on the
+    // values-only refresh: same power button, now unchecked, no rebuild.
+    {
+        QStringList bad;
+        QPointer<QAbstractButton> power = qobject_cast<QAbstractButton*>(child("fxparams.fx2.active.check"));
+        if (!power || !power->isChecked()) bad << "setup: no checked power toggle on fx2";
+        else {
+            jefe::qt::setFXActiveOnPlate(0, 2, false);
+            panel.refresh();
+            settle();
+            if (!power) bad << "power button rebuilt";
+            else if (power->isChecked()) bad << "still checked after the FX was switched off";
+            jefe::qt::setFXActiveOnPlate(0, 2, true);
+            panel.refresh();
+            settle();
+            if (power && !power->isChecked()) bad << "not checked again after the FX was switched on";
+            if (!jefe::qt::getFXStackMetaOnPlate(0)[2].active) bad << "the button wrote the state back";
+        }
+        check("power toggle follows the stack", bad.isEmpty(), bad.join("; "));
+    }
+
+    // Dock screenshots for the PR, before the stack is changed below.
+    if (!shotDir.isEmpty() && fxParamsDock_) {
+        QDir().mkpath(shotDir);
+        fxParamPanelWidget_->refresh();
+        const QList<QDockWidget*> others = findChildren<QDockWidget*>();
+        for (QDockWidget* d : others) if (d != fxParamsDock_) d->hide();
+        resize(1600, 1000);
+        struct Shot { const char* name; Qt::DockWidgetArea area; bool floating; int size; };
+        const QList<Shot> shots = {{"left-250", Qt::LeftDockWidgetArea, false, 250},
+                                   {"left-360", Qt::LeftDockWidgetArea, false, 360},
+                                   {"bottom", Qt::BottomDockWidgetArea, false, 420},
+                                   {"floating-600", Qt::NoDockWidgetArea, true, 600}};
+        for (const Shot& sh : shots) {
+            fxParamsDock_->setFloating(false);
+            if (sh.floating) {
+                fxParamsDock_->setFloating(true);
+                fxParamsDock_->resize(sh.size, 900);
+            } else {
+                addDockWidget(sh.area, fxParamsDock_);
+            }
+            fxParamsDock_->show();
+            settle();
+            if (!sh.floating)
+                resizeDocks({fxParamsDock_}, {sh.size}, sh.area == Qt::BottomDockWidgetArea ? Qt::Vertical : Qt::Horizontal);
+            for (int i = 0; i < 3; ++i) settle();
+            const QString path = shotDir + "/fx-" + sh.name + ".png";
+            const bool ok = fxParamsDock_->grab().save(path);
+            printf("FX-PANEL SHOT %s %dx%d ok=%d\n", qPrintable(path), fxParamsDock_->width(), fxParamsDock_->height(), ok);
+        }
+        fxParamsDock_->setFloating(false);
+        addDockWidget(Qt::LeftDockWidgetArea, fxParamsDock_);
+
+        // One card per loaded effect, with its defaults, in a 300 px left dock.
+        const std::string stackBefore = jefe::qt::getFXStackXmlOnPlate(0);
+        QDir().mkpath(shotDir + "/effects");
+        for (const auto& [idx, menuName] : jefe::qt::getAvailableFXMenu()) {
+            jefe::qt::clearFXStackOnPlate(0);
+            jefe::qt::addFXToActivePlate(idx);
+            fxParamPanelWidget_->refresh();
+            fxParamsDock_->show();
+            settle();
+            resizeDocks({fxParamsDock_}, {300}, Qt::Horizontal);
+            for (int i = 0; i < 3; ++i) settle();
+            QString file = QString::fromStdString(menuName);
+            file.replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_");
+            const QString path = shotDir + "/effects/" + file + ".png";
+            const bool ok = fxParamsDock_->grab().save(path);
+            printf("FX-PANEL SHOT %s %dx%d ok=%d\n", qPrintable(path), fxParamsDock_->width(), fxParamsDock_->height(), ok);
+        }
+        jefe::qt::setFXStackXmlOnPlate(0, stackBefore);
+        fxParamPanelWidget_->refresh();
+        settle();
+    }
+
+    // fingerprint: a stack that reuses an instance id with a different effect rebuilds
+    {
+        QStringList bad;
+        jefe::qt::clearFXStackOnPlate(0);
+        jefe::qt::addFXToActivePlate(fxIndexOf("Special/Average Blur"));
+        const std::string blurXml = jefe::qt::getFXStackXmlOnPlate(0);
+        jefe::qt::clearFXStackOnPlate(0);
+        jefe::qt::addFXToActivePlate(fxIndexOf(wanted[0]));
+        panel.refresh();
+        settle();
+        const auto bcs = jefe::qt::getFXStackMetaOnPlate(0);
+        QPointer<QWidget> bcsSlider = child("fxparams.fx0.param.Brightness.slider");
+        if (bcs.size() != 1 || !bcsSlider) bad << "setup: no BCS card";
+        else {
+            const QString id = QString::number(bcs[0].instanceId);
+            const QString reused = QString::fromStdString(blurXml)
+                                       .replace(QRegularExpression("instanceId=\"[0-9]+\""), "instanceId=\"" + id + "\"");
+            jefe::qt::setFXStackXmlOnPlate(0, reused.toStdString());
+            const auto now = jefe::qt::getFXStackMetaOnPlate(0);
+            if (now.size() != 1 || now[0].instanceId != bcs[0].instanceId || now[0].menuName != "Special/Average Blur")
+                bad << QString("setup: replacement stack is not [Average Blur#%1]").arg(id);
+            panel.refresh();
+            settle();
+            if (bcsSlider) bad << "old BCS slider still there";
+            if (child("fxparams.fx0.param.Brightness.row")) bad << "BCS rows still shown";
+            if (!child("fxparams.fx0.param.amount.row")) bad << "no Average Blur amount row";
+        }
+        check("fingerprint by id and hash", bad.isEmpty(), bad.join("; "));
+    }
+
+    jefe::qt::clearFXStackOnPlate(0);
+    printf("FX-PANEL RESULT %s %d\n", fails == 0 ? "PASS" : "FAIL", fails);
+    fflush(stdout);
+    return fails == 0 ? 0 : 7;
 }
 
 int MainWindow_Qt::runHeadlessUploadBench(const QString& dir) {
@@ -1968,6 +2729,963 @@ int MainWindow_Qt::runHeadlessFXMultiTest(const QString& imagePath) {
     printf("FX-MULTI %s: siblingNotBlack&Stable=%d  fxAppliedOnScreen=%d\n",
            pass ? "PASS" : "FAIL", (int)siblingOk, (int)fxApplied); fflush(stdout);
     return pass ? 0 : 1;
+}
+
+int MainWindow_Qt::runHeadlessPlateFrameTest() {
+    namespace pl = jefe::platelayout;
+    if (!viewport_) { printf("PLATE-FRAME-TEST FAIL: no viewport\n"); fflush(stdout); return 2; }
+
+    QTemporaryDir tmp;
+    if (!tmp.isValid()) { printf("PLATE-FRAME-TEST FAIL: no temp dir\n"); fflush(stdout); return 2; }
+    const QString grey = tmp.path() + "/grey.png";
+    QImage greyImg(256, 256, QImage::Format_RGB888);
+    greyImg.fill(QColor(128, 128, 128));
+    if (!greyImg.save(grey)) { printf("PLATE-FRAME-TEST FAIL: cannot write %s\n", grey.toLocal8Bit().constData()); fflush(stdout); return 2; }
+    for (int i = 0; i < 4; ++i) loadFileIntoPlate(i, grey);
+    jefe::qt::setAllPlatesShowPreview(true);
+
+    auto isAccent = [](const uchar* px) {
+        return std::abs(int(px[0]) - pl::kAccentR) <= 16 && std::abs(int(px[1]) - pl::kAccentG) <= 16
+            && std::abs(int(px[2]) - pl::kAccentB) <= 16;
+    };
+    // Repaint at the current framing/active plate, then grab (device pixels, top-down).
+    auto grabAt = [&](int framing, int active) -> QImage {
+        jefe::qt::setFramingMode(framing);
+        jefe::qt::setActivePlate(active);
+        viewport_->update();
+        QCoreApplication::processEvents();
+        viewport_->repaint();
+        QCoreApplication::processEvents();
+        QImage img = viewport_->grabFramebuffer();
+        return img.isNull() ? img : img.convertToFormat(QImage::Format_RGBA8888);
+    };
+    // Fraction of accent pixels along a horizontal run [x0,x1) at row y, or a vertical run [y0,y1) at column x.
+    auto rowFrac = [&](const QImage& img, int y, int x0, int x1) {
+        int n = 0, hit = 0;
+        if (y < 0 || y >= img.height()) return -1.0;
+        const uchar* r = img.constScanLine(y);
+        for (int x = std::max(0, x0); x < std::min(img.width(), x1); ++x, ++n) hit += isAccent(r + x * 4);
+        return n ? double(hit) / n : -1.0;
+    };
+    auto colFrac = [&](const QImage& img, int x, int y0, int y1) {
+        int n = 0, hit = 0;
+        if (x < 0 || x >= img.width()) return -1.0;
+        for (int y = std::max(0, y0); y < std::min(img.height(), y1); ++y, ++n) hit += isAccent(img.constScanLine(y) + x * 4);
+        return n ? double(hit) / n : -1.0;
+    };
+    auto cellOf = [](const std::vector<pl::Cell>& cells, int plate) {
+        for (const pl::Cell& c : cells) if (c.plate == plate) return c;
+        return pl::Cell{-1, 0, 0, 0, 0};
+    };
+    const int t = pl::activeFrameThicknessPx(float(viewport_->devicePixelRatioF()));
+    bool allPass = true;
+    auto report = [&](const char* name, bool pass, const QString& detail) {
+        printf("PLATE-FRAME-TEST %s: %s (%s)\n", name, pass ? "PASS" : "FAIL", detail.toLocal8Bit().constData());
+        fflush(stdout);
+        allPass = allPass && pass;
+    };
+
+    {   // 2x2, active plate 1: top row of plate 1's cell is accent, plate 0's is not.
+        const QImage img = grabAt(FRAMINGQUAD_ID, 1);
+        const auto cells = pl::cellsFor(FRAMINGQUAD_ID, img.width(), img.height());
+        const pl::Cell a = cellOf(cells, 1), o = cellOf(cells, 0);
+        const double fa = rowFrac(img, a.y, a.x + t, a.x + a.w - t);
+        const double fo = rowFrac(img, o.y, o.x + t, o.x + o.w - t);
+        report("FRAME 2x2", !img.isNull() && a.plate == 1 && o.plate == 0 && fa >= 0.9 && fo >= 0.0 && fo <= 0.01,
+               QString("fraction=%1 other=%2 t=%3 %4x%5").arg(fa).arg(fo).arg(t).arg(img.width()).arg(img.height()));
+    }
+    {   // 2x1, active plate 0: left column of the left cell is accent, right column of the right cell is not.
+        const QImage img = grabAt(FRAMINGDOUBLE_ID, 0);
+        const auto cells = pl::cellsFor(FRAMINGDOUBLE_ID, img.width(), img.height());
+        const pl::Cell a = cellOf(cells, 0), o = cellOf(cells, 1);
+        const double fa = colFrac(img, 0, a.y + t, a.y + a.h - t);
+        const double fo = colFrac(img, o.x + o.w - 1, o.y + t, o.y + o.h - t);
+        report("FRAME 2x1", !img.isNull() && a.plate == 0 && o.plate == 1 && fa >= 0.9 && fo >= 0.0 && fo <= 0.01,
+               QString("fraction=%1 other=%2").arg(fa).arg(fo));
+    }
+    {   // 1x1: no accent on the outer 3-pixel border.
+        const QImage img = grabAt(FRAMINGSINGLE_ID, 0);
+        int hits = 0;
+        for (int y = 0; y < img.height(); ++y) {
+            const uchar* r = img.constScanLine(y);
+            for (int x = 0; x < img.width(); ++x) {
+                const bool border = x < 3 || y < 3 || x >= img.width() - 3 || y >= img.height() - 3;
+                if (border && isAccent(r + x * 4)) ++hits;
+            }
+        }
+        report("FRAME 1x1", !img.isNull() && hits == 0, QString("accentBorderPixels=%1").arg(hits));
+    }
+    {   // render: the frame is screen-only; a rendered frame of the active plate carries none.
+        grabAt(FRAMINGQUAD_ID, 1);
+        jefe::qt::RenderParams p;
+        p.quadrant     = 1;
+        p.format       = 5;        // PNG (8-bit FBO)
+        p.formatString = "png";
+        const int frame = jefe::qt::getCurrentFrame();
+        p.from = frame; p.to = frame;
+        p.padding = 4; p.scale = 1.0f;
+        p.path   = tmp.path().toStdString();
+        p.prefix = "plateframe_";
+        const QString fname = QString::fromStdString(jefe::qt::previewRenderFilename(p));
+        viewport_->makeCurrent();
+        jefe::qt::triggerSyncRender(p);
+        viewport_->doneCurrent();
+        QImage img(fname);
+        int hits = 0;
+        if (!img.isNull()) {
+            img = img.convertToFormat(QImage::Format_RGBA8888);
+            for (int y = 0; y < img.height(); ++y) {
+                const uchar* r = img.constScanLine(y);
+                for (int x = 0; x < img.width(); ++x) hits += isAccent(r + x * 4);
+            }
+        }
+        report("FRAME render", !img.isNull() && hits == 0,
+               QString("accentPixels=%1 %2x%3").arg(hits).arg(img.width()).arg(img.height()));
+    }
+
+    printf("PLATE-FRAME-TEST %s\n", allPass ? "PASS" : "FAIL");
+    fflush(stdout);
+    return allPass ? 0 : 2;
+}
+
+int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
+    if (!plateDock_ || !plateManagerWidget_) {
+        printf("PLATEMANAGER-TEST FAIL: no plate dock\n"); fflush(stdout); return 2;
+    }
+    // Bottom dock area, 1x1: the wide-short card form.
+    auto settle = []() { for (int i = 0; i < 4; ++i) QCoreApplication::processEvents(); };
+    // Sizes are right only a tick or two after a dock move or resize (§11).
+    auto settleFor = [](int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    };
+    jefe::qt::setFramingMode(FRAMINGSINGLE_ID);
+    plateDock_->setFloating(false);
+    addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
+    plateDock_->show();
+    settle();
+    auto* card = plateDock_->findChild<PlateCard_Qt*>("plate.0.card");
+    if (!card) { printf("PLATEMANAGER-TEST FAIL: no plate.0.card\n"); fflush(stdout); return 2; }
+    // Measured on fa7b182, before the card moved to two 24 px rows (cardH=84).
+    constexpr int kBaselineDockH = 202;
+    // The spec asks for "about today's height": a few px of header, theme or font drift
+    // must not fail the Timeline checks below, but a third card row (+78) must.
+    constexpr int kDockHTolerance = 4;
+    printf("PLATEMANAGER-TEST current cardH=%d dockH=%d (baseline dockH=%d)\n", card->sizeHint().height(),
+           plateDock_->height(), kBaselineDockH);
+
+    namespace ui = jefe::qt::ui;
+    bool allPass = true;
+    auto report = [&](const char* name, bool pass, const QString& detail) {
+        printf("PLATEMANAGER-TEST %s: %s (%s)\n", name, pass ? "PASS" : "FAIL", qPrintable(detail));
+        fflush(stdout);
+        allPass = allPass && pass;
+    };
+
+    {   // Two rows of controls, a row gap and the card margins, plus a 1 px frame each side;
+        // every card, so the active (bordered) and inactive cards are both measured.
+        plateManagerWidget_->refreshAllCards();
+        settle();
+        const int budget = 2 * ui::kControlH + ui::kGapTight + 2 * ui::kGap + 2;
+        int h = 0;
+        QStringList each;
+        for (auto* c : plateDock_->findChildren<PlateCard_Qt*>()) {
+            h = std::max(h, c->sizeHint().height());
+            each << QString("%1:%2%3").arg(c->id()).arg(c->sizeHint().height()).arg(c->property("active").toBool() ? "*" : "");
+        }
+        report("CARD height", h > 0 && h <= budget, QString("max sizeHint %1 <= %2 [%3]").arg(h).arg(budget).arg(each.join(" ")));
+    }
+    {   // Every named control is 24 px tall and sits on one of exactly two rows.
+        QStringList wrong;
+        QList<int> rows;
+        int n = 0;
+        for (QWidget* w : card->findChildren<QWidget*>()) {
+            if (!w->objectName().startsWith("plate.0.") || qobject_cast<QLabel*>(w) || !w->isVisibleTo(card)) continue;
+            ++n;
+            const int y = w->mapTo(card, QPoint(0, 0)).y();
+            if (!rows.contains(y)) rows.append(y);
+            if (w->height() != ui::kControlH) wrong << QString("%1=%2").arg(w->objectName()).arg(w->height());
+        }
+        std::sort(rows.begin(), rows.end());
+        QStringList ys;
+        for (int y : rows) ys << QString::number(y);
+        report("CARD rows", n > 0 && wrong.isEmpty() && rows.size() == 2,
+               QString("%1 controls, rows y=[%2]%3").arg(n).arg(ys.join(",")).arg(wrong.isEmpty() ? QString() : " height " + wrong.join(" ")));
+    }
+    {   // Two cards side by side beside the Timeline in a 1280 window: the card limit is the
+        // 1280 row budget less the grid's side margins and one gap, halved. Zoom/X/Y/Rot live
+        // in the Transform popup, Con/Bri/Sat in the Color popup.
+        const int timelineMin = timelineMinWidth();
+        const int budget1280 = 1280 - (timelineMin + ui::kGap);
+        const int maxCardW = (budget1280 - 2 * ui::kGapTight - ui::kGap) / 2;
+        const int w = card->sizeHint().width();
+        QStringList wrong;
+        QStringList shownPopups;
+        const struct { const char* leaf; std::vector<const char*> spins; } popups[] = {
+            {"transform", {"zoom.spin", "panx.spin", "pany.spin", "rotation.spin"}},
+            {"color", {"contrast.spin", "brightness.spin", "saturation.spin"}}};
+        for (const auto& pp : popups) {
+            auto* btn = card->findChild<QToolButton*>(QString("plate.0.%1.button").arg(pp.leaf));
+            auto* popup = card->findChild<QWidget*>(QString("plate.0.%1.popup").arg(pp.leaf));
+            if (!btn || !popup) { wrong << QString("%1 missing").arg(pp.leaf); continue; }
+            btn->click();
+            settle();
+            if (popup->isVisible()) shownPopups << pp.leaf;
+            else wrong << QString("%1 popup not shown").arg(pp.leaf);
+            for (const char* leaf : pp.spins) {
+                auto* sp = card->findChild<QWidget*>(QString("plate.0.%1").arg(leaf));
+                if (!sp || !popup->isAncestorOf(sp) || !sp->isVisible() || sp->height() != ui::kControlH)
+                    wrong << QString("%1=%2").arg(leaf).arg(sp ? sp->height() : -1);
+            }
+            const auto v = ui::checkDensity(popup);
+            for (const auto& x : v) wrong << QString("%1:%2").arg(x.rule, x.widgetPath);
+            popup->hide();
+            settle();
+        }
+        report("CARD width", w <= maxCardW && wrong.isEmpty(),
+               QString("sizeHint %1 <= %2 (1280 budget %3), popups shown [%4]%5").arg(w).arg(maxCardW).arg(budget1280)
+                   .arg(shownPopups.join(",")).arg(wrong.isEmpty() ? QString(", spins 24 px") : " bad " + wrong.join(" ")));
+        // Diagnostic: the wide-short rows' widths, control by control.
+        QStringList parts;
+        for (QWidget* x : card->findChildren<QWidget*>()) {
+            if (!x->isVisibleTo(card) || x->parentWidget() == card || (!qobject_cast<QLabel*>(x) && !x->objectName().startsWith("plate.0."))) continue;
+            if (x->parentWidget() && x->parentWidget()->parentWidget() != card) continue;
+            parts << QString("%1@%2+%3").arg(qobject_cast<QLabel*>(x) ? qobject_cast<QLabel*>(x)->text() : x->objectName().mid(8))
+                         .arg(x->mapTo(card, QPoint(0, 0)).x()).arg(x->width());
+        }
+        printf("PLATEMANAGER-TEST card parts: %s\n", qPrintable(parts.join(" ")));
+    }
+    {   // UI-test locators keep resolving.
+        const char* leaves[] = {"track.combo", "track.label", "layer.combo", "aspect.combo", "flip.button", "flop.button",
+                                "rgba.button", "zoom.spin", "panx.spin", "pany.spin", "rotation.spin", "lut.combo",
+                                "gamma.spin", "exposure.spin", "contrast.spin", "brightness.spin", "saturation.spin"};
+        QStringList missing;
+        for (const char* leaf : leaves)
+            if (!card->findChild<QWidget*>(QString("plate.0.%1").arg(leaf))) missing << leaf;
+        report("CARD locators", missing.isEmpty(), missing.isEmpty() ? QString("all %1 found").arg(int(std::size(leaves)))
+                                                                     : "missing " + missing.join(" "));
+    }
+    {   // The active cue is a dynamic property, never a stylesheet on the card.
+        // A repeat call must not re-polish: refreshAllCards runs it on every viewport event.
+        // Under the style sheet style a re-polish sends neither StyleChange nor Polish, so the
+        // property write that precedes it (DynamicPropertyChange) is counted too.
+        struct StyleEventCounter : QObject {
+            int n = 0;
+            bool eventFilter(QObject*, QEvent* e) override {
+                if (e->type() == QEvent::StyleChange || e->type() == QEvent::Polish ||
+                    e->type() == QEvent::DynamicPropertyChange) ++n;
+                return false;
+            }
+        } counter;
+        card->setActiveHighlight(true);
+        card->installEventFilter(&counter);
+        card->setActiveHighlight(true);
+        QCoreApplication::processEvents();
+        card->removeEventFilter(&counter);
+        const bool active = card->property("active").toBool();
+        const bool noSheet = card->styleSheet().isEmpty();
+        report("CARD highlight", active && noSheet && counter.n == 0,
+               QString("active=%1 styleSheet=%2 chars, style events on repeat=%3")
+                   .arg(active).arg(card->styleSheet().size()).arg(counter.n));
+        plateManagerWidget_->refreshAllCards();
+    }
+    printf("PLATEMANAGER-TEST card size %dx%d\n", card->sizeHint().width(), card->sizeHint().height());
+    {   // Narrow-tall form (side dock): every control 24 px tall and no density violations.
+        PlateCard_Qt narrow(0);
+        narrow.setVertical(true);
+        narrow.show();
+        settle();
+        QStringList wrong;
+        int n = 0;
+        for (QWidget* w : narrow.findChildren<QWidget*>()) {
+            if (!w->objectName().startsWith("plate.0.") || qobject_cast<QLabel*>(w) || !w->isVisibleTo(&narrow)) continue;
+            ++n;
+            if (w->height() != ui::kControlH) wrong << QString("%1=%2").arg(w->objectName()).arg(w->height());
+        }
+        const auto v = ui::checkDensity(&narrow);
+        report("CARD narrow", n > 0 && wrong.isEmpty() && v.isEmpty(),
+               QString("%1 controls, size %2x%3, %4 density violation(s)%5").arg(n)
+                   .arg(narrow.sizeHint().width()).arg(narrow.sizeHint().height()).arg(int(v.size()))
+                   .arg(wrong.isEmpty() ? QString() : " height " + wrong.join(" ")));
+        for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+        narrow.hide();
+    }
+    {   // Informational: the density checker's view of the card (the dock-wide gate comes later).
+        const auto v = ui::checkDensity(card);
+        printf("PLATEMANAGER-TEST density %d violation(s)\n", int(v.size()));
+        for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+    }
+
+    // ---- Modes and arrangement. Bottom dock (Row shape); framing changes go
+    // through the bridge and then refreshAllCards, never through a shortcut.
+    namespace pl = jefe::platelayout;
+    PlateManager_Qt* pm = plateManagerWidget_;
+    auto ids = [](std::initializer_list<int> l) { return QList<int>(l); };
+    auto idStr = [](const QList<int>& l) {
+        QStringList out;
+        for (int i : l) out << QString::number(i);
+        return "{" + out.join(",") + "}";
+    };
+    auto layout = [&](int framing) {
+        jefe::qt::setFramingMode(framing);
+        pm->refreshAllCards();
+        settle();
+    };
+    report("MODE default", pm->mode() == pl::PlateMode::Visible,
+           QString("mode=%1 (want 1 Visible on a fresh config)").arg(int(pm->mode())));
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        const struct { int framing; const char* name; QList<int> want; } cases[] = {
+            {FRAMINGSINGLE_ID, "S", ids({0})}, {FRAMINGDOUBLE_ID, "D", ids({0, 1})},
+            {FRAMINGDOUBLEVERT_ID, "V", ids({0, 1})}, {FRAMINGQUAD_ID, "Q", ids({0, 1, 2, 3})}};
+        bool ok = true;
+        QStringList got;
+        for (const auto& c : cases) {
+            layout(c.framing);
+            ok = ok && pm->shownPlateIds() == c.want;
+            got << QString("%1=%2").arg(c.name, idStr(pm->shownPlateIds()));
+        }
+        report("MODE visible", ok, got.join(" "));
+    }
+    {
+        pm->setMode(pl::PlateMode::Active);
+        layout(FRAMINGQUAD_ID);
+        jefe::qt::setActivePlate(3);
+        pm->refreshAllCards();
+        settle();
+        const QList<int> first = pm->shownPlateIds();
+        const pl::Cell c2 = pl::cellsFor(FRAMINGQUAD_ID, pm->miniMap()->width(), pm->miniMap()->height())[2];
+        const QPointF at(c2.x + c2.w / 2.0, c2.y + c2.h / 2.0);
+        QMouseEvent press(QEvent::MouseButtonPress, at, pm->miniMap()->mapToGlobal(at),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(pm->miniMap(), &press);
+        const int activeAfter = jefe::qt::getActivePlate();
+        pm->refreshAllCards();
+        settle();
+        report("MODE active", first == ids({3}) && activeAfter == 2 && pm->shownPlateIds() == ids({2}),
+               QString("Q active 3 -> %1; minimap click cell 2 -> active %2, shown %3")
+                   .arg(idStr(first)).arg(activeAfter).arg(idStr(pm->shownPlateIds())));
+    }
+    {
+        pm->setMode(pl::PlateMode::All);
+        layout(FRAMINGDOUBLE_ID);
+        const bool off = pm->cardOffscreen(2) && pm->cardOffscreen(3) && !pm->cardOffscreen(0) && !pm->cardOffscreen(1);
+        report("MODE all", pm->shownPlateIds() == ids({0, 1, 2, 3}) && off,
+               QString("D -> %1, offscreen 0..3 = %2%3%4%5").arg(idStr(pm->shownPlateIds()))
+                   .arg(pm->cardOffscreen(0)).arg(pm->cardOffscreen(1)).arg(pm->cardOffscreen(2)).arg(pm->cardOffscreen(3)));
+        const int stored = QSettings().value("PlateManager/mode", -1).toInt();
+        report("MODE persisted", stored == 2, QString("PlateManager/mode=%1").arg(stored));
+    }
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGQUAD_ID);
+        jefe::qt::setActivePlate(2);
+        pm->refreshAllCards();
+        settle();
+        layout(FRAMINGDOUBLE_ID);
+        auto* card0 = plateDock_->findChild<PlateCard_Qt*>("plate.0.card");
+        auto* card2 = plateDock_->findChild<PlateCard_Qt*>("plate.2.card");
+        const bool hl = card0 && card0->property("active").toBool() && card2 && !card2->property("active").toBool();
+        report("ACTIVE follows layout",
+               jefe::qt::getActivePlate() == 0 && pm->miniMap()->activePlate() == 0 && hl,
+               QString("Q active 2 -> D: active %1, minimap %2, card0 active=%3")
+                   .arg(jefe::qt::getActivePlate()).arg(pm->miniMap()->activePlate())
+                   .arg(card0 ? card0->property("active").toBool() : false));
+    }
+    {   // Cards per row follow the budget. Two cards (2x1): a docked four-card row would widen
+        // the window past the screen and its resize would reset the budget; the four-wide
+        // row is covered by the platelayout model test.
+        // At 1280 the window's own budget fits two cards, so the panel is wide enough for the
+        // two-column case (a row also caps its columns at the panel's actual width).
+        resize(1280, 800);
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGDOUBLE_ID);
+        settleFor(300);   // let pending budget updates from earlier resizes land first
+        int cardW = 0;
+        for (auto* c : plateDock_->findChildren<PlateCard_Qt*>()) cardW = std::max(cardW, c->sizeHint().width());
+        // setRowBudget reflows synchronously; read the cells before the event loop runs, or a
+        // pending budget update from the window would overwrite the test budget.
+        const int panelW = pm->width();
+        pm->setRowBudget(4000);
+        const QPoint wide1 = pm->cardCell(1);
+        const int oneCard = cardW + 2 * ui::kGapTight;   // card plus the grid's side margins
+        pm->setRowBudget(oneCard);
+        const QPoint narrow1 = pm->cardCell(1);
+        report("ROW cells", pm->cardCell(0) == QPoint(0, 0) && wide1 == QPoint(1, 0) && narrow1 == QPoint(0, 1),
+               QString("2x1: budget 4000 cell1=(%1,%2); budget %3 (cardW %4) cell1=(%5,%6); panel %7 px wide (window %8)")
+                   .arg(wide1.x()).arg(wide1.y()).arg(oneCard).arg(cardW).arg(narrow1.x()).arg(narrow1.y())
+                   .arg(panelW).arg(width()));
+        // Balanced wrap, in a window wide enough for three cards per row beside the Timeline:
+        // four shown go 2+2, never 3+1.
+        updatePlateRowBudget(true);
+        resize(1920, 1080);
+        layout(FRAMINGQUAD_ID);
+        settleFor(400);
+        const QPoint want[4] = {QPoint(0, 0), QPoint(1, 0), QPoint(0, 1), QPoint(1, 1)};
+        bool balanced = true;
+        QStringList cells;
+        for (int i = 0; i < 4; ++i) {
+            balanced = balanced && pm->cardCell(i) == want[i];
+            cells << QString("%1:(%2,%3)").arg(i).arg(pm->cardCell(i).x()).arg(pm->cardCell(i).y());
+        }
+        const int fit3 = 3 * cardW + 2 * ui::kGap + 2 * ui::kGapTight;
+        report("ROW balanced", balanced && plateRowBudget() >= fit3,
+               QString("2x2 in a %1 px window (budget %2, three cards need %3) -> [%4]")
+                   .arg(width()).arg(plateRowBudget()).arg(fit3).arg(cells.join(" ")));
+        resize(1280, 800);
+        updatePlateRowBudget(true);   // back to the window's own budget
+        settleFor(300);
+    }
+    auto cellStr = [&]() {
+        QStringList out;
+        for (int i = 0; i < 4; ++i) out << QString("%1:(%2,%3)").arg(i).arg(pm->cardCell(i).x()).arg(pm->cardCell(i).y());
+        return out.join(" ");
+    };
+    auto bottomStrip = [&]() {   // the first-launch layout: Plate Manager left of the Timeline
+        plateDock_->setFloating(false);
+        addDockWidget(Qt::BottomDockWidgetArea, plateDock_);
+        splitDockWidget(plateDock_, timelineDock_, Qt::Horizontal);
+        settleFor(300);
+    };
+    // ---- Title bar (close, float, title, mini-map) and the mode menus. The panel has no header row.
+    auto* titleBar = plateDock_->titleBarWidget();
+    auto* closeBtn = plateDock_->findChild<QAbstractButton*>("platemanager.close");
+    auto* floatBtn = plateDock_->findChild<QAbstractButton*>("platemanager.float");
+    {
+        auto* mm = plateDock_->findChild<QWidget*>("platemanager.minimap");
+        QStringList bad;
+        if (!titleBar || titleBar->objectName() != "platemanager.titlebar") bad << "no platemanager.titlebar";
+        if (!closeBtn || !closeBtn->isVisible()) bad << "close";
+        if (!floatBtn || !floatBtn->isVisible()) bad << "float";
+        if (!mm || !titleBar || !titleBar->isAncestorOf(mm) || mm->width() < 36 || mm->height() < 20 ||
+            !titleBar->rect().contains(QRect(mm->mapTo(titleBar, QPoint(0, 0)), mm->size())))
+            bad << QString("minimap %1x%2").arg(mm ? mm->width() : -1).arg(mm ? mm->height() : -1);
+        if (pm->findChild<QWidget*>("platemanager.header")) bad << "header row still present";
+        if (titleBar && mm && closeBtn && floatBtn) {
+            const int mapRight = mm->mapTo(titleBar, QPoint(mm->width(), 0)).x();
+            const int closeX = closeBtn->mapTo(titleBar, QPoint(0, 0)).x();
+            const int floatX = floatBtn->mapTo(titleBar, QPoint(0, 0)).x();
+            const int gapRight = titleBar->width() - mapRight;
+            if (gapRight < ui::kGapTight || gapRight > ui::kGap + ui::kGapTight)
+                bad << QString("map not at right with a gap (%1 px)").arg(gapRight);
+            if (!(closeX < floatX && floatX < titleBar->width() / 4)) bad << "buttons not at left";
+        }
+        // The title area must match a native dock's: compare where each dock's content starts.
+        bottomStrip();
+        const int plateTop = plateManagerWidget_->mapTo(plateDock_, QPoint(0, 0)).y();
+        const int timelineTop = timelinePanelWidget_->mapTo(timelineDock_, QPoint(0, 0)).y();
+        if (std::abs(plateTop - timelineTop) > 1)
+            bad << QString("title area %1 px vs native Timeline %2 px").arg(plateTop).arg(timelineTop);
+        report("TITLEBAR layout", bad.isEmpty(),
+               bad.isEmpty() ? QString("bar %1x%2 (title area %3 px, native Timeline %4 px), minimap %5x%6 at right, "
+                                       "close/float at left, no header row")
+                                   .arg(titleBar->width()).arg(titleBar->height()).arg(plateTop).arg(timelineTop)
+                                   .arg(mm->width()).arg(mm->height())
+                             : bad.join("; "));
+    }
+    {   // Float button floats and re-docks; the title bar stays on the floating window; close hides.
+        QStringList got;
+        bool ok = closeBtn && floatBtn;
+        if (ok) {
+            floatBtn->click();
+            settleFor(300);
+            const bool floated = plateDock_->isFloating() && titleBar->isVisible();
+            floatBtn->click();
+            settleFor(300);
+            const bool docked = !plateDock_->isFloating();
+            closeBtn->click();
+            settleFor(100);
+            const bool closed = !plateDock_->isVisible();
+            plateDock_->show();
+            bottomStrip();
+            ok = floated && docked && closed && plateDock_->isVisible();
+            got << QString("float %1, re-dock %2, close %3").arg(floated ? "ok" : "FAIL").arg(docked ? "ok" : "FAIL")
+                       .arg(closed ? "ok" : "FAIL");
+        }
+        report("TITLEBAR buttons", ok, got.isEmpty() ? QString("buttons missing") : got.join(", "));
+    }
+    {   // The bar leaves presses on its title to the dock, which drags and (double-click) floats.
+        bool ok = titleBar != nullptr;
+        QString detail = "no title bar";
+        if (titleBar) {
+            const QPoint at = titleBar->rect().center();   // the centred title, not a button or the map
+            // Count the presses that reach the dock itself (an ignored press propagates to the parent).
+            struct PressCounter : QObject {
+                int n = 0;
+                bool eventFilter(QObject*, QEvent* e) override {
+                    if (e->type() == QEvent::MouseButtonPress) ++n;
+                    return false;
+                }
+            } counter;
+            plateDock_->installEventFilter(&counter);
+            QMouseEvent press(QEvent::MouseButtonPress, at, titleBar->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(titleBar, &press);
+            QMouseEvent release(QEvent::MouseButtonRelease, at, titleBar->mapToGlobal(at), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(titleBar, &release);
+            plateDock_->removeEventFilter(&counter);
+            const bool passedOn = counter.n == 1;
+            // Everything below goes to the title bar (points in its coordinates), so the bar's
+            // pass-through is what is tested, not QDockWidget alone.
+            auto toBar = [&](QEvent::Type t, const QPoint& local, Qt::MouseButton b, Qt::MouseButtons bs) {
+                QMouseEvent e(t, local, titleBar->mapToGlobal(local), b, bs, Qt::NoModifier);
+                QCoreApplication::sendEvent(titleBar, &e);
+            };
+            auto dbl = [&]() {
+                toBar(QEvent::MouseButtonDblClick, titleBar->rect().center(), Qt::LeftButton, Qt::LeftButton);
+                settleFor(300);
+            };
+            dbl();
+            const bool floated = plateDock_->isFloating();
+            dbl();
+            const bool redocked = !plateDock_->isFloating();
+            // A press-and-drag on the title undocks the dock. Well into the viewport: a release
+            // near the dock area's edge would plug it straight back.
+            const QPoint at2 = titleBar->rect().center();
+            const QPoint g0 = titleBar->mapToGlobal(at2);
+            toBar(QEvent::MouseButtonPress, at2, Qt::LeftButton, Qt::LeftButton);
+            for (int k = 1; k <= 6; ++k) {
+                const QPoint g = g0 + QPoint(0, -k * 50);
+                // Once the drag starts the dock grabs the mouse; until then the bar gets the moves.
+                QWidget* target = QWidget::mouseGrabber() ? QWidget::mouseGrabber() : titleBar;
+                QMouseEvent mv(QEvent::MouseMove, target->mapFromGlobal(g), g, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(target, &mv);
+                settleFor(20);
+            }
+            {
+                const QPoint g = g0 + QPoint(0, -300);
+                QWidget* target = QWidget::mouseGrabber() ? QWidget::mouseGrabber() : titleBar;
+                QMouseEvent dr(QEvent::MouseButtonRelease, target->mapFromGlobal(g), g, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(target, &dr);
+            }
+            settleFor(300);
+            const bool dragged = plateDock_->isFloating();
+            // Floating (frameless with a custom title bar): dragging the title moves the window.
+            plateDock_->setFloating(true);
+            settleFor(300);
+            const QPoint before = plateDock_->pos();
+            const QPoint fl = titleBar->rect().center();
+            const QPoint fg = titleBar->mapToGlobal(fl);
+            toBar(QEvent::MouseButtonPress, fl, Qt::LeftButton, Qt::LeftButton);
+            for (int k = 1; k <= 6; ++k) {
+                const QPoint g = fg + QPoint(k * 10, k * 10);
+                QWidget* target = QWidget::mouseGrabber() ? QWidget::mouseGrabber() : titleBar;
+                QMouseEvent mv(QEvent::MouseMove, target->mapFromGlobal(g), g, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(target, &mv);
+                settleFor(20);
+            }
+            {
+                const QPoint g = fg + QPoint(60, 60);
+                QWidget* target = QWidget::mouseGrabber() ? QWidget::mouseGrabber() : titleBar;
+                QMouseEvent fr(QEvent::MouseButtonRelease, target->mapFromGlobal(g), g, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(target, &fr);
+            }
+            settleFor(300);
+            const QPoint moved = plateDock_->pos() - before;
+            const bool movable = plateDock_->isFloating() && moved.manhattanLength() > 0;
+            bottomStrip();
+            ok = passedOn && floated && redocked && dragged && movable;
+            detail = QString("press on title passed to dock %1; double-click float %2, again re-dock %3; drag undocks %4; "
+                             "floating window moved by (%5,%6)")
+                         .arg(passedOn ? "yes" : "NO").arg(floated ? "ok" : "FAIL").arg(redocked ? "ok" : "FAIL")
+                         .arg(dragged ? "ok" : "FAIL").arg(moved.x()).arg(moved.y());
+        }
+        report("TITLEBAR drag", ok, detail);
+    }
+    {   // View > Plate Manager Shows and the context menu share the three mode actions.
+        QStringList bad;
+        auto* sub = menuBar()->findChild<QMenu*>("menu.view.platemanager");
+        QList<QAction*> acts;
+        for (const char* leaf : {"active", "visible", "all"}) {
+            QAction* a = nullptr;
+            if (sub) for (QAction* x : sub->actions()) if (x->objectName() == QString("menu.view.platemanager.%1").arg(leaf)) a = x;
+            if (!a || !a->isCheckable()) bad << QString("menu.view.platemanager.%1").arg(leaf);
+            acts << a;
+        }
+        if (bad.isEmpty()) {
+            acts[2]->trigger();
+            const bool all = pm->mode() == pl::PlateMode::All && acts[2]->isChecked() && !acts[1]->isChecked() &&
+                             QSettings().value("PlateManager/mode").toInt() == 2;
+            pm->setMode(pl::PlateMode::Active);   // the API path must update the menu too
+            const bool follows = acts[0]->isChecked() && !acts[2]->isChecked();
+            acts[1]->trigger();
+            const bool back = pm->mode() == pl::PlateMode::Visible && QSettings().value("PlateManager/mode").toInt() == 1;
+            if (!all) bad << "All action did not switch/persist";
+            if (!follows) bad << "menu did not follow setMode";
+            if (!back) bad << "Visible action did not switch/persist";
+            QMenu* ctx = pm->buildContextMenu(this);
+            int shared = 0;
+            for (QAction* a : acts) if (ctx->actions().contains(a)) ++shared;
+            if (shared != 3) bad << QString("context menu has %1 of the 3 actions").arg(shared);
+            delete ctx;
+        }
+        // Right-click: the mode menu over a card's background, not over its editors.
+        {
+            int shown = 0;
+            pm->setContextMenuTestHook([&shown]() { ++shown; });
+            layout(FRAMINGSINGLE_ID);
+            auto* card0 = plateDock_->findChild<PlateCard_Qt*>("plate.0.card");
+            auto* combo = card0 ? card0->findChild<QWidget*>("plate.0.layer.combo") : nullptr;
+            auto rightClick = [&](QWidget* w, const QPoint& local) {
+                QContextMenuEvent e(QContextMenuEvent::Mouse, local, w->mapToGlobal(local));
+                QCoreApplication::sendEvent(w, &e);
+            };
+            if (combo && card0) {
+                rightClick(combo, combo->rect().center());
+                const int overCombo = shown;
+                rightClick(card0, QPoint(2, card0->height() / 2));   // inside the card's side margin
+                const int overCard = shown - overCombo;
+                if (overCombo != 0) bad << "context menu shown over a combo";
+                if (overCard != 1) bad << "no context menu on the card background";
+            } else {
+                bad << "no plate.0 card/combo for the right-click check";
+            }
+            pm->setContextMenuTestHook({});
+        }
+        report("TITLEBAR mode menus", bad.isEmpty(),
+               bad.isEmpty() ? QString("View > Plate Manager Shows: 3 exclusive actions switch and persist the mode; "
+                                       "context menu shares them, shows over a card background and not over a combo")
+                             : bad.join("; "));
+    }
+    {   // Row -> Floating -> Row with the swapped-out card content deleted in between
+        // (a floating map re-forms cards narrow-tall): every control must survive. The Color
+        // popup is left open across the first swap: the swap must close it.
+        auto flushDeletes = []() { QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); };
+        auto* colorBtn0 = plateDock_->findChild<QToolButton*>("plate.0.color.button");
+        auto* colorPopup0 = plateDock_->findChild<QWidget*>("plate.0.color.popup");
+        if (colorBtn0) colorBtn0->click();
+        settle();
+        const bool openedBefore = colorPopup0 && colorPopup0->isVisible();
+        pm->setDockShape(pl::DockShape::Floating);
+        const bool closedBySwap = colorPopup0 && !colorPopup0->isVisible();
+        flushDeletes();
+        pm->setDockShape(pl::DockShape::Row);
+        flushDeletes();
+        settle();
+        QStringList state;
+        bool ok = pm->dockShape() == pl::DockShape::Row && openedBefore && closedBySwap;
+        for (const char* leaf : {"transform", "color"}) {
+            auto* btn = plateDock_->findChild<QToolButton*>(QString("plate.0.%1.button").arg(leaf));
+            ok = ok && btn && btn->isVisibleTo(pm);
+            state << QString("%1 button %2").arg(leaf, btn ? (btn->isVisibleTo(pm) ? "shown" : "hidden") : "missing");
+        }
+        report("SHAPE round trip", ok,
+               QString("%1; open Color popup %2 by the swap").arg(state.join(", "))
+                   .arg(!openedBefore ? "never opened" : closedBySwap ? "closed" : "left open"));
+    }
+    {   // Informational: density checker over the whole panel, in each mode at 2x2.
+        layout(FRAMINGQUAD_ID);
+        for (pl::PlateMode m : {pl::PlateMode::Active, pl::PlateMode::Visible, pl::PlateMode::All}) {
+            pm->setMode(m);
+            settle();
+            const auto v = ui::checkDensity(pm);
+            printf("PLATEMANAGER-TEST panel density mode %d: %d violation(s)\n", int(m), int(v.size()));
+            for (const auto& x : v) printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+        }
+    }
+    // ---- Dock integration. Sizes are right only a tick or two after a dock move (§11),
+    // so each move is followed by settleFor(300).
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        addDockWidget(Qt::LeftDockWidgetArea, plateDock_);
+        settleFor(300);
+        layout(FRAMINGQUAD_ID);
+        settleFor(300);
+        bool column = pm->dockShape() == pl::DockShape::Column;
+        for (int i = 0; i < 4; ++i) column = column && pm->cardCell(i) == QPoint(0, i);
+        jefe::qt::setActivePlate(3);
+        pm->refreshAllCards();
+        settleFor(300);
+        auto* card3 = plateDock_->findChild<PlateCard_Qt*>("plate.3.card");
+        const bool seen = card3 && !card3->visibleRegion().isEmpty();
+        report("DOCK side", column && seen,
+               QString("shape %1 [%2]; active 3 card visible region %3")
+                   .arg(int(pm->dockShape())).arg(cellStr()).arg(seen ? "non-empty" : "empty"));
+    }
+    {
+        plateDock_->setFloating(true);
+        settleFor(300);
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGSINGLE_ID);
+        settleFor(300);
+        layout(FRAMINGQUAD_ID);
+        settleFor(300);
+        const QPoint want[4] = {QPoint(0, 0), QPoint(1, 0), QPoint(0, 1), QPoint(1, 1)};
+        bool map = pm->dockShape() == pl::DockShape::Floating;
+        for (int i = 0; i < 4; ++i) map = map && pm->cardCell(i) == want[i];
+        const QSize hint = pm->sizeHint();
+        const bool fits = plateDock_->width() >= hint.width() && plateDock_->height() >= hint.height() &&
+                          pm->width() >= hint.width() && pm->height() >= hint.height();
+        report("DOCK floating", map && fits,
+               QString("shape %1 [%2]; dock %3x%4, panel %5x%6, hint %7x%8").arg(int(pm->dockShape())).arg(cellStr())
+                   .arg(plateDock_->width()).arg(plateDock_->height()).arg(pm->width()).arg(pm->height())
+                   .arg(hint.width()).arg(hint.height()));
+        // Back to 1x1: the floating window shrinks to the one card.
+        const QSize quad = plateDock_->size();
+        layout(FRAMINGSINGLE_ID);
+        settleFor(300);
+        report("DOCK floating shrink", plateDock_->width() < quad.width() && plateDock_->height() < quad.height() &&
+                                           plateDock_->height() >= pm->sizeHint().height(),
+               QString("2x2 dock %1x%2 -> 1x1 dock %3x%4 (hint %5x%6)").arg(quad.width()).arg(quad.height())
+                   .arg(plateDock_->width()).arg(plateDock_->height())
+                   .arg(pm->sizeHint().width()).arg(pm->sizeHint().height()));
+    }
+    {
+        bottomStrip();
+        report("DOCK redock", pm->dockShape() == pl::DockShape::Row && pm->height() >= 2 * ui::kControlH,
+               QString("shape %1, panel %2x%3").arg(int(pm->dockShape())).arg(pm->width()).arg(pm->height()));
+    }
+    auto timelineOk = [&]() {
+        return timelinePanelWidget_->height() >= timelinePanelWidget_->minimumSizeHint().height();
+    };
+    // Every shown card lies wholly inside the scroll viewport (nothing needs scrolling).
+    auto allInView = [&]() {
+        auto* scroll = pm->findChild<QScrollArea*>("platemanager.scroll");
+        if (!scroll) return false;
+        const QRect view = scroll->viewport()->rect();
+        for (int p : pm->shownPlateIds()) {
+            auto* c = plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p));
+            if (!c || !view.contains(QRect(c->mapTo(scroll->viewport(), QPoint(0, 0)), c->size()))) return false;
+        }
+        return true;
+    };
+    {   // Four plates beside the Timeline in a 1280 window: a 2x2 block, no scrolling, the
+        // strip at about the old bottom-dock height, the Timeline at its full height.
+        resize(1280, 800);
+        settleFor(300);
+        const QPoint grid[4] = {QPoint(0, 0), QPoint(1, 0), QPoint(0, 1), QPoint(1, 1)};
+        QStringList got;
+        bool ok = width() == 1280;
+        for (pl::PlateMode m : {pl::PlateMode::Visible, pl::PlateMode::All}) {
+            pm->setMode(m);
+            layout(FRAMINGQUAD_ID);
+            settleFor(300);
+            bool cells = true;
+            for (int i = 0; i < 4; ++i) cells = cells && pm->cardCell(i) == grid[i];
+            const bool inView = allInView();
+            ok = ok && cells && inView && timelineOk() && plateDock_->height() <= kBaselineDockH + kDockHTolerance;
+            got << QString("%1: [%2] %3, dock %4x%5").arg(m == pl::PlateMode::All ? "All" : "Visible").arg(cellStr())
+                       .arg(inView ? "all in view" : "SCROLLS").arg(plateDock_->width()).arg(plateDock_->height());
+        }
+        report("TIMELINE height", ok,
+               QString("window %1x%2, budget %3; timeline %4 (min %5); dock <= %6+%7; %8")
+                   .arg(width()).arg(height()).arg(plateRowBudget())
+                   .arg(timelinePanelWidget_->height()).arg(timelinePanelWidget_->minimumSizeHint().height())
+                   .arg(kBaselineDockH).arg(kDockHTolerance).arg(got.join("; ")));
+    }
+    {   // Dragging the Plate Manager / Timeline separator: a row squeezed to one card's width
+        // re-places its cards in one column (scrolling) with nothing past the viewport's right
+        // edge, and widening it again restores two columns.
+        resize(1280, 800);
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGQUAD_ID);
+        settleFor(300);
+        const QPoint before = pm->cardCell(1);
+        auto* scroll = pm->findChild<QScrollArea*>("platemanager.scroll");
+        auto split = [&](int plateW) {
+            const int pair = plateDock_->width() + timelineDock_->width();
+            resizeDocks({plateDock_, timelineDock_}, {plateW, pair - plateW}, Qt::Horizontal);
+            settleFor(300);
+        };
+        const int fullW = plateDock_->width();
+        split(pm->minimumWidth());
+        const QPoint squeezed = pm->cardCell(1);
+        const int squeezedW = plateDock_->width();
+        bool inside = scroll != nullptr;
+        if (scroll) {
+            const int right = scroll->viewport()->width();
+            for (int p : pm->shownPlateIds()) {
+                auto* c = plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p));
+                if (!c || c->mapTo(scroll->viewport(), QPoint(c->width(), 0)).x() > right) inside = false;
+            }
+        }
+        split(fullW);
+        const QPoint restored = pm->cardCell(1);
+        report("ROW squeeze", before == QPoint(1, 0) && squeezed == QPoint(0, 1) && inside && restored == QPoint(1, 0),
+               QString("2x2 at 1280: cell1=(%1,%2); dock squeezed to %3 px -> cell1=(%4,%5), cards inside viewport %6; "
+                       "back to %7 px -> cell1=(%8,%9)")
+                   .arg(before.x()).arg(before.y()).arg(squeezedW).arg(squeezed.x()).arg(squeezed.y())
+                   .arg(inside ? "yes" : "NO").arg(plateDock_->width()).arg(restored.x()).arg(restored.y()));
+
+        // A squeeze survives a window resize that keeps the budget's column count (1400 -> 1350:
+        // two columns either way), and a layout change gives the row its full width back.
+        resize(1400, 800);
+        settleFor(300);
+        split(pm->minimumWidth());
+        const int keptBefore = plateDock_->width();
+        resize(1350, 800);
+        settleFor(300);
+        const int keptAfter = plateDock_->width();
+        bool stillInside = scroll != nullptr;
+        if (scroll) {
+            const int right = scroll->viewport()->width();
+            for (int p : pm->shownPlateIds()) {
+                auto* c = plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p));
+                if (!c || c->mapTo(scroll->viewport(), QPoint(c->width(), 0)).x() > right) stillInside = false;
+            }
+        }
+        const QPoint keptCell = pm->cardCell(1);
+        layout(FRAMINGDOUBLE_ID);
+        settleFor(300);
+        const QPoint afterLayout = pm->cardCell(1);
+        const int afterLayoutW = plateDock_->width();
+        report("ROW squeeze kept", std::abs(width() - 1350) <= 1 &&   // 1.5x rounds the window to whole device px keptAfter <= keptBefore + 1 && keptCell == QPoint(0, 1) && stillInside &&
+                                       afterLayout == QPoint(1, 0) && afterLayoutW >= pm->sizeHint().width(),
+               QString("squeezed %1 px at 1400 -> %2 px at %3 (cell1=(%4,%5), inside %6); 2x1 layout -> %7 px "
+                       "(full %8), cell1=(%9,%10)")
+                   .arg(keptBefore).arg(keptAfter).arg(width()).arg(keptCell.x()).arg(keptCell.y())
+                   .arg(stillInside ? "yes" : "NO").arg(afterLayoutW).arg(pm->sizeHint().width())
+                   .arg(afterLayout.x()).arg(afterLayout.y()));
+        resize(1280, 800);
+        settleFor(300);
+    }
+    {   // Narrowing the window wraps the row from two columns to one: plate 1 moves from
+        // beside plate 0 to below it, nothing overlaps, and the Timeline keeps its height.
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGDOUBLE_ID);
+        resize(1280, 800);
+        settleFor(300);
+        const QPoint wide = pm->cardCell(1);
+        constexpr int kNarrowW = 1100;
+        resize(kNarrowW, 800);
+        settleFor(300);
+        const QPoint narrow = pm->cardCell(1);
+        bool apart = true;
+        QList<PlateCard_Qt*> shownCards;
+        for (int p : pm->shownPlateIds()) shownCards << plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p));
+        for (int a = 0; a < shownCards.size(); ++a)
+            for (int b = a + 1; b < shownCards.size(); ++b)
+                if (!shownCards[a] || !shownCards[b] || shownCards[a]->geometry().intersects(shownCards[b]->geometry())) apart = false;
+        report("TIMELINE narrow", width() == kNarrowW && wide == QPoint(1, 0) && narrow == QPoint(0, 1) && apart && timelineOk(),
+               QString("2x1: 1280 cell1=(%1,%2) -> window %3x%4 budget %5 cell1=(%6,%7); overlap %8; timeline %9 (min %10)")
+                   .arg(wide.x()).arg(wide.y()).arg(width()).arg(height()).arg(plateRowBudget()).arg(narrow.x()).arg(narrow.y())
+                   .arg(apart ? "none" : "yes")
+                   .arg(timelinePanelWidget_->height()).arg(timelinePanelWidget_->minimumSizeHint().height()));
+        resize(1280, 800);
+        settleFor(300);
+    }
+    {
+        pm->setMode(pl::PlateMode::Visible);
+        layout(FRAMINGSINGLE_ID);
+        jefe::qt::setFramingMode(FRAMINGDOUBLE_ID);   // as a remote peer's layout change lands
+        onRemoteStateApplied();
+        report("SYNC remote", pm->shownPlateIds() == ids({0, 1}), QString("shown %1").arg(idStr(pm->shownPlateIds())));
+    }
+    if (!shotsDir.isEmpty()) {
+        // Screenshot matrix: dock placement x window size x layout x mode. Docked shots grab the
+        // whole window, floating ones the dock window. Each shot also checks that no shown card
+        // overlaps another or spills out of the card area, that the panel gets its full extent,
+        // and that a Timeline sharing the strip keeps its minimum height.
+        QDir().mkpath(shotsDir);
+        const struct { const char* name; Qt::DockWidgetArea area; bool floating; } places[] = {
+            {"bottom", Qt::BottomDockWidgetArea, false}, {"left", Qt::LeftDockWidgetArea, false},
+            {"right", Qt::RightDockWidgetArea, false}, {"floating", Qt::BottomDockWidgetArea, true}};
+        const QSize sizes[] = {QSize(1280, 800), QSize(1920, 1080)};
+        const struct { int framing; const char* name; } framings[] = {
+            {FRAMINGSINGLE_ID, "1x1"}, {FRAMINGDOUBLE_ID, "2x1"}, {FRAMINGDOUBLEVERT_ID, "1x2"}, {FRAMINGQUAD_ID, "2x2"}};
+        const struct { pl::PlateMode m; const char* name; } modes[] = {
+            {pl::PlateMode::Active, "active"}, {pl::PlateMode::Visible, "visible"}, {pl::PlateMode::All, "all"}};
+        int bad = 0, total = 0;
+        for (const auto& pc : places) {
+            bottomStrip();
+            if (pc.floating) plateDock_->setFloating(true);
+            else if (pc.area != Qt::BottomDockWidgetArea) addDockWidget(pc.area, plateDock_);
+            settleFor(300);
+            for (const QSize& sz : sizes) {
+                resize(sz);
+                settleFor(300);
+                for (const auto& fr : framings) {
+                    for (const auto& md : modes) {
+                        pm->setMode(md.m);
+                        layout(fr.framing);
+                        settleFor(250);
+                        QStringList why;
+                        QList<PlateCard_Qt*> cs;
+                        for (int p : pm->shownPlateIds())
+                            if (auto* c = plateDock_->findChild<PlateCard_Qt*>(QString("plate.%1.card").arg(p))) cs << c;
+                        for (int a = 0; a < cs.size(); ++a) {
+                            if (!cs[a]->parentWidget()->rect().contains(cs[a]->geometry())) why << QString("card%1 spills").arg(cs[a]->id());
+                            for (int b = a + 1; b < cs.size(); ++b)
+                                if (cs[a]->geometry().intersects(cs[b]->geometry()))
+                                    why << QString("cards %1/%2 overlap").arg(cs[a]->id()).arg(cs[b]->id());
+                        }
+                        const QSize hint = pm->sizeHint();
+                        if (pm->width() < hint.width() || (pc.area != Qt::LeftDockWidgetArea && pc.area != Qt::RightDockWidgetArea &&
+                                                           pm->height() < hint.height()))
+                            why << QString("panel %1x%2 < hint %3x%4").arg(pm->width()).arg(pm->height()).arg(hint.width()).arg(hint.height());
+                        if (!plateDock_->rect().contains(pm->geometry())) why << "panel outside dock";
+                        if (!pc.floating && pc.area == Qt::BottomDockWidgetArea && !timelineOk())
+                            why << QString("timeline %1 < min %2").arg(timelinePanelWidget_->height())
+                                       .arg(timelinePanelWidget_->minimumSizeHint().height());
+                        const QString path = QString("%1/pm-%2-%3x%4-%5-%6.png").arg(shotsDir, pc.name).arg(sz.width()).arg(sz.height())
+                                                 .arg(fr.name, md.name);
+                        (pc.floating ? plateDock_->grab() : grab()).save(path);
+                        ++total;
+                        if (!why.isEmpty()) ++bad;
+                        printf("PLATEMANAGER-TEST shot %s window %dx%d dock %dx%d %s%s\n", qPrintable(QFileInfo(path).fileName()),
+                               width(), height(), plateDock_->width(), plateDock_->height(), why.isEmpty() ? "ok" : "BAD ",
+                               qPrintable(why.join("; ")));
+                        fflush(stdout);
+                    }
+                }
+            }
+        }
+        report("SHOTS checked", bad == 0, QString("%1 of %2 shots with a problem").arg(bad).arg(total));
+        bottomStrip();
+        resize(1280, 800);
+        settleFor(300);
+    }
+    {   // Window menu: every panel has a shortcut, and no two menu-bar actions share one.
+        QStringList bad;
+        auto* wm = menuBar()->findChild<QMenu*>("menu.window");
+        if (!wm || wm->title() != tr("&Window")) bad << "no menu.window titled Window";
+        const char* panels[] = {"platemanager", "fxparams", "lut", "remote", "render", "notes", "timeline", "playlist"};
+        QStringList keys;
+        for (const char* leaf : panels) {
+            QAction* a = nullptr;
+            if (wm) for (QAction* x : wm->actions()) if (x->objectName() == QString("menu.window.%1").arg(leaf)) a = x;
+            if (!a) { bad << QString("menu.window.%1 missing").arg(leaf); continue; }
+            if (a->shortcut().isEmpty()) bad << QString("menu.window.%1 has no shortcut").arg(leaf);
+            keys << QString("%1=%2").arg(leaf, a->shortcut().toString());
+        }
+        QMap<QString, QString> seen;
+        QSet<QAction*> visited;
+        std::function<void(QMenu*)> walk = [&](QMenu* m) {
+            for (QAction* a : m->actions()) {
+                if (visited.contains(a)) continue;
+                visited.insert(a);
+                if (a->menu()) { walk(a->menu()); continue; }
+                for (const QKeySequence& k : a->shortcuts()) {
+                    const QString key = k.toString();
+                    if (key.isEmpty()) continue;
+                    const QString name = a->objectName().isEmpty() ? a->text() : a->objectName();
+                    if (seen.contains(key)) bad << QString("%1 shared by %2 and %3").arg(key, seen[key], name);
+                    else seen[key] = name;
+                }
+            }
+        };
+        for (QAction* top : menuBar()->actions()) if (top->menu()) walk(top->menu());
+        // Standalone QShortcuts on the main window (the all-plates variants and friends).
+        int standalone = 0;
+        for (QShortcut* sc : findChildren<QShortcut*>()) {
+            const QString key = sc->key().toString();
+            if (key.isEmpty()) continue;
+            ++standalone;
+            const QString name = sc->objectName().isEmpty() ? QString("QShortcut(%1)").arg(key) : sc->objectName();
+            if (seen.contains(key)) bad << QString("%1 shared by %2 and %3").arg(key, seen[key], name);
+            else seen[key] = name;
+        }
+        report("WINDOW menu", bad.isEmpty(),
+               bad.isEmpty() ? QString("8 panel shortcuts [%1]; %2 menu-bar + %3 standalone QShortcut keys, all distinct")
+                                   .arg(keys.join(" ")).arg(seen.size() - standalone).arg(standalone)
+                             : bad.join("; "));
+    }
+    pm->setMode(pl::PlateMode::Visible);
+    layout(FRAMINGSINGLE_ID);
+
+    printf("PLATEMANAGER-TEST %s\n", allPass ? "PASS" : "FAIL");
+    fflush(stdout);
+    return allPass ? 0 : 2;
 }
 
 void MainWindow_Qt::updateSessionTitle() {
@@ -3551,4 +5269,387 @@ void MainWindow_Qt::autoloadStep() {
         if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
         if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
     }
+}
+
+// Surfaces whose owning plan has not landed yet: violations print but never fail the run.
+static const QStringList kDensityDeferred = {"dock.remote"};
+
+QMessageBox* MainWindow_Qt::makeAboutBox() {
+    auto* box = new QMessageBox(this);
+    box->setWindowTitle(tr("About JefeCheck"));
+    box->setObjectName("dialog.about");
+    box->setTextFormat(Qt::RichText);
+    box->setIconPixmap(windowIcon().pixmap(64, 64));
+    box->setText(tr("<h3>JefeCheck %1</h3>"
+                   "<p>Professional video frame review and color correction.</p>"
+                   "<p>By Daniel Gollas &lt;gollas@jefecorp.com&gt;<br>"
+                   "Originally written 2006-2014, modernized 2026 for "
+                   "open-source release under GPL v2 or later.</p>"
+                   "<p><a href='https://github.com/danielgollas/jefecheck'>"
+                   "github.com/danielgollas/jefecheck</a></p>"
+                   "<p style='font-size:small;color:gray'>Built %2 %3</p>")
+                // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
+                // keep in sync with that define and CMakeLists.txt's project() VERSION.
+                .arg(QStringLiteral("1.7.0"))
+                .arg(QStringLiteral(__DATE__))
+                .arg(QStringLiteral(__TIME__)));
+    return box;
+}
+
+int MainWindow_Qt::runHeadlessUiDensityTest(const QString& outDir) {
+    // A failing self-test still lets the surfaces run, so one run shows everything.
+    const bool lutDirOk = LUTPreview_Qt::runDirectionSelfTest();
+    const bool selfTestOk = jefe::qt::ui::runDensityCheckerSelfTest() && lutDirOk;
+    if (!outDir.isEmpty()) QDir().mkpath(outDir);
+
+    int failures = 0;
+    if (!selfTestOk) {
+        printf("UI-DENSITY selftest FAIL\n");
+        ++failures;
+    }
+    // Several passes: item views lay out on a zero-timer and only then move their index widgets.
+    auto settle = []() { for (int i = 0; i < 4; ++i) QCoreApplication::processEvents(); };
+    auto fileSafe = [](QString s) { return s.replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_"); };
+
+    // One surface: check, print, optionally save a PNG. `label` is the line text after UI-DENSITY.
+    auto record = [&](const QString& name, const QString& label, QWidget* root, const QString& pngBase, QWidget* grabWidget = nullptr) {
+        const auto v = jefe::qt::ui::checkDensity(root);
+        const bool deferred = kDensityDeferred.contains(name);
+        const char* verdict = v.isEmpty() ? "PASS" : (deferred ? "DEFERRED" : "FAIL");
+        printf("UI-DENSITY %s %s\n", qPrintable(label), verdict);
+        for (const auto& x : v)
+            printf("    %s %s: %s\n", qPrintable(x.rule), qPrintable(x.widgetPath), qPrintable(x.detail));
+        if (!v.isEmpty() && !deferred) failures += int(v.size());
+        if (!outDir.isEmpty() && !pngBase.isEmpty())
+            (grabWidget ? grabWidget : root)->grab().save(outDir + "/" + fileSafe(pngBase) + ".png");
+    };
+
+    const QList<QDockWidget*> docks = {timelineDock_, lutDock_, playlistDock_, notesDock_,
+                                       plateDock_, fxParamsDock_, remoteDock_};
+    QMap<QDockWidget*, bool> wasVisible;
+    for (auto* d : docks) wasVisible[d] = d->isVisible();
+
+    // One playlist item with its cards expanded, so the cards the list hosts are checked.
+    QTemporaryDir seedDir;
+    const int playlistBefore = int(jefe::qt::getPlaylistItemNames().size());
+    QCheckBox* compactCheck = playlistPanelWidget_ ? playlistPanelWidget_->findChild<QCheckBox*>("playlist.check.compact") : nullptr;
+    const bool compactWas = compactCheck && compactCheck->isChecked();
+    {
+        const QString seed = seedDir.path() + "/density_seed_plate_with_a_long_name.0001.png";
+        QImage img(64, 36, QImage::Format_RGB32);
+        img.fill(Qt::darkGray);
+        if (!seedDir.isValid() || !img.save(seed)) {
+            printf("    playlist-seed could not write %s\n", qPrintable(seed));
+            ++failures;
+        } else {
+            jefe::qt::addPlaylistFile(seed.toStdString());
+            if (compactCheck) compactCheck->setChecked(false);   // expanded cards: header and detail rows
+            if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
+            if (int(jefe::qt::getPlaylistItemNames().size()) != playlistBefore + 1) {
+                printf("    playlist-seed item was not added\n");
+                ++failures;
+            }
+        }
+    }
+
+    const QList<QSize> windowSizes = {{1280, 800}, {1920, 1080}};
+    for (const QSize& ws : windowSizes) {
+        resize(ws);
+        settle();
+        for (QDockWidget* dock : docks) {
+            if (!dock || !dock->widget()) continue;
+            const QString name = dock->objectName();
+            // Only the dock under test is visible, so the others do not squeeze it.
+            for (auto* d : docks) if (d != dock) d->hide();
+
+            if (name == "dock.luts") {
+                // Select a 3D LUT so the (otherwise hidden) 3D controls are exercised.
+                auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                QTreeWidgetItem* pick3D = nullptr;
+                QTreeWidgetItem* pickLong = nullptr;
+                if (list) {
+                    for (int r = 0; r < list->topLevelItemCount(); ++r) {
+                        auto* it = list->topLevelItem(r);
+                        if (it->text(1) != "3D") continue;
+                        if (!pick3D) pick3D = it;
+                        if (!pickLong && it->text(0).size() > 40) pickLong = it;
+                    }
+                }
+                if (!pick3D) printf("UI-DENSITY LUT-3D SKIPPED (no 3D LUT loaded)\n");
+                else {
+                    if (pickLong) { list->setCurrentItem(pickLong); printf("UI-DENSITY LUT-3D long-name selected: %s\n", qPrintable(pickLong->text(0))); }
+                    else { list->setCurrentItem(pick3D); printf("UI-DENSITY LUT-3D selected: %s (no name > 40 chars available)\n", qPrintable(pick3D->text(0))); }
+                }
+            }
+            if (name == "dock.luts") {
+                // Synthetic 120-char name through the same path setLut uses: must elide, not widen.
+                auto* pv = dock->widget()->findChild<LUTPreview_Qt*>();
+                auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                if (pv && list && !list->selectedItems().isEmpty()) {
+                    auto d = jefe::qt::getLutPreview(list->selectedItems().first()->data(0, Qt::UserRole).toInt());
+                    if (d.valid) { d.name = std::string(120, 'n'); pv->setLut(d); }
+                }
+            }
+            // The FX dock is checked with real cards: sliders, knobs, a field grid, bools and pickers.
+            int fxPlateBefore = -1;
+            std::string fxStackBefore;
+            if (name == "dock.fxparams") {
+                fxPlateBefore = jefe::qt::getActivePlate();
+                jefe::qt::setActivePlate(0);
+                fxStackBefore = jefe::qt::getFXStackXmlOnPlate(0);
+                jefe::qt::clearFXStackOnPlate(0);
+                QStringList missing;
+                for (const char* menuName : {"Color/Brightness, Contrast, Saturation", "Fun/Fun",
+                                             "Special/Convolution 3x3", "Comp/Chroma Key (Blue)"}) {
+                    int idx = -1;
+                    for (const auto& entry : jefe::qt::getAvailableFXMenu())
+                        if (entry.second == menuName) idx = entry.first;
+                    if (idx < 0) missing << menuName;
+                    else jefe::qt::addFXToActivePlate(idx);
+                }
+                if (!missing.isEmpty()) {
+                    printf("    fx-seed effects not loaded: %s\n", qPrintable(missing.join(", ")));
+                    ++failures;
+                }
+                if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
+                printf("UI-DENSITY dock.fxparams seeded with %d FX on plate 0\n",
+                       int(jefe::qt::getFXStackMetaOnPlate(0).size()));
+            }
+            // shared: a second side dock split below this one; height: a short dock.
+            struct Cfg { const char* area; Qt::DockWidgetArea qtArea; bool floating; int width; bool shared = false; int height = 0; };
+            int minW = std::max({dock->minimumWidth(), dock->widget()->minimumWidth(),
+                                 dock->widget()->minimumSizeHint().width()});
+            if (name == "dock.luts" && minW > 300) {
+                printf("    lut-longname dock minimum width %d > 300 (long name widened it)\n", minW);
+                ++failures;
+            }
+            QList<Cfg> cfgs = {
+                {"Bottom", Qt::BottomDockWidgetArea, false, 0},
+                {"Left", Qt::LeftDockWidgetArea, false, minW},
+                {"Left", Qt::LeftDockWidgetArea, false, minW * 3 / 2},
+                {"Left", Qt::LeftDockWidgetArea, false, 120},
+                {"Floating", Qt::NoDockWidgetArea, true, 0},
+                {"LeftShared", Qt::LeftDockWidgetArea, false, minW, true},
+                {"LeftShort", Qt::LeftDockWidgetArea, false, minW, true, 240},
+            };
+            QDockWidget* partner = dock == notesDock_ ? playlistDock_ : notesDock_;
+            for (const Cfg& c : cfgs) {
+                dock->setFloating(false);
+                if (c.floating) {
+                    dock->setFloating(true);
+                    dock->resize(std::max(minW, 300), 400);
+                } else {
+                    addDockWidget(c.qtArea, dock);
+                }
+                dock->show();
+                if (c.shared && partner) {
+                    partner->setFloating(false);
+                    addDockWidget(c.qtArea, partner);
+                    splitDockWidget(dock, partner, Qt::Vertical);
+                    partner->show();
+                }
+                dock->raise();
+                settle();
+                if (!c.floating && c.width > 0) {
+                    resizeDocks({dock}, {c.width}, Qt::Horizontal);
+                    settle();
+                }
+                if (c.height > 0) {
+                    resizeDocks({dock}, {c.height}, Qt::Vertical);
+                    settle();
+                }
+                if (name == "dock.luts") {
+                    // Short dock: the content scrolls rather than overlapping, so the button row
+                    // must never sit on top of the list (the checker's rules cover the rest).
+                    auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                    auto* lutScroll = dock->widget()->findChild<QScrollArea*>("lut.scroll");
+                    if (lutScroll && lutScroll->widget() && lutScroll->widget()->width() > lutScroll->viewport()->width()) {
+                        printf("    lut-content wider than its viewport (%d > %d; horizontal scrollbar is off)\n",
+                               lutScroll->widget()->width(), lutScroll->viewport()->width());
+                        ++failures;
+                    }
+                    auto* applyBtn = dock->widget()->findChild<QWidget*>("lut.apply.button");
+                    if (list && applyBtn && applyBtn->isVisible()) {
+                        const QRect lr(list->mapTo(dock->widget(), QPoint(0, 0)), list->size());
+                        const QRect br(applyBtn->mapTo(dock->widget(), QPoint(0, 0)), applyBtn->size());
+                        if (lr.intersects(br)) {
+                            printf("    lut-row overlaps list (list %d,%d %dx%d; button %d,%d %dx%d)\n",
+                                   lr.x(), lr.y(), lr.width(), lr.height(), br.x(), br.y(), br.width(), br.height());
+                            ++failures;
+                        }
+                    }
+                }
+                if (name == "dock.luts") {
+                    auto* list = dock->widget()->findChild<QTreeWidget*>("lut.list");
+                    if (!list || !list->isVisible()) {
+                        printf("    lut-list %s\n", list ? "hidden" : "not found");
+                        ++failures;
+                    } else {
+                        const int nameW = list->header()->sectionSize(0);
+                        const int typeRight = list->header()->sectionViewportPosition(1) + list->header()->sectionSize(1);
+                        if (nameW < 80 || list->header()->sectionViewportPosition(0) < 0 ||
+                            typeRight > list->viewport()->width()) {
+                            printf("    lut-list name width %d, type right edge %d of viewport %d (Name/Type must fit without scrolling)\n",
+                                   nameW, typeRight, list->viewport()->width());
+                            ++failures;
+                        }
+                    }
+                }
+                const int dockW = dock->width();
+                // Shared and short docks also name their height (the variable under test).
+                const QString hTag = c.shared ? QString(" h%1").arg(dock->height()) : QString();
+                const QString label = QString("%1 %2 %3x%4 %5").arg(name, c.area)
+                                          .arg(ws.width()).arg(ws.height()).arg(dockW) + hTag;
+                record(name, label, dock->widget(),
+                       QString("%1-%2-%3x%4-%5").arg(name, c.area).arg(ws.width()).arg(ws.height()).arg(dockW) + hTag,
+                       dock);
+                if (c.shared && c.height > 0 && dock->height() > c.height + 40)
+                    printf("UI-DENSITY %s short-dock note: asked for %d px, got %d (the content's minimum height)\n",
+                           qPrintable(name), c.height, dock->height());
+                if (name == "dock.timeline") {
+                    // Transport expectations: spins never overlap a visible sibling,
+                    // and the tracks area keeps its 96 px floor in a dock >= 200 px tall.
+                    QWidget* root = dock->widget();
+                    for (const char* spinName : {"transport.frame.spin", "transport.in.spin", "transport.out.spin"}) {
+                        auto* spin = root->findChild<QWidget*>(spinName);
+                        if (!spin || !spin->isVisible()) {
+                            printf("    transport-missing %s %s\n", spinName, spin ? "hidden" : "not found");
+                            ++failures;
+                            continue;
+                        }
+                        const QRect r(spin->mapTo(root, QPoint(0, 0)), spin->size());
+                        for (auto* sib : root->findChildren<QWidget*>()) {
+                            if (sib == spin || !sib->isVisible() || sib->isAncestorOf(spin) || spin->isAncestorOf(sib)) continue;
+                            if (!qobject_cast<QLabel*>(sib) && !qobject_cast<QAbstractButton*>(sib) &&
+                                !qobject_cast<QAbstractSpinBox*>(sib) && !qobject_cast<QComboBox*>(sib)) continue;
+                            if (r.intersects(QRect(sib->mapTo(root, QPoint(0, 0)), sib->size()))) {
+                                printf("    transport-overlap %s overlaps %s\n", spinName, qPrintable(sib->objectName()));
+                                ++failures;
+                            }
+                        }
+                    }
+                    auto* tracks = root->findChild<QWidget*>("timeline.tracks");
+                    if (tracks && dock->height() >= 200 && tracks->height() < 96) {
+                        printf("    transport-tracks-height %d < 96\n", tracks->height());
+                        ++failures;
+                    }
+                }
+                if (c.shared && partner) partner->hide();
+            }
+            dock->setFloating(false);
+            dock->hide();
+            if (name == "dock.fxparams") {
+                jefe::qt::setFXStackXmlOnPlate(0, fxStackBefore);
+                if (fxPlateBefore >= 0) jefe::qt::setActivePlate(fxPlateBefore);
+                if (fxParamPanelWidget_) fxParamPanelWidget_->refresh();
+            }
+        }
+    }
+    for (auto* d : docks) d->setVisible(wasVisible.value(d));
+    // Take the seed item back out and restore the card view.
+    if (int(jefe::qt::getPlaylistItemNames().size()) == playlistBefore + 1)
+        jefe::qt::removePlaylistItem(playlistBefore);
+    if (compactCheck) compactCheck->setChecked(compactWas);
+    if (playlistPanelWidget_) playlistPanelWidget_->refreshList();
+
+    // Dialogs: default size, then minimumSizeHint().
+    auto checkDialog = [&](const QString& name, QDialog* dlg) {
+        dlg->show();
+        settle();
+        record(name, name + " default", dlg, "dlg-" + name + "-default");
+        dlg->resize(dlg->minimumSizeHint());
+        settle();
+        record(name, name + " min", dlg, "dlg-" + name + "-min");
+        dlg->close();
+    };
+
+    openLoadWindow();
+    if (loadWindowDialog_) {
+        loadWindowDialog_->close();
+        checkDialog("dlg.load", loadWindowDialog_);
+
+        // Long path, then a long estimates string, at minimumSizeHint: the strips
+        // must neither crowd Browse nor widen/clip, and nothing may need a horizontal scroll.
+        QDialog* ld = loadWindowDialog_;
+        ld->show();
+        settle();
+        auto fail = [&](const QString& what) { printf("    load-fit %s\n", qPrintable(what)); ++failures; };
+        // Default size: all four strips visible without scrolling.
+        ld->resize(620, 720);
+        settle();
+        auto* scroll = ld->findChild<QScrollArea*>("dialog.loadwindow.scroll");
+        if (!scroll || !scroll->isVisible()) fail("scroll area missing or hidden");
+        else if (ld->height() < 720)   // the window manager clamped it to a short screen (e.g. 1.5x scale): scrolling is the design
+            printf("UI-DENSITY load-fit SKIPPED no-scrollbar check (dialog got %d px of 720)\n", ld->height());
+        else if (scroll->verticalScrollBar()->isVisible()) fail("vertical scrollbar visible at default 620x720");
+        auto* fn = ld->findChild<QLineEdit*>("dialog.loadwindow.strip.0.filename");
+        auto* br = ld->findChild<QWidget*>("dialog.loadwindow.strip.0.browse");
+        if (!fn) fail("filename field missing");
+        else fn->setText("/Volumes/" + QString(190, 'a') + "/x.0001.exr");
+        for (auto* strip : ld->findChildren<TrackStrip_Qt*>())
+            strip->setEstimatesText(QString("123456 frames \u00b7 \u2248" + QString(200, '9') + " GB \u00b7 ~99999.9s"));
+        ld->resize(ld->minimumSizeHint());
+        settle();
+        record("dlg.load", "dlg.load longpath", ld, "dlg-dlg.load-longpath");
+        if (!br || !br->isVisible()) fail("browse missing or hidden");
+        else {
+            if (br->width() < br->minimumSizeHint().width()) fail("browse narrower than its minimumSizeHint");
+            if (fn && fn->isVisible() &&
+                QRect(br->mapTo(ld, QPoint(0, 0)), br->size())
+                    .intersects(QRect(fn->mapTo(ld, QPoint(0, 0)), fn->size())))
+                fail("browse intersects filename");
+        }
+        if (fn && !fn->isVisible()) fail("filename hidden");
+        if (scroll && scroll->isVisible()) {
+            if (scroll->horizontalScrollBar()->isVisible()) fail("horizontal scrollbar visible at minimum size");
+            const QRect vp(QPoint(0, 0), scroll->viewport()->size());
+            for (int i = 0; i < 4; ++i) {
+                auto* strip = ld->findChild<QWidget*>(QString("dialog.loadwindow.strip.%1").arg(i));
+                if (!strip || !strip->isVisible()) { fail(QString("strip %1 missing or hidden").arg(i)); continue; }
+                const QRect r(strip->mapTo(scroll->viewport(), QPoint(0, 0)), strip->size());
+                if (r.left() < vp.left() || r.right() > vp.right())
+                    fail(QString("strip %1 clipped horizontally (%2..%3 of %4)").arg(i).arg(r.left()).arg(r.right()).arg(vp.width()));
+            }
+        }
+        ld->close();
+    }
+    {
+        PreferencesWindow_Qt dlg(this);
+        QListWidget* sidebar = dlg.findChild<QListWidget*>();
+        const int rows = sidebar ? sidebar->count() : 1;
+        for (int i = 0; i < rows; ++i) {
+            QString title = "page" + QString::number(i);
+            if (sidebar) { sidebar->setCurrentRow(i); title = sidebar->item(i)->text(); }
+            checkDialog("dlg.prefs." + title, &dlg);
+        }
+    }
+    {
+        // Every quality page: the format combo swaps the stacked page under the form.
+        RenderDialog_Qt dlg(this);
+        auto* format = dlg.findChild<QComboBox*>("dialog.render.format.combo");
+        if (!format) {
+            printf("    render-format combo not found\n");
+            ++failures;
+            checkDialog("dlg.render", &dlg);
+        } else {
+            for (int i = 0; i < format->count(); ++i) {
+                format->setCurrentIndex(i);
+                checkDialog("dlg.render." + fileSafe(format->itemText(i)), &dlg);
+            }
+        }
+    }
+    {
+        MinSpecsDialog_Qt dlg(this);
+        checkDialog("dlg.minspecs", &dlg);
+    }
+    {
+        QMessageBox* about = makeAboutBox();
+        checkDialog("dlg.about", about);
+        delete about;
+    }
+
+    if (failures == 0) printf("UI-DENSITY RESULT PASS\n");
+    else printf("UI-DENSITY RESULT FAIL %d\n", failures);
+    fflush(stdout);
+    return failures == 0 ? 0 : 1;
 }

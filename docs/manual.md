@@ -179,7 +179,7 @@ This option box lets you choose between any available channels present in the im
 
 Once you have selected what tracks you want to load, adjusted their load-time parameters (if needed), and you are sure of what you want to load, hit the **START** button. This will start loading the track in the background and you can continue using the Load Window to load another sequence into another track. If you set up all the tracks and want to start loading them all at the same time, click the **Start All** button at the bottom of the Load Window. This closes the Load Window and the sequences will start loading into the tracks. If you decide you don't want to do anything, you can simply click the **Done** button to close the Load Window.
 
-The **Add to Playlist** button adds the current setup to the playlist. To display the playlist, press `Ctrl+P`.
+The **Add to Playlist** button adds the current setup to the playlist. To display the playlist, press `F9` or use **Window > Playlist**.
 
 > **Summary:** You use the Load Window to select what tracks you want to load, adjust how you want them to be loaded, and then click the START button to start loading. All parameters have the most common values as defaults, so loading can be as fast as selecting a sequence and clicking START. Remember you can also drag a frame of the sequence onto any viewport in the Main Window to load the sequence.
 
@@ -327,7 +327,21 @@ The **Viewport Controls** allow you to specify and control what viewports will b
 
 You can also access layouts from the keyboard or from **View > Viewport Layout** in the Menu Bar.
 
-The controls shown correspond to the active viewport. To activate a viewport, select it in the Active Viewport checkboxes or click on it in the viewport area.
+The viewport controls live in the **Plate Manager** dock (`F2`), one card per viewport ("plate"). Click a card, or click a viewport in the viewport area, to make it the active viewport; the active card has an orange border.
+
+**Which cards show.** Choose the mode from **View > Plate Manager Shows**, or right-click an empty part of the Plate Manager (or a card's background). JefeCheck remembers your choice:
+
+- **Active** — only the active viewport's card.
+- **Visible** (default) — one card per viewport on screen: one in 1x1, two in 2x1 or 1x2, four in 2x2. Changing the layout updates the cards straight away.
+- **All** — all four cards. Cards for viewports the current layout doesn't show have a dashed border and dimmed captions.
+
+**Mini-map.** At the right of the Plate Manager's title bar, a small map of the current layout shows the active viewport in orange. Click a cell to make that viewport active. The title bar otherwise works like any dock's: the buttons at its left close and float the dock, drag it to move or undock the dock, and double-click it to float or re-dock.
+
+**How the cards are arranged** depends on where the dock is:
+
+- **Bottom or top** — wide, short cards in a row, left to right. When the window is too narrow for every card (the Timeline beside the Plate Manager keeps its own width), they wrap onto evenly filled rows (four cards go two and two, never three and one); in a 1280-pixel-wide window two cards fit beside the Timeline, so four plates take two rows. The strip never grows past two rows of cards; with more cards it scrolls, and the active card is scrolled into view. The Timeline always keeps its full height. To fit, this form keeps a few controls behind buttons: Zoom, X, Y and Rotation behind the zoom button (it shows the zoom, e.g. "1.00×"), and Contrast, Brightness and Saturation behind the **Color** button. Click a button to open its controls. The Layer, Aspect and channel controls have no caption here; hover for their names.
+- **Left or right** — narrow, tall cards in one column, A to D. The column scrolls, and making a viewport active scrolls its card into view.
+- **Floating** — a map of the viewport layout: side by side for 2x1, stacked for 1x2, a 2×2 grid for 2x2 (and for All). The floating window resizes itself when the layout changes.
 
 ![Single viewport control panel](manual-images/SingleViewportControl.png)
 
@@ -347,7 +361,7 @@ When you activate the **Crop Bars** control and the Aspect Ratio is set to anyth
 
 ![Flip/flop controls](manual-images/FlipFlopControls.png)
 
-**Flip/Flop Controls** — Reflects the viewport vertically (Flip) or horizontally (Flop) or both. Shortcuts: `Ctrl+8` (flip) and `Ctrl+9` (flop).
+**Flip/Flop Controls** — Reflects the viewport vertically (Flip) or horizontally (Flop) or both. Shortcuts: `V` (flip) and `M` (flop); add `Shift` for every viewport.
 
 ![RGBA channel mask controls](manual-images/ChannelMaskControls.png)
 
@@ -378,7 +392,7 @@ If you use a color correction frequently, you can save it as a **Color Correctio
 
 The central area of the Main Window is the **Viewports Area**. This is where the image sequences and other bits of information are drawn. The viewport area will be divided into up to four sections, depending on the layout chosen.
 
-The sections are not divided by a visible divider, but each viewport has a text overlay that shows valuable information on what is being shown at the moment.
+The sections are not divided by a visible divider, but each viewport has a text overlay that shows valuable information on what is being shown at the moment. When more than one viewport is on screen, a thin orange frame marks the active one. The frame is never drawn in 1x1 and never appears in renders, stamped notes or review thumbnails.
 
 #### Viewport Behavior
 
@@ -490,10 +504,11 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 
 #### File Menu
 
-- **Load Manager** (`Ctrl+L`) — Opens the Load Manager Window.
-- **Playlist Manager** (`Ctrl+P`) — Opens the Playlist Window.
+- **Quick Load…** (`Ctrl+O`) — Loads a file straight into the active plate.
+- **Load Sequence Manager…** (`Ctrl+L`) — Opens the Load Sequence Manager.
+- **Open Playlist…** — Opens a saved playlist (the Playlist panel itself is **Window > Playlist**, `F9`).
 - **Save Session** (`Ctrl+S`) — Saves a complete JefeCheck session including loaded tracks, load-time parameters, and viewport configurations into a single file for later recall.
-- **Open Session** (`Ctrl+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
+- **Open Session…** (`Ctrl+Shift+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
 - **Export Review Summary…** — Writes the notes on everything in the current session to a PDF, text or CSV file, organized by shot, review round and frame. The PDF also shows a thumbnail of each noted frame with its markup. Noted frames that are not in memory are loaded for the export as needed. Use it to send feedback to people who don't have JefeCheck.
 - **Export Review Package…** — Bundles the current session, its notes and any LUTs you loaded yourself into a single `.jcreview` file you can hand to someone else. Leave **Include media** ticked to copy the footage into the package so it opens anywhere; untick it when everyone can reach the same storage, and JefeCheck will find the footage by its content instead.
 - **Open Review Package…** — Opens a `.jcreview` file. JefeCheck loads its session and LUTs, finds the footage (inside the package, where it was originally, by searching your Search Paths, or by asking you to locate it), and adds the package's notes to any notes you already have on that footage — nothing of yours is removed. When it's done, it lists anything it couldn't find or load.
@@ -504,32 +519,36 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 
 #### View Menu
 
-- **Viewport Layout** — Change the layout of the viewports.
+- **Plate Manager Shows** — Active, Visible or All plate cards in the Plate Manager (also on right-click in the panel).
 - **Zoom Filtering** — Choose between a **Point Filter** (see every pixel when zoomed in) or a **Bilinear Filter** that smoothes the image.
 - **Aspect bar opacity** — Select the opacity for aspect bars overlaid on the image when the aspect ratio is modified.
 - **Fit to viewport** (`F`) — Find the best fit for the current frame in the viewport. Smaller images will not be enlarged, but large images will be zoomed out.
-- **Fit all to viewport** (`Alt+F`) — Fit frames in all viewports.
-- **Flip** (`Ctrl+8`) — Flip viewport vertically.
-- **Flop** (`Ctrl+9`) — Flop viewport horizontally.
-- **Flip All** (`Alt+Ctrl+8`) — Flip all viewports vertically.
-- **Flop All** (`Alt+Ctrl+9`) — Flop all viewports horizontally.
+- **Fit all to viewport** (`Shift+F`) — Fit frames in all viewports.
+- **Flip** (`V`) — Flip viewport vertically.
+- **Flop** (`M`) — Flop viewport horizontally.
+- **Flip All** (`Shift+V`) — Flip all viewports vertically.
+- **Flop All** (`Shift+M`) — Flop all viewports horizontally.
 - **Reset Current View** (`Ctrl+R`) — Resets the current viewport's transformations.
 - **Reset All Views** (`Ctrl+Alt+R`) — Resets all viewport transformations.
 - **Reset Current Color Correction** (`Shift+R`) — Resets the current viewport's color corrections.
 - **Reset All Color Corrections** (`Shift+Alt+R`) — Resets all viewport color corrections.
 - **Show Histogram** (`Ctrl+H`) — Shows an RGB histogram for the current viewport. You can drag and resize the histogram within the viewport.
-- **Fullscreen** (`Ctrl+F`) — Toggles full-screen mode on or off. If you have two monitors, full-screen mode activates on the monitor where the JefeCheck main window is located.
-- **Hide Controls** (`Ctrl+Alt+F`) — Hides the control and menu bars. Most keyboard shortcuts will work when in this mode. To return to normal mode, press `Ctrl+Alt+F` again.
+- **Fullscreen** (`F11` or `Cmd+Ctrl+F`) — Toggles full-screen mode on or off. If you have two monitors, full-screen mode activates on the monitor where the JefeCheck main window is located.
 
-#### Dialogs Menu
+#### Window Menu
 
-- **Load Manager** (`Ctrl+L`) — Opens the Load Manager Window.
-- **Playlist Manager** (`Ctrl+P`) — Opens the Playlist Window.
-- **FX Stack Manager** (`F2`) — Opens the FX Stack Manager Window. See Section 2: Process.
-- **FX Manager** (`F3`) — Opens the FX Manager Window. See Section 2: Process.
-- **LUT Manager** (`F4`) — Opens the LUT Manager Window. See Section 2: Process.
-- **Remote Session Manager** (`F5`) — Opens the Remote Session Manager Window. See Section 3: Share.
-- **Render Manager** (`F6`) — Opens the Render Manager Window. See Section 4: Other Stuff.
+The **Window** menu shows and hides every panel. A checkmark means the panel is showing; showing a panel also brings it to the front of its tab group.
+
+- **Plate Manager** (`F2`) — the per-viewport controls.
+- **FX** (`F3`) — the effect controls for the active viewport. See Section 2: Process.
+- **LUTs** (`F4`) — the LUT browser. See Section 2: Process.
+- **Notes** (`F7`) — review notes for the active viewport's media.
+- **Timeline** (`F8`) — transport, frame range and the track lanes.
+- **Playlist** (`F9`) — the playlist.
+- **Remote Session…** (`F5`) — the remote session panel. See Section 3: Share.
+- **Render…** (`F6`) — the Render window. See Section 4: Other Stuff.
+- **Hide Controls** (`Ctrl+Alt+F`) — hides the menu bar, status bar and every panel; press it again to bring them back.
+- On macOS, the standard **Minimize** (`Cmd+M`), **Zoom** and **Bring All to Front** commands.
 
 #### Help Menu
 
@@ -553,7 +572,7 @@ For example, you might be reviewing a series of shots for a show. Say for shot 1
 
 > **Power Tip:** You can think of a playlist item as a snapshot of the current state of JefeCheck.
 
-To open the Playlist Window, use `Ctrl+P` or use the Dialogs Menu.
+To open the Playlist panel, use `F9` or **Window > Playlist**.
 
 You add items to a playlist in three ways:
 
@@ -609,7 +628,7 @@ To load a LUT, be it 3D or 1D, you use the **LUT Manager**.
 
 ![The LUT Manager Window](manual-images/LUTManager.png)
 
-From the **LUT Manager** (`F4` or **Dialogs > LUT Manager**) you can load and unload LUTs.
+From the **LUTs** panel (`F4` or **Window > LUTs**) you can load and unload LUTs.
 
 The first time you open the LUT Manager, it will be empty, so you need to load whatever LUTs you intend to use. To load a LUT, click the **Browse** button — this opens a file browser where you can select any supported LUT format. You can select multiple LUTs at once by dragging or `Ctrl`-clicking. The LUT browser navigates by default to the FX folder in your JefeCheck installation, which is where your LUTs should be stored.
 
@@ -647,7 +666,7 @@ Real Time modifications are called **FXs** within JefeCheck. Each FX comes in th
 
 ![The FX Manager Window](manual-images/FXManager.png)
 
-From the **FX Manager** (`F3` or **Dialogs > FX Manager**) you can load and unload FXs.
+From the **FX** panel (`F3` or **Window > FX**) you can load and unload FXs.
 
 When you first open the FX Manager, it will be empty. To load an FX, click the **Browse** button. This opens a file browser in the default FX folder within your JefeCheck installation. Select one or more `.jfx` files and click OK. If everything goes OK, a confirmation message appears and the FX will be listed in the Loaded section. Check the **Auto-Load** checkbox next to each FX to have them load automatically next time you use JefeCheck. To unload an FX, click its Unload button.
 
@@ -657,11 +676,11 @@ When you first open the FX Manager, it will be empty. To load an FX, click the *
 
 ![The FX Stack Manager (FX Control Window)](manual-images/FXStackManager.png)
 
-You use FXs by applying them to viewports. A viewport can have no FX applied, or as many as your graphics card performance will allow while maintaining a desired playback frame rate. To apply an FX, use the **FX Stack Manager** (`F2` or **Dialogs > FX Stack Manager**). You can also click the FX button on the Main Window's Control Bar.
+You use FXs by applying them to viewports. A viewport can have no FX applied, or as many as your graphics card performance will allow while maintaining a desired playback frame rate. To apply an FX, use the **FX** panel (`F3` or **Window > FX**).
 
 FXs are applied to each viewport independently — you can have one viewport playing back the unprocessed sequence while on another viewport you have the sequence playing with a LUT or Primary Color Correction applied.
 
-To apply an FX to a viewport, open the FX Stack Manager (`F2`) and click on the viewport you wish to use. The FX Stack Manager title will change to show what viewport is selected (e.g., **FX Controls Plate 1** means you are working on Viewport 1). An **Available FX** submenu will appear on the window's menu bar from which you can select what FX you wish to apply. To switch viewports, simply click on the desired viewport.
+To apply an FX to a viewport, open the FX panel (`F3`) and click on the viewport you wish to use. The FX Stack Manager title will change to show what viewport is selected (e.g., **FX Controls Plate 1** means you are working on Viewport 1). An **Available FX** submenu will appear on the window's menu bar from which you can select what FX you wish to apply. To switch viewports, simply click on the desired viewport.
 
 Once you click on an FX from the Available FX menu, it appears on the **FX Stack**. FXs are applied in the order they were added to the stack, so the output of one FX is passed to the one below it.
 
@@ -676,11 +695,21 @@ All FXs have a set of common controls:
 - **Reset** — Returns all FX parameters to their default values.
 - **Move Up/Down** — Moves the FX up or down the stack.
 
-Most FXs have parameters you can customize. As with almost all other numeric input fields in JefeCheck, an FX's numeric parameters can be modified in two ways: by typing a number, or by clicking and dragging with the mouse. The value changes based on mouse movement at a rate dependent on which button you click:
+Most FXs have parameters you can customize. The effect's `.jfx` file decides how each number is drawn:
 
-- **Left mouse button** — Finest precision (smallest decimal step)
-- **Middle mouse button** — 10× rate
-- **Right mouse button** — 100× rate
+- **Slider row** — label, value field, slider and a reset dot, one per line. The slider covers the effect's usual range (its *soft range*); you can still type a value past it, and the slider then stays pinned at its end.
+- **Knob** — label above a small rotary knob, value field below. Drag up or down on the knob to turn it. Knobs sit side by side.
+- **Field** — label and value field only, side by side with other fields (for example X and Y, or the nine cells of a 3×3 matrix).
+
+Every value field works the same way:
+
+- **Drag left or right** on the field to scrub the value. Dragging across about 200 pixels covers the whole slider range.
+- Hold **Shift** while dragging (field, knob or slider) for fine adjustment, at a tenth of the speed.
+- **Double-click** the field (or press **Enter** or **F2** when it has focus) to type a value; **Enter** commits it and **Esc** cancels.
+- The **reset dot** at the end of a slider row returns that parameter to its default. Every parameter also has a right-click **Reset to default** menu.
+- A parameter's label turns **orange** while its value differs from the default.
+
+When the FX dock is narrow, controls that share a line wrap onto the next line instead of being cut off.
 
 #### Performance
 
@@ -734,7 +763,7 @@ Everything involved in setting up or joining a Remote Session is done from the *
 
 ![The Remote Session Manager Window](manual-images/RemoteSessionManager.png)
 
-To start or join a remote session, open the **Remote Session Manager** (`F5` or **Dialogs > Remote Session Manager**).
+To start or join a remote session, open the **Remote Session** panel (`F5` or **Window > Remote Session…**).
 
 #### Connecting to a Server
 
@@ -902,7 +931,7 @@ The Preferences Window is organized by tabs:
 
 Although JefeCheck is not a finishing tool, you can output high-quality images of your on-screen results in a variety of formats, including JPEG, BMP, TIFF, TGA, PNG, and OpenEXR. On Linux, you can even create an AVI movie file if you have `mencoder` installed.
 
-The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render Manager** (`F6` or **Dialogs > Render Manager**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render). Each frame is loaded for the render as it is needed, so you can render frames that are not in memory, and rendering does not change which frames are loaded. When the render ends, the playhead is back where it was before you started.
+The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render** window (`F6` or **Window > Render…**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render). Each frame is loaded for the render as it is needed, so you can render frames that are not in memory, and rendering does not change which frames are loaded. When the render ends, the playhead is back where it was before you started.
 
 ### The Render Window
 
@@ -1108,6 +1137,8 @@ The `.jfx` is an XML tree with the following structure:
 - `newline` — Makes the following widgets appear on the next line.
 - `spacer` — Creates a space between the previous widget and the next. Must have a `width` attribute specifying how much space is added.
 
+How controls are laid out: a slider always takes a line of its own. Every other control (knobs, fields, checkboxes, selection boxes) shares a line with its neighbours until the next `newline`, and that line wraps when the panel is too narrow to fit them. A `spacer` adds a fixed gap inside such a line.
+
 Each `widget` node must contain these attributes (italic = optional):
 
 | Attribute | Description |
@@ -1120,6 +1151,10 @@ Each `widget` node must contain these attributes (italic = optional):
 | `step` | Decimal precision for `float` type widgets (`0.1`, `0.01`, `1.0`, etc.) |
 | `default` | The default value for the widget |
 | `labelColorR`, `labelColorG`, `labelColorB` | Together define the label color (0–255 each) |
+| *`style`* | How a `float` widget is drawn: `slider` (the default), `knob` or `field` (not case-sensitive). An unknown style draws a slider and prints one warning when the FX loads |
+| *`softMinimum`*, *`softMaximum`* | The slider and scrub range of a `float` widget, inside `minimum`–`maximum`. Typed values may still go anywhere between `minimum` and `maximum` |
+
+Without `softMinimum`/`softMaximum`, the soft range is the full `minimum`–`maximum` range when that spans 100 or less; for a wider range it becomes `minimum` to twice the default (at least `minimum` + 1) when `minimum` ≥ 0, else the default ± max(|default|, 1). An unreadable soft end is skipped, a soft end outside `minimum`–`maximum` is clamped to it, and an empty or reversed soft range is ignored; each prints one warning when the FX loads.
 
 **`shaders` node:** Specifies the names of the shader files:
 - `vertex` — Filename of the vertex shader (e.g., `"fixed.vert"`).
