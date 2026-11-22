@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="${1:-1.7.0}"
+VERSION="${1:-2.0.0}"
 PACKAGE="jefecheck-${VERSION}-linux-x64"
 
 echo "Creating Linux package ($VERSION)..."

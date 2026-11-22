@@ -1,6 +1,6 @@
 # JefeCheck User's Manual
 
-Version 1.7 — Open Source Release
+Version 2.0
 
 ---
 
@@ -50,6 +50,10 @@ It is recommended that you understand the sections in order, since each one assu
 - **Shortcuts** — Keyboard shortcut reference.
 - **Power Tip** — Extra tips and useful information.
 
+**Screenshots:** the pictures in this manual are from the 2014 release. The current interface looks different; where a picture and the text disagree, the text describes JefeCheck 2.0.
+
+**Shortcuts on macOS:** `Ctrl` in this manual means `Cmd`, and `Alt` means `Option`.
+
 ---
 
 ## SECTION 1: PLAY
@@ -76,13 +80,15 @@ The most basic way of using JefeCheck is to see one Track on one Viewport withou
 
 ![Main application window](manual-images/MainWindow.png)
 
-When you first open JefeCheck, you will see the **Main Window** and the **Load Window** on top. If you don't see the Load Window, you can bring it up by pressing `Ctrl+L` (L is for load). As you might have guessed, the Load Window is used to load the image sequences into tracks.
+When you open JefeCheck, you see the **Main Window**. To load image sequences into tracks, open the **Load Sequence Manager** with `Ctrl+L` (L is for load) or **File > Load Sequence Manager…**. You can have it open at startup with **Open Load window at startup** in Preferences.
 
-### The Load Window
+For a single file there is a faster path: **File > Quick Load…** (`Ctrl+O`), or drag the file onto the viewport. Either loads it straight into the active viewport's track.
+
+### The Load Sequence Manager
 
 ![The Load Window](manual-images/LoadWindow.png)
 
-The **Load Window** is divided into 4 sections. These four sections represent the four tracks into which you can load image sequences. You don't have to use all four — you can use as many as you want. Each section is exactly the same, so let's analyze what each control does.
+The **Load Sequence Manager** has four strips, one for each track (A, B, C and D). You don't have to use all four. Each strip is the same, so let's look at what each control does. The window stays open while you work in the Main Window; widen it and the strips arrange themselves two by two.
 
 #### Sequence Info Controls
 
@@ -90,39 +96,29 @@ The **Load Window** is divided into 4 sections. These four sections represent th
 
 ![Load Parameters (populated)](manual-images/LoadParameters-Populated.png)
 
-The **Sequence Info Controls** let you select what sequence you want to load. When you press the **Browse** button a file-choosing dialog appears.
+The top row of each strip selects the sequence. Click the **Browse** (folder) button to open a file dialog, then select any file that belongs to the sequence and click Open. You can also type or paste a path into the filename field. The clock button next to Browse lists recently used files.
 
-From within the file chooser, you can navigate through all the folders and drives attached to your computer. To pick a sequence simply select any file that belongs to that sequence and click OK.
+You can drag a frame of the sequence from your file browser onto the viewport while the Load Sequence Manager is open. The file goes into the first strip as a preview. If the Load Sequence Manager is closed when you drop a file, it loads straight away. If you `Shift`-drag a file, it loads at 50% resolution (`Shift+Ctrl` for 25%). If you drag a folder, the first image or movie file in it (by name) is used.
 
-You can filter out the kinds of files that are shown by selecting an item in the **Show** selection box.
+You can set the folder the file dialogs open in with **Default browse path** in Preferences.
 
-The bottom text box labeled **Filename** shows the current path to the selected file, and also serves as a navigation tool — click on the box above any folder in the path to go directly to that folder. You can also type the path in the filename box and use the autocomplete function by pressing `Tab`.
+Once you have chosen a file, the strip fills in. The last line of the strip estimates the number of frames, how much memory they will use, and how long they will take to load.
 
-You can also drag and drop any frame in the sequence from your Windows Explorer, Mac Finder, or Linux file browser onto the Main Window while the Load Window is open to load a preview. If the Load Window is closed when you drag a file onto the viewport, loading of that sequence will start immediately. If you `Shift`-drag a file, it will load the sequence at 50% resolution.
+The image you selected is also shown as a preview in the viewport, with information about the sequence on top of it: the filename, format, number of channels, bits per channel, KeyKode and SMPTE timecode (on DPX files that contain them), and how many frames will be loaded.
 
-If you drag a folder, the first sequence that is found will be loaded.
-
-When working on a project, you will probably be visiting the same folder many times a day. JefeCheck lets you store **Favorites**, which are paths to folders you use frequently. To add the current folder to your favorites, click on the **Favorites** selection box and choose **Add to Favorites**. Now that folder will be available from the Favorites selection box and you can navigate directly to it by choosing it. You can also manage your favorites by clicking on the Favorites selection box and choosing **Manage Favorites**. You can also set the default browsing directory in the Preferences window.
-
-Once you have selected the file you want and click OK, the file chooser dialog closes and the Load Window is populated with information relevant to the sequence you have chosen. The statistics box shows how much RAM memory will be used up by each frame and by the whole sequence, as well as an estimated load time based on how long the preview frame took to load.
-
-The most recent sequences you load will be available from the **Recently Loaded** drop-down menu to the left of the Browse button.
-
-Even though you are not familiar with the Main Window yet, you will see that the image you selected will be loaded and previewed on it, right behind the Load Window. You can get a better look at the image behind by moving the Load Window out of the way — click and drag on any gray part of the window to move it.
-
-On top of that preview image you will also see some information on the sequence you are going to load, such as the filename, format, number of channels, bits per channel, selected frame, Keycode and SMPTE Timecode (on DPX files that contain that information), and how many frames will be loaded.
-
-At this point, you could press the **START** button and JefeCheck would begin to load the sequence into the track for you to play. But before we do that, let's review the other options you have at load time.
+At this point you could click **Load All** and JefeCheck would start loading. But first, let's review the other options you have at load time.
 
 #### Range Controls
 
-The **Range Controls** let you select what part of the whole sequence you want to load. You simply select In and Out frames. The numbers you see are directly related to the numbers on the file's name. So if a sequence starts with frame number 153, the smallest value you could choose for the In frame would be 153. To select In and Out points, you simply drag the sliders on the right side of the numbers.
+The **From** and **To** boxes select what part of the sequence you want to load. The numbers match the numbers in the file names, so if a sequence starts with frame 153, the smallest value you can choose for From is 153.
 
 #### Load Time Modification Controls
 
 The **Load Time Modification Controls** allow you to alter certain properties of the image sequence as it is loaded into a track. Changes made at load time are "baked" into the track, as opposed to Real Time Modifications which are applied "on the fly" as the picture is being drawn on the screen (you will learn about Real Time Modifications later).
 
 Neither Real Time Modifications nor Load Time Modifications change the original file on disk in any way.
+
+A sequence does not have to fit in memory to be viewed: JefeCheck loads frames around the playhead and unloads frames it no longer needs (see the Track Bar under [Timeline and Track Controls](#timeline-and-track-controls)). The load time controls are still useful to fit more frames, or to make loading faster.
 
 **Table: Load Time vs. Real Time Modifications**
 
@@ -139,178 +135,157 @@ The Load Time Modification Controls are described below:
 
 ##### Scale
 
-The **Scale** input box allows you to load the images as proxies of the original one. This means that the image is resampled and loaded as a lower-resolution version of itself. This saves memory and also helps performance on lower-end hardware. You can choose from common options by clicking on the pop-down menu (100%, 50%, 25%) or type in any number. When you modify the Scale value, the preview image in the main window changes accordingly.
+The **Scale** box loads the images as proxies: each image is resampled and loaded as a lower-resolution version of itself. This saves memory and helps performance on slower hardware. Choose 100%, 50% or 25%. When you change the scale, the preview in the viewport changes to match.
 
 ##### Filter
 
-This option box lets you choose between two resampling methods for when scaling an image. If you are loading the image at 100% scale, this option is irrelevant. Linear sampling is faster but produces lower-quality images, while Bilinear sampling is slower but produces smoother images. If you are not that concerned with the quality of the proxies and want faster load times, use Linear sampling; otherwise choose Bilinear.
+The resampling filter used when scaling is set for all tracks in **Preferences > General > Default decode filter**: `nearest` (fastest, blockiest), `triangle`, `mitchell` or `lanczos3` (sharpest and slowest, the default). At 100% scale the filter is not used.
 
 ##### Crop
 
 Crop is a load time modification that has no Real Time counterpart, and is great for saving memory and improving performance on lower-end computers.
 
-Crop allows you to specify a rectangular sub-section of the image you want to load, and only that part will be loaded into memory. When you enable the **Crop** checkbox, a blue overlay square will appear atop the preview image in the main window.
+Crop allows you to specify a rectangular sub-section of the image you want to load, and only that part will be loaded into memory. When you tick the **Crop** checkbox, a crop region appears on the preview image in the viewport.
 
 ![Crop region selection on a frame](manual-images/CropSample.png) Whatever is under this square will be loaded. To move the Crop square, click and drag it; to resize the square, click and drag the corner squares.
 
 ##### BitDepth
 
-The **BitDepth** drop-down box allows you to choose different formats to load the image into memory. The different formats have different tradeoffs:
+The **Bit** box chooses the format the image is stored in, in memory. The formats have different tradeoffs:
 
-- **8bpc** — Loads the image and transforms it to an 8-bit-per-component image to be displayed on normal monitors. This is the format you will usually use, as it offers a good balance of memory usage and provides perfect image quality unless heavy processing is applied later.
+- **8-bit** — Converts the image to 8 bits per component for display on normal monitors. This is the format you will usually use: it balances memory use and image quality unless heavy processing is applied later.
 
-- **16bpc** — Loads images in their native bit depth and transforms them to 16-bit floating-point images. This uses up twice the amount of memory than the normal format, but allows greater flexibility during processing, preventing banding and other color artifacts when applying real-time color modifications.
+- **16-bit** — Stores 16 bits per component. This uses twice the memory of 8-bit, but prevents banding and other color artifacts when you apply heavy real-time color changes.
 
-- **HALF** — This image format is specific to OpenEXR image files. If you select it while loading another image format, the effect will be the same as choosing 16bpc. Loading OpenEXR images using the HALF bit depth allows JefeCheck to display the image using its native format (16-bit half-float numbers). Loading from OpenEXR files will be much faster as well, since no processing has to be done on the image. When loading using the HALF format, you will have the entire high dynamic range of the image available for processing. You will usually need to use the Gamma and Exposure controls to view it correctly, since OpenEXR pixels need gamma correction to be viewed directly on an 8-bit screen. Loading in HALF format will result in each frame using double the RAM of a normal 8bpc image.
+- **16-half** — 16-bit half-float, the native format of most OpenEXR files. With other formats the effect is the same as 16-bit. Loading OpenEXR images as 16-half keeps the full high dynamic range of the image available for processing. You will usually need the Gamma and Exposure controls to view such images correctly. Each frame uses twice the RAM of an 8-bit frame.
 
-- **4bpc** — Loads the image and transforms it into a 4-bits-per-component image. This introduces serious banding and color inaccuracies for all but the simplest images. The tradeoff is that you can fit twice as many frames into memory as you could with the normal format. One use of this format is to load as many frames as possible into memory in order to check for black or missing frames in a sequence, a process where image quality is not important.
-
-- **S3TC** — Loads the image and compresses it in order to fit more frames into memory. Not all hardware supports this format and it is a little slower to load. The compression is not lossless and introduces a small amount of artifacts, so if you are checking for pixel imperfections, this is not the way to go. On the other hand, this format lets you fit up to eight times more frames into memory and should be used if you wish to view very long sequences where image quality does not have to be absolutely perfect (but still quite good).
-
-Unless you are having specific problems, or you need to load more frames into memory at the expense of image quality, the 8bpc method is the recommended format for most uses (except for EXR images, in which case the HALF format is recommended).
+Unless you are having specific problems, 8-bit is the recommended format for most uses, and 16-half for EXR images. The bit depth used by Quick Load and drag and drop is set in **Preferences > General > Default bit depth**.
 
 ##### Channels
 
-This option box lets you choose between any available channels present in the image. This is particularly useful for OpenEXR files. If you open a multi-channel OpenEXR image, all the contained channels will be shown here so you can choose which one you wish to load into the track (e.g., Specular, Diffuse, RGBA, Y, Shadows, Depth, etc.).
+The **Ch** box lets you choose between the channels present in the image. This is particularly useful for OpenEXR files. If you open a multi-channel OpenEXR image, all the contained channels will be shown here so you can choose which one you wish to load into the track (e.g., Specular, Diffuse, RGBA, Y, Shadows, Depth, etc.).
 
-#### Start All and Playlist Buttons
+#### Load All, Reload and Unload
 
 ![Start and Cancel buttons](manual-images/StartCancelButtons.png)
 
-Once you have selected what tracks you want to load, adjusted their load-time parameters (if needed), and you are sure of what you want to load, hit the **START** button. This will start loading the track in the background and you can continue using the Load Window to load another sequence into another track. If you set up all the tracks and want to start loading them all at the same time, click the **Start All** button at the bottom of the Load Window. This closes the Load Window and the sequences will start loading into the tracks. If you decide you don't want to do anything, you can simply click the **Done** button to close the Load Window.
+When you have set up the tracks you want, click **Load All** at the bottom of the window. The window closes and every strip that has a file starts loading into its track. To leave without loading, close the window.
 
-The **Add to Playlist** button adds the current setup to the playlist. To display the playlist, press `F9` or use **Window > Playlist**.
+Each strip also has a **Reload** button, which reads that track's frames from disk again, and an **Unload & Clear** (trash) button, which unloads the track and clears its fields.
 
-> **Summary:** You use the Load Window to select what tracks you want to load, adjust how you want them to be loaded, and then click the START button to start loading. All parameters have the most common values as defaults, so loading can be as fast as selecting a sequence and clicking START. Remember you can also drag a frame of the sequence onto any viewport in the Main Window to load the sequence.
+To save the current setup in the playlist, use **Add Current** in the Playlist panel (`F9` or **Window > Playlist**).
+
+> **Summary:** You use the Load Sequence Manager to select what to load into each track and how, and then click Load All. All parameters have the most common values as defaults, so loading can be as fast as selecting a sequence and clicking Load All. You can also drag a frame of the sequence onto the viewport, or use Quick Load.
 
 ---
 
 ### Movies
 
-Besides image sequences, JefeCheck loads movie files: `.mov` and `.mp4` containing ProRes (422, 422 HQ, 4444, 4444 XQ), H.264 or H.265. You load a movie exactly like a sequence — Browse to it in the Load Window, Quick Load it, drag it onto a viewport or a track, or name it on the command line — and it lands in a track as a single entry that behaves like a sequence. The range controls, scale, bit depth, crop, hold modes, offsets, the filmstrip and notes all work the same way, and the timeline numbers the movie's frames from 1. The frames are decoded into memory; nothing is ever extracted to disk. Numbers in a movie's name are never read as frame numbers, so `shot_v003.mov` is one clip and `a_001.mov` and `a_002.mov` are never joined into a sequence.
+Besides image sequences, JefeCheck loads movie files: `.mov`, `.mp4` and `.mxf` containing ProRes (422, 422 HQ, 4444, 4444 XQ), H.264, H.265 or DNxHR. You load a movie exactly like a sequence — Browse to it in the Load Sequence Manager, Quick Load it, drag it onto a viewport or a track lane, or pass it with `--open-file` on the command line — and it lands in a track as a single entry that behaves like a sequence. The range controls, scale, bit depth, crop, hold modes, offsets, the filmstrip and notes all work the same way, and the timeline numbers the movie's frames from 1. The frames are decoded into memory; nothing is ever extracted to disk. Numbers in a movie's name are never read as frame numbers, so `shot_v003.mov` is one clip and `a_001.mov` and `a_002.mov` are never joined into a sequence.
 
 **Colour.** The picture is converted from YUV with the file's own matrix (Rec.709, Rec.601 or Rec.2020) and range (video or full). A file that does not say is treated as Rec.709, video range. Code values are shown straight, as with any other image, and 10- and 12-bit sources keep their precision when the track is loaded at 16 bits.
 
-**Frame rate and timecode.** JefeCheck plays at one rate, the one in the FPS box. Loading a movie sets it to the movie's exact rate (23.976 is held as 24000/1001, not rounded); when you load several movies the most recent one wins, and opening a saved session keeps the session's rate. Other tracks keep playing one of their frames per timeline frame at that rate. The status bar shows the active movie's source timecode, with drop-frame timecode shown with a `;`. A variable-frame-rate file is played as if it were constant at its average rate, and the status bar says so.
+**Frame rate and timecode.** JefeCheck plays at one rate, the one in the Timeline panel's FPS box. Loading a movie sets it to the movie's exact rate (23.976 is held as 24000/1001, not rounded); when you load several movies the most recent one wins, and opening a saved session keeps the session's rate. Other tracks keep playing one of their frames per timeline frame at that rate. The status bar shows the active movie's source timecode, with drop-frame timecode shown with a `;`. A variable-frame-rate file is played as if it were constant at its average rate, and the status bar says so.
 
-**Sound.** Every track with sound plays at the same time, mixed together. To mute a track, click the speaker on its lane in the timeline (or right-click the lane and choose **Mute audio**); the lane's waveform dims, and the mute is saved with the session. When you play forward at the movie's own rate the sound leads and the picture follows it, dropping a frame rather than letting the sound stutter. When you step, scrub, or play at any other rate, each frame you see plays its own slice of sound at normal pitch — cut short when playing faster, followed by silence when playing slower, never stretched. Reverse playback is silent. Offsets, ranges and looping apply to the sound as they do to the picture; a held frame does not repeat its sound.
+**Sound.** Every track with sound plays at the same time, mixed together. Only one audio stream per file is read, so a camera MXF that stores each channel as its own mono stream plays its first channel only. To mute a track, click the speaker on its lane in the timeline (or right-click the lane and choose **Mute audio**); the lane's waveform dims, and the mute is saved with the session. When you play forward at the movie's own rate the sound leads and the picture follows it, dropping a frame rather than letting the sound stutter. When you step, scrub, or play at any other rate, each frame you see plays its own slice of sound at normal pitch — cut short when playing faster, followed by silence when playing slower, never stretched. Reverse playback is silent. Offsets, ranges and looping apply to the sound as they do to the picture; a held frame does not repeat its sound.
 
-**Limits.** A movie, like a sequence, does not have to fit in memory: a clip longer than memory plays to the end. Frames load ahead of the playhead and frames behind it are unloaded to make room, and the sound is loaded separately, so it never drops out where pictures are missing. Very heavy 4K ProRes 4444 (around 1 Gb/s) can load slower than real time on current machines; what happens then is set by **When loading can't keep up** in Preferences. Frames already in memory play at full rate. There is no hardware decoding yet, MXF files are not supported, and rendered output carries no sound.
+**Limits.** A movie, like a sequence, does not have to fit in memory: a clip longer than memory plays to the end. Frames load ahead of the playhead and frames behind it are unloaded to make room, and the sound is loaded separately, so it never drops out where pictures are missing. Very heavy 4K ProRes 4444 (around 1 Gb/s) can load slower than real time on current machines; what happens then is set by **When loading can't keep up** in Preferences. Frames already in memory play at full rate. **Hardware decoding** in Preferences (Auto, the default, or Off) lets JefeCheck decode movies on the graphics hardware when it can, which is often much faster for heavy files. Rendered output carries no sound.
 
 ---
 
 ### The Main Window
 
-The **Main Window** is where almost everything else in JefeCheck really happens. It is basically divided in three: the **Menu Bar**, the **Viewports Area**, and the **Control Bar**.
+The **Main Window** is where almost everything else in JefeCheck happens. It has four parts:
 
-- The **Menu Bar** is where you access other windows or adjust some settings.
-- The **Viewports Area** is where the viewports are located and you actually see the image sequences you have loaded.
-- The **Control Bar** is where you control almost everything related to the playback of the sequences you are watching and adjust many settings for the viewports.
+- The **Menu Bar** (**File · View · Window · Help**), where you open other windows and change settings.
+- The **Viewports Area** in the middle, where you see the image sequences you have loaded.
+- The **panels** docked around it: the Plate Manager (`F2`), FX (`F3`), LUTs (`F4`), Notes (`F7`), Timeline (`F8`) and Playlist (`F9`). Show and hide them from the **Window** menu. You can drag a panel to another edge of the window, stack panels as tabs, or float a panel in its own window.
+- The **Status Bar** at the bottom, which shows the layout, messages and, for movies, the source timecode. Hide it with **View > Show Status Bar**.
 
-You can hide the Control and Menu Bars by pressing `Ctrl+Alt+F`. You bring the controls back up by pressing `Ctrl+Alt+F` again.
+Press `Ctrl+Alt+F` (**Window > Hide Controls**) to hide the menu bar, status bar and every panel. Press it again to bring them back.
 
-When you first see the Main Window, it is empty. What is shown in the Viewports Area varies depending on what windows are open, but this is the area where you will see all of the graphical data that JefeCheck can show.
-
-When the Load Window is open, you will see a preview of the sequences that will be loaded if you click the START button. When the Load Window is closed, you will see whatever track is loaded and assigned to each particular viewport.
+What the Viewports Area shows depends on what windows are open. While the Load Sequence Manager is open, you see a preview of the sequences it will load. Otherwise you see whatever track is loaded and assigned to each viewport.
 
 Remember: tracks are independent from viewports — tracks hold sequences, and viewports are used to view those sequences. One viewport can show only one sequence, but one sequence can be seen on multiple viewports.
 
 ---
 
-### The Control Bar
+### The Timeline and Plate Manager Panels
 
 ![The Control Bar](manual-images/ControlBar.png)
 
-The Control Bar contains many different controls grouped into three logical areas:
+In the 2014 release these controls sat in one Control Bar. In JefeCheck 2.0 they live in two panels:
 
-1. Timeline and Track Controls
-2. Viewport Controls
-3. Playback Controls
+1. Timeline and Track Controls, and the Playback Controls: the **Timeline** panel (`F8`)
+2. Viewport Controls: the **Plate Manager** panel (`F2`)
 
 #### Timeline and Track Controls
 
 ![Timeline controls](manual-images/TimeLineControls.png)
 
-The **Timeline and Track Controls** show you information relevant to time and position of what you are seeing on the screen, and they let you control what frames of the loaded sequences you are looking at.
+The **Timeline and Track Controls** show where you are in time, and let you choose which frames of the loaded sequences you are looking at.
 
-The Timeline controls from left to right are:
+The Timeline panel has a row of transport controls at the top, the timeline bar under it, and one lane per track under that.
 
-**SMPTE Counter** — Shows the current time relative to the timeline starting at frame one. It does not show timecode information embedded in files. The counter shows time as `HH:MM:SS:FF`. The number of frames that must elapse for the seconds counter to increase depends on the target frame rate, controlled from the Playback Controls.
+**Current Frame (F)** — Shows the current timeline frame. Type a frame number to jump to it.
 
-**From/To — In/Out Markers** — The From and To markers specify the range of the timeline. You can force the timeline to play back only from a certain frame and up to another one using the In/Out markers. This is helpful if you only want to see a certain range of frames of the sequence at a time. This is different from only loading a certain range of frames, since you can change the From and To markers on the fly without having to unload or reload any frames. As with all numeric inputs in JefeCheck, you can click and drag to change the value or enter a number with the keyboard. You can also use `i` and `o` to set the In and Out points. To reset them use `Shift+I` and `Shift+O`. If you do `Alt+I`, the In point will be set and the sequence will start reloading from that point on. You can also click and drag the In/Out markers directly on the timeline. Whenever you load a sequence, the From/To and In/Out markers are updated to fit the longest loaded sequence.
+**In/Out** — The **In** and **Out** boxes set the range of the timeline that plays. This is helpful if you only want to see a certain range of frames at a time. It is different from loading only a range of frames: you can change In and Out at any time without unloading or reloading anything. The timeline bar and the track lanes always show the In–Out range across their full width, so narrowing the range zooms in. You can also press `I` and `O` to set the In and Out points at the current frame, and `Shift+I` and `Shift+O` to reset them to the ends of the timeline. `Alt+I` sets the In point and loads all tracks from that frame. Whenever you load a sequence, In and Out are reset to fit it.
 
-**Loop Priority Control** — When you have multiple tracks loaded, each with a different length, the loop priority determines at what point on the timeline the playback will loop. The options are:
+**The Timeline** — Click or drag on the timeline bar to jump or scrub to any frame. The orange line is the playhead.
 
-- **Shortest** — The playback loops around the sequence with the shortest number of loaded frames. This could mean not seeing all of the frames in the longer sequences.
-- **Longest** — The playback loops around the sequence with the longest number of loaded frames. This could mean seeing empty frames in the shorter sequences.
-- **Timeline** — The playback loops around the length of the timeline, no matter how many frames are loaded in any track.
-
-**Current Frame** — Shows the current frame the timeline is at.
-
-**The Timeline** — Allows you to control and graphically visualize what frame of the sequence you are looking at. You can click and drag the knob on the timeline to scrub or jump to any point on it. The size of the knob will vary depending on the range the timeline is showing, as defined by the From and To markers.
-
-**Track Controls** — There are four rows of controls under the Timeline, one for each track. Each row contains a **Track Options Button**, a **Cancel** button, and a **Track Bar**.
+**Track Lanes** — Under the timeline there is one lane for each track.
 
 ![Track controls row](manual-images/TrackControls.png)
 
-- **The Track Bar** — A gray background showing how long the track is in relation to the timeline and other tracks.
+- **The Track Bar** — A bar showing how long the track is in relation to the timeline and other tracks.
 
   ![Track bar showing loading progress](manual-images/TrackBar.png)
 
-  ![Track loading mode indicator](manual-images/TrackLoadingMode.png) Inside the gray background there is a slightly darker gray area that shows the range of the track we wish to load. Green segments over it show the frames that are in memory right now and ready to show. They move with the playhead: frames ahead of it load and turn green, and when memory is full, frames behind it are unloaded and their green disappears (the few just behind the playhead go last, so stepping back stays instant). A frame that is not in memory can still be reached; click it on the timeline and it loads. A frame that can't be read shows black, and playback carries on past it.
+  ![Track loading mode indicator](manual-images/TrackLoadingMode.png) Green segments show the frames that are in memory right now and ready to show. They move with the playhead: frames ahead of it load and turn green, and when memory is full, frames behind it are unloaded and their green disappears (the few just behind the playhead go last, so stepping back stays instant). A frame that is not in memory can still be reached; click it on the timeline and it loads. A frame that can't be read shows black, and playback carries on past it.
 
-- **The Cancel Loading Button** — Turns red whenever its corresponding track is being loaded, allowing you to cancel the load at any point. When the track is completely loaded or no more frames can fit into memory, loading stops and the button turns gray.
+- **Thumbnails** — When thumbnails are on (the filmstrip button in the transport row, the lane's right-click menu, or **Timeline thumbnails** in Preferences), each lane shows a filmstrip of the track's frames.
 
-  ![Cancel loading button](manual-images/cancelLoading.png)
+- **Sound** — A track with sound shows its waveform and a speaker icon on its lane. Click the speaker to mute or unmute the track.
 
-- **The Track Options Button** — When you click on the Track Options button, a **Track Options** window appears with the following options:
+- **Frame Offset** — Drag a lane left or right to offset the track a number of frames in relation to the timeline and other tracks. This is useful when the part you want to compare is not at the same frames on both tracks. You can also right-click the lane and choose **Set offset…** to type the offset.
 
-  - **Frame Offset** — Allows you to offset the track a certain number of frames in relation to the timeline and other tracks. This is useful if you are comparing two tracks but the segment you wish to compare is not in the same frames on both tracks. You can also change the frame offset by clicking and dragging the track bar.
+- **Right-click menu** — **Hold last frame**, **Set offset…**, **Mute audio** (on tracks with sound) and **Show frame thumbnails**.
 
-  - **Hold Frame** — Specifies what should be displayed if the current frame is outside of the loaded frames for a particular track. Options are:
-    - **None** — No frame will be held. If the timeline goes out of the range of the sequence, no frame will be shown.
-    - **Current** — The track will always show the frame that was current when the Current option was selected.
-    - **Edge** — Whenever the current timeline frame is out of the range of loaded frames, the one on the closest edge will be used: if the timeline is at a later frame, the last loaded frame will be shown; if earlier, the first loaded frame will be shown.
+- **Load from here** — `Alt`+click on a lane to load that track starting at the clicked frame.
 
-  - **Unload Track** — Unloads the track to free memory. All settings are kept in the Load Window so the track will be reloaded next time you start a load. To unload the track and erase the settings, use the Unload button in the Load Window.
+- **Drop to load** — Drop a file onto a lane to load it into that track.
 
-You can also reach the Track Options menu by right-clicking on the track.
+To unload a track, use **Unload & Clear** on its strip in the Load Sequence Manager.
 
-Many times a whole sequence won't fit into memory. You can tell JefeCheck to unload the loaded frames and start loading the sequence from a different point by `Alt`+right-mouse-button-clicking on the track at the point where you would like to start loading. If instead of `Alt`+right-clicking on the track bar you do it on the timeline, then all tracks will unload and start loading from that point on.
-
-> **Summary:** You use the Timeline controls to change the timeline range and current timeline frame, which controls what is displayed for each track according to its own settings. You can also use the track bars and timeline to start loading frames at a particular point.
+> **Summary:** You use the Timeline controls to change the timeline range and current timeline frame, which controls what is displayed for each track according to its own settings. You use the track lanes to offset tracks, mute their sound and load from a particular frame.
 
 #### Playback Controls
 
 ![Playback controls](manual-images/PlaybackControls.png)
 
-The **Playback Controls** let you control and decide how the timeline is to behave.
+The **Playback Controls** are the transport row at the top of the Timeline panel. They control how the timeline plays.
 
 | Control | Action | Shortcut |
 |---------|--------|----------|
-| Rewind | Returns to first frame | `Z` |
-| One Frame Back | Move one frame back | `X` or `Left Arrow` |
-| Play/Pause Reverse | Play or pause in reverse | `,` |
-| Pause | Play or pause in current direction | `Space` |
-| Play/Pause Forward | Play or pause forward | `.` |
-| One Frame Forward | Move one frame forward | `C` or `Right Arrow` |
-| Fast Forward | Jump to last frame | `V` |
+| Rewind | Go to the first frame | `Home` |
+| Step Back | Move one frame back | `X` or `Left Arrow` |
+| Play/Pause | Play or pause | `Space` |
+| Step Forward | Move one frame forward | `C` or `Right Arrow` |
+| Fast Forward | Go to the last frame | `End` |
 
-The keyboard shortcuts may seem a little unusual, but if you position your left hand with your thumb on the Space bar and your pinky finger on the `Z` key, your other fingers will fall right in place with the other playback control keys, allowing you to start/pause playback, fast forward, rewind, and advance frames with very little effort — all while leaving your right hand free to control the viewports.
+Press `,` (or `<`) to set the play direction to reverse, and `.` (or `>`) to set it to forward.
 
 **Loop Modes** — Control what happens when the current timeline value reaches its limit:
 
 - **Once** — The sequence plays once and then stops on the last frame. Shortcut: `8`.
-- **Loop** — The sequence plays forward in an infinite loop until paused. Shortcut: `9`.
-- **Swing** — The sequence plays forward, and when it reaches the last frame it plays in reverse, going back and forth until paused. Shortcut: `0`.
+- **Loop** — The sequence plays forward in an infinite loop until paused. Shortcut: `9`. This is the default.
+- **Bounce** — The sequence plays forward, and when it reaches the last frame it plays in reverse, going back and forth until paused. Shortcut: `0`.
 
-**Actual Frame Rate** — Shows the actual frame rate the sequence is running at. Due to hardware limitations the playback frame rate may not match the target frame rate.
+**FPS** — The target frame rate. JefeCheck tries to keep this rate during playback. Loading a movie sets it to the movie's rate.
 
-**Target Frame Rate** — JefeCheck will try to maintain this frame rate during playback. You can type in any integer value or click the drop-down menu to select commonly used frame rates.
+**Actual Frame Rate** — The text overlay on each viewport shows the rate playback is actually running at (`fps:`). It shows the target rate while playback keeps up, and the real rate when it can't.
 
-You can also scrub the timeline by clicking and dragging on the viewport while holding the `Shift` key.
-
-> **Summary:** You use the Playback controls to start/pause playback, determine the target frame rate, monitor the actual frame rate, and select if and how you want the sequence to loop.
+> **Summary:** You use the Playback controls to start and pause playback, set the target frame rate, and choose if and how the sequence loops.
 
 #### Viewport Controls
 
@@ -320,12 +295,10 @@ The **Viewport Controls** allow you to specify and control what viewports will b
 
 **Viewport Layouts:**
 
-- **1x1** — A single viewport (Viewport 1) using all the space in the viewport area. Shortcut: `Ctrl+1`.
+- **1x1** — A single viewport using all the space in the viewport area. Shortcut: `Ctrl+1`.
 - **2x1** — Two viewports side by side, each using half the horizontal space and full vertical space. Shortcut: `Ctrl+2`.
 - **1x2** — Two viewports one on top of the other, each using half the vertical space and full horizontal space. Shortcut: `Ctrl+3`.
 - **2x2** — Four viewports, two side by side and another two under them. Shortcut: `Ctrl+4`.
-
-You can also access layouts from the keyboard or from **View > Viewport Layout** in the Menu Bar.
 
 The viewport controls live in the **Plate Manager** dock (`F2`), one card per viewport ("plate"). Click a card, or click a viewport in the viewport area, to make it the active viewport; the active card has an orange border.
 
@@ -349,40 +322,42 @@ The viewport controls live in the **Plate Manager** dock (`F2`), one card per vi
 
 ![Track selection box](manual-images/trackSelectionBox.png)
 
-**Track Selection Box** — Select which track you want displayed on this viewport. It can be any of the four tracks. If no sequence is loaded in the selected track, the viewport will not show anything. More than one viewport can show the same track at the same time.
+**Track** — Select which track this viewport displays: A, B, C or D. If no sequence is loaded in the selected track, the viewport shows nothing. More than one viewport can show the same track at the same time. You can also click a viewport and press `Up` or `Down` to step through the tracks.
+
+**Layer** — Choose the image layer the viewport shows. It reads **Main** until you load a multi-layer EXR, whose layers are then listed here.
 
 ![Aspect ratio controls](manual-images/AspectControls.png)
 
-**Aspect Ratio Controls** — You can change the aspect ratio of the sequence being shown on the screen in real time. The default value is **original**, which uses the original aspect ratio of the image. The drop-down menu shows commonly used aspect ratios such as 4:3, 16:9, 2.35:1, etc., but you can type in any ratio using `x:y` notation or as a decimal.
+**Aspect** — Change the aspect ratio of the image on screen in real time. Click the aspect button to open its list. The default, **source**, uses the image's own aspect ratio. The list has commonly used ratios such as 4:3, 16:9 and 2.35:1, and you can type your own as `x:y` or as a decimal.
 
-By default, when you change the aspect ratio, the image will be deformed to adapt to it. This is useful when viewing material filmed with anamorphic lenses.
+By default, changing the aspect ratio stretches the image to fit it. This is useful when viewing material filmed with anamorphic lenses.
 
-When you activate the **Crop Bars** control and the Aspect Ratio is set to anything other than "original", the aspect ratio will be changed not by squashing or stretching the image but by applying black crop bars to hide or compensate for a portion of the image. The opacity of the black aspect bars can be changed in **View > Aspect Bars opacity**.
+Tick **Letterbox** in the same list to show the new ratio with black bars instead of stretching the image. The opacity of the bars is set in **Preferences > General > Aspect-bar opacity**.
 
 ![Flip/flop controls](manual-images/FlipFlopControls.png)
 
-**Flip/Flop Controls** — Reflects the viewport vertically (Flip) or horizontally (Flop) or both. Shortcuts: `V` (flip) and `M` (flop); add `Shift` for every viewport.
+**Flip/Flop** — Reflects the viewport vertically (Flip) or horizontally (Flop) or both. Shortcuts: `V` (flip) and `M` (flop); add `Shift` for every viewport.
 
 ![RGBA channel mask controls](manual-images/ChannelMaskControls.png)
 
-**RGBA Mask** — View any RGB color channel of the image by clicking the RGB color mask button, which toggles through each channel. Shortcuts: `R`, `G`, `B`, and `A`.
+**Channels** — The channel button (it shows **RGB**) steps through RGB, R, G and B, so you can look at one color channel at a time.
 
 ![Transformation controls](manual-images/TransformationControls.png)
 
-**Transformation Controls** — Zoom in and out using the scroll wheel, or use the zoom control (1 = no zoom). You can also zoom by holding `Ctrl` and left-clicking and dragging on the viewport. Pan by left-clicking and dragging on the viewport, or use the X/Y position controls (0 = centered). You can also rotate the frame an arbitrary number of degrees. To reset transformations use `Ctrl+R`, or `Alt+Ctrl+R` to reset all viewports.
+**Transformation Controls** — Zoom in and out with the mouse wheel or a trackpad pinch, or use the **Zoom** box (1 = no zoom). Pan by left-clicking and dragging on the viewport, or use the **X** and **Y** boxes (0 = centered). **Rot** rotates the frame by any number of degrees. When the Plate Manager is docked at the top or bottom, these four boxes sit behind the zoom button (it shows the zoom, e.g. "1.00×"). Press `F` to fit the image to the viewport (`Shift+F` for every viewport). To reset transformations press `Ctrl+R`, or `Ctrl+Alt+R` to reset all viewports.
 
 **Color Correction Controls** — Adjust several color aspects of the viewport. Applied in the following order:
 
-- **LUT** — Apply a 1D or 3D LUT to the viewport. Loading LUTs is described in Section 2. To scroll through available LUTs use `Ctrl+Up/Down`. You can select a default LUT in the **LUT Manager** (shortcut `F4`). This default LUT can be overridden by setting the environment variable `JEFECHECK_DEFAULT_LUT` to the name of the desired LUT.
+- **LUT** — Apply a 1D or 3D LUT to the viewport. Loading LUTs is described in Section 2.
 - **Gamma** — Adjust screen gamma. Shortcut: hold `W` and click-drag on the viewport.
-- **Exposure** — Adjust screen exposure. Shortcut: hold `E` and click-drag on the viewport.
-- **Brightness** — Adjust screen brightness. Shortcut: hold `Q` and click-drag on the viewport.
-- **Contrast** — Adjust screen contrast. Shortcut: hold `D` and click-drag on the viewport.
-- **Saturation** — Adjust screen saturation. Shortcut: hold `S` and click-drag on the viewport.
+- **Exp** (Exposure) — Adjust screen exposure. Shortcut: hold `E` and click-drag on the viewport.
+- **Bri** (Brightness) — Adjust screen brightness. Shortcut: hold `Q` and click-drag on the viewport.
+- **Con** (Contrast) — Adjust screen contrast. Shortcut: hold `D` and click-drag on the viewport.
+- **Sat** (Saturation) — Adjust screen saturation. Shortcut: hold `S` and click-drag on the viewport.
 
-To reset the viewport's color corrections click `Shift+R`.
+When the Plate Manager is docked at the top or bottom, Con, Bri and Sat sit behind the **Color** button. Hold `Alt` while dragging to change every viewport. To reset the viewport's color corrections press `Shift+R`, or `Shift+Alt+R` for all viewports.
 
-If you use a color correction frequently, you can save it as a **Color Correction Favorite** in one of 5 slots. Click `Ctrl+Shift+1` through `Ctrl+Shift+5` to save. Click `Shift+1` through `Shift+5` to apply a favorite color correction to the active viewport. Favorite color corrections are saved in the settings file and will be available next time you open JefeCheck.
+If you use a color correction often, save it as a **Color Correction Favorite** in one of 5 slots with **View > Color Correction Favorites > Save to Slot 1–5**. Apply a favorite to the active viewport with **Load Slot 1–5** from the same menu. Favorites are kept between launches, and are also saved in each session file.
 
 > **Summary:** You use the layout controls to change how many viewports are displayed and how they are laid out. You use the viewport controls to change the way each viewport is drawn — aspect ratio, zoom, and which track is displayed. You use the color correction controls to change the color properties of the viewport, with the ability to save and load up to 5 favorite color corrections.
 
@@ -398,11 +373,11 @@ The sections are not divided by a visible divider, but each viewport has a text 
 
 Viewports show different information depending on what you are doing at the moment.
 
-**With the Load Window Open:**
+**With the Load Sequence Manager Open:**
 
 ![Preview information overlay shown in viewport](manual-images/PreviewInformation.png)
 
-When the Load Window is open, each visible viewport shows a preview frame for each sequence that will be loaded into each track. Each viewport shows the preview for whatever track it is assigned to.
+When the Load Sequence Manager is open, each visible viewport shows a preview frame for each sequence that will be loaded into each track. Each viewport shows the preview for whatever track it is assigned to.
 
 Additionally, the text overlay on each viewport will show:
 
@@ -419,7 +394,7 @@ Additionally, the text overlay on each viewport will show:
 
 **During Playback:**
 
-Once sequences are loaded and the Load Window is closed, you will see the frames in the selected layout.
+Once sequences are loaded and the Load Sequence Manager is closed, you will see the frames in the selected layout.
 
 The text overlay can toggle between three states by pressing `T`: no display, basic information, and basic plus metadata
 
@@ -468,7 +443,15 @@ For images with EXIF metadata, all available fields will be displayed.
 
 **LUT Visualization:**
 
-The viewports can also show a graphical representation of a 1D or 3D Lookup Table. See Section 2: Process for more information.
+The LUTs panel shows a graphical representation of a 1D or 3D Lookup Table. See Section 2: Process for more information.
+
+**Notes:**
+
+Review notes drawn on a frame show on top of it. Press `N` (**View > Show Notes**) to show or hide them. See [Review Notes](#review-notes).
+
+**On-screen help:**
+
+Press `H` to show or hide a list of keyboard shortcuts over the viewports.
 
 #### Viewport Interaction
 
@@ -476,11 +459,11 @@ Using the mouse and keyboard you can interact with the viewports to modify their
 
 | To do this... | ...do this |
 |--------------|------------|
-| Scrub the timeline | Click and drag left or right on the viewport while holding `Shift`. |
-| Zoom in and out | Move the mouse wheel up or down. Pressing `Shift` makes zoom act 10× slower. Optionally, left-click and drag up and down while holding `Ctrl`. |
-| Gang Zoom (all viewports) | Zoom as normal but also press `Alt`. |
+| Zoom in and out | Move the mouse wheel up or down, or pinch on a trackpad. |
+| Gang Zoom (all viewports) | Pinch while holding `Alt`. |
 | Pan | Left-click and drag on the viewport. |
 | Gang Pan (all viewports) | Left-click and drag while holding `Alt`. |
+| Fit the image to the viewport | Press `F` (`Shift+F` for all viewports). |
 | Reset viewport transformations | Select the viewport and press `Ctrl+R`. |
 | Reset all viewport transformations | Press `Ctrl+Alt+R`. |
 | Adjust Gamma | Left-click and drag while holding `W`. |
@@ -488,9 +471,10 @@ Using the mouse and keyboard you can interact with the viewports to modify their
 | Adjust Brightness | Left-click and drag while holding `Q`. |
 | Adjust Contrast | Left-click and drag while holding `D`. |
 | Adjust Saturation | Left-click and drag while holding `S`. |
+| Adjust every viewport's color | Add `Alt` to any of the five above. |
 | Reset viewport color corrections | Select the viewport and press `Shift+R`. |
 | Reset all color corrections | Press `Shift+Alt+R`. |
-| Color picker (show pixel value) | Right-click on the viewport while pressing `Ctrl`. |
+| Show a remote pointer | In a remote session, left-click and drag while holding `Shift`. |
 
 > **Summary:** The Viewport Area is where you will see the Viewports displaying all the information contained in the tracks. You can interact with the Viewports using the mouse and keyboard and display text information on what you are looking at, including DPX, OpenEXR and EXIF metadata when present.
 
@@ -504,36 +488,36 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 
 #### File Menu
 
-- **Quick Load…** (`Ctrl+O`) — Loads a file straight into the active plate.
+- **Quick Load…** (`Ctrl+O`) — Loads a file straight into the active viewport's track.
 - **Load Sequence Manager…** (`Ctrl+L`) — Opens the Load Sequence Manager.
-- **Open Playlist…** — Opens a saved playlist (the Playlist panel itself is **Window > Playlist**, `F9`).
-- **Save Session** (`Ctrl+S`) — Saves a complete JefeCheck session including loaded tracks, load-time parameters, and viewport configurations into a single file for later recall.
-- **Open Session…** (`Ctrl+Shift+O`) — Opens a complete JefeCheck session, replacing any current sequence settings and loaded tracks.
+- **Save Session** (`Ctrl+S`) — Saves a complete JefeCheck session, including loaded tracks, load-time parameters and viewport settings, into a single `.jcs` file for later recall.
+- **Save Session As…** — Saves the session under a new name.
+- **Open Session…** (`Ctrl+Shift+O`) — Opens a saved session, replacing the current tracks and settings.
+- **Recent Sessions** — The last few sessions you saved or opened.
+- **Open Playlist…** — Opens a saved `.jpl` playlist (the Playlist panel itself is **Window > Playlist**, `F9`).
+- **Recent Playlists** — The last few playlists you saved or opened.
+- **Stamp Notes into EXR…** — Saves a copy of the current frame as an EXR with its review notes attached.
 - **Export Review Summary…** — Writes the notes on everything in the current session to a PDF, text or CSV file, organized by shot, review round and frame. The PDF also shows a thumbnail of each noted frame with its markup. Noted frames that are not in memory are loaded for the export as needed. Use it to send feedback to people who don't have JefeCheck.
-- **Export Review Package…** — Bundles the current session, its notes and any LUTs you loaded yourself into a single `.jcreview` file you can hand to someone else. Leave **Include media** ticked to copy the footage into the package so it opens anywhere; untick it when everyone can reach the same storage, and JefeCheck will find the footage by its content instead.
-- **Open Review Package…** — Opens a `.jcreview` file. JefeCheck loads its session and LUTs, finds the footage (inside the package, where it was originally, by searching your Search Paths, or by asking you to locate it), and adds the package's notes to any notes you already have on that footage — nothing of yours is removed. When it's done, it lists anything it couldn't find or load.
-- **Save Chat Log** — Saves the complete chat log after a remote session.
-- **Preferences** (`Ctrl+P`) — Opens the Preferences Window. See Section 4: Other Stuff.
+- **Export Review Package…** — Bundles the current session, its notes and any LUTs you loaded yourself into a single `.jcreview` file you can hand to someone else. Leave **Include media** ticked to copy the footage into the package so it opens anywhere. Untick it when everyone can reach the same storage; JefeCheck will then look for the footage where it was, and by file name in the other person's Search Paths.
+- **Open Review Package…** — Opens a `.jcreview` file. JefeCheck loads its session and LUTs, finds the footage (inside the package, where it was originally, by file name in your Search Paths, or by asking you to locate it), and adds the package's notes to any notes you already have on that footage — nothing of yours is removed. When it's done, it lists anything it couldn't find or load. To also match footage that was moved and renamed, turn on **Also match moved media by fingerprint** in **Preferences > Search Paths** (slower).
+- **Preferences…** (`Ctrl+P` or `Ctrl+,`) — Opens the Preferences window. See Section 4: Other Stuff.
 - **Quit** (`Ctrl+Q`) — Quits JefeCheck.
-- **Recent Sessions** — Shows the last few loaded sessions.
 
 #### View Menu
 
+- **Fullscreen** (`F11` or `Cmd+Ctrl+F`) — Toggles full-screen mode. With two monitors, full screen uses the monitor the main window is on.
+- **Show Histogram** (`Ctrl+H`) — Shows an RGB histogram for the active viewport. You can drag the histogram within the viewport.
+- **Show Histogram (All Plates)** (`Ctrl+Alt+H`) — Shows a histogram on every viewport.
+- **Show Notes** (`N`) — Shows or hides review notes on the viewports.
+- **Show Status Bar** — Shows or hides the status bar.
 - **Plate Manager Shows** — Active, Visible or All plate cards in the Plate Manager (also on right-click in the panel).
-- **Zoom Filtering** — Choose between a **Point Filter** (see every pixel when zoomed in) or a **Bilinear Filter** that smoothes the image.
-- **Aspect bar opacity** — Select the opacity for aspect bars overlaid on the image when the aspect ratio is modified.
-- **Fit to viewport** (`F`) — Find the best fit for the current frame in the viewport. Smaller images will not be enlarged, but large images will be zoomed out.
-- **Fit all to viewport** (`Shift+F`) — Fit frames in all viewports.
-- **Flip** (`V`) — Flip viewport vertically.
-- **Flop** (`M`) — Flop viewport horizontally.
-- **Flip All** (`Shift+V`) — Flip all viewports vertically.
-- **Flop All** (`Shift+M`) — Flop all viewports horizontally.
-- **Reset Current View** (`Ctrl+R`) — Resets the current viewport's transformations.
-- **Reset All Views** (`Ctrl+Alt+R`) — Resets all viewport transformations.
-- **Reset Current Color Correction** (`Shift+R`) — Resets the current viewport's color corrections.
-- **Reset All Color Corrections** (`Shift+Alt+R`) — Resets all viewport color corrections.
-- **Show Histogram** (`Ctrl+H`) — Shows an RGB histogram for the current viewport. You can drag and resize the histogram within the viewport.
-- **Fullscreen** (`F11` or `Cmd+Ctrl+F`) — Toggles full-screen mode on or off. If you have two monitors, full-screen mode activates on the monitor where the JefeCheck main window is located.
+- **Color Correction Favorites** — Save the active viewport's color correction to one of 5 slots, or load a slot into it.
+- **Fit to Screen** (`F`) — Fits the current frame to the viewport. Smaller images are not enlarged, but large images are zoomed out. `Shift+F` fits every viewport.
+- **Flip Vertical** (`V`) — Flips the viewport vertically. `Shift+V` flips every viewport.
+- **Flop Horizontal** (`M`) — Flops the viewport horizontally. `Shift+M` flops every viewport.
+- **Text Overlay Mode** (`T`) — Steps through the text overlay modes. `Alt+T` changes every viewport.
+- **Reset Plate** (`Ctrl+R`) — Resets the active viewport's transformations. `Ctrl+Alt+R` resets every viewport.
+- **Reset Color Correction** (`Shift+R`) — Resets the active viewport's color corrections. `Shift+Alt+R` resets every viewport.
 
 #### Window Menu
 
@@ -552,13 +536,12 @@ The **Window** menu shows and hides every panel. A checkmark means the panel is 
 
 #### Help Menu
 
-- **Help** (`F1`) — Displays this user manual.
-- **Quick Start Guide** — Shows the Quick Start Guide.
-- **Online Support** — Takes you to the JefeCheck support page.
-- **Video Tutorials** — Takes you to the JefeCheck video tutorials page.
-- **Toggle On-screen Help** (`H`) — Displays/hides quick help shortcuts on the viewport area.
-- **Check System Requirements** — Displays a window showing what JefeCheck features are available on your hardware.
-- **About JefeCheck** — Shows the About window containing version, contact, and credits information.
+- **User Manual** (`F1`) — Opens this user manual.
+- **Quick Start Guide** — Opens the Quick Start Guide.
+- **Report an Issue…** — Opens the JefeCheck issue tracker on GitHub.
+- **Toggle On-Screen Help** (`H`) — Shows or hides the keyboard shortcut list over the viewports.
+- **About JefeCheck** — Shows the version, author and license.
+- **System Specs…** — Shows your graphics hardware and what it supports.
 
 ---
 
@@ -576,23 +559,39 @@ To open the Playlist panel, use `F9` or **Window > Playlist**.
 
 You add items to a playlist in three ways:
 
-1. From the Load Window's **Add to Playlist** button.
-2. From the Main Window's **Add to Playlist** button.
-3. By dragging a single file from the sequence into the Playlist window. If you drag more than one file, each one will be considered a sequence and loaded into different tracks.
+1. **Add Current** saves the current setup as a new item.
+2. **Add Files…** builds a new item from one or more files, one track per file.
+3. Dropping media files on an empty part of the list adds a new item.
 
-Whatever way you choose to add an item to the playlist, the state of the application (viewport layout, FXs, playback settings) will be saved with the item.
+You can append tracks to an item by dropping media onto that item's card, or with **Append tracks…** in its right-click menu.
 
-You can append tracks to a playlist item by dragging a single file in the sequence onto the playlist item in the Playlist Window. It will be added to the first available track in the item.
+Each item shows a card per track with its file name, range and scale. Click a card's arrow to show or hide the details. **Compact** shortens the cards, and **Full paths** shows whole paths instead of file names.
 
 To load a playlist item, double-click on it or select it and press `Enter`.
 
-You can move items by selecting them and pressing `Shift+Up` or `Shift+Down`.
+You can move an item by selecting it and pressing `Shift+Up` or `Shift+Down`, or with the up and down buttons. Remove the selected item with `Delete` or `Backspace`, or the remove button. The clear (trash) button removes every item.
 
-Keep in mind that only items loaded from the Playlist Window will be loaded in remote sessions (see Section 3: Share).
+With **Auto-advance** on, when an item has played through once the next item loads and plays. With **Loop playlist** on, the last item is followed by the first. **Scale override** loads every track of an item at the scale you choose next to it, whatever scale the item was saved with.
 
-Playlists can be saved using the Playlist Menu in the Playlist Window. Click **Save Playlist** and choose a path and filename — the file will be saved with a `.jpl` extension. To load a playlist, use **Load Playlist**, or drag it into the Playlist Window or the Main Window's viewport area. You can load more than one playlist at a time; their items will be appended.
+Keep in mind that only items loaded from the Playlist panel will be loaded in remote sessions (see Section 3: Share).
 
-You can clear a playlist using **Clear Playlist**, which removes all items from it.
+Save the playlist with the save button and choose a file name; it is saved with a `.jpl` extension. Open one with the open (folder) button or **File > Open Playlist…**, or drop a `.jpl` file onto the Playlist panel. Opening a playlist replaces the items in the list.
+
+---
+
+### Review Notes
+
+Notes are drawings and short texts you put on a frame during a review. They belong to the footage, not to the session, so they show again whenever the same footage is loaded.
+
+Open the **Notes** panel (`F7` or **Window > Notes**). It shows the notes for the active viewport's footage, grouped by review round.
+
+1. Pick a tool: **Freehand**, **Arrow**, **Box** or **Text**. Click the tool again to put it down, or press `Escape`.
+2. Pick a **Colour** and a **Size** if you like.
+3. Drag on the viewport to draw. With the Text tool, click where the note goes and type it.
+
+Select a note in the list and click **Remove Note** to delete it. **Lock Round** freezes the current round's notes; click it again to reopen the round.
+
+Press `N` to show or hide notes on the viewports. To share notes, see **Export Review Summary…** and **Export Review Package…** in the [File Menu](#file-menu).
 
 ---
 
@@ -610,69 +609,59 @@ You can think of Load Time Processing as making a different print of the film re
 
 In contrast, Real Time Modifications are equivalent to loading the original film reel on the projector and then putting different filters or lenses on it. You don't have to make a different print in order to see a different effect — you simply swap one filter for another, but the reel remains the same.
 
-In JefeCheck, Load Time Modifications are done in the Load Window. Real Time modifications are applied on the fly using the power of your computer's graphics card.
+In JefeCheck, Load Time Modifications are done in the Load Sequence Manager. Real Time modifications are applied on the fly using the power of your computer's graphics card.
 
-JefeCheck can load a variety of Lookup Table formats, but the easiest way to get a 3D LUT is to make your own. It is really easy to emulate any color look by using a custom-made JefeCheck LUT. If you can render a single frame through your color pipeline, then you can use the color output of that pipeline in JefeCheck! All you do is process the provided calibration image (`JefeCheckLUTSourceImage.tga`) through your pipeline — the resulting image (which should be the same size as the original) is loaded into JefeCheck and converted to a 3D Lookup Table that will emulate whatever color alterations your pipeline made to the original image. See Section 4: Other Stuff to find out how to make your own 3D LUT.
+JefeCheck can load a variety of Lookup Table formats, but the easiest way to get a 3D LUT is to make your own. It is really easy to emulate any color look by using a custom-made JefeCheck LUT. If you can render a single frame through your color pipeline, then you can use the color output of that pipeline in JefeCheck! All you do is process the provided identity image (`UnitCube.tga`, in the FX folder) through your pipeline — the resulting image (which should be the same size as the original) is loaded into JefeCheck and converted to a 3D Lookup Table that will emulate whatever color alterations your pipeline made to the original image. See Section 4: Other Stuff to find out how to make your own 3D LUT.
 
 You can also load and use 1D LUTs. The file format for a 1D LUT is a simple text file. To learn how to write your own 1D LUT see Section 4: Other Stuff.
 
-JefeCheck also understands Truelight `.cub` 3D cube files and has been tested with cubes of size 16 and 32, but should work with any size.
+JefeCheck also reads `.cub` (Truelight) and `.cube` 3D cube files.
 
-CMS cubes rendered from The Foundry's Nuke are similar to JefeCheck's 3D LUT images and are also supported for cubes of size 16 (these are images with a resolution of 448×448 pixels). You should render out the image as a TGA file with linear color space conversion.
-
-To load a LUT, be it 3D or 1D, you use the **LUT Manager**.
+To load and inspect LUTs, be they 3D or 1D, you use the **LUTs** panel.
 
 ---
 
-### The LUT Manager Window
+### The LUTs Panel
 
 ![The LUT Manager Window](manual-images/LUTManager.png)
 
-From the **LUTs** panel (`F4` or **Window > LUTs**) you can load and unload LUTs.
+Open the **LUTs** panel with `F4` or **Window > LUTs**.
 
-The first time you open the LUT Manager, it will be empty, so you need to load whatever LUTs you intend to use. To load a LUT, click the **Browse** button — this opens a file browser where you can select any supported LUT format. You can select multiple LUTs at once by dragging or `Ctrl`-clicking. The LUT browser navigates by default to the FX folder in your JefeCheck installation, which is where your LUTs should be stored.
+At startup JefeCheck loads every LUT (`.lut`, `.cube`, `.cub` and `.tga`) in its FX folder, so the panel is not empty the first time you open it. The list shows each LUT's name, type, size and depth; click a column header to sort by it.
 
-Once you have selected one or more LUT files and click OK, JefeCheck will start loading. If the LUT was correctly loaded, the progress bar will turn green.
+To load another LUT, drop a `.lut`, `.cube` or `.cub` file onto the panel. Click the Refresh button to rescan the LUT folders and rebuild the list.
 
-The LUT will appear in the **Loaded LUTs** section. You don't have to load a specific LUT every time you need it — check the **Auto-Load** checkbox next to a loaded LUT to have JefeCheck automatically load it next time you open the program.
-
-You can load as many LUTs in as many different formats as you want. Unload them by pressing the **Delete** button next to each one. This only unloads them from memory — it does not delete them from disk.
-
-#### Default LUT
-
-You can have a default LUT that is applied to all viewports whenever you open JefeCheck. You can override this setting by setting the environment variable `JEFECHECK_DEFAULT_LUT` with the name of the LUT (e.g., `LogToLin.lut`). Make sure that you use the name of a LUT that has previously been loaded.
+To apply a LUT, select it and click **Apply to active plate**, or double-click it. You can also choose a LUT in the **LUT** box on a viewport's card in the Plate Manager.
 
 #### Visualizing LUTs
 
-JefeCheck can show you a visual representation of loaded LUTs, be they 1D or 3D. To visualize a LUT, check the **On** checkbox in the Visualization Section of the LUT Manager and select the LUT you want to visualize. You will see the LUT drawn on a viewport in the Main Window. Use the same controls you normally use to pan and zoom a viewport to navigate the LUT visualization.
+With **Preview** ticked, the panel shows the selected LUT under the list. Drag the divider to give the preview more room.
 
-**1D LUTs** are plotted on an X/Y plane, with the input value on the X axis and the output value on the Y axis. A grayscale value of the output is used to color each point in the plot. Text labels of a subsample of the values are also drawn showing input and output values.
+**1D LUTs** are plotted as curves, with the input value on the X axis and the output value on the Y axis.
 
 ![Grayscale 1D LUT visualization](manual-images/grayScaleLUT.png)
 
-**3D LUTs** are displayed as color cubes, placing a colored point at each sample in 3D space. A canonical 3D LUT generates a perfect color cube, while a modified cube displays other characteristics.
+**3D LUTs** are displayed as a color cube you can rotate, with a colored point at each sample. A canonical 3D LUT generates a perfect color cube, while a modified cube displays other characteristics.
 
 ![Perfect (unmodified) color cube visualization](manual-images/PerfectCube.png)
 
-![Grayscale 3D LUT cube visualization](manual-images/GrayscaleCube.png) Each point in the LUT is positioned in 3D space corresponding to its output RGB value, and is colored with that same information. If you click the **Uniform** checkbox, the samples will be spaced uniformly forming a perfect cube, but points will still be colored with their output values — this lets you compare two cubes without being distracted by geometric deformations.
+![Grayscale 3D LUT cube visualization](manual-images/GrayscaleCube.png) With **Deformed** ticked, each point sits in 3D space at its output RGB value. With it off, the samples are spaced uniformly, forming a perfect cube, but are still colored with their output values — this lets you compare two cubes without being distracted by geometric deformations. **Dots**, **Grid** and **Solid** choose how the cube is drawn, the marker box chooses the shape of each point, **Spin** turns the cube on its own, and **Bg** sets the background brightness.
 
 #### Using LUTs
 
-Real Time modifications are called **FXs** within JefeCheck. Each FX comes in the form of a plug-in that must be loaded in order to be used. JefeCheck comes with two FXs for LUT application: one for 1D LUTs and one for 3D LUTs. See Section 4: Other Stuff for an explanation of the included FXs.
+A viewport's LUT (from its card or **Apply to active plate**) is part of its color correction. LUTs can also be applied in an FX stack: Real Time modifications are called **FXs** within JefeCheck, and JefeCheck comes with two FXs for LUT application, one for 1D LUTs and one for 3D LUTs. See Section 4: Other Stuff for an explanation of the included FXs.
 
 ---
 
-### The FX Manager Window
+### Loading FXs
 
 ![The FX Manager Window](manual-images/FXManager.png)
 
-From the **FX** panel (`F3` or **Window > FX**) you can load and unload FXs.
-
-When you first open the FX Manager, it will be empty. To load an FX, click the **Browse** button. This opens a file browser in the default FX folder within your JefeCheck installation. Select one or more `.jfx` files and click OK. If everything goes OK, a confirmation message appears and the FX will be listed in the Loaded section. Check the **Auto-Load** checkbox next to each FX to have them load automatically next time you use JefeCheck. To unload an FX, click its Unload button.
+There is no separate FX manager in JefeCheck 2.0. At startup JefeCheck loads every FX in its FX folder, and they are all listed in the FX panel's **+ Add FX** menu. To add an FX of your own, put its `.jfx`, `.frag` and `.vert` files in the FX folder and restart JefeCheck.
 
 ---
 
-### The FX Control Window
+### The FX Panel
 
 ![The FX Stack Manager (FX Control Window)](manual-images/FXStackManager.png)
 
@@ -680,20 +669,20 @@ You use FXs by applying them to viewports. A viewport can have no FX applied, or
 
 FXs are applied to each viewport independently — you can have one viewport playing back the unprocessed sequence while on another viewport you have the sequence playing with a LUT or Primary Color Correction applied.
 
-To apply an FX to a viewport, open the FX panel (`F3`) and click on the viewport you wish to use. The FX Stack Manager title will change to show what viewport is selected (e.g., **FX Controls Plate 1** means you are working on Viewport 1). An **Available FX** submenu will appear on the window's menu bar from which you can select what FX you wish to apply. To switch viewports, simply click on the desired viewport.
+The FX panel always shows the active viewport's FX stack. To work on another viewport, click it. Click **+ Add FX** and choose an FX from its category submenu (Color, Comp, Special, Transitions and so on).
 
-Once you click on an FX from the Available FX menu, it appears on the **FX Stack**. FXs are applied in the order they were added to the stack, so the output of one FX is passed to the one below it.
+Each FX you add appears as a card in the **FX Stack**. FXs are applied from the top card down, so the output of one FX is passed to the one below it.
 
 #### Common FX Controls
 
-All FXs have a set of common controls:
+Every FX card has the same header:
 
-- **On/Off** — Turns the FX on or off. This lets you compare with and without the effect without having to delete and re-apply it.
-- **Delete** — Removes the FX from the FX stack.
+- **Drag handle** — Drag the card up or down to move the FX in the stack.
+- **Power button** — Turns the FX on or off. This lets you compare with and without the effect without having to remove and re-apply it.
+- **Collapse arrow** — Hides or shows the FX's controls.
+- **Remove** — Removes the FX from the stack.
 
   ![Delete FX button on an FX stack entry](manual-images/DeleteFX.png)
-- **Reset** — Returns all FX parameters to their default values.
-- **Move Up/Down** — Moves the FX up or down the stack.
 
 Most FXs have parameters you can customize. The effect's `.jfx` file decides how each number is drawn:
 
@@ -709,28 +698,17 @@ Every value field works the same way:
 - The **reset dot** at the end of a slider row returns that parameter to its default. Every parameter also has a right-click **Reset to default** menu.
 - A parameter's label turns **orange** while its value differs from the default.
 
+Image inputs are chosen from a list: **Previous** (the result of the FX above) or **Track A** to **Track D**. LUT inputs list the loaded LUTs.
+
 When the FX dock is narrow, controls that share a line wrap onto the next line instead of being cut off.
+
+The FX stack of every viewport is saved with the session and with each playlist item.
 
 #### Performance
 
 A viewport can have many FXs stacked one on top of the other. You can apply an arbitrary number of FXs, but the performance and frame rate will vary depending on your graphics hardware. When selecting graphics cards, the key spec to look for is the number of Pixel Shaders or Pixel Units (called Stream Processors on newer cards) — the more of these a graphics card has, the better FX stack performance will be.
 
 Tests have shown very good performance on mid-range gaming-level video cards with more than 5 FXs applied on a 2K resolution sequence.
-
-#### FX Control Window Menu
-
-The FX Control Window has its own menu bar consisting of:
-
-- **FX Manager** — Opens the FX Manager Window.
-- **Clear All** — Removes all FXs from the stack.
-- **Save Stack** — Saves a stack with all FXs and their settings to a file with a `.fxs` extension. You can later apply this same stack to another viewport or a different sequence.
-- **Load Stack** — Loads a previously saved `.fxs` stack file. The FXs need to be loaded for Load Stack to work; otherwise you will get a message stating what FX is missing. Note that when loading a stack, the FXs will be **added** to the current stack. To replace the current stack, clear all FXs first.
-
-**Favorites** — The Favorites menu allows you to save an FX stack and recall it with a single keystroke. There are 5 favorite slots available, each of which can contain a complete FX stack with parameters.
-
-- Save the current FX stack to a favorite: use **Favorites > Save Stack To > slot number**, or use `Ctrl+Shift+F1` through `Ctrl+Shift+F5`.
-- Recall an FX favorite: use **Favorites > Load > slot number**, or use `Shift+F1` through `Shift+F5`.
-- Append a favorite to the current stack: use **Favorites > Append > slot number**, or use `Ctrl+F1` through `Ctrl+F5`.
 
 ---
 
@@ -744,7 +722,7 @@ Collaborating with other people over a network connection or the Internet is cal
 
 ### Remote Sessions
 
-When two or more people have a JefeCheck Remote Session, each participant has a copy of JefeCheck running on their computer, along with a local copy of the sequences that will be loaded for playback. JefeCheck does not send any image information over the network, for two reasons:
+When two or more people have a JefeCheck Remote Session, each participant has a copy of JefeCheck running on their computer, along with a local copy of the sequences that will be loaded for playback. JefeCheck does not send the footage over the network (it does send the LUTs and FXs a participant is missing), for two reasons:
 
 1. Sending image information requires great amounts of bandwidth that might not be available to all participants.
 2. Even if everybody had sufficient bandwidth, sensitive content such as frames from an unreleased movie is usually copied and sent on a need-to-have basis through specialized, controlled, and secured channels managed by a data wrangler.
@@ -757,37 +735,42 @@ A JefeCheck Remote Session requires at least two participants, one of whom will 
 
 **Step 3 — Play!** When everybody has connected to the server, anything someone does on their copy of JefeCheck will be mirrored on everybody else's copy, including the server.
 
-Everything involved in setting up or joining a Remote Session is done from the **Remote Session Manager Window**.
+Everything involved in setting up or joining a Remote Session is done from the **Remote Session** window.
 
-### The Remote Session Manager
+### The Remote Session Window
 
 ![The Remote Session Manager Window](manual-images/RemoteSessionManager.png)
 
-To start or join a remote session, open the **Remote Session** panel (`F5` or **Window > Remote Session…**).
+To start or join a remote session, open the **Remote Session** window (`F5` or **Window > Remote Session…**). It stays open while you work, so you can watch the status, the participants and the chat during the session. At the top, **Host**, **Cloud** and **Join** switch between the three ways to start.
 
 #### Connecting to a Server
 
-In order to connect to a JefeCheck remote server that is already online:
+In order to connect to a JefeCheck session that is already running:
 
-1. Type the IP address in the **IP** text box (or select a recent one from the drop-down menu).
-2. Type the port in the **Port** text box (ports 32000 and above recommended, but anything over 1025 should work).
-3. Type the password in the **Password** box (if the server requires one).
-4. Type a **Nickname** — other participants will identify your actions with this name.
-5. Select your pointer color from 7 available colors.
-6. Click the **Connect** button.
+1. Choose **Join**.
+2. Type a **Nickname** — other participants will identify your actions with this name.
+3. Set **Join with** to **IP address**.
+4. Type the host's address in **Server** and its port in **Port**.
+5. Type the **Password** if the host set one.
+6. Click **Join**.
 
-The status box will indicate if the connection was successful. If you are online with the server, the status box will turn green and say **Online**.
+The status line at the top shows whether the connection worked. Once you are connected, the window shows the participants and the chat, and a **Leave** button.
+
+If the host started the session through **Cloud**, set **Join with** to **Session code** and type the code they give you instead of an address.
 
 #### Starting a Server
 
-To host a remote session that other users can log into:
+To host a remote session that other users can join:
 
-1. Type the **Name** of the server in the Name box — the server's name will be your nickname.
-2. Type the port in the **Port** text box (ports 32000 and above recommended).
-3. Type a password in the **Password** box (recommended).
-4. Click the **Start** button.
+1. Choose **Host**.
+2. Type a **Name** for the session.
+3. Type the **Port** to listen on (the default is 60000).
+4. Type a **Password** (recommended).
+5. Click **Start hosting**.
 
-If starting the server is successful, the status bar will turn green and say **Online**. The **Server IP** text box will show the IP address and port that other participants should use when connecting (e.g., `172.16.28.105:32000`). Communicate this information to the other participants.
+Tell the other participants your computer's IP address and the port. The host ends the session with the **End Session** button.
+
+**Cloud** hosts the session through a JefeCheck Cloud coordinator instead, so participants join with a session code rather than an IP address. It needs you to sign in, and the coordinator's address is set in **Preferences > Remote**.
 
 ### Participating in a Remote Session
 
@@ -795,17 +778,17 @@ Once a server is set up and at least one more user is connected, you can start u
 
 #### Loading Sequences in a Remote Session
 
-Loading sequences in a remote session is done through the **Playlist Window**. Only sequences loaded through the Playlist Window will be automatically loaded on other participants' computers.
+Loading sequences in a remote session is done through the **Playlist** panel. Only sequences loaded through the Playlist panel will be automatically loaded on other participants' computers.
 
 Remote session users may have different file system organizations — one participant might load images from a CD, another from a network share, and a third from a local drive. If user 1 loads a playlist item with a path like `c:/MyDocuments/images/`, a remote user without that exact path or a Linux/Mac user will not be able to load the file.
 
 To resolve this, set up **Search Paths** in the JefeCheck Preferences window. When a remote playlist item is loaded, JefeCheck will first try to find it at the received path; if it can't be found, it will search the configured search paths and load the first match. Be careful not to point search paths at root or `C:\` — that could slow down searching significantly. Usually you set search paths to point to your project's render folder, or copy files for remote review into a special folder.
 
-To add a search path: open the **Preferences Window**, go to the **Paths** tab, click **Browse**, find the folder, and click OK. You can add as many search paths as you wish. Setting **Include Subfolders** to true will also search within subfolders.
+To add a search path: open the **Preferences** window, go to **Search Paths**, tick **Use search paths**, click the add button and choose the folder. You can add as many search paths as you wish. Tick **Search recursively** to also search within subfolders.
 
 One important thing to note: although all users must have the same image sequences, they don't have to load them at the same scale. A user with a laptop can load at 50% or 25%, while a user on a bigger workstation loads at full resolution (see Load Time Modification Controls: Scale).
 
-Even if a remote user loads a playlist item that contains sequences at 100%, you can override this from your own Playlist Window by specifying the **Playlist Scale Override** size in the top right corner and checking the checkbox.
+Even if a remote user loads a playlist item that contains sequences at 100%, you can override this in your own Playlist panel: tick **Scale override** and choose the scale next to it.
 
 If you know how to use JefeCheck then you know how to participate in a Remote Session. You can pan, zoom, change layouts, play, scrub the timeline, advance or rewind frames, change In and Out points, change the frame rate, change the playback mode, add and modify FXs, flip, flop — everything. Any playlist item you load during a remote session will also be loaded in the remote participants' sessions. Whenever a new user joins a session, their playlist items will be merged with the ones already on the server.
 
@@ -815,21 +798,15 @@ There are only two new commands involved in a Remote Session: **Chat** and **Rem
 
 In JefeCheck you can text chat with all other participants.
 
-When you are connected to a JefeCheck Remote Session, press `Y` to bring up the **Chat Interface**. Press `Escape` to exit the chat interface. The Chat interface is overlaid at the bottom of the Viewport Area.
+Type a message in the box under the chat in the Remote Session window and press `Enter` (or click Send).
 
-When in chat mode, type messages into the lower area and press `Enter` to send. Received messages appear above the dividing line.
-
-You will only see the last 5 messages received. To see older messages, while in chat mode press the `Up` or `Down` cursor keys to navigate through message history.
-
-When you exit chat mode with `Escape`, you will still see incoming messages, but they will fade away automatically after a few seconds. You can hide/show chat messages when not in chat mode by pressing `Ctrl+Y`.
-
-You can save the complete chat log by going to **File > Save Chat Log**. The file is saved as plain text.
+You can also chat from the viewport: click the viewport and press `Enter` to start a message, type it, and press `Enter` again to send it or `Escape` to cancel. Messages show over the bottom of the Viewports Area and fade away after a few seconds. The chat's font size, opacity, number of lines and fading are set in **Preferences > Remote**.
 
 ### Remote Pointers
 
 Remote pointers let everybody in the session see exactly where you are pointing at on the screen with your mouse.
 
-To use a remote pointer, right-click on the Viewport Area. Everybody else in the session will see a white point with your nickname next to it. As long as you keep any mouse button pressed, others will see your remote pointer and can watch it move as you move the mouse.
+To use a remote pointer, hold `Shift` and left-click and drag on the Viewport Area. Everybody else in the session sees a point with your nickname next to it, and can watch it move as you move the mouse. Your pointer's color is set in **Preferences > Remote**.
 
 Note that if users have loaded the same sequence at different scales, JefeCheck's remote pointers compensate for the difference in scales and different monitor resolutions. Remote pointers work by showing where you are pointing at on the **image**, not at where you are pointing on your monitor.
 
@@ -843,152 +820,103 @@ This section covers topics that don't quite fit anywhere else: the Preferences W
 
 ### Preferences Window
 
-The **Preferences Window** (`Ctrl+P` or **File > Preferences**) is used to change settings that affect the whole application.
+The **Preferences** window (`Ctrl+P` or **File > Preferences…**) changes settings that affect the whole application.
 
-You can close the Preferences Window by clicking **Done**, or click **Save** first to save settings to your preferences file. Preferences are also saved automatically when you close the application.
+Most changes show straight away, for example the viewport background or the text style, so you can see them while the window is open. Click **Done** to keep your changes, or **Cancel** to put everything back as it was when you opened the window.
 
-The Preferences Window is organized by tabs:
+Choose a section from the list on the left:
 
-#### General Tab
+#### General
 
-**Startup Section:**
+- **Background color** — The color behind and around the images. Opens a color picker.
+- **Checkerboard background** — Draws a checkerboard (two shades of the background color) instead of a flat color. Useful for judging image edges and alpha.
+- **Default browse path** — The folder file dialogs open in when there is no more recent location.
+- **Start in fullscreen** — Opens the main window in full screen at startup.
+- **Open Load window at startup** — Opens the Load Sequence Manager at startup.
+- **Enable crash recovery session** — Keeps a snapshot of the current session so it can be restored after an unexpected exit.
+- **On launch** — What to do with the previous session at startup: **Start empty**, **Reopen last session**, or **Ask**.
+- **Aspect-bar opacity** — Opacity of the letterbox bars (0 = invisible, 1 = solid).
+- **Timeline thumbnails** — Shows filmstrip thumbnails on the timeline's track lanes.
+- **Feedback message size** and **Feedback fade delay (s)** — The size of the messages shown over the viewport when you change a setting with a shortcut, and how long they stay.
 
-- **Open Load Window on Startup** — Determines if the Load Window opens automatically every time you open the program.
-- **Start In Fullscreen Mode** — Determines if the program window maximizes to fullscreen automatically when opened.
-- **Attempt To Recover from Crash** — When checked, JefeCheck will try to detect when the program crashed and restore the last state of the application next time it is opened.
-- **Default Browse Path** — Set the Default Browse Path to point to the folder where you store your image files. When you open the browse dialog in the Load Window, you will automatically be taken there.
-
-**BG Color Section:**
-
-- **Value** — Set the grayscale value of the background for the application. Can go from 0 (black) to medium gray (127).
-
-**Action Feedback Section:**
-
-- **Size** — The font size for the action feedback display (the display overlaid on the viewport when you adjust a setting or perform an action with a shortcut).
-- **Fade** — Controls how long the Action Feedback display is shown in seconds. Setting it to zero turns the display off.
-
-**Text Display Section:**
-
-- **Font Size** — Set the font size for the text display on the viewports.
-- **Color** — Color for the text display. Can go from black (0) to white (1).
-- **Opacity** — The opacity of the text display. Can go from almost invisible (0.1) to completely opaque (1).
-
-**Engine Section:**
+**Playback & Engine:**
 
 - **Memory limit (% of RAM)** — Frames load while the whole machine's memory use (all programs, not just JefeCheck) stays under this share of its RAM. Above it, a frame behind the playhead is unloaded for each one that loads; nothing is unloaded while nothing is loading. The playhead and a few frames ahead of it always load, even over the limit, so footage can still be viewed on a busy machine. From 50% to 100%; the default is 90%. A new value applies to the next frame that loads.
 - **When loading can't keep up** — What playback does when the next frame isn't in memory yet:
   - **Keep time (skip frames)** — The sound keeps playing on time and the picture holds the last loaded frame, skipping the frames that are not ready. Skipped frames still load, so the next pass shows them. Playback waits a fraction of a second after you press play or jump, so it doesn't start on a frozen frame.
   - **Show every frame (slow down)** — Every frame is shown in order and playback runs only as fast as frames load; the FPS display shows the slower rate.
   - **Automatic** (the default) — Keep time when a track has sound, show every frame when none has.
-- **Force GFL Loading Engine** — If you have problems loading certain types of DPX files, try this option to load with a different loading engine. It is usually slower but may be able to read some obscure DPX formats.
-- **Continue Loading sequence after load error** — If a frame is corrupt and can't be read, JefeCheck will stop loading the rest of the sequence unless this item is checked.
-- **Enable Vertical Redraw Sync** — Syncs the viewport drawing to the monitor's refresh rate. Drastically reduces image tearing. On Xinerama displays in Linux, this syncs to the main monitor, so displaying on a secondary monitor could increase tearing.
-- **Try hard to maintain FPS** — JefeCheck will use significantly more CPU time to maintain the desired FPS. If this is off, the FPS counter might vary by a few hundredths every few seconds of playback. Recommended setting is to keep it off.
-- **Balance Reads** — If more than one sequence is being loaded, Balance Reads will try to read both at the same rate. This helps when loading very small frames (JPEGs) alongside large heavy EXRs, preventing RAM from filling with the JPEGs before the EXRs have time to load. Setting this to ON also greatly improves performance when reading more than one sequence from the same physical hard drive.
-- **Force Single Buffered FX** — Enable this if you are using an old or lower-end video card (GeForce 6 and older) or if you are having trouble viewing images with FXs correctly. Some more complex FXs require this to be on. Changing this parameter requires JefeCheck to restart to show the changes.
+- **OIIO decode threads** — The number of worker threads OpenImageIO uses for resizing and some decoders (0 = automatic). If you often load several tracks at once, a low value (1–2) can work better; for a single heavy sequence, leave it on automatic.
+- **Hardware decoding** — **Auto** decodes movies on the graphics hardware when it can (VideoToolbox on macOS, D3D11VA on Windows, VAAPI or NVDEC on Linux) and in software otherwise. **Off** always uses software. Applies to movies loaded after you click Done.
+- **Default decode filter** — The resampling filter used when a sequence is loaded at a reduced scale: `nearest` (fastest), `triangle`, `mitchell` or `lanczos3` (sharpest, the default).
+- **Default bit depth** — The bit depth used for files loaded with Quick Load or drag and drop: 8, 16, 16-half or 32-float. Tracks already loaded keep their depth until reloaded.
 
-#### Formats Tab
+#### Text
 
-**OpenEXR Section:**
+Settings for the information text drawn on each viewport: **Size**, **Color**, **Hinting** (Light, Normal or Force autohint), **Filter** (Nearest for pixel-exact text, Linear for smoother text), **Gamma** (lower values draw text bolder), and a drop shadow (**Shadow enabled**, **Shadow offset X/Y**, **Shadow blur radius**, **Shadow color**) that keeps the text readable over bright images. The viewport updates as you change them.
 
-- **Ignore Display Window** — EXR images contain both a data window and a display window. JefeCheck will only load and show the Display Window unless this setting is checked. You usually want this off.
-- **Ignore Header's Aspect Ratio** — The EXR file header contains information about the Pixel Aspect Ratio for display. JefeCheck will automatically change the aspect ratio of the image unless this setting is checked. You usually want this off.
-- **Float > Integer transformation** — The EXR reference implementation recommends applying a color transformation to 16-bit Floating Point images for display on an 8-bit display. If you enable this transformation it will require you to reload whatever images are already cached. Parameters: Exposure, Defog, Gamma, Knee Low, and Knee High.
+#### Formats
 
-#### Remote Session Tab
+- **EXR: ignore display window** — EXR images contain both a data window and a display window. JefeCheck shows the data inside the full display window unless this is ticked, in which case only the data window is shown. You usually want this off.
+- **EXR: ignore header aspect ratio** — The EXR header contains a pixel aspect ratio. JefeCheck corrects for non-square pixels unless this is ticked. You usually want this off.
+- **Read straight (unassociated) alpha** — Reads alpha as non-premultiplied instead of premultiplied. Match this to how your images were made. Takes effect on the next load.
+- **Apply embedded orientation** — Rotates or flips stills (JPEG, TIFF) to match their orientation metadata. Off by default. Takes effect on the next load.
 
-**Chat Options Section:**
+#### Search Paths
 
-- **Font Size** — The font size for the chat display.
-- **Text Background** — Set whether to show a background behind the text to improve readability.
-- **Opacity** — The opacity of the chat display.
-- **History Lines** — How many lines of chat history should be visible.
-- **Auto Fade** — If you are not in chat mode but there is chat visible, it will slowly fade away.
-- **Delay** — The number of seconds before the chat fades away.
+- **Use search paths** — When a file is not found at its original path (for example in a remote session or a review package), look for it in the folders listed below.
+- **Search recursively** — Also search inside the subfolders of each search path.
+- **Also match moved media by fingerprint (slower)** — When opening a review package, also look for footage that was moved and renamed by comparing its content. Off by default.
+- The folder list, with buttons to add and remove folders. Folders are searched in order.
 
-**Remote Pointer Options:**
+#### Remote
 
-- **Font Size** — The font size to display the remote pointer name.
-- **Pointer Size** — The size of the remote pointer.
-- **Fade** — When on, the remote pointer will fade a few seconds after the last movement was registered.
-- **Trail** — Show a trail behind the remote pointer.
-- **Trail Length** — The length of the remote pointer trail.
-
-**Update Frequency (per second) section (advanced):**
-
-- **Transformations** — How many times per second transformation messages are sent over the network. Reduce to ease network load or reduce lag while transforming.
-- **FX Parameters** — How many times per second FX Parameter messages are sent over the network. Reduce to ease network load or reduce lag while modifying FX parameters.
-- **Other Messages** — How many times per second other messages (play/pause/scrub, flip, flop, etc.) are sent over the network.
-
-#### Licensing Tab
-
-- **License File Path** — Define where your JefeCheck license is stored.
-- **License Server Section** — (Currently disabled)
+- **Nickname** — Your name as other participants see it.
+- **JefeCheck Cloud: Coordinator** — The address of the coordinator used by the Cloud option in the Remote Session window.
+- **Chat** — **Fade delay (s)**, **Auto-fade chat**, **Chat text background**, **Font size**, **Opacity** and **Display lines** for the chat shown on the viewport.
+- **Remote pointer** — **Fade delay (s)** (how long a pointer stays after it stops moving) and **Color** (your pointer's color as others see it).
 
 ---
 
 ### Rendering
 
-Although JefeCheck is not a finishing tool, you can output high-quality images of your on-screen results in a variety of formats, including JPEG, BMP, TIFF, TGA, PNG, and OpenEXR. On Linux, you can even create an AVI movie file if you have `mencoder` installed.
+Although JefeCheck is not a finishing tool, you can output high-quality images of your on-screen results as JPEG, OpenEXR, TIFF, Targa, BMP or PNG files, or as an H.264, H.265 or ProRes movie.
 
-The render process is as follows: load a sequence and apply FXs to the viewport where it is being displayed (if desired). Then open the **Render** window (`F6` or **Window > Render…**), set a few parameters, and click the **Render** button. During render, the viewport may flicker, but the render is taking place. You can cancel the render at any time by clicking the Render button again (the button's label changes to **Cancel** during render). Each frame is loaded for the render as it is needed, so you can render frames that are not in memory, and rendering does not change which frames are loaded. When the render ends, the playhead is back where it was before you started.
+The render process is as follows: load a sequence and apply FXs and color corrections to the viewport where it is shown (if desired). Then open the **Render** window (`F6` or **Window > Render…**), set a few parameters, and click **Render**. The render includes the viewport's FX stack, its color correction and its LUT. You can cancel the render at any time by clicking the Render button again (its label changes to **Cancel** during the render). Each frame is loaded for the render as it is needed, so you can render frames that are not in memory, and rendering does not change which frames are loaded. When the render ends, the playhead is back where it was before you started.
 
 ### The Render Window
 
 ![The Render Window](manual-images/RenderWindow.png)
 
-Parameters in the **Render Manager** are organized in tabs:
+The **Render** window has these settings:
 
-#### General Tab
-
-**Source Section:**
-
-- **Viewport** — Select the viewport you wish to render (q1, q2, q3, q4).
-- **Scale** — The rendered image can be automatically scaled down by this factor: 1 is the original image, 0.5 is half, etc.
-
-**Output Files Section:**
-
-- **Path** — The path where the rendered images will be written. Click **Browse** to find a destination folder.
-- **Prefix, Padding, Postfix, Format** — The final image names will be composed as:
+- **Quadrant** — The viewport to render (Plate 1 to Plate 4).
+- **Format** — JPEG, OpenEXR, TIFF, Targa, BMP, PNG, H.264 (MP4), H.265 (MP4) or ProRes (MOV). The movie formats need FFmpeg, which release builds include; without it they are marked "ffmpeg not found".
+- **Quality** — Options for the chosen format:
+  - **JPEG** — quality, **Progressive**, and **Chroma** subsampling (4:4:4, 4:2:2 or 4:2:0).
+  - **OpenEXR** — **Depth** (Half or Float) and **Compression**.
+  - **TIFF** — **Depth** (8-bit or 16-bit) and **Compression** (LZW, None or ZIP).
+  - **PNG** — **Depth** (8-bit or 16-bit) and **Compression (0–9)**.
+  - **Targa**, **BMP** — no options.
+  - **Movies** — **FPS**, **Rate** (**Quality**, a 0–100 value, or **Bitrate** in Mbps) and the encoder **Preset**.
+- **Frames** — The first and last frame to render, in timeline frames. **Auto-range** fills them from the timeline's In and Out points.
+- **Padding** — The number of digits in the frame numbers of image files.
+- **Resolution** — Source (100%), 75%, 50%, 25% or Custom width and height.
+- **Framing: Bake aspect / crop bars into output** — Burns the viewport's letterbox bars into the output. Off by default.
+- **Notes: Burn in notes** — Draws the frame's review notes into the output.
+- **Output dir**, **Prefix**, **Postfix** — Where the files go and how they are named:
   ```
-  Prefix####PostFix.ext
+  Prefix####Postfix.ext
   ```
-- **Start Frame, End Frame** — Define the start and end frames to be rendered, in the same time domain as the timeline.
-- **Create Movie** — Linux only. Requires `mencoder` to be installed. When checked, creates a movie called `PrefixPostfix.avi` in the output path from the rendered frames. The rendered frames will not be erased.
-- **Example** — The first and last output filenames are shown here as an example of the filename generation.
+- **Preview** — An example of the output file name.
 
-#### Image Options Tab
-
-**JPEG Section:**
-- **Quality** — Compression rate; higher quality means better image fidelity but larger files.
-- **Progressive** — Stores the image as a progressive JPEG. Best for viewing online or over a slow medium.
-- **Optimized** — When not using Progressive mode, yields slightly smaller file sizes.
-
-**PNG Section:**
-- **Compression** — Set the compression rate for PNG output. Larger compression yields smaller file sizes but is more CPU-intensive to decode.
-
-**TIFF Section:**
-- **Compression** — Select the compression method for TIFF output (currently only LZW is available).
-
-**OpenEXR Section:**
-- **Depth** — Select the bit depth for writing (currently only Half Floating Point is available).
-- **Compression** — Select the compression method:
-  - Lossless: RLE, ZIP (per scanline or block), PIZ
-  - Lossy: PXR24, B44 (variable bit rate and fixed rate)
-
-#### Movie Options Tab
-
-**Mencoder Options (Linux only):**
-- **Kbits/second** — Set the desired bitrate of the output movie.
-- **Codec** — Select the codec for encoding your movie. Currently only `msmpeg4` is supported and recommended, as it can be viewed on almost all Windows and Mac OS X machines.
-
-**Open rendered frames when done** — When checked, the rendered sequence will be loaded into the selected viewport's associated track. All FXs and the previous track will be unloaded to make way for the rendered sequence.
+A progress bar shows how far the render has got. When it ends, click the status link to open the output folder. Click **Done** to close the window. Rendered movies have no sound.
 
 ---
 
 ### Included FXs
 
-A list of the FXs currently installed with JefeCheck follows. More may become available online in the forums as they are developed or needed.
+A list of the FXs installed with JefeCheck follows, grouped as in the **+ Add FX** menu.
 
 #### Color
 
@@ -997,6 +925,7 @@ A list of the FXs currently installed with JefeCheck follows. More may become av
 - **Brightness, Contrast, Saturation** — Modify the brightness, contrast, and saturation of the image. You can also change the average luminance for the contrast operation.
 - **Gamma** — Modify the gamma of the image.
 - **Primary Color Correction** — Modify the brightness, contrast, and saturation of the image on a per-component basis.
+- Also in this group: **Channel** and **Log to Lin**.
 
 #### Compositing
 
@@ -1007,13 +936,19 @@ A list of the FXs currently installed with JefeCheck follows. More may become av
 - **Ondita** — Proof of concept shader.
 - **Over** — Perform an over composite operation. You can select the source and target image, the matte image, and the method used to extract the mask. You can also determine if the target image is premultiplied or not.
 - **Split** — Split the frame between two different images. The split is performed on a slope, and the axis of the slope can also be determined. The edge of the split can also be smoothed.
-- **Subtract** — Perform a subtract operation on two images.
+- **Substract** — Perform a subtract operation on two images.
+- Also in this group: **Add**, **Alpha Over**, **Flip Horizontal**, **move2D**, **Multiply** and **Stereo SxS Squeeze**.
 
 #### Special
 
 - **Anaglyph Color Stereo** — Create an anaglyph color stereo image from a left/right pair. Each "eye" should be loaded in a different track. The left image is colorized to cyan and the right to red; you can adjust the amount of colorizing.
 - **OpenEXR** — Useful when loading HDR OpenEXR images in half-float format. Adjust the gamma and exposure of the displayed image.
 - **Fields** — An animated effect. Alternates blacking out odd/even lines to achieve an interlaced look. This is not a de-interlacer — it is an aesthetic simulation.
+- Also in this group: **Anaglyph BW Stereo**, **Side By Side Anaglyph Color Stereo**, **Aspect Bars**, **Average Blur**, **Average Blur 3x3**, **Gaussian Blur 3x3** and **Convolution 3x3**.
+
+#### Fun
+
+- **Fun**
 
 #### Transitions
 
@@ -1065,11 +1000,10 @@ As you can see, this is an inversion LUT: low input values yield a high output a
 
 A 3D LUT can be viewed as a cubical lattice, with each color sample placed on a vertex. JefeCheck works with lattices of 16×16×16 samples, giving 4096 different input and output values. When plotted on screen, the result is usually some kind of deformed "color cube" — which is why 3D LUTs are also called cubes.
 
-JefeCheck accepts 3D LUTs in three formats:
+JefeCheck accepts 3D LUTs in these formats:
 
-1. **Truelight cube** — A text file with `.cub` extension. Support is still experimental and may not yield exact results.
-2. **Nuke CMS color patch** — Rendered to TGA image up to size 16 (448×448 pixels). Render as TGA with linear color space conversion.
-3. **JefeCheck native LUT format** — A color patch saved as an image file.
+1. **Cube files** — Text files with a `.cub` (Truelight) or `.cube` extension.
+2. **JefeCheck native LUT format** — A 64×64 color patch saved as a TGA image.
 
 **JefeCheck Native LUT Format:**
 
@@ -1077,13 +1011,13 @@ The native LUT format consists of an image 64×64 pixels in size. Each pixel rep
 
 This perfect color cube can be encoded into an image by "unfolding" it into 2D. If you process this image through any color pipeline, you "burn in" all the transformation. When you load it back into JefeCheck as a 3D LUT, you effectively apply all your color processing to any image in real time.
 
-Since the canonical color patch is just an image, you can put it through any image processing pipeline (Shake, Photoshop, etc.). Open `canonicCubeImage.tga` in your software, apply color processing (only color processing — not geometric operations), and save back in TGA format.
+Since the canonical color patch is just an image, you can put it through any image processing pipeline (Nuke, Photoshop, etc.). Open `UnitCube.tga` from the FX folder in your software, apply color processing (only color processing — not geometric operations), and save back in TGA format.
 
 ![Canonical cube image (the 64×64 LUT source patch)](manual-images/canonicCubeImage.png)
 
-![Canonical cube visualized as a 3D cube](manual-images/canonicCube.png) Load it back into JefeCheck and use it as a 3D LUT.
+![Canonical cube visualized as a 3D cube](manual-images/canonicCube.png) Put the result in the FX folder (so it loads at startup) and use it as a 3D LUT.
 
-An example: taking the patch and converting it to grayscale would yield a cube where all vertices are in a single line — this is how a grayscale 3D LUT looks when visualized in JefeCheck. More extreme color processes produce more deformed cubes. You can plot any LUT directly in JefeCheck using the LUT Manager (see Visualizing LUTs).
+An example: taking the patch and converting it to grayscale would yield a cube where all vertices are in a single line — this is how a grayscale 3D LUT looks when visualized in JefeCheck. More extreme color processes produce more deformed cubes. You can plot any LUT directly in JefeCheck using the LUTs panel (see Visualizing LUTs).
 
 ![Example image: Viper Zodiac test footage](manual-images/ViperZodiac.png)
 
@@ -1117,10 +1051,10 @@ The `.jfx` is an XML tree with the following structure:
 
 **`general` node:** Contains descriptive information on the FX in the following attributes:
 - `Description` — A brief description of what the FX does (e.g., `"Blend two images together"`).
-- `menuName` — The menu structure where the FX will appear in the FX Stack Control Window (e.g., `"Comp/Mix"` will make the FX appear in a submenu called **Comp** with the name **Mix**).
+- `menuName` — Where the FX appears in the FX panel's **+ Add FX** menu (e.g., `"Comp/Mix"` will make the FX appear in a submenu called **Comp** with the name **Mix**).
 - `version` — The version number of the FX (e.g., `"2.0"`).
 - `author` — Who wrote the FX (e.g., `"Daniel Gollas"`).
-- `name` — The name that will appear in the FX Stack Manager and FX Manager windows (e.g., `"Mix"`).
+- `name` — The name shown on the FX's card in the FX panel (e.g., `"Mix"`).
 
 **`groups` node:** Contains a series of `group` nodes, each containing controls and variables for use within the shaders. Each control group can have a name that will be displayed in the GUI.
 
@@ -1130,7 +1064,7 @@ The `.jfx` is an XML tree with the following structure:
 
 - `float` — Creates a numeric input and passes a floating-point value to the shaders.
 - `bool` — Creates a checkbox and passes `1.0` or `0.0` to the shaders.
-- `texture` — Creates a selection box and passes a rectangular 2D texture sampler to the shaders. The selection box contains values A, B, C, D, and **previous**. A/B/C/D represent the image for that particular track. **previous** passes the previous FX's result to the shader — this is what allows FXs to be stacked. If you don't specify any texture widgets, the previous texture will be passed by default with the variable name `image`.
+- `texture` — Creates a selection box and passes a rectangular 2D texture sampler to the shaders. The selection box contains **Previous** and **Track A** to **Track D**. Track A–D is the image for that particular track. **Previous** passes the previous FX's result to the shader — this is what allows FXs to be stacked. If you don't specify any texture widgets, the previous texture will be passed by default with the variable name `image`.
 - `cube` — Creates a selection box and passes a 3D texture sampler containing a 3D LUT. The box is filled with all loaded 3D LUTs.
 - `lut` — Creates a selection box and passes a 1D texture sampler containing a 1D LUT. The box is filled with all loaded 1D LUTs.
 - `choice` — Creates a selection box and passes a floating-point number representing the index of the selected item. A `choice` widget must have child nodes named `choice`, each with a `label` attribute specifying the text to appear in the selection box (see `OVER.jfx` for an example).
@@ -1164,7 +1098,7 @@ Many FXs can share the same shader files — most included FXs use the `fixed.ve
 
 #### Example: The MIX FX
 
-![Mix FX GUI in the FX Stack Manager](manual-images/MixGUI.png)
+![Mix FX GUI in the FX panel](manual-images/MixGUI.png)
 
 Here is the complete `MIX.jfx` file:
 
@@ -1244,7 +1178,7 @@ You should look at all the other included FXs to get an idea of the range of thi
 
 ## Appendix: Screenshots
 
-The following screenshots are from the original 2014 release and need to be updated for the current UI:
+The following screenshots are from the original 2014 release. They show the old interface and need to be retaken for JefeCheck 2.0:
 
 | Image | Description |
 |-------|-------------|
