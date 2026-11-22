@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcplaybackgui_qt.h"
 
 gfcPlaybackGUI_Qt::gfcPlaybackGUI_Qt() {}

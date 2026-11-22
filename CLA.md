@@ -12,4 +12,4 @@ By submitting a pull request or otherwise contributing to this project, you agre
 
 ## Why a CLA?
 
-This project is currently licensed under GPL v2 due to dependencies on GPL-licensed code (RakNet). As those dependencies are replaced, we intend to relicense under a more permissive license (such as Apache 2.0). This CLA ensures that relicensing is possible without needing to contact every past contributor.
+This project is currently licensed under the GNU General Public License, version 2 or (at your option) any later version, due to dependencies on GPL-licensed code (RakNet, FFmpeg). As those dependencies are replaced, we intend to relicense under a more permissive license (such as Apache 2.0). This CLA ensures that relicensing is possible without needing to contact every past contributor.

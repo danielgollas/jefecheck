@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Plate Manager dock content: a scroll area of plate cards. The mode (Active /
 // Visible / All) is chosen from the View menu or this panel's context menu (the
 // same three actions); the viewport mini-map sits in the dock's title bar.

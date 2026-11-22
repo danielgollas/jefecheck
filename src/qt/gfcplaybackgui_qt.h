@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt skeleton for gfcPlaybackGUI. All methods stubbed. See docs/MIGRATION.md.
 #ifndef GFCPLAYBACKGUI_QT_H
 #define GFCPLAYBACKGUI_QT_H

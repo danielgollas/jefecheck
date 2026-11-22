@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPOINTERSTORAGE_H
 #define GFCPOINTERSTORAGE_H
 

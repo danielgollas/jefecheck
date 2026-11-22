@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // PKCE codec for desktop Google sign-in (RFC 8252): pure string/crypto work,
 // testable headlessly (--pkce-test). The verifier never leaves the process.

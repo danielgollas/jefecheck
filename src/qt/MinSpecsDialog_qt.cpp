@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "MinSpecsDialog_qt.h"
 
 #include "GLSystemInfo.h"

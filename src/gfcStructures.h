@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCSTRUCTURES_H
 #define GFCSTRUCTURES_H
 
@@ -276,6 +277,8 @@ public:
         maxRecentBrowsed=10;
         maxRecentIPs=5;
         maximumFramesInQueue=5;
+        memoryLimitPercent=90;
+        lagPolicy=0;
         loopMode=0;
         vsync=1;
         searchPathsRecursive=false;
@@ -298,9 +301,11 @@ public:
 		defaultTextureFormat=GFC_16HALF;
 		defaultDecodeFilter = FILTERLANCZOS_ID;
 		showThumbnails=true;
+		hardwareDecoding=true;
 
 	}
     bool showThumbnails;   // timeline filmstrip thumbnails (default on)
+    bool hardwareDecoding; // movies: use the platform's hardware decoder when it can decode the file (default on)
     int startFullscreen;
     float bgColor;        // legacy grayscale (kept as the luminance of bgColorRGB)
     float bgColorR, bgColorG, bgColorB;  // RGB viewport background (General prefs)
@@ -312,6 +317,8 @@ public:
     int openLoadWindowAtStartup;
     int loopMode; ///1 once, 2 loop, 3 bounce;
     int vsync; //1 on, 0 off.
+    int memoryLimitPercent; //rolling cache: share of physical RAM the app may use, 50-100.
+    int lagPolicy; //when loading cannot keep up: 0 Automatic (keep time with sound, show every frame without), 1 Keep time (skip frames), 2 Show every frame (slow down).
     int maximumFramesInQueue; //determines if the raw queue should limit how many frames are loaded before they are converted to textures, 0 means no limiting.
     int numOfPartitions; ///how many mirrors will be used to strip and load images
 

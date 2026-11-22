@@ -1,4 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcNoteStore.h"
+#include "gfcMediaKinds.h"
 
 #include "gfcreview.h"
 #include "gfcrevision.h"
@@ -495,6 +497,7 @@ std::string gfcNoteStore::toJsonString(const gfcReview& review)
 
 std::string gfcNoteStore::normalisePath(const std::string& anyFramePath)
 {
+	if (gfcIsMovieFile(anyFramePath)) return anyFramePath;
 	std::smatch m;
 	if (std::regex_search(anyFramePath, m, frameNumberPattern()))
 	{

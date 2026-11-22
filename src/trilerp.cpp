@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 //this define fixes not being able to find glTexiImage3D
 #define GL_GLEXT_PROTOTYPES

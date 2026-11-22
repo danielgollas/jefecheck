@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Abstract GUI surface for gfcPlateManager. Concrete impls in
 // src/gfcplatemanagergui_fltk.cpp (FLTK) and src/qt/gfcplatemanagergui_qt.cpp.
 //

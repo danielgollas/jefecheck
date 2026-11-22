@@ -13,7 +13,7 @@ This file documents the licenses of third-party code vendored in this repository
 
 - Files: src/RakPeer.*, src/RakNet*.*, src/BitStream.*, src/ReplicaManager.*, src/DS_*.*, and related networking files in src/
 - Author: Jenkins Software LLC
-- License: GNU General Public License v2.0
+- License: GNU General Public License v2.0 or later (see `src/RakPeer.cpp:12-15`)
 - URL: https://github.com/facebookarchive/RakNet
 
 ## Rijndael / AES
@@ -21,3 +21,15 @@ This file documents the licenses of third-party code vendored in this repository
 - Files: src/Rijndael.h, src/rijndael.cpp, src/Rijndael-Boxes.h
 - License: AES Crypt Project License
 - URL: http://www.sf.net/projects/aescrypt
+
+## FFmpeg (linked)
+
+- Libraries: libavformat, libavcodec, libavutil, libswresample, libswscale (movie reading, `src/gfcMovieReader.cpp`)
+- License: GNU General Public License v2 or later; packaged builds are GPLv3 (`--enable-version3`), so distributed JefeCheck binaries are effectively under GPLv3. The export CLI binary is covered by `packaging/ffmpeg-NOTICE.txt`.
+- URL: https://ffmpeg.org
+
+## Qt Multimedia (linked)
+
+- Module: Qt6::Multimedia (audio output, `src/qt/AudioOutput_qt.cpp`)
+- License: LGPL v3 (like the rest of Qt)
+- URL: https://www.qt.io

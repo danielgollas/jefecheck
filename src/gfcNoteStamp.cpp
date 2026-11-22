@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcNoteStamp.h"
 
 #include "gfcNoteStore.h"
@@ -24,6 +25,13 @@ namespace
 	}
 }
 
+namespace
+{
+	bool writeStamped(const OIIO::ImageSpec& src, const std::vector<float>& pixels,
+	                  const std::string& outExr, const gfcReview& review,
+	                  const gfcNoteStamp::Options& opt, std::string* err);
+}
+
 bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
                          const gfcReview& review, const Options& opt,
                          std::string* err)
@@ -42,7 +50,7 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 		return false;
 	}
 
-	const OIIO::ImageSpec& src = in->spec();
+	const OIIO::ImageSpec src = in->spec();
 	const int w = src.width;
 	const int h = src.height;
 	const int srcChannels = src.nchannels;
@@ -56,6 +64,32 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 		return false;
 	}
 	in->close();
+	return writeStamped(src, pixels, outExr, review, opt, err);
+}
+
+bool gfcNoteStamp::stampPixels(int width, int height, const float* rgb, const std::string& outExr,
+                               const gfcReview& review, const Options& opt, std::string* err)
+{
+	if (width <= 0 || height <= 0 || !rgb)
+	{
+		setErr(err, "stamp: no pixels");
+		return false;
+	}
+	OIIO::ImageSpec src(width, height, 3, OIIO::TypeDesc::HALF);
+	src.channelnames = {"R", "G", "B"};
+	std::vector<float> pixels(rgb, rgb + (size_t)width * height * 3);
+	return writeStamped(src, pixels, outExr, review, opt, err);
+}
+
+namespace
+{
+bool writeStamped(const OIIO::ImageSpec& src, const std::vector<float>& pixels,
+                  const std::string& outExr, const gfcReview& review,
+                  const gfcNoteStamp::Options& opt, std::string* err)
+{
+	const int w = src.width;
+	const int h = src.height;
+	const int srcChannels = src.nchannels;
 
 	const bool wantLayer = !opt.layerRGBA.empty();
 	if (wantLayer &&
@@ -155,6 +189,7 @@ bool gfcNoteStamp::stamp(const std::string& inExr, const std::string& outExr,
 	}
 	out->close();
 	return true;
+}
 }
 
 bool gfcNoteStamp::imageSize(const std::string& path, int* width, int* height)

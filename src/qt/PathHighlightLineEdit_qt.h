@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // QLineEdit subclass that overlays a colored underlay on a configurable
 // character range. The TrackStrip uses it to highlight the digit portion
 // of a sequence filename that the loader identified as the frame number,

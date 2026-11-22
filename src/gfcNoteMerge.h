@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCNOTEMERGE_H
 #define GFCNOTEMERGE_H
 

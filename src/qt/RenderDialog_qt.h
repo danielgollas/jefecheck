@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // File → Render… dialog with per-format quality pages in a QStackedWidget keyed on
 // the format index. See developer_notes.md §18–20, §30.
 #ifndef JEFECHECK_QT_RENDER_DIALOG_H

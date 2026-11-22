@@ -1,8 +1,11 @@
-// Implementation of the QSettings <-> gfcSettings `sett` bridge declared in
-// qt_prefs_persist.h: the single place preference keys are read and written.
+// SPDX-License-Identifier: GPL-2.0-or-later
+// The QSettings <-> `sett` bridge: every preference key is read and written here.
+// See developer_notes.md §27.
+#include <algorithm>
 #include "qt_prefs_persist.h"
 #include "../gfcStructures.h"
 #include "../gfcTextRenderer.h"
+#include "../gfcMovieReader.h"
 #include <QSettings>
 #include <QString>
 #include <QStringList>
@@ -20,11 +23,14 @@ void loadPreferences() {
     // Engine.
     sett.defaultDecodeFilter  = s.value("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter).toInt();
     sett.defaultTextureFormat = s.value("Engine/defaultTextureFormat", sett.defaultTextureFormat).toInt();
-    // Engine: only maximumFramesInQueue has a live effect and a UI control, so
-    // the other engine settings are not persisted.
-    sett.maximumFramesInQueue  = s.value("Engine/maximumFramesInQueue",  sett.maximumFramesInQueue).toInt();
+    // Engine/maximumFramesInQueue (the decode-to-upload queue) is no longer read: it never set
+    // how far ahead frames load, and a stored 0 left a queue of one.
+    sett.memoryLimitPercent    = std::clamp(s.value("Engine/memoryLimitPercent", sett.memoryLimitPercent).toInt(), 50, 100);
+    sett.lagPolicy             = std::clamp(s.value("Engine/lagPolicy", sett.lagPolicy).toInt(), 0, 2);
     sett.oiioThreads           = s.value("Engine/oiioThreads",           sett.oiioThreads).toInt();
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply at startup
+    sett.hardwareDecoding      = s.value("Engine/hardwareDecoding", sett.hardwareDecoding).toBool();
+    gfcMovieReader::setHardwareDecodingAllowed(sett.hardwareDecoding);
     // Session behavior.
     sett.startupSessionBehavior = s.value("Session/startupBehavior", sett.startupSessionBehavior).toInt();
 
@@ -114,9 +120,12 @@ void writePreferences() {
     QSettings s;
     s.setValue("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter);
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
-    s.setValue("Engine/maximumFramesInQueue", sett.maximumFramesInQueue);
+    s.setValue("Engine/memoryLimitPercent", sett.memoryLimitPercent);
+    s.setValue("Engine/lagPolicy", sett.lagPolicy);
     s.setValue("Engine/oiioThreads",          sett.oiioThreads);
     gfcSetOIIOThreadCount(sett.oiioThreads);   // apply on Done
+    s.setValue("Engine/hardwareDecoding",     sett.hardwareDecoding);
+    gfcMovieReader::setHardwareDecodingAllowed(sett.hardwareDecoding);  // movies opened from now on
     s.setValue("Session/startupBehavior",     sett.startupSessionBehavior);
 
     // General.

@@ -1,22 +1,56 @@
 FFmpeg
 ======
 
-This distribution bundles a static build of FFmpeg (https://ffmpeg.org),
-used by JefeCheck's video-export feature to encode rendered image
-sequences into H.264 / H.265 / ProRes files.
+JefeCheck uses FFmpeg (https://ffmpeg.org) in two separate ways.
 
-The bundled binary is a GPL build obtained from:
-  https://github.com/eugeneware/ffmpeg-static  (release b6.1.1)
+1. Linked libraries (movie reading and sound)
+   JefeCheck links libavformat, libavcodec, libavutil, libswresample and
+   libswscale to read .mov/.mp4 movies and their audio. Release builds take
+   these libraries from the platform package, not from the static build in
+   item 2:
+     - macOS:   Homebrew "ffmpeg" (libraries bundled into the app)
+     - Windows: MSYS2 "mingw-w64-x86_64-ffmpeg" (DLLs shipped with the app)
+     - Linux:   the distribution's libav* packages (the Linux package
+                depends on them; they are not bundled)
+   These FFmpeg builds are GPL builds, and the Homebrew build is also
+   configured with --enable-version3 (each package's configure line is in
+   ffmpeg-libs-VERSION.txt, below), so distributed JefeCheck binaries are
+   effectively under the GNU GPL version 3.
+   FFmpeg is licensed under the GPL version 2 or later; JefeCheck is
+   distributed under the GPL version 2 or (at your option) any later
+   version.
 
-FFmpeg is free software licensed under the GNU General Public License
-version 2 or later (GPL builds enable GPL-only components such as x264 /
-x265). JefeCheck is likewise distributed under the GNU GPL v2, so this
-combination is license-compatible.
+2. Bundled "ffmpeg" command-line program (video export only)
+   JefeCheck runs a separate static ffmpeg executable as a subprocess to
+   encode rendered image sequences into H.264 / H.265 / ProRes files. It
+   is a GPL build obtained from:
+     https://github.com/eugeneware/ffmpeg-static  (release b6.1.1)
+   You may replace it with your own ffmpeg build, or point JefeCheck at a
+   different one via Preferences -> Render -> FFmpeg path or the
+   JEFECHECK_FFMPEG environment variable.
 
-FFmpeg source and license texts are available at https://ffmpeg.org and
-in the upstream ffmpeg-static release. FFmpeg is a trademark of Fabrice
-Bellard, originator of the FFmpeg project.
+Version and configure line of the linked libraries
+   Each release package records them, at packaging time, in the file
+   ffmpeg-libs-VERSION.txt next to this notice:
+     - macOS:   JefeCheck.app/Contents/Resources/ffmpeg-libs-VERSION.txt
+                (output of the Homebrew package's `ffmpeg -version`, which
+                prints the version, the configure line and every libav*
+                version, plus the list of dylibs bundled in
+                Contents/Frameworks/)
+     - Windows: ffmpeg-libs-VERSION.txt next to jefecheck.exe (output of
+                MSYS2's `ffmpeg.exe -version`)
+     - Linux:   ffmpeg-libs-VERSION.txt in the package directory (the
+                distribution package versions and libav* versions the
+                build linked against; the libraries themselves come from
+                your distribution, so `ffmpeg -version` there, or the
+                distribution's source package, gives their configure line)
 
-You may replace the bundled binary with your own ffmpeg build, or point
-JefeCheck at a different one via Preferences → Render → FFmpeg path (or the
-JEFECHECK_FFMPEG environment variable).
+Corresponding source
+   - FFmpeg: the release tarball for the matching version at
+     https://ffmpeg.org/download.html , plus the package recipe
+     (Homebrew formula "ffmpeg", MSYS2 PKGBUILD "mingw-w64-ffmpeg", or
+     the distribution's source package). For the static CLI binary in
+     item 2, see the ffmpeg-static release above and https://ffmpeg.org .
+   - JefeCheck: https://github.com/danielgollas/jefecheck
+
+FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.

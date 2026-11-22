@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Thin bridge from a file path to a BGRA8 byte buffer, using
 // gfcImageLoaderOIIO under the hood. Lives in its own TU so callers don't
 // have to pull glad (via gfcimageloader.h → gfcglframeinfo.h) into the

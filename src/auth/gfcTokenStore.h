@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 // Refresh-token storage for desktop sign-in (refresh token only; the access token stays in memory).
 // Keyed by coordinator URL. Backends: Keychain (macOS), Credential Manager (Windows), a 0600 file on Linux.

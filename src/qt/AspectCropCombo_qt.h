@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // AspectCropCombo_Qt — a click-to-open aspect-ratio control whose drop-down
 // popup folds in a "Crop" checkbox at the top. It consolidates what used to
 // be two separate plate-card controls (a QComboBox of aspect ratios and a

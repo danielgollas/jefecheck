@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPICLNOTIFEE_H
 #define GFCPICLNOTIFEE_H
 

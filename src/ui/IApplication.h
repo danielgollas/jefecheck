@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Abstract event loop / app singleton. Replaces ~85 Fl::check()/wait() and
 // the Fl::run() / Fl::screen_xywh() / Fl::set_color() / Fl::scheme() calls
 // scattered across main.cpp, gfcPlaybackManager, and the network managers.

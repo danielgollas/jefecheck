@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "PathHighlightLineEdit_qt.h"
 
 #include <QFontMetrics>

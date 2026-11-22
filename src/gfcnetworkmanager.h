@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCNETWORKMANAGER_H
 #define GFCNETWORKMANAGER_H
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCTARARCHIVE_H
 #define GFCTARARCHIVE_H
 

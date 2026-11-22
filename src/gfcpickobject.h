@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCPICKOBJECT_H
 #define GFCPICKOBJECT_H
 

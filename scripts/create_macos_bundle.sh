@@ -34,7 +34,10 @@ else
         "https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_VERSION}/ffmpeg-darwin-arm64"
 fi
 chmod +x "$APP/Contents/Resources/ffmpeg"
-cp packaging/ffmpeg-NOTICE.txt "$APP/Contents/Resources/" 2>/dev/null || true
+cp packaging/ffmpeg-NOTICE.txt "$APP/Contents/Resources/"
+
+# Bundle the linked FFmpeg libraries; Qt and OpenImageIO are not bundled yet.
+bash "$(dirname "$0")/bundle_macos_libav.sh" "$APP"
 
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>

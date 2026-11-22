@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCIMAGELOADERDPX_H
 #define GFCIMAGELOADERDPX_H
 

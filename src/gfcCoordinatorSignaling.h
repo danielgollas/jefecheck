@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Cloud-coordinator signaling client (one rtc::WebSocket; wire protocol: coordinator repo docs/coordinator-protocol.md, developer_notes §34).
 // Callbacks run on libdatachannel threads: register them BEFORE connect(). This TU must NOT include Qt/GL headers (§1).
 #pragma once

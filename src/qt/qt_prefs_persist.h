@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Single source of truth for mapping the global gfcSettings `sett` to/from
 // Qt QSettings. The legacy XML saveSettings()/readSettings() are dead stubs;
 // this is the only real preferences persistence.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCRENDERPARAMS_H
 #define GFCRENDERPARAMS_H
 

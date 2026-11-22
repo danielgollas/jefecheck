@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // A reusable collapsible "accordion" section with a Nuke/Maya-style disclosure
 // header: a full-width header row (▸/▾ triangle + title) that toggles a content
 // area. Qt has no native accordion widget (QToolBox is single-open and dated;

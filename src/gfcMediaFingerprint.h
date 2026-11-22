@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCMEDIAFINGERPRINT_H
 #define GFCMEDIAFINGERPRINT_H
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -21,6 +23,10 @@ namespace gfcMediaFingerprint
 		int height = 0;
 		std::vector<std::string> channels;
 	};
+
+	/** The three [begin,end) byte windows of a movie file of `size` bytes that
+	    compute() hashes: first 64 KiB, middle +-32 KiB, last 64 KiB (clamped). */
+	void movieHashWindows(std::uint64_t size, std::uint64_t out[3][2]);
 
 	/** Reads a frame's header only, no pixels. */
 	bool probe(const std::string& framePath, Probe& out, std::string* err);

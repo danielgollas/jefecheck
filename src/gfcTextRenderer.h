@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCTEXTRENDERER_H
 #define GFCTEXTRENDERER_H
 
@@ -60,6 +61,10 @@ public:
     // Font setup
     void setSize(float pixelSize);
     void setBold(bool bold);
+    // The current size, bold and colour, so a one-off draw can put them back.
+    float size() const { return currentSize; }
+    bool bold() const { return currentBold; }
+    void color(float &r, float &g, float &b, float &a) const { r = colorR; g = colorG; b = colorB; a = colorA; }
     void setDPIScale(float scale);
     // Physical-pixels-per-logical-pixel (2.0 on Retina). gfc_gl_measure
     // returns LOGICAL pixels; callers laying out in a physical-pixel ortho

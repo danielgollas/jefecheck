@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt backend for jefe::ui::IEventSystem.
 // Minimal stub — for the first Qt build the only consumers are tests/skeletons,
 // not actual callbacks. The real port will populate state from QEvent dispatch.

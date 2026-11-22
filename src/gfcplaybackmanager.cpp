@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcplaybackmanager.h"
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <numeric>
 #include "ui/IApplication.h"
 namespace { jefe::ui::IApplication& app() { return jefe::ui::IApplication::instance(); } }
 #include "qt/gfcplaybackgui_qt.h"
@@ -15,6 +19,9 @@ extern gfcNetworkManager networkManager;
 
 #include "gfcplatemanager.h"
 extern gfcPlateManager plateManager;
+
+#include "gfcAudioEngine.h"
+#include "gfcFrameCache.h"
 
 gfcPlaybackManager::gfcPlaybackManager() {
     myGUI=NULL;
@@ -51,45 +58,129 @@ int gfcPlaybackManager::isPlaying()
 
 void gfcPlaybackManager::update() {
     static double intraFrameCount=0;
-    static double fpsTimerCount=0;
-	
-
     static double fpsCount=0;
     updateTimestep();
 
     int endLimit=getEndLimit();
     int startLimit=getStartLimit();
 
-    if (!playing) { //TODO: sleep should not be handled here, figure a better way, probably timing if there hasn't been a callback in a while then go to sleep.
-/*
-
-#ifdef WIN32
-                    app().waitForEvents(0.001);
-#endif
-
-#ifdef __APPLE__
-                    //on mac we have to sleep a whole lot apparently
-                    app().waitForEvents(0.02);
-#endif
-
-#ifdef linux
-                    app().waitForEvents(0.0001);
-#endif*/
+    if (!playing) {
         intraFrameCount=0;
-		fpsTimerCount=0;
+        buffering_=false;
+        fpsHeld_=false;
+        fpsResumed_=true;
+        if (leadSkipOn_) setLeadSkip(false);
+        return;
+    }
 
-		
+    // Pre-play buffer (Keep time): hold the playhead until the next ~0.25 s is resident or 0.5 s
+    // has passed, then let the sound lead.
+    if (buffering_) {
+        const double waited=std::chrono::duration<double>(std::chrono::steady_clock::now()-bufferingSince_).count();
+        if (waited>=kPrePlayMaxWait || trackManager.timelineFramesResident(currentFrame, prePlayFrames(), currentDirection)) {
+            buffering_=false;
+            if (currentDirection>0) audioTryLead();
+        } else {
+            intraFrameCount=0;
+            return;
+        }
+    }
 
-    } else {
-        intraFrameCount+=timeStep;
-        fpsTimerCount+=timeStep;
-				
-		
+    // The frame cache follows each step (and a BOUNCE turn): one atomic store
+    // and a wake, no lock, no table walk.
+    const int frame0=currentFrame, dir0=currentDirection;
+    auto cacheFollow=[&] {
+        if (currentFrame==frame0 && currentDirection==dir0) return;
+        frameCache.advance(currentFrame, currentDirection);
+        cacheSentDir=currentDirection;
+    };
 
-        if (intraFrameCount>=timePerFrame) {
+    // Native-rate forward play: the audio clock leads and the picture drops frames to follow; the sound
+    // never waits. FPS pacing takes over once the engine can't lead or Show every frame is on.
+    if (audioEngine.isLeading()) {
+        audioSyncTransport();
+        if (audioEngine.canLead() && keepTime()) {
+            intraFrameCount=0;
+            const int f=audioEngine.leaderFrame();
+            currentDirection=audioEngine.leaderDirection();
+            if (f!=currentFrame) {
+                int moved=std::abs(f-currentFrame);
+                if (moved>(endLimit-startLimit)/2) moved=1;   // a loop wrap is one frame
+                recordAdvanceForFPS(moved);
+                currentFrame=f;
+                updateTimeCode();
+                plateManager.setChanged();
+                boundCurrentFrameToLimits();
+            }
+            cacheFollow();
+            return;
+        }
+        // Leaving the audio clock: the picture carries on from the frame heard.
+        currentFrame=audioEngine.leaderFrame();
+        audioEngine.stopLeading();
+    }
+    // Pacing leads from here. Keep time still skips ahead whichever clock leads (the cache walk
+    // follows the direction); Show every frame never skips. Atomics only.
+    {
+        const bool skip=keepTime();
+        if (leadSkipOn_!=skip) setLeadSkip(skip);
+    }
 
-			// Measured-FPS readout (the "fps:" overlay reads getCurrentFPS()): an EMA of
-			// the wall-clock interval between frame advances.
+    intraFrameCount+=timeStep;
+
+    if (intraFrameCount>=timePerFrame) {
+        // Show every frame: the next frame isn't resident, so hold this one and look again next tick.
+        // Only a tick that would advance pays the check.
+        if (!keepTime()) {
+            int dirCopy=currentDirection;
+            const int next=advanceFrame(currentFrame, dirCopy, playbackMode, startLimit, endLimit);
+            if (next!=currentFrame && !trackManager.timelineFrameResident(next)) {
+                intraFrameCount=timePerFrame;
+                fpsHeld_=true;
+                return;
+            }
+        }
+
+        recordAdvanceForFPS(1);
+
+        intraFrameCount-=timePerFrame;
+
+        updateTimeCode();
+        plateManager.setChanged();
+
+        // ONCE holds at a limit without counting a frame; every other move counts.
+        const int before=currentFrame;
+        {
+            const bool counted = playbackMode != LOOPMODEONCE_ID ||
+                (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit);
+            currentFrame = advanceFrame(currentFrame, currentDirection, playbackMode, startLimit, endLimit);
+            if (counted) fpsCount++;
+        }
+
+        boundCurrentFrameToLimits();
+
+        // Sound follows the picture forward: hand over to the audio clock when a native-rate track can
+        // lead, otherwise play this frame's slice.
+        if (currentDirection>0 && currentFrame!=before && !audioTryLead())
+            audioEngine.playSlice(currentFrame);
+    }
+
+    // Periodically drain the old window counter so it stays bounded.
+    if (fpsCount>=targetFPS*2)
+        fpsCount=0;
+
+    //prevent it from trying to "catch up" in case the timestep has been longer that one frame.
+    if (intraFrameCount> 2*timePerFrame)
+        intraFrameCount=0;
+
+    cacheFollow();
+}
+
+// Measured-FPS readout from the wall-clock interval between frame advances
+// (`frames` = how many timeline frames this advance moved).
+void gfcPlaybackManager::recordAdvanceForFPS(int frames) {
+			// Measured FPS for the overlay: an EMA of the wall-clock interval between
+			// frame advances, so OS-timer jitter doesn't make the readout tick.
 			{
 				using dclock = std::chrono::steady_clock;
 				static dclock::time_point lastAdvance = dclock::now();
@@ -97,13 +188,18 @@ void gfcPlaybackManager::update() {
 				static double emaIntervalMs = -1.0;
 				const dclock::time_point nowAdv = dclock::now();
 				const double interMs =
-					std::chrono::duration<double, std::milli>(nowAdv - lastAdvance).count();
+					std::chrono::duration<double, std::milli>(nowAdv - lastAdvance).count() / double(frames > 0 ? frames : 1);
 				lastAdvance = nowAdv;
 
 				// Ignore discontinuities (first advance, or resuming after a
 				// pause/idle gap) so they don't poison the average.
+				// An interval that ends a Show-every-frame hold is a real slow
+				// frame (up to 5 s), not a resume after a pause.
 				const double tpfMs = timePerFrame*1000.0;
-				if (interMs > 0.0 && interMs < 5.0*tpfMs) {
+				const bool held = fpsHeld_, resumed = fpsResumed_;
+				fpsHeld_ = false;
+				fpsResumed_ = false;
+				if (!resumed && interMs > 0.0 && (interMs < 5.0*tpfMs || (held && interMs < 5000.0))) {
 					if (emaIntervalMs < 0.0) emaIntervalMs = interMs;
 					else emaIntervalMs += 0.05*(interMs - emaIntervalMs);
 				}
@@ -125,119 +221,6 @@ void gfcPlaybackManager::update() {
 					myGUI->setCurrentFPS(currentFPS);
 				}
 			}
-
-            intraFrameCount-=timePerFrame;
-
-			updateTimeCode();
-			plateManager.setChanged();
-			
-
-            switch ( playbackMode ) {
-            case LOOPMODEONCE_ID: {
-                if (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit) {
-                    //advance a frame in the direction
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                } else {
-                    if (currentFrame<=startLimit) {
-                        currentFrame=startLimit;
-
-                    } else if (currentFrame>=endLimit) {
-                        currentFrame=endLimit;
-                    }
-                }
-            }
-            break;
-            case LOOPMODELOOP_ID: {
-                if (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit) {
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                } else {
-                    if (currentFrame>=endLimit) {
-                        currentFrame=startLimit;
-                        fpsCount++;
-                    } else {
-                        if (currentFrame<=startLimit) {
-                            currentFrame=endLimit;
-                            fpsCount++;
-                        }
-                    }
-                }
-            }
-            break;
-            case LOOPMODEBOUNCE_ID: {
-                if (currentFrame+currentDirection<=endLimit && currentFrame+currentDirection>=startLimit) {
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                } else {
-                    currentDirection=-currentDirection;
-                    currentFrame+=currentDirection;
-                    fpsCount++;
-                }
-            }
-            break;
-            }
-
-           			
-			boundCurrentFrameToLimits();
-			
-		/*	#ifdef WIN32
-                    app().waitForEvents(0.001);
-#endif
-
-#ifdef __APPLE__
-                    //on mac we have to sleep a whole lot apparently
-                    app().waitForEvents(0.002);
-#endif
-
-#ifdef linux
-                    app().waitForEvents(0.001);
-#endif*/
-        }
-		
-		
-		
-		// currentFPS is maintained by the EMA at the frame-advance point above;
-		// drain the old window counters so they stay bounded.
-		if (fpsCount>=targetFPS*2)
-		{
-			fpsTimerCount=0;
-			fpsCount=0;
-		}
-		
-		/*if (fpsTimerCount>=1.0) 
-		{
-			char tmpNum[6];
-			sprintf(tmpNum,"%.5f",fpsCount/fpsTimerCount);
-			currentFPS=atof(tmpNum);
-			//currentFPS=timeStep;
-			myGUI->setCurrentFPS(currentFPS);
-			fpsTimerCount=0;
-			fpsCount=0;
-		}*/
-		/*double elapsed=fpsTimer.getElapsedSecs(true);
-		//
-		if (elapsed>=1.0)
-		{
-		currentFPS=currentFPS=atof(tmpNum);
-		//currentFPS=elapsed;
-		printf("%i frames: %Lfs=%f\n",fpsCount,elapsed,currentFPS);
-		fpsTimer.reset();
-		fpsCount=0;
-		myGUI->setCurrentFPS(currentFPS);
-		}*/
-		
-		//prevent it from trying to "catch up" in case the timestep has been longer that one frame.
-		if (intraFrameCount> 2*timePerFrame)
-            intraFrameCount=0;
-
-		
-
-    }
-
-
-
-
 
 }
 
@@ -278,21 +261,27 @@ int gfcPlaybackManager::getCurrentFrame() {
 void gfcPlaybackManager::startPlayFwd() {
     if (playing) {
         if (currentDirection==1) {
+            audioStop();
             playing=false;
 			fpsTimer.stop();
         } else { //we are playing but not forward, start playing fwd
             //playing=true; //not needed
             currentDirection=1;
+            audioTryLead();
         }
     } else { //just start playing fwd
         playing=true;
         currentDirection=1;
 		fpsTimer.reset();
-
+        fpsResumed_=true;
+        // Keep time waits for the pre-play buffer; the sound leads when it ends.
+        if (!(keepTime() && beginBuffering()))
+            audioTryLead();
     }
     myGUI->setPlayRevLabel(0);
     myGUI->setPlayFwdLabel(playing);
     myGUI->setTimelineValue(currentFrame);
+    cacheSyncTransport();
     updateTimeCode();
 
     sendPlayPauseMessage();
@@ -303,6 +292,7 @@ void gfcPlaybackManager::startPlayFwd() {
 
 void gfcPlaybackManager::pause() {
     if (playing) {
+        audioStop();
         playing=false;
         myGUI->setPlayRevLabel(0);
         myGUI->setPlayFwdLabel(0);
@@ -320,6 +310,7 @@ void gfcPlaybackManager::pause() {
 }
 
 void gfcPlaybackManager::startPlayRev() {
+    audioStop();   // reverse playback is silent
     if (playing) {
         if (currentDirection==-1) {
             playing=false;
@@ -333,10 +324,13 @@ void gfcPlaybackManager::startPlayRev() {
         playing=true;
         currentDirection=-1;
 		fpsTimer.reset();
+        fpsResumed_=true;
+        if (keepTime()) beginBuffering();
     }
     myGUI->setPlayRevLabel(playing);
     myGUI->setPlayFwdLabel(0);
     myGUI->setTimelineValue(currentFrame);
+    cacheSyncTransport();
     updateTimeCode();
     sendPlayPauseMessage();
 }
@@ -409,13 +403,18 @@ void gfcPlaybackManager::setPlaybackMode(int mode) {
 	plateManager.setChanged();
     this->playbackMode=mode;
     this->myGUI->setPlaybackMode(mode);
+    audioSyncTransport();
+    cacheSyncTransport();
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
 }
 
 void gfcPlaybackManager::setTargetFPS() {
     //this->setTargetFPS(myGUI->getTargetFPS());
-    this->targetFPS=myGUI->getTargetFPS();
-    this->timePerFrame=1.0/targetFPS;
+    { int n,d; rationalFromFPS(myGUI->getTargetFPS(),n,d); targetRateNum=n; targetRateDen=d; }
+    this->targetFPS=float(targetRateNum)/float(targetRateDen);
+    this->timePerFrame=double(targetRateDen)/double(targetRateNum);
+    audioSyncTransport();
+    cacheSyncTransport();
     // printf("TargetFPS: %f (%Lf/frame)",targetFPS,timePerFrame);
     //this->myGUI->setTargetFPS(targetFPS);
     updateTimeCode();
@@ -423,11 +422,51 @@ void gfcPlaybackManager::setTargetFPS() {
 }
 
 void gfcPlaybackManager::setTargetFPS(float fps) {
-    this->targetFPS=fps;
-    this->timePerFrame=1.0/targetFPS;
+    if (fps>0.0f) {
+        int n,d;
+        rationalFromFPS(fps,n,d);
+        targetRateNum=n; targetRateDen=d;
+        this->targetFPS=float(n)/float(d);
+        this->timePerFrame=double(d)/double(n);
+        audioSyncTransport();
+    } else {
+        this->targetFPS=fps;
+        this->timePerFrame=1.0/targetFPS;
+    }
+    cacheSyncTransport();
     this->myGUI->setTargetFPS(targetFPS);
     updateTimeCode();
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
+}
+
+void gfcPlaybackManager::setTargetRate(int num, int den) {
+    if (num<=0 || den<=0) return;
+    const int g=std::gcd(num,den);
+    targetRateNum=num/g; targetRateDen=den/g;
+    this->targetFPS=float(targetRateNum)/float(targetRateDen);
+    this->timePerFrame=double(targetRateDen)/double(targetRateNum);
+    audioSyncTransport();
+    cacheSyncTransport();
+    if (myGUI) this->myGUI->setTargetFPS(targetFPS);
+    updateTimeCode();
+    networkManager.notifyEvent(GFCNETEVENT_OTHER);
+}
+
+void gfcPlaybackManager::getTargetRate(int& num, int& den) const {
+    num=targetRateNum; den=targetRateDen;
+}
+
+void gfcPlaybackManager::rationalFromFPS(float fps, int& num, int& den) {
+    static const int ntsc[]={24,30,48,60};
+    for (int base : ntsc) {
+        const double v=double(base)*1000.0/1001.0;
+        if (std::fabs(double(fps)-v)<0.005) { num=base*1000; den=1001; return; }
+    }
+    long long n=std::llround(double(fps)*1000.0);
+    if (n<=0) { num=24; den=1; return; }
+    long long d=1000;
+    const long long g=std::gcd(n,d);
+    num=int(n/g); den=int(d/g);
 }
 
 int gfcPlaybackManager::getEndLimit() {
@@ -478,11 +517,24 @@ int gfcPlaybackManager::getStartLimit() {
         return inPoint;//return from;
 }
 
-void gfcPlaybackManager::setCurrentFrame(int frame) {
+void gfcPlaybackManager::setRenderFrame(int frame) {
+    this->currentFrame=frame;
+    updateTimeCode();
+}
+
+void gfcPlaybackManager::setCurrentFrame(int frame, bool audible) {
 	
     this->currentFrame=frame;
+    // A jump: the frame cache's window moves here (new generation, no reload).
+    cacheSyncTransport();
+    frameCache.retarget(frame);
+    trackManager.retargetAudio(frame);   // and the sound fills from here first
     this->myGUI->setTimelineValue(frame);
     this->myGUI->setCurrentFrame(frame);
+    // A seek while playing (Keep time) waits for the pre-play buffer; the
+    // sound restarts from here when it ends.
+    const bool waiting = playing && keepTime() && beginBuffering();
+    if (audible && !waiting) audioSeek();
     updateTimeCode();
     sendPlayPauseMessage();
 	plateManager.setChanged();
@@ -504,6 +556,8 @@ void gfcPlaybackManager::setOutPoint(int frame)
 
 	myGUI->setTimelineOut(outPoint);
 	myGUI->setOutPoint(outPoint);
+	audioSyncTransport();
+	cacheSyncTransport();
 	updateTimeCode();
 	networkManager.notifyEvent(GFCNETEVENT_OTHER);
 	//trackManager.updateTrackWidgetsFromAndTo(from,to);
@@ -525,6 +579,7 @@ void gfcPlaybackManager::setToFrame(int frame) {
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
     trackManager.updateTrackWidgetsFromAndTo(from,to);
 	boundCurrentFrameToLimits();
+	cacheSyncTransport();
 	plateManager.setChanged();
 }
 
@@ -544,6 +599,7 @@ void gfcPlaybackManager::setFromFrame(int frame) {
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
     trackManager.updateTrackWidgetsFromAndTo(from,to);
 	boundCurrentFrameToLimits();
+	cacheSyncTransport();
 	plateManager.setChanged();
 }
 
@@ -566,6 +622,8 @@ void gfcPlaybackManager::setInPoint(int frame)
 	}
 	myGUI->setTimelineIn(inPoint);
 	myGUI->setInPoint(inPoint);
+	audioSyncTransport();
+	cacheSyncTransport();
 	updateTimeCode();
 	networkManager.notifyEvent(GFCNETEVENT_OTHER);
 	//trackManager.updateTrackWidgetsFromAndTo(from,to);
@@ -593,7 +651,11 @@ void gfcPlaybackManager::updateInOutFromGUI() {
 }
 
 void gfcPlaybackManager::setDirection(int direction) {
+    const bool turned = playing && direction!=currentDirection;
+    if (turned) audioStop();
     currentDirection=direction;
+    cacheSyncTransport();
+    if (turned && direction>0) audioTryLead();
     myGUI->setPlayRevLabel(playing && direction==1);
     myGUI->setPlayFwdLabel(playing && direction==-1);
     sendPlayPauseMessage();
@@ -603,8 +665,11 @@ void gfcPlaybackManager::setDirection(int direction) {
 
 void gfcPlaybackManager::updateTimelineValueFromGUI() {
     currentFrame=myGUI->getTimeLineValue();
+    frameCache.retarget(currentFrame);   // a timeline click is a jump
+    trackManager.retargetAudio(currentFrame);   // and the sound fills from here first
 	
     myGUI->setCurrentFrame(currentFrame);
+    audioSeek();
 
 	setInPoint(myGUI->getTimelineInPointValue());
 	setOutPoint(myGUI->getTimelineOutPointValue());
@@ -616,7 +681,10 @@ void gfcPlaybackManager::updateTimelineValueFromGUI() {
 
 void gfcPlaybackManager::updateCurrentFrameValueFromGUI() {
     currentFrame=myGUI->getCurrentFrame();
+    frameCache.retarget(currentFrame);   // a typed frame is a jump
+    trackManager.retargetAudio(currentFrame);   // and the sound fills from here first
     myGUI->setTimelineValue(currentFrame);
+    audioSeek();
     updateTimeCode();
 }
 
@@ -698,6 +766,7 @@ void gfcPlaybackManager::setPlaybackInfo(gfcNetPlaybackInfo info) {
 void gfcPlaybackManager::setLoopPriority(int priority) {
     this->loopPriority=priority;
     myGUI->setLoopPriority(priority);
+    cacheSyncTransport();   // the limits follow the loop priority
     networkManager.notifyEvent(GFCNETEVENT_OTHER);
 }
 
@@ -736,4 +805,146 @@ int gfcPlaybackManager::getLoopPriority()
 float gfcPlaybackManager::getTargetFPS()
 {
 	return targetFPS;
+}
+
+// The frame after `cur` for one step (BOUNCE flips `direction`, ONCE clamps and holds). Shared by
+// update() and the audio engine's clock, so both walk frames identically.
+int gfcPlaybackManager::advanceFrame(int cur, int& direction, int mode, int startLimit, int endLimit) {
+    switch ( mode ) {
+    case LOOPMODEONCE_ID: {
+        if (cur+direction<=endLimit && cur+direction>=startLimit) {
+            //advance a frame in the direction
+            cur+=direction;
+        } else {
+            if (cur<=startLimit) {
+                cur=startLimit;
+
+            } else if (cur>=endLimit) {
+                cur=endLimit;
+            }
+        }
+    }
+    break;
+    case LOOPMODELOOP_ID: {
+        if (cur+direction<=endLimit && cur+direction>=startLimit) {
+            cur+=direction;
+        } else {
+            if (cur>=endLimit) {
+                cur=startLimit;
+            } else {
+                if (cur<=startLimit) {
+                    cur=endLimit;
+                }
+            }
+        }
+    }
+    break;
+    case LOOPMODEBOUNCE_ID: {
+        if (cur+direction<=endLimit && cur+direction>=startLimit) {
+            cur+=direction;
+        } else {
+            direction=-direction;
+            cur+=direction;
+        }
+    }
+    break;
+    }
+    return cur;
+}
+
+// ---- movie sound ----
+
+// Sends the rate and loop limits/mode to the audio engine when they change (the limits move
+// while tracks load). While the engine leads it takes only the limits and mode.
+void gfcPlaybackManager::audioSyncTransport() {
+    audioEngine.setPlayerRate(targetRateNum, targetRateDen);
+    const int s0=getStartLimit(), e0=getEndLimit();
+    if (s0==audioSentStart && e0==audioSentEnd && playbackMode==audioSentMode && currentDirection==audioSentDir) return;
+    audioSentStart=s0; audioSentEnd=e0; audioSentMode=playbackMode; audioSentDir=currentDirection;
+    audioEngine.updateTransport(gfcAudioTransport{currentFrame, s0, e0, playbackMode, currentDirection});
+}
+
+bool gfcPlaybackManager::audioTryLead() {
+    audioEngine.setPlayerRate(targetRateNum, targetRateDen);
+    const gfcAudioTransport t{currentFrame, getStartLimit(), getEndLimit(), playbackMode, currentDirection};
+    audioSentStart=t.startLimit; audioSentEnd=t.endLimit; audioSentMode=t.loopMode; audioSentDir=t.direction;
+    // The picture is waiting for the pre-play buffer: its end starts the lead.
+    if (buffering_) { audioEngine.updateTransport(t); return false; }
+    // Reverse is silent; Show every frame never lets the sound lead (each
+    // shown frame plays its own slice instead).
+    if (currentDirection<=0 || !keepTime()) { audioEngine.updateTransport(t); return false; }
+    audioEngine.startLeading(t);   // a no-op unless the engine can lead
+    const bool leading=audioEngine.isLeading();
+    // Keep time and not buffering (both checked above): the lead skip is on
+    // whether or not the sound took the lead.
+    setLeadSkip(playing);
+    return leading;
+}
+
+void gfcPlaybackManager::setLeadSkip(bool on) {
+    leadSkipOn_=on;
+    frameCache.setLeadSkip(on);
+}
+
+void gfcPlaybackManager::audioStop() {
+    if (audioEngine.isLeading() && audioEngine.leaderFrame()!=currentFrame) {
+        currentFrame=audioEngine.leaderFrame();   // stop on the frame heard
+        frameCache.advance(currentFrame);
+    }
+    audioEngine.stopLeading();
+    audioEngine.stopSlices();
+    setLeadSkip(false);
+}
+
+// The user moved the playhead. Paused: play that frame's slice (a newer request replaces one
+// pending). Playing: restart the audio clock there so it doesn't pull the picture back.
+void gfcPlaybackManager::audioSeek() {
+    if (!playing) {
+        audioEngine.setPlayerRate(targetRateNum, targetRateDen);
+        audioEngine.playSlice(currentFrame);
+    } else if (currentDirection>0) {
+        audioTryLead();   // also resumes a lead a pre-play wait stopped
+    }
+}
+
+int gfcPlaybackManager::prePlayFrames() const {
+    return std::max(1, int(std::ceil(kPrePlaySeconds*double(targetFPS))));
+}
+
+bool gfcPlaybackManager::beginBuffering() {
+    if (trackManager.timelineFramesResident(currentFrame, prePlayFrames(), currentDirection)) {
+        buffering_=false;
+        return false;
+    }
+    buffering_=true;
+    bufferingSince_=std::chrono::steady_clock::now();
+    audioEngine.stopLeading();   // silent while waiting
+    setLeadSkip(false);
+    return true;
+}
+
+// ---- frame cache ----
+
+// Sends the transport to the frame cache when direction/mode/limits/rate changed (the limits move
+// as tracks load). The playhead itself travels by retarget() and advance(), which take no lock.
+void gfcPlaybackManager::cacheSyncTransport(bool force) {
+    const int s0=getStartLimit(), e0=getEndLimit();
+    if (!force && s0==cacheSentStart && e0==cacheSentEnd && playbackMode==cacheSentMode &&
+        currentDirection==cacheSentDir && targetFPS==cacheSentFPS)
+        return;
+    cacheSentStart=s0; cacheSentEnd=e0; cacheSentMode=playbackMode; cacheSentDir=currentDirection; cacheSentFPS=targetFPS;
+    frameCache.setTransport(currentFrame, currentDirection, playbackMode, s0, e0, targetFPS);
+}
+
+void gfcPlaybackManager::cacheResendTransport() {
+    cacheSyncTransport(true);
+}
+
+void gfcPlaybackManager::cacheRefreshTransport() {
+    cacheSyncTransport(false);
+}
+
+bool gfcPlaybackManager::keepTime() const
+{
+    return sett.lagPolicy==1 || (sett.lagPolicy==0 && trackManager.anyTrackHasAudio());
 }

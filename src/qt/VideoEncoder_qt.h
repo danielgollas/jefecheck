@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Encodes a rendered image sequence into a video via the FFmpeg CLI.
 //
 // We shell out to `ffmpeg` (QProcess) rather than linking libav* — it keeps

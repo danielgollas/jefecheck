@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCNOTEARROW_H
 #define GFCNOTEARROW_H
 

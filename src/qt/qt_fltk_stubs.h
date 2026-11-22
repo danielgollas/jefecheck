@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Stub definitions of the FLTK widget classes that survive in the Qt
 // build's compile units only because some manager headers still declare
 // `Fl_*` widget pointer fields. Nothing in the Qt build actually

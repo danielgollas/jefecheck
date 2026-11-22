@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcimageloaderoiio.h"
+#include "gfcIOSurface.h"
+#include "gfcUploadPool.h"
 #include "UIConstants.h"
 #include "gfcStructures.h"
 extern gfcSettings sett;
@@ -14,10 +17,8 @@ gfcImageLoaderOIIO::~gfcImageLoaderOIIO() {
     releaseMemory();
 }
 
-// Parse channel names to find layers and their channel indices.
-// E.g. channels [R, G, B, right.R, right.G, right.B] ->
-//   default layer "" has channels 0,1,2 (R,G,B)
-//   layer "right" has channels 3,4,5 (right.R, right.G, right.B)
+// Parse channel names into layers, e.g. [R, G, B, right.R, right.G, right.B] ->
+//   layer "" = channels 0,1,2 and layer "right" = channels 3,4,5.
 struct LayerInfo {
     std::string name;         // display name (e.g. "RGB", "right", "diffuse")
     int chBegin;              // first channel index
@@ -88,7 +89,7 @@ static std::vector<LayerInfo> discoverLayers(const OIIO::ImageSpec &spec) {
     for (auto &g : groups) {
         LayerInfo li;
         if (g.prefix.empty()) {
-            // Default layer: the prefix-less channels, "Main" (or "Luminance" for single-channel).
+            // Default layer (prefix-less channels): "Main" across formats; single-channel is "Luminance".
             if (g.count == 1) li.name = "Luminance";
             else li.name = "Main";
         } else {
@@ -143,8 +144,8 @@ void reorientBitmap(GFL_BITMAP* bmp, int orientation) {
 }
 }  // namespace
 
-// Sets OIIO's global worker-thread pool size (0 = auto). A plain free function
-// so the Qt preference TUs can call it without pulling in OIIO headers.
+// Sets OIIO's global worker-thread pool size (0 = all cores). A plain free function so the Qt
+// preference TUs can call it without OIIO headers.
 void gfcSetOIIOThreadCount(int n) {
     OIIO::attribute("threads", n < 0 ? 0 : n);
 }
@@ -152,8 +153,7 @@ void gfcSetOIIOThreadCount(int n) {
 int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     this->params = params;
 
-    // Straight (unassociated) alpha: hint OIIO not to auto-premultiply on read
-    // (Formats prefs), passed as a config ImageSpec to open().
+    // Straight (unassociated) alpha: ask OIIO not to auto-premultiply on read (Formats prefs).
     OIIO::ImageSpec config;
     if (sett.oiioUnassociatedAlpha)
         config.attribute("oiio:UnassociatedAlpha", 1);
@@ -174,8 +174,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     const int orientation = sett.applyExifOrientation
                                 ? spec.get_int_attribute("Orientation", 1) : 1;
 
-    // EXR display window vs. data window (overscan/crop). Without a distinct
-    // display window outW/outH == width/height and dispDX/dispDY == 0, a 1:1 copy.
+    // EXR display vs data window. Where they coincide (and for non-EXR) outW/outH == width/height
+    // and dispDX/dispDY == 0, so the composite below is a 1:1 copy.
     const bool hasDistinctDisplayWindow =
         (spec.full_width != spec.width || spec.full_height != spec.height ||
          spec.full_x != spec.x || spec.full_y != spec.y);
@@ -188,12 +188,13 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         outH = spec.full_height;
     }
 
-    // Determine bit depth from the requested compression mode
+    // Half mode reads HALF, not UINT16: converting float pixels to UINT16 clamps them to 0..1.
     int bitsPerComponent = 8;
     OIIO::TypeDesc readType = OIIO::TypeDesc::UINT8;
-    if (params.compressed == GFC_16BPC || params.compressed == GFC_16HALF) {
+    const bool halfFloat = params.compressed == GFC_16HALF;
+    if (params.compressed == GFC_16BPC || halfFloat) {
         bitsPerComponent = 16;
-        readType = OIIO::TypeDesc::UINT16;
+        readType = halfFloat ? OIIO::TypeDesc::HALF : OIIO::TypeDesc::UINT16;
     }
 
     originalBitDepth = spec.format.size() * 8;
@@ -238,8 +239,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         }
     }
 
-    // Allocate output bitmap (always BGRA), sized to the display window so a
-    // smaller/offset EXR data window is padded into the full frame.
+    // BGRA for 8-bit, RGBA for 16-bit: the orders Metal stores natively, so Apple's GL uploads them
+    // without per-pixel conversion. Sized to the display window; the data window is padded into it.
     int outChannels = 4;
     theBitmap = gflAllockBitmapEx(GFL_BGRA, outW, outH, bitsPerComponent, outChannels, nullptr);
     if (!theBitmap || !theBitmap->Data) {
@@ -247,8 +248,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         inp->close();
         return -1;
     }
-    // Zero the bitmap so display-window padding reads as transparent, not
-    // uninitialized memory.
+    // Zero the full bitmap so display-window padding reads black; don't rely on
+    // gflAllockBitmapEx's calloc.
     memset(theBitmap->Data, 0, (size_t)theBitmap->BytesPerLine * outH);
 
     // Read selected channels
@@ -259,8 +260,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
 
     inp->read_image(0, 0, chBegin, chBegin + srcChannels, readType, imgBuf.data());
 
-    // Convert to BGRA, compositing the data window into the display window at
-    // (x + dispDX, y + dispDY); without a distinct display window this is a 1:1 copy.
+    // Convert to BGRA (8-bit) or RGBA (16-bit), compositing the data window into the display window
+    // at (x + dispDX, y + dispDY); a 1:1 copy when the two coincide.
     for (int y = 0; y < height; y++) {
         int dy = y + dispDY;
         if (dy < 0 || dy >= outH) continue; // whole source row falls outside the display window
@@ -269,6 +270,9 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         unsigned char *dst = theBitmap->Data + (size_t)dy * theBitmap->BytesPerLine;
 
         if (bitsPerComponent == 16) {
+            // RGBA order (see the allocation above). Alpha defaults to 1.0:
+            // 0x3C00 as a half, 0xFFFF as a normalised 16-bit integer.
+            const unsigned short opaque = halfFloat ? 0x3C00 : 0xFFFF;
             unsigned short *src16 = (unsigned short*)src;
             unsigned short *dst16 = (unsigned short*)dst;
             for (int x = 0; x < width; x++) {
@@ -279,10 +283,10 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
                 unsigned short r = src16[si + 0];
                 unsigned short g = (srcChannels > 1) ? src16[si + 1] : r;
                 unsigned short b = (srcChannels > 2) ? src16[si + 2] : r;
-                unsigned short a = (srcChannels > 3) ? src16[si + 3] : 0xFFFF;
-                dst16[di + 0] = b;
+                unsigned short a = (srcChannels > 3) ? src16[si + 3] : opaque;
+                dst16[di + 0] = r;
                 dst16[di + 1] = g;
-                dst16[di + 2] = r;
+                dst16[di + 2] = b;
                 dst16[di + 3] = a;
             }
         } else {
@@ -312,8 +316,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     // Apply scale via OIIO (the filter actually matters here — our
     // local gflResize ignores filter selection and is nearest-only).
     if (params.scale > 0 && params.scale != 100) {
-        // Base the target on the composited (display-window size) bitmap, not the
-        // raw data window, or an overscan EXR would resize to the wrong dimensions.
+        // Base the target on the composited (display-window) size, not the data window, or an overscan
+        // EXR with a non-100 decode scale resizes to the wrong dimensions.
         int newW = (int)(theBitmap->Width  * params.scale / 100.0f);
         int newH = (int)(theBitmap->Height * params.scale / 100.0f);
 
@@ -323,7 +327,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         OIIO::ImageSpec srcSpec(theBitmap->Width, theBitmap->Height,
                                 theBitmap->ComponentsPerPixel,
                                 theBitmap->BitsPerComponent == 8  ? OIIO::TypeDesc::UINT8 :
-                                theBitmap->BitsPerComponent == 16 ? OIIO::TypeDesc::UINT16 :
+                                theBitmap->BitsPerComponent == 16 ? (halfFloat ? OIIO::TypeDesc::HALF
+                                                                               : OIIO::TypeDesc::UINT16) :
                                                                     OIIO::TypeDesc::FLOAT);
         OIIO::ImageBuf src(srcSpec, theBitmap->Data);
 
@@ -331,13 +336,19 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
                                 srcSpec.nchannels, srcSpec.format);
         OIIO::ImageBuf dst(dstSpec);
 
-        // OIIO 3.x KWArgs form — pass the filter name as a string.
-        bool ok = OIIO::ImageBufAlgo::resize(
-            dst, src, {{ "filtername", filterName }});
+        // OIIO 3.x takes KWArgs; 2.x (Ubuntu 24.04 ships 2.4) takes the
+        // filter name positionally and finds the KWArgs form ambiguous.
+        auto resizeWith = [&](const char* name) {
+#if OIIO_VERSION_MAJOR >= 3
+            return OIIO::ImageBufAlgo::resize(dst, src, {{ "filtername", name }});
+#else
+            return OIIO::ImageBufAlgo::resize(dst, src, name);
+#endif
+        };
+        bool ok = resizeWith(filterName);
         if (!ok) {
             // Fall back to box (nearest) if the filter name was rejected.
-            ok = OIIO::ImageBufAlgo::resize(
-                dst, src, {{ "filtername", "box" }});
+            ok = resizeWith("box");
         }
 
         if (ok) {
@@ -383,8 +394,8 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
     quadSizeX = theBitmap->Width;
     quadSizeY = theBitmap->Height;
     if (!sett.exrIgnoreHeadersAspectRatio) {
-        // par stretches the original horizontal axis; a 90/270 degree reorient
-        // (Orientation 5..8) swaps the axes, so apply par to the vertical axis.
+        // par stretches the original horizontal axis; a 90/270 reorient (Orientation 5..8) swapped the
+        // axes, so apply par to the vertical axis instead.
         if (orientation >= 5 && orientation <= 8)
             quadSizeY = (int)(quadSizeY * par);
         else
@@ -404,10 +415,14 @@ int gfcImageLoaderOIIO::load(gfcLoadParams params) {
         frameInfo.internalFormat = GL_RGBA4;
         break;
     case GFC_16HALF:
-    case GFC_16BPC:
-        frameInfo.format = GL_BGRA;
-        frameInfo.dataType = GL_UNSIGNED_SHORT;
+        frameInfo.format = GL_RGBA;
+        frameInfo.dataType = GL_HALF_FLOAT_ARB;
         frameInfo.internalFormat = GL_RGBA16F_ARB;
+        break;
+    case GFC_16BPC:
+        frameInfo.format = GL_RGBA;
+        frameInfo.dataType = GL_UNSIGNED_SHORT;
+        frameInfo.internalFormat = GL_RGBA16;
         break;
     case GFC_S3TCDX1:
         frameInfo.format = GL_BGRA;
@@ -495,6 +510,91 @@ void* gfcImageLoaderOIIO::getPixelPointer() {
 void gfcImageLoaderOIIO::releaseMemory() {
     delete theBitmap;
     theBitmap = nullptr;
+    gfcSurface::release(frameInfo.ioSurface);
+    frameInfo.ioSurface = nullptr;
+    gfcUpload::abandon(frameInfo.staging);   // no-op once it was uploaded
+    frameInfo.staging = 0;
+    frameInfo.thumbnailRGBA.clear();
+    frameInfo.thumbnailRGBA.shrink_to_fit();
+    frameInfo.thumbnailW = frameInfo.thumbnailH = 0;
+}
+
+void gfcImageLoaderOIIO::prepareUpload() {
+    // Hand the pixels to the GPU side here, on the decode thread, so the GL thread copies nothing:
+    // an IOSurface on macOS, else (or on failure) a mapped staging buffer.
+    if (!theBitmap || !(copyToSurface() || copyToStaging())) return;
+    // The frame now waits in the upload queue with one copy of its pixels,
+    // not two: make the thumbnail while the bitmap exists, then free it.
+    frameInfo.thumbnailRGBA.clear();
+    frameInfo.thumbnailW = frameInfo.thumbnailH = 0;
+    gfcMakeThumbnail(theBitmap->Data, theBitmap->Width, theBitmap->Height, theBitmap->BytesPerLine,
+                     frameInfo.format, frameInfo.dataType,
+                     frameInfo.thumbnailRGBA, frameInfo.thumbnailW, frameInfo.thumbnailH);
+    delete theBitmap;
+    theBitmap = nullptr;
+    frameInfo.dataPointer = nullptr;
+}
+
+size_t gfcImageLoaderOIIO::handOffRowBytes() const {
+    if (!theBitmap || !theBitmap->Data || theBitmap->ComponentsPerPixel != 4) return 0;
+    size_t pixelBytes;
+    switch (params.compressed) {
+    case GFC_8BPC:   pixelBytes = 4; break;
+    case GFC_16BPC:
+    case GFC_16HALF: pixelBytes = 8; break;
+    default: return 0;   // 4-bit and S3TC keep the upload path
+    }
+    const size_t rowBytes = (size_t)theBitmap->Width * pixelBytes;
+    return (size_t)theBitmap->BytesPerLine >= rowBytes ? rowBytes : 0;
+}
+
+void gfcImageLoaderOIIO::copyRows(unsigned char* dst, size_t pitch, size_t rowBytes) const {
+    const unsigned char* src = theBitmap->Data;
+    const int h = theBitmap->Height;
+    if (pitch == rowBytes && (size_t)theBitmap->BytesPerLine == rowBytes) {
+        memcpy(dst, src, rowBytes * h);
+    } else {
+        for (int y = 0; y < h; ++y)
+            memcpy(dst + pitch * y, src + (size_t)theBitmap->BytesPerLine * y, rowBytes);
+    }
+}
+
+bool gfcImageLoaderOIIO::copyToSurface() {
+    gfcSurface::release(frameInfo.ioSurface);
+    frameInfo.ioSurface = nullptr;
+    const size_t rowBytes = handOffRowBytes();
+    if (!gfcSurface::available() || !rowBytes) return false;
+
+    const gfcSurface::Layout layout = params.compressed == GFC_8BPC  ? gfcSurface::Layout::BGRA8
+                                    : params.compressed == GFC_16BPC ? gfcSurface::Layout::RGBA16
+                                                                     : gfcSurface::Layout::RGBAHalf;
+    void* surface = gfcSurface::create(theBitmap->Width, theBitmap->Height, layout);
+    if (!surface) return false;
+    size_t pitch = 0;
+    unsigned char* dst = (unsigned char*)gfcSurface::lockForWriting(surface, &pitch);
+    if (!dst || pitch < rowBytes) {
+        if (dst) gfcSurface::unlock(surface);
+        gfcSurface::release(surface);
+        return false;
+    }
+    copyRows(dst, pitch, rowBytes);
+    gfcSurface::unlock(surface);
+    frameInfo.ioSurface = surface;
+    frameInfo.ioSurfaceLayout = layout;
+    return true;
+}
+
+bool gfcImageLoaderOIIO::copyToStaging() {
+    gfcUpload::abandon(frameInfo.staging);
+    frameInfo.staging = 0;
+    const size_t rowBytes = handOffRowBytes();
+    if (!rowBytes) return false;
+    void* dst = nullptr;
+    const gfcUpload::Ticket staging = gfcUpload::acquire(rowBytes * theBitmap->Height, &dst);
+    if (!staging) return false;
+    copyRows((unsigned char*)dst, rowBytes, rowBytes);   // tightly packed rows
+    frameInfo.staging = staging;
+    return true;
 }
 
 std::vector<std::string> gfcImageLoaderOIIO::getChannelNames() {

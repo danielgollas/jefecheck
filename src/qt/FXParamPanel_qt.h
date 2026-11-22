@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Combined FX panel for the Qt port — the single "effect controls"
 // surface for the ACTIVE plate. Replaces the old split between an FX
 // browser (FXStackPanel_Qt, removed) and a read-only FX-params view.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // One plate's controls as a self-contained card. Lives inside the Plate
 // Manager dock. Drives a stateful gfcPlateGUI_Qt — either an externally
 // owned one borrowed from gfcPlateManager (the rendering chain's GUI for

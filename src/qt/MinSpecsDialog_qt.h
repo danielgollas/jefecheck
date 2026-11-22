@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // "Host System Specs" — read-only summary of the GL state captured at
 // startup. Mirrors the FLTK minSpecsWindow's content but as a modal
 // QDialog with a Close button. Triggered from Help → System Specs.

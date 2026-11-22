@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt-build globals, defined in a dedicated TU (the app shell does not own
 // them).
 

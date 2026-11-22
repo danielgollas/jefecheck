@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Export Review Package dialog: output path, "Include media" with its size,
 // progress and cancel (docs/superpowers/specs/2026-09-14-review-package-design.md).
 #ifndef JEFECHECK_QT_REVIEW_PACKAGE_DIALOG_H

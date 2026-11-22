@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCTRACKMANAGER_H
 #define GFCTRACKMANAGER_H
 
@@ -35,6 +36,9 @@ public:
 	void startLoadingSequence(int whichOne);
 	
 	void stopLoadingAll();
+	// App quit: stops and joins every track's loader and audio thread, wakes
+	// the coordinator's waiters, and keeps any load from starting again.
+	void shutdown();
 	void stopLoadingSequence(int whichOne);
 	void startLoadingSequenceAt(int whichOne, int startFrame);
 	
@@ -62,17 +66,35 @@ public:
 	void addToRecentlyLoaded(std::string filename);
 	
 	gfcSequence* getSequence(int whichOne);
+	bool anyTrackHasAudio() const; ///true if any track has a sound clip; cheap, safe from the GL thread.
 	
 	std::vector<gfcNetTrackStateInfo> getTrackStateInfo();
 	void setTrackStateInfo(std::vector<gfcNetTrackStateInfo> info);
 	
 	int getMaxTrackLength();
+
+	// Rolling cache. Resident frames over all tracks.
+	int residentFrameCount() const;
+	// True when every track with footage at this timeline frame has it
+	// resident (true when no track has footage there).
+	bool timelineFrameResident(int frame) const;
+	// The same for count frames from `from`, stepping by direction (+1/-1).
+	bool timelineFramesResident(int from, int count, int direction) const;
+	// Hands the coordinator the playhead, loop mode, limits and rate for a load.
+	// Sends the player transport to the frame cache: always (a load), or only when it changed (force=false).
+	void syncCacheTransport(bool force=true);
+	// A jump: each movie track's audio thread fills the sound at this timeline
+	// frame first when it is not there yet. Each track stores its target under
+	// its audio wake mutex (uncontended, jumps only, never the tick) and notifies.
+	void retargetAudio(int timelineFrame);
 	int getMinTrackLength();
 	
 	void saveTrackSessionParameters(XMLNode &tracksNode);
 	void loadTrackSessionParameters(XMLNode &tracksNode);
 	
-	//auxiliary functions used by the playbackManager to determine loops
+	//auxiliary functions used by the playbackManager to determine loops. They
+	//read each non-empty track's trim range (getRangeStart/End, offset applied),
+	//not its resident frames, so the loop limits do not move as frames are evicted.
 	int getFirstFirstLoaded();
 	int getLastFirstLoaded();
 	int getFirstLastLoaded();

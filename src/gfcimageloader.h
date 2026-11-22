@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCIMAGELOADER_H
 #define GFCIMAGELOADER_H
 
@@ -52,6 +53,11 @@ public:
     virtual int fillProcessor(gfcImageProcessor &processor) { return 0; }
     virtual void* getPixelPointer()=0;
     virtual void releaseMemory()=0;
+    // Decode thread, after a successful load() of a frame headed for a
+    // texture: moves the pixels to where the GL thread uploads from and may
+    // free the CPU copy (getPixelPointer() is then null). Loaders without a
+    // hand-off keep their pixels. Callers that read pixels skip it.
+    virtual void prepareUpload() {}
     virtual std::vector<std::string> getChannelNames()=0;
     
     gfcGLFrameInfo getFrameInfo();

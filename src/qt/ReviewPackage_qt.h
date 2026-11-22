@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Review package (.jcreview): manifest, exporter and opener.
 // docs/superpowers/specs/2026-09-14-review-package-design.md
 // QtCore only — no glad, no managers (developer_notes.md §1). App-side actions

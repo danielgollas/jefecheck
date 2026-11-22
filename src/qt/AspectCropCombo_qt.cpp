@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "AspectCropCombo_qt.h"
 #include "UiMetrics_qt.h"
 

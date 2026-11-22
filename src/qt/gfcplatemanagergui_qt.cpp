@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcplatemanagergui_qt.h"
 
 gfcPlateManagerGUI_Qt::gfcPlateManagerGUI_Qt() {}

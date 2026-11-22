@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Qt implementation of IGLViewport, backed by QOpenGLWidget; forwards GL callbacks
 // to an IGLViewportListener (see RenderBridge_qt) and emits fileDropped(path).
 #ifndef GLVIEWPORT_QT_H

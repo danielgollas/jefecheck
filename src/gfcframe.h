@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef GFCFRAME_H
 #define GFCFRAME_H
 
@@ -22,12 +23,13 @@
 #include "gfcpixelbuffer.h"
 #include "gfcimageloaderdpx.h"
 #include "gfcimageloaderoiio.h"
+#include "gfcimageloadermovie.h"
 
 /**
 	@author Daniel Gollas Gilman <dgollas@ollin.com.mx>
 */
 
-enum loaders{GFCLOADER_EXR,GFCLOADER_GFL,GFCLOADER_OTHER, GFCLOADER_DPX, GFCLOADER_FIL};
+enum loaders{GFCLOADER_EXR,GFCLOADER_GFL,GFCLOADER_OTHER, GFCLOADER_DPX, GFCLOADER_FIL, GFCLOADER_MOVIE};
 
 enum frameloaderrors{
 	GFCFRAME_LOADERROR_NO_ERROR=0,
@@ -119,6 +121,11 @@ public:
         skipped=false;
         theImageLoader=NULL;
         textureID=defaultTexture;
+        ioSurface=nullptr;
+        textureTarget=0;
+        textureFormat=0;
+        textureW=textureH=0;
+        textureBytes=0;
         indexNumber=0;
         forceGFLLoader=false;
     }
@@ -130,6 +137,25 @@ public:
     gfcImageLoader* theImageLoader;
 
     GLuint textureID;
+    // macOS: the IOSurface backing textureID, or null when the texture was
+    // uploaded. The texture does not keep the surface alive, so the frame
+    // holds a reference until deleteTexture(). Copied along with textureID.
+    void* ioSurface;
+    // What textureID holds, for the texture pool: set by generateTexture
+    // (size 0 = don't pool: IOSurface-backed, or the upload failed).
+    GLenum textureTarget;
+    GLint textureFormat;
+    int textureW;
+    int textureH;
+    // GPU bytes textureID holds (sizeX*sizeY at internalFormat), for the cache's
+    // budget. Set by generateTexture, 0 when nothing was uploaded.
+    size_t textureBytes;
+    // True while this frame's textureID is counted in liveTextures(); copied
+    // with textureID, cleared by deleteTexture().
+    bool countedTexture = false;
+    // Textures generateTexture made or took from the pool and deleteTexture
+    // has not freed yet, over every frame (for the leak tests).
+    static long liveTextures();
 
     bool loaded;
     bool skipped;

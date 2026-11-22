@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include <glad/glad.h>
 #include "gfcfx.h"
 #include "ui/IApplication.h"
