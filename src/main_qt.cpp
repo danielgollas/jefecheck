@@ -1379,6 +1379,7 @@ int main(int argc, char* argv[]) {
     // Load each --open-file into the matching plate once the event loop has spun up the
     // GL context (deferred so paintGL has initialized GLAD before the texture upload).
     const QStringList openFiles = resolveOpenFiles(argc, argv);
+    if (!openFiles.isEmpty()) window.suppressStartupLoadWindow();
     for (int i = 0; i < openFiles.size() && i < 4; ++i) {
         const int plateIdx = i;
         const QString path = openFiles.at(i);

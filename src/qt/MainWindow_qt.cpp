@@ -306,7 +306,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // Bridged so this TU stays glad-free (developer_notes.md §1).
     QTimer::singleShot(0, this, [this]() {
         if (jefe::qt::getStartFullscreen()) showFullScreen();
-        if (jefe::qt::getOpenLoadWindowAtStartup()) openLoadWindow();
+        if (jefe::qt::getOpenLoadWindowAtStartup() && !suppressStartupLoadWindow_) openLoadWindow();
     });
 
     // Fast playback tick (~250Hz): frame advance accumulates wall-clock time, so a fine tick lands within a few ms (a 16ms grid made 24fps wobble).
