@@ -49,7 +49,6 @@
 <link rel="modulepreload" href="assets/moments/lib.js">
 <link rel="modulepreload" href="assets/moments/iris-opens/moment.js">
 <style>
-  .hero__shot { display: block; width: min(1100px, 100%); height: auto; margin: 0 auto; border-radius: 10px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06); position: relative; z-index: 1; }
   /* the hero window: JefeCheck's viewer drawn in its own controls (track list, plate, transport) */
   .jc-win { background: #141416; color: #e9e9e6; border-radius: 12px; overflow: hidden; font: 400 13px/1.4 var(--font-text); box-shadow: 0 0 0 1px rgb(255 255 255 / .09), 0 30px 70px -30px rgb(0 0 0 / .9); }
   .jc-win__bar { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 14px; border-bottom: 1px solid rgb(255 255 255 / .08); color: #a3a3a0; }
@@ -114,12 +113,12 @@
         <div class="nav__menu">
           <div class="wrap grid">
             <a class="menu-card span-4" href="#features">
-              <div class="panel"><img class="frame__img" src="assets/images/jc_playback.jpg" width="1300" height="994" srcset="assets/images/jc_playback-640.jpg 640w, assets/images/jc_playback.jpg 1300w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="JefeCheck playing a 16-bit OpenEXR landscape on plate A, with its LUT applied" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
+              <div class="panel"><img class="frame__img" src="assets/images/ss_mount.jpg" width="1018" height="759" srcset="assets/images/ss_mount-640.jpg 640w, assets/images/ss_mount.jpg 1018w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="JefeCheck playing a 16-bit OpenEXR sequence" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
               <span class="t-card">Playback</span>
               <span class="t-small muted">EXR, DPX and JPEG sequences in real time</span>
             </a>
             <a class="menu-card span-4" href="#compare">
-              <div class="panel"><img class="frame__img" src="assets/images/jc_compare.jpg" width="1300" height="994" srcset="assets/images/jc_compare-640.jpg 640w, assets/images/jc_compare.jpg 1300w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="Four OpenEXR shots in a 2x2 layout, each plate with its own LUT and exposure" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
+              <div class="panel"><img class="frame__img" src="assets/images/ss_colibriOver.jpg" width="1016" height="757" srcset="assets/images/ss_colibriOver-640.jpg 640w, assets/images/ss_colibriOver.jpg 1016w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="An Over comp of two tracks with the FX controls open" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
               <span class="t-card">Compare and grade</span>
               <span class="t-small muted">Four tracks, LUTs and GLSL effects</span>
             </a>
@@ -154,8 +153,27 @@
         <p class="hero__lead">JefeCheck plays EXR, DPX and JPEG sequences at up to 4K and 24 fps on everyday hardware, with LUTs and four tracks on screen.</p>
         <div class="btn-row"><a class="btn btn--primary" href="https://github.com/danielgollas/jefecheck/releases/latest">Download JefeCheck<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="#install">See the install steps</a></div>
       </div>
-      <div class="hero__window" data-fx="grain-gradient" data-fx-seed="11" role="img" aria-label="JefeCheck comparing four OpenEXR shots in a 2x2 layout, each plate with its own LUT and exposure">
-        <img class="hero__shot" src="assets/images/jc_hero.jpg" width="1600" height="990" srcset="assets/images/jc_hero-800.jpg 800w, assets/images/jc_hero.jpg 1600w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 90vw, 1100px" alt="" fetchpriority="high">
+      <div class="hero__window" data-fx="grain-gradient" data-fx-seed="11" role="img" aria-label="JefeCheck playing an OpenEXR frame on plate A with a LUT, an exposure change and a review note">
+        <div class="ly-piece ui jc-win" aria-hidden="true">
+          <div class="jc-win__bar"><span class="jc-win__dots"><i></i><i></i><i></i></span><span><b>MtTamNorth.exr</b> · Plate A</span><span class="sp"></span><span>1x1 · 24 fps</span></div>
+          <div class="jc-win__body">
+            <div class="jc-tracks">
+              <div class="jc-track is-on"><i>A</i><b>MtTamNorth.exr</b><span>Half float · 1198 x 796</span></div>
+              <div class="jc-track"><i>B</i><b>Garden.exr</b><span>Half float · 874 x 493</span></div>
+              <div class="jc-track"><i>C</i><b>CrissyField.exr</b><span>Half float · 1218 x 810</span></div>
+              <div class="jc-track"><i>D</i><b>Empty</b><span>Drop a sequence here</span></div>
+            </div>
+            <div class="jc-view">
+              <img src="assets/images/mttam.jpg" width="1200" height="797" srcset="assets/images/mttam-640.jpg 640w, assets/images/mttam.jpg 1200w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="" fetchpriority="high" data-source="library" data-subject="OpenEXR test image, Mt Tam North">
+              <div class="jc-hud" data-ly-steps="900">
+                <span class="jc-chip jc-chip--acc">Plate A</span>
+                <span class="jc-chip" data-step>LUT · rec709.cube</span>
+                <span class="jc-chip" data-step>Exposure +0.50</span>
+              </div>
+              <div class="jc-pin"><span>Lift the ridge shadows</span></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div></div>
   </section>
@@ -170,12 +188,12 @@
           <article class="card card--row span-6">
             <h3>Loads 16-bit OpenEXR sequences</h3>
             <p>Reads EXR, DPX, TIFF and JPEG through OpenImageIO, up to 5K frames.</p>
-            <div class="panel panel--flush"><img class="frame__img" src="assets/images/jc_playback.jpg" width="1300" height="994" srcset="assets/images/jc_playback-640.jpg 640w, assets/images/jc_playback.jpg 1300w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="JefeCheck playing a 16-bit OpenEXR landscape on plate A, with its LUT applied" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
+            <div class="panel panel--flush"><img class="frame__img" src="assets/images/ss_mount.jpg" width="1018" height="759" srcset="assets/images/ss_mount-640.jpg 640w, assets/images/ss_mount.jpg 1018w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="A 16-bit OpenEXR landscape sequence loaded on plate A" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
           </article>
           <article class="card card--row span-6">
             <h3>Pushes exposure in HDR frames</h3>
             <p>Set gamma and exposure per plate to check the highlights a float EXR holds.</p>
-            <div class="panel panel--flush"><img class="frame__img" src="assets/images/jc_exposure.jpg" width="1300" height="994" srcset="assets/images/jc_exposure-640.jpg 640w, assets/images/jc_exposure.jpg 1300w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="A float EXR interior with exposure pulled down 1.5 stops to show the stained glass" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
+            <div class="panel panel--flush"><img class="frame__img" src="assets/images/ss_exrRange.jpg" width="1016" height="757" srcset="assets/images/ss_exrRange-640.jpg 640w, assets/images/ss_exrRange.jpg 1016w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="An HDR EXR frame with its exposure raised" loading="lazy" data-source="client" data-subject="JefeCheck screenshot"></div>
           </article>
         </div>
       </div>
