@@ -22,6 +22,12 @@ public:
 
     void assignLayoutGroupWidget(void*) override;
     void assignLayoutChoiceWidget(void*) override;
+
+private:
+    // gfcPlateManager::setFramingMode writes the layout here and updateAllFromGUI
+    // reads it back, so it has to round-trip: a stub returning 0 reset every
+    // loaded session to the single-plate layout.
+    int layoutChoice_ = 0;
 };
 
 #endif
