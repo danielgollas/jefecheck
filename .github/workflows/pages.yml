@@ -1,31 +1,32 @@
 name: Deploy GitHub Pages
 
+# The 2.0 site is not published yet; the live site is the classic 1.7 one,
+# deployed from main by website-v* tags. This workflow only runs by hand
+# (Actions tab -> "Run workflow") so merging the Qt line into main can't
+# replace the live site by accident.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v4
-      - uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./site
-      - uses: actions/upload-pages-artifact@v3
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
+jobs:
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
       - id: deployment
         uses: actions/deploy-pages@v4

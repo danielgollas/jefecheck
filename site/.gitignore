@@ -5,3 +5,6 @@ _site/
 vendor/
 .bundle/
 Gemfile.lock
+
+# Generated feature-notes site (tools/feature-notes)
+n-*/
