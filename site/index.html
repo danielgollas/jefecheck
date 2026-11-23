@@ -87,6 +87,10 @@
   @media (max-width: 379px) { header.nav .nav__bar > .nav__actions { display: none; } }
   .close__word { line-height: 1.04; overflow: visible; padding-top: .06em; }
   .faq__gh { display: flex; align-items: center; gap: var(--s-3); }
+  /* the 1.7 window is tall; show it whole (its Control Bar is the point), not cropped by the fade */
+  .hero--centred .hero__window:has(.hero__shot) { flex: none; min-height: 0; padding: var(--s-6); -webkit-mask-image: none; mask-image: none; }
+  @media (max-width: 639px) { .hero--centred .hero__window:has(.hero__shot) { padding: var(--s-3); } }
+  .hero__shot { display: block; width: min(880px, 100%); height: auto; margin: 0 auto; border-radius: 10px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06); position: relative; z-index: 1; }
   .hero__window .loop-pause:focus-visible, .jc-win .loop-pause:focus-visible { outline: 3px solid #e8a020; outline-offset: 2px; box-shadow: 0 0 0 6px #0c0c0d; }
 
   /* the review diagram fills its frame */
@@ -153,27 +157,8 @@
         <p class="hero__lead">JefeCheck plays EXR, DPX and JPEG sequences at up to 4K and 24 fps on everyday hardware, with LUTs and four tracks on screen.</p>
         <div class="btn-row"><a class="btn btn--primary" href="https://github.com/danielgollas/jefecheck/releases/latest">Download JefeCheck<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="#install">See the install steps</a></div>
       </div>
-      <div class="hero__window" data-fx="grain-gradient" data-fx-seed="11" role="img" aria-label="JefeCheck playing an OpenEXR frame on plate A with a LUT, an exposure change and a review note">
-        <div class="ly-piece ui jc-win" aria-hidden="true">
-          <div class="jc-win__bar"><span class="jc-win__dots"><i></i><i></i><i></i></span><span><b>MtTamNorth.exr</b> · Plate A</span><span class="sp"></span><span>1x1 · 24 fps</span></div>
-          <div class="jc-win__body">
-            <div class="jc-tracks">
-              <div class="jc-track is-on"><i>A</i><b>MtTamNorth.exr</b><span>Half float · 1198 x 796</span></div>
-              <div class="jc-track"><i>B</i><b>Garden.exr</b><span>Half float · 874 x 493</span></div>
-              <div class="jc-track"><i>C</i><b>CrissyField.exr</b><span>Half float · 1218 x 810</span></div>
-              <div class="jc-track"><i>D</i><b>Empty</b><span>Drop a sequence here</span></div>
-            </div>
-            <div class="jc-view">
-              <img src="assets/images/mttam.jpg" width="1200" height="797" srcset="assets/images/mttam-640.jpg 640w, assets/images/mttam.jpg 1200w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 50vw, 628px" alt="" fetchpriority="high" data-source="library" data-subject="OpenEXR test image, Mt Tam North">
-              <div class="jc-hud" data-ly-steps="900">
-                <span class="jc-chip jc-chip--acc">Plate A</span>
-                <span class="jc-chip" data-step>LUT · rec709.cube</span>
-                <span class="jc-chip" data-step>Exposure +0.50</span>
-              </div>
-              <div class="jc-pin"><span>Lift the ridge shadows</span></div>
-            </div>
-          </div>
-        </div>
+      <div class="hero__window" data-fx="grain-gradient" data-fx-seed="11" role="img" aria-label="JefeCheck 1.7 comparing four OpenEXR shots in a 2x2 layout, each plate with its own LUT">
+        <img class="hero__shot" src="assets/images/jc17_hero.jpg" width="1600" height="1242" srcset="assets/images/jc17_hero-800.jpg 800w, assets/images/jc17_hero.jpg 1600w" sizes="(max-width: 639px) 342px, (max-width: 1279px) 90vw, 1000px" alt="" fetchpriority="high">
       </div>
     </div></div>
   </section>
