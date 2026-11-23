@@ -4,8 +4,8 @@
 gfcPlateManagerGUI_Qt::gfcPlateManagerGUI_Qt() {}
 gfcPlateManagerGUI_Qt::~gfcPlateManagerGUI_Qt() {}
 
-int  gfcPlateManagerGUI_Qt::getLayoutChoice() { return 0; }
-void gfcPlateManagerGUI_Qt::setLayoutChoice(int) {}
+int  gfcPlateManagerGUI_Qt::getLayoutChoice() { return layoutChoice_; }
+void gfcPlateManagerGUI_Qt::setLayoutChoice(int value) { layoutChoice_ = value; }
 
 int gfcPlateManagerGUI_Qt::getLayoutGroupX() { return 0; }
 int gfcPlateManagerGUI_Qt::getLayoutGroupY() { return 0; }

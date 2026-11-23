@@ -108,6 +108,17 @@
 #include <ctime>
 
 namespace {
+// Status-bar wording for a framing mode ("Layout: quad").
+const char* layoutName(int framingMode) {
+    switch (framingMode) {
+        case FRAMINGSINGLE_ID:     return "single";
+        case FRAMINGDOUBLE_ID:     return "double-horizontal";
+        case FRAMINGDOUBLEVERT_ID: return "double-vertical";
+        case FRAMINGQUAD_ID:       return "quad";
+        default:                   return "unknown";
+    }
+}
+
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
 // Layout key version: older layouts saved while the timeline forced an
 // over-tall bottom dock row (hiding the Plate Manager) are ignored.
@@ -215,16 +226,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
 
     // Window-scoped layout shortcuts. QShortcut delivers regardless of which
     // widget has focus; GlViewport_Qt::keyPressEvent only fires when the viewport has it.
-    auto layoutName = [](int framingMode) -> const char* {
-        switch (framingMode) {
-            case FRAMINGSINGLE_ID:     return "single";
-            case FRAMINGDOUBLE_ID:     return "double-horizontal";
-            case FRAMINGDOUBLEVERT_ID: return "double-vertical";
-            case FRAMINGQUAD_ID:       return "quad";
-            default:                   return "unknown";
-        }
-    };
-    auto announceLayout = [this, layoutName](int framingMode) {
+    auto announceLayout = [this](int framingMode) {
         if (layoutStatusLabel_) {
             layoutStatusLabel_->setText(
                 QStringLiteral("Layout: %1").arg(layoutName(framingMode)));
@@ -1240,6 +1242,8 @@ void MainWindow_Qt::refreshAfterSessionLoad() {
         if (plateManagerWidget_)   plateManagerWidget_->refreshAllCards();
         if (lutPanelWidget_)       lutPanelWidget_->refreshList();
         if (timelinePanelWidget_)  timelinePanelWidget_->refreshFromPlayback();
+        if (layoutStatusLabel_)    // the session sets the layout; keep the status bar honest
+            layoutStatusLabel_->setText(QStringLiteral("Layout: %1").arg(layoutName(jefe::qt::getFramingMode())));
         // Deliberately inside the deferred lambda: this path decodes asynchronously, so the first call can run
         // before the preview frame exists; the 250/750ms repeats below catch it.
         refreshNotesForLoadedMedia();
