@@ -13,6 +13,7 @@
 #ifndef JEFECHECK_QT_PLATE_CARD_H
 #define JEFECHECK_QT_PLATE_CARD_H
 
+#include <QElapsedTimer>
 #include <QFrame>
 #include <QString>
 
@@ -24,6 +25,7 @@ class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QPushButton;
+class QToolButton;
 
 class AspectCropCombo_Qt;
 class gfcPlateGUI_Qt;
@@ -79,7 +81,14 @@ public:
     // Toggles the active-plate styling. Called by the parent dock when
     // it knows the active plate index has changed (either from a click
     // on a different card or via plateManager.setActiveQuad()).
+    // Sets the `active` dynamic property the theme draws the orange border from;
+    // re-polishes only when the value changes.
     void setActiveHighlight(bool on);
+
+    // Marks a card whose plate the current viewport layout doesn't show: dashed
+    // border, dimmed captions (theme rules on the `offscreen` property).
+    void setOffscreen(bool on);
+    bool isOffscreen() const;
 
 signals:
     // Emitted on left-click anywhere on the card body that isn't
@@ -95,6 +104,8 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent* e) override;
+    // Stamps the Transform / Color popup's close time (see openPopup).
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     // (Re)builds the content widget for the current `vertical_` value. The
@@ -102,6 +113,17 @@ private:
     // content_ (caption labels + layout containers only) is deleted after
     // the new one is fully built so it can't drag the controls with it.
     void rebuildContent();
+
+    // Wide-short form only: Zoom/X/Y/Rot live in a popup opened from the Transform
+    // button (its face shows the zoom), Con/Bri/Sat in one opened from the Color
+    // button. Shows `popup` under `anchor`, flipped above / clamped to the screen.
+    void openPopup(QFrame* popup, QToolButton* anchor);
+    // Creates a popup button and its Qt::Popup frame (parented to the card, so the
+    // spins it will hold stay findChild-able), named `<prefix>.<leaf>.button|popup`.
+    QFrame* makePopupButton(QToolButton*& btn, const char* leaf, const QString& text,
+                            const QString& accessible, const QString& tip, QElapsedTimer* closed);
+    // Sets the Transform button's "1.00×" face; no widget write when the text is unchanged.
+    void updateTransformButton(double scale);
 
     int id_;
     // Object-name prefix `plate.<idx>` — shared between the constructor and
@@ -130,6 +152,18 @@ private:
     QPushButton* flipBtn_ = nullptr;
     QPushButton* flopBtn_ = nullptr;
     QPushButton* rgbaBtn_ = nullptr;
+    // Transform popup (wide-short form): a Qt::Popup frame parented to the card, so the
+    // four spins stay findChild-able card descendants. popupContent_ holds the captions
+    // and is rebuilt (like content_) on each orientation change.
+    QToolButton* transformBtn_ = nullptr;
+    QFrame* transformPopup_ = nullptr;
+    QWidget* popupContent_ = nullptr;
+    QElapsedTimer transformClosed_;
+    // Color popup (wide-short form): Con/Bri/Sat, built the same way as Transform.
+    QToolButton* colorBtn_ = nullptr;
+    QFrame* colorPopup_ = nullptr;
+    QWidget* colorPopupContent_ = nullptr;
+    QElapsedTimer colorClosed_;
     QDoubleSpinBox* zoomSpin_ = nullptr;
     QDoubleSpinBox* panXSpin_ = nullptr;
     QDoubleSpinBox* panYSpin_ = nullptr;

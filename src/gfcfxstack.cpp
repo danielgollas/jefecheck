@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "gfcfxstack.h"
+
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
+#include <string>
 //#include "network.h"
 
 // fxcontrolwindow.h pulls in the widget headers used by handleGUICB below.
@@ -16,6 +21,57 @@ extern gfcFXManager fxManager;
 
 //extern std::vector<CubeLUT> lutArray; //contains loaded LUTs
 
+namespace {
+// Valid instance ids are [1, kInstanceIdLimit). Keeping them below 2^31 leaves
+// the counter (uint32) room so it can never wrap back to 0.
+constexpr std::uint32_t kInstanceIdLimit = 0x80000000u;
+
+// An instanceId attribute as a valid id; absent, malformed or out of range
+// reads 0 (meaning: assign a fresh one).
+std::uint32_t parseInstanceId(const char* text) {
+    if (!text || !*text) return 0;
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long v = std::strtoull(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || text[0] == '-' || v >= kInstanceIdLimit) return 0;
+    return static_cast<std::uint32_t>(v);
+}
+
+std::string attributeOrEmpty(XMLNode& node, const char* name) {
+    const char* v = node.getAttribute(name);
+    return v ? std::string(v) : std::string();
+}
+
+// The "type" attribute saveStackToNode writes for a widget of this kind; "" for
+// kinds it never saves.
+const char* savedWidgetType(GFC_FX_GUI_TYPE t) {
+    switch (t) {
+        case FX_GUI_FLOAT:   return "float";
+        case FX_GUI_CHOICE:  return "choice";
+        case FX_GUI_BOOL:    return "bool";
+        case FX_GUI_TEXTURE: return "texture";
+        case FX_GUI_CUBE:    return "cube";
+        case FX_GUI_LUT:     return "lut";
+        default:             return "";
+    }
+}
+
+// The widget with this varName: in the named group when it is there, else in any group.
+gfcFXWidget* findWidgetByVarName(gfcFX& fx, const std::string& group, const std::string& varName) {
+    if (varName.empty()) return nullptr;
+    auto g = fx.groups.find(group);
+    if (g != fx.groups.end()) {
+        auto w = g->second.widgets.find(varName);
+        if (w != g->second.widgets.end()) return &w->second;
+    }
+    for (auto& kv : fx.groups) {
+        auto w = kv.second.widgets.find(varName);
+        if (w != kv.second.widgets.end()) return &w->second;
+    }
+    return nullptr;
+}
+}  // namespace
+
 gfcFXStack::gfcFXStack() {
     numOfActiveFX=0;
 }
@@ -24,10 +80,36 @@ gfcFXStack::gfcFXStack() {
 gfcFXStack::~gfcFXStack() {
 }
 
-void gfcFXStack::addFX(gfcFX theFX) {
+std::uint32_t gfcFXStack::addFX(gfcFX theFX) {
+    // Keep the FX's id when it is valid and free in this stack; otherwise give it
+    // a fresh one. nextInstanceId_ only grows, so a removed FX's id is never
+    // handed out again (clearStack keeps it too: the bridge removes by clearing
+    // and re-adding the survivors).
+    if (theFX.instanceId == 0 || theFX.instanceId >= kInstanceIdLimit ||
+        indexOfInstance(theFX.instanceId) >= 0) {
+        if (nextInstanceId_ < kInstanceIdLimit) {
+            theFX.instanceId = nextInstanceId_++;
+        } else {
+            // Only reachable from a file that saved an id at the very top of the
+            // range: reuse the lowest free id rather than wrap or leave the range.
+            std::uint32_t id = 1;
+            while (indexOfInstance(id) >= 0) ++id;
+            theFX.instanceId = id;
+        }
+    } else if (theFX.instanceId >= nextInstanceId_) {
+        nextInstanceId_ = theFX.instanceId + 1;
+    }
     fxs.push_back(theFX);
     if (theFX.active)
         numOfActiveFX++;
+    return theFX.instanceId;
+}
+
+int gfcFXStack::indexOfInstance(std::uint32_t id) const {
+    if (id == 0) return -1;
+    for (int i = 0; i < (int)fxs.size(); ++i)
+        if (fxs[i].instanceId == id) return i;
+    return -1;
 }
 
 int gfcFXStack::getNumOfFXs() {
@@ -248,6 +330,7 @@ void gfcFXStack::saveStackToNode(XMLNode &pnode) const {
         fxNode.addAttribute("name",tmpFX->name.c_str());
         fxNode.addAttribute("menuName",tmpFX->menuName.c_str());
         fxNode.addAttribute("hash",tmpFX->md5Hash.c_str());
+        fxNode.addAttribute("instanceId",std::to_string(tmpFX->instanceId).c_str());
         if (tmpFX->active)
             fxNode.addAttribute("active","1.0");
         else
@@ -387,7 +470,7 @@ void gfcFXStack::saveStackToFile(std::string filename) const
                    \-FXn
  * @param pnode The stack0 node from the diagram.
  */
-std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXSi)
+std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXSi, bool matchByName)
 {
 
      int notLoadedFXcounter=0;
@@ -402,113 +485,105 @@ std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXS
     //iterate through all the FX nodes.
     int numOfFX=xNode.nChildNode("FX");
     int xmlFXIter=0;
-    //printf("No. of FX: %i\n",numOfFX);
 
     for(int i=0; i<numOfFX;i++)
     {
-        gfcFXWidgetGroup group;
         XMLNode fxNode=xNode.getChildNode("FX",&xmlFXIter);
+        const std::string fxName=attributeOrEmpty(fxNode,"name");
 
-        //printf("%i. FX Node: %s, %s\n",i,fxNode.getAttribute("name"),fxNode.getAttribute("menuName"));
-
-        
         //get the FX from the FX manager (if it's there...)
-        gfcFX tmpFX=fxManager.getFXbyHash(fxNode.getAttribute("hash"));
+        gfcFX tmpFX=fxManager.getFXbyHash(attributeOrEmpty(fxNode,"hash"));
+        //The hash covers the .jfx and shader files, so editing an effect changes it. Files
+        //(sessions, playlists, favourites, .fxs) then fall back to the one loaded FX with the
+        //same menu name, else the same name. Peers pass matchByName=false: their assets must match exactly.
+        if(!tmpFX.loadedAndCompiled && matchByName)
+        {
+            const char* matchedBy="menu name";
+            tmpFX=fxManager.getFXbyMenuName(attributeOrEmpty(fxNode,"menuName"));
+            if(!tmpFX.loadedAndCompiled)
+            {
+                matchedBy="name";
+                tmpFX=fxManager.getFXbyName(fxName);
+            }
+            if(tmpFX.loadedAndCompiled)
+                printf("FX %s: matched by %s as %s (file changed since saved)\n",fxName.c_str(),matchedBy,tmpFX.menuName.c_str());
+        }
         //if it is not found (indicated by a NOT loaded and compiled status) skip this node and add it to the not loaded string.
         if(!tmpFX.loadedAndCompiled)
         { //the fx is not loaded.
-        	//printf("FX %s not loaded, adding to not loaded string\n",fxNode.getAttribute("name"));
             notLoadedFX+="\n ";
-            notLoadedFX+=fxNode.getAttribute("name");
+            notLoadedFX+=fxName;
             notLoadedFXcounter++;
         }
         else
         { //if we found it, then push the FX into the applied FX array (appliedFX) for this quadrant AFTER filling it with attributes.
             
             //after that, we must fill the values of each attribute using the values in the file.
+            //Widgets are matched by varName (the saved group first, then any group), so an
+            //effect whose .jfx gained or reordered widgets still restores; a saved widget the
+            //effect no longer has is skipped, and new widgets keep their defaults.
             int numOfWidgets=fxNode.nChildNode("widget");
             int xmlWidgetIter=0;
-            //printf(" No. of Widgets: %i\n",numOfWidgets);
             for(int j=0;j<numOfWidgets;j++)
             {
                 XMLNode widgetNode = fxNode.getChildNode("widget",&xmlWidgetIter);
-
-                //printf("%i  Widget Node: %s, %s (%s)\n",j,widgetNode.getAttribute("varName"),widgetNode.getAttribute("value"),widgetNode.getAttribute("type"));
+                const std::string type=attributeOrEmpty(widgetNode,"type");
+                const std::string value=attributeOrEmpty(widgetNode,"value");
+                gfcFXWidget* widget=findWidgetByVarName(tmpFX,
+                                                        attributeOrEmpty(widgetNode,"group"),
+                                                        attributeOrEmpty(widgetNode,"varName"));
+                if(!widget)
+                    continue;
+                //A widget whose kind changed (say float -> choice) keeps its default:
+                //the saved number means something else now.
+                if(!type.empty() && type!=savedWidgetType(widget->type))
+                    continue;
 
                 //Cubes and luts are handled differently.
-                if(strcmp(widgetNode.getAttribute("type"),"lut")==0)
+                if(type=="lut" || type=="cube")
                 { //cubes and luts need to searched for in the lutArray , keeping track of index for each particular type (cube or lut) and that will be the value asigned to the widget
                     
                     //1. Find if the lut is loaded, the index will be stored in the value of the widget
-                    int lutIndex=lutManager.getLutIndexByName(widgetNode.getAttribute("value"));
+                    int lutIndex=lutManager.getLutIndexByName(value);
                     if(lutIndex==-1)
                     { //the saved lut is not loaded
                     	notLoadedLUTcounter++;
                         notLoadedLUT+="\n ";
-                        notLoadedLUT+=widgetNode.getAttribute("value");
+                        notLoadedLUT+=value;
                     }
                     else
                     {
                     	//1.5 store the value
-                    	tmpFX.groups[widgetNode.getAttribute("group")].widgets[widgetNode.getAttribute("varName")].value=lutIndex;
+                    	widget->value=lutIndex;
                     	
-                    	//2. Find it in the 1D lut array, that will be the GUI value (we have two different indexes since all luts are stored in the same array but only 1D are shown in LUTs and only 3D are shown in Cube attribs in FXs)
-                    	int lut1Dindex=lutManager.get1DLutIndexByName(widgetNode.getAttribute("value"));
-                    	if(lut1Dindex==-1)
-                    	{ //we didn't find it, this should never happen since we already found it in the lutManager, but just in case the lutManager fucks up.
+                    	//2. Find it in the 1D (lut) or 3D (cube) lut array, that will be the GUI value (we have two different indexes since all luts are stored in the same array but only 1D are shown in LUTs and only 3D are shown in Cube attribs in FXs)
+                    	int guiIndex= type=="lut" ? lutManager.get1DLutIndexByName(value)
+                    	                          : lutManager.get3DLutIndexByName(value);
+                    	if(guiIndex==-1)
+                    	{ //we didn't find it, this should never happen since we already found it in the lutManager, but just in case.
                     		notLoadedLUTcounter++;
                         	notLoadedLUT+="\n ";
-                        	notLoadedLUT+=widgetNode.getAttribute("value");
+                        	notLoadedLUT+=value;
                     	}
                     	else
                     	{	//save the gui value
-                    		tmpFX.groups[widgetNode.getAttribute("group")].widgets[widgetNode.getAttribute("varName")].lutValue=lut1Dindex;
+                    		widget->lutValue=guiIndex;
                     	}
                     }
-                }
-                else if(strcmp(widgetNode.getAttribute("type"),"cube")==0)
-                {
-                
-                     //1. Find if the lut is loaded, the index will be stored in the value of the widget
-                    int lutIndex=lutManager.getLutIndexByName(widgetNode.getAttribute("value"));
-                    if(lutIndex==-1)
-                    { //the saved lut is not loaded
-                    	notLoadedLUTcounter++;
-                        notLoadedLUT+="\n ";
-                        notLoadedLUT+=widgetNode.getAttribute("value");
-                    }
-                    else
-                    {
-                    	//1.5 store the value
-                    	tmpFX.groups[widgetNode.getAttribute("group")].widgets[widgetNode.getAttribute("varName")].value=lutIndex;
-                    	
-                    	//2. Find it in the 3D lut array, that will be the GUI value (we have two different indexes since all luts are stored in the same array but only 1D are shown in LUTs and only 3D are shown in Cube attribs in FXs)
-                    	int lut3Dindex=lutManager.get3DLutIndexByName(widgetNode.getAttribute("value"));
-                    	if(lut3Dindex==-1)
-                    	{ //we didn't find it, this should never happen since we already found it in the lutManager, but just in case the lutManager fucks up.
-                    		notLoadedLUTcounter++;
-                        	notLoadedLUT+="\n ";
-                        	notLoadedLUT+=widgetNode.getAttribute("value");
-                    	}
-                    	else
-                    	{	//save the gui value
-                    		tmpFX.groups[widgetNode.getAttribute("group")].widgets[widgetNode.getAttribute("varName")].lutValue=lut3Dindex;
-                    	}
-                    }
-                
                 }
                 else //Manage all other cases that are straigt forward converting the strings to floats
                 {
-                    //printf("  Setting %s:%s at %f \n",widgetNode.getAttribute("group"),widgetNode.getAttribute("varName"),atof(widgetNode.getAttribute("value")));
-                    tmpFX.groups[widgetNode.getAttribute("group")].widgets[widgetNode.getAttribute("varName")].value=atof(widgetNode.getAttribute("value"));
+                    widget->value=atof(value.c_str());
                 }
             }
 
             if(fxNode.getAttribute("active")!=NULL)
                 tmpFX.active=atof(fxNode.getAttribute("active"));
 
-            this->numOfActiveFX+=tmpFX.active;
-            fxs.push_back(tmpFX);
+            // A stack saved before instance ids existed, or a bad value, reads
+            // 0; addFX then assigns a fresh id (and dedupes repeated ones).
+            tmpFX.instanceId=parseInstanceId(fxNode.getAttribute("instanceId"));
+            addFX(tmpFX);
 
         }//closes the else on fxArrayIndex==-1
 
@@ -528,9 +603,6 @@ std::vector<std::string> gfcFXStack::loadStackFromNode(XMLNode & pnode, int *FXS
     }
     
     return errors;
-
-
-    
 }
 
 
@@ -565,9 +637,9 @@ std::vector<std::string> gfcFXStack::loadStackFromFile(std::string filename)
     return loadStackFromNode(stackNode);
 }
 
-std::vector<std::string> gfcFXStack::loadStackFromString(std::string s){
+std::vector<std::string> gfcFXStack::loadStackFromString(std::string s, bool matchByName){
 	XMLNode node = XMLNode::parseString(s.c_str());
-	return loadStackFromNode(node);
+	return loadStackFromNode(node, NULL, matchByName);
 	
 }
 
@@ -585,9 +657,9 @@ std::vector< gfcFX > gfcFXStack::getAllFXs()
 
 void gfcFXStack::appendFXStack(gfcFXStack otherStack)
 {
-	std::vector< gfcFX > tmp=otherStack.getAllFXs();
-	fxs.insert(fxs.end(),tmp.begin(),tmp.end());
-
+	// Through addFX so an appended FX whose id is already taken here gets a fresh one.
+	for (const gfcFX& fx : otherStack.getAllFXs())
+		addFX(fx);
 }
 
 std::string gfcFXStack::getDescriptionString()

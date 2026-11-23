@@ -12,9 +12,9 @@ def test_plate_zero_card_widgets_resolvable(app):
     expected = [
         locators.plate(0, "gamma.spin"),
         locators.plate(0, "exposure.spin"),
-        locators.plate(0, "contrast.spin"),
-        locators.plate(0, "brightness.spin"),
-        locators.plate(0, "saturation.spin"),
+        # contrast/brightness/saturation live in the Color popup of the bottom-dock
+        # card (not in the AX tree when closed); its button is asserted instead.
+        locators.plate(0, locators.PLATE_COLOR_BUTTON),
         locators.plate(0, "lut.combo"),
         locators.plate(0, "flip.button"),
         locators.plate(0, "flop.button"),

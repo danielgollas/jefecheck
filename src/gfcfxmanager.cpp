@@ -314,6 +314,37 @@ std::map< std::string, int > gfcFXManager::getHashMap()
 	return fxHashMap;
 }
 
+namespace {
+template <typename Key>
+gfcFX uniqueFX(const std::vector<gfcFX>& fxs, const std::string& want, Key key)
+{
+	gfcFX found;
+	found.name="";
+	if (want.empty()) return found;
+	int matches=0;
+	for (const gfcFX& fx : fxs) {
+		if (key(fx)!=want) continue;
+		if (++matches>1) {
+			gfcFX none;
+			none.name="";
+			return none;
+		}
+		found=fx;
+	}
+	return found;
+}
+}  // namespace
+
+gfcFX gfcFXManager::getFXbyMenuName(const std::string& menuName) const
+{
+	return uniqueFX(fxArray, menuName, [](const gfcFX& fx) -> const std::string& { return fx.menuName; });
+}
+
+gfcFX gfcFXManager::getFXbyName(const std::string& name) const
+{
+	return uniqueFX(fxArray, name, [](const gfcFX& fx) -> const std::string& { return fx.name; });
+}
+
 gfcFX gfcFXManager::getFXbyHash(std::string hash)
 {	
 	

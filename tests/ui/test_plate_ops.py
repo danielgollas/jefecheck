@@ -16,6 +16,8 @@ def _reset_plate_toggles_after(app):
     """Restore every plate's flip/flop/crop to off after each test (the `app` fixture is module-scoped).
     Crop's checkbox is only in the AX tree while the aspect combo's Qt::Popup is open, so reopen it per plate."""
     yield
+    # Visible mode shows only the layout's plates; 2x2 brings plates 1-3 into the dock.
+    app.send_shortcut("cmd+4")
     for plate_id in range(4):
         for role in ("flip.button", "flop.button"):
             btn = app.by_object_name(locators.plate(plate_id, role))
@@ -26,6 +28,7 @@ def _reset_plate_toggles_after(app):
         crop = app.by_object_name(locators.plate(plate_id, "crop.button"))
         if _checked(crop):
             crop.click()
+    app.send_shortcut("cmd+1")
 
 
 def test_flip_button_toggles_when_clicked(app):
@@ -56,6 +59,8 @@ def test_crop_button_toggles_when_clicked(app):
 
 def test_each_plate_has_independent_flip_state(app):
     """Toggling plate 0's flip should not change plate 1's."""
+    # The Plate Manager shows only the layout's plates (Visible mode); 2x2 shows plate 1.
+    app.send_shortcut("cmd+4")
     p0_flip = app.by_object_name(locators.plate(0, "flip.button"))
     p1_flip = app.by_object_name(locators.plate(1, "flip.button"))
     assert not _checked(p0_flip)

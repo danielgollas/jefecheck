@@ -28,6 +28,7 @@
 #include <QStackedWidget>
 #include <QUrl>
 #include <QVBoxLayout>
+#include "UiMetrics_qt.h"
 
 #include <type_traits>
 #include <utility>
@@ -124,17 +125,17 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     {
         auto* jpegPage = new QWidget(this);
         auto* l = new QHBoxLayout(jpegPage);
-        l->setContentsMargins(0, 0, 0, 0);
+        jefe::qt::ui::applyRowMetrics(l, jefe::qt::ui::kGap);
         jpegQualitySpin_ = new QSpinBox(jpegPage);
         jpegQualitySpin_->setObjectName("dialog.render.jpegquality.spin");
         jpegQualitySpin_->setRange(0, 100);
         jpegQualitySpin_->setValue(95);
         jpegProgressiveCheck_ = new QCheckBox("Progressive", jpegPage);
         jpegProgressiveCheck_->setObjectName("dialog.render.jpegprogressive.check");
+        jefe::qt::ui::useWidgetRect(jpegProgressiveCheck_);   // native checkbox layout rect is narrower than its paint
         jpegSubsamplingCombo_ = new QComboBox(jpegPage);
         jpegSubsamplingCombo_->setObjectName("dialog.render.jpegsubsampling.combo");
         jpegSubsamplingCombo_->addItems({"4:4:4", "4:2:2", "4:2:0"});  // 0/1/2
-        l->addWidget(new QLabel("Quality:", jpegPage));
         l->addWidget(jpegQualitySpin_);
         l->addWidget(jpegProgressiveCheck_);
         l->addWidget(new QLabel("Chroma:", jpegPage));
@@ -147,7 +148,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     {
         auto* exrRow = new QWidget(this);
         auto* l = new QHBoxLayout(exrRow);
-        l->setContentsMargins(0, 0, 0, 0);
+        jefe::qt::ui::applyRowMetrics(l, jefe::qt::ui::kGap);
         exrDepthCombo_ = new QComboBox(exrRow);
         exrDepthCombo_->setObjectName("dialog.render.exrdepth.combo");
         exrDepthCombo_->addItems({"Half", "Float"});   // GFC_HALF=0, GFC_FLOAT=1
@@ -169,7 +170,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     {
         auto* tiffPage = new QWidget(this);
         auto* l = new QHBoxLayout(tiffPage);
-        l->setContentsMargins(0, 0, 0, 0);
+        jefe::qt::ui::applyRowMetrics(l, jefe::qt::ui::kGap);
         tiffCompCombo_ = new QComboBox(tiffPage);
         tiffCompCombo_->setObjectName("dialog.render.tiffcomp.combo");
         tiffCompCombo_->addItems({"LZW", "None", "ZIP"});  // 0/1/2
@@ -192,7 +193,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     {
         auto* pngPage = new QWidget(this);
         auto* l = new QHBoxLayout(pngPage);
-        l->setContentsMargins(0, 0, 0, 0);
+        jefe::qt::ui::applyRowMetrics(l, jefe::qt::ui::kGap);
         pngLevelSpin_ = new QSpinBox(pngPage);
         pngLevelSpin_->setObjectName("dialog.render.pnglevel.spin");
         pngLevelSpin_->setRange(0, 9);
@@ -213,7 +214,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     {
         auto* vpage = new QWidget(this);
         auto* l = new QHBoxLayout(vpage);
-        l->setContentsMargins(0, 0, 0, 0);
+        jefe::qt::ui::applyRowMetrics(l, jefe::qt::ui::kGap);
         videoFpsSpin_ = new QSpinBox(vpage);
         videoFpsSpin_->setObjectName("dialog.render.videofps.spin");
         videoFpsSpin_->setRange(1, 120);
@@ -256,6 +257,9 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
         qualityStack_->insertWidget(6, vpage);
     }
 
+    // Pages are transparent so the quality row matches the dialog background.
+    qualityStack_->setAutoFillBackground(false);
+    qualityStack_->setStyleSheet("QStackedWidget, QStackedWidget > QWidget { background: transparent; }");
     form->addRow("Quality:", qualityStack_);
 
     // Frame range — start + end + auto-fill from playback.
@@ -271,6 +275,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
 
     autoRangeBtn_ = new QPushButton("Auto-range", this);
     autoRangeBtn_->setObjectName("dialog.render.autorange.button");
+    jefe::qt::ui::useWidgetRect(autoRangeBtn_);
     autoRangeBtn_->setToolTip(
         "Fill range from playback in/out points");
 
@@ -338,6 +343,7 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     pathEdit_->setText(s.value(kRenderDirSettingKey).toString());
 
     browseBtn_ = new QPushButton(jefe::qticons::folder(), "Browse…", this);
+    jefe::qt::ui::useWidgetRect(browseBtn_);
     browseBtn_->setObjectName("dialog.render.browse.button");
     browseBtn_->setToolTip("Choose the output folder");
 
@@ -408,14 +414,15 @@ RenderDialog_Qt::RenderDialog_Qt(QWidget* parent) : QDialog(parent) {
     doneBtn_ = new QPushButton("Done", this);
     doneBtn_->setObjectName("dialog.render.done.button");
 
+    for (QPushButton* b : {renderBtn_, doneBtn_}) jefe::qt::ui::useWidgetRect(b);   // centred with the status text
     auto* buttonRow = new QHBoxLayout();
     buttonRow->addWidget(statusLabel_, /*stretch*/ 1);
     buttonRow->addWidget(renderBtn_);
     buttonRow->addWidget(doneBtn_);
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(16, 16, 16, 16);
-    outer->setSpacing(10);
+    outer->setContentsMargins(jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup, jefe::qt::ui::kGapGroup);
+    outer->setSpacing(jefe::qt::ui::kGap);
     outer->addLayout(form);
     outer->addWidget(progressBar_);
     outer->addLayout(buttonRow);

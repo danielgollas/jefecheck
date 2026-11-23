@@ -19,6 +19,11 @@ public:
     void deleteAllFX();
     gfcFX getFX(int index);
     gfcFX getFXbyHash(std::string hash);
+    // The one loaded FX whose menuName (or name) is exactly this. An empty
+    // key, no match, or more than one match returns an empty, not-loaded gfcFX:
+    // a name that is ambiguous must not pick an effect at random.
+    gfcFX getFXbyMenuName(const std::string& menuName) const;
+    gfcFX getFXbyName(const std::string& name) const;
     void setAutoLoad(int index, bool autoload);
     void autoLoadAll(bool autoload);
     void initWidgets();

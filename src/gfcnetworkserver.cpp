@@ -574,7 +574,7 @@ void gfcNetworkServer::Update() {
 			if (ourPl!=thePl)
 			{
 				networkManager.setTakeNotifications(false);
-				playlistManager.mergePlaylist(thePl);
+				playlistManager.mergePlaylist(thePl, false); // peer playlist: exact effect match only
 				networkManager.setTakeNotifications(true);
 
 				jefe::wire::Writer outW;

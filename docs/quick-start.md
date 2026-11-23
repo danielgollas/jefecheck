@@ -1,6 +1,8 @@
-# JefeCheck Quick Reference
+# JefeCheck 2.0 Quick Reference
 
 ![Main application window](manual-images/MainWindow.png)
+
+> The screenshots in this guide are from the 2014 release and do not show the current interface. On macOS, `Ctrl` in shortcuts means `Cmd` and `Alt` means `Option`.
 
 ## Loading
 
@@ -8,28 +10,32 @@
 
 ![The Load Window](manual-images/LoadWindow.png)
 
-1. Open the Load Window (Menu > File > Load Sequence or `Ctrl+L`)
-2. Click on the Browse button for track X
-3. Navigate the file system to find your sequence and select any frame, click ok.
-4. Click the Start Button in the Load Window
+1. Open the Load Sequence Manager (**File > Load Sequence Manager…** or `Ctrl+L`).
+2. Click the Browse (folder) button on the strip for track X.
+3. Select any frame of the sequence and click Open.
+4. Click **Load All**.
 
 OR
 
-Drag and drop a single file from the sequence into the viewport. The sequence will be loaded into whatever track is assigned to that viewport. If the Load Window is open, only the preview will be loaded until you click the START button.
+Use **File > Quick Load…** (`Ctrl+O`) and pick any frame. It loads straight into the active plate's track.
 
 OR
 
-Drag and drop a folder into the viewport. The first sequence found will be loaded into whatever track is assigned to that viewport. If the Load Window is open, only the preview will be loaded until you click the START button.
+Drag and drop a single file from the sequence onto the viewport. It loads straight away into Track A. If the Load Sequence Manager is open, the file goes into its first strip as a preview instead, and nothing loads until you click **Load All**.
 
 OR
 
-Drag and drop a single file or folder into a track in the main window.
+Drag and drop a folder onto the viewport. The first image or movie file in it (by name) is loaded.
+
+OR
+
+Drag and drop a file onto a track's lane in the Timeline panel to load it into that track.
 
 ### How to Load a Movie (.mov / .mp4 / .mxf)
 
-JefeCheck plays ProRes (422, HQ, 4444, XQ), H.264 and H.265 movies in `.mov` and `.mp4` files.
+JefeCheck plays ProRes (422, HQ, 4444, XQ), H.264, H.265 and DNxHR movies in `.mov`, `.mp4` and `.mxf` files, with sound.
 
-1. Load the movie exactly like an image sequence: Browse to it in the Load Window, Quick Load it (`Ctrl+O`), or drag and drop it onto a viewport or a track.
+1. Load the movie exactly like an image sequence: Browse to it in the Load Sequence Manager, Quick Load it (`Ctrl+O`), or drag and drop it onto a viewport or a track lane.
 2. The movie becomes one track. Range, scale, bit depth, crop, hold, offset and notes all work as they do for a sequence, and the timeline counts its frames from 1.
 3. The player's frame rate is set to the movie's own rate (for example 23.976). If you load several movies, the last one loaded sets the rate; other tracks play one frame per timeline frame at that rate.
 
@@ -38,42 +44,38 @@ JefeCheck plays ProRes (422, HQ, 4444, XQ), H.264 and H.265 movies in `.mov` and
 ### How to Load Only a Certain Range of an Image Sequence
 
 1. Follow steps 1 through 3 of [How to Load an Image Sequence into Track X](#how-to-load-an-image-sequence-into-track-x)
-2. Drag the In and Out sliders in the corresponding track in the Load Window
-3. Click the Start Button in the Load Window
+2. Set **From** and **To** on that track's strip in the Load Sequence Manager.
+3. Click **Load All**.
 
 ### How to Load a Sequence as a Lower Res Proxy
 
 1. Follow steps 1 through 3 of [How to Load an Image Sequence into Track X](#how-to-load-an-image-sequence-into-track-x)
-2. Before pressing Start, select or type in a scale in the Scale Box for the sequence you are loading, select the filtering you want to apply when resizing the image (linear=fast, bilinear=better looking).
-3. Click the Start Button in the Load Window
+2. Choose 100%, 50% or 25% in the strip's **Scale** box. The resampling filter is set in **File > Preferences… > General > Default decode filter**.
+3. Click **Load All**.
 
 OR
 
-Drag and drop a single file from the sequence into the viewport while pressing the `Shift` key. The sequence will be loaded into whatever track is assigned to that viewport at 50%. If the Load Window is open, only the preview will be loaded until you click the START button.
+Hold `Shift` while you drop a file onto the viewport to load it at 50%, or `Shift+Ctrl` for 25%.
 
 ### How to Load Y Number of Sequences into Several Tracks
 
 1. Follow steps 1 through 3 of [How to Load an Image Sequence into Track X](#how-to-load-an-image-sequence-into-track-x) with up to four tracks (A, B, C and D).
-2. Click the Start Button in the Load Window
+2. Click **Load All**.
 
 ### How to Load Only a Specific Region of an Image Sequence
 
 1. Follow steps 1 through 3 of [How to Load an Image Sequence into Track X](#how-to-load-an-image-sequence-into-track-x)
-2. Activate the Crop Checkbox for that track in the Load Window
-3. Select the region you wish to load on the preview image shown in the Main Window. Click and Drag to move the Crop Region, Click and Drag the white corner markers to resize the Crop Region. You can zoom and pan with the left mouse button and mouse wheel.
-4. Click the Start Button in the Load Window
+2. Tick **Crop** on that track's strip.
+3. Select the region you wish to load on the preview image in the viewport. Drag the region to move it; drag its corner markers to resize it.
+4. Click **Load All**.
 
 ### How to Load an Image with 16 Bit Floating Point Precision
 
 > **Note:** This will store images in 16 bit in memory, allowing greater precision when modifying 16 bit per component images with JefeCheck's FXs at the cost of double the memory usage. You don't need to do this to simply load and playback 16 bit per component images — ONLY do it if you are experiencing problems when doing heavy processing.
 
 1. Follow steps 1 through 3 of [How to Load an Image Sequence into Track X](#how-to-load-an-image-sequence-into-track-x)
-2. Select Half Float or 16bpc from the Format Option Box in the Load Window.
-3. Click the Start Button in the Load Window
-
-### How to Cancel Loading of a Sequence
-
-Click on the white X stop button next to the track in the Main Window. The X button will only be enabled when a track is being loaded.
+2. Choose **16-half** or **16-bit** in the strip's **Bit** box. (The default for Quick Load and drag and drop is set in **File > Preferences… > General > Default bit depth**.)
+3. Click **Load All**.
 
 ### How to Start Loading a Sequence from a Certain Point in the Timeline
 
@@ -101,7 +103,7 @@ A range or loop that fits in memory loads once and stays loaded, however many ti
 
 ### What the Green Segments Under a Track Mean
 
-The green segments on each track's lane are the frames that are in memory right now. They move with the playhead: frames ahead of it turn green as they load, and when memory is full, frames behind it are unloaded and lose their green. The frames just behind the playhead are unloaded last, so after playing and pausing, stepping back is instant. A gap is not an error; clicking a frame in a gap loads it. A frame that can't be read shows black, and playback carries on past it.
+The green segments on each track's lane in the Timeline panel (`F8`) are the frames that are in memory right now. They move with the playhead: frames ahead of it turn green as they load, and when memory is full, frames behind it are unloaded and lose their green. The frames just behind the playhead are unloaded last, so after playing and pausing, stepping back is instant. A gap is not an error; clicking a frame in a gap loads it. A frame that can't be read shows black, and playback carries on past it.
 
 ---
 
@@ -111,41 +113,38 @@ The green segments on each track's lane are the frames that are in memory right 
 
 ### Change the Layout of the Viewports
 
-Click on any of the layout radio buttons in the Main Window's Control Bar. Or use keyboard keys `1` through `4` while holding the `Ctrl` key to go through the different layouts.
+Press `Ctrl+1` (single), `Ctrl+2` (side by side), `Ctrl+3` (top and bottom) or `Ctrl+4` (2x2).
 
 ### How to Change What Track Is Displayed on Each Viewport
 
-Select the track you want to show (A, B, C or D) in the corresponding viewport's Track Option Box in the Main Window's Control Bar.
+Select the track (A, B, C or D) in the **Track** box on that viewport's card in the Plate Manager (`F2`).
 
 OR
 
-Press keyboard keys `1` through `4` to select tracks A through D.
-
-OR
-
-Press keyboard keys `Up` or `Down` to move through the tracks.
+Click the viewport and press `Up` or `Down` to move through the tracks.
 
 ### How to Transform a Viewport
 
 - Left click and drag on a viewport to pan.
-- Use the mouse wheel to zoom in and out. Pressing `Shift` while zooming makes the zoom 10x slower OR `Ctrl+Left Click` drag up and down for the same effect.
-- If you press the `Alt` key while doing any of this, transformations will apply to all viewports (Gang Transformation).
-- If you don't have a mouse wheel, you can zoom in and out by clicking and dragging the viewport's zoom box on the Main Window's control panel. From this box you can also change the pan values.
-- You can also flip and flop the image by clicking on the flip and flop buttons.
-- You can reset the transformation on a viewport by pressing `Ctrl+R` on your keyboard, or `Alt+R` to reset all viewports.
+- Use the mouse wheel (or pinch on a trackpad) to zoom in and out.
+- Hold `Alt` while dragging (or pinching) to apply the change to all viewports.
+- Zoom, X, Y and Rotation are also on the viewport's card in the Plate Manager (behind the zoom button when the dock is at the top or bottom).
+- Press `V` to flip and `M` to flop the active viewport, or use the Flip and Flop buttons on its card. Add `Shift` for all viewports.
+- Press `F` to fit the image to the viewport (`Shift+F` for all viewports).
+- Press `Ctrl+R` to reset the active viewport's transformations, or `Ctrl+Alt+R` for all viewports.
 
 ### How to Color Correct a Viewport
 
-1. Select a LUT from the LUT listbox or press `Up`/`Down` while holding the `L` key.
-2. Adjust Gamma by inputting a value in the Gamma box or dragging the mouse left/right while holding the `W` key.
-3. Adjust Exposure by inputting a value in the Exposure box or dragging the mouse left/right while holding the `E` key.
-4. Adjust Brightness by inputting a value in the Brightness box or dragging the mouse left/right while holding the `Q` key.
-5. Adjust Contrast by inputting a value in the Contrast box or dragging the mouse left/right while holding the `D` key.
-6. Adjust Saturation by inputting a value in the Saturation box or dragging the mouse left/right while holding the `S` key.
+1. Select a LUT from the LUT box on the viewport's card, or select it in the LUTs panel (`F4`) and click **Apply to active plate**.
+2. Adjust Gamma in the Gamma box, or hold `W` and drag left/right on the viewport.
+3. Adjust Exposure in the Exp box, or hold `E` and drag.
+4. Adjust Brightness (hold `Q` and drag), Contrast (hold `D`) or Saturation (hold `S`). Their boxes are on the card, behind the **Color** button when the dock is at the top or bottom.
 
-You can reset the color correction on a viewport by pressing `Shift+R` on your keyboard, or `Alt+Shift+R` to reset all viewports.
+Hold `Alt` as well to adjust every viewport.
 
-You can also save a favorite color correction by pressing `Ctrl+Shift+1`, `2`, `3`, `4` or `5`. Apply the color correction to another viewport at another time by pressing `Shift+1`, `2`, `3`, `4` or `5`.
+You can reset the color correction on a viewport by pressing `Shift+R`, or `Shift+Alt+R` to reset all viewports.
+
+To keep a color correction, use **View > Color Correction Favorites > Save to Slot 1–5**. Apply it later with **Load Slot 1–5**. Favorites are kept between launches.
 
 OR
 
@@ -153,21 +152,26 @@ Apply one or more FXs like Primary Color Correction, Brightness-Contrast-Saturat
 
 ### How to Change the Aspect Ratio of a Viewport
 
-Select or type in an aspect ratio in the viewport's Ratio Option Box. File is the default value, which maintains the original aspect ratio of the image.
+Click the aspect button on the viewport's card and choose a ratio, or type your own. **source** is the default; it keeps the image's own ratio.
 
-You can change the aspect ratio of the image by placing black crop bars instead of deforming it by clicking the Crop Bars Button to the left of the Ratio Option Box.
+Turn on **Letterbox** in the same popup to show the new ratio with black bars instead of stretching the image.
 
-Change the opacity of the crop bars in the View Menu.
+Change the opacity of the bars in **File > Preferences… > General > Aspect-bar opacity**.
 
 ### How to See the RGBA Channels on a Viewport
 
-Toggle through the RGBA channels by pressing the RGB button, or use shortcut keys `R`, `G`, `B`, `A`.
+Click the channel button (it shows **RGB**) on the viewport's card to step through RGB, R, G and B.
 
 ### How to Control the Playback
 
-- Click on the play/pause, rewind, fast forward, back one frame and forward one frame buttons.
-- Scrub the timeline by clicking and dragging the current frame notch on the timeline or `Shift+Click` and dragging on the viewport.
-- Click on the Playback Mode Radio Buttons to control if you want to play the sequence once (Once) (shortcut `8`), Loop it (Loop) (shortcut `9`), or play it back and forth (Swing) (shortcut `10`).
+The transport is in the Timeline panel (`F8`).
+
+- Play/pause: `Space`. Rewind to start: `Home`. Fast forward to end: `End`.
+- Step one frame back or forward: `Left`/`Right` or `X`/`C`.
+- Play direction reverse/forward: `,`/`.` (the `<` and `>` keys).
+- Scrub by clicking and dragging on the timeline bar.
+- Choose **Once** (`8`), **Loop** (`9`) or **Bounce** (`0`) in the loop mode box.
+- Set the In and Out points with `I` and `O` (`Shift+I` / `Shift+O` reset them to the timeline's ends), or type them in the **In** and **Out** boxes.
 
 ### How to Hear or Mute a Movie's Sound
 
@@ -179,39 +183,37 @@ Every loaded movie with sound plays at the same time, mixed together. Click the 
 
 ### How to Offset a Track on the Timeline
 
-1. Click on the more options menu button (or right click on the track) next to the track on the Main Window's Control Bar
-2. Change the value of the track offset in the More Options Window for that track. You can type in a number or click and drag to change the value.
+Click and drag the track's lane in the Timeline panel left or right.
 
 OR
 
-Click and drag the track to move it left or right.
+Right-click the lane, choose **Set offset…**, and type the offset in frames.
 
 ### How to Hold a Specific Frame on a Track
 
-1. Click on the more options menu button next to the track on the Main Window's Control Bar
-2. Select an option from the Hold Frame Option Box:
-   - **Current:** Holds the current frame
-   - **Edge:** When the current frame number is smaller than the first loaded frame on the track, the first frame will be shown. When the current frame number is bigger than the last loaded frame on the track, the last frame will be shown.
-   - **None:** The track plays normally.
+Right-click the track's lane in the Timeline panel and tick **Hold last frame**. Untick it to play the track normally again.
 
 ### How to Unload a Track
 
-1. Click on the more options menu button next to the track on the Main Window's Control Bar
-2. Click on the Unload Track button.
-
-OR
-
-Click on the unload track button from the Load Window.
+Open the Load Sequence Manager (`Ctrl+L`) and click the **Unload & Clear** (trash) button on that track's strip.
 
 ### How to Show or Hide Text Information
 
 Press the shortcut key `T` to toggle display of information text on the viewport, or press `Alt+T` to toggle it on all viewports.
 
-If the track has a DPX, EXIF or OpenEXR metadata, it will be shown.
+If the track has DPX, EXIF or OpenEXR metadata, it will be shown.
 
 ### How to Show DPX Metadata on the Viewport
 
-If the track has a DPX image sequence loaded, you can display the DPX metadata for each frame by pressing the shortcut key `T` until the appropriate text display mode is activated (text display modes are none, normal and normal+metadata).
+If the track has a DPX image sequence loaded, press `T` until the metadata mode is on (the modes are none, normal and normal+metadata).
+
+### How to Show the Shortcut Help
+
+Press `H` to show or hide the on-screen help, which lists the keyboard shortcuts.
+
+### How to Show a Histogram
+
+Press `Ctrl+H` (or **View > Show Histogram**) for the active viewport, or `Ctrl+Alt+H` for all viewports. Drag the histogram to move it.
 
 ---
 
@@ -219,29 +221,50 @@ If the track has a DPX image sequence loaded, you can display the DPX metadata f
 
 ### How to Load a JefeCheck FX
 
-1. Open the FX Manager Window (`F3` or menu > Dialogs > FX Manager).
-2. Click the Browse Button
-3. Select one or more `.jfx` files
-4. If you want to have the FX autoload next time you start JefeCheck, click on the auto-load checkbox next to the FX's name (on by default).
+Every FX in JefeCheck's FX folder loads at startup. Add a new FX by putting its `.jfx`, `.frag` and `.vert` files in that folder and restarting JefeCheck.
 
 ### How to Load a LUT
 
-1. Open the LUT Manager Window (`F4` or menu > Dialogs > LUT Manager).
-2. Click the Browse Button
-3. Select a `.cube`, `.cub`, `.lut`, or `.tga` file.
-4. If you want to have the LUT load automatically next time you start JefeCheck, click on the auto-load checkbox next to the LUT's name (on by default).
+LUTs in JefeCheck's FX folder load at startup and are listed in the LUTs panel (`F4` or **Window > LUTs**).
+
+To load another one, drop a `.lut`, `.cube` or `.cub` file onto the LUTs panel. Click the Refresh button to rescan the LUT folders.
 
 ### How to Apply One or More FXs to a Viewport's FX Stack
 
-1. Open the FX Control Window (`F2` or menu > Dialogs > FX Stack Manager)
-2. Click on the Viewport where you want to apply the FX
-3. Select the FX you want to apply from the Available FXs menu in the FX Stack Manager Window.
-4. Turn the FX on or off by clicking on the on/off checkbox on the FX's controls.
+1. Open the FX panel (`F3` or **Window > FX**).
+2. Click the viewport where you want to apply the FX.
+3. Click **+ Add FX** and choose the FX from its category submenu.
+4. Turn the FX on or off with the power button on its card.
 5. Repeat steps 3 and 4 for each FX you want to add.
 
 ### How to Change the Position of an FX in the FX Stack
 
-Click on the Up or Down button on the FX's controls.
+Drag the FX's card by its handle (at the left of the card's header) to a new position.
+
+### How to Reset an FX Parameter
+
+Click the reset dot at the end of the parameter's row, or right-click the parameter and choose **Reset to default**. A parameter's label is orange while it differs from its default.
+
+---
+
+## Review
+
+### How to Draw Notes on a Frame
+
+1. Open the Notes panel (`F7` or **Window > Notes**).
+2. Pick a tool: Freehand, Arrow, Box or Text. Pick a colour and size if you like.
+3. Drag on the viewport to draw. With the Text tool, click and type the note.
+4. Press `Escape` to put the tool down.
+
+Press `N` to show or hide notes on the viewport. Use **Lock Round** in the Notes panel to freeze the current round's notes.
+
+### How to Send Notes to Someone Without JefeCheck
+
+Use **File > Export Review Summary…** and choose PDF, text or CSV.
+
+### How to Send a Review to Another JefeCheck User
+
+Use **File > Export Review Package…**. It bundles the session, its notes, any LUTs you loaded yourself and, if **Include media** is ticked, the footage, into one `.jcreview` file. The other person opens it with **File > Open Review Package…**.
 
 ---
 
@@ -251,42 +274,36 @@ Click on the Up or Down button on the FX's controls.
 
 ### How to Start a JefeCheck Remote Session Server
 
-1. Open the Remote Session Manager Window (`F6` or menu > Remote Session > Session Manager).
-2. In the Start Server section of the Manager fill in the necessary information:
-   - Type the server's name in the Server Name Text Box
-   - Type the port the server should listen on (32000 and above recommended) in the Port Text Box
-   - Type a password in the Password Text Box (optional but recommended)
-3. Click the Start Button
+1. Open the Remote Session window (`F5` or **Window > Remote Session…**).
+2. Choose **Host** and fill in:
+   - **Name:** the session name
+   - **Port:** the port to listen on (default 60000)
+   - **Password:** optional but recommended
+3. Click **Start hosting**.
 
 ### How to Join a JefeCheck Remote Session Server
 
-1. Open the Remote Session Manager Window (`F6` or menu > Remote Session > Session Manager).
-2. In the Connect to Server section of the Manager fill in the necessary information:
-   - Type the server's IP address
-   - Type the port where the server you are connecting to is listening
-   - Type a password in the Password field if the server requires one
-   - Type in a Nickname to identify yourself in the session
-3. Click the Connect Button
+1. Open the Remote Session window (`F5` or **Window > Remote Session…**).
+2. Choose **Join** and fill in:
+   - **Nickname:** how others see you
+   - **Join with:** IP address
+   - **Server** and **Port:** the host's address and port
+   - **Password:** if the host set one
+3. Click **Join**.
 
 ### How to Chat in a Remote Session
 
-1. Connect to a Remote Session
-2. Press `Y` to go into Chat Mode
-3. Type in your message
-4. Press `Enter` to send the message.
+Type in the message box in the Remote Session window and press `Enter` (or click Send).
 
-You can also navigate the previous messages by pressing `Up` or `Down` on the cursor keys on your keyboard.
+OR
 
-You can exit chat mode by pressing the `Escape` key.
+1. Click the viewport and press `Enter` to start typing a message on the viewport.
+2. Type your message.
+3. Press `Enter` to send it, or `Escape` to cancel.
 
 ### How to Use Remote Pointers in a Remote Session
 
 1. Connect to a Remote Session
-2. Right click and drag anywhere on the viewport's area — everybody will see your cursor with your Nickname next to it.
+2. Hold `Shift` and drag on the viewport. Everybody sees your pointer with your nickname next to it.
 
-### How to Save a Chat from a Remote Session
-
-1. Connect to a Remote Session
-2. Chat
-3. When you are finished, click on menu > File > Save Chat Log
-4. Select where you want to save your session and type a filename
+Set your pointer colour in **File > Preferences… > Remote**.

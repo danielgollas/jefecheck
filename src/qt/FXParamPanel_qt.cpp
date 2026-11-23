@@ -1,58 +1,39 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "FXParamPanel_qt.h"
+#include "FXParamEditors_qt.h"
+#include "FlowLayout_qt.h"
+#include "UiMetrics_qt.h"
 #include "qticons.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
-#include <QDoubleSpinBox>
 #include <QDropEvent>
+#include <QEvent>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidgetItem>
 #include <QMenu>
+#include <QMetaObject>
+#include <QPainter>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include <cmath>
+#include <algorithm>
+
+namespace ui = jefe::qt::ui;
 
 namespace {
 
 // Stack index of an FX, stashed on its list item so the reorder math can
 // reconstruct the pre-drop order after QListWidget shuffles items.
 constexpr int kFxIndexRole = Qt::UserRole;
-
-QString typeLabel(jefe::qt::FXParamType t) {
-    using T = jefe::qt::FXParamType;
-    switch (t) {
-        case T::Float:   return "float";
-        case T::Bool:    return "bool";
-        case T::Choice:  return "choice";
-        case T::Texture: return "texture";
-        case T::Cube:    return "cube";
-        case T::LUT:     return "lut";
-        case T::Spacer:  return "spacer";
-        case T::Newline: return "newline";
-        case T::Other:   return "other";
-        case T::Unknown: return "unknown";
-    }
-    return "unknown";
-}
-
-// Number of decimals for a float spinbox, derived from `step` (0.001 -> 3, 1.0 -> 0)
-// and clamped so a tiny step doesn't blow up the field width.
-int decimalsForStep(float step) {
-    if (step <= 0.0f) return 3;
-    const float abs_step = std::fabs(step);
-    if (abs_step >= 1.0f) return 0;
-    int d = 1;
-    float s = abs_step;
-    while (s < 0.1f && d < 6) { s *= 10.0f; ++d; }
-    return d;
-}
 
 }  // namespace
 
@@ -138,8 +119,10 @@ FXParamPanel_Qt::FXParamPanel_Qt(QWidget* parent) : QWidget(parent) {
     list_->setUniformItemSizes(false);
     list_->setSpacing(2);
     // Cards always fit the dock width; never scroll horizontally (that would
-    // carry the active/remove buttons off-view when the dock is narrow).
+    // carry the power/remove buttons off-view when the dock is narrow).
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    list_->viewport()->installEventFilter(this);
     connect(list_, &FXReorderList_Qt::itemsReordered, this,
             [this](int from, int to) {
                 if (refreshing_) return;
@@ -147,10 +130,15 @@ FXParamPanel_Qt::FXParamPanel_Qt(QWidget* parent) : QWidget(parent) {
                 if (active < 0) return;
                 jefe::qt::moveFXOnPlate(active, from, to);
                 emit viewportRepaintRequested();
-                // Defer the rebuild: we're inside the drop's call stack and
-                // tearing down the list items now is unsafe.
-                QTimer::singleShot(0, this, [this]() { refresh(); });
+                // We're inside the drop's call stack: rebuild on the next turn.
+                scheduleRefresh();
             });
+
+    // A rebuild that arrived mid-drag waits for the drag to end.
+    retryTimer_ = new QTimer(this);
+    retryTimer_->setSingleShot(true);
+    retryTimer_->setInterval(50);
+    connect(retryTimer_, &QTimer::timeout, this, &FXParamPanel_Qt::refresh);
 
     auto* topRow = new QHBoxLayout();
     topRow->setContentsMargins(0, 0, 0, 0);
@@ -158,8 +146,8 @@ FXParamPanel_Qt::FXParamPanel_Qt(QWidget* parent) : QWidget(parent) {
     topRow->addStretch(1);
 
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(8, 8, 8, 8);
-    outer->setSpacing(6);
+    outer->setContentsMargins(ui::kGapTight, ui::kGapTight, ui::kGapTight, ui::kGapTight);
+    outer->setSpacing(ui::kGapTight);
     outer->addLayout(topRow);
     outer->addWidget(status_);
     outer->addWidget(list_, /*stretch*/ 1);
@@ -211,365 +199,497 @@ void FXParamPanel_Qt::rebuildAddMenu() {
     }
 }
 
+void FXParamPanel_Qt::scheduleRefresh() {
+    if (refreshQueued_) return;
+    refreshQueued_ = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        refreshQueued_ = false;
+        refresh();
+    }, Qt::QueuedConnection);
+}
+
+bool FXParamPanel_Qt::anyEditorInteracting() const {
+    for (const CachedRow& r : rowCache_)
+        if (r.floatEditor && r.floatEditor->isInteracting()) return true;
+    return false;
+}
+
 void FXParamPanel_Qt::refresh() {
     const int active = jefe::qt::getActivePlate();
+    const std::vector<jefe::qt::FXMeta> stack =
+        active >= 0 ? jefe::qt::getFXStackMetaOnPlate(active) : std::vector<jefe::qt::FXMeta>();
 
-    // Fast path: when the active plate and the FX name list are unchanged, just refresh
-    // widget values in place; plateStateChanged fires per mouse-move during a drag.
-    if (active >= 0 && active == lastActivePlate_) {
-        const auto stackNames = jefe::qt::getFXStackOnPlate(active);
-        if (stackNames == lastStack_ && !stackNames.empty()) {
-            refreshing_ = true;
-            const bool ok = refreshValuesOnly();
-            refreshing_ = false;
-            if (ok) return;
-            // Fall through to full rebuild if the cached row list is stale.
-        }
+    std::vector<std::pair<std::uint32_t, std::string>> fingerprint;
+    fingerprint.reserve(stack.size());
+    for (const auto& fx : stack) fingerprint.emplace_back(fx.instanceId, fx.hash);
+
+    // Fast path: same plate, same effects. plateStateChanged fires per viewport
+    // mouse-move and during playback, so this must not rebuild anything.
+    if (active >= 0 && active == lastActivePlate_ && fingerprint == lastFingerprint_ && !stack.empty()) {
+        refreshing_ = true;
+        const bool ok = refreshValuesOnly(stack);
+        refreshing_ = false;
+        if (ok) return;
     }
 
+    // Never tear the cards down under a drag or an open edit: try again once it ends.
+    if (anyEditorInteracting()) {
+        retryTimer_->start();
+        return;
+    }
+    rebuild(active, stack);
+    lastActivePlate_ = active;
+    lastFingerprint_ = std::move(fingerprint);
+}
+
+namespace {
+
+bool isLayoutOnly(jefe::qt::FXParamType t) {
+    return t == jefe::qt::FXParamType::Spacer || t == jefe::qt::FXParamType::Newline;
+}
+
+// The file's label colour, or empty for white (white means "theme colour").
+QString fileColourOf(const jefe::qt::FXParamMeta& p) {
+    if (fxui::isWhite(p.labelR, p.labelG, p.labelB)) return QString();
+    return QColor(p.labelR, p.labelG, p.labelB).name();
+}
+
+// Menu name's last segment ("Color/Brightness, …" -> "Brightness, …").
+QString displayName(const jefe::qt::FXMeta& fx) {
+    const QString full = QString::fromStdString(!fx.menuName.empty() ? fx.menuName : fx.name);
+    const QStringList parts = full.split('/', Qt::SkipEmptyParts);
+    return parts.isEmpty() ? full : parts.last().trimmed();
+}
+
+// Header name: elided to whatever width the header leaves it.
+class ElidedLabel : public QLabel {
+public:
+    ElidedLabel(const QString& text, QWidget* parent) : QLabel(text, parent) {
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        setProperty(ui::kDensityElidedProperty, true);
+    }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        const QRect r = contentsRect();
+        style()->drawItemText(&p, r, Qt::AlignLeft | Qt::AlignVCenter, palette(), isEnabled(),
+                              fontMetrics().elidedText(text(), Qt::ElideRight, r.width()), foregroundRole());
+    }
+};
+
+// The widest a combo grows on a column row: the slider track's cap, so a bottom dock
+// does not stretch a LUT picker across the screen.
+constexpr int kColumnComboMaxW = 320;
+
+// One non-float parameter: label, then the control, 24 px tall. In a flow row (several
+// controls sharing a line) the row is packed to its content. A column row (the line's
+// only control) spans the card: the label sits in the card's right-aligned label column,
+// sized in relayoutCards(), so the control starts where the slider rows' value fields
+// start; a combo stretches up to the slider cap.
+QWidget* makeLabelledRow(const QString& objectBase, const QString& text, const QString& tooltip,
+                         QWidget* control, QLabel** labelOut, bool column = false) {
+    auto* row = new QWidget();
+    row->setObjectName(objectBase + ".row");
+    row->setToolTip(tooltip);
+    row->setFixedHeight(ui::kControlH);
+    row->setSizePolicy(column ? QSizePolicy::Expanding : QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto* lay = new QHBoxLayout(row);
+    ui::applyRowMetrics(lay, ui::kGapTight);
+    auto* label = new QLabel(text, row);
+    label->setObjectName(objectBase + ".label");
+    lay->addWidget(label);
+    control->setParent(row);
+    control->setToolTip(tooltip);
+    control->setAccessibleName(text);
+    if (column) {
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        const bool combo = qobject_cast<QComboBox*>(control) != nullptr;
+        if (combo) control->setMaximumWidth(kColumnComboMaxW);
+        lay->addWidget(control, combo ? 1 : 0);
+        lay->addStretch(0);  // takes the width past the combo's cap, or right of a checkbox
+    } else {
+        lay->addWidget(control);
+    }
+    *labelOut = label;
+    return row;
+}
+
+QComboBox* makeCombo() {
+    auto* combo = new QComboBox();
+    // Size to a short minimum, not the longest option, so a picker fits a narrow dock.
+    combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    combo->setMinimumContentsLength(8);
+    combo->setProperty(ui::kDensityElidedProperty, true);
+    return combo;
+}
+
+// Picks the combo item whose data equals `want` (LUT pickers store the global LUT index).
+void selectByData(QComboBox* combo, int want) {
+    for (int i = 0; i < combo->count(); ++i)
+        if (combo->itemData(i).toInt() == want) { combo->setCurrentIndex(i); return; }
+}
+
+}  // namespace
+
+void FXParamPanel_Qt::rebuild(int active, const std::vector<jefe::qt::FXMeta>& stack) {
     refreshing_ = true;
 
-    // Tear down existing cards synchronously. Immediate clear (vs
-    // deleteLater) keeps the AX tree coherent.
+    // The list releases item widgets with deleteLater, so this is safe even when
+    // the request came from inside a card.
     list_->clear();
     rowCache_.clear();
+    sliderLabels_.clear();
+    columnLabels_.clear();
+    powerButtons_.clear();
+    lastCardWidth_ = -1;
 
     if (active < 0) {
         status_->setText("No active plate.");
         refreshing_ = false;
-        lastActivePlate_ = active;
-        lastStack_.clear();
         return;
     }
-
-    const auto stack = jefe::qt::getFXStackMetaOnPlate(active);
     if (stack.empty()) {
         status_->setText(QString("Plate %1: no FX. Use \"+ Add FX\".").arg(active));
         refreshing_ = false;
-        lastActivePlate_ = active;
-        lastStack_.clear();
         return;
     }
 
-    int paramCount = 0;
-    int editableCount = 0;
+    using jefe::qt::FXParamType;
+    int paramCount = 0, editableCount = 0;
     for (size_t i = 0; i < stack.size(); ++i) {
         const auto& fx = stack[i];
         const int fxIdx = static_cast<int>(i);
+        const QString fxBase = QString("fxparams.fx%1").arg(fxIdx);
+        // Writes find this FX by instance id when they happen: the stack can change under
+        // a drag (a peer or the viewport inserts an FX before it) while the rebuild waits.
+        const auto fxNow = [active, fxIdx, fxId = fx.instanceId]() {
+            return fxId != 0 ? jefe::qt::fxIndexOfInstanceOnPlate(active, fxId) : fxIdx;
+        };
 
         auto* card = new QFrame();
-        card->setObjectName(QString("fxparams.fx%1.card").arg(fxIdx));
-        card->setFrameShape(QFrame::StyledPanel);
+        card->setObjectName(fxBase + ".card");
+        card->setProperty("fxCard", true);
         card->setStyleSheet(
-            "QFrame { background: #2b2b2b; border: 1px solid #3a3a3a;"
-            " border-radius: 4px; }");
+            "QFrame[fxCard=\"true\"] { background: #2b2b2b; border: 1px solid #3a3a3a;"
+            " border-radius: 4px; }"
+            " *[fxClear=\"true\"] { background: transparent; }");
         auto* cardLay = new QVBoxLayout(card);
-        cardLay->setContentsMargins(8, 6, 8, 6);
-        cardLay->setSpacing(4);
+        cardLay->setContentsMargins(ui::kGapTight, ui::kGapTight, ui::kGapTight, ui::kGapTight);
+        cardLay->setSpacing(ui::kGapTight);
 
-        // --- Header row: drag handle + index/name + active + remove -----
-        auto* headerRow = new QWidget(card);
-        headerRow->setStyleSheet("background: transparent; border: none;");
-        auto* headerLay = new QHBoxLayout(headerRow);
-        headerLay->setContentsMargins(0, 0, 0, 0);
-        headerLay->setSpacing(6);
+        // --- Header: handle, power, name, remove ------------------------------------
+        auto* header = new QWidget(card);
+        header->setObjectName(fxBase + ".header");
+        header->setFixedHeight(ui::kControlH);
+        auto* headerLay = new QHBoxLayout(header);
+        ui::applyRowMetrics(headerLay, ui::kGapTight);
 
-        auto* handle = new QLabel("☰", headerRow);  // ☰ drag glyph
-        handle->setStyleSheet("color: #777; border: none;");
+        // Collapse: the card shrinks to this header. Kept per FX instance (and its content
+        // hash, since a loaded stack can reuse ids), so it survives rebuilds (adding,
+        // removing or reordering effects) for the rest of the run.
+        const CollapseKey collapseKey{active, fx.instanceId != 0 ? fx.instanceId : (0x80000000u | std::uint32_t(fxIdx)),
+                                      fx.hash};
+        const bool collapsed = collapsed_.count(collapseKey) != 0;
+        auto* chevron = new QToolButton(header);
+        chevron->setObjectName(fxBase + ".collapse.button");
+        chevron->setAccessibleName(QString("Collapse FX %1").arg(fxIdx));
+        chevron->setToolTip(collapsed ? "Show this effect's controls" : "Hide this effect's controls");
+        chevron->setIcon(jefe::qticons::chevron(!collapsed));
+        chevron->setAutoRaise(true);
+        ui::makeIconButton(chevron);
+        chevron->setStyleSheet("QToolButton { padding: 0; }");
+        headerLay->addWidget(chevron);
+
+        // The handle and the empty card area ignore presses, so they reach the list
+        // and start a card drag; the editors accept theirs.
+        auto* handle = new QLabel(header);
+        handle->setObjectName(fxBase + ".handle");
+        handle->setPixmap(jefe::qticons::dragHandle().pixmap(QSize(ui::kIconPx, ui::kIconPx)));
+        handle->setFixedSize(ui::kIconPx, ui::kControlH);
         handle->setToolTip("Drag to reorder");
+        handle->setCursor(Qt::OpenHandCursor);
         headerLay->addWidget(handle);
 
-        const QString fxDisplay = QString::fromStdString(
-            !fx.menuName.empty() ? fx.menuName : fx.name);
-        auto* nameLab = new QLabel(
-            QString("<b>%1.</b> %2")
-                .arg(fxIdx + 1)
-                .arg(fxDisplay.toHtmlEscaped()),
-            headerRow);
-        nameLab->setTextFormat(Qt::RichText);
-        nameLab->setStyleSheet("border: none;");
-        nameLab->setObjectName(QString("fxparams.fx%1.header").arg(fxIdx));
-        nameLab->setToolTip(fxDisplay);
-        // Let the name absorb slack AND shrink/clip below its text width, so a long
-        // menuName never pushes the active/remove buttons out of view (Ignored policy).
-        nameLab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        QToolButton* power = makePowerToggle(header);
+        power->setObjectName(fxBase + ".active.check");
+        power->setAccessibleName(QString("FX %1 active").arg(fxIdx));
+        power->setToolTip("Enable / disable this effect");
+        power->setChecked(fx.active);
+        powerButtons_.push_back(power);
+        connect(power, &QToolButton::toggled, this, [this, active, fxNow](bool on) {
+            const int at = fxNow();
+            if (refreshing_ || at < 0) return;
+            jefe::qt::setFXActiveOnPlate(active, at, on);
+            emit viewportRepaintRequested();
+        });
+        headerLay->addWidget(power);
+
+        const QString fullName = QString::fromStdString(!fx.menuName.empty() ? fx.menuName : fx.name);
+        auto* nameLab = new ElidedLabel(displayName(fx), header);
+        nameLab->setObjectName(fxBase + ".name");
+        nameLab->setToolTip(fullName);
+        QFont bold = nameLab->font();
+        bold.setBold(true);
+        nameLab->setFont(bold);
         headerLay->addWidget(nameLab, /*stretch*/ 1);
 
-        auto* activeChk = new QCheckBox(headerRow);
-        activeChk->setObjectName(QString("fxparams.fx%1.active.check").arg(fxIdx));
-        activeChk->setAccessibleName(QString("FX %1 active").arg(fxIdx));
-        activeChk->setToolTip("Enable / disable this effect");
-        activeChk->setStyleSheet("border: none;");
-        activeChk->setChecked(fx.active);
-        connect(activeChk, &QCheckBox::toggled, this,
-                [this, active, fxIdx](bool on) {
-                    if (refreshing_) return;
-                    jefe::qt::setFXActiveOnPlate(active, fxIdx, on);
-                    emit viewportRepaintRequested();
-                });
-        headerLay->addWidget(activeChk);
-
-        auto* removeBtn = new QToolButton(headerRow);
-        removeBtn->setObjectName(QString("fxparams.fx%1.remove.button").arg(fxIdx));
+        auto* removeBtn = new QToolButton(header);
+        removeBtn->setObjectName(fxBase + ".remove.button");
         removeBtn->setAccessibleName(QString("Remove FX %1").arg(fxIdx));
         removeBtn->setIcon(jefe::qticons::remove());
-        removeBtn->setIconSize(QSize(14, 14));
         removeBtn->setToolTip("Remove this effect");
-        removeBtn->setStyleSheet("border: none;");
-        connect(removeBtn, &QToolButton::clicked, this,
-                [this, active, fxIdx]() {
-                    if (refreshing_) return;
-                    jefe::qt::removeFXFromPlate(active, fxIdx);
-                    emit viewportRepaintRequested();
-                    // Defer: the button lives inside the card we're about
-                    // to delete, so don't rebuild inside its own click.
-                    QTimer::singleShot(0, this, [this]() { refresh(); });
-                });
+        ui::makeIconButton(removeBtn);
+        removeBtn->setStyleSheet("QToolButton { padding: 0; }");
+        connect(removeBtn, &QToolButton::clicked, this, [this, active, fxNow]() {
+            const int at = fxNow();
+            if (refreshing_ || at < 0) return;
+            jefe::qt::removeFXFromPlate(active, at);
+            emit viewportRepaintRequested();
+            // The button lives inside the card the rebuild deletes.
+            scheduleRefresh();
+        });
         headerLay->addWidget(removeBtn);
+        cardLay->addWidget(header);
 
-        cardLay->addWidget(headerRow);
+        // Every row below the header lives in one body widget, so collapsing hides them all.
+        auto* body = new QWidget(card);
+        body->setObjectName(fxBase + ".body");
+        auto* bodyLay = new QVBoxLayout(body);
+        bodyLay->setContentsMargins(0, 0, 0, 0);
+        bodyLay->setSpacing(ui::kGapTight);
+        cardLay->addWidget(body);
+        body->setVisible(!collapsed);
+        connect(chevron, &QToolButton::clicked, this, [this, chevron, body, collapseKey]() {
+            const bool nowCollapsed = body->isVisible();
+            if (nowCollapsed) collapsed_.insert(collapseKey);
+            else collapsed_.erase(collapseKey);
+            body->setVisible(!nowCollapsed);
+            chevron->setIcon(jefe::qticons::chevron(!nowCollapsed));
+            chevron->setToolTip(nowCollapsed ? "Show this effect's controls" : "Hide this effect's controls");
+            relayoutCards();  // the list item takes the card's new height
+        });
 
-        // --- Params ------------------------------------------------------
-        QString lastGroup;
+        // --- Body: rows from the .jfx layout -----------------------------------------
+        std::vector<fxui::Item> items;
+        items.reserve(fx.params.size());
+        std::vector<std::string> groups;
         for (const auto& p : fx.params) {
-            if (p.type == jefe::qt::FXParamType::Spacer ||
-                p.type == jefe::qt::FXParamType::Newline) {
-                continue;
-            }
+            items.push_back({jefe::qt::fxKindOf(p.type), p.style, p.group});
+            if (std::find(groups.begin(), groups.end(), p.group) == groups.end()) groups.push_back(p.group);
+        }
+        const std::vector<fxui::Row> rows = fxui::layoutRows(items, /*showGroupHeadings=*/groups.size() > 1);
 
-            const QString groupName = QString::fromStdString(p.group);
-            if (groupName != lastGroup && !groupName.isEmpty()) {
-                auto* gLabel = new QLabel(
-                    QString("<i style='color:#777'>%1</i>")
-                        .arg(groupName.toHtmlEscaped()),
-                    card);
-                gLabel->setTextFormat(Qt::RichText);
-                gLabel->setStyleSheet("border: none;");
-                cardLay->addWidget(gLabel);
-                lastGroup = groupName;
-            }
+        // Cache entries by param index, flattened in declaration order afterwards.
+        std::vector<CachedRow> cacheByParam(fx.params.size());
+        std::vector<bool> cached(fx.params.size(), false);
+        std::vector<SliderLabel> sliders;
+        std::vector<ColumnLabel> columnLabels;
+        // Set while building a line's only labelled control: its label joins the column.
+        bool columnRow = false;
 
-            const QString labelText = !p.label.empty()
-                ? QString::fromStdString(p.label)
-                : QString::fromStdString(p.name);
-            const std::string groupStd = p.group;
-            const std::string nameStd  = p.name;
+        // Builds the editor for param pi; returns the widget for the row.
+        auto buildParam = [&](int pi) -> QWidget* {
+            const auto& p = fx.params[pi];
+            const QString base = QString("%1.param.%2").arg(fxBase, QString::fromStdString(p.name));
+            const QString text = QString::fromStdString(!p.label.empty() ? p.label : p.name);
+            const QString tooltip = QString::fromStdString(p.tooltip);
+            const std::string group = p.group, name = p.name;
+            CachedRow c;
+            c.group = p.group;
+            c.name = p.name;
+            c.paramType = static_cast<int>(p.type);
+            c.value = p.value;
+            c.defaultValue = p.defaultValue;
+            c.fileColour = fileColourOf(p);
 
-            auto* row = new QWidget(card);
-            row->setStyleSheet("border: none;");
-            row->setObjectName(
-                QString("fxparams.fx%1.param.%2.row")
-                    .arg(fxIdx)
-                    .arg(QString::fromStdString(p.name)));
-            auto* rowLay = new QHBoxLayout(row);
-            rowLay->setContentsMargins(12, 0, 0, 0);
-            rowLay->setSpacing(6);
-
-            auto* paramLab = new QLabel(labelText + ":", row);
-            paramLab->setMinimumWidth(50);
-            paramLab->setStyleSheet("border: none;");
-            paramLab->setObjectName(
-                QString("fxparams.fx%1.param.%2.label")
-                    .arg(fxIdx)
-                    .arg(QString::fromStdString(p.name)));
-            rowLay->addWidget(paramLab);
-
-            QWidget* editor = nullptr;
+            QWidget* rowWidget = nullptr;
             switch (p.type) {
-                case jefe::qt::FXParamType::Float: {
-                    auto* spin = new QDoubleSpinBox(row);
-                    spin->setObjectName(
-                        QString("fxparams.fx%1.param.%2.spin")
-                            .arg(fxIdx)
-                            .arg(QString::fromStdString(p.name)));
-                    spin->setRange(static_cast<double>(p.minimum),
-                                   static_cast<double>(p.maximum));
-                    spin->setDecimals(decimalsForStep(p.step));
-                    spin->setSingleStep(p.step > 0 ? p.step : 0.001);
-                    spin->setValue(static_cast<double>(p.value));
-                    spin->setKeyboardTracking(false);
-                    connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                            this, [this, active, fxIdx, groupStd, nameStd](double v) {
-                                if (refreshing_) return;
-                                jefe::qt::setFXParamValueOnPlate(
-                                    active, fxIdx, groupStd, nameStd,
-                                    static_cast<float>(v));
+                case FXParamType::Spacer: {
+                    auto* gap = new QWidget();
+                    gap->setFixedSize(ui::kControlH, ui::kControlH);
+                    return gap;
+                }
+                case FXParamType::Float: {
+                    FXEditorSpec spec;
+                    spec.label = text;
+                    spec.tooltip = tooltip;
+                    spec.hardMin = p.minimum;
+                    spec.hardMax = p.maximum;
+                    spec.softMin = p.softMinimum;
+                    spec.softMax = p.softMaximum;
+                    spec.step = p.step > 0.f ? p.step : 0.001f;
+                    spec.defaultValue = p.defaultValue;
+                    if (!c.fileColour.isEmpty()) spec.labelColor = QColor(c.fileColour);
+                    spec.objectBase = base;
+                    FXParamEditor_Qt* editor = makeFloatEditor(p.style, spec, nullptr);
+                    editor->setObjectName(base + ".row");
+                    editor->setValue(p.value);
+                    connect(editor, &FXParamEditor_Qt::valueEdited, this,
+                            [this, active, fxNow, group, name](float v) {
+                                const int at = fxNow();
+                                if (refreshing_ || at < 0) return;
+                                jefe::qt::setFXParamValueOnPlate(active, at, group, name, v);
                                 emit viewportRepaintRequested();
                             });
-                    editor = spin;
-                    ++editableCount;
+                    if (auto* slider = qobject_cast<FXSliderRow_Qt*>(editor)) sliders.push_back({slider, text});
+                    c.floatEditor = editor;
+                    rowWidget = editor;
                     break;
                 }
-                case jefe::qt::FXParamType::Bool: {
-                    auto* check = new QCheckBox(row);
-                    check->setStyleSheet("border: none;");
-                    check->setObjectName(
-                        QString("fxparams.fx%1.param.%2.check")
-                            .arg(fxIdx)
-                            .arg(QString::fromStdString(p.name)));
+                case FXParamType::Bool: {
+                    auto* check = new QCheckBox();
+                    check->setObjectName(base + ".check");
                     check->setChecked(p.value != 0.0f);
-                    connect(check, &QCheckBox::toggled,
-                            this, [this, active, fxIdx, groupStd, nameStd](bool on) {
-                                if (refreshing_) return;
-                                jefe::qt::setFXParamValueOnPlate(
-                                    active, fxIdx, groupStd, nameStd,
-                                    on ? 1.0f : 0.0f);
-                                emit viewportRepaintRequested();
-                            });
-                    editor = check;
-                    ++editableCount;
+                    connect(check, &QCheckBox::toggled, this, [this, active, fxNow, group, name](bool on) {
+                        const int at = fxNow();
+                        if (refreshing_ || at < 0) return;
+                        jefe::qt::setFXParamValueOnPlate(active, at, group, name, on ? 1.0f : 0.0f);
+                        emit viewportRepaintRequested();
+                        scheduleRefresh();  // label accent follows on the next turn
+                    });
+                    QLabel* label = nullptr;
+                    rowWidget = makeLabelledRow(base, text, tooltip, check, &label, columnRow);
+                    c.control = check;
+                    c.label = label;
                     break;
                 }
-                case jefe::qt::FXParamType::Choice: {
-                    auto* combo = new QComboBox(row);
-                    combo->setObjectName(
-                        QString("fxparams.fx%1.param.%2.combo")
-                            .arg(fxIdx)
-                            .arg(QString::fromStdString(p.name)));
-                    for (const auto& opt : p.options) {
-                        combo->addItem(QString::fromStdString(opt));
+                case FXParamType::Choice:
+                case FXParamType::Texture: {
+                    const bool texture = p.type == FXParamType::Texture;
+                    QComboBox* combo = makeCombo();
+                    combo->setObjectName(base + (texture ? ".texture" : ".combo"));
+                    if (texture) {
+                        // 0 = "Previous" (prior pass FBO), 1..4 = Track A..D, as gfcFX::bind() maps it.
+                        combo->addItems({"Previous", "Track A", "Track B", "Track C", "Track D"});
+                    } else {
+                        for (const auto& opt : p.options) combo->addItem(QString::fromStdString(opt));
                     }
                     const int idx = static_cast<int>(p.value);
-                    if (idx >= 0 && idx < combo->count()) {
-                        combo->setCurrentIndex(idx);
-                    }
-                    connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                            this, [this, active, fxIdx, groupStd, nameStd](int v) {
-                                if (refreshing_) return;
-                                jefe::qt::setFXParamValueOnPlate(
-                                    active, fxIdx, groupStd, nameStd,
-                                    static_cast<float>(v));
+                    if (idx >= 0 && idx < combo->count()) combo->setCurrentIndex(idx);
+                    connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                            [this, active, fxNow, group, name](int v) {
+                                const int at = fxNow();
+                                if (refreshing_ || at < 0) return;
+                                jefe::qt::setFXParamValueOnPlate(active, at, group, name, static_cast<float>(v));
                                 emit viewportRepaintRequested();
+                                scheduleRefresh();
                             });
-                    editor = combo;
-                    ++editableCount;
+                    QLabel* label = nullptr;
+                    rowWidget = makeLabelledRow(base, text, tooltip, combo, &label, columnRow);
+                    c.control = combo;
+                    c.label = label;
                     break;
                 }
-                case jefe::qt::FXParamType::Texture: {
-                    // Texture input picker: option 0 = "Previous" (prior pass FBO), 1..4 =
-                    // trackManager.getSequence(value-1) (Track A..D), as gfcFX::bind() maps it.
-                    auto* combo = new QComboBox(row);
-                    combo->setObjectName(
-                        QString("fxparams.fx%1.param.%2.texture")
-                            .arg(fxIdx)
-                            .arg(QString::fromStdString(p.name)));
-                    combo->addItem("Previous");
-                    combo->addItem("Track A");
-                    combo->addItem("Track B");
-                    combo->addItem("Track C");
-                    combo->addItem("Track D");
-                    const int idx = static_cast<int>(p.value);
-                    if (idx >= 0 && idx < combo->count()) {
-                        combo->setCurrentIndex(idx);
-                    }
-                    connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                            this, [this, active, fxIdx, groupStd, nameStd](int v) {
-                                if (refreshing_) return;
-                                jefe::qt::setFXParamValueOnPlate(
-                                    active, fxIdx, groupStd, nameStd,
-                                    static_cast<float>(v));
-                                emit viewportRepaintRequested();
-                            });
-                    editor = combo;
-                    ++editableCount;
-                    break;
-                }
-                case jefe::qt::FXParamType::Cube:
-                case jefe::qt::FXParamType::LUT: {
-                    // LUT picker (Cube = 3D, LUT = 1D). The combo DISPLAYS names but STORES the
-                    // global lutManager index in Qt::UserRole; gfcFX::bind() reads getLUT(value).
-                    const bool is3D = (p.type == jefe::qt::FXParamType::Cube);
-                    const auto choices = is3D ? jefe::qt::getCubeLutChoices()
-                                              : jefe::qt::getLut1DChoices();
+                case FXParamType::Cube:
+                case FXParamType::LUT: {
+                    // The combo shows LUT names but stores the global lutManager index
+                    // (gfcFX::bind() reads getLUT(value)), carried in the item data.
+                    const bool is3D = p.type == FXParamType::Cube;
+                    const auto choices = is3D ? jefe::qt::getCubeLutChoices() : jefe::qt::getLut1DChoices();
+                    QWidget* control = nullptr;
                     if (choices.empty()) {
-                        // No LUTs of this kind loaded — show a hint instead of
-                        // an empty combo (a full rebuild picks them up later).
-                        auto* valLab = new QLabel(
-                            QString("(no %1 LUTs loaded)").arg(is3D ? "3D" : "1D"),
-                            row);
-                        valLab->setStyleSheet(
-                            "color:#888; font-style:italic; border:none;");
-                        valLab->setObjectName(
-                            QString("fxparams.fx%1.param.%2.value")
-                                .arg(fxIdx)
-                                .arg(QString::fromStdString(p.name)));
-                        editor = valLab;
-                        break;
+                        auto* none = new QLabel(QString("(no %1 LUTs loaded)").arg(is3D ? "3D" : "1D"));
+                        none->setStyleSheet("color:#888; font-style:italic;");
+                        none->setObjectName(base + ".value");
+                        control = none;
+                    } else {
+                        QComboBox* combo = makeCombo();
+                        combo->setObjectName(base + (is3D ? ".cube" : ".lut"));
+                        for (const auto& [globalIdx, lutName] : choices)
+                            combo->addItem(QString::fromStdString(lutName), globalIdx);
+                        selectByData(combo, static_cast<int>(p.value));
+                        connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                                [this, active, fxNow, group, name, combo](int v) {
+                                    const int at = fxNow();
+                                    if (refreshing_ || at < 0) return;
+                                    jefe::qt::setFXParamValueOnPlate(active, at, group, name,
+                                                                    static_cast<float>(combo->itemData(v).toInt()));
+                                    emit viewportRepaintRequested();
+                                    scheduleRefresh();  // label accent follows on the next turn
+                                });
+                        control = combo;
                     }
-                    auto* combo = new QComboBox(row);
-                    combo->setObjectName(
-                        QString("fxparams.fx%1.param.%2.%3")
-                            .arg(fxIdx)
-                            .arg(QString::fromStdString(p.name))
-                            .arg(is3D ? "cube" : "lut"));
-                    const int cur = static_cast<int>(p.value);   // global lut index
-                    int curPos = -1;
-                    for (int ci = 0; ci < (int)choices.size(); ++ci) {
-                        combo->addItem(QString::fromStdString(choices[ci].second),
-                                       choices[ci].first);  // global index in UserRole
-                        if (choices[ci].first == cur) curPos = ci;
-                    }
-                    if (curPos >= 0) combo->setCurrentIndex(curPos);
-                    connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                            this, [this, active, fxIdx, groupStd, nameStd, combo](int v) {
-                                if (refreshing_) return;
-                                const int globalIdx = combo->itemData(v).toInt();
-                                jefe::qt::setFXParamValueOnPlate(
-                                    active, fxIdx, groupStd, nameStd,
-                                    static_cast<float>(globalIdx));
-                                emit viewportRepaintRequested();
-                            });
-                    editor = combo;
-                    ++editableCount;
+                    QLabel* label = nullptr;
+                    rowWidget = makeLabelledRow(base, text, tooltip, control, &label, columnRow);
+                    c.control = control;
+                    c.label = label;
                     break;
                 }
                 default: {
-                    // Other — read-only display.
-                    auto* valLab = new QLabel(
-                        QString::number(static_cast<double>(p.value), 'g', 6),
-                        row);
-                    valLab->setStyleSheet(
-                        "color: #ddd; font-family: monospace; border: none;");
-                    valLab->setObjectName(
-                        QString("fxparams.fx%1.param.%2.value")
-                            .arg(fxIdx)
-                            .arg(QString::fromStdString(p.name)));
-                    editor = valLab;
+                    auto* value = new QLabel(QString::number(static_cast<double>(p.value), 'g', 6));
+                    value->setObjectName(base + ".value");
+                    QLabel* label = nullptr;
+                    rowWidget = makeLabelledRow(base, text, tooltip, value, &label, columnRow);
+                    c.control = value;
+                    c.label = label;
                     break;
                 }
             }
-            // Let the editor shrink below its content-based minimum when the dock narrows
-            // (Ignored policy); a small explicit minimum keeps the control usable.
-            if (editor) {
-                editor->setMinimumWidth(40);
-                editor->setSizePolicy(QSizePolicy::Ignored,
-                                      editor->sizePolicy().verticalPolicy());
+
+            // Every non-float row: reset menu, accent label when modified, else the file's colour.
+            if (c.label) {
+                attachResetMenu(rowWidget, [this, active, fxNow, group, name, def = p.defaultValue]() {
+                    const int at = fxNow();
+                    if (at < 0) return;
+                    jefe::qt::setFXParamValueOnPlate(active, at, group, name, def);
+                    emit viewportRepaintRequested();
+                    scheduleRefresh();
+                });
             }
-            rowLay->addWidget(editor, /*stretch*/ 1);
-
-            CachedRow cached;
-            cached.fxIdx = fxIdx;
-            cached.group = p.group;
-            cached.name = p.name;
-            cached.paramType = static_cast<int>(p.type);
-            cached.value = p.value;
-            cached.editor = editor;
-            rowCache_.push_back(std::move(cached));
-
-            auto* typeLab = new QLabel(
-                QString("<span style='color:#666'>(%1)</span>")
-                    .arg(typeLabel(p.type)),
-                row);
-            typeLab->setTextFormat(Qt::RichText);
-            typeLab->setStyleSheet("border: none;");
-            // Don't let the type hint impose a width floor — it's the first
-            // thing that can give when the dock is narrowed.
-            typeLab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-            rowLay->addWidget(typeLab);
-
-            cardLay->addWidget(row);
+            if (columnRow && c.label) columnLabels.push_back({c.label, c.control, text});
+            if (c.floatEditor || qobject_cast<QCheckBox*>(c.control) || qobject_cast<QComboBox*>(c.control))
+                ++editableCount;
+            cacheByParam[pi] = std::move(c);
+            cached[pi] = true;
             ++paramCount;
+            return rowWidget;
+        };
+
+        for (const fxui::Row& row : rows) {
+            switch (row.kind) {
+                case fxui::RowKind::Heading: {
+                    auto* heading = new QLabel(QString::fromStdString(row.group), body);
+                    heading->setObjectName(QString("%1.group.%2").arg(fxBase, QString::fromStdString(row.group)));
+                    heading->setStyleSheet("color: #777; font-style: italic;");
+                    heading->setFixedHeight(ui::kControlH);
+                    bodyLay->addWidget(heading);
+                    break;
+                }
+                case fxui::RowKind::Slider:
+                    bodyLay->addWidget(buildParam(row.items.front()));
+                    break;
+                case fxui::RowKind::Flow: {
+                    // A line holding one labelled control lines up with the slider rows;
+                    // several controls on a line stay packed so they can wrap.
+                    const fxui::Kind k = items[row.items.front()].kind;
+                    if (row.items.size() == 1 && k != fxui::Kind::Float && k != fxui::Kind::Spacer &&
+                        k != fxui::Kind::NewLine) {
+                        columnRow = true;
+                        bodyLay->addWidget(buildParam(row.items.front()));
+                        columnRow = false;
+                        break;
+                    }
+                    auto* host = new QWidget(body);
+                    auto* flow = new FlowLayout_Qt(host, 0, ui::kGap, ui::kGapTight);
+                    for (int pi : row.items) flow->addWidget(buildParam(pi));
+                    bodyLay->addWidget(host);
+                    break;
+                }
+            }
         }
+        // The theme gives every plain QWidget the window background; the card's own
+        // containers (header, rows, flow hosts, spacers, drawn sliders and knobs) must
+        // show the card colour instead. A property rule only touches their background.
+        for (QWidget* w : card->findChildren<QWidget*>())
+            if (w->metaObject() == &QWidget::staticMetaObject || qobject_cast<FXParamEditor_Qt*>(w))
+                w->setProperty("fxClear", true);
+
+        // Cache in declaration order, spacers and newLines skipped: refreshValuesOnly walks
+        // the stack the same way.
+        for (size_t pi = 0; pi < cacheByParam.size(); ++pi)
+            if (cached[pi] && !isLayoutOnly(fx.params[pi].type)) rowCache_.push_back(std::move(cacheByParam[pi]));
+        sliderLabels_.push_back(std::move(sliders));
+        columnLabels_.push_back(std::move(columnLabels));
 
         // Host the card as a list item so InternalMove can drag-reorder.
         auto* item = new QListWidgetItem(list_);
@@ -578,115 +698,167 @@ void FXParamPanel_Qt::refresh() {
         // reordering works; just disable inline rename.
         item->setFlags(item->flags() & ~Qt::ItemIsEditable);
         // Width 0: the item spans the list viewport width, so the list never scrolls
-        // horizontally (which would slide the active/remove buttons off-view).
+        // horizontally. relayoutCards() sets the height for that width.
         item->setSizeHint(QSize(0, card->sizeHint().height()));
         list_->setItemWidget(item, card);
     }
 
-    status_->setText(
-        QString("Plate %1 — %2 FX, %3 params (%4 editable)")
-            .arg(active)
-            .arg(stack.size())
-            .arg(paramCount)
-            .arg(editableCount));
-
-    // Update the stack fingerprint (names only, menuName preferred, as getFXStackOnPlate
-    // selects them) for the next refresh() fast-path check.
-    lastActivePlate_ = active;
-    lastStack_.clear();
-    lastStack_.reserve(stack.size());
-    for (const auto& fx : stack) {
-        lastStack_.push_back(fx.menuName.empty() ? fx.name : fx.menuName);
+    for (CachedRow& c : rowCache_) {
+        if (!c.label) continue;
+        const bool modified = fxui::isModified(c.value, c.defaultValue, 1.f);
+        c.labelState = modified ? 1 : 0;
+        if (modified) c.label->setStyleSheet(QString("color: %1;").arg(jefe::qt::kFXModifiedColor));
+        else if (!c.fileColour.isEmpty()) c.label->setStyleSheet(QString("color: %1;").arg(c.fileColour));
     }
 
+    status_->setText(QString("Plate %1 — %2 FX, %3 params (%4 editable)")
+                         .arg(active).arg(stack.size()).arg(paramCount).arg(editableCount));
+    relayoutCards();
     refreshing_ = false;
 }
 
-bool FXParamPanel_Qt::refreshValuesOnly() {
-    // Fast-path partner to refresh(): re-reads the bridge's param values and writes only
-    // changed widgets. Returns false to demand a full rebuild if the row layout no longer matches.
-    const int active = lastActivePlate_;
-    if (active < 0) return false;
+bool FXParamPanel_Qt::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == list_->viewport() && event->type() == QEvent::Resize) relayoutCards();
+    return QWidget::eventFilter(watched, event);
+}
 
-    const auto stack = jefe::qt::getFXStackMetaOnPlate(active);
-    if (stack.empty()) return false;
+void FXParamPanel_Qt::relayoutCards() {
+    const int cardWidth = list_->viewport()->width() - 2 * list_->spacing();
+    if (cardWidth <= 0) return;
 
+    for (int i = 0; i < list_->count(); ++i) {
+        QListWidgetItem* item = list_->item(i);
+        QWidget* card = list_->itemWidget(item);
+        if (!card) continue;
+
+        // Label column: as wide as the card's longest slider or column-row label when
+        // every control keeps its minimum width, else narrower with the labels elided
+        // (full text in the tooltip). Never more than 45 % of the card.
+        const bool haveRows = i < int(sliderLabels_.size()) && i < int(columnLabels_.size()) &&
+                              (!sliderLabels_[i].empty() || !columnLabels_[i].empty());
+        if (cardWidth != lastCardWidth_ && haveRows) {
+            const auto& sliders = sliderLabels_[i];
+            const auto& columns = columnLabels_[i];
+            QLabel* probe = nullptr;  // any live label: the theme's 13 px font, not the default
+            for (const SliderLabel& s : sliders)
+                if (s.row) { probe = s.row->label(); break; }
+            if (!probe)
+                for (const ColumnLabel& c : columns)
+                    if (c.label) { probe = c.label; break; }
+            if (probe) {
+                probe->ensurePolished();
+                const QFontMetrics fm(probe->font());
+                const QMargins m = card->layout()->contentsMargins();
+                const int inner = cardWidth - m.left() - m.right() - 2;  // 1 px card border each side
+                int widest = 0;
+                int room = inner;
+                for (const SliderLabel& s : sliders) {
+                    if (!s.row) continue;
+                    widest = std::max(widest, fm.horizontalAdvance(s.text) + 1);
+                    const int spacing = s.row->layout() ? s.row->layout()->spacing() : ui::kGapTight;
+                    room = std::min(room, inner - s.row->field()->sizeHint().width() -
+                                              s.row->slider()->minimumWidth() - ui::kControlH - 3 * spacing);
+                }
+                for (const ColumnLabel& c : columns) {
+                    if (!c.label) continue;
+                    widest = std::max(widest, fm.horizontalAdvance(c.text) + 1);
+                    if (c.control) room = std::min(room, inner - c.control->minimumSizeHint().width() - ui::kGapTight);
+                }
+                const int column = std::max(ui::kControlH, std::min({widest, room, inner * 45 / 100}));
+                const auto fit = [&](QLabel* label, const QString& text) {
+                    const QString shown = fm.elidedText(text, Qt::ElideRight, column);
+                    if (shown != label->text()) label->setText(shown);
+                    label->setProperty(ui::kDensityElidedProperty, true);
+                    return shown == text;
+                };
+                for (const SliderLabel& s : sliders) {
+                    if (!s.row) continue;
+                    s.row->setLabelColumnWidth(column);
+                    QLabel* label = s.row->label();
+                    label->setToolTip(fit(label, s.text) ? QString() : s.text);
+                }
+                for (const ColumnLabel& c : columns) {
+                    if (!c.label) continue;
+                    c.label->setFixedWidth(column);
+                    c.label->setToolTip(fit(c.label, c.text) ? QString() : c.text);
+                }
+            }
+        }
+
+        const int h = card->hasHeightForWidth() ? card->heightForWidth(cardWidth) : card->sizeHint().height();
+        if (h > 0 && item->sizeHint().height() != h) item->setSizeHint(QSize(0, h));
+    }
+    lastCardWidth_ = cardWidth;
+}
+
+bool FXParamPanel_Qt::refreshValuesOnly(const std::vector<jefe::qt::FXMeta>& stack) {
+    // Walk the params in the order the rebuild cached them.
     std::vector<const jefe::qt::FXParamMeta*> flat;
     flat.reserve(rowCache_.size());
-    for (const auto& fx : stack) {
-        for (const auto& p : fx.params) {
-            if (p.type == jefe::qt::FXParamType::Spacer ||
-                p.type == jefe::qt::FXParamType::Newline) {
-                continue;
-            }
-            flat.push_back(&p);
-        }
+    for (const auto& fx : stack)
+        for (const auto& p : fx.params)
+            if (!isLayoutOnly(p.type)) flat.push_back(&p);
+    if (flat.size() != rowCache_.size() || stack.size() != powerButtons_.size()) return false;
+
+    // Active state can change outside the panel (a peer, a favourite, the bridge).
+    for (size_t i = 0; i < stack.size(); ++i) {
+        QToolButton* power = powerButtons_[i].data();
+        if (!power || power->isChecked() == stack[i].active) continue;  // cache-gated (§5c)
+        const QSignalBlocker b(power);
+        power->setChecked(stack[i].active);
     }
-    if (flat.size() != rowCache_.size()) return false;
 
+    using jefe::qt::FXParamType;
     for (size_t i = 0; i < rowCache_.size(); ++i) {
-        auto& cached = rowCache_[i];
+        CachedRow& c = rowCache_[i];
         const auto* p = flat[i];
+        if (c.group != p->group || c.name != p->name || c.paramType != static_cast<int>(p->type)) return false;
+        if (c.value == p->value) continue;  // unchanged: no widget write (developer_notes.md §5c)
 
-        if (cached.group != p->group ||
-            cached.name != p->name ||
-            cached.paramType != static_cast<int>(p->type)) {
-            return false;
+        if (c.floatEditor) {
+            // The editor ignores setValue while dragged or typed in; leave the cache
+            // stale then, so the next refresh after the interaction syncs it.
+            if (c.floatEditor->isInteracting()) continue;
+            c.floatEditor->setValue(p->value);
+            c.value = p->value;
+            continue;
         }
-
-        if (cached.value == p->value) continue;  // unchanged
-        cached.value = p->value;
-
-        QWidget* w = cached.editor.data();
-        if (!w) continue;  // editor torn down behind our back; skip
-
-        switch (static_cast<jefe::qt::FXParamType>(cached.paramType)) {
-            case jefe::qt::FXParamType::Float: {
-                if (auto* spin = qobject_cast<QDoubleSpinBox*>(w)) {
-                    const QSignalBlocker b(spin);
-                    spin->setValue(static_cast<double>(p->value));
-                }
-                break;
-            }
-            case jefe::qt::FXParamType::Bool: {
+        c.value = p->value;
+        QWidget* w = c.control.data();
+        if (!w) continue;
+        switch (static_cast<FXParamType>(c.paramType)) {
+            case FXParamType::Bool:
                 if (auto* check = qobject_cast<QCheckBox*>(w)) {
                     const QSignalBlocker b(check);
                     check->setChecked(p->value != 0.0f);
                 }
                 break;
-            }
-            case jefe::qt::FXParamType::Choice:
-            case jefe::qt::FXParamType::Texture: {
+            case FXParamType::Choice:
+            case FXParamType::Texture:
                 if (auto* combo = qobject_cast<QComboBox*>(w)) {
                     const QSignalBlocker b(combo);
                     const int idx = static_cast<int>(p->value);
-                    if (idx >= 0 && idx < combo->count()) {
-                        combo->setCurrentIndex(idx);
-                    }
+                    if (idx >= 0 && idx < combo->count()) combo->setCurrentIndex(idx);
                 }
                 break;
-            }
-            case jefe::qt::FXParamType::Cube:
-            case jefe::qt::FXParamType::LUT: {
-                // value is a global lut index; find the item carrying it.
+            case FXParamType::Cube:
+            case FXParamType::LUT:
                 if (auto* combo = qobject_cast<QComboBox*>(w)) {
                     const QSignalBlocker b(combo);
-                    const int want = static_cast<int>(p->value);
-                    for (int i = 0; i < combo->count(); ++i) {
-                        if (combo->itemData(i).toInt() == want) {
-                            combo->setCurrentIndex(i);
-                            break;
-                        }
-                    }
+                    selectByData(combo, static_cast<int>(p->value));
                 }
                 break;
-            }
-            default: {
-                if (auto* lab = qobject_cast<QLabel*>(w)) {
-                    lab->setText(QString::number(
-                        static_cast<double>(p->value), 'g', 6));
-                }
+            default:
+                if (auto* lab = qobject_cast<QLabel*>(w)) lab->setText(QString::number(static_cast<double>(p->value), 'g', 6));
                 break;
+        }
+        if (c.label) {
+            const int state = fxui::isModified(c.value, c.defaultValue, 1.f) ? 1 : 0;
+            if (state != c.labelState) {
+                c.labelState = state;
+                c.label->setStyleSheet(state ? QString("color: %1;").arg(jefe::qt::kFXModifiedColor)
+                                             : (c.fileColour.isEmpty() ? QString()
+                                                                       : QString("color: %1;").arg(c.fileColour)));
             }
         }
     }

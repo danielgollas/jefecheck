@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(jefecheck VERSION 1.7.0 LANGUAGES C CXX)
+project(jefecheck VERSION 2.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -73,6 +73,9 @@ elseif(WIN32)
     list(APPEND JEFECHECK_AUTH_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/auth/gfcTokenStore_win.cpp)
 endif()
 list(APPEND JEFECHECK_SOURCES ${JEFECHECK_AUTH_SOURCES})
+
+# The dark theme is compiled in (AUTORCC) so every packaged layout finds it.
+list(APPEND JEFECHECK_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/qt/theme/theme.qrc)
 
 if(APPLE)
     find_library(JEFECHECK_SECURITY_FRAMEWORK Security REQUIRED)

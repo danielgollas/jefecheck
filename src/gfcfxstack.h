@@ -3,6 +3,7 @@
 #define GFCFXSTACK_H
 
 #include "gfcfx.h"
+#include <cstdint>
 #include <map>
 #include <vector>
 #include "gfcNetworkStructures.h"
@@ -38,7 +39,13 @@ public:
     
     public:
     void clearStack();
-    void addFX(gfcFX theFX);
+    // Appends theFX and returns its instance id: the FX's own id when it is
+    // non-zero and not already used in this stack, otherwise a fresh one.
+    // Ids are never reused within a stack's life, even after a remove or clear.
+    // Valid ids are 1 .. 2^31-1; anything else is treated as unset.
+    std::uint32_t addFX(gfcFX theFX);
+    // Stack index of the FX with this instance id; -1 when absent (or id 0).
+    int indexOfInstance(std::uint32_t id) const;
     gfcFX getFX(int index);
     gfcFX& fxAt(int index);
     std::vector< gfcFX > getAllFXs();
@@ -89,9 +96,12 @@ public:
     
     void appendFXStack(gfcFXStack otherStack);
         
-    std::vector<std::string> loadStackFromNode(XMLNode &pnode,int *FXSi=NULL);
+    // matchByName: when an FX's saved hash is not loaded, fall back to the one
+    // loaded FX with the same menuName, else the same name (an edited effect
+    // changes its hash). Files pass true; network stack messages pass false.
+    std::vector<std::string> loadStackFromNode(XMLNode &pnode,int *FXSi=NULL,bool matchByName=true);
     std::vector<std::string> loadStackFromFile(std::string filename);
-	std::vector<std::string> loadStackFromString(std::string s);
+	std::vector<std::string> loadStackFromString(std::string s,bool matchByName=true);
 	
     
     std::vector<int> getActiveFXIndexes();
@@ -102,6 +112,7 @@ private:
 std::vector<gfcFX> fxs;
 std::map<void*, fxParamInfo> guiToFX; // map keyed by opaque widget handle (see API doc).
 int numOfActiveFX;
+std::uint32_t nextInstanceId_ = 1; // always above every id in fxs
 };
 
 #endif

@@ -58,8 +58,8 @@ You merge the PR, then sync to the homebrew tap repo and submit the winget PR (m
 
 ## Versioning
 
-When releasing v1.7.3 (say):
-1. `git tag v1.7.3 && git push origin v1.7.3` — kicks off the build/release workflow.
+When releasing v2.0.1 (say):
+1. `git tag v2.0.1 && git push origin v2.0.1` — kicks off the build/release workflow.
 2. Release workflow uploads artifacts to GitHub Releases.
 3. `update-manifests.yml` fires, opens a manifest-bump PR.
 4. You merge the manifest-bump PR.

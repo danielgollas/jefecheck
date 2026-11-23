@@ -2,24 +2,25 @@
 
 Professional video frame processing and playback application for color correction, effects, and real-time review of digital cinema content.
 
-> **GUI:** JefeCheck's interface is built on **Qt 6** (dark VFX theme). The Qt
-> rewrite lives on the `qt-experimental` branch; `main` remains on the older
-> FLTK build until the rewrite is promoted. Build from `qt-experimental` for
-> the current app.
+This is **JefeCheck 2.0**. Its interface is built on **Qt 6** with a dark VFX theme.
+
+The classic 1.7 release, built on FLTK, stays on the `main` branch and its 1.7.x
+releases. The 1.7 line ends at 1.7.x; new work happens on 2.0.
 
 ## Features
 
 - Real-time playback of image sequences (DPX, EXR, and common formats via OpenImageIO)
-- Movies (`.mov` / `.mp4`: ProRes 422/HQ/4444/XQ, H.264, H.265) load like a sequence, with sound — see [Movies](#movies)
+- Movies (`.mov` / `.mp4` / `.mxf`: ProRes 422/HQ/4444/XQ, H.264, H.265, DNxHR) load like a sequence, with sound — see [Movies](#movies)
 - Up to 4 simultaneous video tracks/plates with multi-plate layouts (1×1, 2×1, 1×2, 2×2)
-- Per-plate color correction (gamma/exposure/brightness/contrast/saturation, RGBA masks)
+- Per-plate color correction (gamma/exposure/brightness/contrast/saturation, RGBA channel view)
 - 1D and 3D LUT (Look-Up Table) support for color grading, with an interactive LUT inspector
 - Render & export: image sequences (JPEG/PNG/TIFF/TGA/BMP/EXR, 8/16-bit, per-format quality) and **video** (H.264/H.265/ProRes via bundled FFmpeg), with output-resolution control and a live, cancellable progress bar
 - RGB histogram overlay
-- Network-based remote control and synchronization between instances
+- Shader-based FX pipeline (GLSL), with an FX panel for adding, reordering and adjusting effects per plate
+- Review notes (freehand, arrow, box and text) per frame, review summaries (PDF/TXT/CSV) and `.jcreview` review packages
+- Remote sessions: synchronized playback, chat and remote pointers between instances
 - Playlist management (`.jpl`) for sequential review sessions
 - Session save/restore with crash recovery
-- Shader-based FX pipeline (GLSL) — *wiring the FX stack into the Qt build is in progress*
 
 ## Building from Source
 
@@ -55,40 +56,38 @@ Use MSYS2 (UCRT64 environment) with `mingw-w64-ucrt-x86_64-qt6-base`, `mingw-w64
 
 ## Usage
 
+Most work happens in the app: **File → Quick Load…** (`Ctrl+O`), the **Load Sequence
+Manager** (`Ctrl+L`), or drag and drop onto the viewport. See the
+[user manual](docs/manual.md) and the [quick start](docs/quick-start.md). On macOS,
+`Ctrl` in shortcuts means `Cmd`.
+
 ```bash
-jefecheck [options] <files...>
+jefecheck [--open-file <path>]... [--config-dir <dir>] [--open-package <file.jcreview>]
 ```
 
 ### Options
 
 | Flag | Description |
 |------|-------------|
-| `-h, --help` | Show help message |
-| `-f, --from <frame>` | Start loading from this frame (per track) |
-| `-t, --to <frame>` | Stop loading at this frame (per track) |
-| `-s, --scale <percent>` | Scale percentage for loading (per track) |
-| `-r, --frameRate <fps>` | Set playback frame rate |
-| `-x, --fx <file>` | Load FX stack file (per track) |
-| `-l, --lut <file>` | Load LUT file (per plate) |
+| `--open-file <path>` | Load a file or sequence into the next plate. Repeat for up to four plates. |
+| `--config-dir <dir>` | Keep settings, sessions and caches in this folder instead of the default (also `JEFECHECK_CONFIG_DIR`). |
+| `--open-package <file>` | Open a `.jcreview` review package at startup, without asking you to locate missing media. |
 
 ### Examples
 
 ```bash
 # Play a DPX sequence
-jefecheck /path/to/sequence.0001.dpx
+jefecheck --open-file /path/to/sequence.0001.dpx
 
-# Play two sequences side by side at 24fps
-jefecheck -r 24 /path/to/seq_a.0001.exr /path/to/seq_b.0001.exr
-
-# Load with a LUT applied
-jefecheck -l grade.cube /path/to/sequence.0001.dpx
+# Load two sequences into plates 1 and 2
+jefecheck --open-file /path/to/seq_a.0001.exr --open-file /path/to/seq_b.0001.exr
 ```
 
 ## Movies
 
-Open a `.mov` or `.mp4` (ProRes 422/HQ/4444/XQ, H.264, H.265) the same way as a
+Open a `.mov`, `.mp4` or `.mxf` (ProRes 422/HQ/4444/XQ, H.264, H.265, DNxHR) the same way as a
 sequence: Quick Load (`Ctrl+O`), the Load Sequence Manager (`Ctrl+L`), drag and drop, or
-the command line. A movie is one track entry that behaves like a sequence (range, trims,
+`--open-file`. A movie is one track entry that behaves like a sequence (range, trims,
 scale, bit depth, hold, offset, filmstrip, notes); the timeline counts its frames 1…n.
 Frames are decoded into memory, never extracted to disk. Numbers in a movie's name are
 never read as frame numbers: `shot_v003.mov` is one clip, and `a_001.mov` / `a_002.mov`
@@ -106,9 +105,13 @@ are two.
   timeline lane (or its right-click menu); mute is saved with the session. At the movie's
   own rate the sound leads and the picture keeps up; stepping, scrubbing and off-rate
   playback play each frame's own slice at normal pitch; reverse is silent.
-- **Limits:** a movie loads what fits in memory, like a sequence. Heavy 4K ProRes 4444
-  (around 1 Gb/s) can load slower than real time; it plays at full rate once loaded.
-  There is no hardware decoding yet, no MXF, and exports carry no sound.
+- **Memory:** a movie does not have to fit in memory. Frames load ahead of the playhead
+  and frames behind it are unloaded to make room. Heavy 4K ProRes 4444 (around 1 Gb/s)
+  can load slower than real time; frames already in memory play at full rate.
+- **Hardware decoding:** Preferences → General → Hardware decoding (Auto / Off). Auto
+  uses the graphics hardware when it can decode the file and software otherwise.
+- **Limits:** only one audio stream per file is read, so camera MXF that stores each
+  channel as its own mono stream plays its first channel only. Exports carry no sound.
 
 ## Contributing
 

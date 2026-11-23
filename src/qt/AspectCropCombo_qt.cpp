@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "AspectCropCombo_qt.h"
+#include "UiMetrics_qt.h"
 
 #include <QCheckBox>
 #include <QEvent>
@@ -32,26 +33,28 @@ AspectCropCombo_Qt::AspectCropCombo_Qt(QWidget* parent)
     // beside it. Clicking it opens the popup (see onClicked / openPopup).
     setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     setMinimumWidth(60);
-    setFixedHeight(20);  // match the compact button row in the card
-    // The dark theme styles QComboBox/QPushButton but not QToolButton; mirror its
-    // QComboBox body here (the selector keeps it off the popup's children).
-    setStyleSheet(
+    // Keep the combo-like body (darker fill than the theme's transparent tool buttons);
+    // the selector keeps it off the popup's children. Content box kControlH - 2 plus a
+    // 1 px border each side = the theme's control height.
+    setStyleSheet(QString(
         "QToolButton {"
         " background-color: #2a2a2a;"
         " border: 1px solid #3a3a3a;"
         " border-radius: 3px;"
         " color: #e0e0e0;"
         " text-align: left;"
-        " padding: 2px 4px;"
+        " padding: 0 4px;"
+        " min-height: %1px;"
+        " max-height: %1px;"
         " }"
-        "QToolButton:hover { border-color: #d4771e; }");
+        "QToolButton:hover { border-color: #d4771e; }").arg(jefe::qt::ui::kControlH - 2));
 
     // Build the custom popup frame. Qt::Popup gives us click-outside
     // dismissal and grabs input while shown.
     popupFrame_ = new QFrame(this, Qt::Popup);
     popupFrame_->setFrameShape(QFrame::StyledPanel);
-    // The plate card's 10pt font stylesheet does not cover the popup's
-    // children; a 10pt QFont keeps rows compact (default is ~13pt on macOS).
+    // The popup is its own window, laid out apart from the docks' density rules;
+    // a 10pt QFont keeps its rows compact (default is ~13pt on macOS).
     {
         QFont compact = popupFrame_->font();
         compact.setPointSize(10);

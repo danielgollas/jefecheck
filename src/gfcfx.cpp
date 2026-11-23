@@ -335,6 +335,9 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 
 				widget.varName= widgetNode.getAttribute ( "varName" )?widgetNode.getAttribute ( "varName" ):"";
 				widget.label= widgetNode.getAttribute ( "label" )?widgetNode.getAttribute ( "label" ):"";
+				widget.ui=fxui::readWidgetUi ( widgetNode.getAttribute ( "style" ),
+				                               widgetNode.getAttribute ( "softMinimum" ),
+				                               widgetNode.getAttribute ( "softMaximum" ) );
 
 				if ( widgetNode.getAttribute ( "labelColorR" ) !=NULL )
 					widget.labelColor.x=atof ( widgetNode.getAttribute ( "labelColorR" ) );
@@ -359,6 +362,16 @@ int gfcFX::load ( const std::string pfilename, int type, Fl_Progress *pprogress 
 					widget.defaultValue=atof ( widgetNode.getAttribute ( "default" ) );
 
 				widget.value=widget.defaultValue;
+
+				{
+					//Report attribute problems once, at load. softRange runs on a copy
+					//so an explicit soft range that cannot be used is reported too.
+					fxui::WidgetUi uiCheck=widget.ui;
+					if ( widget.type==FX_GUI_FLOAT )
+						fxui::softRange ( widget.minimum, widget.maximum, widget.defaultValue, uiCheck );
+					for ( const std::string& warning : uiCheck.warnings )
+						printf ( "FX %s: widget %s: %s\n", getNameNoPath().c_str(), widget.varName.c_str(), warning.c_str() );
+				}
 
 #ifdef PRINTFXLOADINGMESSAGES
 

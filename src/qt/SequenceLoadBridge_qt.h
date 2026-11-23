@@ -9,10 +9,12 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "../gfcFXUi.h"
 #include "../gfcReviewSummary.h"
 
 class gfcPlateGUI_Qt;
@@ -296,7 +298,15 @@ struct FXParamMeta {
     float step = 0.0f;
     float defaultValue = 0.0f;
     std::vector<std::string> options;
+    // Resolved widget style: a Float is never Default (it becomes Slider).
+    fxui::Style style = fxui::Style::Default;
+    // Slider range inside [minimum, maximum], from fxui::softRange.
+    float softMinimum = 0.0f, softMaximum = 0.0f;
+    int labelR = 255, labelG = 255, labelB = 255;
 };
+
+// The fxui layout kind of a parameter type (the one mapping the bridge and panel share).
+fxui::Kind fxKindOf(FXParamType t);
 
 struct FXMeta {
     std::string name;
@@ -306,6 +316,10 @@ struct FXMeta {
     std::string description;
     bool active = false;
     bool loadedAndCompiled = false;
+    std::uint32_t instanceId = 0;
+    // Content hash of the effect's files: with instanceId, it tells two stacks apart
+    // even when a loaded stack reuses ids.
+    std::string hash;
     std::vector<FXParamMeta> params;
 };
 
@@ -313,6 +327,47 @@ struct FXMeta {
 // Walks gfcFXStack copies, so this is a snapshot — refresh on
 // plateStateChanged or after add/remove. Empty for invalid plate idx.
 std::vector<FXMeta> getFXStackMetaOnPlate(int plateIdx);
+
+// The plate's FX stack as stack XML (what a session saves), and replacing the whole
+// stack from such XML the way favourites and .fxs files load (name fallback on, saved
+// instance ids kept). Empty string / no-op for an invalid plate idx.
+std::string getFXStackXmlOnPlate(int plateIdx);
+void setFXStackXmlOnPlate(int plateIdx, const std::string& xml);
+
+// Current stack index of the FX with this instance id on the plate, or -1. Cheap
+// (no metadata copy): editors resolve their FX with it at write time, because the
+// index a card was built with goes stale when the stack changes under a drag.
+int fxIndexOfInstanceOnPlate(int plateIdx, std::uint32_t instanceId);
+
+// Headless self-test (run by --fx-test): adds the BCS effect to plate 0,
+// checks the style / soft range / label colour getFXStackMetaOnPlate reports,
+// then removes it. Prints FX-META PASS|FAIL lines; returns true on pass.
+bool fxMetaSelfTest();
+
+// Names one FX parameter by the FX's persistent instance id rather than its
+// stack position, so the reference survives reorders, saves and reloads.
+struct FXParamRef {
+    int plate = -1;
+    std::uint32_t instanceId = 0;
+    std::string varName;
+};
+
+// Sets the parameter from a normalised t in [0, 1] (clamped). Float: mapped over
+// the soft range by fxui::fromNormalized; Bool: t >= 0.5; Choice: the option at
+// round(t * (options - 1)). Texture, cube, LUT and other kinds return false, as
+// does a ref that names no FX or parameter. Repaints through setChanged().
+bool setFXParamNormalized(const FXParamRef& ref, float t);
+
+// The parameter's normalised position, the inverse of setFXParamNormalized: a
+// Float past its soft range reads 0 or 1. Empty for the kinds and refs that
+// setFXParamNormalized rejects.
+std::optional<float> getFXParamNormalized(const FXParamRef& ref);
+
+// Headless self-test (run by --fx-test): instance ids on plate 0 survive copies,
+// reorders and a save/load round trip, legacy stacks get fresh ids, and the
+// normalised setter/getter follow the id. Prints FX-ID PASS|FAIL lines; returns
+// true on pass. Leaves plate 0's stack empty.
+bool fxParamIdentitySelfTest();
 
 // Mutates an FX widget value on `plateIdx`'s stack. The Qt FX param
 // panel's editor widgets call this on user edit; gfcFX::bind reads
@@ -907,6 +962,8 @@ void setScreenFBO(unsigned fbo);
 // plate (or all plates when the *All variant is used). All of them
 // flag plateManager dirty so the next paintGL picks up the change.
 void setFramingMode(int framingMode);
+// Current FRAMING*_ID value of the plate manager.
+int getFramingMode();
 void fitActivePlate();
 void fitAllPlates();
 void toggleFlipActive();
