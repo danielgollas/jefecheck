@@ -270,6 +270,11 @@ public:
      */
     void repaintViewportNow();
 
+    /** Skip the "open Load Window at startup" preference for this launch.
+     *  Call before the event loop starts; main() does when footage was named
+     *  on the command line, so the modal doesn't cover files already loading. */
+    void suppressStartupLoadWindow() { suppressStartupLoadWindow_ = true; }
+
 protected:
     void closeEvent(QCloseEvent* e) override;
     void resizeEvent(QResizeEvent* e) override;
@@ -313,6 +318,7 @@ private:
     void maybeRestoreSessionAtStartup();
     void toggleHideControls();
     bool controlsHidden_ = false;
+    bool suppressStartupLoadWindow_ = false;   // set by main() when --open-file names footage
     QString currentSessionPath_;
     QString packageTitle_;   // the open review package's file name, when the session came from one
     QString packageCacheRoot_;   // override for where openReviewPackage extracts (tests)
