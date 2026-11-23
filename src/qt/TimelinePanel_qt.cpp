@@ -21,6 +21,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QUrl>
@@ -63,6 +64,7 @@ TimelineScrubber_Qt::TimelineScrubber_Qt(QWidget* parent) : QWidget(parent) {
     setCursor(Qt::PointingHandCursor);
     setObjectName("timeline.scrubber");
     setAccessibleName("Timeline scrubber");
+    setToolTip("Click to jump · Alt-click to load every track from this frame");
 }
 
 void TimelineScrubber_Qt::setRange(int from, int to) {
@@ -121,13 +123,18 @@ void TimelineScrubber_Qt::paintEvent(QPaintEvent*) {
 }
 
 void TimelineScrubber_Qt::mousePressEvent(QMouseEvent* e) {
-    if (e->button() == Qt::LeftButton) {
-        emit seek(frameFromX(e->position().x()));
+    if (e->button() != Qt::LeftButton) return;
+    if (e->modifiers() & Qt::AltModifier) {
+        loadFromClick_ = true;   // the drag that follows must not scrub
+        emit loadFrom(frameFromX(e->position().x()));
+        return;
     }
+    loadFromClick_ = false;
+    emit seek(frameFromX(e->position().x()));
 }
 
 void TimelineScrubber_Qt::mouseMoveEvent(QMouseEvent* e) {
-    if (e->buttons() & Qt::LeftButton) {
+    if ((e->buttons() & Qt::LeftButton) && !loadFromClick_) {
         emit seek(frameFromX(e->position().x()));
     }
 }
@@ -671,6 +678,24 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
         if (tracks_) tracks_->refresh();
     });
 
+    rollingCache_ = new QPushButton(this);   // circular arrow: frames roll through memory
+    rollingCache_->setIcon(jefe::qticons::refresh());
+    rollingCache_->setCheckable(true);
+    rollingCache_->setChecked(jefe::qt::getRollingCache());
+    rollingCache_->setToolTip(
+        "Rolling cache\n"
+        "On: frames load around the playhead and unload behind it, so long clips play end to end.\n"
+        "Off: every track loads from the in point until memory is full and keeps it; playback "
+        "follows the loop mode over what is loaded. Alt-click the timeline (or Alt+I) to load from another frame.");
+    rollingCache_->setObjectName("transport.rollingcache.toggle");
+    rollingCache_->setAccessibleName("Rolling cache");
+    ui::makeIconButton(rollingCache_);
+    transport->addWidget(rollingCache_);
+    connect(rollingCache_, &QPushButton::toggled, this, [](bool on) {
+        jefe::qt::setRollingCache(on);
+        QSettings().setValue("Engine/rollingCache", on);
+    });
+
     scrubber_ = new TimelineScrubber_Qt(this);
     tracks_   = new TimelineTracks_Qt(this);
 
@@ -711,6 +736,8 @@ TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
 
     connect(scrubber_, &TimelineScrubber_Qt::seek,
             this, [](int v) { jefe::qt::seekToFrame(v); });
+    connect(scrubber_, &TimelineScrubber_Qt::loadFrom,
+            this, [](int v) { jefe::qt::loadAllFromFrame(v); });
 
     refreshFromPlayback();
 }

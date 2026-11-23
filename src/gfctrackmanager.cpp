@@ -527,15 +527,16 @@ void gfcTrackManager::setRecentBrowsed(std::vector< std::string > precentBrowsed
 	}
 }
 
-// "Load from here" on a loaded track only moves the playhead to startFrame (0-based; the timeline
-// is 1-based), since any frame loads on demand. Only an empty track starts a load there.
+// "Load from here" on a loaded track moves the playhead to startFrame (0-based; the timeline is
+// 1-based); with the rolling cache off it also refills forward from there. Only an empty track starts
+// a load there.
 void gfcTrackManager::startLoadingSequenceAt(int whichOne, int startFrame)
 {
 	if(!checkBounds(whichOne,"startLoadingSequenceAt"))
 		return;
 	if(!sequences[whichOne].isEmpty())
 	{
-		playbackManager.setCurrentFrame(startFrame+1);
+		playbackManager.loadFromHere(startFrame+1);
 		return;
 	}
 	sequences[whichOne].startLoading(startFrame);
@@ -550,7 +551,7 @@ void gfcTrackManager::startLoadingAllAt(int startFrame)
 	for(int i=0;i<GFC_MAX_SEQUENCES;i++)
 		anyLoaded|=!sequences[i].isEmpty();
 	if(anyLoaded)
-		playbackManager.setCurrentFrame(startFrame+1);
+		playbackManager.loadFromHere(startFrame+1);
 	bool started=false;
 	for(int i=0;i<GFC_MAX_SEQUENCES;i++){
 		if(!sequences[i].isEmpty())

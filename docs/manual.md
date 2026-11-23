@@ -229,9 +229,11 @@ The Timeline panel has a row of transport controls at the top, the timeline bar 
 
 **Current Frame (F)** — Shows the current timeline frame. Type a frame number to jump to it.
 
-**In/Out** — The **In** and **Out** boxes set the range of the timeline that plays. This is helpful if you only want to see a certain range of frames at a time. It is different from loading only a range of frames: you can change In and Out at any time without unloading or reloading anything. The timeline bar and the track lanes always show the In–Out range across their full width, so narrowing the range zooms in. You can also press `I` and `O` to set the In and Out points at the current frame, and `Shift+I` and `Shift+O` to reset them to the ends of the timeline. `Alt+I` sets the In point and loads all tracks from that frame. Whenever you load a sequence, In and Out are reset to fit it.
+**In/Out** — The **In** and **Out** boxes set the range of the timeline that plays. This is helpful if you only want to see a certain range of frames at a time. It is different from loading only a range of frames: you can change In and Out at any time without unloading or reloading anything. The timeline bar and the track lanes always show the In–Out range across their full width, so narrowing the range zooms in. You can also press `I` and `O` to set the In and Out points at the current frame, and `Shift+I` and `Shift+O` to reset them to the ends of the timeline. `Alt+I` sets the In point; with the rolling cache off (below) every track also reloads from that frame until memory is full. Whenever you load a sequence, In and Out are reset to fit it.
 
 **The Timeline** — Click or drag on the timeline bar to jump or scrub to any frame. The orange line is the playhead.
+
+**Rolling cache** — The circular-arrow button at the right of the transport row turns the rolling cache on and off; the setting is remembered between launches. **On** (default): frames load around the playhead and unload behind it, so a clip longer than memory plays end to end. **Off**: every track loads from the In point until memory is full and keeps those frames, and playback follows the loop mode over what is loaded. `Alt`+click on the timeline or a lane, or `Alt+I`, loads from another frame.
 
 **Track Lanes** — Under the timeline there is one lane for each track.
 

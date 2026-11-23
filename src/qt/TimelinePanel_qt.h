@@ -45,6 +45,7 @@ signals:
     // already clamped to [from, to]; the parent panel forwards it to
     // playbackManager.setCurrentFrame.
     void seek(int frame);
+    void loadFrom(int frame);   // Alt/Option-click: load every track from this frame
 
 protected:
     void paintEvent(QPaintEvent* e) override;
@@ -54,6 +55,7 @@ protected:
 private:
     int frameFromX(int x) const;
     int xFromFrame(int frame) const;
+    bool loadFromClick_ = false;   // an Alt-click press: the drag after it does not scrub
 
     int from_ = 1;
     int to_ = 1;
@@ -148,6 +150,7 @@ private:
     QSpinBox* outSpin_ = nullptr;
     QDoubleSpinBox* fpsSpin_ = nullptr;
     QPushButton* thumbsBtn_ = nullptr;
+    QPushButton* rollingCache_ = nullptr;   // rolling cache on/off (circular-arrow toggle)
 
     // Last-seen playback values; refreshFromPlayback compares against
     // these and skips widget setters when nothing changed. Without this
