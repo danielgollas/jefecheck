@@ -5294,7 +5294,7 @@ QMessageBox* MainWindow_Qt::makeAboutBox() {
                    "<p style='font-size:small;color:gray'>Built %2 %3</p>")
                 // Hardcoded copy of JEFE_VERSION (gfcStructures.h pulls glad, which can't share a TU with QtGui on macOS);
                 // keep in sync with that define and CMakeLists.txt's project() VERSION.
-                .arg(QStringLiteral("1.7.0"))
+                .arg(QStringLiteral("2.0.0"))
                 .arg(QStringLiteral(__DATE__))
                 .arg(QStringLiteral(__TIME__)));
     return box;

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 JefeCheck is a professional C++ video frame processing and playback application for color correction, effects processing, and real-time playback of digital cinema content. Originally written 2006-2014, modernized for open-source release in 2026 under the GNU General Public License, version 2 or (at your option) any later version (distributed binaries are effectively GPLv3; project-own sources carry `// SPDX-License-Identifier: GPL-2.0-or-later`).
 
 **GitHub:** github.com/danielgollas/jefecheck
-**Version:** 1.7.0
+**Version:** 2.0.0
 **Default branch:** `main`
 
 ## Build System
@@ -94,7 +94,7 @@ The Qt build's load flow has two paths:
 - **Cmd+L → Load Sequence Manager** (`LoadWindowDialog_Qt`). Modal with four track strips. Edits live-update each track's preview frame; while the modal is open, all plates render their tracks' previews (deterministic — `viewport.loadWindowOpen_` is the single source of `gfcPlate::showPreview`). "Load All" closes the modal and fires `trackManager.startLoadingSequence` per non-empty track.
 - **Cmd+O → Quick Load…** and **drag-drop on viewport**: existing fast path. `jefe::qt::loadFileIntoPlate` runs immediately; no preview indirection.
 
-`Cmd+Shift+O` is reserved for the future Open Session feature (FLTK convention) and is intentionally unbound today.
+`Cmd+Shift+O` opens a saved session (File → Open Session…, FLTK convention).
 
 OIIO loader resize uses `OIIO::ImageBufAlgo::resize` with `Filter2D::create` so the Preferences → Engine → Default decode filter setting (`nearest` / `triangle` / `mitchell` / `lanczos3`, default `lanczos3`) actually controls scale quality.
 
@@ -232,7 +232,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 
 - **Build CI** (`.github/workflows/build.yml`): Runs on push to `main` and all PRs targeting `main`. Builds on macOS (ARM64), Linux (x64 Ubuntu 24.04), and Windows (x64 MSYS2/MinGW).
 - **Release CI** (`.github/workflows/release.yml`): Triggers on `v*` tags. Builds Release binaries on all 3 platforms, packages with FX plugins and fonts, publishes to GitHub Releases via `softprops/action-gh-release`.
-- **To publish a release:** `git tag v1.7.0 && git push origin v1.7.0`
+- **To publish a release:** `git tag v2.0.0 && git push origin v2.0.0`
 - **Artifacts:** `jefecheck-linux-x64.tar.gz`, `jefecheck-macos-arm64.tar.gz`, `jefecheck-windows-x64.zip`
 
 ## Documentation
@@ -247,5 +247,5 @@ docs/manual-images/     Screenshots (2014, need updating)
 - No automated test suite exists.
 - The `gfc` prefix on classes stands for the project's internal namespace convention.
 - Always initialize GL object handles to 0 in constructors (uninitialized handles crash `glDeleteObjectARB`). GLAD must be initialized before any GL call — done on first `GlViewport::draw()`.
-- Version string lives in three places: `src/gfcStructures.h` (`JEFE_VERSION`), `CMakeLists.txt` (`project VERSION`), and `src/aboutWindow.cxx`/`.fl` (splash label).
+- Version string lives in three places: `src/gfcStructures.h` (`JEFE_VERSION`), `CMakeLists.txt` (`project VERSION`), and the About box in `src/qt/MainWindow_qt.cpp` (a hardcoded copy, because that TU cannot include `gfcStructures.h`). The packaging scripts default to the same number.
 - Legacy branches (`floatEXR`, `gfcTrackIntroduced`, `subsequence`, `trackloading`) contain incomplete refactoring from the original development period.
