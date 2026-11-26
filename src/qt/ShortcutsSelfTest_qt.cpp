@@ -1458,8 +1458,8 @@ QStringList helpLabelProblems(Registry& reg, const QList<HelpLine>& lines, QStri
             const QList<QKeySequence> ks = keysOfId(id);
             if (ks.isEmpty()) missing << id;
             for (const QKeySequence& k : ks)
-                if (!showsKey(l.text, k.toString(QKeySequence::PortableText)))
-                    missing << id + "=" + k.toString(QKeySequence::PortableText);
+                if (!showsKey(l.text, helpKeyText(k)))
+                    missing << id + "=" + helpKeyText(k);
         }
         for (const QStringList& range : l.ranges) {
             if (shownOut) *shownOut << range;
@@ -1473,9 +1473,9 @@ QStringList helpLabelProblems(Registry& reg, const QList<HelpLine>& lines, QStri
                         int(ks[j][0].key()) != int(first[j][0].key()) + i)
                         missing << QStringLiteral("range %1 not a run at %2").arg(range.first(), range[i]);
                 }
-                const QString lastName = QKeySequence(last[j][0].key()).toString(QKeySequence::PortableText);
-                if (!showsKey(l.text, first[j].toString(QKeySequence::PortableText), "-" + lastName))
-                    missing << QStringLiteral("range %1=%2-%3").arg(range.first(), first[j].toString(QKeySequence::PortableText), lastName);
+                const QString lastName = helpKeyText(QKeySequence(last[j][0].key()));
+                if (!showsKey(l.text, helpKeyText(first[j]), "-" + lastName))
+                    missing << QStringLiteral("range %1=%2-%3").arg(range.first(), helpKeyText(first[j]), lastName);
             }
         }
     }
@@ -1485,12 +1485,7 @@ QStringList helpLabelProblems(Registry& reg, const QList<HelpLine>& lines, QStri
         const QKeyCombination b = base[0], e = extra[0];
         const Qt::KeyboardModifiers added = e.keyboardModifiers() & ~b.keyboardModifiers();
         if (b.key() != e.key() || !added || (b.keyboardModifiers() & ~e.keyboardModifiers())) return QString();
-        QString out;
-        if (added & Qt::ControlModifier) out += "+Ctrl";
-        if (added & Qt::MetaModifier) out += "+Meta";
-        if (added & Qt::AltModifier) out += "+Alt";
-        if (added & Qt::ShiftModifier) out += "+Shift";
-        return out;
+        return helpModifierText(added);
     };
     for (const HelpLine& l : lines)
         for (const QString& id : l.extraIds) {
@@ -1501,7 +1496,7 @@ QStringList helpLabelProblems(Registry& reg, const QList<HelpLine>& lines, QStri
             for (const QKeySequence& k : ks) {
                 const QString d = base.isEmpty() ? QString() : delta(base.first(), k);
                 // Each key form opens a note or follows " or ", and is followed by " = " or " or ".
-                const QString form = d.isEmpty() ? k.toString(QKeySequence::PortableText) : d;
+                const QString form = d.isEmpty() ? helpKeyText(k) : d;
                 const QRegularExpression re(QStringLiteral(R"((?:\(|, | or ))") + QRegularExpression::escape(form) +
                                             QStringLiteral(R"((?: = | or ))"));
                 if (!re.match(l.text).hasMatch()) missing << id + "=" + form;
@@ -1560,6 +1555,14 @@ void testHelpText(Registry& reg)
                                     shown.contains("playback.play-pause"),
               QStringLiteral("lines=%1 missing=%2 unplaced=%3 unknown=%4")
                   .arg(lines.size()).arg(missing.join(','), unplaced.join(','), unknown.join(',')));
+#ifdef Q_OS_MACOS
+        {   // A Mac has no Ctrl or Meta key: the overlay says Cmd and Control (Option for Alt).
+            static const QRegularExpression portableMods(QStringLiteral(R"(\b(Ctrl|Meta)\+|\bAlt\+(?!LMB))"));
+            const QRegularExpressionMatch m = portableMods.match(text);
+            const QByteArray wn = QStringLiteral("help-mac-key-words-%1").arg(preset).toUtf8();
+            check(wn.constData(), !m.hasMatch(), m.hasMatch() ? text.mid(std::max(0, int(m.capturedStart()) - 30), 60) : QString());
+        }
+#endif
         if (qEnvironmentVariableIsSet("JEFE_SHORTCUTS_DUMP"))
             std::printf("---- help text (%s) ----\n%s\n---- end ----\n", preset, text.toUtf8().constData());
     }
@@ -1568,12 +1571,15 @@ void testHelpText(Registry& reg)
     QStringList missing;
     // The keys the old hand-written overlay listed, now from the registry, and the new run lines.
     for (const char* want : {"Toggle Fullscreen - F11 or ", "Step one frame (back / forward) - Left / Right",
-                             "Play Direction (reverse / forward) - , / . (or < / >)", "Preferences - Ctrl+P or Ctrl+,",
+                             "Play Direction (reverse / forward) - , / . (or < / >)",
                              "Show Track A-D - 1-4",
-#ifdef Q_OS_MACOS
-                             "CC favourite apply / save - Shift+1-5 / Meta+Shift+1-5",
-                             "FX favourite load / append / save - Shift+F1-F5 / Alt+F1-F5 / Ctrl+Shift+F1-F5",
+#ifdef Q_OS_MACOS  // the Mac's key names: Cmd, Control, Option
+                             "Preferences - Cmd+P or Cmd+,",
+                             "Toggle Fullscreen - F11 or Control+Cmd+F",
+                             "CC favourite apply / save - Shift+1-5 / Control+Shift+1-5",
+                             "FX favourite load / append / save - Shift+F1-F5 / Option+F1-F5 / Shift+Cmd+F1-F5",
 #else
+                             "Preferences - Ctrl+P or Ctrl+,",
                              "CC favourite apply / save - Shift+1-5 / Ctrl+Shift+1-5",
                              "FX favourite load / append / save - Shift+F1-F5 / Ctrl+F1-F5 / Ctrl+Shift+F1-F5",
 #endif
@@ -1595,7 +1601,7 @@ void testHelpText(Registry& reg)
     const QList<HelpLine> broken = buildHelpLines(reg);
     const QString brokenText = buildHelpText(reg);
     const QStringList brokenProblems = helpLabelProblems(reg, broken, nullptr);
-    const QString saveRun = QStringLiteral("CC favourite save - %1-5").arg(reg.key("color.cc-fav-save-1").toString(QKeySequence::PortableText));
+    const QString saveRun = QStringLiteral("CC favourite save - %1-5").arg(helpKeyText(reg.key("color.cc-fav-save-1")));
     const bool brokenOk = !brokenText.contains("apply / save") && brokenText.contains(" / Shift+9 / ") &&
                           brokenText.contains(saveRun) && brokenProblems.isEmpty();
     check("help-run-broken", brokenOk,
@@ -1606,7 +1612,7 @@ void testHelpText(Registry& reg)
     // gfcPlateManager's fallback helpMessage, plus the brought-back 1.7 commands).
     check("help-fits", maxLines <= 60, QStringLiteral("lines=%1").arg(maxLines));
     check("help-all-plates-suffix",
-          text.contains(QStringLiteral("Fit to Screen - %1  (+Shift = all plates)").arg(reg.key("plate.fit").toString(QKeySequence::PortableText))),
+          text.contains(QStringLiteral("Fit to Screen - %1  (+Shift = all plates)").arg(helpKeyText(reg.key("plate.fit")))),
           QString());
 
     reg.setOverride("inout.set-in", QKeySequence("K"));
@@ -1621,8 +1627,8 @@ void testHelpText(Registry& reg)
     QString inLine;
     for (const HelpLine& l : buildHelpLines(reg))
         if (l.text.startsWith("Set IN Point")) inLine = l.text;
-    const QString goIn = reg.key("inout.go-in").toString(QKeySequence::PortableText);
-    const QString resetIn = reg.key("inout.reset-in").toString(QKeySequence::PortableText);
+    const QString goIn = helpKeyText(reg.key("inout.go-in"));
+    const QString resetIn = helpKeyText(reg.key("inout.reset-in"));
     check("help-unbound-base-keeps-extras",
           !goIn.isEmpty() && inLine.contains(goIn + " = go to") && inLine.contains(resetIn + " = timeline start") &&
               !inLine.contains("Set IN Point - I"),

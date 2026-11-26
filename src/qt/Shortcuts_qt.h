@@ -193,6 +193,11 @@ QString buildHelpText(const Registry& reg);
 struct HelpLine { QString text; QStringList ids; QStringList extraIds; QList<QStringList> ranges; };
 QList<HelpLine> buildHelpLines(const Registry& reg);
 QStringList helpPlacedIds();
+// A key as the overlay names it: PortableText ("Ctrl+Alt+F"), except on macOS, where the
+// modifiers are the Mac's words in Apple's order ("Option+Cmd+F", "Control+Shift+1"; Qt's Ctrl
+// is Cmd there and Meta the Control key). helpModifierText gives "+Option+Shift" for a set.
+QString helpKeyText(const QKeySequence& k);
+QString helpModifierText(Qt::KeyboardModifiers mods);
 
 // "Play / Pause (Space)"; just `text` when the command is unbound.
 QString tooltipWithKey(const QString& text, const char* id);

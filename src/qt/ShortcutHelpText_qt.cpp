@@ -36,9 +36,9 @@ bool isHold(const Registry& reg, const char* id)
     return false;
 }
 
-// Every current key of a command (or the hold key), in registry order. PortableText
-// ("Ctrl+Alt+F", "Left"): the overlay's glyph atlas has no arrow or macOS modifier symbols,
-// so native text ("⌥⌘F", "←") would draw as gaps.
+// Every current key of a command (or the hold key), in registry order. Named by helpKeyText
+// ("Ctrl+Alt+F", "Left"; on macOS "Option+Cmd+F"): the overlay's glyph atlas has no arrow or
+// macOS modifier symbols, so native text ("⌥⌘F", "←") would draw as gaps.
 QList<QKeySequence> keysOf(const Registry& reg, const char* id)
 {
     if (isHold(reg, id)) {
@@ -48,7 +48,7 @@ QList<QKeySequence> keysOf(const Registry& reg, const char* id)
     return reg.keys(id);
 }
 
-QString portable(const QKeySequence& k) { return k.toString(QKeySequence::PortableText); }
+QString portable(const QKeySequence& k) { return helpKeyText(k); }
 
 QString labelOf(const Registry& reg, const char* id)
 {
@@ -64,17 +64,12 @@ QString modifierDelta(const QKeySequence& base, const QKeySequence& extra)
     if (b.key() != e.key()) return {};
     const Qt::KeyboardModifiers added = e.keyboardModifiers() & ~b.keyboardModifiers();
     if (!added || (b.keyboardModifiers() & ~e.keyboardModifiers())) return {};
-    QString out;
-    if (added & Qt::ControlModifier) out += QStringLiteral("+Ctrl");
-    if (added & Qt::MetaModifier) out += QStringLiteral("+Meta");
-    if (added & Qt::AltModifier) out += QStringLiteral("+Alt");
-    if (added & Qt::ShiftModifier) out += QStringLiteral("+Shift");
-    return out;
+    return helpModifierText(added);
 }
 
 // Returns the line text, or empty when one of the item's commands is unbound (a one-command
 // item with extras keeps its line for the extras still bound: "Set IN Point - none  (...)").
-// One command: all its keys, "F11 or Meta+Ctrl+F". Several: their first keys joined with
+// One command: all its keys, "F11 or Meta+Ctrl+F" (macOS: "F11 or Control+Cmd+F"). Several: their first keys joined with
 // " / ", then any second keys in brackets, "Left / Right (or X / C)".
 QString itemText(const Registry& reg, const Item& it, QStringList* idsOut, QStringList* extraOut)
 {
@@ -294,6 +289,46 @@ QList<Section> sections()
 }
 
 }  // namespace
+
+// The modifier names the overlay uses, in the platform's order. macOS: words for the keys a Mac
+// has (Ctrl is Cmd there, Meta the Control key, Alt Option), Control, Option, Shift, Cmd as
+// Apple orders them. Elsewhere: PortableText's names and order.
+namespace {
+struct ModName { Qt::KeyboardModifier mod; const char* name; };
+#ifdef Q_OS_MACOS
+constexpr ModName kModNames[] = {{Qt::MetaModifier, "Control"}, {Qt::AltModifier, "Option"},
+                                 {Qt::ShiftModifier, "Shift"}, {Qt::ControlModifier, "Cmd"}};
+#else
+constexpr ModName kModNames[] = {{Qt::ControlModifier, "Ctrl"}, {Qt::MetaModifier, "Meta"},
+                                 {Qt::AltModifier, "Alt"}, {Qt::ShiftModifier, "Shift"}};
+#endif
+}  // namespace
+
+QString helpModifierText(Qt::KeyboardModifiers mods)
+{
+    QString out;
+    for (const ModName& m : kModNames)
+        if (mods & m.mod) out += QLatin1Char('+') + QLatin1String(m.name);
+    return out;
+}
+
+QString helpKeyText(const QKeySequence& k)
+{
+#ifdef Q_OS_MACOS
+    // Built from the modifier flags and the bare key's name (never a text replace), so a key or
+    // command name that contains "Ctrl" or "Alt" is left alone.
+    QStringList parts;
+    for (int i = 0; i < k.count(); ++i) {
+        const QKeyCombination c = k[i];
+        const QString key = QKeySequence(c.key()).toString(QKeySequence::PortableText);
+        const QString mods = helpModifierText(c.keyboardModifiers());
+        parts << (mods.isEmpty() ? key : mods.mid(1) + QLatin1Char('+') + key);
+    }
+    return parts.join(QStringLiteral(", "));
+#else
+    return k.toString(QKeySequence::PortableText);
+#endif
+}
 
 QList<HelpLine> buildHelpLines(const Registry& reg)
 {
