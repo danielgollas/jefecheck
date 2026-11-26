@@ -5,6 +5,7 @@
 #include "FXParamEditors_qt.h"      // kFXModifiedColor: the FX panel's "changed" orange
 #include "FlowLayout_qt.h"
 #include "SequenceLoadBridge_qt.h"  // getDefaultBrowsePath
+#include "ShortcutKeyboard_qt.h"
 #include "UiMetrics_qt.h"
 
 #include <QAbstractItemView>
@@ -24,7 +25,10 @@
 #include <QStandardItemModel>
 #include <QStyledItemDelegate>
 #include <QTreeView>
+#include <QTreeWidget>
 #include <QVBoxLayout>
+
+#include <memory>
 
 namespace sc = jefe::shortcuts;
 namespace ui = jefe::qt::ui;
@@ -84,6 +88,26 @@ QList<PanelKey> panelKeys()
 QString native(const QKeySequence& k) { return k.toString(QKeySequence::NativeText); }
 
 QByteArray idBytes(const QString& id) { return id.toUtf8(); }
+
+QString modifierName(Qt::KeyboardModifier m)
+{
+#ifdef Q_OS_MACOS
+    switch (m) {  // Qt's Control is Cmd on macOS, Meta the Control key
+    case Qt::ShiftModifier: return QStringLiteral("Shift");
+    case Qt::MetaModifier: return QStringLiteral("Control");
+    case Qt::AltModifier: return QStringLiteral("Option");
+    case Qt::ControlModifier: return QStringLiteral("Command");
+    default: return {};
+    }
+#else
+    switch (m) {
+    case Qt::ShiftModifier: return QStringLiteral("Shift");
+    case Qt::ControlModifier: return QStringLiteral("Ctrl");
+    case Qt::AltModifier: return QStringLiteral("Alt");
+    default: return QStringLiteral("Meta");
+    }
+#endif
+}
 
 bool isModifierOnly(int key)
 {
@@ -326,13 +350,21 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     presetBar_ = makeBar(this, QStringLiteral("prefs.shortcuts.presetbar"), &presetBarText_, {sw, keep});
     outer->addWidget(presetBar_);
 
-    // The keyboard map's place, above the list; empty until it exists.
+    // The keyboard map, above the list.
     keymapSlot_ = new QWidget(this);
     keymapSlot_->setObjectName(QStringLiteral("prefs.shortcuts.keymapslot"));
     auto* slotLayout = new QVBoxLayout(keymapSlot_);
     slotLayout->setContentsMargins(0, 0, 0, 0);
-    keymapSlot_->hide();
+    slotLayout->setSpacing(ui::kGapTight);
     outer->addWidget(keymapSlot_);
+
+    // Search and list on the left, the clicked key's layers on the right.
+    auto* lower = new QHBoxLayout();
+    ui::applyRowMetrics(lower);
+    auto* listColumn = new QVBoxLayout();
+    listColumn->setContentsMargins(0, 0, 0, 0);
+    listColumn->setSpacing(ui::kGap);
+    lower->addLayout(listColumn, 1);
 
     search_ = new QLineEdit(this);
     search_->setObjectName(QStringLiteral("prefs.shortcuts.search"));
@@ -340,7 +372,7 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     search_->setClearButtonEnabled(true);
     search_->setToolTip(tr("Filter the list by command name or key."));
     search_->installEventFilter(this);  // Escape clears it, Return goes to the list (not Done / Cancel)
-    outer->addWidget(search_);
+    listColumn->addWidget(search_);
 
     model_ = new QStandardItemModel(this);
     model_->setHorizontalHeaderLabels({tr("Command"), tr("Key"), tr("Second key"), QString()});
@@ -365,7 +397,33 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     header->resizeSection(kColKey0, 120);
     header->resizeSection(kColKey1, 100);
     header->resizeSection(kColReset, ui::kControlH);
-    outer->addWidget(list_, 1);
+    listColumn->addWidget(list_, 1);
+
+    auto* info = new QWidget(this);
+    info->setObjectName(QStringLiteral("prefs.shortcuts.keyinfo"));
+    info->setMinimumWidth(200);
+    info->setMaximumWidth(260);
+    auto* infoColumn = new QVBoxLayout(info);
+    infoColumn->setContentsMargins(0, 0, 0, 0);
+    infoColumn->setSpacing(ui::kGapTight);
+    keyInfoTitle_ = new QLabel(info);
+    keyInfoTitle_->setObjectName(QStringLiteral("prefs.shortcuts.keyinfo.title"));
+    keyInfoTitle_->setWordWrap(true);
+    infoColumn->addWidget(keyInfoTitle_);
+    keyInfo_ = new QTreeWidget(info);
+    keyInfo_->setObjectName(QStringLiteral("prefs.shortcuts.keyinfo.list"));
+    keyInfo_->setAccessibleName(tr("Key on every modifier layer"));
+    keyInfo_->setColumnCount(2);
+    keyInfo_->setHeaderHidden(true);
+    keyInfo_->setRootIsDecorated(false);
+    keyInfo_->setUniformRowHeights(true);
+    keyInfo_->setSelectionMode(QAbstractItemView::SingleSelection);
+    keyInfo_->setToolTip(tr("Click a command to find it in the list."));
+    keyInfo_->header()->setStretchLastSection(true);
+    keyInfo_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    infoColumn->addWidget(keyInfo_, 1);
+    lower->addWidget(info);
+    outer->addLayout(lower, 1);
 
     auto* replace = new QPushButton(tr("Replace"));
     replace->setObjectName(QStringLiteral("prefs.shortcuts.conflict.replace"));
@@ -383,6 +441,7 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
 
     buildRows();
     refresh();
+    buildKeymap();
 
     connect(&reg_, &sc::Registry::changed, this, [this] { refresh(); });
     connect(search_, &QLineEdit::textChanged, this, [this] { applyFilter(); });
@@ -704,6 +763,108 @@ void ShortcutsPage_Qt::applyFilter()
             any = any || match;
         }
         list_->setRowHidden(r, QModelIndex(), !any);
+    }
+}
+
+void ShortcutsPage_Qt::buildKeymap()
+{
+    auto* slotLayout = static_cast<QVBoxLayout*>(keymapSlot_->layout());
+
+    // "Modifiers [None] [⇧] [⌃] [⌥] [⌘]" and the category legend; wraps when narrow.
+    auto* bar = new QWidget(keymapSlot_);
+    bar->setObjectName(QStringLiteral("prefs.shortcuts.keymap.bar"));
+    auto* flow = new FlowLayout_Qt(bar, 0, ui::kGap, ui::kGapTight);
+    auto* label = new QLabel(tr("Modifiers"), bar);
+    flow->addWidget(label);
+    auto* none = new QPushButton(tr("None"), bar);
+    none->setObjectName(QStringLiteral("prefs.shortcuts.keymap.layer.none"));
+    none->setCheckable(true);
+    none->setChecked(true);
+    none->setToolTip(tr("Show the keys pressed with no modifier."));
+    ui::useWidgetRect(none);
+    flow->addWidget(none);
+    struct Toggle { Qt::KeyboardModifier mod; QPushButton* button; };
+    auto toggles = std::make_shared<QList<Toggle>>();
+    for (Qt::KeyboardModifier m : sc::layerModifiers()) {
+        auto* b = new QPushButton(sc::modifierGlyph(m), bar);
+        QString leaf;
+        switch (m) {
+        case Qt::ShiftModifier: leaf = QStringLiteral("shift"); break;
+        case Qt::ControlModifier: leaf = QStringLiteral("ctrl"); break;
+        case Qt::AltModifier: leaf = QStringLiteral("alt"); break;
+        default: leaf = QStringLiteral("meta"); break;
+        }
+        b->setObjectName(QStringLiteral("prefs.shortcuts.keymap.layer.") + leaf);
+        b->setCheckable(true);
+        b->setToolTip(tr("Show the keys pressed with %1 (combine toggles for more than one). "
+                         "Holding the key while this page has focus does the same.")
+                          .arg(modifierName(m)));
+        ui::useWidgetRect(b);
+        flow->addWidget(b);
+        toggles->push_back({m, b});
+    }
+    for (sc::Category c : sc::allCategories()) {
+        auto* chip = new QLabel(bar);
+        chip->setTextFormat(Qt::RichText);
+        chip->setText(QStringLiteral("<span style=\"color:%1\">&#9632;</span> %2")
+                          .arg(sc::categoryColor(c).name(), sc::categoryDisplayName(c).toHtmlEscaped()));
+        flow->addWidget(chip);
+    }
+    ui::keepMinHeightForWidth(bar);
+    slotLayout->addWidget(bar);
+
+    keymap_ = new ShortcutKeyboard_Qt(keymapSlot_);
+    keymap_->setModifierScope(this);  // held modifiers count while the list or the search box has focus
+    slotLayout->addWidget(keymap_);
+
+    auto sync = [none, toggles](Qt::KeyboardModifiers shown) {
+        none->setChecked(shown == Qt::NoModifier);
+        for (const Toggle& t : *toggles) t.button->setChecked(shown & t.mod);
+    };
+    connect(keymap_, &ShortcutKeyboard_Qt::layerChanged, this, sync);
+    connect(none, &QPushButton::clicked, this, [this, sync] {
+        keymap_->setLayer(Qt::NoModifier);
+        sync(keymap_->layer());
+    });
+    for (const Toggle& t : *toggles)
+        connect(t.button, &QPushButton::clicked, this, [this, sync, m = t.mod] {
+            keymap_->setLayer(keymap_->toggledLayer() ^ m);
+            sync(keymap_->layer());
+        });
+    connect(keymap_, &ShortcutKeyboard_Qt::keyClicked, this, [this](Qt::Key k) { showKeyInfo(k); });
+    connect(&reg_, &sc::Registry::changed, this, [this] {
+        if (keymap_->selectedKey() != Qt::Key_unknown) showKeyInfo(keymap_->selectedKey());
+    });
+    connect(keyInfo_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* item, int) {
+        const QString id = item ? item->data(0, Qt::UserRole).toString() : QString();
+        if (!id.isEmpty()) selectCommand(id);
+    });
+    showKeyInfo(Qt::Key_unknown);
+}
+
+void ShortcutsPage_Qt::showKeyInfo(Qt::Key key)
+{
+    keyInfo_->clear();
+    if (key == Qt::Key_unknown) {
+        keyInfoTitle_->setText(tr("Click a key on the map to see what it does with each modifier."));
+        return;
+    }
+    QString name;
+    for (const sc::KeyCap& c : sc::ansiLayout())
+        if (c.key == key) { name = c.label; break; }
+    keyInfoTitle_->setText(tr("Key: %1").arg(name));
+    const QList<ShortcutKeyboard_Qt::Binding> bindings = keymap_->bindingsFor(key);
+    for (const ShortcutKeyboard_Qt::Binding& b : bindings) {
+        auto* item = new QTreeWidgetItem(keyInfo_);
+        item->setText(0, native(b.key) + (b.hold ? tr(" hold") : QString()));
+        item->setText(1, b.name);
+        item->setToolTip(1, b.name);
+        item->setData(0, Qt::UserRole, b.id);
+    }
+    if (bindings.isEmpty()) {
+        auto* item = new QTreeWidgetItem(keyInfo_);
+        item->setText(1, tr("Nothing on this key"));
+        item->setFlags(Qt::NoItemFlags);
     }
 }
 

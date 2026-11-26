@@ -24,6 +24,8 @@ class QPushButton;
 class QStandardItem;
 class QStandardItemModel;
 class QTreeView;
+class QTreeWidget;
+class ShortcutKeyboard_Qt;
 
 // The in-place key capture: the first key with its modifiers is the key. Escape cancels;
 // Backspace or Delete with nothing captured unbinds; modifier-only and unknown keys are
@@ -57,8 +59,9 @@ public:
 
     // Selects (and scrolls to) a command or hold-key row, clearing a search that hides it.
     void selectCommand(const QString& id);
-    // Empty and hidden; the keyboard map goes here, above the list.
+    // The keyboard map above the list: modifier layer toggles, category legend, the map.
     QWidget* keymapSlot() const { return keymapSlot_; }
+    ShortcutKeyboard_Qt* keymap() const { return keymap_; }
 
     // Import / export without a file dialog (the buttons call these after asking for a path).
     bool importFile(const QString& path);
@@ -111,6 +114,8 @@ private:
     bool handleEscape();     // true when Escape cancelled something on the page
     void focusFirstMatch();
     void onPresetActivated(int index);
+    void buildKeymap();
+    void showKeyInfo(Qt::Key key);  // the side panel: what `key` does on every modifier layer
     void showNotice(const QString& text, bool error);
     QString nameOf(const QString& id) const;
     QString testPath() const;  // JEFECHECK_SHORTCUTS_FILE, for UI tests: skips the file dialog
@@ -125,6 +130,9 @@ private:
     QLabel* presetBarText_ = nullptr;
     QString pendingPreset_;
     QWidget* keymapSlot_ = nullptr;
+    ShortcutKeyboard_Qt* keymap_ = nullptr;
+    QLabel* keyInfoTitle_ = nullptr;
+    QTreeWidget* keyInfo_ = nullptr;
     QLineEdit* search_ = nullptr;
     QTreeView* list_ = nullptr;
     QStandardItemModel* model_ = nullptr;

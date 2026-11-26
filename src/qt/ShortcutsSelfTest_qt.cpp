@@ -3,22 +3,35 @@
 // (QAction) but no window.
 #include "Shortcuts_qt.h"
 #include "PreferencesWindow_qt.h"
+#include "ShortcutKeyboard_qt.h"
+#include "ShortcutsPage_qt.h"
 
 #include <QAction>
+#include <QApplication>
+#include <QImage>
+#include <QKeyEvent>
+#include <QLineEdit>
+#include <QMouseEvent>
+#include <QPushButton>
+#include <QTreeView>
+#include <QTreeWidget>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QRegularExpression>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QSettings>
 #include <QUuid>
 #include <QWidget>
 #include <QtGlobal>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <iterator>
 #include <memory>
@@ -1650,6 +1663,227 @@ void testHelpText(Registry& reg)
     reg.reset();
 }
 
+// ---- Keyboard map (ShortcutKeyboard_Qt) -----------------------------------------------------
+
+double relLuminance(const QColor& c)
+{
+    auto ch = [](double v) { return v <= 0.03928 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * ch(c.redF()) + 0.7152 * ch(c.greenF()) + 0.0722 * ch(c.blueF());
+}
+double contrast(const QColor& a, const QColor& b)
+{
+    double x = relLuminance(a), y = relLuminance(b);
+    if (x < y) std::swap(x, y);
+    return (x + 0.05) / (y + 0.05);
+}
+
+void testKeymapLayout(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    const QList<KeyCap> caps = ansiLayout();
+    QSet<int> onMap;
+    for (const KeyCap& c : caps) onMap.insert(c.key);
+    QStringList missing;
+    auto need = [&](const QKeySequence& k, const char* id) {
+        if (k.isEmpty()) return;
+        // Qt::Key_Exit: the platform's Quit key on a platform with no Quit shortcut (offscreen).
+        if (k[0].key() == Qt::Key_Exit) return;
+        Qt::Key cap = Qt::Key_unknown;
+        Qt::KeyboardModifiers mods;
+        if (!capForKey(k[0], &cap, &mods) || !onMap.contains(cap))
+            missing << QStringLiteral("%1:%2").arg(id, k.toString(QKeySequence::PortableText));
+    };
+    for (const Command& c : reg.commands()) {
+        for (const QKeySequence& k : c.editing) need(k, c.id);
+        for (const QKeySequence& k : c.classic) need(k, c.id);
+    }
+    for (const HoldKey& h : reg.holdKeys())
+        for (Qt::Key k : {h.editing, h.classic})
+            if (k != Qt::Key_unknown) need(QKeySequence(k), h.id);
+    QStringList overlaps;
+    for (int i = 0; i < caps.size(); ++i)
+        for (int j = i + 1; j < caps.size(); ++j) {
+            const QRectF a(caps[i].x, caps[i].y, caps[i].w, 1.0), b(caps[j].x, caps[j].y, caps[j].w, 1.0);
+            if (a.adjusted(0.01, 0.01, -0.01, -0.01).intersects(b.adjusted(0.01, 0.01, -0.01, -0.01)))
+                overlaps << caps[i].label + "/" + caps[j].label;
+        }
+    check("keymap-layout", caps.size() > 70 && missing.isEmpty() && overlaps.isEmpty(),
+          QStringLiteral("caps=%1 missing=%2 overlaps=%3").arg(caps.size()).arg(missing.join(','), overlaps.join(',')));
+    reg.reset();
+}
+
+void testKeymapLayer(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    map.setLayer(Qt::NoModifier);
+    const QString none = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::ShiftModifier);
+    const QString shift = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::AltModifier);
+    const QString alt = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::AltModifier | Qt::ShiftModifier);
+    const QString shiftAlt = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::NoModifier);
+    const QString unbound = map.keyCaption(Qt::Key_U);
+    check("keymap-layer", none == "Set In" && shift == "Go to In" && alt == "Clear In" && !shiftAlt.isEmpty() &&
+                              unbound.isEmpty() && map.layer() == Qt::NoModifier,
+          QStringLiteral("none=%1 shift=%2 alt=%3 shift+alt=%4 U=%5").arg(none, shift, alt, shiftAlt, unbound));
+
+    // Under the 1.7 preset "<" (Shift+comma) is Play Reverse: it is on the comma key's Shift layer.
+    reg.pinPreset(QStringLiteral("classic"));
+    map.setLayer(Qt::ShiftModifier);
+    const QString lessThan = map.keyCaption(Qt::Key_Comma);
+    reg.pinPreset(QStringLiteral("editing"));
+    map.setLayer(Qt::NoModifier);
+    check("keymap-layer-symbol", lessThan == shortCommandName("playback.play-reverse", QString()), lessThan);
+
+    // An override moves the caption, and the map follows Registry::changed.
+    reg.setOverride("inout.set-in", QKeySequence("P"));
+    const QString moved = map.keyCaption(Qt::Key_P), left = map.keyCaption(Qt::Key_I);
+    reg.clearOverride("inout.set-in");
+    check("keymap-changed", moved == "Set In" && left.isEmpty() && map.keyCaption(Qt::Key_I) == "Set In",
+          QStringLiteral("P=%1 I=%2").arg(moved, left));
+
+    // Every layer of I, in layer order, for the side panel.
+    QStringList ids;
+    for (const ShortcutKeyboard_Qt::Binding& b : map.bindingsFor(Qt::Key_I)) ids << b.id;
+    check("keymap-bindings", ids == QStringList{"inout.set-in", "inout.go-in", "inout.reset-in", "inout.set-in-load"},
+          ids.join(','));
+    reg.reset();
+}
+
+void testKeymapHold(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    const bool bare = map.showsHoldMark(Qt::Key_W) && map.keyCaption(Qt::Key_W) == "Gamma";
+    map.setLayer(Qt::ShiftModifier);
+    const bool shifted = !map.showsHoldMark(Qt::Key_W);
+    map.setLayer(Qt::NoModifier);
+    const bool notHold = !map.showsHoldMark(Qt::Key_I);
+    check("keymap-hold", bare && shifted && notHold,
+          QStringLiteral("W=%1 bare=%2 shifted=%3 I=%4").arg(map.keyCaption(Qt::Key_W)).arg(bare).arg(shifted).arg(notHold));
+    reg.reset();
+}
+
+void testKeymapTints(Registry& reg)
+{
+    // One tint per category, all different, and #e0e0e0 text stays legible on each (WCAG AA 4.5).
+    QSet<QRgb> seen;
+    QStringList weak;
+    for (Category c : allCategories()) {
+        seen.insert(categoryTint(c).rgb());
+        const double r = contrast(categoryTint(c), QColor(0xe0, 0xe0, 0xe0));
+        if (r < 4.5) weak << QStringLiteral("%1=%2").arg(categoryDisplayName(c)).arg(r, 0, 'f', 1);
+    }
+    check("keymap-tints", allCategories().size() == 9 && seen.size() == 9 && weak.isEmpty(), weak.join(','));
+
+    // Painted: a bound key is tinted, an unbound one is not, and two categories differ.
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    const QImage img = map.grab().toImage();
+    const qreal dpr = img.devicePixelRatio();
+    auto sample = [&](Qt::Key k) {
+        const QRectF r = map.keyRect(k);
+        const QPointF p(r.right() - 3, r.top() + r.height() / 2);  // right edge: clear of the label
+        return img.pixelColor(int(p.x() * dpr), int(p.y() * dpr));
+    };
+    const QColor inout = sample(Qt::Key_I), unbound = sample(Qt::Key_U), playback = sample(Qt::Key_L);
+    check("keymap-paint", !img.isNull() && inout != unbound && inout != playback && playback != unbound &&
+                              inout.rgb() == categoryTint(Category::InOut).rgb(),
+          QStringLiteral("I=%1 U=%2 L=%3 tint=%4").arg(inout.name(), unbound.name(), playback.name(),
+                                                       categoryTint(Category::InOut).name()));
+    reg.reset();
+}
+
+// The map inside the page: click a key to inspect it, click a command there to select it in
+// the list, layer toggles, and held modifiers while a page widget has focus.
+void testKeymapPage(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutsPage_Qt page;
+    page.resize(700, 560);
+    auto* map = page.findChild<ShortcutKeyboard_Qt*>(QStringLiteral("prefs.shortcuts.keymap"));
+    auto* info = page.findChild<QTreeWidget*>(QStringLiteral("prefs.shortcuts.keyinfo.list"));
+    const bool found = map && info && !page.keymapSlot()->isHidden() && map->focusPolicy() == Qt::NoFocus;
+    check("keymap-in-page", found, QStringLiteral("map=%1 info=%2").arg(map != nullptr).arg(info != nullptr));
+    if (!found) { reg.reset(); return; }
+
+    // Click I: the side panel lists I on every layer.
+    Qt::Key clicked = Qt::Key_unknown;
+    QObject::connect(map, &ShortcutKeyboard_Qt::keyClicked, map, [&clicked](Qt::Key k) { clicked = k; });
+    const QPointF at = map->keyRect(Qt::Key_I).center();
+    QMouseEvent press(QEvent::MouseButtonPress, at, map->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(map, &press);
+    QStringList rows;
+    for (int i = 0; i < info->topLevelItemCount(); ++i) rows << info->topLevelItem(i)->text(1);
+    check("keymap-click", clicked == Qt::Key_I && map->selectedKey() == Qt::Key_I && info->topLevelItemCount() == 4 &&
+                              rows.value(0) == QStringLiteral("Set In Point at Playhead"),
+          rows.join(" | "));
+
+    // Clicking "Go to In Point" there selects it in the list.
+    QTreeWidgetItem* goIn = info->topLevelItemCount() > 1 ? info->topLevelItem(1) : nullptr;
+    if (goIn) emit info->itemClicked(goIn, 1);
+    const QString current = page.list()->currentIndex().siblingAtColumn(0).data(Qt::UserRole + 1).toString();
+    check("keymap-inspect-select", current == "inout.go-in", current);
+
+    // Layer toggles: Shift on, then None.
+    auto* shiftBtn = page.findChild<QPushButton*>(QStringLiteral("prefs.shortcuts.keymap.layer.shift"));
+    auto* noneBtn = page.findChild<QPushButton*>(QStringLiteral("prefs.shortcuts.keymap.layer.none"));
+    bool toggles = shiftBtn && noneBtn;
+    if (toggles) {
+        shiftBtn->click();
+        toggles = map->layer() == Qt::ShiftModifier && shiftBtn->isChecked() && !noneBtn->isChecked() &&
+                  map->keyCaption(Qt::Key_I) == "Go to In";
+        noneBtn->click();
+        toggles = toggles && map->layer() == Qt::NoModifier && noneBtn->isChecked() && !shiftBtn->isChecked();
+    }
+    check("keymap-toggles", toggles);
+
+    // Holding Alt with the search box focused shows the Alt layer; a letter still types.
+    QLineEdit* search = page.search();
+    QKeyEvent altDown(QEvent::KeyPress, Qt::Key_Alt, Qt::AltModifier);
+    QApplication::sendEvent(search, &altDown);
+    const bool held = map->layer() == Qt::AltModifier && map->keyCaption(Qt::Key_I) == "Clear In";
+    QKeyEvent altUp(QEvent::KeyRelease, Qt::Key_Alt, Qt::NoModifier);
+    QApplication::sendEvent(search, &altUp);
+    const bool released = map->layer() == Qt::NoModifier;
+    QKeyEvent x(QEvent::KeyPress, Qt::Key_X, Qt::NoModifier, QStringLiteral("x"));
+    QApplication::sendEvent(search, &x);
+    const bool typed = search->text() == "x";
+    search->clear();
+    check("keymap-held-modifier", held && released && typed,
+          QStringLiteral("held=%1 released=%2 typed=%3").arg(held).arg(released).arg(typed));
+
+    // JEFE_KEYMAP_SHOT=<png>: the page with I selected, for a look by eye (and <png>-shift.png).
+    const QString shot = qEnvironmentVariable("JEFE_KEYMAP_SHOT");
+    if (!shot.isEmpty()) {
+        QDir().mkpath(QFileInfo(shot).absolutePath());
+        page.resize(940 - 140 - 3 * 8, 660 - 3 * 8 - 24);  // the page inside the default 940 x 660 dialog
+        page.grab().save(shot);
+        map->setLayer(Qt::ShiftModifier);
+        QString shifted = shot;
+        shifted.replace(QStringLiteral(".png"), QStringLiteral("-shift.png"));
+        page.grab().save(shifted);
+        map->setLayer(Qt::NoModifier);
+        std::printf("SHORTCUTS-TEST keymap-shot %s\n", shot.toUtf8().constData());
+    }
+    reg.reset();
+}
+
 // JEFE_SHORTCUTS_DUMP=1: print both presets' keys (for the docs and reviews).
 void dumpPresets(Registry& reg)
 {
@@ -1783,6 +2017,11 @@ int shortcutsSelfTest()
     testMacosReserved(reg);
     testPresetsConflictFree(reg);
     testHelpText(reg);
+    testKeymapLayout(reg);
+    testKeymapLayer(reg);
+    testKeymapHold(reg);
+    testKeymapTints(reg);
+    testKeymapPage(reg);
     dumpPresets(reg);
     testTooltipGrep();
     reg.reset();

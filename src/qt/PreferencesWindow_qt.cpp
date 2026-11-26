@@ -61,7 +61,7 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     )");
     setAccessibleName("Preferences");
     setModal(true);
-    resize(640, 480);
+    resize(940, 660);  // room for the Shortcuts page's keyboard map above its list
 
     // Snapshot the live settings on open so Cancel can restore them verbatim
     // — pages below mutate `sett` directly as the user edits.
