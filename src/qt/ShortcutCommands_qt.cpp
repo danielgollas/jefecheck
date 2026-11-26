@@ -19,10 +19,11 @@ QKeySequence k(const char* portable)
     return QKeySequence::fromString(QString::fromLatin1(portable), QKeySequence::PortableText);
 }
 
-// The keys a QKeySequence::StandardKey maps to on this platform (at most two).
+// The key a QKeySequence::StandardKey maps to on this platform: only the first binding, as
+// QKeySequence(StandardKey) gives the menus today (later bindings are media keys on macOS).
 Keys standard(QKeySequence::StandardKey key)
 {
-    return QKeySequence::keyBindings(key).mid(0, 2);
+    return QKeySequence::keyBindings(key).mid(0, 1);
 }
 
 // Phase 1: both presets carry today's keys.

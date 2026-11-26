@@ -667,11 +667,16 @@ void testParity20(Registry& reg)
         };
         for (const ParityRow& r : kParity20)
             expect(r.scope, QKeySequence::fromString(QString::fromLatin1(r.key), QKeySequence::PortableText), r.id);
-        // Standard keys: whatever the platform maps them to (first two bindings).
+        // Standard keys: exactly the one key the menu constructs today (QKeySequence(StandardKey)).
         for (const auto& [standardKey, id] : {std::pair{QKeySequence::Save, "file.save-session"},
                                       std::pair{QKeySequence::Quit, "file.quit"}}) {
-            const QList<QKeySequence> ks = QKeySequence::keyBindings(standardKey);
-            for (int i = 0; i < ks.size() && i < 2; ++i) expect(Scope::Global, ks[i], id);
+            const QKeySequence menuKey(standardKey);
+            expect(Scope::Global, menuKey, id);
+            ++rows;
+            if (reg.keys(id) != QList<QKeySequence>{menuKey})
+                bad << QStringLiteral("%1:%2 keys=%3 (want only %4)")
+                           .arg(preset, id, keysText(reg.keys(id)),
+                                menuKey.toString(QKeySequence::PortableText));
         }
         const QPair<const char*, Qt::Key> holds[] = {
             {"color.drag-gamma", Qt::Key_W},      {"color.drag-exposure", Qt::Key_E},
