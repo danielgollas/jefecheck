@@ -5,7 +5,8 @@
 // `sett` snapshot.
 //
 // Pages cover: General (incl. the folded Playback & Engine controls), Text,
-// Formats, Search Paths, Remote. Text binds to the GfcTextRenderer singleton
+// Formats, Search Paths, Remote, Shortcuts (ShortcutsPage_Qt: edits the shortcut
+// registry live; Done saves it, Cancel restores the snapshot). Text binds to the GfcTextRenderer singleton
 // (not `sett`) with deferred QSettings persistence — see writeTextPrefs() and
 // qt_prefs_persist's applyTextPrefs().
 //

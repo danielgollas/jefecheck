@@ -6,6 +6,7 @@
 #include "../gfcTextRenderer.h"
 #include "../UIConstants.h"
 #include "qt_prefs_persist.h"
+#include "ShortcutsPage_qt.h"
 
 #include <QCheckBox>
 #include <QTimer>
@@ -87,6 +88,7 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     buildFormatsPage();
     buildSearchPathsPage();
     buildRemotePage();
+    addPage("Shortcuts", new ShortcutsPage_Qt(this));
 
     sidebar_->setCurrentRow(0);
 
