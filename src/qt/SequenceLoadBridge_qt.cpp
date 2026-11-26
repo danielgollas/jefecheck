@@ -3205,7 +3205,10 @@ void remoteChatToggleShown() {
     if (networkManager.chatFadeCounter > networkManager.chatOpacity)
         networkManager.chatFadeCounter = networkManager.chatOpacity;
     else
-        networkManager.chatFadeCounter = networkManager.chatFadeDelay / GFCNET_CHAT_FADE_SPEED;
+        remoteChatShowNow();
+}
+void remoteChatShowNow() {
+    networkManager.chatFadeCounter = networkManager.chatFadeDelay / GFCNET_CHAT_FADE_SPEED;
 }
 std::string remoteChatText() { return networkManager.gChatTextString; }
 void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }

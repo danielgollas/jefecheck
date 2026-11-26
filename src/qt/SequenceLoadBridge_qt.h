@@ -714,6 +714,7 @@ std::vector<ChatEntry> remoteChatEntries();
 void drawNetworkOverlay(int w, int h);
 bool remoteChatModeActive();
 void remoteChatBegin();
+void remoteChatShowNow();       // restart the chat overlay's fade (shown at full opacity)
 void remoteChatToggleShown();   // show a faded chat overlay again, or fade it out now (1.7 Ctrl+Y)
 void remoteChatCancel();
 void remoteChatBackspace();

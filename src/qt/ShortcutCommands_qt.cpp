@@ -193,17 +193,31 @@ void registerAllCommands(Registry& reg)
         const QByteArray n = QByteArray::number(i + 1);
         const QByteArray f = "F" + n;
         // Shift+digit and Ctrl+Shift+digit: CC favourites (1.7 globalCB and the View menu).
+        // Shift / Ctrl / Ctrl+Shift + F1-F5: FX-stack favourites (1.7 globalCB).
+#ifdef Q_OS_MACOS
+        // macOS keeps Cmd+Shift+3/4/5 (screenshots) and Cmd+F5 (VoiceOver) for itself, so Editing
+        // saves a colour favourite on Control+Shift+digit (1.7's physical keys) and appends an
+        // FX favourite on Option+Fn (Control+Fn is macOS keyboard navigation). Classic keeps
+        // 1.7's Control keys and gets no Cmd key for the saves: 1.7 ignored Cmd, so Cmd+Shift+1
+        // applied a favourite there and must not overwrite one here.
+        const Keys ccSaveEditing{ctl("Ctrl+Shift+" + n)}, ccSaveClassic{ctl("Ctrl+Shift+" + n)};
+        const Keys fxAppendEditing{k("Alt+" + f)}, fxAppendClassic = keys({ctl("Ctrl+" + f), k("Alt+" + f)});
+        const Keys fxSaveClassic{ctl("Ctrl+Shift+" + f)};
+#else
+        const Keys ccSaveEditing{k("Ctrl+Shift+" + n)}, ccSaveClassic{k("Ctrl+Shift+" + n)};
+        const Keys fxAppendEditing{k("Ctrl+" + f)}, fxAppendClassic{k("Ctrl+" + f)};
+        const Keys fxSaveClassic{k("Ctrl+Shift+" + f)};
+#endif
         both(reg, kCCApply[i], kNames[0][i].constData(), Category::Color, P, {k("Shift+" + n)},
              [i] { applyCCFavoriteToActive(i); });
-        add(reg, kCCSave[i], kNames[1][i].constData(), Category::Color, P, {k("Ctrl+Shift+" + n)},
-            keys({ctl("Ctrl+Shift+" + n), k("Ctrl+Shift+" + n)}), [i] { saveCCFavoriteFromActive(i); });
-        // Shift / Ctrl / Ctrl+Shift + F1-F5: FX-stack favourites (1.7 globalCB).
+        add(reg, kCCSave[i], kNames[1][i].constData(), Category::Color, P, ccSaveEditing, ccSaveClassic,
+            [i] { saveCCFavoriteFromActive(i); });
         both(reg, kFXLoad[i], kNames[2][i].constData(), Category::Plate, P, {k("Shift+" + f)},
              [i] { loadFXFavoriteToActive(i); });
-        add(reg, kFXAppend[i], kNames[3][i].constData(), Category::Plate, P, {k("Ctrl+" + f)},
-            keys({ctl("Ctrl+" + f), k("Ctrl+" + f)}), [i] { appendFXFavoriteToActive(i); });
-        add(reg, kFXSave[i], kNames[4][i].constData(), Category::Plate, P, {k("Ctrl+Shift+" + f)},
-            keys({ctl("Ctrl+Shift+" + f), k("Ctrl+Shift+" + f)}), [i] { saveFXFavoriteFromActive(i); });
+        add(reg, kFXAppend[i], kNames[3][i].constData(), Category::Plate, P, fxAppendEditing, fxAppendClassic,
+            [i] { appendFXFavoriteToActive(i); });
+        add(reg, kFXSave[i], kNames[4][i].constData(), Category::Plate, P, {k("Ctrl+Shift+" + f)}, fxSaveClassic,
+            [i] { saveFXFavoriteFromActive(i); });
     }
 
     // ---- Timeline (Player): reserved for the timeline project, which binds the runs --------
@@ -217,7 +231,9 @@ void registerAllCommands(Registry& reg)
     // (GlViewport_Qt claims typed keys while composing). 1.7's Ctrl+Y shows / fades the chat.
     add(reg, "remote.chat-type", "Chat: Start Typing", Category::Panels, P, {k("Return"), k("Enter")},
         {k("Y")}, [] {
-            if (isRemoteConnected()) remoteChatBegin();
+            if (!isRemoteConnected()) return;
+            remoteChatShowNow();   // 1.7's Y also brought a faded chat back
+            remoteChatBegin();
         });
     add(reg, "remote.chat-toggle", "Chat: Show / Hide", Category::Panels, P, {}, {ctl("Ctrl+Y")},
         [] { remoteChatToggleShown(); });

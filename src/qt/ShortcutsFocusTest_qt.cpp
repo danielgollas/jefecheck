@@ -123,7 +123,10 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
 
     // The checks assert the Editing keys (V is Go to End in the 1.7 preset); the preset is put
     // back at the end, in memory only.
-    const sc::Registry::Snapshot keysBefore = sc::Registry::instance().snapshot();
+    struct RestoreKeys {
+        sc::Registry::Snapshot before = sc::Registry::instance().snapshot();
+        ~RestoreKeys() { sc::Registry::instance().restore(before); }
+    } restoreKeys;   // every return below puts the preset back
     sc::Registry::instance().setPreset(QStringLiteral("editing"));
 
     // Every registry command that runs, in order; each check clears it first.
@@ -417,7 +420,6 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
     settleFor(100);
 
     disconnect(spy);
-    sc::Registry::instance().restore(keysBefore);
     printf("SHORTCUTS-FOCUS-TEST %s\n", allPass ? "PASS" : "FAIL");
     fflush(stdout);
     return allPass ? 0 : 2;

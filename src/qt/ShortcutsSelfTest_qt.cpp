@@ -698,10 +698,13 @@ struct ParityRow {
 constexpr Scope P = Scope::Player;
 constexpr Scope G = Scope::Global;
 
+QKeySequence portableKey(const QByteArray& text);
 QKeySequence portableKey(const char* text)
 {
     return QKeySequence::fromString(QString::fromLatin1(text), QKeySequence::PortableText);
 }
+
+QKeySequence portableKey(const QByteArray& text) { return portableKey(text.constData()); }
 
 // FLTK's FL_CTRL is the physical Control key: Qt::META on macOS (where Qt::CTRL is Cmd),
 // Qt::CTRL elsewhere. Rows of the 1.7 table written "Ctrl+..." mean that key.
@@ -884,9 +887,15 @@ const ParityRow kEditing[] = {
     {P, "R", "color.channel-r"}, {P, "G", "color.channel-g"},                // Channels
     {P, "B", "color.channel-b"}, {P, "A", "color.channel-a"},
     {P, "Shift+1", "color.cc-fav-apply-1"}, {P, "Shift+5", "color.cc-fav-apply-5"},  // CC favourites
+#ifdef Q_OS_MACOS  // Cmd+Shift+3/4/5 and Cmd+F5 belong to macOS: Control+Shift+digit, Option+Fn
+    {P, "Meta+Shift+1", "color.cc-fav-save-1"}, {P, "Meta+Shift+5", "color.cc-fav-save-5"},
+    {P, "Shift+F1", "fx.fav-load-1"}, {P, "Shift+F5", "fx.fav-load-5"},       // FX favourites
+    {P, "Alt+F1", "fx.fav-append-1"}, {P, "Alt+F5", "fx.fav-append-5"},
+#else
     {P, "Ctrl+Shift+1", "color.cc-fav-save-1"}, {P, "Ctrl+Shift+5", "color.cc-fav-save-5"},
     {P, "Shift+F1", "fx.fav-load-1"}, {P, "Shift+F5", "fx.fav-load-5"},       // FX favourites
     {P, "Ctrl+F1", "fx.fav-append-1"}, {P, "Ctrl+F5", "fx.fav-append-5"},
+#endif
     {P, "Ctrl+Shift+F1", "fx.fav-save-1"}, {P, "Ctrl+Shift+F5", "fx.fav-save-5"},
     {G, "F", "plate.fit"}, {G, "Shift+F", "plate.fit-all"},                  // Fit
     {G, "V", "plate.flip"}, {G, "Shift+V", "plate.flip-all"},                // Flip
@@ -1095,7 +1104,7 @@ void testJKL(Registry& reg)
     if (!press("K") || playing) bad << "K did not pause";
     if (!press("K") || playing) bad << "K while paused started";
     if (!press("J") || direction != -1 || !playing) bad << QStringLiteral("J: dir=%1 playing=%2").arg(direction).arg(playing);
-    check("jkl", bad.isEmpty(), bad.join("; ") + " calls=" + calls.join(','));
+    check("jkl", bad.isEmpty(), bad.isEmpty() ? QString() : bad.join("; ") + " calls=" + calls.join(','));
     reg.reset();
 }
 
@@ -1199,6 +1208,48 @@ void testDefaultPreset(Registry& reg)
     reg.reset();
     check("default-preset", classic && editing && stored && app,
           QStringLiteral("classic=%1 editing=%2 stored=%3 app=%4").arg(classic).arg(editing).arg(stored).arg(app));
+}
+
+// macOS keeps some keys for itself; a command on one would never fire (or would fire the system
+// action). No preset may use them. Known exceptions, deliberately not listed: Cmd+H (2.0's
+// histogram; macOS "Hide" from the app menu), Cmd+M (panels.minimize means the system action).
+void testMacosReserved(Registry& reg)
+{
+#ifdef Q_OS_MACOS
+    const char* reserved[] = {"Ctrl+Shift+3", "Ctrl+Shift+4", "Ctrl+Shift+5", "Ctrl+F5", "Ctrl+Alt+F5",
+                              "Ctrl+Tab", "Ctrl+Space", "Ctrl+Alt+Esc"};  // Qt Ctrl = Cmd here
+    reg.reset();
+    registerAllCommands(reg);
+    QStringList bad;
+    for (const char* preset : {"editing", "classic"}) {
+        reg.setPreset(QString::fromLatin1(preset));
+        for (const Command& c : reg.commands())
+            for (const QKeySequence& key : reg.keys(c.id)) {
+                for (const char* r : reserved)
+                    if (key == portableKey(r)) bad << QStringLiteral("%1:%2 %3").arg(preset, c.id, r);
+                // Control+F1-F5 are macOS keyboard-navigation keys. Allowed only in classic, where
+                // they are 1.7's FX-favourite append keys (parity).
+                const QKeyCombination kc = key[0];
+                if (QString::fromLatin1(preset) == QLatin1String("editing") &&
+                    kc.keyboardModifiers() == Qt::MetaModifier && kc.key() >= Qt::Key_F1 && kc.key() <= Qt::Key_F5)
+                    bad << QStringLiteral("editing:%1 %2").arg(c.id, key.toString(QKeySequence::PortableText));
+            }
+    }
+    // 1.7 ignored Cmd, so Cmd+Shift+1 applied colour favourite 1 and Cmd+Shift+F1 loaded FX
+    // favourite 1: in classic those keys must not save (overwrite) a favourite.
+    reg.setPreset(QStringLiteral("classic"));
+    for (int i = 1; i <= 5; ++i) {
+        const QByteArray n = QByteArray::number(i);
+        if (!reg.commandForKey(P, portableKey("Ctrl+Shift+" + n)).isEmpty() ||
+            !reg.commandForKey(P, portableKey("Ctrl+Shift+F" + n)).isEmpty())
+            bad << "classic: Cmd+Shift+" + QString::fromLatin1(n) + " or Cmd+Shift+F" + QString::fromLatin1(n) + " is bound";
+    }
+    reg.setPreset(QStringLiteral("editing"));
+    check("macos-reserved", bad.isEmpty(), bad.join(' '));
+    reg.reset();
+#else
+    (void)reg;
+#endif
 }
 
 void testPresetsConflictFree(Registry& reg)
@@ -1363,8 +1414,14 @@ void testHelpText(Registry& reg)
     // The keys the old hand-written overlay listed, now from the registry, and the new run lines.
     for (const char* want : {"Toggle Fullscreen - F11 or ", "Step one frame (back / forward) - Left / Right",
                              "Play Direction (reverse / forward) - , / . (or < / >)", "Preferences - Ctrl+P or Ctrl+,",
-                             "Show Track A-D - 1-4", "CC favourite apply / save - Shift+1-5 / Ctrl+Shift+1-5",
+                             "Show Track A-D - 1-4",
+#ifdef Q_OS_MACOS
+                             "CC favourite apply / save - Shift+1-5 / Meta+Shift+1-5",
+                             "FX favourite load / append / save - Shift+F1-F5 / Alt+F1-F5 / Ctrl+Shift+F1-F5",
+#else
+                             "CC favourite apply / save - Shift+1-5 / Ctrl+Shift+1-5",
                              "FX favourite load / append / save - Shift+F1-F5 / Ctrl+F1-F5 / Ctrl+Shift+F1-F5",
+#endif
                              "Channels (red / green / blue / alpha) - R / G / B / A",
                              "Reverse / Pause / Forward - J / K / L", "Enter Chat - Return or Enter"})
         if (!text.contains(QString::fromUtf8(want))) missing << QStringLiteral("\"%1\"").arg(want);
@@ -1383,9 +1440,11 @@ void testHelpText(Registry& reg)
     const QList<HelpLine> broken = buildHelpLines(reg);
     const QString brokenText = buildHelpText(reg);
     const QStringList brokenProblems = helpLabelProblems(reg, broken, nullptr);
-    check("help-run-broken", !brokenText.contains("apply / save") && brokenText.contains(" / Shift+9 / ") &&
-                                 brokenText.contains("CC favourite save - Ctrl+Shift+1-5") && brokenProblems.isEmpty(),
-          brokenProblems.join(',') + " | " + brokenText.section("CC favourite", 1).left(200));
+    const QString saveRun = QStringLiteral("CC favourite save - %1-5").arg(reg.key("color.cc-fav-save-1").toString(QKeySequence::PortableText));
+    const bool brokenOk = !brokenText.contains("apply / save") && brokenText.contains(" / Shift+9 / ") &&
+                          brokenText.contains(saveRun) && brokenProblems.isEmpty();
+    check("help-run-broken", brokenOk,
+          brokenOk ? QString() : brokenProblems.join(',') + " | " + brokenText.section("CC favourite", 1).left(200));
     reg.clearOverride("color.cc-fav-apply-3");
 
     // The overlay is drawn centred and unclipped: it may grow to at most 60 lines (53 in
@@ -1503,6 +1562,7 @@ int shortcutsSelfTest()
     testReserved(reg);
     testHoldConflict(reg);
     testDefaultPreset(reg);
+    testMacosReserved(reg);
     testPresetsConflictFree(reg);
     testHelpText(reg);
     dumpPresets(reg);
