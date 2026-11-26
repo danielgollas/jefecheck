@@ -543,10 +543,11 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
 bool GlViewport_Qt::event(QEvent* e) {
     // While composing a remote chat message the keys a user types are text for the chat
     // (keyPressEvent), so claim them before a shortcut (F, V, Space...) can fire. Combos with
-    // Ctrl/Cmd, Meta or Alt and the F-keys are not typing: Cmd+S, Ctrl+1, F11 keep working.
+    // Ctrl/Cmd or Meta and the F-keys are not typing: Cmd+S, Ctrl+1, F11 keep working.
     if (e->type() == QEvent::ShortcutOverride && jefe::qt::remoteChatModeActive()) {
         const auto* ke = static_cast<QKeyEvent*>(e);
-        const bool combo = ke->modifiers() & (Qt::ControlModifier | Qt::MetaModifier | Qt::AltModifier);
+        // Alt (Option) is how macOS types accented characters, so Alt and Alt+Shift stay typing.
+        const bool combo = ke->modifiers() & (Qt::ControlModifier | Qt::MetaModifier);
         const bool fkey = ke->key() >= Qt::Key_F1 && ke->key() <= Qt::Key_F35;
         if (!combo && !fkey) {
             e->accept();

@@ -236,9 +236,16 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         if (QString::fromStdString(remoteChatText()) != text)
             bad << QString("Ctrl+2 changed the chat text to \"%1\"").arg(QString::fromStdString(remoteChatText()));
         setFramingMode(layoutBefore);
+        // Option is how macOS types accented characters: Alt+I types into the chat instead of
+        // running "set In and load".
+        const QString before = QString::fromStdString(remoteChatText());
+        ran.clear();
+        press(Qt::Key_I, QString(QChar(0x0131)), Qt::AltModifier);
+        if (ran.contains("inout.set-in-load")) bad << "Alt+I ran inout.set-in-load while chatting";
+        if (QString::fromStdString(remoteChatText()) == before) bad << "Alt+I did not type into the chat";
         remoteChatCancel();
         report("CHAT f", bad.isEmpty(),
-               bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run; Ctrl+2 ran layout.side") : bad.join("; "));
+               bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run; Ctrl+2 ran layout.side; Alt+I typed, set-in-load not run") : bad.join("; "));
     }
 
     {   // Viewport focused: Space toggles playback.
