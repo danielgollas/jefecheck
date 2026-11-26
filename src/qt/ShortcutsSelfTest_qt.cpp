@@ -6,6 +6,7 @@
 #include <QAction>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>
@@ -515,6 +516,60 @@ void testImportConflict(Registry& reg)
           c.join(','));
 }
 
+void testExportTwoKeysAndUnbound(Registry& reg)
+{
+    registerTwo(reg);
+    reg.registerCommand(cmd("t.two", Scope::Player, {QKeySequence("A"), QKeySequence("B")}));
+    reg.registerCommand(cmd("t.u", Scope::Player, {QKeySequence("U")}));
+    reg.setOverride("t.u", QKeySequence());
+    const QString before = allKeys(reg);
+    const QString path = tempPath(".jcshortcuts");
+    const bool exported = reg.exportTo(path);
+    QFile f(path);
+    f.open(QIODevice::ReadOnly);
+    const QJsonObject keys = QJsonDocument::fromJson(f.readAll()).object().value("keys").toObject();
+    f.close();
+    const QJsonValue two = keys.value("t.two"), un = keys.value("t.u");
+    const bool json = exported && two.isArray() && two.toArray().size() == 2 && un.isString() &&
+                      un.toString().isEmpty() && keys.contains("t.u");
+    reg.setOverride("t.two", QKeySequence("Z"));
+    reg.setOverride("t.u", QKeySequence("Y"));
+    QString err;
+    const bool imported = reg.importFrom(path, &err);
+    QFile::remove(path);
+    check("export-two-keys-unbound",
+          json && imported && reg.keys("t.two") == QList<QKeySequence>{QKeySequence("A"), QKeySequence("B")} &&
+              reg.keys("t.u").isEmpty() && allKeys(reg) == before,
+          allKeys(reg) + " err=" + err);
+}
+
+void testPersistComma(Registry& reg)
+{
+    registerTwo(reg);
+    reg.registerCommand(cmd("t.c", Scope::Player, {QKeySequence("C")}));
+    reg.registerCommand(cmd("t.d", Scope::Player, {QKeySequence("D")}));
+    reg.setOverride("t.c", QKeySequence("Ctrl+,"));
+    reg.setOverride("t.d", QKeySequence(","));
+    reg.setHoldOverride("t.h", Qt::Key_Comma);
+    const QString before = allKeys(reg);
+    const QString path = tempPath(".ini");
+    {
+        QSettings s(path, QSettings::IniFormat);
+        reg.save(s);
+        s.sync();
+    }
+    registerTwo(reg);
+    reg.registerCommand(cmd("t.c", Scope::Player, {QKeySequence("C")}));
+    reg.registerCommand(cmd("t.d", Scope::Player, {QKeySequence("D")}));
+    QSettings s(path, QSettings::IniFormat);
+    reg.load(s);
+    const QString after = allKeys(reg);
+    QFile::remove(path);
+    check("persist-comma", before == after && reg.key("t.c") == QKeySequence("Ctrl+,") &&
+                               reg.key("t.d") == QKeySequence(","),
+          before + " vs " + after);
+}
+
 }  // namespace
 
 int shortcutsSelfTest()
@@ -544,6 +599,8 @@ int shortcutsSelfTest()
     testImportUnknownId(reg);
     testImportBad(reg);
     testImportConflict(reg);
+    testExportTwoKeysAndUnbound(reg);
+    testPersistComma(reg);
     reg.reset();
     std::printf("SHORTCUTS-TEST %s\n", g_fails == 0 ? "PASS" : "FAIL");
     return g_fails;

@@ -30,6 +30,13 @@ QString holdText(Qt::Key k)
     return k == Qt::Key_unknown ? QString() : keyText(QKeySequence(k));
 }
 
+// INI reads an unquoted value containing a comma back as a QStringList; rejoin it.
+QString settingText(const QVariant& v)
+{
+    return v.metaType().id() == QMetaType::QStringList ? v.toStringList().join(QLatin1Char(','))
+                                                       : v.toString();
+}
+
 // One shortcut: a single key plus modifiers (no chords). Empty text = unbound (valid).
 bool parseKey(const QString& text, QKeySequence* out)
 {
@@ -287,7 +294,7 @@ void Registry::load(QSettings& s)
 
     s.beginGroup(QStringLiteral("Shortcuts/overrides"));
     for (const QString& id : s.childKeys()) {
-        const QString text = s.value(id).toString();
+        const QString text = settingText(s.value(id));
         if (indexOf(id) < 0) {
             orphanOverrides_.insert(id, text);
             continue;
@@ -300,7 +307,7 @@ void Registry::load(QSettings& s)
 
     s.beginGroup(QStringLiteral("Shortcuts/holdOverrides"));
     for (const QString& id : s.childKeys()) {
-        const QString text = s.value(id).toString();
+        const QString text = settingText(s.value(id));
         if (!holdIndex_.contains(id)) {
             orphanHoldOverrides_.insert(id, text);
             continue;
