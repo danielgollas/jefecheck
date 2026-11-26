@@ -815,7 +815,8 @@ void ShortcutsPage_Qt::buildKeymap()
         b->setObjectName(QStringLiteral("prefs.shortcuts.keymap.layer.") + leaf);
         b->setCheckable(true);
         b->setToolTip(tr("Show the keys pressed with %1 (combine toggles for more than one). "
-                         "Holding the key while this page has focus does the same.")
+                         "Holding the key while this page has focus, or while dragging a command "
+                         "onto the map, adds it to the keys shown.")
                           .arg(modifierName(m)));
         ui::useWidgetRect(b);
         flow->addWidget(b);

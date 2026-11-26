@@ -9,6 +9,7 @@
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QGuiApplication>
 #include <QHelpEvent>
 #include <QMimeData>
 #include <QKeyEvent>
@@ -408,7 +409,8 @@ void ShortcutKeyboard_Qt::setLayer(Qt::KeyboardModifiers mods)
     }
 }
 
-Qt::KeyboardModifiers ShortcutKeyboard_Qt::layer() const { return held_ ? held_ : toggled_; }
+// Held modifiers add to the toggled ones: toggled Shift with Cmd held shows Shift+Cmd.
+Qt::KeyboardModifiers ShortcutKeyboard_Qt::layer() const { return held_ | toggled_; }
 
 void ShortcutKeyboard_Qt::setHeld(Qt::KeyboardModifiers held)
 {
@@ -723,9 +725,17 @@ void ShortcutKeyboard_Qt::setDropHover(Qt::Key key)
     update();
 }
 
+void ShortcutKeyboard_Qt::followHeldModifiers()
+{
+    // No key events arrive during a drag (macOS), so a modifier pressed or released mid-drag
+    // would never reach eventFilter: read the keyboard's modifiers instead.
+    setHeld(QGuiApplication::queryKeyboardModifiers());
+}
+
 void ShortcutKeyboard_Qt::dragEnterEvent(QDragEnterEvent* e)
 {
     if (!e->mimeData()->hasFormat(commandMimeType())) return e->ignore();
+    followHeldModifiers();
     e->setDropAction(Qt::CopyAction);
     e->accept();
     setDropHover(dropKeyAt(e->position(), e->mimeData()));
@@ -733,6 +743,7 @@ void ShortcutKeyboard_Qt::dragEnterEvent(QDragEnterEvent* e)
 
 void ShortcutKeyboard_Qt::dragMoveEvent(QDragMoveEvent* e)
 {
+    followHeldModifiers();
     const Qt::Key k = dropKeyAt(e->position(), e->mimeData());
     setDropHover(k);
     if (k == Qt::Key_unknown) {
@@ -752,6 +763,7 @@ QString ShortcutKeyboard_Qt::dropToolTip(Qt::Key key) const
 
 void ShortcutKeyboard_Qt::dragLeaveEvent(QDragLeaveEvent* e)
 {
+    followHeldModifiers();  // a modifier released during the drag must not leave its layer on
     setDropHover(Qt::Key_unknown);
     QToolTip::hideText();
     e->accept();
@@ -759,6 +771,7 @@ void ShortcutKeyboard_Qt::dragLeaveEvent(QDragLeaveEvent* e)
 
 void ShortcutKeyboard_Qt::dropEvent(QDropEvent* e)
 {
+    followHeldModifiers();  // the drop binds on the layer shown now
     const Qt::Key k = dropKeyAt(e->position(), e->mimeData());
     setDropHover(Qt::Key_unknown);
     QToolTip::hideText();

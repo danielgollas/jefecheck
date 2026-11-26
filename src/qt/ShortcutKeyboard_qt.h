@@ -2,9 +2,10 @@
 // Preferences -> Shortcuts keyboard map: a painted US ANSI keyboard (F-row, number row,
 // QWERTY rows, space, arrows, a Delete/Home/End/PgUp/PgDn column). Each key is tinted by the category of
 // the command it runs on the current modifier layer and shows a short name; hold keys carry a
-// small ring. The layer is the toggled one (setLayer), or the modifiers physically held while
-// a widget of the page (setModifierScope) has focus. Clicking a key emits keyClicked; clicking a modifier
-// key toggles that modifier. The map takes no key focus, so it never consumes keys.
+// small ring. The layer is the toggled one (setLayer) plus the modifiers physically held while
+// a widget of the page (setModifierScope) has focus or a command is dragged over the map.
+// Clicking a key emits keyClicked; clicking a modifier key toggles that modifier. The map takes
+// no key focus, so it never consumes keys.
 //
 // Non-US layouts: keys are labelled by Qt key names on the ANSI shape; the list is authoritative.
 #pragma once
@@ -81,7 +82,7 @@ public:
     ~ShortcutKeyboard_Qt() override;
 
     void setLayer(Qt::KeyboardModifiers mods);   // the toggled layer
-    Qt::KeyboardModifiers layer() const;         // shown: held modifiers, else the toggled layer
+    Qt::KeyboardModifiers layer() const;         // shown: the toggled layer plus held modifiers
     Qt::KeyboardModifiers toggledLayer() const { return toggled_; }
     QRectF keyRect(Qt::Key key) const;           // widget coordinates; empty when not on the map
     QString keyCaption(Qt::Key key) const;       // short name on the shown layer, or empty
@@ -126,6 +127,7 @@ protected:
 private:
     void rebuild();                                       // bindings cache from the registry
     void setHeld(Qt::KeyboardModifiers held);
+    void followHeldModifiers();                           // held = the keyboard's modifiers (drags)
     const Binding* bindingOn(Qt::Key key, Qt::KeyboardModifiers mods) const;  // the first
     QList<const Binding*> bindingsOn(Qt::Key key, Qt::KeyboardModifiers mods) const;
     int capAt(const QPointF& pos) const;

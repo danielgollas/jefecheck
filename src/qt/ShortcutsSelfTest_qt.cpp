@@ -2054,6 +2054,26 @@ void testKeymapDrop(Registry& reg)
     QApplication::sendEvent(map, &leave);
     check("keymap-drop-hover", hovered == Qt::Key_T && map->dropHoverKey() == Qt::Key_unknown);
 
+    // Modifiers during a drag follow the keyboard (no key events arrive mid-drag on macOS): a
+    // held layer whose release was missed clears on drag leave, and a drop binds on the layer
+    // shown at the drop. (Here no key is really down, so the keyboard reads no modifiers.)
+    {
+        QKeyEvent altDown(QEvent::KeyPress, Qt::Key_Alt, Qt::AltModifier);
+        QApplication::sendEvent(page.search(), &altDown);
+        const bool heldAlt = map->layer() == Qt::AltModifier;
+        QDragLeaveEvent left;
+        QApplication::sendEvent(map, &left);
+        const bool clearedOnLeave = map->layer() == Qt::NoModifier;
+        QApplication::sendEvent(page.search(), &altDown);  // Alt "held" again, released mid-drag
+        const bool freeU = reg.conflicts("playback.jkl-reverse", QKeySequence("U")).isEmpty();
+        sendDrop(Qt::Key_U, "playback.jkl-reverse");
+        const QList<QKeySequence> ks = reg.keys("playback.jkl-reverse");
+        check("keymap-drag-modifiers", heldAlt && clearedOnLeave && freeU && !ks.isEmpty() &&
+                                           ks.first() == QKeySequence("U") && map->layer() == Qt::NoModifier,
+              QStringLiteral("held=%1 cleared=%2 free=%3 key=%4").arg(heldAlt).arg(clearedOnLeave).arg(freeU)
+                  .arg(ks.isEmpty() ? QString() : ks.first().toString()));
+    }
+
     // A reserved key is refused like a captured one (macOS only).
 #ifdef Q_OS_MACOS
     map->setLayer(Qt::ControlModifier);
@@ -2150,6 +2170,21 @@ void testKeymapPage(Registry& reg)
     search->clear();
     check("keymap-held-modifier", held && released && typed,
           QStringLiteral("held=%1 released=%2 typed=%3").arg(held).arg(released).arg(typed));
+
+    // A held modifier adds to the toggled layer: toggled Shift with Cmd (Qt's Control) held
+    // shows Shift+Cmd, and releasing Cmd goes back to Shift.
+    map->setLayer(Qt::ShiftModifier);
+    QKeyEvent ctrlDown(QEvent::KeyPress, Qt::Key_Control, Qt::ControlModifier);
+    QApplication::sendEvent(search, &ctrlDown);
+    const Qt::KeyboardModifiers combined = map->layer();
+    QKeyEvent ctrlUp(QEvent::KeyRelease, Qt::Key_Control, Qt::NoModifier);
+    QApplication::sendEvent(search, &ctrlUp);
+    const Qt::KeyboardModifiers after = map->layer();
+    const bool buttonsShow = shiftBtn && noneBtn && shiftBtn->isChecked() && !noneBtn->isChecked();
+    map->setLayer(Qt::NoModifier);
+    check("keymap-layer-combines", combined == (Qt::ShiftModifier | Qt::ControlModifier) &&
+                                       after == Qt::ShiftModifier && buttonsShow,
+          QStringLiteral("combined=%1 after=%2").arg(int(combined), 0, 16).arg(int(after), 0, 16));
 
     // JEFE_KEYMAP_SHOT=<png>: the page with I selected, for a look by eye (and <png>-shift.png).
     const QString shot = qEnvironmentVariable("JEFE_KEYMAP_SHOT");
