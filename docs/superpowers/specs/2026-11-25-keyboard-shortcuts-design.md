@@ -1,6 +1,6 @@
 # Customizable keyboard shortcuts — design
 
-Status: draft, awaiting owner approval. Base: `qt-experimental` (2.0 line).
+Status: approved by the owner 2026-11-25. Plan: `docs/superpowers/plans/2026-11-25-keyboard-shortcuts.md`. Base: `qt-experimental` (2.0 line).
 Order of the three related projects (owner-agreed): **1. shortcuts (this doc)** → 2. timeline zoom and In/Out (built on `feature/panel-polish-E`, which has the ruler) → 3. multi-clip edit tracks (`2026-11-22-multi-clip-tracks-edl-design.md`).
 
 ## Why
