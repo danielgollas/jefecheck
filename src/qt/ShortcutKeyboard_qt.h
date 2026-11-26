@@ -72,6 +72,11 @@ public:
     QRectF keyRect(Qt::Key key) const;           // widget coordinates; empty when not on the map
     QString keyCaption(Qt::Key key) const;       // short name on the shown layer, or empty
     bool showsHoldMark(Qt::Key key) const;       // a hold key on the shown layer
+    // The caption as painted: keyCaption when it fits the key whole, else empty (never elided).
+    QString drawnCaption(Qt::Key key) const;
+    // Commands on the key on the shown layer; more than one draws a "+" mark.
+    int bindingCount(Qt::Key key) const;
+    QString keyToolTip(Qt::Key key) const;       // every command on the key on the shown layer
     QList<Binding> bindingsFor(Qt::Key key) const;  // every layer, in layer order
     Qt::Key selectedKey() const { return selected_; }
     void setSelectedKey(Qt::Key key);
@@ -95,7 +100,8 @@ protected:
 private:
     void rebuild();                                       // bindings cache from the registry
     void setHeld(Qt::KeyboardModifiers held);
-    const Binding* bindingOn(Qt::Key key, Qt::KeyboardModifiers mods) const;
+    const Binding* bindingOn(Qt::Key key, Qt::KeyboardModifiers mods) const;  // the first
+    QList<const Binding*> bindingsOn(Qt::Key key, Qt::KeyboardModifiers mods) const;
     int capAt(const QPointF& pos) const;
     QRectF capRect(const jefe::shortcuts::KeyCap& c) const;
     qreal unit() const;

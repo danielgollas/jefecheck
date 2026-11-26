@@ -1730,7 +1730,7 @@ void testKeymapLayer(Registry& reg)
     const QString shiftAlt = map.keyCaption(Qt::Key_I);
     map.setLayer(Qt::NoModifier);
     const QString unbound = map.keyCaption(Qt::Key_U);
-    check("keymap-layer", none == "Set In" && shift == "Go to In" && alt == "Clear In" && !shiftAlt.isEmpty() &&
+    check("keymap-layer", none == "Set In" && shift == "Go In" && alt == "Clr In" && !shiftAlt.isEmpty() &&
                               unbound.isEmpty() && map.layer() == Qt::NoModifier,
           QStringLiteral("none=%1 shift=%2 alt=%3 shift+alt=%4 U=%5").arg(none, shift, alt, shiftAlt, unbound));
 
@@ -1764,7 +1764,7 @@ void testKeymapHold(Registry& reg)
     reg.pinPreset(QStringLiteral("editing"));
     ShortcutKeyboard_Qt map;
     map.resize(map.sizeHint());
-    const bool bare = map.showsHoldMark(Qt::Key_W) && map.keyCaption(Qt::Key_W) == "Gamma";
+    const bool bare = map.showsHoldMark(Qt::Key_W) && map.keyCaption(Qt::Key_W) == "Gam";
     map.setLayer(Qt::ShiftModifier);
     const bool shifted = !map.showsHoldMark(Qt::Key_W);
     map.setLayer(Qt::NoModifier);
@@ -1804,6 +1804,81 @@ void testKeymapTints(Registry& reg)
                               inout.rgb() == categoryTint(Category::InOut).rgb(),
           QStringLiteral("I=%1 U=%2 L=%3 tint=%4").arg(inout.name(), unbound.name(), playback.name(),
                                                        categoryTint(Category::InOut).name()));
+    reg.reset();
+}
+
+// At the preferred size every caption the map draws fits its key whole, in both presets and on
+// every layer (drawnCaption is empty when a caption would need eliding).
+void testKeymapNoElide(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    ShortcutKeyboard_Qt map;
+    map.ensurePolished();  // the theme's 13 px font
+    map.resize(map.sizeHint());
+    const QList<Qt::KeyboardModifier> mods = layerModifiers();
+    QStringList cut;
+    int drawn = 0;
+    for (const char* preset : {"editing", "classic"}) {
+        reg.pinPreset(QString::fromLatin1(preset));
+        for (int mask = 0; mask < (1 << mods.size()); ++mask) {
+            Qt::KeyboardModifiers layer;
+            for (int i = 0; i < mods.size(); ++i)
+                if (mask & (1 << i)) layer |= mods[i];
+            map.setLayer(layer);
+            for (const KeyCap& c : ansiLayout()) {
+                const QString caption = map.keyCaption(c.key);
+                if (caption.isEmpty()) continue;
+                if (map.drawnCaption(c.key) == caption) ++drawn;
+                else
+                    cut << QStringLiteral("%1:%2+%3=\"%4\"(%5px>%6px)")
+                               .arg(preset, QKeySequence(int(layer)).toString(QKeySequence::PortableText), c.label, caption)
+                               .arg(QFontMetricsF(map.font()).horizontalAdvance(caption), 0, 'f', 0)
+                               .arg(map.keyRect(c.key).width() - 8, 0, 'f', 0);
+            }
+        }
+    }
+    cut.removeDuplicates();
+    check("keymap-no-elide", drawn > 0 && cut.isEmpty() && map.font().pixelSize() == 13,
+          QStringLiteral("drawn=%1 font=%2px cut=%3").arg(drawn).arg(map.font().pixelSize()).arg(cut.join(' ')));
+    reg.reset();
+}
+
+// Two commands on one key and layer (a Global and a Player command, as a hand-edited settings
+// file could leave them): the key carries the "+" mark and the tooltip names both.
+void testKeymapMulti(Registry& reg)
+{
+    reg.reset();
+    reg.registerCommand(Command{"t.global", QStringLiteral("Global Thing"), Category::File, Scope::Global,
+                                {QKeySequence("K")}, {}, {}});
+    reg.registerCommand(Command{"t.player", QStringLiteral("Player Thing"), Category::Playback, Scope::Player,
+                                {QKeySequence("K")}, {}, {}});
+    reg.registerCommand(Command{"t.single", QStringLiteral("Single Thing"), Category::Playback, Scope::Player,
+                                {QKeySequence("J")}, {}, {}});
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    const QString tip = map.keyToolTip(Qt::Key_K);
+    const bool multi = map.bindingCount(Qt::Key_K) == 2 && tip.contains("Global Thing") && tip.contains("Player Thing");
+    const bool single = map.bindingCount(Qt::Key_J) == 1 && map.keyToolTip(Qt::Key_J).contains("Single Thing");
+    // Painted: the "+" sits in the key's top-right corner, which is plain tint on J.
+    const QImage img = map.grab().toImage();
+    const qreal dpr = img.devicePixelRatio();
+    auto cornerHasMark = [&](Qt::Key k) {
+        const QRectF r = map.keyRect(k);
+        const QColor tint = img.pixelColor(int((r.left() + r.width() / 2) * dpr), int((r.top() + 3) * dpr));
+        for (int y = int(r.top() + 3); y < int(r.top() + 18); ++y)
+            for (int x = int(r.right() - 14); x < int(r.right() - 3); ++x)
+                if (img.pixelColor(int(x * dpr), int(y * dpr)) != tint) return true;
+        return false;
+    };
+    const bool painted = cornerHasMark(Qt::Key_K) && !cornerHasMark(Qt::Key_J);
+    // One command on two keys of one cap (Return and Enter) is not two commands.
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    const int returnCount = map.bindingCount(Qt::Key_Return);
+    check("keymap-multi", multi && single && painted && returnCount == 1,
+          QStringLiteral("multi=%1 painted=%2 return=%3 tip=%4").arg(multi).arg(painted).arg(returnCount).arg(QString(tip).replace('\n', " / ")));
     reg.reset();
 }
 
@@ -1847,7 +1922,7 @@ void testKeymapPage(Registry& reg)
     if (toggles) {
         shiftBtn->click();
         toggles = map->layer() == Qt::ShiftModifier && shiftBtn->isChecked() && !noneBtn->isChecked() &&
-                  map->keyCaption(Qt::Key_I) == "Go to In";
+                  map->keyCaption(Qt::Key_I) == "Go In";
         noneBtn->click();
         toggles = toggles && map->layer() == Qt::NoModifier && noneBtn->isChecked() && !shiftBtn->isChecked();
     }
@@ -1857,7 +1932,7 @@ void testKeymapPage(Registry& reg)
     QLineEdit* search = page.search();
     QKeyEvent altDown(QEvent::KeyPress, Qt::Key_Alt, Qt::AltModifier);
     QApplication::sendEvent(search, &altDown);
-    const bool held = map->layer() == Qt::AltModifier && map->keyCaption(Qt::Key_I) == "Clear In";
+    const bool held = map->layer() == Qt::AltModifier && map->keyCaption(Qt::Key_I) == "Clr In";
     QKeyEvent altUp(QEvent::KeyRelease, Qt::Key_Alt, Qt::NoModifier);
     QApplication::sendEvent(search, &altUp);
     const bool released = map->layer() == Qt::NoModifier;
@@ -2021,6 +2096,8 @@ int shortcutsSelfTest()
     testKeymapLayer(reg);
     testKeymapHold(reg);
     testKeymapTints(reg);
+    testKeymapNoElide(reg);
+    testKeymapMulti(reg);
     testKeymapPage(reg);
     dumpPresets(reg);
     testTooltipGrep();

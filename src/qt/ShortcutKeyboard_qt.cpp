@@ -37,6 +37,7 @@ constexpr int kRowH = 38;            // two 13 px lines: the key's name and the 
 constexpr qreal kMinUnit = 24;
 constexpr qreal kPrefUnit = 46;
 constexpr qreal kCapGap = 1.5;       // each side, so keys are 3 px apart
+constexpr qreal kCaptionPad = 4;    // text inset from a key's left and right edges
 
 QColor mix(const QColor& a, const QColor& b, qreal t)  // t of a over b
 {
@@ -208,57 +209,59 @@ bool capForKey(const QKeyCombination& key, Qt::Key* cap, Qt::KeyboardModifiers* 
 
 QString shortCommandName(const QString& id, const QString& name)
 {
+    // Each fits a one-unit key at the preferred size in the 13 px font (--shortcuts-test
+    // keymap-no-elide). "*" = all plates. The tooltip and the side panel give the full name.
     static const QHash<QString, QString> table = {
-        {"playback.play-pause", "Play"},           {"playback.jkl-reverse", "Play Back"},
-        {"playback.jkl-pause", "Pause"},           {"playback.jkl-forward", "Play Fwd"},
-        {"playback.play-reverse", "Reverse"},      {"playback.play-forward", "Forward"},
-        {"playback.step-back", "Step Back"},       {"playback.step-forward", "Step Fwd"},
-        {"playback.go-start", "Start"},            {"playback.go-end", "End"},
-        {"playback.direction-reverse", "Dir Rev"}, {"playback.direction-forward", "Dir Fwd"},
-        {"playback.loop-once", "Once"},            {"playback.loop", "Loop"},
-        {"playback.bounce", "Bounce"},
-        {"inout.set-in", "Set In"},                {"inout.set-out", "Set Out"},
-        {"inout.go-in", "Go to In"},               {"inout.go-out", "Go to Out"},
-        {"inout.reset-in", "Clear In"},            {"inout.reset-out", "Clear Out"},
-        {"inout.clear-both", "Clear I/O"},         {"inout.set-in-load", "In + Load"},
-        {"plate.track-prev", "Prev Track"},        {"plate.track-next", "Next Track"},
-        {"color.channel-r", "Red"},                {"color.channel-g", "Green"},
-        {"color.channel-b", "Blue"},               {"color.channel-a", "Alpha"},
-        {"plate.lut-prev", "Prev LUT"},            {"plate.lut-next", "Next LUT"},
-        {"timeline.zoom-in", "Zoom In"},           {"timeline.zoom-out", "Zoom Out"},
-        {"timeline.zoom-fit", "Zoom Fit"},         {"timeline.zoom-inout", "Zoom I/O"},
-        {"remote.chat-type", "Chat"},              {"remote.chat-toggle", "Chat Show"},
-        {"layout.single", "Single"},               {"layout.side", "Side"},
-        {"layout.top-bottom", "Top/Bot"},          {"layout.quad", "2 x 2"},
-        {"plate.fit", "Fit"},                      {"plate.fit-all", "Fit All"},
-        {"plate.flip", "Flip"},                    {"plate.flip-all", "Flip All"},
-        {"plate.flop", "Flop"},                    {"plate.flop-all", "Flop All"},
-        {"plate.text-mode", "Text"},               {"plate.text-mode-all", "Text All"},
-        {"plate.reset", "Reset"},                  {"plate.reset-all", "Reset All"},
-        {"view.toggle-histogram", "Histogram"},    {"view.toggle-histogram-all", "Histo All"},
-        {"view.toggle-note-overlay", "Notes"},     {"color.reset", "Reset CC"},
-        {"color.reset-all", "Reset CCs"},          {"file.quick-load", "Load"},
-        {"file.load-manager", "Load Mgr"},         {"file.save-session", "Save"},
-        {"file.open-session", "Open"},             {"file.preferences", "Prefs"},
-        {"file.quit", "Quit"},                     {"view.toggle-fullscreen", "Full Scr"},
-        {"panels.toggle-plate-manager", "Plates"}, {"panels.toggle-fx", "FX"},
-        {"panels.toggle-luts", "LUTs"},            {"panels.open-remote", "Remote"},
-        {"panels.open-render", "Render"},          {"panels.toggle-notes", "Notes"},
-        {"panels.toggle-timeline", "Timeline"},    {"panels.toggle-playlist", "Playlist"},
-        {"panels.hide-controls", "Hide UI"},       {"panels.minimize", "Minimize"},
-        {"help.manual", "Manual"},                 {"help.toggle-overlay", "Help"},
-        {"color.drag-gamma", "Gamma"},             {"color.drag-exposure", "Exposure"},
-        {"color.drag-brightness", "Bright"},       {"color.drag-contrast", "Contrast"},
-        {"color.drag-saturation", "Sat"},          {"plate.lut-hold", "LUT"},
+        {"playback.play-pause", "Play"},       {"playback.jkl-reverse", "Rev"},
+        {"playback.jkl-pause", "Stop"},       {"playback.jkl-forward", "Play"},
+        {"playback.play-reverse", "Rev"},      {"playback.play-forward", "Fwd"},
+        {"playback.step-back", "Step"},        {"playback.step-forward", "Step"},
+        {"playback.go-start", "Start"},        {"playback.go-end", "End"},
+        {"playback.direction-reverse", "Dir"}, {"playback.direction-forward", "Dir"},
+        {"playback.loop-once", "Once"},        {"playback.loop", "Loop"},
+        {"playback.bounce", "Bnc"},
+        {"inout.set-in", "Set In"},            {"inout.set-out", "Out"},
+        {"inout.go-in", "Go In"},              {"inout.go-out", "Go O"},
+        {"inout.reset-in", "Clr In"},          {"inout.reset-out", "Clr O"},
+        {"inout.clear-both", "Clr IO"},        {"inout.set-in-load", "In+Ld"},
+        {"plate.track-prev", "Prev"},          {"plate.track-next", "Next"},
+        {"color.channel-r", "Red"},            {"color.channel-g", "Grn"},
+        {"color.channel-b", "Blue"},           {"color.channel-a", "Alpha"},
+        {"plate.lut-prev", "LUT-"},            {"plate.lut-next", "LUT+"},
+        {"timeline.zoom-in", "Zm+"},           {"timeline.zoom-out", "Zm-"},
+        {"timeline.zoom-fit", "ZFit"},         {"timeline.zoom-inout", "Zm IO"},
+        {"remote.chat-type", "Chat"},          {"remote.chat-toggle", "Chat"},
+        {"layout.single", "1-Up"},             {"layout.side", "Side"},
+        {"layout.top-bottom", "Stack"},        {"layout.quad", "2x2"},
+        {"plate.fit", "Fit"},                  {"plate.fit-all", "Fit*"},
+        {"plate.flip", "Flip"},                {"plate.flip-all", "Flip*"},
+        {"plate.flop", "Flop"},                {"plate.flop-all", "Flop*"},
+        {"plate.text-mode", "Text"},           {"plate.text-mode-all", "Text*"},
+        {"plate.reset", "Reset"},              {"plate.reset-all", "Rst*"},
+        {"view.toggle-histogram", "Hist"},     {"view.toggle-histogram-all", "Hist*"},
+        {"view.toggle-note-overlay", "Notes"}, {"color.reset", "CC 0"},
+        {"color.reset-all", "CC 0*"},          {"file.quick-load", "Load"},
+        {"file.load-manager", "Mgr"},          {"file.save-session", "Save"},
+        {"file.open-session", "Open"},         {"file.preferences", "Prefs"},
+        {"file.quit", "Quit"},                 {"view.toggle-fullscreen", "Full"},
+        {"panels.toggle-plate-manager", "Plt"}, {"panels.toggle-fx", "FX"},
+        {"panels.toggle-luts", "LUTs"},        {"panels.open-remote", "Rmt"},
+        {"panels.open-render", "Rend"},        {"panels.toggle-notes", "Notes"},
+        {"panels.toggle-timeline", "Time"},    {"panels.toggle-playlist", "List"},
+        {"panels.hide-controls", "Hide"},      {"panels.minimize", "Min"},
+        {"help.manual", "Docs"},               {"help.toggle-overlay", "Help"},
+        {"color.drag-gamma", "Gam"},           {"color.drag-exposure", "Exp"},
+        {"color.drag-brightness", "Brt"},      {"color.drag-contrast", "Con"},
+        {"color.drag-saturation", "Sat"},      {"plate.lut-hold", "LUT"},
     };
     if (const auto it = table.constFind(id); it != table.constEnd()) return it.value();
-    // Numbered families: "color.cc-fav-apply-3" -> "CC 3".
+    // Numbered families: the key's own label already shows the number.
     static const QList<QPair<QString, QString>> families = {
-        {"color.cc-fav-apply-", "CC %1"}, {"color.cc-fav-save-", "Save CC %1"}, {"fx.fav-load-", "FX %1"},
-        {"fx.fav-append-", "+FX %1"},     {"fx.fav-save-", "Save FX %1"},       {"plate.show-track-", "Track %1"},
+        {"color.cc-fav-apply-", "CC"}, {"color.cc-fav-save-", "SvCC"}, {"fx.fav-load-", "FX"},
+        {"fx.fav-append-", "+FX"},     {"fx.fav-save-", "SvFX"},       {"plate.show-track-", "Trk"},
     };
     for (const auto& f : families)
-        if (id.startsWith(f.first)) return f.second.arg(id.mid(f.first.size()));
+        if (id.startsWith(f.first)) return f.second;
     // Anything else: the name without "(…)", a "Group: " prefix or a trailing ellipsis.
     QString s = name;
     if (const int p = s.indexOf(QLatin1Char('(')); p > 0) s = s.left(p);
@@ -459,13 +462,50 @@ void ShortcutKeyboard_Qt::rebuild()
     update();
 }
 
+QList<const ShortcutKeyboard_Qt::Binding*> ShortcutKeyboard_Qt::bindingsOn(Qt::Key key,
+                                                                         Qt::KeyboardModifiers mods) const
+{
+    QList<const Binding*> out;
+    const auto it = bindings_.constFind(key);
+    if (it == bindings_.constEnd()) return out;
+    // One entry per command: Return and Enter (both on the Return key) are one command, not two.
+    QSet<QString> seen;
+    for (const Binding& b : *it)
+        if (b.mods == mods && !seen.contains(b.id)) {
+            seen.insert(b.id);
+            out.push_back(&b);
+        }
+    return out;
+}
+
 const ShortcutKeyboard_Qt::Binding* ShortcutKeyboard_Qt::bindingOn(Qt::Key key, Qt::KeyboardModifiers mods) const
 {
-    const auto it = bindings_.constFind(key);
-    if (it == bindings_.constEnd()) return nullptr;
-    for (const Binding& b : *it)
-        if (b.mods == mods) return &b;
-    return nullptr;
+    const QList<const Binding*> on = bindingsOn(key, mods);
+    return on.isEmpty() ? nullptr : on.first();
+}
+
+int ShortcutKeyboard_Qt::bindingCount(Qt::Key key) const { return int(bindingsOn(key, layer()).size()); }
+
+QString ShortcutKeyboard_Qt::drawnCaption(Qt::Key key) const
+{
+    const Binding* b = bindingOn(key, layer());
+    if (!b) return {};
+    const QRectF r = keyRect(key);
+    const qreal room = r.width() - 2 * kCaptionPad;
+    // Whole or not at all: an elided stub ("Tra…") says nothing the tooltip does not say better.
+    return QFontMetricsF(font()).horizontalAdvance(b->caption) <= room ? b->caption : QString();
+}
+
+QString ShortcutKeyboard_Qt::keyToolTip(Qt::Key key) const
+{
+    const QList<const Binding*> on = bindingsOn(key, layer());
+    if (on.isEmpty()) return tr("Nothing on this key with these modifiers. Click to see every layer.");
+    QStringList lines;
+    for (const Binding* b : on)
+        lines << b->key.toString(QKeySequence::NativeText) + QStringLiteral("  ") + b->name +
+                     (b->hold ? tr(" (hold and drag)") : QString());
+    if (on.size() > 1) lines << tr("More than one command is on this key; the list decides which runs.");
+    return lines.join(QLatin1Char('\n'));
 }
 
 QString ShortcutKeyboard_Qt::keyCaption(Qt::Key key) const
@@ -514,7 +554,7 @@ void ShortcutKeyboard_Qt::paintEvent(QPaintEvent*)
 
     const Qt::KeyboardModifiers shown = layer();
     const QFontMetricsF fm(font());
-    const qreal pad = 4;
+    const qreal pad = kCaptionPad;
     for (const sc::KeyCap& c : caps_) {
         const QRectF r = capRect(c);
         const bool modCap = isModifierCap(c.key);
@@ -540,18 +580,27 @@ void ShortcutKeyboard_Qt::paintEvent(QPaintEvent*)
         const QString label = fm.elidedText(c.label, Qt::ElideRight, inner.width());
         p.drawText(inner, Qt::AlignLeft | Qt::AlignTop, label);
         if (b) {
-            // The command's short name on the second line, if at least a few letters fit.
-            const QString cap = fm.elidedText(b->caption, Qt::ElideRight, inner.width());
-            if (!cap.isEmpty() && cap != QString(QChar(0x2026)) && (cap == b->caption || cap.size() >= 3)) {
+            // The command's short name on the second line, only when it fits whole.
+            const QString cap = drawnCaption(c.key);
+            if (!cap.isEmpty()) {
                 p.setPen(kText);
                 p.drawText(inner, Qt::AlignLeft | Qt::AlignBottom, cap);
+            }
+            qreal markRight = r.right() - pad;
+            if (bindingsOn(c.key, shown).size() > 1) {
+                // More than one command on this key: a "+" in the top-right corner.
+                const QString plus = QStringLiteral("+");
+                const qreal w = fm.horizontalAdvance(plus);
+                p.setPen(kAccentText);
+                p.drawText(QRectF(markRight - w, inner.top(), w, fm.height()), Qt::AlignRight | Qt::AlignTop, plus);
+                markRight -= w + 2;
             }
             if (b->hold) {
                 // Hold mark: a small ring in the top-right corner.
                 const qreal rad = 3;
                 p.setPen(QPen(kText, 1.2));
                 p.setBrush(Qt::NoBrush);
-                p.drawEllipse(QPointF(r.right() - pad - rad, r.top() + pad + rad), rad, rad);
+                p.drawEllipse(QPointF(markRight - rad, r.top() + pad + rad), rad, rad);
             }
         }
     }
@@ -579,11 +628,7 @@ bool ShortcutKeyboard_Qt::event(QEvent* e)
         const int i = capAt(he->pos());
         QString tip;
         if (i >= 0 && !isModifierCap(caps_[i].key)) {
-            if (const Binding* b = bindingOn(caps_[i].key, layer()))
-                tip = b->key.toString(QKeySequence::NativeText) + QStringLiteral("  ") + b->name +
-                      (b->hold ? tr(" (hold and drag)") : QString());
-            else
-                tip = tr("Nothing on this key with these modifiers. Click to see every layer.");
+            tip = keyToolTip(caps_[i].key);
         } else if (i >= 0) {
             tip = tr("Click to show this modifier's keys.");
         }
