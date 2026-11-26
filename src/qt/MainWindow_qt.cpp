@@ -3891,9 +3891,17 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             bad << "cannot snapshot the favourites";
         } else {
             jefe::qt::setFavoritesFilePathForTest(path.toStdString());
-            QAction* menuSave = findChild<QAction*>(QStringLiteral("menu.view.ccfav.save.4"));
+            // The registry owns the actions, so look in the menu rather than among our children.
+            QMenu* favMenu = findChild<QMenu*>(QStringLiteral("menu.view.ccfavorites"));
+            auto inMenu = [favMenu](const char* name) -> QAction* {
+                if (favMenu)
+                    for (QAction* a : favMenu->actions())
+                        if (a->objectName() == QLatin1String(name)) return a;
+                return nullptr;
+            };
+            QAction* menuSave = inMenu("menu.view.ccfav.save.4");
             QAction* regSave = sc::Registry::instance().action("color.cc-fav-save-5");
-            QAction* menuLoad = findChild<QAction*>(QStringLiteral("menu.view.ccfav.load.0"));
+            QAction* menuLoad = inMenu("menu.view.ccfav.load.0");
             if (!menuSave || menuSave != regSave) bad << "Save to Slot 5 is not the registry's color.cc-fav-save-5";
             if (!menuLoad || menuLoad != sc::Registry::instance().action("color.cc-fav-apply-1"))
                 bad << "Load Slot 1 is not the registry's color.cc-fav-apply-1";
