@@ -8,17 +8,18 @@ Order of the three related projects (owner-agreed): **1. shortcuts (this doc)** 
 JefeCheck 2.0 is aimed at **new people**, most of whom already know Premiere, Resolve, Final Cut or Avid. JefeCheck's keys come from the 2006 FLTK app and differ from the editing convention in places people hit early (`Shift+I`/`Shift+O` reset In/Out here; everywhere else they jump to In/Out). The owner wants:
 
 - a Shortcuts section in Preferences where any key can be changed;
-- presets, with an **Editing** preset (the NLE convention) as the default and a **JefeCheck 1.7** preset that keeps today's keys;
+- presets, with an **Editing** preset (the NLE convention) as the default and a **JefeCheck 1.7** preset that matches what shipped 1.7 did;
 - a Final Cut–style **keyboard map** in the first release, not later;
 - **import / export** of shortcut sets so a studio can hand everyone the same keys;
 - **J / K / L** transport.
 
-Success: someone from Premiere or Resolve presses I, O, Shift+I, Option+X, J, K, L, Space, arrows and gets what they expect; a 1.7 user picks one preset and gets exactly today's behaviour; every place that names a key (menus, tooltips, the `H` overlay, the manual) shows the current key.
+Success: someone from Premiere or Resolve presses I, O, Shift+I, Option+X, J, K, L, Space, arrows and gets what they expect; a 1.7 user picks one preset and gets what shipped 1.7 did; every place that names a key (menus, tooltips, the `H` overlay, the manual) shows the current key.
 
 ## Goals
 
 - One list of commands (the registry) is the only place a key is bound.
-- Every key binding in the app today moves into it, with no behaviour change under the 1.7 preset.
+- Every key binding in the app today moves into it (phase 1 changes no behaviour).
+- The 1.7 commands 2.0 dropped come back (channels, track 1–4, favourites, LUT scroll).
 - Two built-in presets plus user customization ("Custom" = a preset with overrides).
 - Preferences → **Shortcuts** page: keyboard map, searchable command list, key capture, conflict warning, reset, import, export.
 - First-launch preset chooser.
@@ -34,7 +35,7 @@ Success: someone from Premiere or Resolve presses I, O, Shift+I, Option+X, J, K,
 
 ## Anti-goals
 
-- A 1.7 user who picks the 1.7 preset notices any difference. (Tested key by key.)
+- A 1.7 user who picks the 1.7 preset finds a shipped-1.7 key doing something else. (Tested key by key against `main`.)
 - Typing into a text field, spin box or the chat overlay fires a shortcut.
 - Arrow keys stop navigating lists (Playlist, Notes, LUT list) because a global shortcut stole them.
 - A key shown in a menu, tooltip or the help overlay is not the key that actually works.
@@ -58,6 +59,10 @@ Keys are bound in four places:
 | `GlViewport_qt.cpp:394` `keyPressEvent` switch (viewport focus only) | Space, Left/Right, X/C, Home/End, Up/Down, 8/9/0, `<`/`>`, I, O, Shift+I/O, Alt+I, Escape (pencil), Return (chat) | ~20 |
 | `GlViewport_qt.cpp` held-key drags | W gamma, E exposure, Q brightness, D contrast, S saturation (hold + left-drag) | 5 |
 
+Also bound inside single panels (stay there, see Scopes): Playlist Enter / Delete / Backspace / Shift+Up/Down, the LUT cube's F, the FX scrub field.
+
+Shipped 1.7 (`main`) bound more keys than 2.0 does today; see Presets.
+
 Text that names keys by hand: the help overlay string (`gfcplatemanager.cpp:42`), tooltips across `src/qt/`, `docs/manual.md`, `docs/quick-start.md`.
 
 ## Approaches
@@ -80,15 +85,18 @@ struct Command {
     QString     name;          // shown in Preferences, e.g. "Play / Pause"
     Category    category;
     Scope       scope;
-    QKeySequence editing;      // key in the Editing preset (may be empty)
-    QKeySequence classic;      // key in the JefeCheck 1.7 preset (may be empty)
+    QList<QKeySequence> editing;   // keys in the Editing preset (0–2)
+    QList<QKeySequence> classic;   // keys in the JefeCheck 1.7 preset (0–2)
     std::function<void()> run;
 };
 
 struct HoldKey {               // hold-a-key-and-drag; not a QAction
     const char* id;            // e.g. "color.drag-gamma"
     QString name;
-    Qt::Key editing, classic;
+    Qt::Key editing, classic;  // Qt::Key_unknown = unbound in that preset
+    // Optional: hold this key, then press one of `with` (e.g. hold L + Up/Down).
+    // Empty = hold-and-drag. Each entry runs its own action.
+    QList<QPair<Qt::Key, std::function<void()>>> with;
 };
 
 class Registry {
@@ -123,37 +131,72 @@ signals:
 ### Scopes
 
 - **Global** (`Qt::ApplicationShortcut`): fires wherever focus is, unless the focused widget claims the key via `ShortcutOverride` (text fields and spin boxes do for printable keys). Used for: File, Panels, Help, Layout, plate transforms (as today).
-- **Player** (`Qt::WidgetWithChildrenShortcut`, the action added to the viewport, the Timeline dock and the Plate Manager dock): fires only when focus is in one of those. Used for transport, In/Out, timeline, track cycling — the keys that are also list-navigation keys (arrows, Space, Home/End). This keeps arrows working in the Playlist and Notes lists.
-- Remote chat mode: while chat mode is on, the viewport accepts `ShortcutOverride` for every key so typed letters go to the chat, as today.
+- **Player** (`Qt::WidgetShortcut`, the action added to the viewport and to the timeline's two painted widgets, `TimelineScrubber_Qt` and `TimelineTracks_Qt`, only): fires only when one of those has focus. Not the Plate Manager dock and not the timeline's transport controls: their sliders, combos, spin boxes and buttons use arrows, Home/End and Space themselves and don't claim them through `ShortcutOverride`. Used for transport, In/Out, timeline, track cycling — the keys that are also navigation keys. Today these fire only with viewport focus; adding the two timeline widgets is the only widening. (My call, from the builder check.)
+- **Panel keys stay where they are** and are not in the registry: Playlist Enter / Delete / Backspace / Shift+Up/Down, the LUT cube's F, the FX scrub field's keys. They mean something only inside one widget. The Shortcuts page lists them read-only in a "Inside panels" group so they can be found. The LUT cube's F currently loses to the Global F (Fit); fix it here by having `LutCloudWidget` claim F through `ShortcutOverride` while it has focus. (My call.)
+- Remote chat mode: while chat mode is on, the viewport accepts `ShortcutOverride` for every key so typed letters go to the chat. Today the Global bare letters (F, V, M, T, H, N) probably fire while typing chat; this is a fix, applied in both presets. (My call.)
+- **Modifiers match exactly.** Today's viewport handler ignores Shift on most keys, so Shift+Left, Shift+Space, Shift+8 and so on work by accident. `QAction` matches exact modifiers and those accidental variants are dropped (listed in the release notes, not registered as hidden aliases). A command may hold **up to two keys per preset** (needed for Left/Right + X/C in 1.7 and `,`/`.` + `<`/`>`); the canonical stored keys for play direction are `,` and `.` (unshifted, which match reliably across platforms), with `<`/`>` as the second key. (My call.)
 - Conflict rule: two commands may not share a key in the same scope, and a Global key may not equal any Player key.
 
 ### Presets
 
-The **JefeCheck 1.7** preset (`classic`) reproduces today's keys exactly. The **Editing** preset (`editing`, the default) differs only where the NLE convention differs. New commands get keys in both presets when the key is free in both.
+Two built-in presets. The **Editing** preset is the default; **JefeCheck 1.7** reproduces what shipped FLTK 1.7 did (`main`: `UICallbacks.cpp` `globalCB`, `GlViewport.cpp` `FL_KEYDOWN`), the keys returning users' fingers know. (Owner: match shipped 1.7, not today's qt-experimental keys.)
 
-| Command | Editing | 1.7 |
+Rules:
+- **1.7** = shipped 1.7's keys, plus a 2.0 key wherever that key is free in 1.7. Where a 1.7 key now belongs to a 2.0 command (`V` is Flip in 2.0, Last Frame in 1.7), the 1.7 meaning wins and the 2.0 command keeps its other key or goes to the key 1.7 used for it.
+- **Editing** = today's 2.0 keys, changed only where the NLE convention (Premiere, Resolve, Final Cut, Avid) differs, plus the 1.7 commands 2.0 dropped, on keys that don't clash with that convention.
+
+**Commands 2.0 dropped and this project brings back** (backends exist in `gfcPlateManager`; each needs a bridge call):
+- R / G / B / A: toggle the red / green / blue / alpha channel on the active plate. (Dropped because bare letters at app scope broke typing; Player scope and `ShortcutOverride` fix that.)
+- 1–4: show track A–D on the active plate.
+- Shift+1–5: apply colour-correction favourite 1–5; Ctrl+Shift+1–5: save the active plate's colour correction as favourite 1–5.
+- Shift+F1–F5: load FX-stack favourite 1–5; Ctrl+F1–F5: append it; Ctrl+Shift+F1–F5: save the active plate's stack as favourite 1–5.
+- Previous / next LUT on the active plate (1.7: hold L + Up / Down).
+
+| Command | Editing (default) | JefeCheck 1.7 |
 |---|---|---|
 | Play / Pause | Space | Space |
-| Play backward / Pause / Play forward | J / K / L | J / K / L (new, free) |
-| Step back / forward | Left / Right | Left / Right, X / C (two keys each) |
-| Go to start / end | Home / End | Home / End |
+| Play backward / Pause / Play forward | J / K / L | — (L is the LUT hold key in 1.7) |
+| Step back / forward | Left / Right | Left / Right, X / C |
+| Go to start / end | Home / End | Z / V, Home / End |
+| Play direction reverse / forward | `,` / `.` (also `<` / `>`) | same |
+| Loop once / loop / bounce | 8 / 9 / 0 | 8 / 9 / 0 |
 | Set In / Out at playhead | I / O | I / O |
 | Go to In / Go to Out | Shift+I / Shift+O | — |
-| Reset In / Out to the timeline ends | Alt+I / Alt+O (clear) | Shift+I / Shift+O |
+| Reset In / Out to the timeline ends | Alt+I / Alt+O | Shift+I / Shift+O |
 | Clear In and Out | Alt+X | — |
 | Set In and load from here | Shift+Alt+I | Alt+I |
-| Play direction | `<` / `>` | `<` / `>` |
-| Loop once / loop / bounce | 8 / 9 / 0 | 8 / 9 / 0 |
 | Cycle track on active plate | Up / Down | Up / Down |
-| Timeline zoom in / out | `=` / `-` | `=` / `-` |
-| Timeline zoom to fit / to In–Out | `\` / Shift+`\` | `\` / Shift+`\` |
-| Go to playhead / Follow playhead (timeline view) | picked by the timeline project from free keys | same |
-| Everything else (F, V, M, T, Ctrl+R, Shift+R, F2–F9, F11, H, N, Ctrl+1–4, File menu) | unchanged | unchanged |
-| Hold keys W/E/Q/D/S | unchanged | unchanged |
+| Show track A–D on active plate | 1–4 | 1–4 |
+| Previous / next LUT | — (unbound; bind in Preferences) | hold L + Up / Down |
+| Toggle R / G / B / A channel | R / G / B / A | R / G / B / A |
+| CC favourite apply / save | Shift+1–5 / Ctrl+Shift+1–5 | same |
+| FX favourite load / append / save | Shift+F1–F5 / Ctrl+F1–F5 / Ctrl+Shift+F1–F5 | same |
+| Fit / fit all plates | F / Shift+F | F / Alt+F, Shift+F |
+| Flip / flip all | V / Shift+V | Ctrl+8 / Ctrl+Alt+8 |
+| Flop / flop all | M / Shift+M | M, Ctrl+9 / Shift+M, Ctrl+Alt+9 |
+| Text mode / all | T / Alt+T | T / Alt+T |
+| Reset plate / all | Ctrl+R / Ctrl+Alt+R | same |
+| Reset colour / all | Shift+R / Shift+Alt+R | same |
+| Fullscreen | F11, Cmd+Ctrl+F | Ctrl+F, F11 |
+| Hide controls | Ctrl+Alt+F | Ctrl+Alt+F |
+| On-screen help | H | H |
+| Histogram / all | Ctrl+H / Ctrl+Alt+H | same |
+| Load Sequence Manager | Ctrl+L | Ctrl+L |
+| Preferences | Ctrl+P, Ctrl+, | Ctrl+P |
+| Quit | standard Quit (Cmd+Q / Ctrl+Q) | same |
+| Remote chat: start typing / show-hide chat | Return / — | Y / Ctrl+Y (Return also sends) |
+| Layouts single / side / top-bottom / 2×2 | Ctrl+1–4 | Ctrl+1–4 |
+| Panels F2–F9, Notes N, Manual F1, File menu (Ctrl+O, Ctrl+S, Ctrl+Shift+O) | unchanged | unchanged (1.7's F2–F6 opened windows 2.0 merged or renamed; the 2.0 panel keys are kept) |
+| Timeline zoom in / out, fit, fit to In–Out | `=` / `-`, `\`, Shift+`\` | same |
+| Go to / follow playhead (timeline) | picked by the timeline project from free keys | same |
+| Hold and drag: gamma / exposure / brightness / contrast / saturation | W / E / Q / D / S | W / E / Q / D / S |
 
-Timeline-project commands (zoom, fit, go to playhead, follow) are registered by that project; the keys above are reserved now so the presets are complete. "Up/Down = previous/next edit" is the NLE convention; the edit-tracks project decides whether Editing moves track cycling to make room.
-
-"Clear" (Editing) and "Reset to the ends" (1.7) do the same thing in JefeCheck: In goes to the first frame, Out to the last. Only the key differs.
+Notes:
+- Ctrl+1–5 vs Shift+1–5 vs bare 1–4 vs Ctrl+Shift+1–5 are four different layers of the digit keys, as in 1.7.
+- "Clear" (Editing) and "Reset to the ends" (1.7) do the same thing in JefeCheck: In goes to the first frame, Out to the last.
+- Hold L + Up/Down is a hold-key combination; `HoldKey` gains an optional paired key list so the registry can express it. Only 1.7 binds it.
+- "Up/Down = previous/next edit" is the NLE convention; the edit-tracks project decides whether Editing moves track cycling to make room.
+- Timeline-project commands are registered by that project; their keys are reserved here so both presets are complete.
 
 ### Persistence
 
@@ -225,7 +268,8 @@ When `Shortcuts/preset` is unset, the first time the main window shows, an inlin
 
 - `--shortcuts-test` (headless, no GL):
   - every command id unique; every preset conflict-free under the scope rule;
-  - **1.7 parity**: a table of every key the app handled before this change → expected command; under `classic` each resolves to that command;
+  - **2.0 parity** (phase 1): every key qt-experimental handles today → its command, under the phase-1 keyset;
+  - **1.7 parity** (phase 2): every key shipped 1.7 handled (`main`'s `globalCB` and `GlViewport::handle`) → its command; under `classic` each resolves to it;
   - Editing differences resolve as in the table above;
   - preset switch updates every `QAction`'s key; overrides persist and reload; override equal to preset is dropped;
   - export → import round trip gives identical keys; Mac-style file imports on other platforms (portable text);
@@ -237,8 +281,8 @@ When `Shortcuts/preset` is unset, the first time the main window shows, an inlin
 
 ## Phases (PRs)
 
-1. **Registry, no behaviour change.** Registry, all commands registered with `classic` = today's keys and `editing` = same for now; all four binding places moved over; help overlay generated; tooltips via `label()`; `--shortcuts-test` parity + focus test. The app ships with `classic` as default in this PR so nothing changes.
-2. **Editing preset and Preferences list.** Editing keys, J/K/L, Go to In/Out, Clear In/Out, Set In and load moved; Shortcuts page with list, capture, conflicts, reset, search, import/export; first-launch banner; default becomes `editing`; docs.
+1. **Registry, no behaviour change.** Registry; every command registered with today's qt-experimental keys as its only keyset; all binding places moved over; help overlay generated; tooltips via `label()`; `--shortcuts-test` 2.0 parity + focus test.
+2. **Presets and Preferences list.** Editing and shipped-1.7 presets; the brought-back 1.7 commands (channels, track 1–4, CC and FX favourites, LUT scroll) with their bridge calls; J/K/L, Go to In/Out, Clear In/Out; Shortcuts page with list, capture, conflicts, reset, search, import/export; first-launch banner; default becomes `editing`; docs.
 3. **Keyboard map.** `ShortcutKeyboard_Qt` on the page, modifier layers, click-to-inspect, drag-to-assign.
 
 All three land before the 2.0 release (owner: the map is in the first version).
@@ -246,14 +290,15 @@ All three land before the 2.0 release (owner: the map is in the first version).
 ## Decided by the owner
 
 - Approach A (Qt actions in one registry).
-- Default preset for new installs is Editing; a JefeCheck 1.7 preset exists.
+- Default preset for new installs is Editing; a JefeCheck 1.7 preset exists and matches **shipped** 1.7, not today's qt-experimental keys.
 - Keyboard map, import/export and J/K/L are in the first release.
 - Shortcuts come before the timeline project, which comes before edit tracks.
 
 ## My calls (check these)
 
 - Editing gives Alt+I / Alt+O = clear In / Out and moves "Set In and load from here" to Shift+Alt+I.
-- 1.7 preset also gets J/K/L, zoom keys and `\` since they are free there; X/C stay as second step keys only in 1.7.
+- 1.7 preset gets 2.0 keys wherever free in 1.7 (zoom, `\`, F2–F9, N, M for flop); it does not get J/K/L because L is its LUT hold key.
+- Editing also binds the brought-back 1.7 commands (R/G/B/A, 1–4, favourites) on non-clashing keys; previous/next LUT is unbound in Editing.
 - Two scopes (Global / Player) rather than per-widget keys.
 - First-launch chooser is an inline banner, not a dialog.
 - Export writes every key, not only the changes.
