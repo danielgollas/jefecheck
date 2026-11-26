@@ -71,6 +71,10 @@ public:
     // Self-tests: the preset with no overrides at all, even when it is the current one (setPreset
     // keeps a same-preset user's overrides). Callers snapshot first and restore afterwards.
     void pinPreset(const QString& preset);
+    // Preferences "Reset to preset": drops every override of the current preset. Unlike
+    // pinPreset it keeps a preset name load() did not know (and ids this build does not
+    // register), so a later version's settings still round-trip.
+    void resetToPreset();
     // An override equal to the preset's keys is dropped. Empty key = deliberately unbound.
     void setOverride(const char* id, const QKeySequence& key);
     // Both keys of a command at once (more than two are cut to two). Empty list = unbound.
@@ -192,6 +196,10 @@ QStringList helpPlacedIds();
 
 // "Play / Pause (Space)"; just `text` when the command is unbound.
 QString tooltipWithKey(const QString& text, const char* id);
+
+// Tests that redirect QSettings::setPath(IniFormat, UserScope, dir) read the current directory
+// first with this and set it back afterwards (Qt has no getter for it).
+QString iniUserScopePath();
 
 // --shortcuts-test: headless registry self-test. Returns the failure count.
 int shortcutsSelfTest();

@@ -736,6 +736,7 @@ void testPrefsCancelDone(Registry& reg)
                         QUuid::createUuid().toString(QUuid::Id128);
     QDir().mkpath(dir);
     const QSettings::Format oldFmt = QSettings::defaultFormat();
+    const QString oldIniPath = iniUserScopePath();
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir);
     QSettings::setDefaultFormat(QSettings::IniFormat);
     const Registry::Snapshot orig = reg.snapshot();
@@ -773,6 +774,20 @@ void testPrefsCancelDone(Registry& reg)
         t.sync();
         unknownOk = t.value("Shortcuts/preset").toString() == "studio-2027";
     }
+    bool resetKeepsUnknown = false;
+    {   // Preferences "Reset to preset" drops the keys but keeps a later version's preset name.
+        QSettings s;
+        s.setValue("Shortcuts/preset", "studio-2027");
+        s.sync();
+        reg.load(s);
+        reg.setOverride("playback.play-pause", QKeySequence("Ctrl+Alt+Q"));
+        reg.resetToPreset();
+        const bool dropped = !reg.isCustom() && reg.key("playback.play-pause") == base;
+        reg.save(s);
+        s.sync();
+        resetKeepsUnknown = dropped && s.value("Shortcuts/preset").toString() == "studio-2027" &&
+                            !s.contains("Shortcuts/overrides/playback.play-pause");
+    }
     bool escOk = false;
     {
         reg.restore(orig);
@@ -784,11 +799,15 @@ void testPrefsCancelDone(Registry& reg)
     }
     check("prefs-escape-reverts", escOk);
     QSettings::setDefaultFormat(oldFmt);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, oldIniPath);
+    const bool pathBack = iniUserScopePath() == oldIniPath;
     QDir(dir).removeRecursively();
     reg.restore(orig);
     check("prefs-cancel", cancelOk);
     check("prefs-done", doneOk);
     check("prefs-done-keeps-unknown-preset", unknownOk);
+    check("reset-to-preset-keeps-unknown-preset", resetKeepsUnknown);
+    check("prefs-test-restores-ini-path", pathBack, oldIniPath);
 }
 
 // A stored value this build cannot parse (for a registered id) falls back to the preset and is

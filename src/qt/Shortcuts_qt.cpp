@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QFileInfo>
 #include <QSettings>
 #include <QWidget>
 #include <QtGlobal>
@@ -256,6 +257,15 @@ void Registry::pinPreset(const QString& preset)
     if (preset != kEditing && preset != kClassic) return;
     preset_ = preset;
     unknownPreset_.clear();
+    overrides_.clear();
+    holdOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
+    applyKeys();
+}
+
+void Registry::resetToPreset()
+{
     overrides_.clear();
     holdOverrides_.clear();
     unreadableOverrides_.clear();
@@ -665,6 +675,14 @@ void Registry::reset()
     unknownPreset_.clear();
     preset_ = kEditing;
     defaultPreset_ = kEditing;
+}
+
+QString iniUserScopePath()
+{
+    // "<path>/<org>/<app>.ini": two levels up is the UserScope directory. Nothing is written.
+    const QSettings probe(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("probe-org"),
+                          QStringLiteral("probe-app"));
+    return QFileInfo(QFileInfo(probe.fileName()).absolutePath()).absolutePath();
 }
 
 }  // namespace jefe::shortcuts

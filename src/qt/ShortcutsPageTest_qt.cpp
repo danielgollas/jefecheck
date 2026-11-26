@@ -356,6 +356,116 @@ int MainWindow_Qt::runHeadlessShortcutsPageTest(const QString& outDir)
             pageCheck("enter-opens-capture", opened && !page->captureEditor());
         }
 
+        // A conflict bar left open across a preset switch, the reset dot or Reset to preset must
+        // not let Replace act on the old measurement. Editing: V is Flip; capture V for Step Back
+        // (the bar names Flip), then switch to 1.7 (V = Go to End, Flip = Ctrl+8), then Replace.
+        auto* combo = dlg.findChild<QComboBox*>(QStringLiteral("prefs.shortcuts.preset"));
+        auto* sw = dlg.findChild<QPushButton*>(QStringLiteral("prefs.shortcuts.preset.switch"));
+        auto* resetAll = dlg.findChild<QPushButton*>(QStringLiteral("prefs.shortcuts.reset"));
+        auto* pbar = dlg.findChild<QWidget*>(QStringLiteral("prefs.shortcuts.presetbar"));
+        const char* back = "playback.step-back";
+        const QKeySequence v(Qt::Key_V);
+        auto chooseClassic = [&] {
+            const int classic = combo ? combo->findData(QStringLiteral("classic")) : -1;
+            if (classic < 0) return;
+            combo->setCurrentIndex(classic);
+            emit combo->activated(classic);
+            settle();
+        };
+        auto vOnOneCommand = [&] {  // no command shares V with another in a clashing scope
+            for (const sc::Command& c : reg.commands())
+                if (reg.keys(c.id).contains(v) && !reg.conflicts(c.id, v).isEmpty()) return false;
+            return true;
+        };
+        for (const bool custom : {false, true}) {
+            reg.pinPreset(QStringLiteral("editing"));
+            if (custom) reg.setOverride("playback.go-start", freeKey("playback.go-start"));
+            capture(page, back, 0, Qt::Key_V);
+            settle();
+            const bool named = bar && bar->isVisible() && barText && barText->text().contains("Flip");
+            chooseClassic();
+            if (custom && sw) sw->click();  // custom keys: the preset bar asks first
+            settle();
+            const bool hidden = bar && !bar->isVisible() && pbar && !pbar->isVisible();
+            if (replace) replace->click();  // a hidden button still clicks: must do nothing
+            settle();
+            const QByteArray name = custom ? QByteArray("stale-conflict-preset-switch-custom")
+                                           : QByteArray("stale-conflict-preset-switch");
+            pageCheck(name.constData(),
+                      named && hidden && reg.preset() == "classic" && vOnOneCommand() &&
+                          reg.keys(back) == reg.presetKeys(back),
+                      QStringLiteral("named=%1 hidden=%2 back=%3 goEnd=%4")
+                          .arg(named).arg(hidden).arg(keysOf(back), keysOf("playback.go-end")));
+        }
+        {   // The reset dot and Reset to preset close the bar too.
+            reg.pinPreset(QStringLiteral("editing"));
+            reg.setOverride("playback.go-start", freeKey("playback.go-start"));
+            capture(page, back, 0, Qt::Key_V);
+            settle();
+            const bool shown1 = bar && bar->isVisible();
+            page->resetRowByClick(QStringLiteral("playback.go-start"));
+            settle();
+            const bool dotHides = bar && !bar->isVisible();
+            if (replace) replace->click();
+            settle();
+            const bool dotOk = shown1 && dotHides && reg.keys(back) == reg.presetKeys(back) &&
+                               reg.key("plate.flip") == v;
+            reg.setOverride("playback.go-start", freeKey("playback.go-start"));
+            capture(page, back, 0, Qt::Key_V);
+            settle();
+            const bool shown2 = bar && bar->isVisible();
+            if (resetAll) resetAll->click();
+            settle();
+            const bool resetHides = bar && !bar->isVisible();
+            if (replace) replace->click();
+            settle();
+            const bool resetOk = shown2 && resetHides && reg.keys(back) == reg.presetKeys(back) &&
+                                 reg.key("plate.flip") == v && !reg.isCustom();
+            pageCheck("stale-conflict-reset", dotOk && resetOk,
+                      QStringLiteral("dot=%1 reset=%2 flip=%3").arg(dotOk).arg(resetOk).arg(keysOf("plate.flip")));
+        }
+
+        // Escape and Return stay on the page: the dialog's Escape (reject) reverts every page and
+        // its Return presses Done.
+        {
+            reg.pinPreset(QStringLiteral("editing"));
+            reg.setOverride("playback.go-start", freeKey("playback.go-start"));  // an edit Escape must not lose
+            const QString edited = allKeys();
+            page->search()->setText(QStringLiteral("zzzz"));
+            page->search()->setFocus();
+            press(page->search(), Qt::Key_Escape);
+            pageCheck("escape-clears-search", dlg.isVisible() && page->search()->text().isEmpty() && allKeys() == edited,
+                      QStringLiteral("visible=%1 text=%2").arg(dlg.isVisible()).arg(page->search()->text()));
+
+            capture(page, back, 0, Qt::Key_V);
+            settle();
+            const bool shown = bar && bar->isVisible();
+            page->list()->setFocus();
+            press(page->list(), Qt::Key_Escape);
+            pageCheck("escape-cancels-conflict", shown && dlg.isVisible() && bar && !bar->isVisible() && allKeys() == edited,
+                      QStringLiteral("shown=%1 visible=%2").arg(shown).arg(dlg.isVisible()));
+
+            chooseClassic();  // custom keys: the preset bar asks
+            const bool asked = pbar && pbar->isVisible();
+            page->search()->setFocus();
+            press(page->search(), Qt::Key_Escape);
+            pageCheck("escape-keeps-preset", asked && dlg.isVisible() && pbar && !pbar->isVisible() &&
+                                                 allKeys() == edited && combo && combo->currentData().toString() == "editing",
+                      QStringLiteral("asked=%1 visible=%2").arg(asked).arg(dlg.isVisible()));
+
+            page->search()->setText(QStringLiteral("play forward"));
+            settle();
+            page->search()->setFocus();
+            press(page->search(), Qt::Key_Return);
+            const QString cur = page->list()->currentIndex().siblingAtColumn(0).data(Qt::UserRole + 1).toString();
+            pageCheck("return-in-search-goes-to-list",
+                      dlg.isVisible() && dlg.result() != QDialog::Accepted && cur == QString::fromUtf8(fwd) &&
+                          QApplication::focusWidget() == page->list(),
+                      QStringLiteral("visible=%1 current=%2").arg(dlg.isVisible()).arg(cur));
+            page->search()->clear();
+            settle();
+        }
+
         // selectCommand + commandSelected.
         {
             QString got;

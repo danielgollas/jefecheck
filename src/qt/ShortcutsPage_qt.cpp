@@ -339,6 +339,7 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     search_->setPlaceholderText(tr("Search commands or keys"));
     search_->setClearButtonEnabled(true);
     search_->setToolTip(tr("Filter the list by command name or key."));
+    search_->installEventFilter(this);  // Escape clears it, Return goes to the list (not Done / Cancel)
     outer->addWidget(search_);
 
     model_ = new QStandardItemModel(this);
@@ -388,6 +389,7 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     connect(preset_, &QComboBox::activated, this, [this](int i) { onPresetActivated(i); });
     connect(sw, &QPushButton::clicked, this, [this] {
         presetBar_->hide();
+        dismissConflict();  // the bar's key and "used by" were measured under the old preset
         reg_.setPreset(pendingPreset_);
         refresh();
     });
@@ -397,18 +399,20 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     });
     connect(replace, &QPushButton::clicked, this, [this] {
         conflictBar_->hide();
-        const Pending p = pending_;
+        Pending p = pending_;
         pending_ = {};
+        if (p.id.isEmpty()) return;
+        // Measured again now: the bar's list may predate a preset switch or reset, and a stale
+        // list would leave the key on two commands.
+        p.others = reg_.conflicts(idBytes(p.id).constData(), p.key);
         for (const QString& other : p.others) unbindFrom(other, p.key);
         apply(p);
     });
-    connect(cancel, &QPushButton::clicked, this, [this] {
-        conflictBar_->hide();
-        pending_ = {};
-    });
+    connect(cancel, &QPushButton::clicked, this, [this] { dismissConflict(); });
     connect(reset_, &QPushButton::clicked, this, [this] {
         presetBar_->hide();
-        reg_.pinPreset(reg_.preset());
+        dismissConflict();
+        reg_.resetToPreset();  // keeps a later version's preset name, unlike pinPreset
     });
     connect(import_, &QPushButton::clicked, this, [this] {
         QString path = testPath();
@@ -458,16 +462,74 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
 
 bool ShortcutsPage_Qt::eventFilter(QObject* o, QEvent* e)
 {
-    if (o == list_ && e->type() == QEvent::KeyPress) {
+    if ((o == list_ || o == search_) && e->type() == QEvent::KeyPress) {
         auto* ke = static_cast<QKeyEvent*>(e);
-        if ((ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) &&
-            (ke->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
+        const bool plain = (ke->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier;
+        const bool isReturn = ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter;
+        // Escape would reach the dialog, whose reject() reverts every page: cancel what is open first.
+        if (ke->key() == Qt::Key_Escape && plain && handleEscape()) return true;
+        if (o == search_ && isReturn && plain) {
+            focusFirstMatch();  // never the dialog's default button (Done)
+            return true;
+        }
+        if (o == list_ && isReturn && plain) {
             const QModelIndex cur = list_->currentIndex();
             const QString id = cur.siblingAtColumn(kColName).data(kIdRole).toString();
-            if (!id.isEmpty() && beginCapture(id, cur.column() == kColKey1 ? 1 : 0)) return true;
+            if (!id.isEmpty()) beginCapture(id, cur.column() == kColKey1 ? 1 : 0);
+            return true;  // a group or read-only row: nothing, rather than Done
         }
     }
     return QWidget::eventFilter(o, e);
+}
+
+void ShortcutsPage_Qt::keyPressEvent(QKeyEvent* e)
+{
+    // Escape from any other widget of the page (a bar's button, the preset menu).
+    if (e->key() == Qt::Key_Escape && (e->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier && handleEscape()) {
+        e->accept();
+        return;
+    }
+    QWidget::keyPressEvent(e);
+}
+
+bool ShortcutsPage_Qt::handleEscape()
+{
+    if (conflictBar_->isVisibleTo(this)) {
+        dismissConflict();
+        return true;
+    }
+    if (presetBar_->isVisibleTo(this)) {
+        presetBar_->hide();
+        refresh();  // the combo goes back to the current preset (Keep)
+        return true;
+    }
+    if (!search_->text().isEmpty()) {
+        search_->clear();
+        return true;
+    }
+    return false;  // nothing to cancel: Escape closes Preferences (and reverts)
+}
+
+void ShortcutsPage_Qt::dismissConflict()
+{
+    conflictBar_->hide();
+    pending_ = {};
+}
+
+void ShortcutsPage_Qt::focusFirstMatch()
+{
+    for (int r = 0; r < model_->rowCount(); ++r) {
+        if (list_->isRowHidden(r, QModelIndex())) continue;
+        QStandardItem* g = model_->item(r);
+        for (int c = 0; c < g->rowCount(); ++c) {
+            if (list_->isRowHidden(c, g->index())) continue;
+            const QModelIndex idx = g->child(c)->index();
+            list_->setCurrentIndex(idx);
+            list_->scrollTo(idx);
+            list_->setFocus(Qt::OtherFocusReason);
+            return;
+        }
+    }
 }
 
 void ShortcutsPage_Qt::buildRows()
@@ -550,6 +612,8 @@ QString ShortcutsPage_Qt::nameOf(const QString& id) const
 
 void ShortcutsPage_Qt::refresh()
 {
+    // Keys changed: a conflict the bar shows was measured against the old keys.
+    dismissConflict();
     for (int r = 0; r < model_->rowCount(); ++r) {
         QStandardItem* g = model_->item(r);
         for (int c = 0; c < g->rowCount(); ++c) {
@@ -660,8 +724,7 @@ bool ShortcutsPage_Qt::beginCapture(const QString& id, int slot)
     const int kind = it->data(kKindRole).toInt();
     if (kind != CommandRow && kind != HoldRow) return false;
     if (kind == HoldRow) slot = 0;
-    conflictBar_->hide();
-    pending_ = {};
+    dismissConflict();
     finishCapture();
     selectCommand(id);
     const QModelIndex idx = it->index().siblingAtColumn(kColKey0 + slot);
@@ -763,6 +826,7 @@ void ShortcutsPage_Qt::unbindFrom(const QString& id, const QKeySequence& key)
 
 void ShortcutsPage_Qt::resetRow(const QString& id)
 {
+    dismissConflict();
     const QByteArray b = idBytes(id);
     QStandardItem* it = rowItem(id);
     if (it && it->data(kKindRole).toInt() == HoldRow) reg_.clearHoldOverride(b.constData());
@@ -799,8 +863,7 @@ bool ShortcutsPage_Qt::importFile(const QString& path)
 {
     QString err;
     presetBar_->hide();
-    conflictBar_->hide();
-    pending_ = {};
+    dismissConflict();
     const bool ok = reg_.importFrom(path, &err);
     const QString file = QFileInfo(path).fileName();
     if (!ok) showNotice(tr("Could not import %1: %2").arg(file, err), true);

@@ -82,7 +82,10 @@ signals:
     void commandSelected(const QString& id);
 
 protected:
-    bool eventFilter(QObject* o, QEvent* e) override;  // Enter on a list row starts a capture
+    // Enter on a list row starts a capture; Escape in the search box or the list cancels the
+    // open bar or clears the search first; Return in the search box goes to the first match.
+    bool eventFilter(QObject* o, QEvent* e) override;
+    void keyPressEvent(QKeyEvent* e) override;  // Escape from the page's other widgets
 
 private:
     enum Kind { Group = 0, CommandRow, HoldRow, PanelRow };
@@ -104,6 +107,9 @@ private:
     void apply(const Pending& p);
     void unbindFrom(const QString& id, const QKeySequence& key);
     void resetRow(const QString& id);
+    void dismissConflict();  // hides the conflict bar and forgets its pending key
+    bool handleEscape();     // true when Escape cancelled something on the page
+    void focusFirstMatch();
     void onPresetActivated(int index);
     void showNotice(const QString& text, bool error);
     QString nameOf(const QString& id) const;
