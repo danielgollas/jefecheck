@@ -49,9 +49,12 @@ ShortcutsBanner_Qt::ShortcutsBanner_Qt(QWidget* parent) : QFrame(parent) {
 }
 
 void ShortcutsBanner_Qt::choose(const QString& preset) {
-    jefe::shortcuts::Registry::instance().setPreset(preset);
+    auto& reg = jefe::shortcuts::Registry::instance();
+    reg.setPreset(preset);
+    // The whole registry, not just the preset name: a switch drops any overrides, and those
+    // must not come back from QSettings next launch.
     QSettings s;
-    s.setValue(QStringLiteral("Shortcuts/preset"), preset);
+    reg.save(s);
     s.sync();
     hide();
 }

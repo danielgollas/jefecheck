@@ -88,7 +88,7 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     buildFormatsPage();
     buildSearchPathsPage();
     buildRemotePage();
-    addPage("Shortcuts", new ShortcutsPage_Qt(this));
+    addPage(tr("Shortcuts"), new ShortcutsPage_Qt(this));  // objectName prefs.shortcuts.page
 
     sidebar_->setCurrentRow(0);
 
@@ -124,11 +124,18 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
 // type from gfcStructures.h (the header only forward-declares it).
 PreferencesWindow_Qt::~PreferencesWindow_Qt() = default;
 
-bool PreferencesWindow_Qt::showSection(const QString& title) {
-    for (int i = 0; i < sidebar_->count(); ++i) {
-        if (sidebar_->item(i)->text() == title) { sidebar_->setCurrentRow(i); return true; }
+bool PreferencesWindow_Qt::showSection(const QString& pageObjectName) {
+    // By the page's objectName, not the sidebar text (which is translated).
+    for (int i = 0; i < pages_->count(); ++i) {
+        if (pages_->widget(i)->objectName() == pageObjectName) return showSection(i);
     }
     return false;
+}
+
+bool PreferencesWindow_Qt::showSection(int index) {
+    if (index < 0 || index >= sidebar_->count()) return false;
+    sidebar_->setCurrentRow(index);
+    return true;
 }
 
 void PreferencesWindow_Qt::addPage(const QString& title, QWidget* page) {

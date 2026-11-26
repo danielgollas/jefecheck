@@ -177,7 +177,7 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     centralLayout->addWidget(viewport_, 1);
     setCentralWidget(central);
     connect(shortcutsBanner_, &ShortcutsBanner_Qt::customizeRequested, this,
-            [this]() { openPreferences(QStringLiteral("Shortcuts")); });
+            [this]() { openPreferences(QStringLiteral("prefs.shortcuts.page")); });
 
     // Initialize the rendering pipeline's GUI bridges before paintGL runs.
     // Routed through a Qt-free TU: glad can't share a TU with QOpenGLWidget on macOS.
@@ -2814,7 +2814,8 @@ void MainWindow_Qt::openPreferences(const QString& section) {
     if (!section.isEmpty()) dlg.showSection(section);
     connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
             this, [this]() { if (viewport_) viewport_->update(); });
-    dlg.exec();
+    // Done saves the shortcut preset, so the first-launch banner has had its answer.
+    if (dlg.exec() == QDialog::Accepted && shortcutsBanner_) shortcutsBanner_->hide();
 }
 
 void MainWindow_Qt::maybeShowShortcutsBanner(bool isTestRun) {
@@ -3927,6 +3928,13 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         for (const char* name : {"classic", "keep", "customize"}) {
             clear();
             reg.setPreset(QStringLiteral("editing"));
+            {   // A stored custom key: a switch to 1.7 drops it, and it must not come back next launch.
+                reg.setOverride("playback.play-pause", QKeySequence("Ctrl+Alt+Q"));
+                QSettings s;
+                reg.save(s);
+                s.remove("Shortcuts/preset");   // still a first launch
+                s.sync();
+            }
             ShortcutsBanner_Qt banner;
             banner.show();
             bool customized = false;
@@ -3940,11 +3948,15 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             if (banner.isVisible()) bad << QStringLiteral("%1 left the bar visible").arg(name);
             if (customized != (QString::fromLatin1(name) == "customize")) bad << QStringLiteral("%1 customizeRequested=%2").arg(name).arg(customized);
             if (ShortcutsBanner_Qt::shouldShow(QSettings(), false)) bad << QStringLiteral("%1 still asks").arg(name);
+            const bool keptStored = QSettings().contains("Shortcuts/overrides/playback.play-pause");
+            if (keptStored != (QString::fromLatin1(name) != "classic"))
+                bad << QStringLiteral("%1 stored override present=%2").arg(name).arg(keptStored);
+            reg.clearOverride("playback.play-pause");
         }
         {   // Preferences can open on the Shortcuts section.
             PreferencesWindow_Qt dlg(this);
             QListWidget* sidebar = dlg.findChild<QListWidget*>();
-            if (!dlg.showSection("Shortcuts") || !sidebar || sidebar->currentItem()->text() != "Shortcuts")
+            if (!dlg.showSection("prefs.shortcuts.page") || !sidebar || sidebar->currentItem()->text() != "Shortcuts")
                 bad << "showSection(Shortcuts) did not select the page";
             dlg.cancelForTest();
         }
