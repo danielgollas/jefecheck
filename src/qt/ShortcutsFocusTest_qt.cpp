@@ -217,7 +217,8 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         report("RENDER-PATH i", bad.isEmpty(), bad.isEmpty() ? QString("text ends with i, in point %1 unchanged").arg(inBefore) : bad.join("; "));
     }
 
-    {   // Chat mode: the viewport claims every key, F goes to the message, Fit does not run.
+    {   // Chat mode: the viewport claims typed keys, F goes to the message, Fit does not run;
+        // a Ctrl/Cmd combo is not typing, so Ctrl+2 still changes the layout.
         // remoteChatBegin only flips the compose flag, so no connection is needed.
         QStringList bad;
         if (!focusOn(viewport_)) bad << "viewport has no focus";
@@ -227,9 +228,17 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         press(Qt::Key_F, "f");
         const QString text = QString::fromStdString(remoteChatText());
         if (!text.endsWith('f')) bad << QString("chat text is \"%1\"").arg(text);
-        if (!ran.isEmpty()) bad << "ran " + ran.join(",");
+        if (!ran.isEmpty()) bad << "F ran " + ran.join(",");
+        const int layoutBefore = getFramingMode();
+        ran.clear();
+        press(Qt::Key_2, "2", Qt::ControlModifier);
+        if (!ran.contains("layout.side")) bad << "Ctrl+2 ran [" + ran.join(",") + "], not layout.side";
+        if (QString::fromStdString(remoteChatText()) != text)
+            bad << QString("Ctrl+2 changed the chat text to \"%1\"").arg(QString::fromStdString(remoteChatText()));
+        setFramingMode(layoutBefore);
         remoteChatCancel();
-        report("CHAT f", bad.isEmpty(), bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run") : bad.join("; "));
+        report("CHAT f", bad.isEmpty(),
+               bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run; Ctrl+2 ran layout.side") : bad.join("; "));
     }
 
     {   // Viewport focused: Space toggles playback.
