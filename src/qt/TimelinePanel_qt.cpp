@@ -63,6 +63,8 @@ TimelineScrubber_Qt::TimelineScrubber_Qt(QWidget* parent) : QWidget(parent) {
     setMouseTracking(false);
     setCursor(Qt::PointingHandCursor);
     setObjectName("timeline.scrubber");
+    // Click focus so Player-scope shortcuts (Space, arrows, I/O...) fire after clicking the scrubber.
+    setFocusPolicy(Qt::ClickFocus);
     setAccessibleName("Timeline scrubber");
     setToolTip("Click to jump · Alt-click to load every track from this frame");
 }
@@ -147,6 +149,7 @@ TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(96);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setObjectName("timeline.tracks");
+    setFocusPolicy(Qt::ClickFocus);   // Player-scope shortcuts fire after clicking the tracks
     setAccessibleName("Timeline tracks");
     setAcceptDrops(true);
     setCursor(Qt::SizeHorCursor);  // hint that horizontal drag = offset

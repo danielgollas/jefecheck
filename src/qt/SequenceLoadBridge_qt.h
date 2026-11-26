@@ -141,6 +141,7 @@ void togglePlayFwd();
 void rewindPlayback();
 void fastFwdPlayback();
 void setPlayDirection(int direction);   // FLTK '.' = +1 fwd, ',' = -1 rev
+int  getPlayDirection();               // +1 forward, -1 reverse
 void seekToFrame(int frame);
 void setLoopMode(int mode);     // 0 once, 1 loop, 2 bounce
 int  getLoopMode();

@@ -27,6 +27,7 @@
 
 #include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
+#include "Shortcuts_qt.h"
 #include "TimelinePanel_qt.h"
 #include "UiDensityCheck_qt.h"
 #include "UiMetrics_qt.h"
@@ -73,6 +74,8 @@
 #include <QSettings>
 #include <QShortcut>
 #include <QContextMenuEvent>
+#include <QFocusEvent>
+#include <QKeyEvent>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTemporaryDir>
@@ -117,6 +120,15 @@ const char* layoutName(int framingMode) {
         case FRAMINGQUAD_ID:       return "quad";
         default:                   return "unknown";
     }
+}
+
+// The registry's action for `id`, dressed as a menu item: the menu's own text and objectName
+// (UI tests resolve menu items by their menu.* name). The key comes from the registry.
+QAction* registryMenuAction(const char* id, const QString& text, const char* objectName) {
+    QAction* a = jefe::shortcuts::Registry::instance().action(id);
+    a->setText(text);
+    a->setObjectName(QString::fromLatin1(objectName));
+    return a;
 }
 
 constexpr const char* kSettingsGeometry = "MainWindow/geometry";
@@ -201,9 +213,16 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
                    | QMainWindow::AllowNestedDocks
                    | QMainWindow::AllowTabbedDocks);
 
+    // Every key binding is a registry command (Shortcuts_qt.h). Register them before the menus
+    // take their actions; window-level commands get their run from bindRun in buildMenuBar /
+    // buildDocks, and attach() puts the actions on this window and the Player widgets.
+    auto& shortcuts = jefe::shortcuts::Registry::instance();
+    if (shortcuts.commands().isEmpty()) jefe::shortcuts::registerAllCommands(shortcuts);
+
     buildMenuBar();
     buildDocks();
     restoreLayout();
+    shortcuts.attach(this, {viewport_, timelinePanelWidget_->scrubber(), timelinePanelWidget_->tracks()});
 
     // Seed session state from QSettings + capture last-run clean-exit flag.
     {
@@ -224,77 +243,29 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // App-global color-correction favorites (persist across launches).
     jefe::qt::loadCCFavoritesFile(jefe::qt::getFavoritesFilePath());
 
-    // Window-scoped layout shortcuts. QShortcut delivers regardless of which
-    // widget has focus; GlViewport_Qt::keyPressEvent only fires when the viewport has it.
-    auto announceLayout = [this](int framingMode) {
-        if (layoutStatusLabel_) {
-            layoutStatusLabel_->setText(
-                QStringLiteral("Layout: %1").arg(layoutName(framingMode)));
+    // After a keyboard (or menu) command: what each old handler did besides its bridge call.
+    // Player keys behave as the viewport's own key handler did; Global plate, colour and layout
+    // commands repaint and refresh the plate cards; layouts also update the status-bar label.
+    connect(&shortcuts, &jefe::shortcuts::Registry::commandRan, this,
+            [this](const QString& id, jefe::shortcuts::Category category) {
+        using jefe::shortcuts::Category;
+        const auto& reg = jefe::shortcuts::Registry::instance();
+        for (const jefe::shortcuts::Command& c : reg.commands()) {
+            if (id != QLatin1String(c.id)) continue;
+            if (c.scope == jefe::shortcuts::Scope::Player) {
+                if (viewport_) viewport_->commandApplied();
+                return;
+            }
+            break;
         }
-    };
-    auto bindLayout = [this, announceLayout](QKeySequence seq, int framingMode) {
-        auto* sc = new QShortcut(seq, this);
-        sc->setContext(Qt::WindowShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this, framingMode, announceLayout]() {
-            jefe::qt::setFramingMode(framingMode);
-            if (viewport_) viewport_->update();
-            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-            announceLayout(framingMode);
-        });
-    };
-    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_1), FRAMINGSINGLE_ID);
-    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_2), FRAMINGDOUBLE_ID);
-    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_3), FRAMINGDOUBLEVERT_ID);
-    bindLayout(QKeySequence(Qt::CTRL | Qt::Key_4), FRAMINGQUAD_ID);
-    announceLayout(FRAMINGSINGLE_ID);
-
-    // Cmd+P and Cmd+, both open Preferences: macOS's system Print handler intercepts synthesized Cmd+P
-    // in some contexts (Appium / Mac2), so tests prefer Cmd+,.
-    auto openPrefs = [this]() {
-        PreferencesWindow_Qt dlg(this);
-        // Live preview: repaint the viewport as viewport-affecting settings
-        // (text style, background, aspect bars) change while the dialog is open.
-        connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
-                this, [this]() { if (viewport_) viewport_->update(); });
-        dlg.exec();
-    };
-    auto bindPrefsShortcut = [this, openPrefs](QKeySequence seq) {
-        auto* sc = new QShortcut(seq, this);
-        // ApplicationShortcut so it fires whichever widget has focus; synthesized
-        // keystrokes (Mac2 / AppleScript) don't always reach the QMainWindow filter.
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this, openPrefs);
-    };
-    // Ctrl+P belongs to File > Preferences… (an ApplicationShortcut there); a second binding
-    // here made it ambiguous. Ctrl+, has no menu entry, so it keeps a standalone shortcut.
-    bindPrefsShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
-
-    // Plate-control shortcuts are ApplicationShortcuts so they fire regardless of focus; Qt suppresses them when the focused widget consumes the key (ShortcutOverride).
-    // Arrows, Space and Left/Right stay in the viewport handler: they compete with widget-level meanings.
-    auto bindPlateAction = [this](QKeySequence seq, std::function<void()> action) {
-        auto* sc = new QShortcut(seq, this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this, [this, action]() {
-            action();
-            if (viewport_) viewport_->update();
-            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-        });
-    };
-    // Active-plate transforms are View-menu QActions that own their shortcut (buildMenuBar); only the all-plates variants are ApplicationShortcuts here.
-    // Flop is on M so bare H toggles help; bare `r` is NOT promoted (an app-scope printable letter would block typing 'r').
-    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_F),
-                    []() { jefe::qt::fitAllPlates(); });
-    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_V),
-                    []() { jefe::qt::toggleFlipAll(); });
-    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::Key_M),
-                    []() { jefe::qt::toggleFlopAll(); });
-    bindPlateAction(QKeySequence(Qt::ALT | Qt::Key_T),
-                    []() { jefe::qt::toggleTextModeAll(); });
-    bindPlateAction(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_R),
-                    []() { jefe::qt::resetAllPlates(); });
-    bindPlateAction(QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_R),
-                    []() { jefe::qt::resetAllColorCorrections(); });
+        if (category != Category::Plate && category != Category::Color && category != Category::Layout) return;
+        if (viewport_) viewport_->update();
+        if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+        if (category == Category::Layout && layoutStatusLabel_)
+            layoutStatusLabel_->setText(QStringLiteral("Layout: %1").arg(layoutName(jefe::qt::getFramingMode())));
+    });
+    if (layoutStatusLabel_)
+        layoutStatusLabel_->setText(QStringLiteral("Layout: %1").arg(layoutName(FRAMINGSINGLE_ID)));
 
     // LUT + FX autoload runs after show. The 250ms delay matters: at 0ms the load fires before AppKit registers the window and WDA's handshake gets a 404.
     // Each step loads ONE file and re-posts via singleShot(0) so paints and AX queries are serviced between shader compiles.
@@ -454,9 +425,9 @@ void MainWindow_Qt::buildMenuBar() {
     fileMenu->setObjectName("menu.file");
     // Routes one QFileDialog pick into the active plate like drag-drop (loadFileIntoPlate);
     // opens at the most recently loaded file's directory (QSettings).
-    auto* loadAction = fileMenu->addAction("&Quick Load…",
-                        QKeySequence(Qt::CTRL | Qt::Key_O),
-                        this, [this]() {
+    auto& reg = jefe::shortcuts::Registry::instance();
+    fileMenu->addAction(registryMenuAction("file.quick-load", "&Quick Load…", "menu.file.load"));
+    reg.bindRun("file.quick-load", [this]() {
         QSettings settings;
         // Prefer the most-recently-used load directory; fall back to the
         // General-prefs default browse path, then the platform Pictures folder.
@@ -482,24 +453,18 @@ void MainWindow_Qt::buildMenuBar() {
         // index (default 0) — no out-of-range path to guard.
         loadFileIntoPlate(plate, chosen);
     });
-    loadAction->setObjectName("menu.file.load");
 
-    auto* loadMgrAction = fileMenu->addAction(tr("Load Sequence Manager…"));
-    loadMgrAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
-    loadMgrAction->setObjectName("menu.file.loadmgr");
-    connect(loadMgrAction, &QAction::triggered, this, &MainWindow_Qt::openLoadWindow);
+    fileMenu->addAction(registryMenuAction("file.load-manager", tr("Load Sequence Manager…"), "menu.file.loadmgr"));
+    reg.bindRun("file.load-manager", [this]() { openLoadWindow(); });
 
     fileMenu->addSeparator();
-    auto* saveSessAction = fileMenu->addAction(tr("&Save Session"),
-        QKeySequence(QKeySequence::Save), this, [this]() { doSaveSession(false); });
-    saveSessAction->setObjectName("menu.file.savesession");
+    fileMenu->addAction(registryMenuAction("file.save-session", tr("&Save Session"), "menu.file.savesession"));
+    reg.bindRun("file.save-session", [this]() { doSaveSession(false); });
     auto* saveAsAction = fileMenu->addAction(tr("Save Session &As…"),
         this, [this]() { doSaveSession(true); });
     saveAsAction->setObjectName("menu.file.savesessionas");
-    auto* openSessAction = fileMenu->addAction(tr("&Open Session…"),
-        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O),
-        this, [this]() { doOpenSession(); });
-    openSessAction->setObjectName("menu.file.opensession");
+    fileMenu->addAction(registryMenuAction("file.open-session", tr("&Open Session…"), "menu.file.opensession"));
+    reg.bindRun("file.open-session", [this]() { doOpenSession(); });
     recentMenu_ = fileMenu->addMenu(tr("Recent Sessions"));
     recentMenu_->setObjectName("menu.file.recent");
 
@@ -581,73 +546,55 @@ void MainWindow_Qt::buildMenuBar() {
 
     // Render… and Remote Session… live in the Window menu, not File.
     fileMenu->addSeparator();
-    auto* prefsAction = fileMenu->addAction("&Preferences…",
-                        QKeySequence(Qt::CTRL | Qt::Key_P),
-                        this, [this]() {
-                            // Modal — settings persist on Done via
-                            // jefe::qt::writePreferences() inside the dialog.
-                            PreferencesWindow_Qt dlg(this);
-                            connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
-                                    this, [this]() { if (viewport_) viewport_->update(); });
-                            dlg.exec();
-                        });
-    prefsAction->setObjectName("menu.file.preferences");
-    prefsAction->setShortcutContext(Qt::ApplicationShortcut);   // fires whichever widget or floating dock has focus
+    // Cmd+P and Cmd+, both open Preferences (one command, two keys): macOS's system Print handler
+    // intercepts synthesized Cmd+P in some contexts (Appium / Mac2), so tests prefer Cmd+,.
+    auto* prefsAction = registryMenuAction("file.preferences", "&Preferences…", "menu.file.preferences");
+    fileMenu->addAction(prefsAction);
+    reg.bindRun("file.preferences", [this]() {
+        // Modal — settings persist on Done via jefe::qt::writePreferences() inside the dialog.
+        // Live preview: repaint the viewport as viewport-affecting settings change.
+        PreferencesWindow_Qt dlg(this);
+        connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
+                this, [this]() { if (viewport_) viewport_->update(); });
+        dlg.exec();
+    });
     // Suppress Qt's "Preferences..." auto-detection: it moves the action into the
-    // macOS Application menu and steals Cmd+, , racing our window-level QShortcut.
+    // macOS Application menu and steals Cmd+, .
     prefsAction->setMenuRole(QAction::NoRole);
     fileMenu->addSeparator();
-    fileMenu->addAction("&Quit",
-                        QKeySequence::Quit,
-                        []() { QApplication::quit(); })
-            ->setObjectName("menu.file.quit");
+    fileMenu->addAction(registryMenuAction("file.quit", "&Quit", "menu.file.quit"));
+    reg.bindRun("file.quit", []() { QApplication::quit(); });
 
     auto* viewMenu = mb->addMenu("&View");
     viewMenu->setObjectName("menu.view");
     // Fullscreen toggle: F11 (cross-platform) + Cmd+Ctrl+F (macOS standard);
     // Cmd+F is conventionally Find on macOS.
-    auto* fullscreenAction = viewMenu->addAction("&Fullscreen",
-        this, [this]() {
-            if (isFullScreen()) {
-                showNormal();
-            } else {
-                showFullScreen();
-            }
-        });
-    fullscreenAction->setObjectName("menu.view.fullscreen");
-    fullscreenAction->setShortcuts({
-        QKeySequence(Qt::Key_F11),
-        QKeySequence(Qt::CTRL | Qt::META | Qt::Key_F),
-    });
+    auto* fullscreenAction = registryMenuAction("view.toggle-fullscreen", "&Fullscreen", "menu.view.fullscreen");
+    viewMenu->addAction(fullscreenAction);
     fullscreenAction->setCheckable(true);
-    // Keep the checkmark in sync with the window state, which the macOS green
-    // zoom button or system menu can also change.
-    connect(fullscreenAction, &QAction::triggered, this, [fullscreenAction, this]() {
+    reg.bindRun("view.toggle-fullscreen", [this, fullscreenAction]() {
+        if (isFullScreen()) {
+            showNormal();
+        } else {
+            showFullScreen();
+        }
+        // Keep the checkmark in sync with the window state, which the macOS green
+        // zoom button or system menu can also change.
         fullscreenAction->setChecked(isFullScreen());
     });
     viewMenu->addSeparator();
     // Histogram overlay (gfcPlate's in-viewport draggable sub-window): Ctrl+H on
     // the active quad, Ctrl+Alt+H on all plates.
-    viewMenu->addAction(tr("Show &Histogram"), QKeySequence(Qt::CTRL | Qt::Key_H),
-                        this, []() {
-        jefe::qt::toggleHistogramActiveQuad();
-    })->setObjectName("menu.view.histogram");
-    viewMenu->addAction(tr("Show Histogram (All Plates)"),
-                        QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H),
-                        this, []() {
-        jefe::qt::toggleHistogramAll();
-    })->setObjectName("menu.view.histogramall");
-    // Bare N toggles note-overlay visibility; ApplicationShortcut context so it
-    // fires regardless of which widget has focus.
-    auto* notesVisibleAction = viewMenu->addAction(
-        tr("Show &Notes"), QKeySequence(Qt::Key_N), this, [this]() {
-            jefe::qt::toggleNotesVisible();
-            if (viewport_) viewport_->update();
-        });
-    notesVisibleAction->setShortcutContext(Qt::ApplicationShortcut);
+    viewMenu->addAction(registryMenuAction("view.toggle-histogram", tr("Show &Histogram"), "menu.view.histogram"));
+    viewMenu->addAction(registryMenuAction("view.toggle-histogram-all", tr("Show Histogram (All Plates)"),
+                                           "menu.view.histogramall"));
+    // Bare N toggles note-overlay visibility (a Global command: fires whichever widget has focus).
+    auto* notesVisibleAction = registryMenuAction("view.toggle-note-overlay", tr("Show &Notes"),
+                                                  "menu.view.notesvisible");
+    viewMenu->addAction(notesVisibleAction);
     notesVisibleAction->setCheckable(true);
     notesVisibleAction->setChecked(jefe::qt::notesVisible());
-    notesVisibleAction->setObjectName("menu.view.notesvisible");
+    reg.bindRun("view.toggle-note-overlay", []() { jefe::qt::toggleNotesVisible(); });
     viewMenu->addSeparator();
     // Toggle actions for each dock. createDockWidget() exposes a built-in
     // toggleViewAction() that flips visibility and tracks state for us.
@@ -709,43 +656,16 @@ void MainWindow_Qt::buildMenuBar() {
         });
     }
 
-    // Active-plate transforms are View-menu QActions owning their shortcut at ApplicationShortcut context (fires regardless of focus, even a floating dock).
-    // The "all-plates" variants stay bare QShortcuts (ctor), listed in the help overlay.
-    auto addPlateMenuAction = [this](QMenu* menu, const QString& text,
-                                     const QKeySequence& seq,
-                                     std::function<void()> fn,
-                                     const QString& objName) {
-        QAction* a = menu->addAction(text, this, [this, fn]() {
-            fn();
-            if (viewport_) viewport_->update();
-            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-        });
-        if (!seq.isEmpty()) {
-            a->setShortcut(seq);
-            a->setShortcutContext(Qt::ApplicationShortcut);
-        }
-        a->setObjectName(objName);
-        return a;
-    };
+    // Active-plate transforms. The all-plates variants (Shift+F, Alt+T, ...) are registry
+    // commands with no menu item; the commandRan slot (ctor) repaints and refreshes the cards.
     viewMenu->addSeparator();
-    addPlateMenuAction(viewMenu, tr("Fit to Screen"), QKeySequence(Qt::Key_F),
-                       []() { jefe::qt::fitActivePlate(); }, "menu.view.fit");
-    addPlateMenuAction(viewMenu, tr("Flip Vertical"), QKeySequence(Qt::Key_V),
-                       []() { jefe::qt::toggleFlipActive(); }, "menu.view.flip");
-    addPlateMenuAction(viewMenu, tr("Flop Horizontal"), QKeySequence(Qt::Key_M),
-                       []() { jefe::qt::toggleFlopActive(); }, "menu.view.flop");
-    addPlateMenuAction(viewMenu, tr("Text Overlay Mode"), QKeySequence(Qt::Key_T),
-                       []() { jefe::qt::toggleTextModeActive(); },
-                       "menu.view.textmode");
+    viewMenu->addAction(registryMenuAction("plate.fit", tr("Fit to Screen"), "menu.view.fit"));
+    viewMenu->addAction(registryMenuAction("plate.flip", tr("Flip Vertical"), "menu.view.flip"));
+    viewMenu->addAction(registryMenuAction("plate.flop", tr("Flop Horizontal"), "menu.view.flop"));
+    viewMenu->addAction(registryMenuAction("plate.text-mode", tr("Text Overlay Mode"), "menu.view.textmode"));
     viewMenu->addSeparator();
-    addPlateMenuAction(viewMenu, tr("Reset Plate"),
-                       QKeySequence(Qt::CTRL | Qt::Key_R),
-                       []() { jefe::qt::resetActivePlate(); },
-                       "menu.view.resetplate");
-    addPlateMenuAction(viewMenu, tr("Reset Color Correction"),
-                       QKeySequence(Qt::SHIFT | Qt::Key_R),
-                       []() { jefe::qt::resetActiveColorCorrection(); },
-                       "menu.view.resetcc");
+    viewMenu->addAction(registryMenuAction("plate.reset", tr("Reset Plate"), "menu.view.resetplate"));
+    viewMenu->addAction(registryMenuAction("color.reset", tr("Reset Color Correction"), "menu.view.resetcc"));
 
     // Window: created empty between View and Help; populated in buildDocks() once the docks exist.
     windowMenu_ = mb->addMenu(tr("&Window"));
@@ -753,10 +673,11 @@ void MainWindow_Qt::buildMenuBar() {
 
     auto* helpMenu = mb->addMenu("&Help");
     helpMenu->setObjectName("menu.help");
-    helpMenu->addAction(tr("User &Manual"), QKeySequence(Qt::Key_F1), this, []() {
+    helpMenu->addAction(registryMenuAction("help.manual", tr("User &Manual"), "menu.help.manual"));
+    reg.bindRun("help.manual", []() {
         QDesktopServices::openUrl(QUrl(
             "https://github.com/danielgollas/jefecheck/blob/main/docs/manual.md"));
-    })->setObjectName("menu.help.manual");
+    });
     helpMenu->addAction(tr("&Quick Start Guide"), this, []() {
         QDesktopServices::openUrl(QUrl(
             "https://github.com/danielgollas/jefecheck/blob/main/docs/quick-start.md"));
@@ -767,14 +688,9 @@ void MainWindow_Qt::buildMenuBar() {
             "https://github.com/danielgollas/jefecheck/issues"));
     })->setObjectName("menu.help.issues");
     helpMenu->addSeparator();
-    // On-screen help overlay. Bare H is an ApplicationShortcut so it fires
+    // On-screen help overlay. Bare H is a Global command, so it fires
     // regardless of which widget or floating dock has focus.
-    auto* onScreenHelpAction = helpMenu->addAction(
-        tr("Toggle On-Screen &Help"), QKeySequence(Qt::Key_H), this, []() {
-            jefe::qt::toggleOnScreenHelp();
-        });
-    onScreenHelpAction->setShortcutContext(Qt::ApplicationShortcut);
-    onScreenHelpAction->setObjectName("menu.help.onscreen");
+    helpMenu->addAction(registryMenuAction("help.toggle-overlay", tr("Toggle On-Screen &Help"), "menu.help.onscreen"));
     helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("&About JefeCheck",
         this, [this]() {
@@ -1017,54 +933,56 @@ void MainWindow_Qt::buildDocks() {
     connect(notesPanelWidget_, &NotesPanel_Qt::viewportRepaintRequested,
             this, [this]() { if (viewport_) viewport_->update(); });
 
-    // Populate the Window menu now that docks exist: each panel contributes its checkable toggleViewAction() with an
-    // F-key; "show" also raises the dock to the front of its tab group.
+    // Populate the Window menu now that docks exist: each panel contributes its registry command (an F-key), a
+    // checkable action mirroring the dock's toggleViewAction(); "show" also raises the dock to the front of its tab group.
     if (windowMenu_) {
-        auto addDockToggle = [this](QDockWidget* dock, const QKeySequence& seq,
-                                    const QString& objName) {
+        auto& reg = jefe::shortcuts::Registry::instance();
+        // The registry action mirrors the dock's toggleViewAction(): its run triggers that
+        // action, and its checkmark follows the dock's visibility.
+        auto addDockToggle = [this, &reg](QDockWidget* dock, const char* id, const char* objName) {
             if (!dock) return;
-            QAction* a = dock->toggleViewAction();
-            a->setShortcut(seq);
-            a->setShortcutContext(Qt::ApplicationShortcut);
-            a->setObjectName(objName);
+            QAction* toggle = dock->toggleViewAction();
+            QAction* a = registryMenuAction(id, dock->windowTitle(), objName);
+            a->setCheckable(true);
+            a->setChecked(toggle->isChecked());
+            connect(toggle, &QAction::toggled, a, &QAction::setChecked);
+            connect(dock, &QDockWidget::windowTitleChanged, a, &QAction::setText);
+            reg.bindRun(id, [toggle]() { toggle->trigger(); });
             // Bringing a hidden/tabbed dock back should also raise it forward.
-            connect(a, &QAction::toggled, this,
+            connect(toggle, &QAction::toggled, this,
                     [dock](bool on) { if (on) dock->raise(); });
             windowMenu_->addAction(a);
         };
-        addDockToggle(plateDock_,    QKeySequence(Qt::Key_F2), "menu.window.platemanager");
-        addDockToggle(fxParamsDock_, QKeySequence(Qt::Key_F3), "menu.window.fxparams");
-        addDockToggle(lutDock_,      QKeySequence(Qt::Key_F4), "menu.window.lut");
-        addDockToggle(notesDock_,    QKeySequence(Qt::Key_F7), "menu.window.notes");
-        addDockToggle(timelineDock_, QKeySequence(Qt::Key_F8), "menu.window.timeline");
-        addDockToggle(playlistDock_, QKeySequence(Qt::Key_F9), "menu.window.playlist");
+        addDockToggle(plateDock_,    "panels.toggle-plate-manager", "menu.window.platemanager");
+        addDockToggle(fxParamsDock_, "panels.toggle-fx",            "menu.window.fxparams");
+        addDockToggle(lutDock_,      "panels.toggle-luts",          "menu.window.lut");
+        addDockToggle(notesDock_,    "panels.toggle-notes",         "menu.window.notes");
+        addDockToggle(timelineDock_, "panels.toggle-timeline",      "menu.window.timeline");
+        addDockToggle(playlistDock_, "panels.toggle-playlist",      "menu.window.playlist");
 
         windowMenu_->addSeparator();
         // Remote Session… (F5): the modeless persistent dock, lazy-created;
         // show()/raise() brings it forward.
-        windowMenu_->addAction(tr("Remote Session…"), QKeySequence(Qt::Key_F5),
-                               this, [this]() {
+        windowMenu_->addAction(registryMenuAction("panels.open-remote", tr("Remote Session…"), "menu.window.remote"));
+        reg.bindRun("panels.open-remote", [this]() {
             if (remoteDock_) { remoteDock_->show(); remoteDock_->raise(); }
             if (remoteDialog_) remoteDialog_->refreshConnectionState();
-        })->setObjectName("menu.window.remote");
+        });
         // Render… (F6): modal RenderDialog_Qt.
-        windowMenu_->addAction(tr("Render…"), QKeySequence(Qt::Key_F6),
-                               this, [this]() {
+        windowMenu_->addAction(registryMenuAction("panels.open-render", tr("Render…"), "menu.window.render"));
+        reg.bindRun("panels.open-render", [this]() {
             RenderDialog_Qt dlg(this);
             dlg.exec();
-        })->setObjectName("menu.window.render");
+        });
         windowMenu_->addSeparator();
-        windowMenu_->addAction(tr("Hide Controls"),
-                               QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
-                               this, [this]() { toggleHideControls(); })
-            ->setObjectName("menu.window.hidecontrols");
+        windowMenu_->addAction(registryMenuAction("panels.hide-controls", tr("Hide Controls"), "menu.window.hidecontrols"));
+        reg.bindRun("panels.hide-controls", [this]() { toggleHideControls(); });
 #ifdef Q_OS_MACOS
         // The standard macOS Window-menu commands, so the title promises nothing we lack.
         // Qt::CTRL is Cmd on macOS.
         windowMenu_->addSeparator();
-        windowMenu_->addAction(tr("Minimize"), QKeySequence(Qt::CTRL | Qt::Key_M),
-                               this, [this]() { showMinimized(); })
-            ->setObjectName("menu.window.minimize");
+        windowMenu_->addAction(registryMenuAction("panels.minimize", tr("Minimize"), "menu.window.minimize"));
+        reg.bindRun("panels.minimize", [this]() { showMinimized(); });
         windowMenu_->addAction(tr("Zoom"), this, [this]() {
             if (isMaximized()) showNormal(); else showMaximized();
         })->setObjectName("menu.window.zoom");
@@ -1355,7 +1273,7 @@ int MainWindow_Qt::runHeadlessVideoTest(const QString& dir) {
 
 void MainWindow_Qt::toggleHideControls() {
     // Hide/show the menu bar, status bar and all docks so only the viewport
-    // remains; the Ctrl+Alt+F QShortcut still fires while hidden.
+    // remains; the Ctrl+Alt+F registry action lives on the main window, so it still fires while hidden.
     controlsHidden_ = !controlsHidden_;
     const bool vis = !controlsHidden_;
     menuBar()->setVisible(vis);
@@ -3669,7 +3587,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             }
         };
         for (QAction* top : menuBar()->actions()) if (top->menu()) walk(top->menu());
-        // Standalone QShortcuts on the main window (the all-plates variants and friends).
+        // Standalone QShortcuts on the main window (none since the registry; REGISTRY keys checks that).
         int standalone = 0;
         for (QShortcut* sc : findChildren<QShortcut*>()) {
             const QString key = sc->key().toString();
@@ -3683,6 +3601,115 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
                bad.isEmpty() ? QString("8 panel shortcuts [%1]; %2 menu-bar + %3 standalone QShortcut keys, all distinct")
                                    .arg(keys.join(" ")).arg(seen.size() - standalone).arg(standalone)
                              : bad.join("; "));
+    }
+    {   // Every key lives in the registry: no standalone QShortcut, every command runs, no clashes,
+        // and every menu item that has a key is the registry's action for it.
+        namespace sc = jefe::shortcuts;
+        const sc::Registry& reg = sc::Registry::instance();
+        QStringList bad;
+        if (reg.commands().isEmpty()) bad << "registry is empty";
+        for (const sc::Command& c : reg.commands()) {
+            if (!c.run) bad << QString("%1 has no run").arg(c.id);
+            for (const QKeySequence& k : reg.keys(c.id)) {
+                const QStringList other = reg.conflicts(c.id, k);
+                if (!other.isEmpty())
+                    bad << QString("%1 (%2) clashes with %3").arg(c.id, k.toString(), other.join(","));
+            }
+        }
+        const QList<QShortcut*> stray = findChildren<QShortcut*>();
+        for (QShortcut* s : stray) bad << QString("standalone QShortcut %1").arg(s->key().toString());
+        QSet<QAction*> regActions;
+        for (const sc::Command& c : reg.commands()) regActions.insert(reg.action(c.id));
+        QSet<QAction*> seenMenu;
+        std::function<void(QMenu*)> walkKeys = [&](QMenu* m) {
+            for (QAction* a : m->actions()) {
+                if (seenMenu.contains(a)) continue;
+                seenMenu.insert(a);
+                if (a->menu()) { walkKeys(a->menu()); continue; }
+                if (!a->shortcuts().isEmpty() && !regActions.contains(a))
+                    bad << QString("menu key %1 on %2 not from the registry")
+                               .arg(a->shortcut().toString(), a->objectName().isEmpty() ? a->text() : a->objectName());
+            }
+        };
+        for (QAction* top : menuBar()->actions()) if (top->menu()) walkKeys(top->menu());
+        report("REGISTRY keys", bad.isEmpty(),
+               bad.isEmpty() ? QString("%1 commands, all bound, no clashes, no standalone QShortcut").arg(reg.commands().size())
+                             : bad.join("; "));
+    }
+    {   // Hold keys survive auto-repeat release/press pairs and clear on focus-out.
+        QStringList bad;
+        auto send = [this](QEvent::Type t, Qt::Key k, bool autoRep, const QString& text) {
+            QKeyEvent ev(t, k, Qt::NoModifier, text, autoRep);
+            QApplication::sendEvent(viewport_, &ev);
+        };
+        send(QEvent::KeyPress, Qt::Key_W, false, "w");
+        if (!viewport_->isHolding("color.drag-gamma")) bad << "W press not held";
+        send(QEvent::KeyRelease, Qt::Key_W, true, "w");
+        if (!viewport_->isHolding("color.drag-gamma")) bad << "auto-repeat release dropped the hold";
+        send(QEvent::KeyPress, Qt::Key_W, true, "w");
+        if (!viewport_->isHolding("color.drag-gamma")) bad << "auto-repeat press lost the hold";
+        QFocusEvent out(QEvent::FocusOut, Qt::OtherFocusReason);
+        QApplication::sendEvent(viewport_, &out);
+        if (viewport_->isHolding("color.drag-gamma")) bad << "focus-out left W held";
+        send(QEvent::KeyPress, Qt::Key_E, false, "e");
+        send(QEvent::KeyRelease, Qt::Key_E, false, "e");
+        if (viewport_->isHolding("color.drag-exposure")) bad << "E release left E held";
+        report("HOLD-KEYS", bad.isEmpty(), bad.isEmpty() ? QString("W held through auto-repeat, cleared on focus-out") : bad.join("; "));
+    }
+    {   // Player keys reach the focused viewport. A real US-layout '<' press (Shift+,) offers the
+        // shortcut map both Shift+Less and bare Less (the platform key mapper strips the Shift the
+        // glyph needs; Windows offers only bare Less), so '<' / '>' are bound bare. A synthetic
+        // event carries no native key, so Qt offers only its literal key+modifiers: send bare Less.
+        QStringList bad;
+        raise();
+        activateWindow();
+        settleFor(200);
+        // Launched from a terminal, macOS may refuse to activate the app; WidgetShortcut needs an
+        // active window, so force Qt's notion of it (test only).
+        if (!isActiveWindow()) {
+            QT_WARNING_PUSH
+            QT_WARNING_DISABLE_DEPRECATED
+            QApplication::setActiveWindow(this);
+            QT_WARNING_POP
+        }
+        viewport_->setFocus(Qt::OtherFocusReason);
+        settleFor(100);
+        if (QApplication::focusWidget() != viewport_) bad << "viewport has no focus";
+        auto press = [this](Qt::Key k, Qt::KeyboardModifiers m, const QString& text) {
+            QKeyEvent ev(QEvent::KeyPress, k, m, text);
+            QApplication::sendEvent(viewport_, &ev);
+            QKeyEvent up(QEvent::KeyRelease, k, m, text);
+            QApplication::sendEvent(viewport_, &up);
+        };
+        jefe::qt::setPlayDirection(+1);
+        press(Qt::Key_Less, Qt::NoModifier, "<");
+        if (jefe::qt::getPlayDirection() != -1) bad << "< did not reverse";
+        press(Qt::Key_Greater, Qt::NoModifier, ">");
+        if (jefe::qt::getPlayDirection() != +1) bad << "> did not go forward";
+        press(Qt::Key_Comma, Qt::NoModifier, ",");
+        if (jefe::qt::getPlayDirection() != -1) bad << ", did not reverse";
+        press(Qt::Key_Period, Qt::NoModifier, ".");
+        if (jefe::qt::getPlayDirection() != +1) bad << ". did not go forward";
+        const int loopBefore = jefe::qt::getLoopMode();
+        press(Qt::Key_9, Qt::NoModifier, "9");
+        if (jefe::qt::getLoopMode() != 1) bad << "9 did not set loop";
+        press(Qt::Key_8, Qt::NoModifier, "8");
+        if (jefe::qt::getLoopMode() != 0) bad << "8 did not set loop-once";
+        jefe::qt::setLoopMode(loopBefore);
+        // The LUT cube claims bare F (frame the cube) over the Global Fit while it has focus.
+        if (auto* cube = findChild<LutCloudWidget*>()) {
+            QKeyEvent ov(QEvent::ShortcutOverride, Qt::Key_F, Qt::NoModifier, "f");
+            ov.ignore();
+            QApplication::sendEvent(cube, &ov);
+            if (!ov.isAccepted()) bad << "LUT cube does not claim F";
+            QKeyEvent ovShift(QEvent::ShortcutOverride, Qt::Key_F, Qt::ShiftModifier, "F");
+            ovShift.ignore();
+            QApplication::sendEvent(cube, &ovShift);
+            if (ovShift.isAccepted()) bad << "LUT cube claims Shift+F";
+        } else {
+            bad << "no LUT cube";
+        }
+        report("PLAYER keys", bad.isEmpty(), bad.isEmpty() ? QString("< > , . 9 8 on the viewport; LUT cube claims F only") : bad.join("; "));
     }
     pm->setMode(pl::PlateMode::Visible);
     layout(FRAMINGSINGLE_ID);

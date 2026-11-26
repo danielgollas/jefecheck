@@ -433,6 +433,8 @@ void setPlayDirection(int direction) {
     playbackManager.setDirection(direction);
 }
 
+int getPlayDirection() { return playbackManager.direction(); }
+
 void setInPointAndLoad() {
     // FLTK's Alt+I: set the in point at the current frame and load from there. The rolling cache
     // already loads around the playhead; with it off, the load refills forward from this frame.

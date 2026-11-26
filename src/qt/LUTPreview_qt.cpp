@@ -430,6 +430,18 @@ void LutCloudWidget::keyPressEvent(QKeyEvent* e) {
     QOpenGLWidget::keyPressEvent(e);
 }
 
+bool LutCloudWidget::event(QEvent* e) {
+    // While the cube has focus, bare F frames the cube instead of firing the Global Fit shortcut.
+    if (e->type() == QEvent::ShortcutOverride) {
+        auto* k = static_cast<QKeyEvent*>(e);
+        if (k->key() == Qt::Key_F && (k->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
+            e->accept();
+            return true;
+        }
+    }
+    return QOpenGLWidget::event(e);
+}
+
 namespace {
 // A value label that elides its text to the width it is given, so a long LUT
 // name never widens the dock. The full text stays in the tooltip.

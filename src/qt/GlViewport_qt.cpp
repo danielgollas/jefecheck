@@ -3,15 +3,13 @@
 // initializeGL and resizeGL are forwarded to the registered IGLViewportListener.
 #include "GlViewport_qt.h"
 #include "SequenceLoadBridge_qt.h"
-
-// FRAMING*_ID constants for layout shortcuts. UIConstants.h has no
-// FLTK dependencies, so it's safe to pull into the Qt TU directly.
-#include "../UIConstants.h"
+#include "Shortcuts_qt.h"
 
 #include <QApplication>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QFocusEvent>
 #include <QGestureEvent>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -41,6 +39,11 @@ GlViewport_Qt::GlViewport_Qt(QWidget* parent)
 }
 
 GlViewport_Qt::~GlViewport_Qt() = default;
+
+bool GlViewport_Qt::isHolding(const char* holdId) const {
+    const Qt::Key k = jefe::shortcuts::Registry::instance().holdKey(holdId);
+    return k != Qt::Key_unknown && heldDragModifierKeys_.contains(k);
+}
 
 void GlViewport_Qt::requestRedraw() {
     update();
@@ -297,19 +300,19 @@ void GlViewport_Qt::mouseMoveEvent(QMouseEvent* e) {
             handledColor = true;
         };
 
-        if (heldDragModifierKeys_.contains(Qt::Key_W)) {
+        if (isHolding("color.drag-gamma")) {
             applyColor(jefe::qt::adjustPlateGamma,
                        jefe::qt::adjustAllPlatesGamma);
-        } else if (heldDragModifierKeys_.contains(Qt::Key_E)) {
+        } else if (isHolding("color.drag-exposure")) {
             applyColor(jefe::qt::adjustPlateExposure,
                        jefe::qt::adjustAllPlatesExposure);
-        } else if (heldDragModifierKeys_.contains(Qt::Key_Q)) {
+        } else if (isHolding("color.drag-brightness")) {
             applyColor(jefe::qt::adjustPlateBrightness,
                        jefe::qt::adjustAllPlatesBrightness);
-        } else if (heldDragModifierKeys_.contains(Qt::Key_D)) {
+        } else if (isHolding("color.drag-contrast")) {
             applyColor(jefe::qt::adjustPlateContrast,
                        jefe::qt::adjustAllPlatesContrast);
-        } else if (heldDragModifierKeys_.contains(Qt::Key_S)) {
+        } else if (isHolding("color.drag-saturation")) {
             applyColor(jefe::qt::adjustPlateSaturation,
                        jefe::qt::adjustAllPlatesSaturation);
         }
@@ -424,176 +427,44 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
         return;
     }
 
-    // Track CC modifier keys (W/E/Q/D/S) for left-drag in mouseMoveEvent.
-    // Don't gate on autoRepeat: only set membership is needed.
-    switch (e->key()) {
-        case Qt::Key_W:
-        case Qt::Key_E:
-        case Qt::Key_Q:
-        case Qt::Key_D:
-        case Qt::Key_S:
-            heldDragModifierKeys_.insert(e->key());
-            break;
-        default:
-            break;
-    }
+    // Hold keys (W/E/Q/D/S by default) combine with left-drag in mouseMoveEvent. Modifiers
+    // don't matter (Alt+W drag = every plate). Auto-repeat presses only re-insert.
+    trackHoldKey(e->key(), true);
 
-    // Plate-control shortcuts. Unhandled keys fall through to the listener and
-    // Qt's default propagation so menu mnemonics and dialog accelerators work.
-    const bool shift = e->modifiers().testFlag(Qt::ShiftModifier);
-    const bool ctrl  = e->modifiers().testFlag(Qt::ControlModifier);
-    const bool alt   = e->modifiers().testFlag(Qt::AltModifier);
-
-    auto handled = [&]() {
-        update();
-        emit plateStateChanged();
-        if (listener_) listener_->onEvent(jefe::ui::EventType::KeyDown);
-    };
-
-    switch (e->key()) {
-        // Layout cycling: Ctrl+1..4 → single / horiz-split / vert-split / quad.
-        case Qt::Key_1:
-            if (ctrl) { jefe::qt::setFramingMode(FRAMINGSINGLE_ID);     handled(); return; }
-            break;
-        case Qt::Key_2:
-            if (ctrl) { jefe::qt::setFramingMode(FRAMINGDOUBLE_ID);     handled(); return; }
-            break;
-        case Qt::Key_3:
-            if (ctrl) { jefe::qt::setFramingMode(FRAMINGDOUBLEVERT_ID); handled(); return; }
-            break;
-        case Qt::Key_4:
-            if (ctrl) { jefe::qt::setFramingMode(FRAMINGQUAD_ID);       handled(); return; }
-            break;
-
-        // F, H, V and T (and Shift/Alt variants) are ApplicationShortcuts in MainWindow_Qt so they fire regardless of focus;
-        // a duplicate handler here would steal keystrokes from input widgets.
-
-        // Track cycling on active plate (matches FLTK's Up/Down handler).
-        case Qt::Key_Up:
-            if (!ctrl && !alt) {
-                jefe::qt::cycleTrackOnActivePlate(-1);
-                handled();
-                return;
-            }
-            break;
-        case Qt::Key_Down:
-            if (!ctrl && !alt) {
-                jefe::qt::cycleTrackOnActivePlate(+1);
-                handled();
-                return;
-            }
-            break;
-
-        // Playback. Space pauses; arrows step a frame.
-        case Qt::Key_Space:
-            if (!ctrl && !alt) {
-                jefe::qt::pausePlayback();
-                handled();
-                return;
-            }
-            break;
-        case Qt::Key_Left:
-            if (!ctrl && !alt) {
-                jefe::qt::stepFrame(-1);
-                handled();
-                return;
-            }
-            break;
-        case Qt::Key_Right:
-            if (!ctrl && !alt) {
-                jefe::qt::stepFrame(+1);
-                handled();
-                return;
-            }
-            break;
-
-        // Rewind / fast-forward to the start / end (transport rew/ffwd).
-        case Qt::Key_Home:
-            if (!ctrl && !alt) { jefe::qt::rewindPlayback(); handled(); return; }
-            break;
-        case Qt::Key_End:
-            if (!ctrl && !alt) { jefe::qt::fastFwdPlayback(); handled(); return; }
-            break;
-
-        // Loop mode (FLTK 8/9/0): once / loop / bounce.
-        case Qt::Key_8:
-            if (!ctrl && !alt) { jefe::qt::setLoopMode(0); handled(); return; }
-            break;
-        case Qt::Key_9:
-            if (!ctrl && !alt) { jefe::qt::setLoopMode(1); handled(); return; }
-            break;
-        case Qt::Key_0:
-            if (!ctrl && !alt) { jefe::qt::setLoopMode(2); handled(); return; }
-            break;
-
-        // Playback direction (FLTK '.' fwd / ',' rev). The keys carry '<'/'>'
-        // on a US layout — match the glyphs, not the shift state.
-        case Qt::Key_Period:
-        case Qt::Key_Greater:
-            if (!ctrl && !alt) { jefe::qt::setPlayDirection(+1); handled(); return; }
-            break;
-        case Qt::Key_Comma:
-        case Qt::Key_Less:
-            if (!ctrl && !alt) { jefe::qt::setPlayDirection(-1); handled(); return; }
-            break;
-
-        // Single-frame step (FLTK 'c' fwd / 'x' rev) — same as Left/Right.
-        case Qt::Key_C:
-            if (!ctrl && !alt) { jefe::qt::stepFrame(+1); handled(); return; }
-            break;
-        case Qt::Key_X:
-            if (!ctrl && !alt) { jefe::qt::stepFrame(-1); handled(); return; }
-            break;
-
-        // In / out points (FLTK I/O). Bare = at current frame; Shift = to the
-        // timeline ends.
-        case Qt::Key_I:
-            if (alt && !ctrl) {
-                // FLTK Alt+I: set in point at current frame + reload tracks.
-                jefe::qt::setInPointAndLoad();
-                handled();
-                return;
-            }
-            if (!ctrl && !alt) {
-                jefe::qt::setInPoint(shift ? jefe::qt::getFromFrame()
-                                           : jefe::qt::getCurrentFrame());
-                handled();
-                return;
-            }
-            break;
-        case Qt::Key_O:
-            if (!ctrl && !alt) {
-                jefe::qt::setOutPoint(shift ? jefe::qt::getToFrame()
-                                            : jefe::qt::getCurrentFrame());
-                handled();
-                return;
-            }
-            break;
-
-        default:
-            break;
-    }
-
-    // Unhandled — pass through to listener / parent.
+    // Every other key binding is a registry QAction (Shortcuts_qt.h): Player keys on this
+    // widget, Global keys on the main window. Unhandled keys go to the listener and Qt's
+    // default propagation so menu mnemonics and dialog accelerators work.
     if (listener_) listener_->onEvent(jefe::ui::EventType::KeyDown);
     QOpenGLWidget::keyPressEvent(e);
 }
 
 void GlViewport_Qt::keyReleaseEvent(QKeyEvent* e) {
-    // Pairs with keyPressEvent's modifier tracking. Qt fires autoRepeat
-    // release/press pairs during a held key; the brief drop is invisible at 60Hz.
-    switch (e->key()) {
-        case Qt::Key_W:
-        case Qt::Key_E:
-        case Qt::Key_Q:
-        case Qt::Key_D:
-        case Qt::Key_S:
-            heldDragModifierKeys_.remove(e->key());
-            break;
-        default:
-            break;
-    }
+    // Auto-repeat sends release/press pairs while a key is held: ignore the releases, or the
+    // hold set flickers empty mid-drag.
+    if (!e->isAutoRepeat()) trackHoldKey(e->key(), false);
     if (listener_) listener_->onEvent(jefe::ui::EventType::KeyUp);
+}
+
+void GlViewport_Qt::trackHoldKey(int key, bool down) {
+    const auto& reg = jefe::shortcuts::Registry::instance();
+    for (const jefe::shortcuts::HoldKey& h : reg.holdKeys()) {
+        if (reg.holdKey(h.id) != key) continue;
+        if (down) heldDragModifierKeys_.insert(key);
+        else heldDragModifierKeys_.remove(key);
+        return;
+    }
+}
+
+void GlViewport_Qt::commandApplied() {
+    update();
+    emit plateStateChanged();
+    if (listener_) listener_->onEvent(jefe::ui::EventType::KeyDown);
+}
+
+void GlViewport_Qt::focusOutEvent(QFocusEvent* e) {
+    // Key releases stop arriving once focus moves away; drop held keys so none stick.
+    heldDragModifierKeys_.clear();
+    QOpenGLWidget::focusOutEvent(e);
 }
 
 void GlViewport_Qt::enterEvent(QEnterEvent*) {
@@ -670,6 +541,12 @@ void GlViewport_Qt::dropEvent(QDropEvent* e) {
 }
 
 bool GlViewport_Qt::event(QEvent* e) {
+    // While composing a remote chat message every key is text for the chat (keyPressEvent),
+    // so claim it before any shortcut (F, V, Space...) can fire.
+    if (e->type() == QEvent::ShortcutOverride && jefe::qt::remoteChatModeActive()) {
+        e->accept();
+        return true;
+    }
     if (e->type() == QEvent::Gesture) {
         auto* ge = static_cast<QGestureEvent*>(e);
         if (auto* gesture = ge->gesture(Qt::PinchGesture)) {

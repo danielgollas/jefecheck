@@ -128,6 +128,10 @@ class TimelinePanel_Qt : public QWidget {
 public:
     explicit TimelinePanel_Qt(QWidget* parent = nullptr);
 
+    // The two painted widgets that take Player-scope shortcuts (transport keys).
+    TimelineScrubber_Qt* scrubber() const { return scrubber_; }
+    TimelineTracks_Qt* tracks() const { return tracks_; }
+
 public slots:
     // Pulls current frame, in/out, range, FPS, loop mode, playing state
     // from gfcPlaybackManager and pushes them into the widgets. Driven
