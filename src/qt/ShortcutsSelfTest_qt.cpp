@@ -1960,6 +1960,42 @@ void testKeymapDrop(Registry& reg)
           QStringLiteral("free=%1 sent=%2 keys=%3 changed=%4").arg(freeKey).arg(sent)
               .arg(keys.isEmpty() ? QString() : keys.first().toString()).arg(page.rowShowsChanged("playback.jkl-forward")));
 
+    // Shift on a symbol key binds the shifted symbol ("<", "?"), not the bare key, and the caption
+    // lands on that key's Shift layer; Shift on a digit stays Shift+digit, as the presets store it.
+    {
+        const QString tipLess = map->dropToolTip(Qt::Key_Comma), tipQ = map->dropToolTip(Qt::Key_Slash);
+        // Editing binds "<" too (Reverse Direction's second key): free it, so the drop applies.
+        for (const QString& other : reg.conflicts("playback.jkl-forward", QKeySequence("<"))) {
+            QList<QKeySequence> ks = reg.keys(other.toUtf8().constData());
+            ks.removeAll(QKeySequence("<"));
+            reg.setOverrideKeys(other.toUtf8().constData(), ks);
+        }
+        const bool freeLess = reg.conflicts("playback.jkl-forward", QKeySequence("<")).isEmpty();
+        const bool freeQ = reg.conflicts("playback.jkl-reverse", QKeySequence("?")).isEmpty();
+        sendDrop(Qt::Key_Comma, "playback.jkl-forward");
+        const QList<QKeySequence> less = reg.keys("playback.jkl-forward");
+        const QString commaCaption = map->keyCaption(Qt::Key_Comma);
+        bool onShiftLayer = false;
+        for (const ShortcutKeyboard_Qt::Binding& b : map->bindingsFor(Qt::Key_Comma))
+            if (b.id == "playback.jkl-forward" && b.mods == Qt::ShiftModifier) onShiftLayer = true;
+        sendDrop(Qt::Key_Slash, "playback.jkl-reverse");
+        const QList<QKeySequence> question = reg.keys("playback.jkl-reverse");
+        const QString slashCaption = map->keyCaption(Qt::Key_Slash);
+        const QKeyCombination digit = keyOnCap(Qt::Key_1, Qt::ShiftModifier);
+        check("keymap-drop-shift-symbol",
+              freeLess && freeQ && !less.isEmpty() && less.first() == QKeySequence(Qt::Key_Less) &&
+                  !question.isEmpty() && question.first() == QKeySequence(Qt::Key_Question) &&
+                  commaCaption == shortCommandName("playback.jkl-forward", QString()) && onShiftLayer &&
+                  slashCaption == shortCommandName("playback.jkl-reverse", QString()) && bar->isHidden() &&
+                  tipLess == QStringLiteral("Assign <") && tipQ == QStringLiteral("Assign ?") &&
+                  digit == QKeyCombination(Qt::ShiftModifier, Qt::Key_1),
+              QStringLiteral("free=%1/%2 <:%3 ?:%4 comma=%5 shiftLayer=%6 slash=%7 tips=%8|%9")
+                  .arg(freeLess).arg(freeQ)
+                  .arg(less.isEmpty() ? QString() : less.first().toString(),
+                       question.isEmpty() ? QString() : question.first().toString(), commaCaption)
+                  .arg(onShiftLayer).arg(slashCaption, tipLess, tipQ));
+    }
+
     // Drop on a taken key: the capture's conflict bar, nothing applied until Replace.
     map->setLayer(Qt::NoModifier);
     QString raisedId;

@@ -166,24 +166,6 @@ bool isModifierOnly(int key)
     }
 }
 
-// Shift + digit on a US layout arrives as the symbol; the presets store "Shift+1".
-int shiftedDigit(int key)
-{
-    switch (key) {
-    case Qt::Key_Exclam: return Qt::Key_1;
-    case Qt::Key_At: return Qt::Key_2;
-    case Qt::Key_NumberSign: return Qt::Key_3;
-    case Qt::Key_Dollar: return Qt::Key_4;
-    case Qt::Key_Percent: return Qt::Key_5;
-    case Qt::Key_AsciiCircum: return Qt::Key_6;
-    case Qt::Key_Ampersand: return Qt::Key_7;
-    case Qt::Key_Asterisk: return Qt::Key_8;
-    case Qt::Key_ParenLeft: return Qt::Key_9;
-    case Qt::Key_ParenRight: return Qt::Key_0;
-    default: return 0;
-    }
-}
-
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -206,8 +188,9 @@ QKeySequence ShortcutCaptureEdit_Qt::keyFor(int key, Qt::KeyboardModifiers mods)
         mods |= Qt::ShiftModifier;
     }
     if (mods & Qt::ShiftModifier) {
-        if (const int d = shiftedDigit(key)) {
-            key = d;
+        // Shift + digit on a US layout arrives as the symbol; the presets store "Shift+1".
+        if (const Qt::Key base = sc::unshiftedKey(Qt::Key(key)); base >= Qt::Key_0 && base <= Qt::Key_9) {
+            key = base;
         } else if (key > 0x20 && key < 0x7f && !(key >= Qt::Key_A && key <= Qt::Key_Z) &&
                    !(key >= Qt::Key_0 && key <= Qt::Key_9)) {
             // Other shifted symbols are the symbol itself ("<", "?"), as Qt matches them.
@@ -1004,8 +987,10 @@ bool ShortcutsPage_Qt::assignKey(const QString& id, Qt::Key key, Qt::KeyboardMod
         showNotice(tr("A hold key is one key without modifiers; switch the map to no modifiers to assign it."), true);
         return true;
     }
-    mods &= Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-    const QKeySequence seq = ShortcutCaptureEdit_Qt::keyFor(key, mods);
+    // The cap's key on this layer: Shift on "," is "<", as a capture records it (keyFor would
+    // otherwise drop the Shift from a symbol key and bind the bare ",").
+    const QKeyCombination onCap = sc::keyOnCap(key, mods);
+    const QKeySequence seq = ShortcutCaptureEdit_Qt::keyFor(onCap.key(), onCap.keyboardModifiers());
     if (seq.isEmpty()) {
         showNotice(tr("That key cannot be used."), true);
         return true;

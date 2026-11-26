@@ -40,6 +40,14 @@ QList<KeyCap> ansiLayout();
 // symbols ("<", "?", "+") on their base key with Shift. False for a key that has no cap.
 bool capForKey(const QKeyCombination& key, Qt::Key* cap, Qt::KeyboardModifiers* mods);
 
+// US layout: the symbol Shift types on a base key ("<" on ","), unknown when it has none.
+Qt::Key shiftedSymbol(Qt::Key base);
+// The reverse: the base key a US shifted symbol is on ("," for "<"), unknown when none.
+Qt::Key unshiftedKey(Qt::Key symbol);
+// The key a cap means on a layer, as the registry stores it: Shift on a symbol key is the
+// shifted symbol ("<", not Shift+,); Shift on a digit stays Shift+digit, as the presets store it.
+QKeyCombination keyOnCap(Qt::Key cap, Qt::KeyboardModifiers mods);
+
 // The short name the map shows for a command or hold key ("Set In", "Gamma").
 QString shortCommandName(const QString& id, const QString& name);
 
@@ -88,6 +96,8 @@ public:
     void setSelectedKey(Qt::Key key);
     // The key under a command being dragged over the map (unknown when none).
     Qt::Key dropHoverKey() const { return dropHover_; }
+    // The tooltip shown while a command is dragged over `key`: "Assign <key as it will be bound>".
+    QString dropToolTip(Qt::Key key) const;
     // The mime type a dragged command carries: its id, UTF-8.
     static QString commandMimeType();
     // Held modifiers count while a widget inside `scope` has focus (default: the parent).

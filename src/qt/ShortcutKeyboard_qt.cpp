@@ -176,6 +176,45 @@ QList<KeyCap> ansiLayout()
     return caps;
 }
 
+namespace {
+// US ANSI: base key -> the symbol Shift types on it.
+const QHash<int, int>& shiftTable()
+{
+    static const QHash<int, int> t = {
+        {Qt::Key_QuoteLeft, Qt::Key_AsciiTilde}, {Qt::Key_1, Qt::Key_Exclam},     {Qt::Key_2, Qt::Key_At},
+        {Qt::Key_3, Qt::Key_NumberSign},         {Qt::Key_4, Qt::Key_Dollar},     {Qt::Key_5, Qt::Key_Percent},
+        {Qt::Key_6, Qt::Key_AsciiCircum},        {Qt::Key_7, Qt::Key_Ampersand},  {Qt::Key_8, Qt::Key_Asterisk},
+        {Qt::Key_9, Qt::Key_ParenLeft},          {Qt::Key_0, Qt::Key_ParenRight}, {Qt::Key_Minus, Qt::Key_Underscore},
+        {Qt::Key_Equal, Qt::Key_Plus},           {Qt::Key_BracketLeft, Qt::Key_BraceLeft},
+        {Qt::Key_BracketRight, Qt::Key_BraceRight}, {Qt::Key_Backslash, Qt::Key_Bar},
+        {Qt::Key_Semicolon, Qt::Key_Colon},      {Qt::Key_Apostrophe, Qt::Key_QuoteDbl},
+        {Qt::Key_Comma, Qt::Key_Less},           {Qt::Key_Period, Qt::Key_Greater}, {Qt::Key_Slash, Qt::Key_Question},
+    };
+    return t;
+}
+}  // namespace
+
+Qt::Key shiftedSymbol(Qt::Key base) { return Qt::Key(shiftTable().value(base, Qt::Key_unknown)); }
+
+Qt::Key unshiftedKey(Qt::Key symbol)
+{
+    static const QHash<int, int> inverse = [] {
+        QHash<int, int> t;
+        for (auto it = shiftTable().cbegin(); it != shiftTable().cend(); ++it) t.insert(it.value(), it.key());
+        return t;
+    }();
+    return Qt::Key(inverse.value(symbol, Qt::Key_unknown));
+}
+
+QKeyCombination keyOnCap(Qt::Key cap, Qt::KeyboardModifiers mods)
+{
+    mods &= Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
+    const bool digit = cap >= Qt::Key_0 && cap <= Qt::Key_9;
+    if ((mods & Qt::ShiftModifier) && !digit)
+        if (const Qt::Key s = shiftedSymbol(cap); s != Qt::Key_unknown) return QKeyCombination(mods & ~Qt::ShiftModifier, s);
+    return QKeyCombination(mods, cap);
+}
+
 bool capForKey(const QKeyCombination& key, Qt::Key* cap, Qt::KeyboardModifiers* mods)
 {
     static const QSet<int> onMap = [] {
@@ -184,16 +223,6 @@ bool capForKey(const QKeyCombination& key, Qt::Key* cap, Qt::KeyboardModifiers* 
             if (!isModifierCap(c.key)) s.insert(c.key);
         return s;
     }();
-    static const QHash<int, int> shifted = {
-        {Qt::Key_AsciiTilde, Qt::Key_QuoteLeft}, {Qt::Key_Exclam, Qt::Key_1},      {Qt::Key_At, Qt::Key_2},
-        {Qt::Key_NumberSign, Qt::Key_3},         {Qt::Key_Dollar, Qt::Key_4},      {Qt::Key_Percent, Qt::Key_5},
-        {Qt::Key_AsciiCircum, Qt::Key_6},        {Qt::Key_Ampersand, Qt::Key_7},   {Qt::Key_Asterisk, Qt::Key_8},
-        {Qt::Key_ParenLeft, Qt::Key_9},          {Qt::Key_ParenRight, Qt::Key_0},  {Qt::Key_Underscore, Qt::Key_Minus},
-        {Qt::Key_Plus, Qt::Key_Equal},           {Qt::Key_BraceLeft, Qt::Key_BracketLeft},
-        {Qt::Key_BraceRight, Qt::Key_BracketRight}, {Qt::Key_Bar, Qt::Key_Backslash},
-        {Qt::Key_Colon, Qt::Key_Semicolon},      {Qt::Key_QuoteDbl, Qt::Key_Apostrophe},
-        {Qt::Key_Less, Qt::Key_Comma},           {Qt::Key_Greater, Qt::Key_Period}, {Qt::Key_Question, Qt::Key_Slash},
-    };
     int k = key.key();
     Qt::KeyboardModifiers m = key.keyboardModifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier |
                                                          Qt::MetaModifier);
@@ -202,8 +231,8 @@ bool capForKey(const QKeyCombination& key, Qt::Key* cap, Qt::KeyboardModifiers* 
         k = Qt::Key_Tab;
         m |= Qt::ShiftModifier;
     }
-    if (const auto it = shifted.constFind(k); it != shifted.constEnd()) {
-        k = it.value();
+    if (const Qt::Key base = unshiftedKey(Qt::Key(k)); base != Qt::Key_unknown) {
+        k = base;
         m |= Qt::ShiftModifier;
     }
     if (!onMap.contains(k)) return false;
@@ -712,13 +741,13 @@ void ShortcutKeyboard_Qt::dragMoveEvent(QDragMoveEvent* e)
     }
     e->setDropAction(Qt::CopyAction);
     e->accept();
-    // The key the drop would bind, on the shown layer.
-    const Qt::KeyboardModifiers mods = layer();
-    QString name;
-    for (const sc::KeyCap& c : caps_)
-        if (c.key == k) { name = c.label; break; }
-    const QString mod = mods == Qt::NoModifier ? QString() : QKeySequence(int(mods)).toString(QKeySequence::NativeText);
-    QToolTip::showText(mapToGlobal(e->position().toPoint()), tr("Assign %1").arg(mod + name), this);
+    QToolTip::showText(mapToGlobal(e->position().toPoint()), dropToolTip(k), this);
+}
+
+QString ShortcutKeyboard_Qt::dropToolTip(Qt::Key key) const
+{
+    // The key the drop binds on the shown layer, as it will be stored ("<" for Shift on ",").
+    return tr("Assign %1").arg(QKeySequence(sc::keyOnCap(key, layer())).toString(QKeySequence::NativeText));
 }
 
 void ShortcutKeyboard_Qt::dragLeaveEvent(QDragLeaveEvent* e)
