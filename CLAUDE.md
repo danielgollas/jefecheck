@@ -187,6 +187,7 @@ docs/manual-images/     Screenshots (2014, need updating)
 - §40 **rolling frame cache** (frame table + coordinator, byte budget from the RAM %, priority order, retarget on every seek, Keep time / Show every frame (the sound leads whenever playback keeps up), rolling on/off toggle (off = load until full from an anchor, Alt-click/Alt+I load from here), audio thread, buffer-bar segments, --cache-test).
 - §39 **frame upload** (Metal-native formats, IOSurface binding on macOS, staging-buffer tickets and texture pool, idle trim, one CPU copy per queued frame, `--upload-bench`).
 - §26 **remote-session runtime** (pump always-on outside `needsPlaybackTick`; TU-safe getters for status/participants/chat/errors; `remoteDialog_` modeless lazy-created; chat+pointer overlay in `paintGL`; `--remote-test` two-process harness).
+- §42 **keyboard shortcuts registry** (every key is a registry `QAction`; Global = ApplicationShortcut on the window, Player = WidgetShortcut on viewport + timeline; add commands in `ShortcutCommands_qt.cpp`, window-level ones via `bindRun`; hold keys; chat and LUT-cube `ShortcutOverride`; help overlay uses PortableText; `--shortcuts-test`, `--shortcuts-focus-test`).
 
 ### Image Loading Flow
 1. `gfcFrame::loadFrame()` creates a loader based on file extension

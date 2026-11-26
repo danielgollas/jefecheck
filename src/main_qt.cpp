@@ -1578,6 +1578,21 @@ int main(int argc, char* argv[]) {
         break;
     }
 
+    // --shortcuts-focus-test [--real-keys]: keys fire only where they should (focus, floating
+    // docks, chat mode). --real-keys adds one System Events keystroke (needs Accessibility).
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--shortcuts-focus-test") != 0) continue;
+        bool realKeys = false;
+        for (int j = 1; j < argc; ++j)
+            if (std::strcmp(argv[j], "--real-keys") == 0) realKeys = true;
+        QTimer::singleShot(3000, &window, [&window, realKeys]() {
+            const int code = window.runHeadlessShortcutsFocusTest(realKeys);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
     // --window-rect X Y W H: place the window, in logical pixels, so two
     // instances can sit side by side for a recording.
     for (int i = 1; i + 4 < argc; ++i) {

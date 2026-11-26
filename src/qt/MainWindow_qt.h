@@ -253,6 +253,12 @@ public:
     // outDir it saves and checks a screenshot matrix there. Returns 0 on PASS, 2 on FAIL.
     int runHeadlessPlateManagerTest(const QString& shotsDir = QString());
 
+    // --shortcuts-focus-test [--real-keys]: proves keys fire only where they should. Text
+    // fields, the playlist list and chat mode keep their keys; the viewport and a floated
+    // Timeline's scrubber get Player keys. --real-keys adds one real keystroke through
+    // System Events (needs Accessibility). Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessShortcutsFocusTest(bool realKeys = false);
+
     // Width a bottom/top Plate Manager row may fill: the window width, less the
     // Timeline's minimum width (and a gap) when the Timeline shares the strip
     // side by side.

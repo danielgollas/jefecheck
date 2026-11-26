@@ -714,6 +714,8 @@ void remoteChatCancel();
 void remoteChatBackspace();
 void remoteChatAppend(const std::string& s);
 void remoteChatSubmit();
+// The message being composed (empty outside chat mode).
+std::string remoteChatText();
 
 // Remote pointer broadcast. Sends the local cursor position to all
 // session peers. xPx/yPx are framebuffer pixel coords with GL bottom-left

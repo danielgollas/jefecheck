@@ -3139,6 +3139,7 @@ void sendChatMessageText(const std::string& text) {
 
 bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
 void remoteChatBegin()      { networkManager.gChatMode = 1; }
+std::string remoteChatText() { return networkManager.gChatTextString; }
 void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }
 void remoteChatBackspace()  {
     auto& s = networkManager.gChatTextString;

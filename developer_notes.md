@@ -1018,6 +1018,24 @@ One density for every dock and dialog: **13 px text, 24 px controls, 4/8/12 px s
 
 **LUT preview layout** is covered in §16: `LUTPreview_Qt::chooseDirection` has hysteresis so the side section does not flip while a dock is dragged.
 
+## 42. Keyboard shortcuts registry
+
+Every key binding is a command in `jefe::shortcuts::Registry` (`src/qt/Shortcuts_qt.{h,cpp}`). Each command owns one `QAction` (object name `shortcut.<id>`); menus add that action and never set keys of their own. No standalone `QShortcut` and no key switch in a `keyPressEvent` is left; `--platemanager-test`'s `REGISTRY keys` check fails if one comes back.
+
+**Scopes.** `Scope::Global` actions get `Qt::ApplicationShortcut` and live on the main window (`attach(this, …)` in the `MainWindow_Qt` ctor), so they fire from any window of the app, floating docks included. `Scope::Player` actions get `Qt::WidgetShortcut` and are added to the viewport, the timeline's `TimelineScrubber_Qt` and `TimelineTracks_Qt` only: Space, arrows, I/O, `,` `.` and friends fire only while one of those has focus, so the playlist list, text fields and spin boxes keep their own arrows and letters. A widget shortcut follows its widget into a floated dock (it is the focus widget that counts, not the main window).
+
+**Adding a command.** Add one `add(reg, "category.verb-noun", "Name", Category::…, P|G, {k("Key")}, run)` line to `registerAllCommands` in `src/qt/ShortcutCommands_qt.cpp`, in its category group. A `run` that only calls a `jefe::qt::*` bridge function goes there. A window-level one (opens a dialog, toggles a dock) is registered with `run = nullptr` and gets its body from `reg.bindRun("id", [this] {…})` in `buildMenuBar`/`buildDocks`; put it in a menu with `registryMenuAction(id, text, objectName)`. Ids are never renamed once shipped (they key the user's overrides). What the old handler did besides the bridge call (repaint, refresh plate cards, status label) is the `commandRan` handler in the `MainWindow_Qt` ctor, by scope and category. Then add the id to the help overlay (`ShortcutHelpText_qt.cpp`, `--shortcuts-test` flags a command the overlay does not place) and to `--shortcuts-test`'s `parity-2.0` table.
+
+**Hold keys** (W/E/Q/D/S + drag for gamma/exposure/brightness/contrast/saturation) are `HoldKey`s, not actions: `GlViewport_Qt::trackHoldKey` keeps the held set from `keyPressEvent`/`keyReleaseEvent`, ignores auto-repeat releases (or the set flickers empty mid-drag) and clears on `focusOutEvent` (releases stop arriving once focus leaves). Mouse code asks `isHolding("color.drag-gamma")`, which reads the current key from the registry.
+
+**Claiming keys back.** Qt sends `ShortcutOverride` to the focus widget before it matches any shortcut; accepting it turns the key back into a plain key press. `QLineEdit`, `QTextEdit`, spin boxes and `QKeySequenceEdit` already accept printable keys, which is why bare F/H/M/T/V type into text fields. Two widgets of ours do the same: `GlViewport_Qt::event` accepts *every* `ShortcutOverride` while `remoteChatModeActive()`, so a chat message can contain F, V or a space; `LutCloudWidget::event` (`LUTPreview_qt.cpp`) accepts bare F only (frame the cube instead of Fit), Shift+F still reaches Fit-all. On macOS the native menu bar does not get ahead of this: a real System Events keystroke of `f` into a `QLineEdit` in a floated dock types the letter and Fit does not run, while the same keystroke on the focused viewport does run Fit (`--shortcuts-focus-test --real-keys`, needs Accessibility for the terminal).
+
+**Key names.** Stored, exported and imported as `QKeySequence::PortableText` ("Ctrl+L" is Cmd+L on macOS); menus and tooltips show `NativeText`. The on-screen help overlay uses PortableText too ("Ctrl+Alt+F", "Left"): the GL text renderer's glyph atlas has no ⌘⌥⇧ or arrow glyphs, so native text would draw gaps.
+
+**Tests.** `--shortcuts-test` (registry, persistence, import/export, parity table, help text; no window). `--shortcuts-focus-test [--real-keys]` (needs a window): with a 5-frame sequence loaded, checks that the keys fire on the viewport, Down in the playlist list moves the selection and runs nothing, I in the Render dialog's path field types, F in chat mode goes to the message, Space on the viewport toggles play, Right on a floated Timeline's scrubber steps, and F/H/M/T/V type into a text field in a floated dock. Keys are sent to `QApplication::focusWidget()`; `QApplication::notify` tries the shortcut map first, so a synthetic press takes the real path except for the native menu bar, which only `--real-keys` exercises.
+
+**AUTOMOC gotcha.** After adding a new `Q_OBJECT` file to `src/qt/` and re-running the configure step, a build can still link without its `moc` output (undefined `vtable`/`staticMetaObject`). Delete `$B/jefecheck_autogen/timestamp` (with `$B` the build dir) and build again.
+
 ## See also
 
 - `CLAUDE.md` — project conventions, build setup, platform-specific gotchas.
