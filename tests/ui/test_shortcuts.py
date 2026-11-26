@@ -110,17 +110,27 @@ def test_export_change_import_restores(shortcuts_app):
     app.by_object_name(locators.PREFERENCES_CANCEL).click()
 
 
+# The keyboard map is one painted widget with no accessible child per key, so a key is clicked
+# at a point computed from the map's layout (ShortcutKeyboard_qt.cpp): an 8 px margin, 16 key
+# units across the rest of the width, 38 px rows. `jefecheck --shortcuts-test` check
+# keymap-click-point asserts keyRect(Qt::Key_I) is centred where keymap_point() says.
+MAP_MARGIN = 8
+MAP_UNITS = 16
+MAP_ROW_H = 38
+I_KEY_CENTRE = (9.0, 2.75)  # units across, rows down: x 8.5 + 0.5, QWERTY row top 2.25 + 0.5
+
+
+def keymap_point(size, centre):
+    unit = (size["width"] - 2 * MAP_MARGIN) / MAP_UNITS
+    return MAP_MARGIN + centre[0] * unit, MAP_MARGIN + centre[1] * MAP_ROW_H
+
+
 def test_click_i_key_lists_its_commands(shortcuts_app):
     app = shortcuts_app
     open_shortcuts_page(app)
     keymap = app.by_object_name(locators.PREFS_SHORTCUTS_KEYMAP)
-    # The map is one painted widget; the I key sits in the QWERTY row at about 62% / 43%.
-    size = keymap.size
-    app.driver.execute_script("macos: click", {
-        "elementId": keymap.id,
-        "x": size["width"] * 0.62,
-        "y": size["height"] * 0.43,
-    })
+    x, y = keymap_point(keymap.size, I_KEY_CENTRE)
+    app.driver.execute_script("macos: click", {"elementId": keymap.id, "x": x, "y": y})
     info = app.by_object_name(locators.PREFS_SHORTCUTS_KEYINFO_LIST)
     text = info.get_attribute("value") or info.text or ""
     assert "Set In" in text, "the I key's commands were not listed in the side panel"

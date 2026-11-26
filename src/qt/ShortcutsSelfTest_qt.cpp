@@ -2091,6 +2091,30 @@ void testKeymapPage(Registry& reg)
                               rows.value(0) == QStringLiteral("Set In Point at Playhead"),
           rows.join(" | "));
 
+    // tests/ui/test_shortcuts.py clicks I at a point computed from the layout (8 px margin, 16
+    // units, 38 px rows; I centred at 9.0 units, 2.75 rows): that point must stay I's centre.
+    {
+        QStringList off;
+        const int widths[] = {map->width(), map->sizeHint().width(), map->minimumSizeHint().width(), 1100};
+        ShortcutKeyboard_Qt probe;
+        Qt::Key hit = Qt::Key_unknown;
+        QObject::connect(&probe, &ShortcutKeyboard_Qt::keyClicked, &probe, [&hit](Qt::Key k) { hit = k; });
+        for (int w : widths) {
+            probe.resize(w, probe.sizeHint().height());
+            const qreal unit = (w - 2 * 8) / 16.0;
+            const QPointF expect(8 + 9.0 * unit, 8 + 2.75 * 38);
+            const QPointF got = probe.keyRect(Qt::Key_I).center();
+            hit = Qt::Key_unknown;
+            QMouseEvent p(QEvent::MouseButtonPress, expect, probe.mapToGlobal(expect), Qt::LeftButton, Qt::LeftButton,
+                          Qt::NoModifier);
+            QApplication::sendEvent(&probe, &p);
+            if (std::abs(got.x() - expect.x()) > 0.5 || std::abs(got.y() - expect.y()) > 0.5 || hit != Qt::Key_I)
+                off << QStringLiteral("w=%1 expect=(%2,%3) got=(%4,%5) hit=%6")
+                           .arg(w).arg(expect.x()).arg(expect.y()).arg(got.x()).arg(got.y()).arg(int(hit), 0, 16);
+        }
+        check("keymap-click-point", off.isEmpty(), off.join("; "));
+    }
+
     // Clicking "Go to In Point" there selects it in the list.
     QTreeWidgetItem* goIn = info->topLevelItemCount() > 1 ? info->topLevelItem(1) : nullptr;
     if (goIn) emit info->itemClicked(goIn, 1);
