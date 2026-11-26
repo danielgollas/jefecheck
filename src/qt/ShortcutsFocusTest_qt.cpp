@@ -123,11 +123,14 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
 
     // The checks assert the Editing keys (V is Go to End in the 1.7 preset); the preset is put
     // back at the end, in memory only.
+    // JEFE_TEST_SEED_OVERRIDE=1 plays a user who rebound Play/Pause to P: the checks must not notice.
+    const bool seeded = qEnvironmentVariableIsSet("JEFE_TEST_SEED_OVERRIDE");
+    if (seeded) sc::Registry::instance().setOverride("playback.play-pause", QKeySequence("P"));
     struct RestoreKeys {
         sc::Registry::Snapshot before = sc::Registry::instance().snapshot();
         ~RestoreKeys() { sc::Registry::instance().restore(before); }
     } restoreKeys;   // every return below puts the preset back
-    sc::Registry::instance().setPreset(QStringLiteral("editing"));
+    sc::Registry::instance().pinPreset(QStringLiteral("editing"));
 
     // Every registry command that runs, in order; each check clears it first.
     QStringList ran;
@@ -420,6 +423,12 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
     settleFor(100);
 
     disconnect(spy);
+    if (seeded) {
+        sc::Registry::instance().restore(restoreKeys.before);
+        const bool back = sc::Registry::instance().key("playback.play-pause") == QKeySequence("P");
+        printf("SHORTCUTS-FOCUS-TEST SEED restored %s\n", back ? "PASS" : "FAIL");
+        allPass = allPass && back;
+    }
     printf("SHORTCUTS-FOCUS-TEST %s\n", allPass ? "PASS" : "FAIL");
     fflush(stdout);
     return allPass ? 0 : 2;

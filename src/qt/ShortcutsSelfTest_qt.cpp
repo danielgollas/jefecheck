@@ -702,6 +702,16 @@ void testPrefsCancelDone(Registry& reg)
         t.sync();
         unknownOk = t.value("Shortcuts/preset").toString() == "studio-2027";
     }
+    bool escOk = false;
+    {
+        reg.restore(orig);
+        reg.pinPreset(QStringLiteral("editing"));
+        PreferencesWindow_Qt dlg;
+        reg.setOverride("playback.play-pause", QKeySequence("Ctrl+Alt+Q"));
+        dlg.reject();   // what Escape and the window close button call
+        escOk = reg.key("playback.play-pause") == base && !reg.isCustom();
+    }
+    check("prefs-escape-reverts", escOk);
     QSettings::setDefaultFormat(oldFmt);
     QDir(dir).removeRecursively();
     reg.restore(orig);

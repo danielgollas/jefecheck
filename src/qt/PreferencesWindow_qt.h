@@ -47,7 +47,9 @@ public:
 
     // The Done / Cancel handlers, callable without a click (headless --shortcuts-test).
     void commitForTest() { onDone(); }
-    void cancelForTest() { onCancel(); }
+    void cancelForTest() { reject(); }
+    // Escape, the window close button and Cancel all end up here and revert.
+    void reject() override;
 
 signals:
     // Emitted continuously while the dialog is open so the owner can repaint
@@ -56,7 +58,6 @@ signals:
 
 private:
     void onDone();
-    void onCancel();
     void addPage(const QString& title, QWidget* page);
     void buildGeneralPage();
     void buildTextPage();

@@ -68,6 +68,9 @@ public:
     // A different preset keeps no overrides; the same one changes no keys. Either way an
     // unknown preset name read by load() is replaced.
     void setPreset(const QString& preset);
+    // Self-tests: the preset with no overrides at all, even when it is the current one (setPreset
+    // keeps a same-preset user's overrides). Callers snapshot first and restore afterwards.
+    void pinPreset(const QString& preset);
     // An override equal to the preset's keys is dropped. Empty key = deliberately unbound.
     void setOverride(const char* id, const QKeySequence& key);
     void clearOverride(const char* id);

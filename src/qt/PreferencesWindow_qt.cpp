@@ -41,13 +41,13 @@ void PreferencesWindow_Qt::onDone() {
     accept();
 }
 
-void PreferencesWindow_Qt::onCancel() {
+void PreferencesWindow_Qt::reject() {
     sett = *sett_backup_;            // revert live mutations
     jefe::shortcuts::Registry::instance().restore(*shortcuts_backup_);
     jefe::qt::applyTextPrefs();      // revert live text-renderer edits (Text/* QSettings are
                                      // untouched; this reapplies the pre-dialog state)
     emit viewportRepaintRequested(); // paint the reverted state before closing
-    reject();
+    QDialog::reject();
 }
 
 PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
@@ -97,7 +97,7 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     buttons->button(QDialogButtonBox::Save)->setObjectName("preferences.done.button");
     buttons->button(QDialogButtonBox::Cancel)->setObjectName("preferences.cancel.button");
     connect(buttons, &QDialogButtonBox::accepted, this, &PreferencesWindow_Qt::onDone);
-    connect(buttons, &QDialogButtonBox::rejected, this, &PreferencesWindow_Qt::onCancel);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     // Live preview: repaint the viewport at ~30 Hz while this modal dialog is open
     // (a modal exec() still processes the parent's paint events).

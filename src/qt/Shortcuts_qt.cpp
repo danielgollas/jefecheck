@@ -248,6 +248,18 @@ void Registry::setPreset(const QString& preset)
     applyKeys();
 }
 
+void Registry::pinPreset(const QString& preset)
+{
+    if (preset != kEditing && preset != kClassic) return;
+    preset_ = preset;
+    unknownPreset_.clear();
+    overrides_.clear();
+    holdOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
+    applyKeys();
+}
+
 QList<QKeySequence> Registry::presetKeys(int i) const
 {
     return preset_ == kClassic ? commands_[i].classic : commands_[i].editing;

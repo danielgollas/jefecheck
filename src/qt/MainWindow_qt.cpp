@@ -3583,8 +3583,11 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
     }
     // The key checks below assert the Editing keys; the preset is put back afterwards (in memory
     // only, nothing is written to QSettings).
+    // JEFE_TEST_SEED_OVERRIDE=1 plays a user who rebound Play/Pause to P: the checks must not notice.
+    const bool seeded = qEnvironmentVariableIsSet("JEFE_TEST_SEED_OVERRIDE");
+    if (seeded) jefe::shortcuts::Registry::instance().setOverride("playback.play-pause", QKeySequence("P"));
     const jefe::shortcuts::Registry::Snapshot keysBefore = jefe::shortcuts::Registry::instance().snapshot();
-    jefe::shortcuts::Registry::instance().setPreset(QStringLiteral("editing"));
+    jefe::shortcuts::Registry::instance().pinPreset(QStringLiteral("editing"));
     {   // Window menu: every panel has a shortcut, and no two menu-bar actions share one.
         QStringList bad;
         auto* wm = menuBar()->findChild<QMenu*>("menu.window");
@@ -3770,7 +3773,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         if (!ovReturn.isAccepted()) bad << "chat mode does not claim Return";
         jefe::qt::remoteChatCancel();
 
-        reg.setPreset(QStringLiteral("classic"));
+        reg.pinPreset(QStringLiteral("classic"));
         press(Qt::Key_Less, "<");
         if (!jefe::qt::isPlaying() || jefe::qt::getPlayDirection() != -1) bad << "classic < did not play reverse";
         press(Qt::Key_Less, "<");
@@ -3795,10 +3798,13 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         if (!ran.contains("plate.track-prev")) bad << "Up without L did not run plate.track-prev";
         jefe::qt::showTrackOnActive(track0 < 0 ? 0 : track0);
         disconnect(spy);
-        reg.setPreset(QStringLiteral("editing"));
+        reg.pinPreset(QStringLiteral("editing"));
         report("PRESET keys", bad.isEmpty(), bad.isEmpty() ? QString("J/K/L, Return; classic < and hold L + Down/Up (%1 LUTs)").arg(jefe::qt::getLutNames().size()) : bad.join("; "));
     }
     jefe::shortcuts::Registry::instance().restore(keysBefore);
+    if (seeded)
+        report("SEED restored", jefe::shortcuts::Registry::instance().key("playback.play-pause") == QKeySequence("P"),
+               "the seeded Play/Pause override is back after the pinned checks");
     {   // Bridge calls behind the brought-back 1.7 keys; every changed state is put back.
         QStringList bad;
         // R is a solo toggle (R alone, or back to RGB), so one press flips G and B, not R.
