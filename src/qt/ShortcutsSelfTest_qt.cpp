@@ -970,8 +970,13 @@ const ParityRow kParity20[] = {
     // View menu.
     {G, "F11", "view.toggle-fullscreen"},
     {G, "Meta+Ctrl+F", "view.toggle-fullscreen"},
+#ifdef Q_OS_MACOS  // Cmd+H / Option+Cmd+H are the app menu's Hide / Hide Others
+    {G, "Meta+H", "view.toggle-histogram"},
+    {G, "Meta+Alt+H", "view.toggle-histogram-all"},
+#else
     {G, "Ctrl+H", "view.toggle-histogram"},
     {G, "Ctrl+Alt+H", "view.toggle-histogram-all"},
+#endif
     {G, "N", "view.toggle-note-overlay"},
     // Window menu.
     {G, "F2", "panels.toggle-plate-manager"},
@@ -1061,7 +1066,11 @@ const ParityRow kEditing[] = {
     {G, "F11", "view.toggle-fullscreen"}, {G, "Meta+Ctrl+F", "view.toggle-fullscreen"},
     {G, "Ctrl+Alt+F", "panels.hide-controls"},                               // Hide controls
     {G, "H", "help.toggle-overlay"},                                         // On-screen help
+#ifdef Q_OS_MACOS  // Cmd+H / Option+Cmd+H are the app menu's Hide / Hide Others
+    {G, "Meta+H", "view.toggle-histogram"}, {G, "Meta+Alt+H", "view.toggle-histogram-all"},
+#else
     {G, "Ctrl+H", "view.toggle-histogram"}, {G, "Ctrl+Alt+H", "view.toggle-histogram-all"},
+#endif
     {G, "Ctrl+L", "file.load-manager"},                                      // Load manager
     {G, "Ctrl+P", "file.preferences"}, {G, "Ctrl+,", "file.preferences"},    // Preferences
     {P, "Return", "remote.chat-type"},                                       // Chat
@@ -1365,14 +1374,12 @@ void testDefaultPreset(Registry& reg)
           QStringLiteral("classic=%1 editing=%2 stored=%3 app=%4").arg(classic).arg(editing).arg(stored).arg(app));
 }
 
-// macOS keeps some keys for itself; a command on one would never fire (or would fire the system
-// action). No preset may use them. Known exceptions, deliberately not listed: Cmd+H (2.0's
-// histogram; macOS "Hide" from the app menu), Cmd+M (panels.minimize means the system action).
+// macOS keeps some keys for itself (systemReservedKeys); a command on one would never fire (or
+// would fire the system action). No preset may use them. Cmd+M (panels.minimize) and Cmd+Q
+// (file.quit) are JefeCheck's own Minimize and Quit and are not in the list.
 void testMacosReserved(Registry& reg)
 {
 #ifdef Q_OS_MACOS
-    const char* reserved[] = {"Ctrl+Shift+3", "Ctrl+Shift+4", "Ctrl+Shift+5", "Ctrl+F5", "Ctrl+Alt+F5",
-                              "Ctrl+Tab", "Ctrl+Space", "Ctrl+Alt+Esc"};  // Qt Ctrl = Cmd here
     reg.reset();
     registerAllCommands(reg);
     QStringList bad;
@@ -1380,8 +1387,8 @@ void testMacosReserved(Registry& reg)
         reg.setPreset(QString::fromLatin1(preset));
         for (const Command& c : reg.commands())
             for (const QKeySequence& key : reg.keys(c.id)) {
-                for (const char* r : reserved)
-                    if (key == portableKey(r)) bad << QStringLiteral("%1:%2 %3").arg(preset, c.id, r);
+                if (isSystemReserved(key))
+                    bad << QStringLiteral("%1:%2 %3").arg(preset, c.id, key.toString(QKeySequence::PortableText));
                 // Control+F1-F5 are macOS keyboard-navigation keys. Allowed only in classic, where
                 // they are 1.7's FX-favourite append keys (parity).
                 const QKeyCombination kc = key[0];

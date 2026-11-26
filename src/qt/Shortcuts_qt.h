@@ -202,6 +202,16 @@ QString helpModifierText(Qt::KeyboardModifiers mods);
 // "Play / Pause (Space)"; just `text` when the command is unbound.
 QString tooltipWithKey(const QString& text, const char* id);
 
+// Keys macOS takes before they reach the app, so a command on one never runs: screenshots
+// (Cmd+Shift+3/4/5), VoiceOver (Cmd+F5, Option+Cmd+F5), the app switcher (Cmd+Tab,
+// Shift+Cmd+Tab), Spotlight (Cmd+Space), Force Quit (Option+Cmd+Esc), the Apple menu's Log Out
+// and Lock Screen (Shift+Cmd+Q, Control+Cmd+Q) and the app menu's Hide (Cmd+H), Hide Others
+// (Option+Cmd+H) and Quit and Close All Windows (Option+Cmd+Q). Cmd+Q and Cmd+M are not
+// listed: Quit and Minimize are JefeCheck's own commands. Empty on other platforms.
+// Preferences refuses them; --shortcuts-test keeps both presets off them.
+const QList<QKeySequence>& systemReservedKeys();
+bool isSystemReserved(const QKeySequence& key);
+
 // Tests that redirect QSettings::setPath(IniFormat, UserScope, dir) read the current directory
 // first with this and set it back afterwards (Qt has no getter for it).
 QString iniUserScopePath();

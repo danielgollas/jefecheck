@@ -757,6 +757,10 @@ void ShortcutsPage_Qt::onCaptured(const QKeySequence& key)
     p.slot = idx.column() - kColKey0;
     p.key = key;
     const QByteArray id = idBytes(p.id);
+    if (sc::isSystemReserved(key)) {  // the system takes it first: the command would never run
+        showNotice(tr("%1 is reserved by macOS.").arg(native(key)), true);
+        return;
+    }
     if (p.hold) {
         if (key[0].keyboardModifiers() != Qt::NoModifier) {
             showNotice(tr("A hold key is one key without modifiers; %1 was not used.").arg(native(key)), true);

@@ -272,10 +272,13 @@ void registerAllCommands(Registry& reg)
         keys({ctl("Ctrl+R"), k("Ctrl+R")}), [] { resetActivePlate(); });
     add(reg, "plate.reset-all", "Reset All Plates", Category::Plate, G, {k("Ctrl+Alt+R")},
         keys({ctl("Ctrl+Alt+R"), k("Ctrl+Alt+R")}), [] { resetAllPlates(); });
-    add(reg, "view.toggle-histogram", "Show Histogram", Category::Plate, G, {k("Ctrl+H")},
-        keys({ctl("Ctrl+H"), k("Ctrl+H")}), [] { toggleHistogramActiveQuad(); });
-    add(reg, "view.toggle-histogram-all", "Show Histogram (All Plates)", Category::Plate, G,
-        {k("Ctrl+Alt+H")}, keys({ctl("Ctrl+Alt+H"), k("Ctrl+Alt+H")}), [] { toggleHistogramAll(); });
+    // Ctrl+H / Ctrl+Alt+H; on macOS Control+H / Control+Option+H in both presets, because Cmd+H
+    // and Option+Cmd+H are the app menu's Hide and Hide Others and never reach the app
+    // (systemReservedKeys). 1.7 used the physical Control key there too.
+    both(reg, "view.toggle-histogram", "Show Histogram", Category::Plate, G, {ctl("Ctrl+H")},
+         [] { toggleHistogramActiveQuad(); });
+    both(reg, "view.toggle-histogram-all", "Show Histogram (All Plates)", Category::Plate, G,
+         {ctl("Ctrl+Alt+H")}, [] { toggleHistogramAll(); });
     both(reg, "view.toggle-note-overlay", "Show Notes", Category::Plate, G, {k("N")});
 
     // ---- Colour (Global) -------------------------------------------------------------------

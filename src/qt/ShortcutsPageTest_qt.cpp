@@ -276,6 +276,25 @@ int MainWindow_Qt::runHeadlessShortcutsPageTest(const QString& outDir)
                       keysOf("playback.play-pause"));
         }
 
+#ifdef Q_OS_MACOS
+        // Keys macOS takes first (Cmd+Shift+3, Cmd+H, ...): refused with a notice, nothing changes.
+        {
+            const QString before = allKeys();
+            auto* notice = dlg.findChild<QLabel*>(QStringLiteral("prefs.shortcuts.notice"));
+            QStringList bad;
+            for (const QKeySequence& r : sc::systemReservedKeys()) {
+                if (!capture(page, "playback.step-back", 0, r[0].key(), r[0].keyboardModifiers())) { bad << "no capture"; continue; }
+                settle();
+                const QString want = r.toString(QKeySequence::NativeText) + QStringLiteral(" is reserved by macOS");
+                if (allKeys() != before || !notice || !notice->isVisible() || !notice->text().startsWith(want) ||
+                    (bar && bar->isVisible()))
+                    bad << r.toString(QKeySequence::PortableText) + "=" + (notice ? notice->text() : QString());
+            }
+            pageCheck("capture-refuses-macos-reserved", bad.isEmpty() && !sc::systemReservedKeys().isEmpty(),
+                      bad.isEmpty() ? (notice ? notice->text() : QString()) : bad.join(", "));
+        }
+#endif
+
         // Read-only "Inside panels" rows: no capture.
         {
             const QString before = allKeys();

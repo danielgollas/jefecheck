@@ -221,7 +221,7 @@ Press `H` to show or hide the on-screen help, which lists the keyboard shortcuts
 
 ### How to Show a Histogram
 
-Press `Ctrl+H` (or **View > Show Histogram**) for the active viewport, or `Ctrl+Alt+H` for all viewports. Drag the histogram to move it.
+Press `Ctrl+H` (`Control+H` on macOS, or **View > Show Histogram**) for the active viewport, or `Ctrl+Alt+H` (`Control+Option+H` on macOS) for all viewports. Drag the histogram to move it.
 
 ---
 

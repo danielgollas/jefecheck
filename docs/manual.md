@@ -508,8 +508,8 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 #### View Menu
 
 - **Fullscreen** (`F11` or `Cmd+Ctrl+F`) — Toggles full-screen mode. With two monitors, full screen uses the monitor the main window is on.
-- **Show Histogram** (`Ctrl+H`) — Shows an RGB histogram for the active viewport. You can drag the histogram within the viewport.
-- **Show Histogram (All Plates)** (`Ctrl+Alt+H`) — Shows a histogram on every viewport.
+- **Show Histogram** (`Ctrl+H`; `Control+H` on macOS) — Shows an RGB histogram for the active viewport. You can drag the histogram within the viewport.
+- **Show Histogram (All Plates)** (`Ctrl+Alt+H`; `Control+Option+H` on macOS) — Shows a histogram on every viewport.
 - **Show Notes** (`N`) — Shows or hides review notes on the viewports.
 - **Show Status Bar** — Shows or hides the status bar.
 - **Plate Manager Shows** — Active, Visible or All plate cards in the Plate Manager (also on right-click in the panel).
@@ -949,8 +949,8 @@ JefeCheck ships two sets of keys, called **presets**. **Editing** is the default
 | Text Overlay Mode (All Plates) | `Alt+T` |
 | Reset Plate | `Ctrl+R` |
 | Reset All Plates | `Ctrl+Alt+R` |
-| Show Histogram | `Ctrl+H` |
-| Show Histogram (All Plates) | `Ctrl+Alt+H` |
+| Show Histogram | `Ctrl+H` (macOS `Control+H`) |
+| Show Histogram (All Plates) | `Ctrl+Alt+H` (macOS `Control+Option+H`) |
 | Show Notes | `N` |
 | Reset Color Correction | `Shift+R` |
 | Reset All Color Corrections | `Alt+Shift+R` |
@@ -1019,8 +1019,6 @@ If you used JefeCheck 1.7 you can switch back to its keys at any time: **File > 
 | Flop All Plates | `Shift+M` | `Shift+M`, `Control+Alt+9` | `Shift+M`, `Ctrl+Alt+9` |
 | Reset Plate | `Ctrl+R` | `Control+R`, `Ctrl+R` | `Ctrl+R` |
 | Reset All Plates | `Ctrl+Alt+R` | `Control+Alt+R`, `Ctrl+Alt+R` | `Ctrl+Alt+R` |
-| Show Histogram | `Ctrl+H` | `Control+H`, `Ctrl+H` | `Ctrl+H` |
-| Show Histogram (All Plates) | `Ctrl+Alt+H` | `Control+Alt+H`, `Ctrl+Alt+H` | `Ctrl+Alt+H` |
 | Quick Load… | `Ctrl+O` | `Ctrl+O` (that is `Cmd+O`; 1.7's `Control+O` is Open Session) | (none) (1.7's `Ctrl+O` is Open Session) |
 | Load Sequence Manager… | `Ctrl+L` | `Control+L`, `Ctrl+L` | `Ctrl+L` |
 | Save Session | `Ctrl+S` | `Control+S`, `Ctrl+S` | `Ctrl+S` |
@@ -1039,8 +1037,9 @@ The Editing preset differs between platforms, because macOS keeps some keys for 
 - **Save Color Favorite 1-5** is `Control+Shift+1-5` on macOS (`Cmd+Shift+3`, `4` and `5` are screenshots) and `Ctrl+Shift+1-5` on Windows and Linux.
 - **Append FX Favorite 1-5** is `Option+F1-5` on macOS (`Control+F1-5` is macOS keyboard navigation) and `Ctrl+F1-5` on Windows and Linux.
 - **Fullscreen** also has `Control+Cmd+F` on macOS, the standard Mac key.
+- **Show Histogram** is `Control+H` and **Show Histogram (All Plates)** `Control+Option+H` on macOS, in both presets (`Cmd+H` and `Option+Cmd+H` are the app menu's Hide and Hide Others), and `Ctrl+H` / `Ctrl+Alt+H` on Windows and Linux.
 
-macOS reserves some other keys for the system, for example `Cmd+H` (Hide), `Cmd+Q` and `Cmd+Space`. JefeCheck does not let you assign a key the system will take before it reaches the program.
+macOS takes some keys before they reach JefeCheck: `Cmd+Shift+3`, `4` and `5` (screenshots), `Cmd+F5` and `Option+Cmd+F5` (VoiceOver), `Cmd+Tab` and `Shift+Cmd+Tab` (switch apps), `Cmd+Space` (Spotlight), `Option+Cmd+Esc` (Force Quit), `Shift+Cmd+Q` and `Control+Cmd+Q` (Log Out, Lock Screen), and the app menu's `Cmd+H` (Hide), `Option+Cmd+H` (Hide Others) and `Option+Cmd+Q` (Quit and Close All Windows). No preset uses them, and the Shortcuts page refuses them with a note ("⇧⌘3 is reserved by macOS"). `Cmd+Q` (Quit) and `Cmd+M` (Minimize) are JefeCheck's own commands.
 
 #### The Shortcuts page in Preferences
 

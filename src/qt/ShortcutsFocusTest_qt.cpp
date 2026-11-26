@@ -12,6 +12,7 @@
 #include "TimelinePanel_qt.h"
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDockWidget>
@@ -416,6 +417,38 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
             }
         }
         dockEdit->setText(saved);
+
+        // Cmd+H on the focused viewport: the app menu's Hide or a command bound to Cmd+H.
+        // Passes when the outcome matches the registry: Cmd+H bound -> its command runs and the
+        // app stays visible; unbound (reserved) -> macOS hides the app. Shown again afterwards.
+        const QKeySequence cmdH(Qt::CTRL | Qt::Key_H);   // Qt Ctrl = Cmd on macOS
+        const QString boundTo = sc::Registry::instance().commandForKey(sc::Scope::Global, cmdH);
+        focusOn(viewport_);
+        osa("tell application \"System Events\" to get unix id of (first process whose frontmost is true)", &frontPid);
+        if (frontPid != pid) {
+            skip("REAL-KEY cmd+h", QString("JefeCheck is not frontmost (%1)").arg(frontPid));
+        } else {
+            ran.clear();
+            osa("tell application \"System Events\" to keystroke \"h\" using command down");
+            settleFor(800);
+            QString visible;
+            osa(QString("tell application \"System Events\" to get visible of (first process whose unix id is %1)").arg(pid),
+                &visible);
+            const bool hid = visible == QLatin1String("false") ||
+                             QGuiApplication::applicationState() == Qt::ApplicationHidden;
+            if (hid) {
+                osa(QString("tell application \"System Events\" to set visible of (first process whose unix id is %1) to true")
+                        .arg(pid));
+                settleFor(500);
+            } else if (!boundTo.isEmpty() && ran.contains(boundTo)) {
+                // Put the toggle back.
+                sc::Registry::instance().action(boundTo.toUtf8().constData())->trigger();
+                settleFor(100);
+            }
+            const bool ok = boundTo.isEmpty() ? hid : (!hid && ran.contains(boundTo));
+            report("REAL-KEY cmd+h", ok,
+                   QString("bound to [%1]; app hid=%2; ran [%3]").arg(boundTo).arg(hid).arg(ran.join(",")));
+        }
     }
 
     remoteDock_->setFloating(remoteWasFloating);

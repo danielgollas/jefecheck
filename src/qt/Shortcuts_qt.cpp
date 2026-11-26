@@ -677,6 +677,31 @@ void Registry::reset()
     defaultPreset_ = kEditing;
 }
 
+const QList<QKeySequence>& systemReservedKeys()
+{
+    static const QList<QKeySequence> keys = [] {
+        QList<QKeySequence> out;
+#ifdef Q_OS_MACOS
+        // PortableText, where Ctrl is Cmd and Meta the Control key on macOS.
+        for (const char* k : {"Ctrl+Shift+3", "Ctrl+Shift+4", "Ctrl+Shift+5", "Ctrl+F5", "Ctrl+Alt+F5", "Ctrl+Tab",
+                              "Ctrl+Shift+Tab", "Ctrl+Space", "Ctrl+Alt+Esc", "Ctrl+Shift+Q", "Meta+Ctrl+Q", "Ctrl+H",
+                              "Ctrl+Alt+H", "Ctrl+Alt+Q"})
+            out << QKeySequence::fromString(QString::fromLatin1(k), QKeySequence::PortableText);
+#endif
+        return out;
+    }();
+    return keys;
+}
+
+bool isSystemReserved(const QKeySequence& key)
+{
+    if (key.isEmpty()) return false;
+    // Shift+Tab arrives as Backtab: compare both spellings.
+    QKeySequence k = key;
+    if (k[0].key() == Qt::Key_Backtab) k = QKeySequence(QKeyCombination(k[0].keyboardModifiers() | Qt::ShiftModifier, Qt::Key_Tab));
+    return systemReservedKeys().contains(k);
+}
+
 QString iniUserScopePath()
 {
     // "<path>/<org>/<app>.ini": two levels up is the UserScope directory. Nothing is written.
