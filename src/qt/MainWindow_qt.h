@@ -258,6 +258,10 @@ public:
     // Timeline's scrubber get Player keys. --real-keys adds one real keystroke through
     // System Events (needs Accessibility). Returns 0 on PASS, 2 on FAIL.
     int runHeadlessShortcutsFocusTest(bool realKeys = false);
+    // --shortcuts-page-test [outDir]: drives Preferences -> Shortcuts in process (search,
+    // capture, conflicts, reset dot, preset switch, import / export, reject). Saves page
+    // grabs to outDir. Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessShortcutsPageTest(const QString& outDir);
 
     // Width a bottom/top Plate Manager row may fill: the window width, less the
     // Timeline's minimum width (and a gap) when the Timeline shares the strip

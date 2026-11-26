@@ -287,6 +287,28 @@ PREFS_TEXT_SHADOW_OFFSET_Y = "preferences.text.shadowoffy.spin"
 PREFS_TEXT_SHADOW_BLUR = "preferences.text.shadowblur.spin"
 PREFS_TEXT_SHADOW_COLOR = "preferences.text.shadowcolor.button"
 
+# Preferences → Shortcuts page (ShortcutsPage_qt.cpp). Edits go to the registry at once;
+# Done saves, Cancel reverts. Import…/Export… skip the file dialog when the app runs with
+# JEFECHECK_SHORTCUTS_FILE set (UI tests).
+PREFS_SHORTCUTS_PAGE = "prefs.shortcuts.page"
+PREFS_SHORTCUTS_PRESET = "prefs.shortcuts.preset"
+PREFS_SHORTCUTS_CUSTOM = "prefs.shortcuts.custom"
+PREFS_SHORTCUTS_IMPORT = "prefs.shortcuts.import"
+PREFS_SHORTCUTS_EXPORT = "prefs.shortcuts.export"
+PREFS_SHORTCUTS_RESET = "prefs.shortcuts.reset"
+PREFS_SHORTCUTS_PRESET_BAR = "prefs.shortcuts.presetbar"
+PREFS_SHORTCUTS_PRESET_BAR_TEXT = "prefs.shortcuts.presetbar.text"
+PREFS_SHORTCUTS_PRESET_SWITCH = "prefs.shortcuts.preset.switch"
+PREFS_SHORTCUTS_PRESET_KEEP = "prefs.shortcuts.preset.keep"
+PREFS_SHORTCUTS_KEYMAP_SLOT = "prefs.shortcuts.keymapslot"
+PREFS_SHORTCUTS_SEARCH = "prefs.shortcuts.search"
+PREFS_SHORTCUTS_LIST = "prefs.shortcuts.list"
+PREFS_SHORTCUTS_CAPTURE = "prefs.shortcuts.capture"
+PREFS_SHORTCUTS_CONFLICT = "prefs.shortcuts.conflict"
+PREFS_SHORTCUTS_CONFLICT_TEXT = "prefs.shortcuts.conflict.text"
+PREFS_SHORTCUTS_CONFLICT_REPLACE = "prefs.shortcuts.conflict.replace"
+PREFS_SHORTCUTS_CONFLICT_CANCEL = "prefs.shortcuts.conflict.cancel"
+PREFS_SHORTCUTS_NOTICE = "prefs.shortcuts.notice"
 
 # Per-plate leaf roles (combine with plate(i, ...)). In the wide-short (top/bottom dock)
 # card the Transform button opens the popup holding the zoom/pan/rotation spins, and the

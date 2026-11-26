@@ -1593,6 +1593,20 @@ int main(int argc, char* argv[]) {
         break;
     }
 
+    // --shortcuts-page-test [outDir]: Preferences -> Shortcuts, driven in process.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--shortcuts-page-test") != 0) continue;
+        QString outDir;
+        if (i + 1 < argc && std::strncmp(argv[i + 1], "--", 2) != 0)
+            outDir = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [&window, outDir]() {
+            const int code = window.runHeadlessShortcutsPageTest(outDir);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
     // --window-rect X Y W H: place the window, in logical pixels, so two
     // instances can sit side by side for a recording.
     for (int i = 1; i + 4 < argc; ++i) {
