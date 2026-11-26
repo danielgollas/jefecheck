@@ -61,7 +61,9 @@ public:
     Qt::Key holdKey(const char* id) const;
 
     QString preset() const;                  // "editing" | "classic"
-    void setPreset(const QString& preset);   // a different preset keeps no overrides; the same one is a no-op
+    // A different preset keeps no overrides; the same one changes no keys. Either way an
+    // unknown preset name read by load() is replaced.
+    void setPreset(const QString& preset);
     // An override equal to the preset's keys is dropped. Empty key = deliberately unbound.
     void setOverride(const char* id, const QKeySequence& key);
     void clearOverride(const char* id);
@@ -69,8 +71,10 @@ public:
     void clearHoldOverride(const char* id);
     bool isCustom() const;                   // any command or hold override present
 
-    // QSettings: Shortcuts/preset, Shortcuts/overrides/<id>, Shortcuts/holdOverrides/<id>.
-    // Overrides for ids that are not registered are kept verbatim and written back by save().
+    // QSettings: Shortcuts/preset, Shortcuts/overrides/<id> (QKeySequence::listToString,
+    // PortableText: "A; B"), Shortcuts/holdOverrides/<id>. Values this build cannot use (ids not
+    // registered, key text it cannot parse, an unknown preset name) are kept verbatim and
+    // written back by save(), so a newer version's settings survive a round trip.
     void load(QSettings& s);                 // replaces preset and overrides; emits changed() once
     void save(QSettings& s) const;
 
@@ -81,6 +85,9 @@ public:
         QHash<QString, Qt::Key> holdOverrides;
         QHash<QString, QString> orphanOverrides;
         QHash<QString, QString> orphanHoldOverrides;
+        QString unknownPreset;
+        QHash<QString, QString> unreadableOverrides;
+        QHash<QString, QString> unreadableHoldOverrides;
     };
     Snapshot snapshot() const;
     void restore(const Snapshot& s);         // emits changed() once
@@ -124,6 +131,9 @@ private:
     QHash<QString, Qt::Key> holdOverrides_;
     QHash<QString, QString> orphanOverrides_;      // stored for ids not registered; written back
     QHash<QString, QString> orphanHoldOverrides_;
+    QHash<QString, QString> unreadableOverrides_;  // registered id, text it cannot parse; written back
+    QHash<QString, QString> unreadableHoldOverrides_;
+    QString unknownPreset_;                        // stored preset name it did not know; written back
     QString preset_ = QStringLiteral("editing");
 };
 

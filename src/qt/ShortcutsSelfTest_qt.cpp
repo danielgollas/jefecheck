@@ -17,6 +17,7 @@
 #include <QtGlobal>
 
 #include <cstdio>
+#include <memory>
 #include <utility>
 
 namespace jefe::shortcuts {
@@ -569,8 +570,119 @@ void testPersistComma(Registry& reg)
     const QString after = allKeys(reg);
     QFile::remove(path);
     check("persist-comma", before == after && reg.key("t.c") == QKeySequence("Ctrl+,") &&
-                               reg.key("t.d") == QKeySequence(","),
+                               reg.key("t.d") == QKeySequence(",") && reg.holdKey("t.h") == Qt::Key_Comma,
           before + " vs " + after);
+}
+
+void registerPersistTwo(Registry& reg)
+{
+    registerTwo(reg);
+    reg.registerCommand(cmd("t.two", Scope::Player, {QKeySequence("A")}));
+    reg.registerCommand(cmd("t.semi", Scope::Player, {QKeySequence("B")}));
+    reg.registerCommand(cmd("t.comma", Scope::Global, {QKeySequence("E")}));
+}
+
+// A two-key override survives save -> load in INI and native QSettings, including keys that
+// are the separator characters themselves.
+void testPersistTwoKeys(Registry& reg)
+{
+    const QString jsonPath = tempPath(".jcshortcuts");
+    writeFile(jsonPath, R"({"format":"jefecheck-shortcuts","version":1,"basedOn":"editing",
+        "keys":{"t.two":["X","Ctrl+Y"],"t.semi":[";","Shift+;"],"t.comma":["Ctrl+,","Meta+Ctrl+F"]}})");
+    QStringList bad;
+    for (const bool native : {false, true}) {
+        registerPersistTwo(reg);
+        QString err;
+        if (!reg.importFrom(jsonPath, &err)) bad << "import:" + err;
+        const QString before = allKeys(reg);
+        const QString name = QStringLiteral("shortcuts-test-") + QUuid::createUuid().toString(QUuid::Id128);
+        const QString path = tempPath(".ini");
+        auto open = [&] {
+            return native ? std::make_unique<QSettings>(QSettings::NativeFormat, QSettings::UserScope,
+                                                        QStringLiteral("JefeCheckTest"), name)
+                          : std::make_unique<QSettings>(path, QSettings::IniFormat);
+        };
+        QString stored;
+        {
+            auto out = open();
+            reg.save(*out);
+            out->sync();
+            stored = out->value("Shortcuts/overrides/t.two").toString();
+        }
+        registerPersistTwo(reg);
+        auto in = open();
+        reg.load(*in);
+        const QString after = allKeys(reg);
+        const bool two = reg.keys("t.two") == QList<QKeySequence>{QKeySequence("X"), QKeySequence("Ctrl+Y")} &&
+                         reg.action("t.two")->shortcuts().size() == 2;
+        if (before != after || !two || stored != "X; Ctrl+Y")
+            bad << QStringLiteral("%1: stored=%2 %3 vs %4").arg(native ? "native" : "ini", stored, before, after);
+        const QString file = in->fileName();
+        in->clear();
+        in->sync();
+        in.reset();
+        QFile::remove(file);
+    }
+    QFile::remove(jsonPath);
+    check("persist-two-keys", bad.isEmpty(), bad.join(' '));
+}
+
+// A preset name from a later version reads as editing and is written back unchanged until the
+// user picks a preset.
+void testPersistUnknownPreset(Registry& reg)
+{
+    registerTwo(reg);
+    const QString path = tempPath(".ini");
+    {
+        QSettings s(path, QSettings::IniFormat);
+        s.setValue("Shortcuts/preset", "studio-2027");
+        s.sync();
+    }
+    QSettings s(path, QSettings::IniFormat);
+    reg.load(s);
+    const bool asEditing = reg.preset() == "editing" && reg.key("t.a") == QKeySequence("I");
+    reg.save(s);
+    s.sync();
+    const QString kept = s.value("Shortcuts/preset").toString();
+    reg.setPreset(QStringLiteral("editing"));
+    reg.save(s);
+    s.sync();
+    const QString picked = s.value("Shortcuts/preset").toString();
+    QFile::remove(path);
+    check("persist-unknown-preset", asEditing && kept == "studio-2027" && picked == "editing",
+          QStringLiteral("kept=%1 picked=%2").arg(kept, picked));
+}
+
+// A stored value this build cannot parse (for a registered id) falls back to the preset and is
+// written back verbatim; setting that command's key replaces it.
+void testPersistUnreadableKept(Registry& reg)
+{
+    registerTwo(reg);
+    const QString path = tempPath(".ini");
+    {
+        QSettings s(path, QSettings::IniFormat);
+        s.setValue("Shortcuts/overrides/t.a", "Hyper+NoSuchKey");
+        s.setValue("Shortcuts/overrides/t.b", "K");
+        s.setValue("Shortcuts/holdOverrides/t.h", "Ctrl+W");
+        s.sync();
+    }
+    QSettings s(path, QSettings::IniFormat);
+    reg.load(s);
+    const bool fallback = reg.key("t.a") == QKeySequence("I") && reg.key("t.b") == QKeySequence("K") &&
+                          reg.holdKey("t.h") == Qt::Key_W;
+    reg.save(s);
+    s.sync();
+    const QString keptA = s.value("Shortcuts/overrides/t.a").toString();
+    const QString keptH = s.value("Shortcuts/holdOverrides/t.h").toString();
+    const bool keptB = s.value("Shortcuts/overrides/t.b").toString() == "K";
+    reg.setOverride("t.a", QKeySequence("J"));
+    reg.save(s);
+    s.sync();
+    const QString replaced = s.value("Shortcuts/overrides/t.a").toString();
+    QFile::remove(path);
+    check("persist-unreadable-kept",
+          fallback && keptA == "Hyper+NoSuchKey" && keptH == "Ctrl+W" && keptB && replaced == "J",
+          QStringLiteral("a=%1 hold=%2 replaced=%3").arg(keptA, keptH, replaced));
 }
 
 // Every key the app binds today (GlViewport_Qt::keyPressEvent, MainWindow_Qt's QShortcuts and
@@ -857,6 +969,9 @@ int shortcutsSelfTest()
     testImportConflict(reg);
     testExportTwoKeysAndUnbound(reg);
     testPersistComma(reg);
+    testPersistTwoKeys(reg);
+    testPersistUnknownPreset(reg);
+    testPersistUnreadableKept(reg);
     testParity20(reg);
     testPresetsConflictFree(reg);
     testHelpText(reg);

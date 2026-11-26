@@ -30,13 +30,6 @@ QString holdText(Qt::Key k)
     return k == Qt::Key_unknown ? QString() : keyText(QKeySequence(k));
 }
 
-// INI reads an unquoted value containing a comma back as a QStringList; rejoin it.
-QString settingText(const QVariant& v)
-{
-    return v.metaType().id() == QMetaType::QStringList ? v.toStringList().join(QLatin1Char(','))
-                                                       : v.toString();
-}
-
 // One shortcut: a single key plus modifiers (no chords). Empty text = unbound (valid).
 bool parseKey(const QString& text, QKeySequence* out)
 {
@@ -46,6 +39,37 @@ bool parseKey(const QString& text, QKeySequence* out)
     if (k.isEmpty() || k.count() != 1 || k[0].key() == Qt::Key_unknown) return false;
     *out = k;
     return true;
+}
+
+// A stored override: QKeySequence::listToString(keys, PortableText), so "A; B" for two keys
+// and "A" for one (what earlier builds wrote). QKeySequence::listFromString splits blindly on
+// "; ", which breaks when a key is ";" itself ("; ; A"), so try each "; " as the split point
+// until both sides read as keys. Empty text = unbound.
+QString keysSettingText(const QList<QKeySequence>& ks)
+{
+    return QKeySequence::listToString(ks, QKeySequence::PortableText);
+}
+
+bool parseKeyList(const QString& text, QList<QKeySequence>* out)
+{
+    out->clear();
+    if (text.isEmpty()) return true;
+    QKeySequence k;
+    if (parseKey(text, &k)) {
+        out->append(k);
+        return true;
+    }
+    const QString sep = QStringLiteral("; ");
+    for (int at = text.indexOf(sep, 1); at >= 0; at = text.indexOf(sep, at + 1)) {
+        QList<QKeySequence> rest;
+        if (parseKey(text.left(at), &k) && !k.isEmpty() && parseKeyList(text.mid(at + sep.size()), &rest) &&
+            !rest.isEmpty()) {
+            out->append(k);
+            out->append(rest);
+            return true;
+        }
+    }
+    return false;
 }
 
 // Hold keys are a bare key (no modifiers).
@@ -214,10 +238,13 @@ void Registry::setPreset(const QString& preset)
         qWarning("Shortcuts: unknown preset \"%s\"; ignored", qPrintable(preset));
         return;
     }
+    unknownPreset_.clear();  // an explicit pick replaces a preset name this build did not know
     if (preset == preset_) return;
     preset_ = preset;
     overrides_.clear();
     holdOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
     applyKeys();
 }
 
@@ -229,6 +256,7 @@ QList<QKeySequence> Registry::presetKeys(int i) const
 void Registry::storeOverride(const QString& id, const QList<QKeySequence>& keys)
 {
     const int i = indexOf(id);
+    unreadableOverrides_.remove(id);
     if (i >= 0 && keys == presetKeys(i)) overrides_.remove(id);
     else overrides_.insert(id, keys);
 }
@@ -238,6 +266,7 @@ void Registry::storeHoldOverride(const QString& id, Qt::Key key)
     const int i = holdIndex_.value(id, -1);
     const Qt::Key preset = i < 0 ? Qt::Key_unknown
                                  : (preset_ == kClassic ? holdKeys_[i].classic : holdKeys_[i].editing);
+    unreadableHoldOverrides_.remove(id);
     if (i >= 0 && key == preset) holdOverrides_.remove(id);
     else holdOverrides_.insert(id, key);
 }
@@ -258,6 +287,7 @@ void Registry::setOverride(const char* id, const QKeySequence& key)
 
 void Registry::clearOverride(const char* id)
 {
+    unreadableOverrides_.remove(QString::fromUtf8(id));
     if (overrides_.remove(QString::fromUtf8(id)) > 0) applyKeys();
 }
 
@@ -278,6 +308,7 @@ void Registry::setHoldOverride(const char* id, Qt::Key key)
 
 void Registry::clearHoldOverride(const char* id)
 {
+    unreadableHoldOverrides_.remove(QString::fromUtf8(id));
     if (holdOverrides_.remove(QString::fromUtf8(id)) > 0) applyKeys();
 }
 
@@ -286,34 +317,46 @@ bool Registry::isCustom() const { return !overrides_.isEmpty() || !holdOverrides
 void Registry::load(QSettings& s)
 {
     const QString p = s.value(QStringLiteral("Shortcuts/preset"), kEditing).toString();
+    // A preset this build does not know (a later version's) behaves as editing but is written
+    // back as it was until the user picks one.
     preset_ = p == kClassic ? kClassic : kEditing;
+    unknownPreset_ = (p == kClassic || p == kEditing) ? QString() : p;
     overrides_.clear();
     holdOverrides_.clear();
     orphanOverrides_.clear();
     orphanHoldOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
 
     s.beginGroup(QStringLiteral("Shortcuts/overrides"));
     for (const QString& id : s.childKeys()) {
-        const QString text = settingText(s.value(id));
+        const QString text = s.value(id).toString();
         if (indexOf(id) < 0) {
             orphanOverrides_.insert(id, text);
             continue;
         }
-        QKeySequence k;
-        if (!parseKey(text, &k)) continue;  // unreadable value: fall back to the preset
-        storeOverride(id, k.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{k});
+        QList<QKeySequence> ks;
+        if (!parseKeyList(text, &ks)) {
+            // Unreadable here (a later version's key name?): the preset applies, the text is kept.
+            unreadableOverrides_.insert(id, text);
+            continue;
+        }
+        storeOverride(id, ks);
     }
     s.endGroup();
 
     s.beginGroup(QStringLiteral("Shortcuts/holdOverrides"));
     for (const QString& id : s.childKeys()) {
-        const QString text = settingText(s.value(id));
+        const QString text = s.value(id).toString();
         if (!holdIndex_.contains(id)) {
             orphanHoldOverrides_.insert(id, text);
             continue;
         }
         Qt::Key k;
-        if (!parseHold(text, &k)) continue;
+        if (!parseHold(text, &k)) {
+            unreadableHoldOverrides_.insert(id, text);
+            continue;
+        }
         storeHoldOverride(id, k);
     }
     s.endGroup();
@@ -322,23 +365,27 @@ void Registry::load(QSettings& s)
 
 void Registry::save(QSettings& s) const
 {
-    s.setValue(QStringLiteral("Shortcuts/preset"), preset_);
+    s.setValue(QStringLiteral("Shortcuts/preset"), unknownPreset_.isEmpty() ? preset_ : unknownPreset_);
     s.remove(QStringLiteral("Shortcuts/overrides"));
     s.remove(QStringLiteral("Shortcuts/holdOverrides"));
     for (auto it = overrides_.cbegin(); it != overrides_.cend(); ++it)
         s.setValue(QStringLiteral("Shortcuts/overrides/") + it.key(),
-                   it.value().isEmpty() ? QString() : keyText(it.value().first()));
-    for (auto it = orphanOverrides_.cbegin(); it != orphanOverrides_.cend(); ++it)
-        s.setValue(QStringLiteral("Shortcuts/overrides/") + it.key(), it.value());
+                   keysSettingText(it.value()));
+    for (const auto* raw : {&orphanOverrides_, &unreadableOverrides_})
+        for (auto it = raw->cbegin(); it != raw->cend(); ++it)
+            s.setValue(QStringLiteral("Shortcuts/overrides/") + it.key(), it.value());
     for (auto it = holdOverrides_.cbegin(); it != holdOverrides_.cend(); ++it)
         s.setValue(QStringLiteral("Shortcuts/holdOverrides/") + it.key(), holdText(it.value()));
-    for (auto it = orphanHoldOverrides_.cbegin(); it != orphanHoldOverrides_.cend(); ++it)
-        s.setValue(QStringLiteral("Shortcuts/holdOverrides/") + it.key(), it.value());
+    for (const auto* raw : {&orphanHoldOverrides_, &unreadableHoldOverrides_})
+        for (auto it = raw->cbegin(); it != raw->cend(); ++it)
+            s.setValue(QStringLiteral("Shortcuts/holdOverrides/") + it.key(), it.value());
 }
 
 Registry::Snapshot Registry::snapshot() const
 {
-    return {preset_, overrides_, holdOverrides_, orphanOverrides_, orphanHoldOverrides_};
+    return {preset_,           overrides_,          holdOverrides_,
+            orphanOverrides_,  orphanHoldOverrides_, unknownPreset_,
+            unreadableOverrides_, unreadableHoldOverrides_};
 }
 
 void Registry::restore(const Snapshot& s)
@@ -348,6 +395,9 @@ void Registry::restore(const Snapshot& s)
     holdOverrides_ = s.holdOverrides;
     orphanOverrides_ = s.orphanOverrides;
     orphanHoldOverrides_ = s.orphanHoldOverrides;
+    unknownPreset_ = s.unknownPreset;
+    unreadableOverrides_ = s.unreadableOverrides;
+    unreadableHoldOverrides_ = s.unreadableHoldOverrides;
     applyKeys();
 }
 
@@ -427,8 +477,11 @@ bool Registry::importFrom(const QString& path, QString* error)
     }
 
     preset_ = newPreset;
+    unknownPreset_.clear();
     overrides_.clear();
     holdOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
     for (auto it = newKeys.cbegin(); it != newKeys.cend(); ++it) storeOverride(it.key(), it.value());
     for (auto it = newHold.cbegin(); it != newHold.cend(); ++it) storeHoldOverride(it.key(), it.value());
     applyKeys();
@@ -479,6 +532,9 @@ void Registry::reset()
     holdOverrides_.clear();
     orphanOverrides_.clear();
     orphanHoldOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
+    unknownPreset_.clear();
     preset_ = kEditing;
 }
 
