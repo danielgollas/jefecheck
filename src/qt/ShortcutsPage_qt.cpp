@@ -20,6 +20,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QStandardItemModel>
@@ -32,6 +33,38 @@
 
 namespace sc = jefe::shortcuts;
 namespace ui = jefe::qt::ui;
+
+namespace {
+constexpr int kRoleId = Qt::UserRole + 1;
+constexpr int kRoleKind = Qt::UserRole + 2;
+
+// The list's model: command and hold rows can be dragged out (their id as the command mime
+// type, for a drop on the keyboard map); groups and the read-only panel rows cannot, and
+// nothing can be dropped in.
+class CommandListModel : public QStandardItemModel {
+public:
+    using QStandardItemModel::QStandardItemModel;
+    Qt::ItemFlags flags(const QModelIndex& idx) const override
+    {
+        Qt::ItemFlags f = QStandardItemModel::flags(idx) & ~Qt::ItemIsDropEnabled;
+        const int kind = idx.siblingAtColumn(0).data(kRoleKind).toInt();
+        if (!idx.isValid() || (kind != 1 && kind != 2)) f &= ~Qt::ItemIsDragEnabled;  // CommandRow, HoldRow
+        return f;
+    }
+    QStringList mimeTypes() const override { return {ShortcutKeyboard_Qt::commandMimeType()}; }
+    QMimeData* mimeData(const QModelIndexList& indexes) const override
+    {
+        for (const QModelIndex& i : indexes) {
+            const int kind = i.siblingAtColumn(0).data(kRoleKind).toInt();
+            if (kind != 1 && kind != 2) continue;
+            auto* m = new QMimeData;
+            m->setData(ShortcutKeyboard_Qt::commandMimeType(), i.siblingAtColumn(0).data(kRoleId).toString().toUtf8());
+            return m;
+        }
+        return nullptr;
+    }
+};
+}  // namespace
 
 namespace {
 
@@ -374,7 +407,7 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     search_->installEventFilter(this);  // Escape clears it, Return goes to the list (not Done / Cancel)
     listColumn->addWidget(search_);
 
-    model_ = new QStandardItemModel(this);
+    model_ = new CommandListModel(this);
     model_->setHorizontalHeaderLabels({tr("Command"), tr("Key"), tr("Second key"), QString()});
     list_ = new QTreeView(this);
     list_->setObjectName(QStringLiteral("prefs.shortcuts.list"));
@@ -385,6 +418,8 @@ ShortcutsPage_Qt::ShortcutsPage_Qt(QWidget* parent) : QWidget(parent), reg_(sc::
     list_->setSelectionBehavior(QAbstractItemView::SelectRows);
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
     list_->setUniformRowHeights(true);
+    list_->setDragEnabled(true);  // a command row drags onto a key of the map
+    list_->setDragDropMode(QAbstractItemView::DragOnly);
     list_->setAllColumnsShowFocus(true);
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
     list_->installEventFilter(this);
@@ -832,6 +867,8 @@ void ShortcutsPage_Qt::buildKeymap()
             sync(keymap_->layer());
         });
     connect(keymap_, &ShortcutKeyboard_Qt::keyClicked, this, [this](Qt::Key k) { showKeyInfo(k); });
+    connect(keymap_, &ShortcutKeyboard_Qt::commandDropped, this,
+            [this](const QString& id, Qt::Key k, Qt::KeyboardModifiers layer) { assignKey(id, k, layer); });
     connect(&reg_, &sc::Registry::changed, this, [this] {
         if (keymap_->selectedKey() != Qt::Key_unknown) showKeyInfo(keymap_->selectedKey());
     });
@@ -917,6 +954,13 @@ void ShortcutsPage_Qt::onCaptured(const QKeySequence& key)
     p.hold = idx.siblingAtColumn(kColName).data(kKindRole).toInt() == HoldRow;
     p.slot = idx.column() - kColKey0;
     p.key = key;
+    requestBind(p);
+}
+
+void ShortcutsPage_Qt::requestBind(const Pending& in)
+{
+    Pending p = in;
+    const QKeySequence key = p.key;
     const QByteArray id = idBytes(p.id);
     if (sc::isSystemReserved(key)) {  // the system takes it first: the command would never run
         showNotice(tr("%1 is reserved by macOS.").arg(native(key)), true);
@@ -943,6 +987,37 @@ void ShortcutsPage_Qt::onCaptured(const QKeySequence& key)
     conflictText_->setText(tr("⚠ %1 is used by %2.").arg(native(key), names.join(QStringLiteral(", "))));
     pending_ = p;
     conflictBar_->show();
+    emit conflictRaised(p.id, key);
+}
+
+
+bool ShortcutsPage_Qt::assignKey(const QString& id, Qt::Key key, Qt::KeyboardModifiers mods)
+{
+    QStandardItem* it = rowItem(id);
+    if (!it) return false;
+    const int kind = it->data(kKindRole).toInt();
+    if (kind != CommandRow && kind != HoldRow) return false;
+    dismissConflict();  // a new drop replaces a pending conflict
+    finishCapture();
+    if (kind == HoldRow && (mods & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+        // A hold key is one bare key: the layer's modifiers cannot be part of it.
+        showNotice(tr("A hold key is one key without modifiers; switch the map to no modifiers to assign it."), true);
+        return true;
+    }
+    mods &= Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
+    const QKeySequence seq = ShortcutCaptureEdit_Qt::keyFor(key, mods);
+    if (seq.isEmpty()) {
+        showNotice(tr("That key cannot be used."), true);
+        return true;
+    }
+    Pending p;
+    p.id = id;
+    p.hold = kind == HoldRow;
+    p.slot = 0;  // the first key: replaced, or filled when the command has none
+    p.key = seq;
+    selectCommand(id);
+    requestBind(p);
+    return true;
 }
 
 void ShortcutsPage_Qt::onUnbound()

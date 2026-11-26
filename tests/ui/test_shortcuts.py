@@ -108,3 +108,20 @@ def test_export_change_import_restores(shortcuts_app):
     reset = app.by_object_name(locators.PREFS_SHORTCUTS_RESET)
     assert reset.get_attribute("enabled") in ("false", False), "import did not restore the exported keys"
     app.by_object_name(locators.PREFERENCES_CANCEL).click()
+
+
+def test_click_i_key_lists_its_commands(shortcuts_app):
+    app = shortcuts_app
+    open_shortcuts_page(app)
+    keymap = app.by_object_name(locators.PREFS_SHORTCUTS_KEYMAP)
+    # The map is one painted widget; the I key sits in the QWERTY row at about 62% / 43%.
+    size = keymap.size
+    app.driver.execute_script("macos: click", {
+        "elementId": keymap.id,
+        "x": size["width"] * 0.62,
+        "y": size["height"] * 0.43,
+    })
+    info = app.by_object_name(locators.PREFS_SHORTCUTS_KEYINFO_LIST)
+    text = info.get_attribute("value") or info.text or ""
+    assert "Set In" in text, "the I key's commands were not listed in the side panel"
+    app.by_object_name(locators.PREFERENCES_CANCEL).click()

@@ -70,6 +70,11 @@ public:
     // Opens the in-place capture on a row's key (`slot` 0 = Key, 1 = Second key). False for a
     // read-only or unknown row.
     bool beginCapture(const QString& id, int slot);
+    // Binds a command (or hold key) to `key` + `mods`, as a drop on the map does: the same
+    // checks as a capture (reserved keys, conflict bar). A command's first key is replaced (or
+    // filled when it has none); a hold key takes the bare key and refuses modifiers. False for an
+    // unknown or read-only row.
+    bool assignKey(const QString& id, Qt::Key key, Qt::KeyboardModifiers mods);
     ShortcutCaptureEdit_Qt* captureEditor() const { return captureEditor_; }
 
     // Test access.
@@ -83,6 +88,8 @@ public:
 
 signals:
     void commandSelected(const QString& id);
+    // The conflict bar opened for `id` wanting `key` (from a capture or a drop on the map).
+    void conflictRaised(const QString& id, const QKeySequence& key);
 
 protected:
     // Enter on a list row starts a capture; Escape in the search box or the list cancels the
@@ -106,6 +113,7 @@ private:
     QStandardItem* rowItem(const QString& id) const;
     void finishCapture();
     void onCaptured(const QKeySequence& key);
+    void requestBind(const Pending& p);  // reserved check, conflict bar, or apply
     void onUnbound();
     void apply(const Pending& p);
     void unbindFrom(const QString& id, const QKeySequence& key);

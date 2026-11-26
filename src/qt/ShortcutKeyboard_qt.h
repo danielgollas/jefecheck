@@ -19,6 +19,12 @@
 #include <QString>
 #include <QWidget>
 
+class QDragEnterEvent;
+class QDragLeaveEvent;
+class QDragMoveEvent;
+class QDropEvent;
+class QMimeData;
+
 namespace jefe::shortcuts {
 
 struct KeyCap {
@@ -80,6 +86,10 @@ public:
     QList<Binding> bindingsFor(Qt::Key key) const;  // every layer, in layer order
     Qt::Key selectedKey() const { return selected_; }
     void setSelectedKey(Qt::Key key);
+    // The key under a command being dragged over the map (unknown when none).
+    Qt::Key dropHoverKey() const { return dropHover_; }
+    // The mime type a dragged command carries: its id, UTF-8.
+    static QString commandMimeType();
     // Held modifiers count while a widget inside `scope` has focus (default: the parent).
     void setModifierScope(QWidget* scope) { scope_ = scope; }
 
@@ -89,6 +99,8 @@ public:
 signals:
     void keyClicked(Qt::Key key);
     void layerChanged(Qt::KeyboardModifiers shown);
+    // A command was dropped on a key; `layer` is the layer shown at the drop.
+    void commandDropped(const QString& id, Qt::Key key, Qt::KeyboardModifiers layer);
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -96,6 +108,10 @@ protected:
     bool event(QEvent* e) override;                       // tooltips
     bool eventFilter(QObject* o, QEvent* e) override;     // held modifiers inside the scope
     void changeEvent(QEvent* e) override;
+    void dragEnterEvent(QDragEnterEvent* e) override;
+    void dragMoveEvent(QDragMoveEvent* e) override;
+    void dragLeaveEvent(QDragLeaveEvent* e) override;
+    void dropEvent(QDropEvent* e) override;
 
 private:
     void rebuild();                                       // bindings cache from the registry
@@ -106,11 +122,14 @@ private:
     QRectF capRect(const jefe::shortcuts::KeyCap& c) const;
     qreal unit() const;
     QWidget* modifierScope() const;
+    Qt::Key dropKeyAt(const QPointF& pos, const QMimeData* mime) const;  // unknown: not a target
+    void setDropHover(Qt::Key key);
 
     QList<jefe::shortcuts::KeyCap> caps_;
     QHash<int, QList<Binding>> bindings_;                 // by cap key
     Qt::KeyboardModifiers toggled_ = Qt::NoModifier;
     Qt::KeyboardModifiers held_ = Qt::NoModifier;
     Qt::Key selected_ = Qt::Key_unknown;
+    Qt::Key dropHover_ = Qt::Key_unknown;
     QWidget* scope_ = nullptr;
 };

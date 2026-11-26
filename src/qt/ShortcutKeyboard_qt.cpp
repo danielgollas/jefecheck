@@ -5,7 +5,12 @@
 #include "UiMetrics_qt.h"
 
 #include <QApplication>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QHelpEvent>
+#include <QMimeData>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -344,6 +349,7 @@ ShortcutKeyboard_Qt::ShortcutKeyboard_Qt(QWidget* parent) : QWidget(parent), cap
     setObjectName(QStringLiteral("prefs.shortcuts.keymap"));
     setAccessibleName(tr("Keyboard map"));
     setFocusPolicy(Qt::NoFocus);  // never takes keys from the list or the search box
+    setAcceptDrops(true);         // a command dragged from the list binds to the key it lands on
     setProperty(jefe::qt::ui::kDensityExemptProperty, true);  // custom-painted
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     connect(&sc::Registry::instance(), &sc::Registry::changed, this, [this] { rebuild(); });
@@ -570,7 +576,7 @@ void ShortcutKeyboard_Qt::paintEvent(QPaintEvent*)
             border = sc::mix(sc::categoryColor(b->category), kCapBg, 0.7);
             labelColor = kText;
         }
-        const bool selected = !modCap && c.key == selected_;
+        const bool selected = !modCap && (c.key == selected_ || c.key == dropHover_);
         p.setPen(QPen(selected ? kAccent : border, selected ? 2 : 1));
         p.setBrush(fill);
         p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
@@ -662,4 +668,74 @@ void ShortcutKeyboard_Qt::changeEvent(QEvent* e)
 {
     if (e->type() == QEvent::ActivationChange && !isActiveWindow()) setHeld(Qt::NoModifier);
     QWidget::changeEvent(e);
+}
+
+// ---------------------------------------------------------------------------
+// Drag a command from the page's list onto a key
+// ---------------------------------------------------------------------------
+
+QString ShortcutKeyboard_Qt::commandMimeType()
+{
+    return QStringLiteral("application/x-jefecheck-command");
+}
+
+Qt::Key ShortcutKeyboard_Qt::dropKeyAt(const QPointF& pos, const QMimeData* mime) const
+{
+    if (!mime || !mime->hasFormat(commandMimeType())) return Qt::Key_unknown;
+    const int i = capAt(pos);
+    if (i < 0 || isModifierCap(caps_[i].key)) return Qt::Key_unknown;
+    return caps_[i].key;
+}
+
+void ShortcutKeyboard_Qt::setDropHover(Qt::Key key)
+{
+    if (key == dropHover_) return;
+    dropHover_ = key;
+    update();
+}
+
+void ShortcutKeyboard_Qt::dragEnterEvent(QDragEnterEvent* e)
+{
+    if (!e->mimeData()->hasFormat(commandMimeType())) return e->ignore();
+    e->setDropAction(Qt::CopyAction);
+    e->accept();
+    setDropHover(dropKeyAt(e->position(), e->mimeData()));
+}
+
+void ShortcutKeyboard_Qt::dragMoveEvent(QDragMoveEvent* e)
+{
+    const Qt::Key k = dropKeyAt(e->position(), e->mimeData());
+    setDropHover(k);
+    if (k == Qt::Key_unknown) {
+        QToolTip::hideText();
+        return e->ignore();
+    }
+    e->setDropAction(Qt::CopyAction);
+    e->accept();
+    // The key the drop would bind, on the shown layer.
+    const Qt::KeyboardModifiers mods = layer();
+    QString name;
+    for (const sc::KeyCap& c : caps_)
+        if (c.key == k) { name = c.label; break; }
+    const QString mod = mods == Qt::NoModifier ? QString() : QKeySequence(int(mods)).toString(QKeySequence::NativeText);
+    QToolTip::showText(mapToGlobal(e->position().toPoint()), tr("Assign %1").arg(mod + name), this);
+}
+
+void ShortcutKeyboard_Qt::dragLeaveEvent(QDragLeaveEvent* e)
+{
+    setDropHover(Qt::Key_unknown);
+    QToolTip::hideText();
+    e->accept();
+}
+
+void ShortcutKeyboard_Qt::dropEvent(QDropEvent* e)
+{
+    const Qt::Key k = dropKeyAt(e->position(), e->mimeData());
+    setDropHover(Qt::Key_unknown);
+    QToolTip::hideText();
+    if (k == Qt::Key_unknown) return e->ignore();
+    const QString id = QString::fromUtf8(e->mimeData()->data(commandMimeType()));
+    e->setDropAction(Qt::CopyAction);
+    e->accept();
+    if (!id.isEmpty()) emit commandDropped(id, k, layer());
 }
