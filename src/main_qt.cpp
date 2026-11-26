@@ -1310,6 +1310,15 @@ int main(int argc, char* argv[]) {
     MainWindow_Qt window;
     window.setObjectName("MainWindow");
     window.show();
+    {   // First-launch keyboard-preset bar: never in a self-test or a --config-dir (UI test) run.
+        bool testRun = !configDir.isEmpty();
+        for (int i = 1; i < argc && !testRun; ++i) {
+            const QByteArray a(argv[i]);
+            testRun = a.endsWith("-test") || a.endsWith("-bench") || a.endsWith("-test-peer") ||
+                      a == "--ui-preview" || a == "--fx-panel-test";
+        }
+        window.maybeShowShortcutsBanner(testRun);
+    }
 
     // Also keep review-package extraction inside the caller-supplied config dir
     // (--config-dir only redirects QSettings on its own).

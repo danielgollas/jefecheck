@@ -124,6 +124,13 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
 // type from gfcStructures.h (the header only forward-declares it).
 PreferencesWindow_Qt::~PreferencesWindow_Qt() = default;
 
+bool PreferencesWindow_Qt::showSection(const QString& title) {
+    for (int i = 0; i < sidebar_->count(); ++i) {
+        if (sidebar_->item(i)->text() == title) { sidebar_->setCurrentRow(i); return true; }
+    }
+    return false;
+}
+
 void PreferencesWindow_Qt::addPage(const QString& title, QWidget* page) {
     sidebar_->addItem(title);
     pages_->addWidget(page);

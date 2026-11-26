@@ -49,6 +49,8 @@ public:
     // The Done / Cancel handlers, callable without a click (headless --shortcuts-test).
     void commitForTest() { onDone(); }
     void cancelForTest() { reject(); }
+    // Selects the sidebar section with this title ("Shortcuts"); false if there is none.
+    bool showSection(const QString& title);
     // Escape, the window close button and Cancel all end up here and revert.
     void reject() override;
 

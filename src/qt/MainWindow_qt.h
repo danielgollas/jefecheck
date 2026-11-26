@@ -251,6 +251,8 @@ public:
     // arrangement, the title bar (mini-map, buttons, drag) and mode menus, then the dock shapes
     // (side, floating, re-dock), the Timeline height and the remote sync. With
     // outDir it saves and checks a screenshot matrix there. Returns 0 on PASS, 2 on FAIL.
+    // First-launch keyboard-preset bar above the viewport (no-op for test runs or a stored choice).
+    void maybeShowShortcutsBanner(bool isTestRun);
     int runHeadlessPlateManagerTest(const QString& shotsDir = QString());
 
     // --shortcuts-focus-test [--real-keys]: proves keys fire only where they should. Text
@@ -297,6 +299,8 @@ private slots:
     void onLoadWindowDropForwarded(int plateIdx, const QString& path);
 
 private:
+    void openPreferences(const QString& section = QString());
+    class ShortcutsBanner_Qt* shortcutsBanner_ = nullptr;
     void buildMenuBar();
     void buildDocks();
     void restoreLayout();

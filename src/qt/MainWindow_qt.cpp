@@ -28,6 +28,7 @@
 #include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
 #include "Shortcuts_qt.h"
+#include "ShortcutsBanner_qt.h"
 #include "TimelinePanel_qt.h"
 #include "UiDensityCheck_qt.h"
 #include "UiMetrics_qt.h"
@@ -72,6 +73,9 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QVBoxLayout>
+#include <QUuid>
+#include <QDir>
 #include <QShortcut>
 #include <QContextMenuEvent>
 #include <QFocusEvent>
@@ -159,7 +163,21 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     resize(1280, 800);
 
     viewport_ = new GlViewport_Qt(this);
-    setCentralWidget(viewport_);
+    // The viewport sits in a zero-margin column under the first-launch shortcuts bar (hidden
+    // unless maybeShowShortcutsBanner shows it), so the bar pushes the viewport down instead of
+    // covering it.
+    auto* central = new QWidget(this);
+    central->setObjectName("central.container");
+    auto* centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    shortcutsBanner_ = new ShortcutsBanner_Qt(central);
+    shortcutsBanner_->hide();
+    centralLayout->addWidget(shortcutsBanner_);
+    centralLayout->addWidget(viewport_, 1);
+    setCentralWidget(central);
+    connect(shortcutsBanner_, &ShortcutsBanner_Qt::customizeRequested, this,
+            [this]() { openPreferences(QStringLiteral("Shortcuts")); });
 
     // Initialize the rendering pipeline's GUI bridges before paintGL runs.
     // Routed through a Qt-free TU: glad can't share a TU with QOpenGLWidget on macOS.
@@ -565,12 +583,7 @@ void MainWindow_Qt::buildMenuBar() {
     auto* prefsAction = registryMenuAction("file.preferences", "&Preferences…", "menu.file.preferences");
     fileMenu->addAction(prefsAction);
     reg.bindRun("file.preferences", [this]() {
-        // Modal — settings persist on Done via jefe::qt::writePreferences() inside the dialog.
-        // Live preview: repaint the viewport as viewport-affecting settings change.
-        PreferencesWindow_Qt dlg(this);
-        connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
-                this, [this]() { if (viewport_) viewport_->update(); });
-        dlg.exec();
+        openPreferences();
     });
     // Suppress Qt's "Preferences..." auto-detection: it moves the action into the
     // macOS Application menu and steals Cmd+, .
@@ -2794,6 +2807,21 @@ int MainWindow_Qt::runHeadlessPlateFrameTest() {
     return allPass ? 0 : 2;
 }
 
+void MainWindow_Qt::openPreferences(const QString& section) {
+    // Modal — settings persist on Done via jefe::qt::writePreferences() inside the dialog.
+    // Live preview: repaint the viewport as viewport-affecting settings change.
+    PreferencesWindow_Qt dlg(this);
+    if (!section.isEmpty()) dlg.showSection(section);
+    connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
+            this, [this]() { if (viewport_) viewport_->update(); });
+    dlg.exec();
+}
+
+void MainWindow_Qt::maybeShowShortcutsBanner(bool isTestRun) {
+    if (shortcutsBanner_ && ShortcutsBanner_Qt::shouldShow(QSettings(), isTestRun))
+        shortcutsBanner_->show();
+}
+
 int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
     if (!plateDock_ || !plateManagerWidget_) {
         printf("PLATEMANAGER-TEST FAIL: no plate dock\n"); fflush(stdout); return 2;
@@ -3849,6 +3877,52 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         }
         jefe::qt::setFXStackXmlOnPlate(plate, stack0);
         report("BROUGHT-BACK", bad.isEmpty(), bad.isEmpty() ? QString("channel toggle, show track, LUT scroll, FX favourites") : bad.join("; "));
+    }
+    {   // BANNER: the first-launch keyboard-preset bar. QSettings goes to a temp ini and the registry
+        // is snapshotted, so the user's own Shortcuts/preset and keys are untouched.
+        namespace sc = jefe::shortcuts;
+        sc::Registry& reg = sc::Registry::instance();
+        const sc::Registry::Snapshot snap = reg.snapshot();
+        const QString dir = QDir::tempPath() + QStringLiteral("/jefe-banner-test-") +
+                            QUuid::createUuid().toString(QUuid::Id128);
+        QDir().mkpath(dir);
+        const QSettings::Format oldFmt = QSettings::defaultFormat();
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QStringList bad;
+        auto stored = []() { return QSettings().value("Shortcuts/preset").toString(); };
+        auto clear = []() { QSettings s; s.remove("Shortcuts/preset"); s.sync(); };
+        clear();
+        if (!ShortcutsBanner_Qt::shouldShow(QSettings(), false)) bad << "unset preset should show";
+        if (ShortcutsBanner_Qt::shouldShow(QSettings(), true)) bad << "test run should not show";
+        for (const char* name : {"classic", "keep", "customize"}) {
+            clear();
+            reg.setPreset(QStringLiteral("editing"));
+            ShortcutsBanner_Qt banner;
+            banner.show();
+            bool customized = false;
+            connect(&banner, &ShortcutsBanner_Qt::customizeRequested, &banner, [&]() { customized = true; });
+            auto* b = banner.findChild<QPushButton*>(QStringLiteral("shortcuts.banner.") + name);
+            if (!b) { bad << QStringLiteral("no %1 button").arg(name); continue; }
+            b->click();
+            const QString want = QString::fromLatin1(name) == "classic" ? "classic" : "editing";
+            if (stored() != want) bad << QStringLiteral("%1 stored '%2'").arg(name, stored());
+            if (reg.preset() != want) bad << QStringLiteral("%1 registry '%2'").arg(name, reg.preset());
+            if (banner.isVisible()) bad << QStringLiteral("%1 left the bar visible").arg(name);
+            if (customized != (QString::fromLatin1(name) == "customize")) bad << QStringLiteral("%1 customizeRequested=%2").arg(name).arg(customized);
+            if (ShortcutsBanner_Qt::shouldShow(QSettings(), false)) bad << QStringLiteral("%1 still asks").arg(name);
+        }
+        {   // Preferences can open on the Shortcuts section.
+            PreferencesWindow_Qt dlg(this);
+            QListWidget* sidebar = dlg.findChild<QListWidget*>();
+            if (!dlg.showSection("Shortcuts") || !sidebar || sidebar->currentItem()->text() != "Shortcuts")
+                bad << "showSection(Shortcuts) did not select the page";
+            dlg.cancelForTest();
+        }
+        QSettings::setDefaultFormat(oldFmt);
+        reg.restore(snap);
+        QDir(dir).removeRecursively();
+        report("BANNER", bad.isEmpty(), bad.isEmpty() ? QString("shouldShow, 3 buttons write+apply the preset, Preferences opens on Shortcuts") : bad.join("; "));
     }
     pm->setMode(pl::PlateMode::Visible);
     layout(FRAMINGSINGLE_ID);
