@@ -282,6 +282,15 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             [this](const QString& id, jefe::shortcuts::Category category) {
         using jefe::shortcuts::Category;
         const auto& reg = jefe::shortcuts::Registry::instance();
+        // Colour favourites (key or View menu): what the menu items used to do besides the bridge call.
+        static const QRegularExpression ccFav(QStringLiteral("^color\\.cc-fav-(save|apply)-(\\d)$"));
+        if (const QRegularExpressionMatch m = ccFav.match(id); m.hasMatch()) {
+            const bool save = m.captured(1) == QLatin1String("save");
+            if (!save && plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+            statusBar()->showMessage(save ? tr("Saved color correction to favorite %1").arg(m.captured(2))
+                                          : tr("Loaded color correction favorite %1").arg(m.captured(2)),
+                                     3000);
+        }
         for (const jefe::shortcuts::Command& c : reg.commands()) {
             if (id != QLatin1String(c.id)) continue;
             if (c.scope == jefe::shortcuts::Scope::Player) {
@@ -655,32 +664,23 @@ void MainWindow_Qt::buildMenuBar() {
     plateModeMenu_ = viewMenu->addMenu(tr("Plate Manager Shows"));
     plateModeMenu_->setObjectName("menu.view.platemanager");
 
-    // View → Color Correction Favorites: 5 save/load slots on the active plate.
-    // Menu-only (no Ctrl+1-5 shortcuts — they'd collide with the layout ones).
+    // View → Color Correction Favorites: 5 save/load slots on the active plate. The items are
+    // the registry's colour-favourite commands, so they show the keys (Shift+1-5 apply; save is
+    // Control+Shift+1-5 on macOS, Ctrl+Shift+1-5 elsewhere). The save command also writes the
+    // favourites file; the commandRan slot (ctor) shows the status message and refreshes.
     viewMenu->addSeparator();
     auto* ccFavMenu = viewMenu->addMenu(tr("Color Correction Favorites"));
     ccFavMenu->setObjectName("menu.view.ccfavorites");
     for (int i = 0; i < 5; ++i) {
-        QAction* save = ccFavMenu->addAction(tr("Save to Slot %1").arg(i + 1));
-        save->setObjectName(QString("menu.view.ccfav.save.%1").arg(i));
-        connect(save, &QAction::triggered, this, [this, i]() {
-            jefe::qt::saveCCFavoriteFromActive(i);
-            jefe::qt::saveCCFavoritesFile(jefe::qt::getFavoritesFilePath());
-            statusBar()->showMessage(
-                tr("Saved color correction to favorite %1").arg(i + 1), 3000);
-        });
+        const QByteArray id = "color.cc-fav-save-" + QByteArray::number(i + 1);
+        const QByteArray name = "menu.view.ccfav.save." + QByteArray::number(i);
+        ccFavMenu->addAction(registryMenuAction(id.constData(), tr("Save to Slot %1").arg(i + 1), name.constData()));
     }
     ccFavMenu->addSeparator();
     for (int i = 0; i < 5; ++i) {
-        QAction* load = ccFavMenu->addAction(tr("Load Slot %1").arg(i + 1));
-        load->setObjectName(QString("menu.view.ccfav.load.%1").arg(i));
-        connect(load, &QAction::triggered, this, [this, i]() {
-            jefe::qt::applyCCFavoriteToActive(i);
-            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-            if (viewport_) viewport_->update();
-            statusBar()->showMessage(
-                tr("Loaded color correction favorite %1").arg(i + 1), 3000);
-        });
+        const QByteArray id = "color.cc-fav-apply-" + QByteArray::number(i + 1);
+        const QByteArray name = "menu.view.ccfav.load." + QByteArray::number(i);
+        ccFavMenu->addAction(registryMenuAction(id.constData(), tr("Load Slot %1").arg(i + 1), name.constData()));
     }
 
     // Active-plate transforms. The all-plates variants (Shift+F, Alt+T, ...) are registry
@@ -3878,6 +3878,34 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         jefe::qt::setFXStackXmlOnPlate(plate, stack0);
         report("BROUGHT-BACK", bad.isEmpty(), bad.isEmpty() ? QString("channel toggle, show track, LUT scroll, FX favourites") : bad.join("; "));
     }
+    {   // CC-FAV-FILE: saving a colour favourite (key or View menu, the same registry action) writes
+        // the favourites file. The file path points at a temp dir and the in-memory favourites
+        // are put back from a copy, so the user's favourites file is never read or written here.
+        namespace sc = jefe::shortcuts;
+        QStringList bad;
+        QTemporaryDir favDir;
+        const std::string before = (favDir.path() + "/before.jcs").toStdString();
+        const QString path = favDir.path() + "/favorites.jcs";
+        if (!favDir.isValid() || !jefe::qt::saveCCFavoritesFile(before)) {
+            bad << "cannot snapshot the favourites";
+        } else {
+            jefe::qt::setFavoritesFilePathForTest(path.toStdString());
+            QAction* menuSave = findChild<QAction*>(QStringLiteral("menu.view.ccfav.save.4"));
+            QAction* regSave = sc::Registry::instance().action("color.cc-fav-save-5");
+            QAction* menuLoad = findChild<QAction*>(QStringLiteral("menu.view.ccfav.load.0"));
+            if (!menuSave || menuSave != regSave) bad << "Save to Slot 5 is not the registry's color.cc-fav-save-5";
+            if (!menuLoad || menuLoad != sc::Registry::instance().action("color.cc-fav-apply-1"))
+                bad << "Load Slot 1 is not the registry's color.cc-fav-apply-1";
+            if (regSave && regSave->shortcut().isEmpty()) bad << "save action has no key";
+            if (regSave) regSave->trigger();
+            settle();
+            if (!QFile::exists(path) || QFileInfo(path).size() == 0) bad << "favourites file not written";
+            if (!statusBar()->currentMessage().contains("favorite 5")) bad << "no status message: " + statusBar()->currentMessage();
+            jefe::qt::setFavoritesFilePathForTest(std::string());
+            jefe::qt::loadCCFavoritesFile(before);   // in-memory favourites as they were
+        }
+        report("CC-FAV-FILE", bad.isEmpty(), bad.isEmpty() ? QString("save action wrote the file; menu items are the registry actions") : bad.join("; "));
+    }
     {   // BANNER: the first-launch keyboard-preset bar. QSettings goes to a temp ini and the registry
         // is snapshotted, so the user's own Shortcuts/preset and keys are untouched.
         namespace sc = jefe::shortcuts;
@@ -3887,6 +3915,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
                             QUuid::createUuid().toString(QUuid::Id128);
         QDir().mkpath(dir);
         const QSettings::Format oldFmt = QSettings::defaultFormat();
+        const QString oldIniPath = sc::iniUserScopePath();
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir);
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QStringList bad;
@@ -3920,6 +3949,8 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             dlg.cancelForTest();
         }
         QSettings::setDefaultFormat(oldFmt);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, oldIniPath);
+        if (sc::iniUserScopePath() != oldIniPath) bad << "QSettings ini path not restored";
         reg.restore(snap);
         QDir(dir).removeRecursively();
         report("BANNER", bad.isEmpty(), bad.isEmpty() ? QString("shouldShow, 3 buttons write+apply the preset, Preferences opens on Shortcuts") : bad.join("; "));

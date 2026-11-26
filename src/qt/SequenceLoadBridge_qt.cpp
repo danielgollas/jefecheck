@@ -2695,6 +2695,8 @@ void appendFXFavoriteToActive(int slot) {
 
 void saveFXFavoriteFromActive(int slot) {
     if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS) return;
+    const int q = plateManager.getActiveQuad();
+    if (q < 0 || !plateManager.getFXStack(q)) return;   // saveFavoriteFromPlate dereferences it
     plateManager.saveFavoriteFromPlate(slot);
 }
 
@@ -2714,7 +2716,14 @@ bool loadCCFavoritesFile(const std::string& path) {
     return true;
 }
 
+namespace {
+std::string gFavoritesPathForTest;   // empty: the real file
+}
+
+void setFavoritesFilePathForTest(const std::string& path) { gFavoritesPathForTest = path; }
+
 std::string getFavoritesFilePath() {
+    if (!gFavoritesPathForTest.empty()) return gFavoritesPathForTest;
     return ::getApplicationDataPath() + "favorites.jcs";
 }
 

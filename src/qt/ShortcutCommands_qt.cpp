@@ -211,7 +211,10 @@ void registerAllCommands(Registry& reg)
         both(reg, kCCApply[i], kNames[0][i].constData(), Category::Color, P, {k("Shift+" + n)},
              [i] { applyCCFavoriteToActive(i); });
         add(reg, kCCSave[i], kNames[1][i].constData(), Category::Color, P, ccSaveEditing, ccSaveClassic,
-            [i] { saveCCFavoriteFromActive(i); });
+            [i] {
+                saveCCFavoriteFromActive(i);
+                saveCCFavoritesFile(getFavoritesFilePath());   // colour favourites persist across launches
+            });
         both(reg, kFXLoad[i], kNames[2][i].constData(), Category::Plate, P, {k("Shift+" + f)},
              [i] { loadFXFavoriteToActive(i); });
         add(reg, kFXAppend[i], kNames[3][i].constData(), Category::Plate, P, fxAppendEditing, fxAppendClassic,

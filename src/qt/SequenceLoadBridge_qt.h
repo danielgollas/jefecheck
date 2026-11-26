@@ -1255,6 +1255,9 @@ void saveFXFavoriteFromActive(int slot);
 bool saveCCFavoritesFile(const std::string& path);
 bool loadCCFavoritesFile(const std::string& path);
 std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
+// Tests: getFavoritesFilePath() returns `path` instead (empty = the real file again), so a
+// test that saves a favourite never touches the user's.
+void setFavoritesFilePathForTest(const std::string& path);
 
 // --- Notes dock ---------------------------------------------------------------
 // NotesPanel_Qt must not include gfcreview.h / gfcrevision.h / gfcnote.h; only
