@@ -20,6 +20,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMouseEvent>
 #include <QProcess>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -65,6 +66,31 @@ void press(Qt::Key k, const QString& text, Qt::KeyboardModifiers m = Qt::NoModif
     QKeyEvent up(QEvent::KeyRelease, k, m, text);
     QApplication::sendEvent(target, &up);
     settleFor(30);
+}
+
+// A left click as the platform delivers it. QApplication gives click focus only for
+// spontaneous (platform) presses, which a sent QMouseEvent is not, so first do what
+// QApplicationPrivate::giveFocusAccordingToFocusPolicy does for one: walk up from the clicked
+// widget to its window and focus the first enabled widget whose policy takes click focus,
+// stopping early at one that already has focus.
+void click(QWidget* w, QPoint at) {
+    QPoint pos = at;
+    for (QWidget* f = w; f; f = f->parentWidget()) {
+        QWidget* proxy = f->focusProxy() ? f->focusProxy() : f;
+        if (f->isEnabled() && f->rect().contains(pos) &&
+            (proxy->focusPolicy() & Qt::ClickFocus) == Qt::ClickFocus) {
+            f->setFocus(Qt::MouseFocusReason);
+            break;
+        }
+        if (f->isWindow() || proxy->hasFocus()) break;
+        pos += f->pos();
+    }
+    const QPointF local(at), global(w->mapToGlobal(at));
+    QMouseEvent down(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(w, &down);
+    QMouseEvent up(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(w, &up);
+    settleFor(50);
 }
 
 QLineEdit* firstEditableLineEdit(QWidget* root) {
@@ -220,18 +246,48 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         report("VIEWPORT space", bad.isEmpty(), bad.isEmpty() ? QString("isPlaying %1 -> %2 (%3)").arg(before).arg(after).arg(ran.join(",")) : bad.join("; "));
     }
 
-    {   // Floated Timeline: the scrubber still gets Player keys (Review Focus 1).
+    const bool timelineWasFloating = timelineDock_->isFloating();
+    {   // Docked Timeline: a click on the scrubber or the tracks leaves the viewport focused, so
+        // a W hold still registers on it (hold drags, Return-to-chat and Escape need that).
         QStringList bad;
-        const bool wasFloating = timelineDock_->isFloating();
+        timelineDock_->show();
+        timelineDock_->setFloating(false);
+        settleFor(300);
+        for (QWidget* w : {static_cast<QWidget*>(timelinePanelWidget_->scrubber()),
+                           static_cast<QWidget*>(timelinePanelWidget_->tracks())}) {
+            if (!focusOn(viewport_)) bad << "viewport has no focus";
+            click(w, QPoint(2, w->height() / 2));
+            QWidget* fw = QApplication::focusWidget();
+            if (fw != viewport_)
+                bad << QString("after clicking %1 focus is %2").arg(w->objectName(), fw ? fw->objectName() : "none");
+            QKeyEvent down(QEvent::KeyPress, Qt::Key_W, Qt::NoModifier, "w");
+            if (fw) QApplication::sendEvent(fw, &down);
+            if (!viewport_->isHolding("color.drag-gamma")) bad << QString("W hold not seen after clicking %1").arg(w->objectName());
+            QKeyEvent up(QEvent::KeyRelease, Qt::Key_W, Qt::NoModifier, "w");
+            if (fw) QApplication::sendEvent(fw, &up);
+            settleFor(30);
+        }
+        if (isPlaying()) pausePlayback();
+        report("DOCKED-TIMELINE click", bad.isEmpty(),
+               bad.isEmpty() ? QString("scrubber and tracks clicks keep viewport focus, W hold registers") : bad.join("; "));
+    }
+
+    {   // Floated Timeline: a click gives the scrubber focus and it gets Player keys (Review Focus 1).
+        QStringList bad;
+        const bool wasFloating = timelineWasFloating;
         timelineDock_->show();
         timelineDock_->setFloating(true);
         settleFor(300);
         if (isPlaying()) pausePlayback();
-        rewindPlayback();
-        settleFor(50);
         auto* scrub = timelinePanelWidget_->scrubber();
         if (!timelineDock_->isFloating()) bad << "dock did not float";
-        if (!focusOn(scrub)) bad << "scrubber has no focus";
+        makeActive(scrub->window());
+        click(scrub, QPoint(2, scrub->height() / 2));
+        if (QApplication::focusWidget() != scrub)
+            bad << QString("click did not give the scrubber focus (focus is %1)")
+                       .arg(QApplication::focusWidget() ? QApplication::focusWidget()->objectName() : "none");
+        rewindPlayback();
+        settleFor(50);
         const int before = getCurrentFrame();
         ran.clear();
         press(Qt::Key_Right, QString());
@@ -241,6 +297,7 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         if (!ran.contains("playback.step-forward")) bad << "step-forward did not run";
         timelineDock_->setFloating(wasFloating);
         settleFor(200);
+        if (!wasFloating && QApplication::focusWidget() == scrub) bad << "scrubber kept focus after docking";
         report("FLOATING-TIMELINE right", bad.isEmpty(), bad.isEmpty() ? QString("frame %1 -> %2").arg(before).arg(after) : bad.join("; "));
     }
 

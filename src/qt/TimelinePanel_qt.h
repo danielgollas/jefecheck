@@ -131,6 +131,10 @@ public:
     // The two painted widgets that take Player-scope shortcuts (transport keys).
     TimelineScrubber_Qt* scrubber() const { return scrubber_; }
     TimelineTracks_Qt* tracks() const { return tracks_; }
+    // Click focus for the scrubber and tracks, so Player keys reach them, only while the dock
+    // floats. Docked they take none: the viewport keeps focus through a scrub, and with it the
+    // W/E/Q/D/S hold drags, Return-to-chat and Escape.
+    void setTakesKeyFocus(bool on);
 
 public slots:
     // Pulls current frame, in/out, range, FPS, loop mode, playing state

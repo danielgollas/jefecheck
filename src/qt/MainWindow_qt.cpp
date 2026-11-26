@@ -858,6 +858,16 @@ void MainWindow_Qt::buildDocks() {
     // The Timeline beside or away from the Plate Manager changes the row budget.
     connect(timelineDock_, &QDockWidget::dockLocationChanged, this, [this]() { updatePlateRowBudget(true); });
     connect(timelineDock_, &QDockWidget::topLevelChanged, this, [this]() { updatePlateRowBudget(true); });
+    // Floating, the Timeline is its own window and its scrubber/tracks need focus for Player
+    // keys; docked, the viewport keeps focus (TimelinePanel_Qt::setTakesKeyFocus).
+    auto timelineFocus = [this](bool floating) {
+        timelinePanelWidget_->setTakesKeyFocus(floating);
+        if (!floating && (timelinePanelWidget_->scrubber()->hasFocus() ||
+                          timelinePanelWidget_->tracks()->hasFocus()))
+            viewport_->setFocus(Qt::OtherFocusReason);
+    };
+    connect(timelineDock_, &QDockWidget::topLevelChanged, this, timelineFocus);
+    timelineFocus(timelineDock_->isFloating());
     connect(timelineDock_, &QDockWidget::visibilityChanged, this, [this]() { updatePlateRowBudget(true); });
     updatePlateRowBudget(true);
 
