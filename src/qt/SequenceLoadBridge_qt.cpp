@@ -2637,6 +2637,63 @@ void applyCCFavoriteToActive(int slot) {
     plateManager.setChanged();
 }
 
+void toggleChannelOnActive(int channel) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    switch (channel) {
+        case 0: plateManager.toggleChannelR(q); break;
+        case 1: plateManager.toggleChannelG(q); break;
+        case 2: plateManager.toggleChannelB(q); break;
+        case 3: plateManager.toggleChannelA(q); break;
+        default: return;
+    }
+    propagatePlateChanges();
+}
+
+bool getChannelOnActive(int channel) {
+    const int q = plateManager.getActiveQuad();
+    auto* gui = q < 0 ? nullptr : plateManager.getPlateGUI(q);
+    if (!gui) return false;
+    switch (channel) {
+        case 0: return gui->getChannelR();
+        case 1: return gui->getChannelG();
+        case 2: return gui->getChannelB();
+        case 3: return gui->getChannelA();
+        default: return false;
+    }
+}
+
+void showTrackOnActive(int track) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0 || track < 0 || track > 3) return;
+    plateManager.setTrackOnPlate(q, track);
+    propagatePlateChanges();
+}
+
+void scrollLUTOnActive(int direction) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    plateManager.scrollLUT(q, direction >= 0 ? 1 : -1);
+    propagatePlateChanges();
+}
+
+void loadFXFavoriteToActive(int slot) {
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS) return;
+    plateManager.setFavoriteOnPlate(slot);
+    propagatePlateChanges();
+}
+
+void appendFXFavoriteToActive(int slot) {
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS) return;
+    plateManager.appendFavoriteOnPlate(slot);
+    propagatePlateChanges();
+}
+
+void saveFXFavoriteFromActive(int slot) {
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS) return;
+    plateManager.saveFavoriteFromPlate(slot);
+}
+
 bool saveCCFavoritesFile(const std::string& path) {
     XMLNode root = XMLNode::createXMLTopNode("ccFavorites");
     plateManager.saveFavoriteColorCorrectionsToNode(root);

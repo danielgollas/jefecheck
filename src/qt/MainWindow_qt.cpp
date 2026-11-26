@@ -3720,6 +3720,51 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         }
         report("PLAYER keys", bad.isEmpty(), bad.isEmpty() ? QString("< > , . 9 8 on the viewport; LUT cube claims F only") : bad.join("; "));
     }
+    {   // Bridge calls behind the brought-back 1.7 keys; every changed state is put back.
+        QStringList bad;
+        // R is a solo toggle (R alone, or back to RGB), so one press flips G and B, not R.
+        const bool g0 = jefe::qt::getChannelOnActive(1);
+        const bool b0 = jefe::qt::getChannelOnActive(2);
+        jefe::qt::toggleChannelOnActive(0);
+        const bool g1 = jefe::qt::getChannelOnActive(1);
+        const bool soloR = jefe::qt::getChannelOnActive(0) && !g1 && !jefe::qt::getChannelOnActive(2) && !jefe::qt::getChannelOnActive(3);
+        jefe::qt::toggleChannelOnActive(0);
+        if (g1 == g0 && !soloR) bad << "R toggle changed nothing";
+        if (!soloR && g0) bad << "R toggle did not solo R";
+        if (jefe::qt::getChannelOnActive(1) != g0 || jefe::qt::getChannelOnActive(2) != b0) bad << "R toggle twice did not return";
+        const int track0 = jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate());
+        jefe::qt::showTrackOnActive(2);
+        if (jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate()) != 2) bad << "showTrackOnActive(2)";
+        jefe::qt::showTrackOnActive(track0 < 0 ? 0 : track0);
+        const int lut0 = jefe::qt::getLUTOnActivePlate();
+        jefe::qt::scrollLUTOnActive(+1);
+        const int lutUp = jefe::qt::getLUTOnActivePlate();
+        jefe::qt::scrollLUTOnActive(-1);
+        if (jefe::qt::getLutNames().size() > 1 && lutUp == lut0) bad << "LUT did not scroll";
+        if (jefe::qt::getLUTOnActivePlate() != lut0) bad << "LUT scroll +1 -1 did not return";
+        jefe::qt::applyLUTToActivePlate(lut0);
+        const int plate = jefe::qt::getActivePlate();
+        const auto stack0 = jefe::qt::getFXStackXmlOnPlate(plate);
+        jefe::qt::clearFXStackOnPlate(plate);
+        if (!jefe::qt::getAvailableFXNames().empty()) {
+            jefe::qt::addFXToActivePlate(0);
+            const size_t one = jefe::qt::getFXStackOnPlate(plate).size();
+            jefe::qt::saveFXFavoriteFromActive(4);
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::loadFXFavoriteToActive(4);
+            const size_t loaded = jefe::qt::getFXStackOnPlate(plate).size();
+            jefe::qt::appendFXFavoriteToActive(4);
+            const size_t appended = jefe::qt::getFXStackOnPlate(plate).size();
+            if (one != 1 || loaded != 1 || appended != 2)
+                bad << QString("FX favourite sizes %1/%2/%3, wanted 1/1/2").arg(one).arg(loaded).arg(appended);
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::saveFXFavoriteFromActive(4);   // slot 4 back to empty (in-memory only)
+        } else {
+            bad << "no FX loaded";
+        }
+        jefe::qt::setFXStackXmlOnPlate(plate, stack0);
+        report("BROUGHT-BACK", bad.isEmpty(), bad.isEmpty() ? QString("channel toggle, show track, LUT scroll, FX favourites") : bad.join("; "));
+    }
     pm->setMode(pl::PlateMode::Visible);
     layout(FRAMINGSINGLE_ID);
 

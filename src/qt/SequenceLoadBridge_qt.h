@@ -1236,6 +1236,16 @@ std::string getDefaultBrowsePath();
 // Color-correction favorites (slot 0..4, on the active plate).
 void saveCCFavoriteFromActive(int slot);
 void applyCCFavoriteToActive(int slot);
+// Brought-back JefeCheck 1.7 keys, all on the active plate. Channel 0 R, 1 G, 2 B, 3 A
+// (a toggle follows gfcPlate: solo the channel, or back to RGB if it already is solo).
+void toggleChannelOnActive(int channel);
+bool getChannelOnActive(int channel);
+void showTrackOnActive(int track);       // 0..3
+void scrollLUTOnActive(int direction);   // +1 / -1
+// FX-stack favourites (slot 0..4): load replaces the stack, append adds to it.
+void loadFXFavoriteToActive(int slot);
+void appendFXFavoriteToActive(int slot);
+void saveFXFavoriteFromActive(int slot);
 bool saveCCFavoritesFile(const std::string& path);
 bool loadCCFavoritesFile(const std::string& path);
 std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
