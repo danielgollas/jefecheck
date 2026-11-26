@@ -2,6 +2,7 @@
 // Headless self-test for the shortcut registry (--shortcuts-test). Needs a QApplication
 // (QAction) but no window.
 #include "Shortcuts_qt.h"
+#include "PreferencesWindow_qt.h"
 
 #include <QAction>
 #include <QDir>
@@ -653,6 +654,60 @@ void testPersistUnknownPreset(Registry& reg)
     QFile::remove(path);
     check("persist-unknown-preset", asEditing && kept == "studio-2027" && picked == "editing",
           QStringLiteral("kept=%1 picked=%2").arg(kept, picked));
+}
+
+// The Preferences dialog: Cancel reverts the registry to what it was when the dialog opened;
+// Done writes it through QSettings (redirected to a temp ini so the user's own are untouched);
+// Done with an unchanged preset keeps a later version's preset name.
+void testPrefsCancelDone(Registry& reg)
+{
+    const QString dir = QDir::tempPath() + QStringLiteral("/jefe-prefs-test-") +
+                        QUuid::createUuid().toString(QUuid::Id128);
+    QDir().mkpath(dir);
+    const QSettings::Format oldFmt = QSettings::defaultFormat();
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir);
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    const Registry::Snapshot orig = reg.snapshot();
+    reg.reset();
+    registerAllCommands(reg);
+    reg.setPreset(QStringLiteral("editing"));
+    const QKeySequence base = reg.key("playback.play-pause");
+
+    bool cancelOk = false, doneOk = false, unknownOk = false;
+    {
+        PreferencesWindow_Qt dlg;
+        reg.setOverride("playback.play-pause", QKeySequence("Ctrl+Alt+Q"));
+        const bool changed = reg.key("playback.play-pause") == QKeySequence("Ctrl+Alt+Q");
+        reg.setPreset(QStringLiteral("classic"));
+        dlg.cancelForTest();
+        cancelOk = changed && reg.preset() == "editing" && reg.key("playback.play-pause") == base;
+    }
+    {
+        PreferencesWindow_Qt dlg;
+        reg.setOverride("playback.play-pause", QKeySequence("Ctrl+Alt+Q"));
+        dlg.commitForTest();
+        QSettings s;
+        s.sync();
+        doneOk = s.value("Shortcuts/overrides/playback.play-pause").toString().contains("Ctrl+Alt+Q") &&
+                 s.value("Shortcuts/preset").toString() == "editing";
+    }
+    {
+        QSettings s;
+        s.setValue("Shortcuts/preset", "studio-2027");
+        s.sync();
+        reg.load(s);
+        PreferencesWindow_Qt dlg;
+        dlg.commitForTest();  // no setPreset call: the preset did not change
+        QSettings t;
+        t.sync();
+        unknownOk = t.value("Shortcuts/preset").toString() == "studio-2027";
+    }
+    QSettings::setDefaultFormat(oldFmt);
+    QDir(dir).removeRecursively();
+    reg.restore(orig);
+    check("prefs-cancel", cancelOk);
+    check("prefs-done", doneOk);
+    check("prefs-done-keeps-unknown-preset", unknownOk);
 }
 
 // A stored value this build cannot parse (for a registered id) falls back to the preset and is
@@ -1553,6 +1608,7 @@ int shortcutsSelfTest()
     testPersistTwoKeys(reg);
     testPersistUnknownPreset(reg);
     testPersistUnreadableKept(reg);
+    testPrefsCancelDone(reg);
     testParity20(reg);
     testPresetEditing(reg);
     testParity17(reg);

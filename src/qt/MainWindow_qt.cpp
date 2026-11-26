@@ -219,7 +219,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // take their actions; window-level commands get their run from bindRun in buildMenuBar /
     // buildDocks, and attach() puts the actions on this window and the Player widgets.
     auto& shortcuts = jefe::shortcuts::Registry::instance();
-    if (shortcuts.commands().isEmpty()) jefe::shortcuts::registerAllCommands(shortcuts);
+    if (shortcuts.commands().isEmpty()) {
+        jefe::shortcuts::registerAllCommands(shortcuts);
+        // The saved preset and overrides need the commands to exist, so they load here and not in
+        // loadPreferences() (which runs before registration); this precedes the menus and help text.
+        QSettings savedShortcuts;
+        shortcuts.load(savedShortcuts);
+    }
 
     buildMenuBar();
     buildDocks();

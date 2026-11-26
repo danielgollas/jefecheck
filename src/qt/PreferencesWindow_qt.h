@@ -18,6 +18,7 @@
 
 #include <QColor>
 #include <QDialog>
+#include "Shortcuts_qt.h"
 
 #include <memory>
 
@@ -44,12 +45,18 @@ public:
     explicit PreferencesWindow_Qt(QWidget* parent = nullptr);
     ~PreferencesWindow_Qt() override;
 
+    // The Done / Cancel handlers, callable without a click (headless --shortcuts-test).
+    void commitForTest() { onDone(); }
+    void cancelForTest() { onCancel(); }
+
 signals:
     // Emitted continuously while the dialog is open so the owner can repaint
     // the viewport for live preview of viewport-affecting settings.
     void viewportRepaintRequested();
 
 private:
+    void onDone();
+    void onCancel();
     void addPage(const QString& title, QWidget* page);
     void buildGeneralPage();
     void buildTextPage();
@@ -92,6 +99,8 @@ private:
     // (see the forward-declaration comment above); allocated/populated in
     // the .cpp where gfcStructures.h is available.
     std::unique_ptr<gfcSettings> sett_backup_;
+    // Same snapshot for the shortcut registry (preset, overrides, orphans).
+    std::unique_ptr<jefe::shortcuts::Registry::Snapshot> shortcuts_backup_;
 };
 
 #endif
