@@ -10,6 +10,7 @@
 #include <QList>
 #include <QObject>
 #include <QPair>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -61,6 +62,9 @@ public:
     Qt::Key holdKey(const char* id) const;
 
     QString preset() const;                  // "editing" | "classic"
+    // The preset load() uses when Shortcuts/preset is unset (and for a name it does not know).
+    void setDefaultPreset(const QString& preset);
+    QString defaultPreset() const { return defaultPreset_; }
     // A different preset keeps no overrides; the same one changes no keys. Either way an
     // unknown preset name read by load() is replaced.
     void setPreset(const QString& preset);
@@ -99,9 +103,18 @@ public:
     bool importFrom(const QString& path, QString* error);
 
     // Ids of other commands already holding `key` in a clashing scope (same scope, or
-    // Global vs Player).
+    // Global vs Player), plus the hold keys equal to it when `key` is a bare key (a hold key is
+    // a bare key that a command must not also use). `id` may name a command or a hold key.
     QStringList conflicts(const char* id, const QKeySequence& key) const;
     QString commandForKey(Scope scope, const QKeySequence& key) const;  // id or empty
+
+    // Hold-key combinations (HoldKey::with, e.g. hold L + Up): while one of `held` (keys the
+    // viewport tracks as held) is a hold key with a `with` entry for `key`, pressed with no
+    // modifiers, the viewport claims the key (ShortcutOverride, so the Player action on the
+    // same key does not fire) and runs that entry.
+    bool holdWithClaims(const QSet<int>& held, int key, Qt::KeyboardModifiers mods) const;
+    bool runHoldWith(const QSet<int>& held, int key, Qt::KeyboardModifiers mods);  // true = ran
+    void bindHoldWith(const char* holdId, Qt::Key key, std::function<void()> fn);  // replaces one entry
 
     const QList<Command>& commands() const { return commands_; }
     const QList<HoldKey>& holdKeys() const { return holdKeys_; }
@@ -135,11 +148,24 @@ private:
     QHash<QString, QString> unreadableHoldOverrides_;
     QString unknownPreset_;                        // stored preset name it did not know; written back
     QString preset_ = QStringLiteral("editing");
+    QString defaultPreset_ = QStringLiteral("editing");
+    const std::function<void()>* holdWithEntry(const QSet<int>& held, int key, Qt::KeyboardModifiers mods) const;
 };
 
 // Registers every command and hold key the app binds (ShortcutCommands_qt.cpp). Window-level
 // commands are registered with run = nullptr; MainWindow_Qt supplies them with bindRun().
 void registerAllCommands(Registry& reg);
+
+// J / K / L: direction -1 plays backward, +1 forward (switching direction if playing the other
+// way, starting if paused), 0 pauses. The transport is injectable so the self-test can check
+// the logic without a playback manager; bridgeTransport() is the real one.
+struct Transport {
+    std::function<bool()> isPlaying;
+    std::function<void(int)> setDirection;   // -1 / +1, does not start or stop
+    std::function<void()> togglePause;       // play in the current direction, or pause
+};
+void runJKL(int direction, const Transport& t);
+Transport bridgeTransport();
 
 // Help overlay (H) text from the registry's current keys, same sections as the fallback string
 // in gfcPlateManager. Unbound commands have no line.
@@ -148,7 +174,9 @@ QString buildHelpText(const Registry& reg);
 // The same text line by line: `ids` are the commands/hold keys whose keys the line shows
 // (empty for headings, blanks and fixed mouse lines). helpPlacedIds() lists every id the
 // overlay places, so a test can tell when a new command is missing from it.
-struct HelpLine { QString text; QStringList ids; QStringList extraIds; };  // extras: "(+Shift = ...)" notes
+// ranges: families of numbered commands drawn as one run, "Shift+1-5" (each a list of slot ids,
+// first to last); a family whose keys do not form a run is listed key by key in `ids` instead.
+struct HelpLine { QString text; QStringList ids; QStringList extraIds; QList<QStringList> ranges; };
 QList<HelpLine> buildHelpLines(const Registry& reg);
 QStringList helpPlacedIds();
 

@@ -414,6 +414,9 @@ int getActivePlate() {
     return plateManager.getActiveQuad();
 }
 
+void playForwardToggle() { playbackManager.startPlayFwd(); plateManager.setChanged(); }
+void playReverseToggle() { playbackManager.startPlayRev(); plateManager.setChanged(); }
+
 void togglePlayFwd() {
     if (playbackManager.isPlaying()) {
         playbackManager.pause();
@@ -2672,19 +2675,20 @@ void showTrackOnActive(int track) {
 
 void scrollLUTOnActive(int direction) {
     const int q = plateManager.getActiveQuad();
-    if (q < 0) return;
+    // No LUT loaded: gfcPlate::scrollLUT would ask lutManager for LUT -1.
+    if (q < 0 || lutManager.getAllNames().empty()) return;
     plateManager.scrollLUT(q, direction >= 0 ? 1 : -1);
     propagatePlateChanges();
 }
 
 void loadFXFavoriteToActive(int slot) {
-    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS) return;
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS || plateManager.getActiveQuad() < 0) return;
     plateManager.setFavoriteOnPlate(slot);
     propagatePlateChanges();
 }
 
 void appendFXFavoriteToActive(int slot) {
-    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS) return;
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS || plateManager.getActiveQuad() < 0) return;
     plateManager.appendFavoriteOnPlate(slot);
     propagatePlateChanges();
 }
@@ -3196,6 +3200,13 @@ void sendChatMessageText(const std::string& text) {
 
 bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
 void remoteChatBegin()      { networkManager.gChatMode = 1; }
+void remoteChatToggleShown() {
+    // JefeCheck 1.7's Ctrl+Y: fade a showing chat out now, or bring a faded one back.
+    if (networkManager.chatFadeCounter > networkManager.chatOpacity)
+        networkManager.chatFadeCounter = networkManager.chatOpacity;
+    else
+        networkManager.chatFadeCounter = networkManager.chatFadeDelay / GFCNET_CHAT_FADE_SPEED;
+}
 std::string remoteChatText() { return networkManager.gChatTextString; }
 void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }
 void remoteChatBackspace()  {

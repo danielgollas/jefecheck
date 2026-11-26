@@ -16,7 +16,9 @@
 #include <QWidget>
 #include <QtGlobal>
 
+#include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <memory>
 #include <utility>
 
@@ -685,133 +687,518 @@ void testPersistUnreadableKept(Registry& reg)
           QStringLiteral("a=%1 hold=%2 replaced=%3").arg(keptA, keptH, replaced));
 }
 
-// Every key the app binds today (GlViewport_Qt::keyPressEvent, MainWindow_Qt's QShortcuts and
-// menu keys) resolves to the registered command, in both presets.
+// ---- Presets ---------------------------------------------------------------------------
+
 struct ParityRow {
     Scope scope;
     const char* key;  // PortableText
     const char* id;
 };
 
+constexpr Scope P = Scope::Player;
+constexpr Scope G = Scope::Global;
+
+QKeySequence portableKey(const char* text)
+{
+    return QKeySequence::fromString(QString::fromLatin1(text), QKeySequence::PortableText);
+}
+
+// FLTK's FL_CTRL is the physical Control key: Qt::META on macOS (where Qt::CTRL is Cmd),
+// Qt::CTRL elsewhere. Rows of the 1.7 table written "Ctrl+..." mean that key.
+QKeySequence physicalCtrl(const char* text)
+{
+    QKeySequence k = portableKey(text);
+#ifdef Q_OS_MACOS
+    if (!k.isEmpty() && (k[0].keyboardModifiers() & Qt::ControlModifier)) {
+        const Qt::KeyboardModifiers m = (k[0].keyboardModifiers() & ~Qt::ControlModifier) | Qt::MetaModifier;
+        k = QKeySequence(QKeyCombination(m, k[0].key()));
+    }
+#endif
+    return k;
+}
+
+// Checks one table: every row's key resolves to its id in `scope` under `preset`.
+QStringList checkRows(Registry& reg, const char* preset, const ParityRow* rows, int n, bool physical,
+                      int* count)
+{
+    QStringList bad;
+    for (int i = 0; i < n; ++i) {
+        const ParityRow& r = rows[i];
+        const QKeySequence key = physical ? physicalCtrl(r.key) : portableKey(r.key);
+        ++*count;
+        const QString got = reg.commandForKey(r.scope, key);
+        if (got != QString::fromLatin1(r.id))
+            bad << QStringLiteral("%1:%2->%3(want %4)")
+                       .arg(preset, key.toString(QKeySequence::PortableText), got, r.id);
+    }
+    return bad;
+}
+
+QStringList checkHolds(Registry& reg, const char* preset, const QList<QPair<const char*, Qt::Key>>& holds,
+                       int* count)
+{
+    QStringList bad;
+    for (const auto& h : holds) {
+        ++*count;
+        if (reg.holdKey(h.first) != h.second)
+            bad << QStringLiteral("%1:hold %2=%3").arg(preset, h.first).arg(int(reg.holdKey(h.first)));
+    }
+    return bad;
+}
+
+QStringList checkUnbound(Registry& reg, const char* preset, const QStringList& ids)
+{
+    QStringList bad;
+    for (const QString& id : ids) {
+        const QByteArray b = id.toUtf8();
+        if (!reg.keys(b.constData()).isEmpty()) bad << QStringLiteral("%1:%2 bound to %3").arg(preset, id, keysText(reg.keys(b.constData())));
+    }
+    return bad;
+}
+
+// The Editing table's ancestor: every key qt-experimental handled before the presets
+// (GlViewport_Qt::keyPressEvent, MainWindow_Qt's QShortcuts and menu keys), with the rows the
+// spec changed for Editing updated: X / C no longer step, Shift+I / Shift+O go to In / Out,
+// Alt+I / Alt+O reset them, Shift+Alt+I sets In and loads.
 const ParityRow kParity20[] = {
     // Viewport keyPressEvent (Player).
-    {Scope::Player, "Space", "playback.play-pause"},
-    {Scope::Player, "Left", "playback.step-back"},
-    {Scope::Player, "X", "playback.step-back"},
-    {Scope::Player, "Right", "playback.step-forward"},
-    {Scope::Player, "C", "playback.step-forward"},
-    {Scope::Player, "Home", "playback.go-start"},
-    {Scope::Player, "End", "playback.go-end"},
-    {Scope::Player, ",", "playback.direction-reverse"},
-    {Scope::Player, "<", "playback.direction-reverse"},
-    {Scope::Player, ".", "playback.direction-forward"},
-    {Scope::Player, ">", "playback.direction-forward"},
-    {Scope::Player, "8", "playback.loop-once"},
-    {Scope::Player, "9", "playback.loop"},
-    {Scope::Player, "0", "playback.bounce"},
-    {Scope::Player, "I", "inout.set-in"},
-    {Scope::Player, "O", "inout.set-out"},
-    {Scope::Player, "Shift+I", "inout.reset-in"},
-    {Scope::Player, "Shift+O", "inout.reset-out"},
-    {Scope::Player, "Alt+I", "inout.set-in-load"},
-    {Scope::Player, "Up", "plate.track-prev"},
-    {Scope::Player, "Down", "plate.track-next"},
+    {P, "Space", "playback.play-pause"},
+    {P, "Left", "playback.step-back"},
+    {P, "Right", "playback.step-forward"},
+    {P, "Home", "playback.go-start"},
+    {P, "End", "playback.go-end"},
+    {P, ",", "playback.direction-reverse"},
+    {P, "<", "playback.direction-reverse"},
+    {P, ".", "playback.direction-forward"},
+    {P, ">", "playback.direction-forward"},
+    {P, "8", "playback.loop-once"},
+    {P, "9", "playback.loop"},
+    {P, "0", "playback.bounce"},
+    {P, "I", "inout.set-in"},
+    {P, "O", "inout.set-out"},
+    {P, "Shift+I", "inout.go-in"},
+    {P, "Shift+O", "inout.go-out"},
+    {P, "Alt+I", "inout.reset-in"},
+    {P, "Alt+O", "inout.reset-out"},
+    {P, "Shift+Alt+I", "inout.set-in-load"},
+    {P, "Up", "plate.track-prev"},
+    {P, "Down", "plate.track-next"},
+    {P, "Return", "remote.chat-type"},
+    {P, "Enter", "remote.chat-type"},
     // Layouts (MainWindow QShortcuts and viewport Ctrl+1-4; registered once, Global).
-    {Scope::Global, "Ctrl+1", "layout.single"},
-    {Scope::Global, "Ctrl+2", "layout.side"},
-    {Scope::Global, "Ctrl+3", "layout.top-bottom"},
-    {Scope::Global, "Ctrl+4", "layout.quad"},
+    {G, "Ctrl+1", "layout.single"},
+    {G, "Ctrl+2", "layout.side"},
+    {G, "Ctrl+3", "layout.top-bottom"},
+    {G, "Ctrl+4", "layout.quad"},
     // Plate transforms: View menu (active) and QShortcuts (all plates).
-    {Scope::Global, "F", "plate.fit"},
-    {Scope::Global, "Shift+F", "plate.fit-all"},
-    {Scope::Global, "V", "plate.flip"},
-    {Scope::Global, "Shift+V", "plate.flip-all"},
-    {Scope::Global, "M", "plate.flop"},
-    {Scope::Global, "Shift+M", "plate.flop-all"},
-    {Scope::Global, "T", "plate.text-mode"},
-    {Scope::Global, "Alt+T", "plate.text-mode-all"},
-    {Scope::Global, "Ctrl+R", "plate.reset"},
-    {Scope::Global, "Ctrl+Alt+R", "plate.reset-all"},
-    {Scope::Global, "Shift+R", "color.reset"},
-    {Scope::Global, "Shift+Alt+R", "color.reset-all"},
+    {G, "F", "plate.fit"},
+    {G, "Shift+F", "plate.fit-all"},
+    {G, "V", "plate.flip"},
+    {G, "Shift+V", "plate.flip-all"},
+    {G, "M", "plate.flop"},
+    {G, "Shift+M", "plate.flop-all"},
+    {G, "T", "plate.text-mode"},
+    {G, "Alt+T", "plate.text-mode-all"},
+    {G, "Ctrl+R", "plate.reset"},
+    {G, "Ctrl+Alt+R", "plate.reset-all"},
+    {G, "Shift+R", "color.reset"},
+    {G, "Shift+Alt+R", "color.reset-all"},
     // File menu.
-    {Scope::Global, "Ctrl+O", "file.quick-load"},
-    {Scope::Global, "Ctrl+L", "file.load-manager"},
-    {Scope::Global, "Ctrl+Shift+O", "file.open-session"},
-    {Scope::Global, "Ctrl+P", "file.preferences"},
-    {Scope::Global, "Ctrl+,", "file.preferences"},
+    {G, "Ctrl+O", "file.quick-load"},
+    {G, "Ctrl+L", "file.load-manager"},
+    {G, "Ctrl+Shift+O", "file.open-session"},
+    {G, "Ctrl+P", "file.preferences"},
+    {G, "Ctrl+,", "file.preferences"},
     // View menu.
-    {Scope::Global, "F11", "view.toggle-fullscreen"},
-    {Scope::Global, "Meta+Ctrl+F", "view.toggle-fullscreen"},
-    {Scope::Global, "Ctrl+H", "view.toggle-histogram"},
-    {Scope::Global, "Ctrl+Alt+H", "view.toggle-histogram-all"},
-    {Scope::Global, "N", "view.toggle-note-overlay"},
+    {G, "F11", "view.toggle-fullscreen"},
+    {G, "Meta+Ctrl+F", "view.toggle-fullscreen"},
+    {G, "Ctrl+H", "view.toggle-histogram"},
+    {G, "Ctrl+Alt+H", "view.toggle-histogram-all"},
+    {G, "N", "view.toggle-note-overlay"},
     // Window menu.
-    {Scope::Global, "F2", "panels.toggle-plate-manager"},
-    {Scope::Global, "F3", "panels.toggle-fx"},
-    {Scope::Global, "F4", "panels.toggle-luts"},
-    {Scope::Global, "F5", "panels.open-remote"},
-    {Scope::Global, "F6", "panels.open-render"},
-    {Scope::Global, "F7", "panels.toggle-notes"},
-    {Scope::Global, "F8", "panels.toggle-timeline"},
-    {Scope::Global, "F9", "panels.toggle-playlist"},
-    {Scope::Global, "Ctrl+Alt+F", "panels.hide-controls"},
+    {G, "F2", "panels.toggle-plate-manager"},
+    {G, "F3", "panels.toggle-fx"},
+    {G, "F4", "panels.toggle-luts"},
+    {G, "F5", "panels.open-remote"},
+    {G, "F6", "panels.open-render"},
+    {G, "F7", "panels.toggle-notes"},
+    {G, "F8", "panels.toggle-timeline"},
+    {G, "F9", "panels.toggle-playlist"},
+    {G, "Ctrl+Alt+F", "panels.hide-controls"},
 #ifdef Q_OS_MACOS
-    {Scope::Global, "Ctrl+M", "panels.minimize"},
+    {G, "Ctrl+M", "panels.minimize"},
 #endif
     // Help menu.
-    {Scope::Global, "F1", "help.manual"},
-    {Scope::Global, "H", "help.toggle-overlay"},
+    {G, "F1", "help.manual"},
+    {G, "H", "help.toggle-overlay"},
+};
+
+const QList<QPair<const char*, Qt::Key>> kDragHolds = {
+    {"color.drag-gamma", Qt::Key_W},      {"color.drag-exposure", Qt::Key_E},
+    {"color.drag-brightness", Qt::Key_Q}, {"color.drag-contrast", Qt::Key_D},
+    {"color.drag-saturation", Qt::Key_S},
 };
 
 void testParity20(Registry& reg)
 {
     reg.reset();
     registerAllCommands(reg);
-    QStringList bad;
-    int rows = 0;
-    for (const char* preset : {"editing", "classic"}) {
-        reg.setPreset(QString::fromLatin1(preset));
-        auto expect = [&](Scope scope, const QKeySequence& key, const char* id) {
-            ++rows;
-            const QString got = reg.commandForKey(scope, key);
-            if (got != QString::fromLatin1(id))
-                bad << QStringLiteral("%1:%2->%3(want %4)")
-                           .arg(preset, key.toString(QKeySequence::PortableText), got, id);
-        };
-        for (const ParityRow& r : kParity20)
-            expect(r.scope, QKeySequence::fromString(QString::fromLatin1(r.key), QKeySequence::PortableText), r.id);
-        // Standard keys: exactly the one key the menu constructs today (QKeySequence(StandardKey)).
-        for (const auto& [standardKey, id] : {std::pair{QKeySequence::Save, "file.save-session"},
-                                      std::pair{QKeySequence::Quit, "file.quit"}}) {
-            const QKeySequence menuKey(standardKey);
-            expect(Scope::Global, menuKey, id);
-            ++rows;
-            if (reg.keys(id) != QList<QKeySequence>{menuKey})
-                bad << QStringLiteral("%1:%2 keys=%3 (want only %4)")
-                           .arg(preset, id, keysText(reg.keys(id)),
-                                menuKey.toString(QKeySequence::PortableText));
-        }
-        const QPair<const char*, Qt::Key> holds[] = {
-            {"color.drag-gamma", Qt::Key_W},      {"color.drag-exposure", Qt::Key_E},
-            {"color.drag-brightness", Qt::Key_Q}, {"color.drag-contrast", Qt::Key_D},
-            {"color.drag-saturation", Qt::Key_S},
-        };
-        for (const auto& h : holds) {
-            ++rows;
-            if (reg.holdKey(h.first) != h.second)
-                bad << QStringLiteral("%1:hold %2=%3").arg(preset, h.first).arg(int(reg.holdKey(h.first)));
-        }
-    }
-    // Phase 1: both presets carry today's keys.
-    for (const Command& c : reg.commands()) {
-        if (c.editing != c.classic) bad << QStringLiteral("presets differ: %1").arg(c.id);
-        if (c.editing.size() > 2) bad << QStringLiteral(">2 keys: %1").arg(c.id);
-    }
     reg.setPreset(QStringLiteral("editing"));
+    int rows = 0;
+    QStringList bad = checkRows(reg, "editing", kParity20, int(std::size(kParity20)), false, &rows);
+    // Standard keys: exactly the one key the menu constructs (QKeySequence(StandardKey)).
+    for (const auto& [standardKey, id] : {std::pair{QKeySequence::Save, "file.save-session"},
+                                          std::pair{QKeySequence::Quit, "file.quit"}}) {
+        const QKeySequence menuKey(standardKey);
+        ++rows;
+        if (reg.keys(id) != QList<QKeySequence>{menuKey})
+            bad << QStringLiteral("editing:%1 keys=%2 (want only %3)")
+                       .arg(id, keysText(reg.keys(id)), menuKey.toString(QKeySequence::PortableText));
+    }
+    bad << checkHolds(reg, "editing", kDragHolds, &rows);
+    for (const Command& c : reg.commands())
+        if (c.editing.size() > 2 || c.classic.size() > 2) bad << QStringLiteral(">2 keys: %1").arg(c.id);
     check("parity-2.0", bad.isEmpty(),
           QStringLiteral("rows=%1 commands=%2 holds=%3 %4")
               .arg(rows).arg(reg.commands().size()).arg(reg.holdKeys().size()).arg(bad.join(' ')));
+}
+
+// One row per line of the spec's preset table, Editing column.
+const ParityRow kEditing[] = {
+    {P, "Space", "playback.play-pause"},                                     // Play / Pause
+    {P, "J", "playback.jkl-reverse"}, {P, "K", "playback.jkl-pause"},        // J / K / L
+    {P, "L", "playback.jkl-forward"},
+    {P, "Left", "playback.step-back"}, {P, "Right", "playback.step-forward"},  // Step
+    {P, "Home", "playback.go-start"}, {P, "End", "playback.go-end"},         // Start / end
+    {P, ",", "playback.direction-reverse"}, {P, ".", "playback.direction-forward"},  // Direction
+    {P, "<", "playback.direction-reverse"}, {P, ">", "playback.direction-forward"},
+    {P, "8", "playback.loop-once"}, {P, "9", "playback.loop"}, {P, "0", "playback.bounce"},
+    {P, "I", "inout.set-in"}, {P, "O", "inout.set-out"},                     // Set In / Out
+    {P, "Shift+I", "inout.go-in"}, {P, "Shift+O", "inout.go-out"},           // Go to In / Out
+    {P, "Alt+I", "inout.reset-in"}, {P, "Alt+O", "inout.reset-out"},         // Reset to ends
+    {P, "Alt+X", "inout.clear-both"},                                        // Clear In and Out
+    {P, "Shift+Alt+I", "inout.set-in-load"},                                 // Set In and load
+    {P, "Up", "plate.track-prev"}, {P, "Down", "plate.track-next"},          // Cycle track
+    {P, "1", "plate.show-track-1"}, {P, "2", "plate.show-track-2"},          // Show track A-D
+    {P, "3", "plate.show-track-3"}, {P, "4", "plate.show-track-4"},
+    {P, "R", "color.channel-r"}, {P, "G", "color.channel-g"},                // Channels
+    {P, "B", "color.channel-b"}, {P, "A", "color.channel-a"},
+    {P, "Shift+1", "color.cc-fav-apply-1"}, {P, "Shift+5", "color.cc-fav-apply-5"},  // CC favourites
+    {P, "Ctrl+Shift+1", "color.cc-fav-save-1"}, {P, "Ctrl+Shift+5", "color.cc-fav-save-5"},
+    {P, "Shift+F1", "fx.fav-load-1"}, {P, "Shift+F5", "fx.fav-load-5"},       // FX favourites
+    {P, "Ctrl+F1", "fx.fav-append-1"}, {P, "Ctrl+F5", "fx.fav-append-5"},
+    {P, "Ctrl+Shift+F1", "fx.fav-save-1"}, {P, "Ctrl+Shift+F5", "fx.fav-save-5"},
+    {G, "F", "plate.fit"}, {G, "Shift+F", "plate.fit-all"},                  // Fit
+    {G, "V", "plate.flip"}, {G, "Shift+V", "plate.flip-all"},                // Flip
+    {G, "M", "plate.flop"}, {G, "Shift+M", "plate.flop-all"},                // Flop
+    {G, "T", "plate.text-mode"}, {G, "Alt+T", "plate.text-mode-all"},        // Text mode
+    {G, "Ctrl+R", "plate.reset"}, {G, "Ctrl+Alt+R", "plate.reset-all"},      // Reset plate
+    {G, "Shift+R", "color.reset"}, {G, "Shift+Alt+R", "color.reset-all"},    // Reset colour
+    {G, "F11", "view.toggle-fullscreen"}, {G, "Meta+Ctrl+F", "view.toggle-fullscreen"},
+    {G, "Ctrl+Alt+F", "panels.hide-controls"},                               // Hide controls
+    {G, "H", "help.toggle-overlay"},                                         // On-screen help
+    {G, "Ctrl+H", "view.toggle-histogram"}, {G, "Ctrl+Alt+H", "view.toggle-histogram-all"},
+    {G, "Ctrl+L", "file.load-manager"},                                      // Load manager
+    {G, "Ctrl+P", "file.preferences"}, {G, "Ctrl+,", "file.preferences"},    // Preferences
+    {P, "Return", "remote.chat-type"},                                       // Chat
+    {G, "Ctrl+1", "layout.single"}, {G, "Ctrl+2", "layout.side"},            // Layouts
+    {G, "Ctrl+3", "layout.top-bottom"}, {G, "Ctrl+4", "layout.quad"},
+    {G, "F2", "panels.toggle-plate-manager"}, {G, "F9", "panels.toggle-playlist"},  // Panels
+    {G, "N", "view.toggle-note-overlay"}, {G, "F1", "help.manual"},
+    {G, "Ctrl+O", "file.quick-load"}, {G, "Ctrl+Shift+O", "file.open-session"},
+    {P, "=", "timeline.zoom-in"}, {P, "-", "timeline.zoom-out"},             // Timeline zoom
+    {P, "\\", "timeline.zoom-fit"}, {P, "Shift+\\", "timeline.zoom-inout"},
+};
+
+void testPresetEditing(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.setPreset(QStringLiteral("editing"));
+    int rows = 0;
+    QStringList bad = checkRows(reg, "editing", kEditing, int(std::size(kEditing)), false, &rows);
+    for (const auto& [standardKey, id] : {std::pair{QKeySequence::Save, "file.save-session"},
+                                          std::pair{QKeySequence::Quit, "file.quit"}}) {
+        ++rows;
+        if (reg.commandForKey(G, QKeySequence(standardKey)) != QLatin1String(id)) bad << QStringLiteral("standard %1").arg(id);
+    }
+    bad << checkHolds(reg, "editing", kDragHolds + QList<QPair<const char*, Qt::Key>>{{"plate.lut-hold", Qt::Key_unknown}}, &rows);
+    // Unbound in Editing: previous / next LUT, show-hide chat, the 1.7-only play keys; X / C no longer step.
+    bad << checkUnbound(reg, "editing", {"plate.lut-prev", "plate.lut-next", "remote.chat-toggle",
+                                         "playback.play-reverse", "playback.play-forward"});
+    for (const char* key : {"X", "C", "Z", "Y"})
+        if (!reg.commandForKey(P, portableKey(key)).isEmpty() || !reg.commandForKey(G, portableKey(key)).isEmpty())
+            bad << QStringLiteral("editing:%1 is bound").arg(key);
+    check("preset-editing", bad.isEmpty(), QStringLiteral("rows=%1 %2").arg(rows).arg(bad.join(' ')));
+}
+
+// Every key shipped JefeCheck 1.7 handled (`main`: UICallbacks.cpp globalCB, GlViewport.cpp
+// FL_KEYDOWN, the mainWindow.fl menu and transport-button shortcuts) -> its command under
+// classic. "Ctrl" here is FLTK's FL_CTRL, the physical Control key (physicalCtrl()).
+const ParityRow kParity17[] = {
+    // GlViewport.cpp FL_KEYDOWN (not in chat mode).
+    {G, "F2", "panels.toggle-plate-manager"},  // fxControlWindow1 (FX stack); 2.0 panel key kept
+    {G, "F3", "panels.toggle-fx"},             // fxw.fxWindow
+    {G, "F4", "panels.toggle-luts"},           // lutw.lutWindow
+    {G, "F5", "panels.open-remote"},           // rmw.remoteWindow
+    {G, "F6", "panels.open-render"},           // rw.renderWindow
+    {P, "Space", "playback.play-pause"},       // playbackManager.pause()
+    {P, "Left", "playback.step-back"},         // oneFrameRev()
+    {P, "Right", "playback.step-forward"},     // oneFrameFwd()
+    {P, "Up", "plate.track-prev"},             // track-1 (wraps); with L held: scrollLUT(-1), see hold-with
+    {P, "Down", "plate.track-next"},           // track+1 (wraps); with L held: scrollLUT(+1)
+    // mainWindow.fl transport buttons: playRevButton '<' (startPlayRev), playFwdButton '>'.
+    {P, "<", "playback.play-reverse"},
+    {P, ">", "playback.play-forward"},
+    // UICallbacks.cpp globalCB, FL_CTRL block.
+    {G, "Ctrl+1", "layout.single"},            // setFramingMode(FRAMINGSINGLE_ID)
+    {G, "Ctrl+2", "layout.side"},
+    {G, "Ctrl+3", "layout.top-bottom"},
+    {G, "Ctrl+4", "layout.quad"},
+    {P, "Ctrl+Shift+1", "color.cc-fav-save-1"},  // saveFavoriteColorCorrectionFromPlate(0)
+    {P, "Ctrl+Shift+2", "color.cc-fav-save-2"},
+    {P, "Ctrl+Shift+3", "color.cc-fav-save-3"},
+    {P, "Ctrl+Shift+4", "color.cc-fav-save-4"},
+    {P, "Ctrl+Shift+5", "color.cc-fav-save-5"},
+    {G, "Ctrl+8", "plate.flip"},               // toggleFlip(active)
+    {G, "Ctrl+Alt+8", "plate.flip-all"},       // toggleFlipAll()
+    {G, "Ctrl+9", "plate.flop"},               // toggleFlop(active)
+    {G, "Ctrl+Alt+9", "plate.flop-all"},       // toggleFlopAll()
+    // globalCB, main switch.
+    {P, ".", "playback.direction-forward"},    // setDirection(1)
+    {P, ",", "playback.direction-reverse"},    // setDirection(-1)
+    {P, "C", "playback.step-forward"},         // oneFrameFwd()
+    {P, "X", "playback.step-back"},            // oneFrameRev()
+    {P, "V", "playback.go-end"},               // ffwd()
+    {P, "Z", "playback.go-start"},             // rew()
+    {P, "8", "playback.loop-once"},            // LOOPMODEONCE_ID
+    {P, "9", "playback.loop"},                 // LOOPMODELOOP_ID
+    {P, "0", "playback.bounce"},               // LOOPMODEBOUNCE_ID
+    {P, "1", "plate.show-track-1"},            // setTrackOnPlate(active, 0)
+    {P, "2", "plate.show-track-2"},
+    {P, "3", "plate.show-track-3"},
+    {P, "4", "plate.show-track-4"},
+    {P, "Shift+1", "color.cc-fav-apply-1"},    // setFavoriteColorCorrectionOnPlate(0)
+    {P, "Shift+2", "color.cc-fav-apply-2"},
+    {P, "Shift+3", "color.cc-fav-apply-3"},
+    {P, "Shift+4", "color.cc-fav-apply-4"},
+    {P, "Shift+5", "color.cc-fav-apply-5"},
+    {G, "Ctrl+L", "file.load-manager"},        // lw.loadWindow->show()
+    {P, "Alt+I", "inout.set-in-load"},         // startLoadingAllAt + setInPoint(current)
+    {P, "Shift+I", "inout.reset-in"},          // setInPoint(1)
+    {P, "I", "inout.set-in"},                  // setInPoint(current)
+    {P, "Shift+O", "inout.reset-out"},         // setOutPoint(max track length)
+    {P, "O", "inout.set-out"},                 // setOutPoint(current)
+    {P, "Ctrl+Shift+F1", "fx.fav-save-1"},     // saveFavoriteFromPlate(0)
+    {P, "Ctrl+Shift+F5", "fx.fav-save-5"},
+    {P, "Ctrl+F1", "fx.fav-append-1"},         // appendFavoriteOnPlate(0)
+    {P, "Ctrl+F5", "fx.fav-append-5"},
+    {P, "Shift+F1", "fx.fav-load-1"},          // setFavoriteOnPlate(0)
+    {P, "Shift+F2", "fx.fav-load-2"},
+    {P, "Shift+F3", "fx.fav-load-3"},
+    {P, "Shift+F4", "fx.fav-load-4"},
+    {P, "Shift+F5", "fx.fav-load-5"},
+    {G, "Ctrl+Alt+R", "plate.reset-all"},      // resetAllPlates()
+    {G, "Ctrl+R", "plate.reset"},              // resetPlate(active)
+    {G, "Shift+Alt+R", "color.reset-all"},     // resetAllColorCorrections()
+    {G, "Shift+R", "color.reset"},             // resetColorCorrection(active)
+    {P, "R", "color.channel-r"},               // toggleChannelR
+    {P, "G", "color.channel-g"},
+    {P, "B", "color.channel-b"},
+    {P, "A", "color.channel-a"},
+    {G, "Alt+T", "plate.text-mode-all"},       // toggleTextModeAll()
+    {G, "T", "plate.text-mode"},               // toggleTextMode(active)
+    {G, "Ctrl+Alt+H", "view.toggle-histogram-all"},  // toggleHistogramModeAll()
+    {G, "Ctrl+H", "view.toggle-histogram"},    // toggleHistogramMode(active)
+    {G, "H", "help.toggle-overlay"},           // toggleHelp()
+    {G, "Ctrl+Q", "file.quit"},                // confirmQuit()
+    {G, "Ctrl+Alt+F", "panels.hide-controls"}, // toggleHideControls()
+    {G, "Alt+F", "plate.fit-all"},             // fitToViewportAll()
+    {G, "F", "plate.fit"},                     // fitToViewport(active)
+    {G, "Ctrl+F", "view.toggle-fullscreen"},   // toggleFullscreen()
+    {P, "Ctrl+Y", "remote.chat-toggle"},       // chat fade counter: show / fade the chat
+    {P, "Y", "remote.chat-type"},              // gChatMode = 1
+    // mainWindow.fl menu shortcuts not already above.
+    {G, "Ctrl+P", "panels.toggle-playlist"},   // File / Dialogs: Playlist Manager
+    {G, "Ctrl+S", "file.save-session"},        // File: Save Session
+    {G, "Ctrl+O", "file.open-session"},        // File: Open Session
+    {G, "F1", "help.manual"},                  // Help: User Manual
+};
+
+void testParity17(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.setPreset(QStringLiteral("classic"));
+    int rows = 0;
+    QStringList bad = checkRows(reg, "classic", kParity17, int(std::size(kParity17)), true, &rows);
+    bad << checkHolds(reg, "classic", kDragHolds + QList<QPair<const char*, Qt::Key>>{{"plate.lut-hold", Qt::Key_L}}, &rows);
+    // 2.0 keys kept where 1.7 left them free (spec rules).
+    const ParityRow kept[] = {
+        {G, "F7", "panels.toggle-notes"}, {G, "F8", "panels.toggle-timeline"}, {G, "F9", "panels.toggle-playlist"},
+        {G, "N", "view.toggle-note-overlay"}, {G, "M", "plate.flop"}, {G, "Shift+M", "plate.flop-all"},
+        {G, "Shift+F", "plate.fit-all"}, {G, "F11", "view.toggle-fullscreen"}, {G, "Ctrl+,", "file.preferences"},
+        {G, "Ctrl+Shift+O", "file.open-session"}, {P, "Home", "playback.go-start"}, {P, "End", "playback.go-end"},
+        {P, "=", "timeline.zoom-in"}, {P, "-", "timeline.zoom-out"}, {P, "\\", "timeline.zoom-fit"},
+        {P, "Shift+\\", "timeline.zoom-inout"},
+    };
+    bad << checkRows(reg, "classic", kept, int(std::size(kept)), false, &rows);
+    ++rows;
+    if (reg.commandForKey(G, QKeySequence(QKeySequence::Quit)) != QLatin1String("file.quit")) bad << "classic: standard Quit";
+    bad << checkUnbound(reg, "classic", {"playback.jkl-reverse", "playback.jkl-pause", "playback.jkl-forward",
+                                         "inout.go-in", "inout.go-out", "inout.clear-both",
+                                         "plate.lut-prev", "plate.lut-next"});
+    reg.setPreset(QStringLiteral("editing"));
+    check("parity-1.7", bad.isEmpty(), QStringLiteral("rows=%1 %2").arg(rows).arg(bad.join(' ')));
+}
+
+void testClassicNoJKL(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.setPreset(QStringLiteral("classic"));
+    QStringList bad;
+    for (const char* key : {"J", "K", "L"})
+        for (Scope s : {P, G})
+            if (!reg.commandForKey(s, portableKey(key)).isEmpty())
+                bad << QStringLiteral("%1 -> %2").arg(key, reg.commandForKey(s, portableKey(key)));
+    if (reg.holdKey("plate.lut-hold") != Qt::Key_L) bad << "L is not the LUT hold key";
+    reg.setPreset(QStringLiteral("editing"));
+    check("classic-no-jkl", bad.isEmpty(), bad.join(' '));
+}
+
+void testJKL(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.setPreset(QStringLiteral("editing"));
+    bool playing = true;
+    int direction = -1;
+    QStringList calls;
+    const Transport fake{
+        [&] { return playing; },
+        [&](int d) { direction = d; calls << QStringLiteral("dir%1").arg(d); },
+        [&] { playing = !playing; calls << QStringLiteral("toggle"); },
+    };
+    reg.bindRun("playback.jkl-reverse", [&] { runJKL(-1, fake); });
+    reg.bindRun("playback.jkl-pause", [&] { runJKL(0, fake); });
+    reg.bindRun("playback.jkl-forward", [&] { runJKL(+1, fake); });
+    auto press = [&](const char* key) {
+        const QString id = reg.commandForKey(P, portableKey(key));
+        QAction* a = id.isEmpty() ? nullptr : reg.action(id.toUtf8().constData());
+        if (a) a->trigger();
+        return a != nullptr;
+    };
+    QStringList bad;
+    if (!press("L") || direction != 1 || !playing) bad << QStringLiteral("L from backward: dir=%1 playing=%2").arg(direction).arg(playing);
+    if (!press("L") || direction != 1 || !playing) bad << "L while playing forward stopped";
+    if (!press("K") || playing) bad << "K did not pause";
+    if (!press("K") || playing) bad << "K while paused started";
+    if (!press("J") || direction != -1 || !playing) bad << QStringLiteral("J: dir=%1 playing=%2").arg(direction).arg(playing);
+    check("jkl", bad.isEmpty(), bad.join("; ") + " calls=" + calls.join(','));
+    reg.reset();
+}
+
+void testHoldWith(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.setPreset(QStringLiteral("classic"));
+    int prev = 0, next = 0, trackPrev = 0;
+    reg.bindHoldWith("plate.lut-hold", Qt::Key_Up, [&] { ++prev; });
+    reg.bindHoldWith("plate.lut-hold", Qt::Key_Down, [&] { ++next; });
+    reg.bindRun("plate.track-prev", [&] { ++trackPrev; });
+    QStringList bad;
+    const QSet<int> holdingL{Qt::Key_L}, none;
+    // L held: the viewport claims Up (so plate.track-prev's action does not fire) and runs the with action.
+    if (!reg.holdWithClaims(holdingL, Qt::Key_Up, Qt::NoModifier)) bad << "L held does not claim Up";
+    if (!reg.runHoldWith(holdingL, Qt::Key_Up, Qt::NoModifier) || prev != 1) bad << "L+Up did not run LUT previous";
+    if (!reg.runHoldWith(holdingL, Qt::Key_Down, Qt::NoModifier) || next != 1) bad << "L+Down did not run LUT next";
+    if (trackPrev != 0) bad << "L+Up ran plate.track-prev";
+    if (reg.holdWithClaims(holdingL, Qt::Key_Up, Qt::ShiftModifier)) bad << "L held claims Shift+Up";
+    if (reg.holdWithClaims(holdingL, Qt::Key_Left, Qt::NoModifier)) bad << "L held claims Left";
+    // Up without L: nothing claims it and the Player action on Up is plate.track-prev.
+    if (reg.holdWithClaims(none, Qt::Key_Up, Qt::NoModifier) || reg.runHoldWith(none, Qt::Key_Up, Qt::NoModifier))
+        bad << "Up without L claimed";
+    const QString up = reg.commandForKey(P, portableKey("Up"));
+    if (up != QLatin1String("plate.track-prev")) bad << "Up -> " + up;
+    else reg.action("plate.track-prev")->trigger();
+    if (trackPrev != 1) bad << "Up without L did not run plate.track-prev";
+    // Editing binds no LUT hold: L held claims nothing.
+    reg.setPreset(QStringLiteral("editing"));
+    if (reg.holdWithClaims(holdingL, Qt::Key_Up, Qt::NoModifier)) bad << "editing: L+Up claimed";
+    check("hold-with", bad.isEmpty(), bad.join("; "));
+    reg.reset();
+}
+
+void testReserved(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    QStringList bad;
+    for (const char* preset : {"editing", "classic"}) {
+        reg.setPreset(QString::fromLatin1(preset));
+        const QStringList c = reg.conflicts("some.new-command", portableKey("="));
+        if (!c.contains(QStringLiteral("timeline.zoom-in"))) bad << QStringLiteral("%1: = conflicts [%2]").arg(preset, c.join(','));
+        for (const char* id : {"timeline.zoom-in", "timeline.zoom-out", "timeline.zoom-fit", "timeline.zoom-inout"}) {
+            const int i = [&] {
+                for (int j = 0; j < reg.commands().size(); ++j)
+                    if (QString::fromUtf8(reg.commands()[j].id) == QLatin1String(id)) return j;
+                return -1;
+            }();
+            if (i < 0) bad << QStringLiteral("%1 not registered").arg(id);
+            else if (reg.commands()[i].run) bad << QStringLiteral("%1 has a run").arg(id);
+        }
+    }
+    reg.setPreset(QStringLiteral("editing"));
+    check("reserved", bad.isEmpty(), bad.join(' '));
+}
+
+// A command key equal to a hold key (bare, same preset) is a conflict, both ways round.
+void testHoldConflict(Registry& reg)
+{
+    reg.reset();
+    reg.registerCommand(cmd("t.a", P, {QKeySequence("L")}, {QKeySequence("K")}));
+    reg.registerHoldKey({"t.h", QStringLiteral("Hold"), Qt::Key_L, Qt::Key_L, {}});
+    reg.registerHoldKey({"t.h2", QStringLiteral("Hold 2"), Qt::Key_W, Qt::Key_L, {}});
+    QStringList bad;
+    const QStringList c = reg.conflicts("t.a", QKeySequence("L"));
+    if (!c.contains("t.h")) bad << "command L vs hold L: [" + c.join(',') + "]";
+    if (!reg.conflicts("t.a", QKeySequence("Shift+L")).isEmpty()) bad << "Shift+L conflicts with a hold key";
+    const QStringList h = reg.conflicts("t.h", QKeySequence(Qt::Key_L));
+    if (!h.contains("t.a")) bad << "hold L vs command L: [" + h.join(',') + "]";
+    if (h.contains("t.h")) bad << "hold conflicts with itself";
+    if (reg.conflicts("t.h", QKeySequence(Qt::Key_W)).value(0) != QLatin1String("t.h2")) bad << "hold W vs hold W";
+    reg.setPreset(QStringLiteral("classic"));
+    if (!reg.conflicts("t.h", QKeySequence(Qt::Key_L)).contains("t.h2")) bad << "classic: two holds on L";
+    if (reg.conflicts("t.h", QKeySequence(Qt::Key_L)).contains("t.a")) bad << "classic: t.a is on K";
+    check("hold-conflict", bad.isEmpty(), bad.join("; "));
+    reg.reset();
+}
+
+void testDefaultPreset(Registry& reg)
+{
+    registerTwo(reg);
+    const QString path = tempPath(".ini");
+    QSettings s(path, QSettings::IniFormat);
+    reg.setDefaultPreset(QStringLiteral("classic"));
+    reg.load(s);
+    const bool classic = reg.preset() == "classic" && reg.key("t.a") == QKeySequence("Shift+I");
+    reg.setDefaultPreset(QStringLiteral("editing"));
+    reg.load(s);
+    const bool editing = reg.preset() == "editing";
+    s.setValue("Shortcuts/preset", "classic");
+    reg.load(s);
+    const bool stored = reg.preset() == "classic";
+    QFile::remove(path);
+    // The app's registration makes Editing the default.
+    reg.reset();
+    reg.setDefaultPreset(QStringLiteral("classic"));
+    registerAllCommands(reg);
+    const bool app = reg.defaultPreset() == "editing";
+    reg.reset();
+    check("default-preset", classic && editing && stored && app,
+          QStringLiteral("classic=%1 editing=%2 stored=%3 app=%4").arg(classic).arg(editing).arg(stored).arg(app));
 }
 
 void testPresetsConflictFree(Registry& reg)
@@ -828,25 +1215,24 @@ void testPresetsConflictFree(Registry& reg)
                     bad << QStringLiteral("%1:%2 %3 vs %4")
                                .arg(preset, c.id, k.toString(QKeySequence::PortableText), others.join(','));
             }
+        for (const HoldKey& h : reg.holdKeys()) {
+            const Qt::Key k = reg.holdKey(h.id);
+            if (k == Qt::Key_unknown) continue;
+            const QStringList others = reg.conflicts(h.id, QKeySequence(k));
+            if (!others.isEmpty())
+                bad << QStringLiteral("%1:hold %2 %3 vs %4")
+                           .arg(preset, h.id, QKeySequence(k).toString(QKeySequence::PortableText), others.join(','));
+        }
     }
     reg.setPreset(QStringLiteral("editing"));
     check("presets-conflict-free", !reg.commands().isEmpty() && bad.isEmpty(),
-          QStringLiteral("commands=%1 %2").arg(reg.commands().size()).arg(bad.join(' ')));
+          QStringLiteral("commands=%1 holds=%2 %3").arg(reg.commands().size()).arg(reg.holdKeys().size()).arg(bad.join(' ')));
 }
 
-void testHelpText(Registry& reg)
+// Help lines name every bound key of every id they place (and ranges their first and last).
+QStringList helpLabelProblems(Registry& reg, const QList<HelpLine>& lines, QStringList* shownOut)
 {
-    reg.reset();
-    registerAllCommands(reg);
-    const QList<HelpLine> lines = buildHelpLines(reg);
-    const QString text = buildHelpText(reg);
-    const QStringList headings = {"VIEWPORT LAYOUTS", "WINDOW / GUI", "WINDOW MENU", "PLAYBACK",
-                                  "TRANSFORMS", "COLOR CORRECTION", "REMOTE SESSIONS"};
     QStringList missing;
-    for (const QString& h : headings)
-        if (!text.contains(h)) missing << h;
-    // Every bound key of every placed id is on that id's line, as a whole key name after
-    // " - ", " / ", " or " or "(or " (so "F" does not match inside "F11" or "Shift+F").
     auto keysOfId = [&reg](const QString& id) {
         const QByteArray b = id.toUtf8();
         QList<QKeySequence> ks = reg.keys(b.constData());
@@ -854,21 +1240,39 @@ void testHelpText(Registry& reg)
             ks << QKeySequence(reg.holdKey(b.constData()));
         return ks;
     };
-    auto showsKey = [](const QString& line, const QString& label) {
-        const QRegularExpression re(QStringLiteral(R"((?: - | / | or |\(or ))") +
-                                    QRegularExpression::escape(label) + QStringLiteral(R"((?=$|\s|\)))"));
+    // A key name after " - ", " / ", " or " or "(or " (so "F" does not match inside "F11" or "Shift+F").
+    auto showsKey = [](const QString& line, const QString& label, const QString& after = QString()) {
+        const QRegularExpression re(QStringLiteral(R"((?: - | / | or |\(or ))") + QRegularExpression::escape(label) +
+                                    QRegularExpression::escape(after) + QStringLiteral(R"((?=$|\s|\)))"));
         return re.match(line).hasMatch();
     };
-    QStringList shown;
-    for (const HelpLine& l : lines)
+    for (const HelpLine& l : lines) {
         for (const QString& id : l.ids) {
-            shown << id;
+            if (shownOut) *shownOut << id;
             const QList<QKeySequence> ks = keysOfId(id);
             if (ks.isEmpty()) missing << id;
             for (const QKeySequence& k : ks)
                 if (!showsKey(l.text, k.toString(QKeySequence::PortableText)))
                     missing << id + "=" + k.toString(QKeySequence::PortableText);
         }
+        for (const QStringList& range : l.ranges) {
+            if (shownOut) *shownOut << range;
+            const QList<QKeySequence> first = keysOfId(range.first()), last = keysOfId(range.last());
+            if (first.isEmpty() || first.size() != last.size()) { missing << "range " + range.first(); continue; }
+            for (int j = 0; j < first.size(); ++j) {
+                // Every slot is bound, with the same modifiers, on consecutive keys.
+                for (int i = 0; i < range.size(); ++i) {
+                    const QList<QKeySequence> ks = keysOfId(range[i]);
+                    if (ks.size() <= j || ks[j][0].keyboardModifiers() != first[j][0].keyboardModifiers() ||
+                        int(ks[j][0].key()) != int(first[j][0].key()) + i)
+                        missing << QStringLiteral("range %1 not a run at %2").arg(range.first(), range[i]);
+                }
+                const QString lastName = QKeySequence(last[j][0].key()).toString(QKeySequence::PortableText);
+                if (!showsKey(l.text, first[j].toString(QKeySequence::PortableText), "-" + lastName))
+                    missing << QStringLiteral("range %1=%2-%3").arg(range.first(), first[j].toString(QKeySequence::PortableText), lastName);
+            }
+        }
+    }
     // Extras read "(+Shift = ...)" when they are the line's first key plus modifiers, else
     // "(Key = ...)"; every key of the extra is there.
     auto delta = [](const QKeySequence& base, const QKeySequence& extra) {
@@ -884,23 +1288,34 @@ void testHelpText(Registry& reg)
     };
     for (const HelpLine& l : lines)
         for (const QString& id : l.extraIds) {
+            if (shownOut) *shownOut << id;
             const QList<QKeySequence> base = keysOfId(l.ids.isEmpty() ? QString() : l.ids.first());
             const QList<QKeySequence> ks = keysOfId(id);
             if (base.isEmpty() || ks.isEmpty()) missing << id;
             for (const QKeySequence& k : ks) {
-                const QString d = delta(base.first(), k);
-                const QString form = (d.isEmpty() ? k.toString(QKeySequence::PortableText) : d) + " = ";
-                if (!l.text.contains("(" + form) && !l.text.contains(", " + form) && !l.text.contains(" or " + form))
-                    missing << id + "=" + form;
+                const QString d = base.isEmpty() ? QString() : delta(base.first(), k);
+                // Each key form opens a note or follows " or ", and is followed by " = " or " or ".
+                const QString form = d.isEmpty() ? k.toString(QKeySequence::PortableText) : d;
+                const QRegularExpression re(QStringLiteral(R"((?:\(|, | or ))") + QRegularExpression::escape(form) +
+                                            QStringLiteral(R"((?: = | or ))"));
+                if (!re.match(l.text).hasMatch()) missing << id + "=" + form;
             }
         }
-    // The keys the old hand-written overlay listed, now from the registry.
-    for (const char* want : {"Toggle Fullscreen - F11 or ", "Step one frame (back / forward) - Left / Right (or X / C)",
-                             "Play Direction (reverse / forward) - , / . (or < / >)", "Preferences - Ctrl+P or Ctrl+,"})
-        if (!text.contains(QString::fromUtf8(want))) missing << QStringLiteral("\"%1\"").arg(want);
-    // Every command and hold key is in the overlay unless deliberately left out here.
+    return missing;
+}
+
+void testHelpText(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    const QStringList headings = {"VIEWPORT LAYOUTS", "WINDOW / GUI", "WINDOW MENU", "PLAYBACK",
+                                  "TRANSFORMS", "COLOR CORRECTION", "REMOTE SESSIONS"};
+    // Commands the overlay deliberately leaves out: file actions the menu shows, and the
+    // timeline project's reserved keys (no run yet).
     const QStringList notInOverlay = {"file.quick-load", "file.load-manager", "file.save-session",
-                                      "file.open-session", "file.quit", "panels.minimize"};
+                                      "file.open-session", "file.quit", "panels.minimize",
+                                      "timeline.zoom-in", "timeline.zoom-out", "timeline.zoom-fit",
+                                      "timeline.zoom-inout"};
     const QStringList placed = helpPlacedIds();
     QStringList unplaced, unknown;
     for (const Command& c : reg.commands()) {
@@ -911,17 +1326,71 @@ void testHelpText(Registry& reg)
         if (!placed.contains(QString::fromUtf8(h.id))) unplaced << QString::fromUtf8(h.id);
     for (const QString& id : placed) {
         const QByteArray b = id.toUtf8();
-        if (!reg.action(b.constData()) && reg.holdKey(b.constData()) == Qt::Key_unknown) unknown << id;
+        const bool isHold = std::any_of(reg.holdKeys().begin(), reg.holdKeys().end(),
+                                        [&](const HoldKey& h) { return QString::fromUtf8(h.id) == id; });
+        if (!reg.action(b.constData()) && !isHold) unknown << id;
     }
-    const bool mouse = text.contains("Alt+LMB") && text.contains("Pan - LMB drag")
-                       && text.contains("Zoom - Mouse Wheel") && text.contains("Shift + LMB drag");
-    check("help-labels", missing.isEmpty() && unplaced.isEmpty() && unknown.isEmpty() && mouse
-                             && shown.contains("playback.play-pause"),
-          QStringLiteral("missing=%1 unplaced=%2 unknown=%3").arg(missing.join(','), unplaced.join(','), unknown.join(',')));
+    int maxLines = 0;
+    for (const char* preset : {"editing", "classic"}) {
+        reg.setPreset(QString::fromLatin1(preset));
+        const QList<HelpLine> lines = buildHelpLines(reg);
+        const QString text = buildHelpText(reg);
+        maxLines = std::max(maxLines, int(lines.size()));
+        QStringList missing;
+        for (const QString& h : headings)
+            if (!text.contains(h)) missing << h;
+        QStringList shown;
+        missing << helpLabelProblems(reg, lines, &shown);
+        // Every bound command the overlay places is on it in this preset.
+        for (const QString& id : placed) {
+            const QByteArray b = id.toUtf8();
+            const bool bound = !reg.keys(b.constData()).isEmpty() || reg.holdKey(b.constData()) != Qt::Key_unknown;
+            if (bound && !shown.contains(id)) missing << "not shown:" + id;
+        }
+        const bool mouse = text.contains("Alt+LMB") && text.contains("Pan - LMB drag")
+                           && text.contains("Zoom - Mouse Wheel") && text.contains("Shift + LMB drag");
+        const QByteArray name = QStringLiteral("help-labels-%1").arg(preset).toUtf8();
+        check(name.constData(), missing.isEmpty() && unplaced.isEmpty() && unknown.isEmpty() && mouse &&
+                                    shown.contains("playback.play-pause"),
+              QStringLiteral("lines=%1 missing=%2 unplaced=%3 unknown=%4")
+                  .arg(lines.size()).arg(missing.join(','), unplaced.join(','), unknown.join(',')));
+        if (qEnvironmentVariableIsSet("JEFE_SHORTCUTS_DUMP"))
+            std::printf("---- help text (%s) ----\n%s\n---- end ----\n", preset, text.toUtf8().constData());
+    }
+    reg.setPreset(QStringLiteral("editing"));
+    const QString text = buildHelpText(reg);
+    QStringList missing;
+    // The keys the old hand-written overlay listed, now from the registry, and the new run lines.
+    for (const char* want : {"Toggle Fullscreen - F11 or ", "Step one frame (back / forward) - Left / Right",
+                             "Play Direction (reverse / forward) - , / . (or < / >)", "Preferences - Ctrl+P or Ctrl+,",
+                             "Show Track A-D - 1-4", "CC favourite apply / save - Shift+1-5 / Ctrl+Shift+1-5",
+                             "FX favourite load / append / save - Shift+F1-F5 / Ctrl+F1-F5 / Ctrl+Shift+F1-F5",
+                             "Channels (red / green / blue / alpha) - R / G / B / A",
+                             "Reverse / Pause / Forward - J / K / L", "Enter Chat - Return or Enter"})
+        if (!text.contains(QString::fromUtf8(want))) missing << QStringLiteral("\"%1\"").arg(want);
+    reg.setPreset(QStringLiteral("classic"));
+    const QString classicText = buildHelpText(reg);
+    for (const QString& want : {QStringLiteral("Previous / Next LUT - L held + Up / Down"),
+                                QStringLiteral("Step one frame (back / forward) - Left / Right (or X / C)"),
+                                QStringLiteral("Play Reverse / Forward - < / >"), QStringLiteral("Enter Chat - Y")})
+        if (!classicText.contains(want)) missing << QStringLiteral("classic \"%1\"").arg(want);
+    if (classicText.contains("J / K / L")) missing << "classic shows J / K / L";
+    reg.setPreset(QStringLiteral("editing"));
+    check("help-runs", missing.isEmpty(), missing.join(','));
 
-    // The overlay is drawn centred and unclipped: it must not grow past today's string
-    // (53 lines in gfcPlateManager's fallback helpMessage).
-    check("help-fits", lines.size() <= 53, QStringLiteral("lines=%1").arg(lines.size()));
+    // A family whose keys stop forming a run is listed key by key.
+    reg.setOverride("color.cc-fav-apply-3", QKeySequence("Shift+9"));
+    const QList<HelpLine> broken = buildHelpLines(reg);
+    const QString brokenText = buildHelpText(reg);
+    const QStringList brokenProblems = helpLabelProblems(reg, broken, nullptr);
+    check("help-run-broken", !brokenText.contains("apply / save") && brokenText.contains(" / Shift+9 / ") &&
+                                 brokenText.contains("CC favourite save - Ctrl+Shift+1-5") && brokenProblems.isEmpty(),
+          brokenProblems.join(',') + " | " + brokenText.section("CC favourite", 1).left(200));
+    reg.clearOverride("color.cc-fav-apply-3");
+
+    // The overlay is drawn centred and unclipped: it may grow to at most 60 lines (53 in
+    // gfcPlateManager's fallback helpMessage, plus the brought-back 1.7 commands).
+    check("help-fits", maxLines <= 60, QStringLiteral("lines=%1").arg(maxLines));
     check("help-all-plates-suffix",
           text.contains(QStringLiteral("Fit to Screen - %1  (+Shift = all plates)").arg(reg.key("plate.fit").toString(QKeySequence::PortableText))),
           QString());
@@ -940,6 +1409,23 @@ void testHelpText(Registry& reg)
     check("tooltip-with-key",
           tooltipWithKey("Play", "playback.play-pause") == "Play (" + reg.label("playback.play-pause") + ")"
           && tooltipWithKey("Set In", "inout.set-in") == "Set In");
+    reg.reset();
+}
+
+// JEFE_SHORTCUTS_DUMP=1: print both presets' keys (for the docs and reviews).
+void dumpPresets(Registry& reg)
+{
+    if (!qEnvironmentVariableIsSet("JEFE_SHORTCUTS_DUMP")) return;
+    reg.reset();
+    registerAllCommands(reg);
+    std::printf("---- key table: id | editing | classic ----\n");
+    for (const Command& c : reg.commands())
+        std::printf("%s | %s | %s\n", c.id, keysText(c.editing).toUtf8().constData(), keysText(c.classic).toUtf8().constData());
+    for (const HoldKey& h : reg.holdKeys())
+        std::printf("%s (hold) | %s | %s\n", h.id,
+                    h.editing == Qt::Key_unknown ? "" : QKeySequence(h.editing).toString(QKeySequence::PortableText).toUtf8().constData(),
+                    h.classic == Qt::Key_unknown ? "" : QKeySequence(h.classic).toString(QKeySequence::PortableText).toUtf8().constData());
+    std::printf("---- end ----\n");
     reg.reset();
 }
 
@@ -1009,8 +1495,17 @@ int shortcutsSelfTest()
     testPersistUnknownPreset(reg);
     testPersistUnreadableKept(reg);
     testParity20(reg);
+    testPresetEditing(reg);
+    testParity17(reg);
+    testClassicNoJKL(reg);
+    testJKL(reg);
+    testHoldWith(reg);
+    testReserved(reg);
+    testHoldConflict(reg);
+    testDefaultPreset(reg);
     testPresetsConflictFree(reg);
     testHelpText(reg);
+    dumpPresets(reg);
     testTooltipGrep();
     reg.reset();
     std::printf("SHORTCUTS-TEST %s\n", g_fails == 0 ? "PASS" : "FAIL");

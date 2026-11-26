@@ -121,6 +121,11 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         return 2;
     }
 
+    // The checks assert the Editing keys (V is Go to End in the 1.7 preset); the preset is put
+    // back at the end, in memory only.
+    const sc::Registry::Snapshot keysBefore = sc::Registry::instance().snapshot();
+    sc::Registry::instance().setPreset(QStringLiteral("editing"));
+
     // Every registry command that runs, in order; each check clears it first.
     QStringList ran;
     const QMetaObject::Connection spy = connect(&sc::Registry::instance(), &sc::Registry::commandRan, this,
@@ -241,11 +246,11 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         const QString before = QString::fromStdString(remoteChatText());
         ran.clear();
         press(Qt::Key_I, QString(QChar(0x0131)), Qt::AltModifier);
-        if (ran.contains("inout.set-in-load")) bad << "Alt+I ran inout.set-in-load while chatting";
+        if (!ran.isEmpty()) bad << "Alt+I ran " + ran.join(",") + " while chatting";
         if (QString::fromStdString(remoteChatText()) == before) bad << "Alt+I did not type into the chat";
         remoteChatCancel();
         report("CHAT f", bad.isEmpty(),
-               bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run; Ctrl+2 ran layout.side; Alt+I typed, set-in-load not run") : bad.join("; "));
+               bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run; Ctrl+2 ran layout.side; Alt+I typed, no command run") : bad.join("; "));
     }
 
     {   // Viewport focused: Space toggles playback.
@@ -412,6 +417,7 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
     settleFor(100);
 
     disconnect(spy);
+    sc::Registry::instance().restore(keysBefore);
     printf("SHORTCUTS-FOCUS-TEST %s\n", allPass ? "PASS" : "FAIL");
     fflush(stdout);
     return allPass ? 0 : 2;

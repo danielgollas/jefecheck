@@ -316,10 +316,10 @@ bool Registry::isCustom() const { return !overrides_.isEmpty() || !holdOverrides
 
 void Registry::load(QSettings& s)
 {
-    const QString p = s.value(QStringLiteral("Shortcuts/preset"), kEditing).toString();
-    // A preset this build does not know (a later version's) behaves as editing but is written
-    // back as it was until the user picks one.
-    preset_ = p == kClassic ? kClassic : kEditing;
+    const QString p = s.value(QStringLiteral("Shortcuts/preset"), defaultPreset_).toString();
+    // A preset this build does not know (a later version's) behaves as the default but is
+    // written back as it was until the user picks one.
+    preset_ = (p == kClassic || p == kEditing) ? p : defaultPreset_;
     unknownPreset_ = (p == kClassic || p == kEditing) ? QString() : p;
     overrides_.clear();
     holdOverrides_.clear();
@@ -502,11 +502,20 @@ QStringList Registry::conflicts(const char* id, const QKeySequence& key) const
     if (key.isEmpty()) return out;
     const QString sid = QString::fromUtf8(id);
     const int self = indexOf(sid);
+    const int selfHold = holdIndex_.value(sid, -1);
     // An unregistered id is treated as Player, the narrower scope (it still clashes with Global).
     const Scope scope = self < 0 ? Scope::Player : commands_[self].scope;
     for (int i = 0; i < commands_.size(); ++i) {
         if (i == self || !scopesClash(scope, commands_[i].scope)) continue;
         if (effectiveKeys(i).contains(key)) out << QString::fromUtf8(commands_[i].id);
+    }
+    // A hold key is a bare key: it clashes with a command on that bare key and with another hold.
+    const QKeyCombination kc = key[0];
+    if (key.count() == 1 && kc.keyboardModifiers() == Qt::NoModifier) {
+        for (int i = 0; i < holdKeys_.size(); ++i) {
+            if (i == selfHold) continue;
+            if (holdKey(holdKeys_[i].id) == kc.key()) out << QString::fromUtf8(holdKeys_[i].id);
+        }
     }
     return out;
 }
@@ -518,6 +527,68 @@ QString Registry::commandForKey(Scope scope, const QKeySequence& key) const
         if (commands_[i].scope == scope && effectiveKeys(i).contains(key))
             return QString::fromUtf8(commands_[i].id);
     return {};
+}
+
+void Registry::setDefaultPreset(const QString& preset)
+{
+    if (preset != kEditing && preset != kClassic) {
+        qWarning("Shortcuts: unknown default preset \"%s\"; ignored", qPrintable(preset));
+        return;
+    }
+    defaultPreset_ = preset;
+}
+
+const std::function<void()>* Registry::holdWithEntry(const QSet<int>& held, int key,
+                                                     Qt::KeyboardModifiers mods) const
+{
+    if ((mods & ~Qt::KeypadModifier) != Qt::NoModifier) return nullptr;
+    for (const HoldKey& h : holdKeys_) {
+        if (h.with.isEmpty()) continue;
+        const Qt::Key hk = holdKey(h.id);
+        if (hk == Qt::Key_unknown || !held.contains(int(hk))) continue;
+        for (const auto& w : h.with)
+            if (int(w.first) == key) return &w.second;
+    }
+    return nullptr;
+}
+
+bool Registry::holdWithClaims(const QSet<int>& held, int key, Qt::KeyboardModifiers mods) const
+{
+    return holdWithEntry(held, key, mods) != nullptr;
+}
+
+bool Registry::runHoldWith(const QSet<int>& held, int key, Qt::KeyboardModifiers mods)
+{
+    const std::function<void()>* entry = holdWithEntry(held, key, mods);
+    if (!entry) return false;
+    const std::function<void()> fn = *entry;  // copy: fn may re-enter the registry
+    if (fn) fn();
+    return true;
+}
+
+void Registry::bindHoldWith(const char* holdId, Qt::Key key, std::function<void()> fn)
+{
+    const int i = holdIndex_.value(QString::fromUtf8(holdId), -1);
+    if (i < 0) {
+        qWarning("Shortcuts: bindHoldWith for unknown hold key \"%s\"", holdId);
+        return;
+    }
+    for (auto& w : holdKeys_[i].with)
+        if (w.first == key) {
+            w.second = std::move(fn);
+            return;
+        }
+    holdKeys_[i].with.append({key, std::move(fn)});
+}
+
+void runJKL(int direction, const Transport& t)
+{
+    if (direction == 0) {
+        if (t.isPlaying()) t.togglePause();
+        return;
+    }
+    t.setDirection(direction > 0 ? +1 : -1);
+    if (!t.isPlaying()) t.togglePause();
 }
 
 void Registry::reset()
@@ -536,6 +607,7 @@ void Registry::reset()
     unreadableHoldOverrides_.clear();
     unknownPreset_.clear();
     preset_ = kEditing;
+    defaultPreset_ = kEditing;
 }
 
 }  // namespace jefe::shortcuts

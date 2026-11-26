@@ -13,12 +13,18 @@ namespace {
 // One "Name - key" item. `ids` are joined as "a / b / c"; `extras` add a parenthesised
 // suffix such as "(+Shift = all plates)" built from the extra command's actual key.
 struct Extra { const char* id; const char* phrase; };
+// A numbered family (favourite slots 1-5, tracks A-D): drawn as one run, "Shift+1-5", when its
+// keys are consecutive with the same modifiers; otherwise its own line lists them key by key.
+struct Family { const char* name; QList<const char*> ids; };
 struct Item {
     const char* name;
     QList<const char*> ids;
     QList<Extra> extras;
+    QList<Family> families = {};      // non-empty: a run item ("Name a / b - run / run")
+    const char* holdWith = nullptr;   // a hold key with `with` keys: "Name - L held + Up / Down"
 };
-struct Row { QList<Item> items; const char* fixed = nullptr; };  // items share one line
+// Items share one line; `fixed` is a constant line, or a constant tail after the items.
+struct Row { QList<Item> items; const char* fixed = nullptr; };
 struct Section { const char* heading; QList<Row> rows; };
 
 constexpr const char* kAll = "all plates";
@@ -108,6 +114,103 @@ QString itemText(const Registry& reg, const Item& it, QStringList* idsOut, QStri
     return text;
 }
 
+// "Shift+1-5" for slots whose j-th keys are consecutive with equal modifiers; empty otherwise.
+QString runText(const Registry& reg, const QList<const char*>& ids, int j)
+{
+    QList<QKeyCombination> combos;
+    for (const char* id : ids) {
+        const QList<QKeySequence> ks = keysOf(reg, id);
+        if (ks.size() <= j) return {};
+        combos << ks[j][0];
+    }
+    if (combos.size() < 2) return {};
+    for (int i = 1; i < combos.size(); ++i)
+        if (combos[i].keyboardModifiers() != combos[0].keyboardModifiers() ||
+            int(combos[i].key()) != int(combos[0].key()) + i)
+            return {};
+    return portable(QKeySequence(combos.first())) + QLatin1Char('-') + portable(QKeySequence(combos.last().key()));
+}
+
+// The family's keys as runs ("Shift+1-5", or "Meta+Shift+1-5 (or Ctrl+Shift+1-5)" for two keys
+// per slot); empty when they are not runs.
+QString familyRun(const Registry& reg, const Family& f)
+{
+    if (f.ids.isEmpty()) return {};
+    const int n = int(keysOf(reg, f.ids.first()).size());
+    if (n == 0) return {};
+    for (const char* id : f.ids)
+        if (keysOf(reg, id).size() != n) return {};
+    QStringList runs;
+    for (int j = 0; j < n; ++j) {
+        const QString r = runText(reg, f.ids, j);
+        if (r.isEmpty()) return {};
+        runs << r;
+    }
+    return runs.size() == 1 ? runs.first() : QStringLiteral("%1 (or %2)").arg(runs.first(), runs.mid(1).join(QStringLiteral(" / ")));
+}
+
+QStringList idList(const QList<const char*>& ids)
+{
+    QStringList out;
+    for (const char* id : ids) out << QString::fromUtf8(id);
+    return out;
+}
+
+// A run item: one "Name a / b - run / run" part when every family is a run (`part`, with the
+// families in `ranges`); otherwise a line per family (`extraLines`), runs where they still are.
+void rangeItem(const Registry& reg, const Item& it, QString* part, QList<QStringList>* ranges,
+               QList<HelpLine>* extraLines)
+{
+    QStringList names, runs;
+    bool allRuns = true;
+    for (const Family& f : it.families) {
+        const QString r = familyRun(reg, f);
+        if (r.isEmpty()) allRuns = false;
+        if (f.name && *f.name) names << QString::fromUtf8(f.name);
+        runs << r;
+    }
+    const QString title = QString::fromUtf8(it.name);
+    if (allRuns) {
+        *part = QStringLiteral("%1 - %2").arg(names.isEmpty() ? title : title + QLatin1Char(' ') + names.join(QStringLiteral(" / ")),
+                                                runs.join(QStringLiteral(" / ")));
+        for (const Family& f : it.families) *ranges << idList(f.ids);
+        return;
+    }
+    for (int i = 0; i < it.families.size(); ++i) {
+        const Family& f = it.families[i];
+        const QString name = (f.name && *f.name) ? title + QLatin1Char(' ') + QString::fromUtf8(f.name) : title;
+        if (!runs[i].isEmpty()) {
+            *extraLines << HelpLine{QStringLiteral("%1 - %2").arg(name, runs[i]), {}, {}, {idList(f.ids)}};
+            continue;
+        }
+        QStringList slotKeys, ids;
+        for (const char* id : f.ids) {
+            QStringList labels;
+            for (const QKeySequence& k : keysOf(reg, id)) labels << portable(k);
+            if (labels.isEmpty()) continue;
+            slotKeys << labels.join(QStringLiteral(" or "));
+            ids << QString::fromUtf8(id);
+        }
+        if (!slotKeys.isEmpty())
+            *extraLines << HelpLine{QStringLiteral("%1 - %2").arg(name, slotKeys.join(QStringLiteral(" / "))), ids, {}, {}};
+    }
+}
+
+// "Name - L held + Up / Down"; empty when the hold key is unbound.
+QString holdWithText(const Registry& reg, const Item& it, QStringList* idsOut)
+{
+    const Qt::Key hk = reg.holdKey(it.holdWith);
+    if (hk == Qt::Key_unknown) return {};
+    QStringList with;
+    for (const HoldKey& h : reg.holdKeys())
+        if (QString::fromUtf8(h.id) == QString::fromUtf8(it.holdWith))
+            for (const auto& w : h.with) with << portable(QKeySequence(w.first));
+    if (with.isEmpty()) return {};
+    if (idsOut) *idsOut << QString::fromUtf8(it.holdWith);
+    return QStringLiteral("%1 - %2 held + %3").arg(QString::fromUtf8(it.name), portable(QKeySequence(hk)),
+                                                   with.join(QStringLiteral(" / ")));
+}
+
 QList<Section> sections()
 {
     return {
@@ -128,17 +231,22 @@ QList<Section> sections()
             {"Notes", {"panels.toggle-notes"}, {}}}},
           {{{"Timeline", {"panels.toggle-timeline"}, {}}, {"Playlist", {"panels.toggle-playlist"}, {}}}}}},
         {"PLAYBACK",
-         {{{{"Play / Pause", {"playback.play-pause"}, {}}}},
+         {{{{"Play / Pause", {"playback.play-pause"}, {}},
+            {"Reverse / Pause / Forward", {"playback.jkl-reverse", "playback.jkl-pause", "playback.jkl-forward"}, {}},
+            {"Play Reverse / Forward", {"playback.play-reverse", "playback.play-forward"}, {}}}},
           {{{"Play Direction (reverse / forward)",
              {"playback.direction-reverse", "playback.direction-forward"}, {}}}},
           {{{"Step one frame (back / forward)", {"playback.step-back", "playback.step-forward"}, {}}}},
           {{{"First / Last Frame", {"playback.go-start", "playback.go-end"}, {}}}},
           {{{"Loop Mode (once / loop / bounce)",
              {"playback.loop-once", "playback.loop", "playback.bounce"}, {}}}},
-          {{{"Cycle Track on Active Plate", {"plate.track-prev", "plate.track-next"}, {}}}},
+          {{{"Cycle Track on Active Plate", {"plate.track-prev", "plate.track-next"}, {}},
+            {"Show Track A-D", {}, {},
+             {{"", {"plate.show-track-1", "plate.show-track-2", "plate.show-track-3", "plate.show-track-4"}}}}}},
           {{{"Set IN Point", {"inout.set-in"},
-             {{"inout.reset-in", "timeline start"}, {"inout.set-in-load", "load from here"}}}}},
-          {{{"Set OUT Point", {"inout.set-out"}, {{"inout.reset-out", "timeline end"}}}}},
+             {{"inout.go-in", "go to"}, {"inout.reset-in", "timeline start"}, {"inout.set-in-load", "load from here"}}}}},
+          {{{"Set OUT Point", {"inout.set-out"}, {{"inout.go-out", "go to"}, {"inout.reset-out", "timeline end"}}},
+            {"Clear In and Out", {"inout.clear-both"}, {}}}},
           {{}, "Load from this point on - Alt+LMB (on a track or the timeline; loads all tracks)"}}},
         {"TRANSFORMS  (active plate)",
          {{{{"Fit to Screen", {"plate.fit"}, {{"plate.fit-all", kAll}}}}},
@@ -149,13 +257,28 @@ QList<Section> sections()
           {{{"Reset Color Correction", {"color.reset"}, {{"color.reset-all", kAll}}}}},
           {{}, "Pan - LMB drag  (+Alt = all plates)"},
           {{}, "Zoom - Mouse Wheel"}}},
-        {"COLOR CORRECTION  (hold key + LMB drag)",
-         {{{{"Gamma / Exposure", {"color.drag-gamma", "color.drag-exposure"}, {}}}},
-          {{{"Brightness / Contrast / Saturation",
-             {"color.drag-brightness", "color.drag-contrast", "color.drag-saturation"}, {}}}}}},
+        {"COLOR CORRECTION  (active plate)",
+         {{{{"Gamma / Exposure (hold + LMB drag)", {"color.drag-gamma", "color.drag-exposure"}, {}}}},
+          {{{"Brightness / Contrast / Saturation (hold + LMB drag)",
+             {"color.drag-brightness", "color.drag-contrast", "color.drag-saturation"}, {}}}},
+          {{{"Channels (red / green / blue / alpha)",
+             {"color.channel-r", "color.channel-g", "color.channel-b", "color.channel-a"}, {}}}},
+          {{{"Previous / Next LUT", {"plate.lut-prev", "plate.lut-next"}, {}},
+            {"Previous / Next LUT", {}, {}, {}, "plate.lut-hold"}}},
+          {{{"CC favourite", {}, {},
+             {{"apply", {"color.cc-fav-apply-1", "color.cc-fav-apply-2", "color.cc-fav-apply-3",
+                         "color.cc-fav-apply-4", "color.cc-fav-apply-5"}},
+              {"save", {"color.cc-fav-save-1", "color.cc-fav-save-2", "color.cc-fav-save-3",
+                        "color.cc-fav-save-4", "color.cc-fav-save-5"}}}}}},
+          {{{"FX favourite", {}, {},
+             {{"load", {"fx.fav-load-1", "fx.fav-load-2", "fx.fav-load-3", "fx.fav-load-4", "fx.fav-load-5"}},
+              {"append", {"fx.fav-append-1", "fx.fav-append-2", "fx.fav-append-3", "fx.fav-append-4",
+                          "fx.fav-append-5"}},
+              {"save", {"fx.fav-save-1", "fx.fav-save-2", "fx.fav-save-3", "fx.fav-save-4", "fx.fav-save-5"}}}}}}}},
         {"REMOTE SESSIONS",
          {{{}, "Remote Pointer - Shift + LMB drag"},
-          {{}, "Enter Chat - Return    Cancel - Escape"}}},
+          {{{"Enter Chat", {"remote.chat-type"}, {}}, {"Show / Hide Chat", {"remote.chat-toggle"}, {}}},
+           "Cancel - Escape"}}},
     };
 }
 
@@ -165,20 +288,30 @@ QList<HelpLine> buildHelpLines(const Registry& reg)
 {
     QList<HelpLine> out;
     const QString toggle = labelOf(reg, "help.toggle-overlay");
-    out << HelpLine{} << HelpLine{} << HelpLine{} << HelpLine{QStringLiteral("JefeCheck - Quick Help"), {}, {}};
+    out << HelpLine{} << HelpLine{} << HelpLine{} << HelpLine{QStringLiteral("JefeCheck - Quick Help"), {}, {}, {}};
     if (!toggle.isEmpty())
-        out << HelpLine{QStringLiteral("(toggle on/off with '%1')").arg(toggle.toLower()), {}, {}};
-    out << HelpLine{QStringLiteral("-------------"), {}, {}} << HelpLine{};
+        out << HelpLine{QStringLiteral("(toggle on/off with '%1')").arg(toggle.toLower()), {}, {}, {}};
+    out << HelpLine{QStringLiteral("-------------"), {}, {}, {}} << HelpLine{};
     for (const Section& s : sections()) {
-        out << HelpLine{QString::fromLatin1(s.heading), {}, {}};
+        out << HelpLine{QString::fromLatin1(s.heading), {}, {}, {}};
         for (const Row& r : s.rows) {
-            if (r.fixed) { out << HelpLine{QString::fromUtf8(r.fixed), {}, {}}; continue; }
+            if (r.items.isEmpty()) {
+                if (r.fixed) out << HelpLine{QString::fromUtf8(r.fixed), {}, {}, {}};
+                continue;
+            }
             QStringList parts, ids, extras;
+            QList<QStringList> ranges;
+            QList<HelpLine> after;  // families that stopped being runs, one line each
             for (const Item& it : r.items) {
-                const QString t = itemText(reg, it, &ids, &extras);
+                QString t;
+                if (!it.families.isEmpty()) rangeItem(reg, it, &t, &ranges, &after);
+                else if (it.holdWith) t = holdWithText(reg, it, &ids);
+                else t = itemText(reg, it, &ids, &extras);
                 if (!t.isEmpty()) parts << t;
             }
-            if (!parts.isEmpty()) out << HelpLine{parts.join(QStringLiteral("   ")), ids, extras};
+            if (r.fixed) parts << QString::fromUtf8(r.fixed);
+            if (!parts.isEmpty()) out << HelpLine{parts.join(QStringLiteral("   ")), ids, extras, ranges};
+            out << after;
         }
         out << HelpLine{};
     }
@@ -194,6 +327,8 @@ QStringList helpPlacedIds()
             for (const Item& it : r.items) {
                 for (const char* id : it.ids) ids << QString::fromUtf8(id);
                 for (const Extra& x : it.extras) ids << QString::fromUtf8(x.id);
+                for (const Family& f : it.families) ids << idList(f.ids);
+                if (it.holdWith) ids << QString::fromUtf8(it.holdWith);
             }
     return ids;
 }

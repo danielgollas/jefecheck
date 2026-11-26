@@ -138,6 +138,10 @@ int  getActivePlate();
 // per-tick refreshFromPlayback() reads the current state back so the
 // playhead and frame counter advance during playback.
 void togglePlayFwd();
+// JefeCheck 1.7's transport buttons ('>' / '<'): start playing that way, switch to it while
+// playing the other way, or stop when already playing that way.
+void playForwardToggle();
+void playReverseToggle();
 void rewindPlayback();
 void fastFwdPlayback();
 void setPlayDirection(int direction);   // FLTK '.' = +1 fwd, ',' = -1 rev
@@ -710,6 +714,7 @@ std::vector<ChatEntry> remoteChatEntries();
 void drawNetworkOverlay(int w, int h);
 bool remoteChatModeActive();
 void remoteChatBegin();
+void remoteChatToggleShown();   // show a faded chat overlay again, or fade it out now (1.7 Ctrl+Y)
 void remoteChatCancel();
 void remoteChatBackspace();
 void remoteChatAppend(const std::string& s);

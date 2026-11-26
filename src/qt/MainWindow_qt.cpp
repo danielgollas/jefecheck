@@ -3575,6 +3575,10 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         resize(1280, 800);
         settleFor(300);
     }
+    // The key checks below assert the Editing keys; the preset is put back afterwards (in memory
+    // only, nothing is written to QSettings).
+    const jefe::shortcuts::Registry::Snapshot keysBefore = jefe::shortcuts::Registry::instance().snapshot();
+    jefe::shortcuts::Registry::instance().setPreset(QStringLiteral("editing"));
     {   // Window menu: every panel has a shortcut, and no two menu-bar actions share one.
         QStringList bad;
         auto* wm = menuBar()->findChild<QMenu*>("menu.window");
@@ -3618,7 +3622,9 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         QStringList bad;
         if (reg.commands().isEmpty()) bad << "registry is empty";
         for (const sc::Command& c : reg.commands()) {
-            if (!c.run) bad << QString("%1 has no run").arg(c.id);
+            // timeline.* are reserved for the timeline project, which binds their runs.
+            if (!c.run && !QString::fromUtf8(c.id).startsWith(QLatin1String("timeline.")))
+                bad << QString("%1 has no run").arg(c.id);
             for (const QKeySequence& k : reg.keys(c.id)) {
                 const QStringList other = reg.conflicts(c.id, k);
                 if (!other.isEmpty())
@@ -3720,6 +3726,73 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         }
         report("PLAYER keys", bad.isEmpty(), bad.isEmpty() ? QString("< > , . 9 8 on the viewport; LUT cube claims F only") : bad.join("; "));
     }
+    {   // Preset keys on the focused viewport: Editing's J / K / L and Return, then the 1.7 preset's
+        // '<' (play reverse) and hold L + Down / Up (next / previous LUT, not the track).
+        namespace sc = jefe::shortcuts;
+        sc::Registry& reg = sc::Registry::instance();
+        QStringList bad, ran;
+        const QMetaObject::Connection spy = connect(&reg, &sc::Registry::commandRan, this,
+                [&ran](const QString& id, sc::Category) { ran << id; });
+        viewport_->setFocus(Qt::OtherFocusReason);
+        settleFor(50);
+        auto send = [this](QEvent::Type t, Qt::Key k, const QString& text) {
+            QKeyEvent ev(t, k, Qt::NoModifier, text);
+            QApplication::sendEvent(viewport_, &ev);
+        };
+        auto press = [&](Qt::Key k, const QString& text) {
+            send(QEvent::KeyPress, k, text);
+            send(QEvent::KeyRelease, k, text);
+        };
+        if (jefe::qt::isPlaying()) jefe::qt::pausePlayback();
+        jefe::qt::setPlayDirection(-1);
+        ran.clear();
+        press(Qt::Key_L, "l");
+        if (!ran.contains("playback.jkl-forward") || !jefe::qt::isPlaying() || jefe::qt::getPlayDirection() != 1)
+            bad << QString("L: ran [%1] playing=%2 dir=%3").arg(ran.join(",")).arg(jefe::qt::isPlaying()).arg(jefe::qt::getPlayDirection());
+        press(Qt::Key_K, "k");
+        if (jefe::qt::isPlaying()) bad << "K did not pause";
+        ran.clear();
+        press(Qt::Key_Return, "\r");
+        if (!ran.contains("remote.chat-type")) bad << "Return did not run remote.chat-type";
+        if (!jefe::qt::isRemoteConnected() && jefe::qt::remoteChatModeActive()) bad << "Return started chat while not connected";
+        jefe::qt::remoteChatCancel();
+        // Composing: the viewport claims Return (it sends the message) instead of the command.
+        jefe::qt::remoteChatBegin();
+        QKeyEvent ovReturn(QEvent::ShortcutOverride, Qt::Key_Return, Qt::NoModifier, "\r");
+        ovReturn.ignore();
+        QApplication::sendEvent(viewport_, &ovReturn);
+        if (!ovReturn.isAccepted()) bad << "chat mode does not claim Return";
+        jefe::qt::remoteChatCancel();
+
+        reg.setPreset(QStringLiteral("classic"));
+        press(Qt::Key_Less, "<");
+        if (!jefe::qt::isPlaying() || jefe::qt::getPlayDirection() != -1) bad << "classic < did not play reverse";
+        press(Qt::Key_Less, "<");
+        if (jefe::qt::isPlaying()) bad << "classic < again did not stop";
+        jefe::qt::setPlayDirection(+1);
+        const int track0 = jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate());
+        const int lut0 = jefe::qt::getLUTOnActivePlate();
+        ran.clear();
+        send(QEvent::KeyPress, Qt::Key_L, "l");
+        if (!viewport_->isHolding("plate.lut-hold")) bad << "L not held";
+        press(Qt::Key_Down, QString());
+        const int lutDown = jefe::qt::getLUTOnActivePlate();
+        press(Qt::Key_Up, QString());
+        send(QEvent::KeyRelease, Qt::Key_L, "l");
+        if (!jefe::qt::getLutNames().empty() && lutDown == lut0) bad << "L+Down did not change the LUT";
+        if (jefe::qt::getLUTOnActivePlate() != lut0) bad << "L+Down, L+Up did not return to the LUT";
+        if (jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate()) != track0) bad << "L+Up/Down changed the track";
+        if (ran.contains("plate.track-prev") || ran.contains("plate.track-next")) bad << "L+Up/Down ran " + ran.join(",");
+        jefe::qt::applyLUTToActivePlate(lut0);
+        ran.clear();
+        press(Qt::Key_Up, QString());
+        if (!ran.contains("plate.track-prev")) bad << "Up without L did not run plate.track-prev";
+        jefe::qt::showTrackOnActive(track0 < 0 ? 0 : track0);
+        disconnect(spy);
+        reg.setPreset(QStringLiteral("editing"));
+        report("PRESET keys", bad.isEmpty(), bad.isEmpty() ? QString("J/K/L, Return; classic < and hold L + Down/Up (%1 LUTs)").arg(jefe::qt::getLutNames().size()) : bad.join("; "));
+    }
+    jefe::shortcuts::Registry::instance().restore(keysBefore);
     {   // Bridge calls behind the brought-back 1.7 keys; every changed state is put back.
         QStringList bad;
         // R is a solo toggle (R alone, or back to RGB), so one press flips G and B, not R.
