@@ -127,6 +127,10 @@ private:
     QString preset_ = QStringLiteral("editing");
 };
 
+// Registers every command and hold key the app binds (ShortcutCommands_qt.cpp). Window-level
+// commands are registered with run = nullptr; MainWindow_Qt supplies them with bindRun().
+void registerAllCommands(Registry& reg);
+
 // --shortcuts-test: headless registry self-test. Returns the failure count.
 int shortcutsSelfTest();
 

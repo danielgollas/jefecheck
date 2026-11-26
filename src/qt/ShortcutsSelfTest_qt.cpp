@@ -15,6 +15,7 @@
 #include <QtGlobal>
 
 #include <cstdio>
+#include <utility>
 
 namespace jefe::shortcuts {
 
@@ -570,6 +571,150 @@ void testPersistComma(Registry& reg)
           before + " vs " + after);
 }
 
+// Every key the app binds today (GlViewport_Qt::keyPressEvent, MainWindow_Qt's QShortcuts and
+// menu keys) resolves to the registered command, in both presets.
+struct ParityRow {
+    Scope scope;
+    const char* key;  // PortableText
+    const char* id;
+};
+
+const ParityRow kParity20[] = {
+    // Viewport keyPressEvent (Player).
+    {Scope::Player, "Space", "playback.play-pause"},
+    {Scope::Player, "Left", "playback.step-back"},
+    {Scope::Player, "X", "playback.step-back"},
+    {Scope::Player, "Right", "playback.step-forward"},
+    {Scope::Player, "C", "playback.step-forward"},
+    {Scope::Player, "Home", "playback.go-start"},
+    {Scope::Player, "End", "playback.go-end"},
+    {Scope::Player, ",", "playback.direction-reverse"},
+    {Scope::Player, "<", "playback.direction-reverse"},
+    {Scope::Player, ".", "playback.direction-forward"},
+    {Scope::Player, ">", "playback.direction-forward"},
+    {Scope::Player, "8", "playback.loop-once"},
+    {Scope::Player, "9", "playback.loop"},
+    {Scope::Player, "0", "playback.bounce"},
+    {Scope::Player, "I", "inout.set-in"},
+    {Scope::Player, "O", "inout.set-out"},
+    {Scope::Player, "Shift+I", "inout.reset-in"},
+    {Scope::Player, "Shift+O", "inout.reset-out"},
+    {Scope::Player, "Alt+I", "inout.set-in-load"},
+    {Scope::Player, "Up", "plate.track-prev"},
+    {Scope::Player, "Down", "plate.track-next"},
+    // Layouts (MainWindow QShortcuts and viewport Ctrl+1-4; registered once, Global).
+    {Scope::Global, "Ctrl+1", "layout.single"},
+    {Scope::Global, "Ctrl+2", "layout.side"},
+    {Scope::Global, "Ctrl+3", "layout.top-bottom"},
+    {Scope::Global, "Ctrl+4", "layout.quad"},
+    // Plate transforms: View menu (active) and QShortcuts (all plates).
+    {Scope::Global, "F", "plate.fit"},
+    {Scope::Global, "Shift+F", "plate.fit-all"},
+    {Scope::Global, "V", "plate.flip"},
+    {Scope::Global, "Shift+V", "plate.flip-all"},
+    {Scope::Global, "M", "plate.flop"},
+    {Scope::Global, "Shift+M", "plate.flop-all"},
+    {Scope::Global, "T", "plate.text-mode"},
+    {Scope::Global, "Alt+T", "plate.text-mode-all"},
+    {Scope::Global, "Ctrl+R", "plate.reset"},
+    {Scope::Global, "Ctrl+Alt+R", "plate.reset-all"},
+    {Scope::Global, "Shift+R", "color.reset"},
+    {Scope::Global, "Shift+Alt+R", "color.reset-all"},
+    // File menu.
+    {Scope::Global, "Ctrl+O", "file.quick-load"},
+    {Scope::Global, "Ctrl+L", "file.load-manager"},
+    {Scope::Global, "Ctrl+Shift+O", "file.open-session"},
+    {Scope::Global, "Ctrl+P", "file.preferences"},
+    {Scope::Global, "Ctrl+,", "file.preferences"},
+    // View menu.
+    {Scope::Global, "F11", "view.toggle-fullscreen"},
+    {Scope::Global, "Meta+Ctrl+F", "view.toggle-fullscreen"},
+    {Scope::Global, "Ctrl+H", "view.toggle-histogram"},
+    {Scope::Global, "Ctrl+Alt+H", "view.toggle-histogram-all"},
+    {Scope::Global, "N", "view.toggle-note-overlay"},
+    // Window menu.
+    {Scope::Global, "F2", "panels.toggle-plate-manager"},
+    {Scope::Global, "F3", "panels.toggle-fx"},
+    {Scope::Global, "F4", "panels.toggle-luts"},
+    {Scope::Global, "F5", "panels.open-remote"},
+    {Scope::Global, "F6", "panels.open-render"},
+    {Scope::Global, "F7", "panels.toggle-notes"},
+    {Scope::Global, "F8", "panels.toggle-timeline"},
+    {Scope::Global, "F9", "panels.toggle-playlist"},
+    {Scope::Global, "Ctrl+Alt+F", "panels.hide-controls"},
+#ifdef Q_OS_MACOS
+    {Scope::Global, "Ctrl+M", "panels.minimize"},
+#endif
+    // Help menu.
+    {Scope::Global, "F1", "help.manual"},
+    {Scope::Global, "H", "help.toggle-overlay"},
+};
+
+void testParity20(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    QStringList bad;
+    int rows = 0;
+    for (const char* preset : {"editing", "classic"}) {
+        reg.setPreset(QString::fromLatin1(preset));
+        auto expect = [&](Scope scope, const QKeySequence& key, const char* id) {
+            ++rows;
+            const QString got = reg.commandForKey(scope, key);
+            if (got != QString::fromLatin1(id))
+                bad << QStringLiteral("%1:%2->%3(want %4)")
+                           .arg(preset, key.toString(QKeySequence::PortableText), got, id);
+        };
+        for (const ParityRow& r : kParity20)
+            expect(r.scope, QKeySequence::fromString(QString::fromLatin1(r.key), QKeySequence::PortableText), r.id);
+        // Standard keys: whatever the platform maps them to (first two bindings).
+        for (const auto& [standardKey, id] : {std::pair{QKeySequence::Save, "file.save-session"},
+                                      std::pair{QKeySequence::Quit, "file.quit"}}) {
+            const QList<QKeySequence> ks = QKeySequence::keyBindings(standardKey);
+            for (int i = 0; i < ks.size() && i < 2; ++i) expect(Scope::Global, ks[i], id);
+        }
+        const QPair<const char*, Qt::Key> holds[] = {
+            {"color.drag-gamma", Qt::Key_W},      {"color.drag-exposure", Qt::Key_E},
+            {"color.drag-brightness", Qt::Key_Q}, {"color.drag-contrast", Qt::Key_D},
+            {"color.drag-saturation", Qt::Key_S},
+        };
+        for (const auto& h : holds) {
+            ++rows;
+            if (reg.holdKey(h.first) != h.second)
+                bad << QStringLiteral("%1:hold %2=%3").arg(preset, h.first).arg(int(reg.holdKey(h.first)));
+        }
+    }
+    // Phase 1: both presets carry today's keys.
+    for (const Command& c : reg.commands()) {
+        if (c.editing != c.classic) bad << QStringLiteral("presets differ: %1").arg(c.id);
+        if (c.editing.size() > 2) bad << QStringLiteral(">2 keys: %1").arg(c.id);
+    }
+    reg.setPreset(QStringLiteral("editing"));
+    check("parity-2.0", bad.isEmpty(),
+          QStringLiteral("rows=%1 commands=%2 holds=%3 %4")
+              .arg(rows).arg(reg.commands().size()).arg(reg.holdKeys().size()).arg(bad.join(' ')));
+}
+
+void testPresetsConflictFree(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    QStringList bad;
+    for (const char* preset : {"editing", "classic"}) {
+        reg.setPreset(QString::fromLatin1(preset));
+        for (const Command& c : reg.commands())
+            for (const QKeySequence& k : reg.keys(c.id)) {
+                const QStringList others = reg.conflicts(c.id, k);
+                if (!others.isEmpty())
+                    bad << QStringLiteral("%1:%2 %3 vs %4")
+                               .arg(preset, c.id, k.toString(QKeySequence::PortableText), others.join(','));
+            }
+    }
+    reg.setPreset(QStringLiteral("editing"));
+    check("presets-conflict-free", !reg.commands().isEmpty() && bad.isEmpty(),
+          QStringLiteral("commands=%1 %2").arg(reg.commands().size()).arg(bad.join(' ')));
+}
+
 }  // namespace
 
 int shortcutsSelfTest()
@@ -601,6 +746,8 @@ int shortcutsSelfTest()
     testImportConflict(reg);
     testExportTwoKeysAndUnbound(reg);
     testPersistComma(reg);
+    testParity20(reg);
+    testPresetsConflictFree(reg);
     reg.reset();
     std::printf("SHORTCUTS-TEST %s\n", g_fails == 0 ? "PASS" : "FAIL");
     return g_fails;
