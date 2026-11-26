@@ -845,26 +845,59 @@ void testHelpText(Registry& reg)
     QStringList missing;
     for (const QString& h : headings)
         if (!text.contains(h)) missing << h;
-    // Every placed id: the line that shows it also shows its current key label.
+    // Every bound key of every placed id is on that id's line, as a whole key name after
+    // " - ", " / ", " or " or "(or " (so "F" does not match inside "F11" or "Shift+F").
+    auto keysOfId = [&reg](const QString& id) {
+        const QByteArray b = id.toUtf8();
+        QList<QKeySequence> ks = reg.keys(b.constData());
+        if (ks.isEmpty() && reg.holdKey(b.constData()) != Qt::Key_unknown)
+            ks << QKeySequence(reg.holdKey(b.constData()));
+        return ks;
+    };
+    auto showsKey = [](const QString& line, const QString& label) {
+        const QRegularExpression re(QStringLiteral(R"((?: - | / | or |\(or ))") +
+                                    QRegularExpression::escape(label) + QStringLiteral(R"((?=$|\s|\)))"));
+        return re.match(line).hasMatch();
+    };
     QStringList shown;
     for (const HelpLine& l : lines)
         for (const QString& id : l.ids) {
             shown << id;
-            const QByteArray b = id.toUtf8();
-            QString label = reg.key(b.constData()).toString(QKeySequence::PortableText);
-            if (label.isEmpty()) {
-                const Qt::Key k = reg.holdKey(b.constData());
-                if (k != Qt::Key_unknown) label = QKeySequence(k).toString(QKeySequence::PortableText);
-            }
-            if (label.isEmpty() || !l.text.contains(label)) missing << id;
+            const QList<QKeySequence> ks = keysOfId(id);
+            if (ks.isEmpty()) missing << id;
+            for (const QKeySequence& k : ks)
+                if (!showsKey(l.text, k.toString(QKeySequence::PortableText)))
+                    missing << id + "=" + k.toString(QKeySequence::PortableText);
         }
-    // Extras read "(+Shift = ...)" when they are the base key plus modifiers, else show their label.
+    // Extras read "(+Shift = ...)" when they are the line's first key plus modifiers, else
+    // "(Key = ...)"; every key of the extra is there.
+    auto delta = [](const QKeySequence& base, const QKeySequence& extra) {
+        const QKeyCombination b = base[0], e = extra[0];
+        const Qt::KeyboardModifiers added = e.keyboardModifiers() & ~b.keyboardModifiers();
+        if (b.key() != e.key() || !added || (b.keyboardModifiers() & ~e.keyboardModifiers())) return QString();
+        QString out;
+        if (added & Qt::ControlModifier) out += "+Ctrl";
+        if (added & Qt::MetaModifier) out += "+Meta";
+        if (added & Qt::AltModifier) out += "+Alt";
+        if (added & Qt::ShiftModifier) out += "+Shift";
+        return out;
+    };
     for (const HelpLine& l : lines)
         for (const QString& id : l.extraIds) {
-            const QByteArray b = id.toUtf8();
-            if (!l.text.contains(reg.key(b.constData()).toString(QKeySequence::PortableText)) && !l.text.contains("(+") && !l.text.contains(", +"))
-                missing << id;
+            const QList<QKeySequence> base = keysOfId(l.ids.isEmpty() ? QString() : l.ids.first());
+            const QList<QKeySequence> ks = keysOfId(id);
+            if (base.isEmpty() || ks.isEmpty()) missing << id;
+            for (const QKeySequence& k : ks) {
+                const QString d = delta(base.first(), k);
+                const QString form = (d.isEmpty() ? k.toString(QKeySequence::PortableText) : d) + " = ";
+                if (!l.text.contains("(" + form) && !l.text.contains(", " + form) && !l.text.contains(" or " + form))
+                    missing << id + "=" + form;
+            }
         }
+    // The keys the old hand-written overlay listed, now from the registry.
+    for (const char* want : {"Toggle Fullscreen - F11 or ", "Step one frame (back / forward) - Left / Right (or X / C)",
+                             "Play Direction (reverse / forward) - , / . (or < / >)", "Preferences - Ctrl+P or Ctrl+,"})
+        if (!text.contains(QString::fromUtf8(want))) missing << QStringLiteral("\"%1\"").arg(want);
     // Every command and hold key is in the overlay unless deliberately left out here.
     const QStringList notInOverlay = {"file.quick-load", "file.load-manager", "file.save-session",
                                       "file.open-session", "file.quit", "panels.minimize"};

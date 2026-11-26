@@ -30,15 +30,24 @@ bool isHold(const Registry& reg, const char* id)
     return false;
 }
 
-QString labelOf(const Registry& reg, const char* id)
+// Every current key of a command (or the hold key), in registry order. PortableText
+// ("Ctrl+Alt+F", "Left"): the overlay's glyph atlas has no arrow or macOS modifier symbols,
+// so native text ("⌥⌘F", "←") would draw as gaps.
+QList<QKeySequence> keysOf(const Registry& reg, const char* id)
 {
     if (isHold(reg, id)) {
         const Qt::Key k = reg.holdKey(id);
-        return k == Qt::Key_unknown ? QString() : QKeySequence(k).toString(QKeySequence::PortableText);
+        return k == Qt::Key_unknown ? QList<QKeySequence>{} : QList<QKeySequence>{QKeySequence(k)};
     }
-    // PortableText ("Ctrl+Alt+F", "Left"): the overlay's glyph atlas has no arrow or macOS
-    // modifier symbols, so native text ("⌥⌘F", "←") would draw as gaps.
-    return reg.key(id).toString(QKeySequence::PortableText);
+    return reg.keys(id);
+}
+
+QString portable(const QKeySequence& k) { return k.toString(QKeySequence::PortableText); }
+
+QString labelOf(const Registry& reg, const char* id)
+{
+    const QList<QKeySequence> ks = keysOf(reg, id);
+    return ks.isEmpty() ? QString() : portable(ks.first());
 }
 
 // "+Shift" / "+Alt+Shift" when `extra` is `base` plus modifiers; empty otherwise.
@@ -57,24 +66,43 @@ QString modifierDelta(const QKeySequence& base, const QKeySequence& extra)
     return out;
 }
 
-// Returns the line text, or empty when the item's first command is unbound.
+// Returns the line text, or empty when one of the item's commands is unbound.
+// One command: all its keys, "F11 or Meta+Ctrl+F". Several: their first keys joined with
+// " / ", then any second keys in brackets, "Left / Right (or X / C)".
 QString itemText(const Registry& reg, const Item& it, QStringList* idsOut, QStringList* extraOut)
 {
-    QStringList labels;
+    QList<QStringList> perId;
     for (const char* id : it.ids) {
-        const QString l = labelOf(reg, id);
-        if (l.isEmpty()) return {};
-        labels << l;
+        QStringList labels;
+        for (const QKeySequence& k : keysOf(reg, id)) labels << portable(k);
+        if (labels.isEmpty()) return {};
+        perId << labels;
         if (idsOut) *idsOut << QString::fromUtf8(id);
     }
-    QString text = QStringLiteral("%1 - %2").arg(QString::fromUtf8(it.name), labels.join(QStringLiteral(" / ")));
+    QString keys;
+    if (perId.size() == 1) {
+        keys = perId.first().join(QStringLiteral(" or "));
+    } else {
+        QStringList first, more;
+        for (const QStringList& labels : perId) {
+            first << labels.first();
+            more << labels.mid(1);
+        }
+        keys = first.join(QStringLiteral(" / "));
+        if (!more.isEmpty()) keys += QStringLiteral(" (or %1)").arg(more.join(QStringLiteral(" / ")));
+    }
+    QString text = QStringLiteral("%1 - %2").arg(QString::fromUtf8(it.name), keys);
     QStringList notes;
+    const QKeySequence base = reg.key(it.ids.first());
     for (const Extra& x : it.extras) {
-        const QString l = labelOf(reg, x.id);
-        if (l.isEmpty()) continue;                                   // unbound: no note
+        QStringList forms;
+        for (const QKeySequence& k : keysOf(reg, x.id)) {
+            const QString delta = modifierDelta(base, k);
+            forms << (delta.isEmpty() ? portable(k) : delta);
+        }
+        if (forms.isEmpty()) continue;                               // unbound: no note
         if (extraOut) *extraOut << QString::fromUtf8(x.id);
-        const QString delta = modifierDelta(reg.key(it.ids.first()), reg.key(x.id));
-        notes << QStringLiteral("%1 = %2").arg(delta.isEmpty() ? l : delta, QString::fromUtf8(x.phrase));
+        notes << QStringLiteral("%1 = %2").arg(forms.join(QStringLiteral(" or ")), QString::fromUtf8(x.phrase));
     }
     if (!notes.isEmpty()) text += QStringLiteral("  (%1)").arg(notes.join(QStringLiteral(", ")));
     return text;
