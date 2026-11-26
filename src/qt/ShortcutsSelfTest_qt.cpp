@@ -507,6 +507,76 @@ void testImportBad(Registry& reg)
     check("import-bad-missing-file", !reg.importFrom(tempPath(".nope"), &err) && oneLine(err), err);
 }
 
+// A command holds at most two keys: an import value with three is refused, keys unchanged.
+void testImportTooManyKeys(Registry& reg)
+{
+    registerTwo(reg);
+    reg.setOverride("t.a", QKeySequence("J"));
+    const QString before = allKeys(reg);
+    const QString path = tempPath(".jcshortcuts");
+    writeFile(path, R"({"format":"jefecheck-shortcuts","version":1,"basedOn":"editing",
+        "keys":{"t.a":["A","B","C"]}})");
+    QString err;
+    const bool ok = reg.importFrom(path, &err);
+    QFile::remove(path);
+    check("import-too-many-keys", !ok && oneLine(err) && err.contains("t.a") && allKeys(reg) == before, err);
+}
+
+// An id with a line break in it still gives a one-line error.
+void testImportErrorOneLine(Registry& reg)
+{
+    registerTwo(reg);
+    const QString path = tempPath(".jcshortcuts");
+    writeFile(path, "{\"format\":\"jefecheck-shortcuts\",\"version\":1,"
+                    "\"keys\":{\"t.a\\nsecond line\":\"Ctrl+Nonsense+\"}}");
+    QString err1;
+    const bool ok1 = reg.importFrom(path, &err1);
+    writeFile(path, "{\"format\":\"jefecheck-shortcuts\",\"version\":1,"
+                    "\"hold\":{\"t.h\\r\\nnext\":\"Ctrl+W\"}}");
+    QString err2;
+    const bool ok2 = reg.importFrom(path, &err2);
+    QFile::remove(path);
+    check("import-error-one-line", !ok1 && !ok2 && oneLine(err1) && oneLine(err2) && !err1.contains('\r') &&
+                                       !err2.contains('\r'),
+          err1 + " / " + err2);
+}
+
+// A file with only the header (no keys, no hold) resets every override to its basedOn preset.
+void testImportHeaderOnly(Registry& reg)
+{
+    registerTwo(reg);
+    reg.setOverride("t.a", QKeySequence("J"));
+    reg.setHoldOverride("t.h", Qt::Key_E);
+    const QString path = tempPath(".jcshortcuts");
+    writeFile(path, R"({"format":"jefecheck-shortcuts","version":1,"basedOn":"classic"})");
+    QString err;
+    const bool ok = reg.importFrom(path, &err);
+    QFile::remove(path);
+    check("import-header-only", ok && reg.preset() == "classic" && !reg.isCustom() &&
+                                    reg.key("t.a") == QKeySequence("Shift+I") && reg.holdKey("t.h") == Qt::Key_G,
+          allKeys(reg));
+}
+
+// setOverrideKeys: both keys of a command at once (the Preferences list edits each one); more
+// than two are cut to two; equal to the preset drops the override; presetKeys / hasOverride.
+void testOverrideKeys(Registry& reg)
+{
+    registerTwo(reg);
+    reg.setOverrideKeys("t.a", {QKeySequence("A"), QKeySequence("B"), QKeySequence("C")});
+    const bool two = reg.keys("t.a") == QList<QKeySequence>{QKeySequence("A"), QKeySequence("B")} &&
+                     reg.hasOverride("t.a") && reg.action("t.a")->shortcuts().size() == 2;
+    reg.setOverrideKeys("t.a", {QKeySequence("I")});
+    const bool dropped = !reg.hasOverride("t.a") && !reg.isCustom();
+    reg.setOverrideKeys("t.a", {});
+    const bool unbound = reg.keys("t.a").isEmpty() && reg.hasOverride("t.a");
+    const bool preset = reg.presetKeys("t.a") == QList<QKeySequence>{QKeySequence("I")} &&
+                        reg.presetHoldKey("t.h") == Qt::Key_W;
+    reg.setHoldOverride("t.h", Qt::Key_E);
+    const bool hold = reg.hasOverride("t.h") && reg.overrideCount() == 2;
+    check("override-keys", two && dropped && unbound && preset && hold,
+          keysText(reg.keys("t.a")) + " count=" + QString::number(reg.overrideCount()));
+}
+
 void testImportConflict(Registry& reg)
 {
     registerTwo(reg);
@@ -1526,8 +1596,19 @@ void testHelpText(Registry& reg)
         if (line.startsWith("Set IN Point") && line.contains(" - I")) inOk = false;
     check("help-override", inOk);
 
+    // Unbinding the base command of a line keeps the line for its still-bound extras.
     reg.setOverride("inout.set-in", QKeySequence());
-    check("help-unbound-omitted", !buildHelpText(reg).contains("Set IN Point"));
+    QString inLine;
+    for (const HelpLine& l : buildHelpLines(reg))
+        if (l.text.startsWith("Set IN Point")) inLine = l.text;
+    const QString goIn = reg.key("inout.go-in").toString(QKeySequence::PortableText);
+    const QString resetIn = reg.key("inout.reset-in").toString(QKeySequence::PortableText);
+    check("help-unbound-base-keeps-extras",
+          !goIn.isEmpty() && inLine.contains(goIn + " = go to") && inLine.contains(resetIn + " = timeline start") &&
+              !inLine.contains("Set IN Point - I"),
+          inLine);
+    reg.setOverride("inout.clear-both", QKeySequence());
+    check("help-unbound-omitted", !buildHelpText(reg).contains("Clear In and Out"));
     reg.setOverride("help.toggle-overlay", QKeySequence());
     check("help-header-unbound", !buildHelpText(reg).contains("toggle on/off"));
     check("tooltip-with-key",
@@ -1613,6 +1694,10 @@ int shortcutsSelfTest()
     testImportUnknownId(reg);
     testImportBad(reg);
     testImportConflict(reg);
+    testImportTooManyKeys(reg);
+    testImportErrorOneLine(reg);
+    testImportHeaderOnly(reg);
+    testOverrideKeys(reg);
     testExportTwoKeysAndUnbound(reg);
     testPersistComma(reg);
     testPersistTwoKeys(reg);

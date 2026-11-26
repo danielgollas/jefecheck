@@ -73,10 +73,17 @@ public:
     void pinPreset(const QString& preset);
     // An override equal to the preset's keys is dropped. Empty key = deliberately unbound.
     void setOverride(const char* id, const QKeySequence& key);
+    // Both keys of a command at once (more than two are cut to two). Empty list = unbound.
+    void setOverrideKeys(const char* id, const QList<QKeySequence>& keys);
     void clearOverride(const char* id);
     void setHoldOverride(const char* id, Qt::Key key);  // Qt::Key_unknown = unbound
     void clearHoldOverride(const char* id);
     bool isCustom() const;                   // any command or hold override present
+    // The current preset's own keys, ignoring overrides (Preferences "changed" state, reset).
+    QList<QKeySequence> presetKeys(const char* id) const;
+    Qt::Key presetHoldKey(const char* id) const;
+    bool hasOverride(const char* id) const;  // command or hold key differs from the preset
+    int overrideCount() const;               // commands plus hold keys that differ
 
     // QSettings: Shortcuts/preset, Shortcuts/overrides/<id> (QKeySequence::listToString,
     // PortableText: "A; B"), Shortcuts/holdOverrides/<id>. Values this build cannot use (ids not

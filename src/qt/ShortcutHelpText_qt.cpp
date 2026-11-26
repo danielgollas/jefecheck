@@ -72,21 +72,30 @@ QString modifierDelta(const QKeySequence& base, const QKeySequence& extra)
     return out;
 }
 
-// Returns the line text, or empty when one of the item's commands is unbound.
+// Returns the line text, or empty when one of the item's commands is unbound (a one-command
+// item with extras keeps its line for the extras still bound: "Set IN Point - none  (...)").
 // One command: all its keys, "F11 or Meta+Ctrl+F". Several: their first keys joined with
 // " / ", then any second keys in brackets, "Left / Right (or X / C)".
 QString itemText(const Registry& reg, const Item& it, QStringList* idsOut, QStringList* extraOut)
 {
     QList<QStringList> perId;
+    QStringList ids;
+    bool baseUnbound = false;
     for (const char* id : it.ids) {
         QStringList labels;
         for (const QKeySequence& k : keysOf(reg, id)) labels << portable(k);
-        if (labels.isEmpty()) return {};
+        if (labels.isEmpty()) {
+            if (it.ids.size() != 1 || it.extras.isEmpty()) return {};
+            baseUnbound = true;
+            break;
+        }
         perId << labels;
-        if (idsOut) *idsOut << QString::fromUtf8(id);
+        ids << QString::fromUtf8(id);
     }
     QString keys;
-    if (perId.size() == 1) {
+    if (baseUnbound) {
+        keys = QStringLiteral("none");
+    } else if (perId.size() == 1) {
         keys = perId.first().join(QStringLiteral(" or "));
     } else {
         QStringList first, more;
@@ -110,7 +119,9 @@ QString itemText(const Registry& reg, const Item& it, QStringList* idsOut, QStri
         if (extraOut) *extraOut << QString::fromUtf8(x.id);
         notes << QStringLiteral("%1 = %2").arg(forms.join(QStringLiteral(" or ")), QString::fromUtf8(x.phrase));
     }
+    if (baseUnbound && notes.isEmpty()) return {};   // nothing on the line is bound
     if (!notes.isEmpty()) text += QStringLiteral("  (%1)").arg(notes.join(QStringLiteral(", ")));
+    if (idsOut) *idsOut << ids;
     return text;
 }
 

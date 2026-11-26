@@ -113,6 +113,9 @@ bool jsonToKeys(const QJsonValue& v, QList<QKeySequence>* out)
     return true;
 }
 
+// An id from a file, quoted in a one-line error: line breaks folded, length capped.
+QString idForMessage(const QString& id) { return id.simplified().left(80); }
+
 }  // namespace
 
 Registry& Registry::instance()
@@ -297,6 +300,44 @@ void Registry::setOverride(const char* id, const QKeySequence& key)
     applyKeys();
 }
 
+void Registry::setOverrideKeys(const char* id, const QList<QKeySequence>& keys)
+{
+    const QString sid = QString::fromUtf8(id);
+    if (indexOf(sid) < 0) {
+        qWarning("Shortcuts: override for unknown command \"%s\"", id);
+        return;
+    }
+    QList<QKeySequence> ks;
+    for (const QKeySequence& k : keys)
+        if (!k.isEmpty() && !ks.contains(k) && ks.size() < 2) ks.append(k);
+    const auto before = overrides_.value(sid);
+    const bool had = overrides_.contains(sid);
+    storeOverride(sid, ks);
+    if (had == overrides_.contains(sid) && before == overrides_.value(sid)) return;
+    applyKeys();
+}
+
+QList<QKeySequence> Registry::presetKeys(const char* id) const
+{
+    const int i = indexOf(QString::fromUtf8(id));
+    return i < 0 ? QList<QKeySequence>{} : presetKeys(i);
+}
+
+Qt::Key Registry::presetHoldKey(const char* id) const
+{
+    const int i = holdIndex_.value(QString::fromUtf8(id), -1);
+    if (i < 0) return Qt::Key_unknown;
+    return preset_ == kClassic ? holdKeys_[i].classic : holdKeys_[i].editing;
+}
+
+bool Registry::hasOverride(const char* id) const
+{
+    const QString sid = QString::fromUtf8(id);
+    return overrides_.contains(sid) || holdOverrides_.contains(sid);
+}
+
+int Registry::overrideCount() const { return int(overrides_.size() + holdOverrides_.size()); }
+
 void Registry::clearOverride(const char* id)
 {
     unreadableOverrides_.remove(QString::fromUtf8(id));
@@ -475,7 +516,11 @@ bool Registry::importFrom(const QString& path, QString* error)
     for (auto it = keysO.begin(); it != keysO.end(); ++it) {
         QList<QKeySequence> ks;
         if (!jsonToKeys(it.value(), &ks))
-            return fail(QStringLiteral("Cannot read the key for \"%1\".").arg(it.key().left(80)));
+            return fail(QStringLiteral("Cannot read the key for \"%1\".").arg(idForMessage(it.key())));
+        if (ks.size() > 2)
+            return fail(QStringLiteral("\"%1\" has %2 keys; a command holds at most 2.")
+                            .arg(idForMessage(it.key()))
+                            .arg(ks.size()));
         if (indexOf(it.key()) < 0) ++unknown;
         else newKeys.insert(it.key(), ks);
     }
@@ -483,7 +528,7 @@ bool Registry::importFrom(const QString& path, QString* error)
     for (auto it = holdO.begin(); it != holdO.end(); ++it) {
         Qt::Key k;
         if (!it.value().isString() || !parseHold(it.value().toString(), &k))
-            return fail(QStringLiteral("Cannot read the hold key for \"%1\".").arg(it.key().left(80)));
+            return fail(QStringLiteral("Cannot read the hold key for \"%1\".").arg(idForMessage(it.key())));
         if (!holdIndex_.contains(it.key())) ++unknown;
         else newHold.insert(it.key(), k);
     }
