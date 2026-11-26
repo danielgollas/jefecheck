@@ -1641,6 +1641,7 @@ void dumpPresetsMarkdown(Registry& reg)
 {
     reg.reset();
     registerAllCommands(reg);
+    // main() may have printed startup lines ("No timer") before this; the table lines start with "|".
     auto text = [](const QList<QKeySequence>& ks) {
         QStringList out;
         for (const QKeySequence& k : ks) {

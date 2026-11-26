@@ -983,42 +983,58 @@ Hold keys are held while you click-drag on the viewport (see Color Correction). 
 
 #### Coming from JefeCheck 1.7
 
-If you used JefeCheck 1.7 you can switch back to its keys at any time: **File > Preferences… > Shortcuts**, then choose **JefeCheck 1.7** in the preset menu. The first time you start JefeCheck 2.0 a banner offers this choice. The two presets differ only in the commands below; everything else has the same key in both.
+If you used JefeCheck 1.7 you can switch back to its keys at any time: **File > Preferences… > Shortcuts**, then choose **JefeCheck 1.7** in the preset menu. The first time you start JefeCheck 2.0 a banner offers this choice. The two presets differ in the commands below; every other command has the same key in both.
 
-| Command | Editing (default) | JefeCheck 1.7 |
-|---|---|---|
-| Play Backward | `J` | (none) |
-| Pause | `K` | (none) |
-| Play Forward | `L` | (none) |
-| Play Reverse (toggle) | (none) | `<` |
-| Play Forward (toggle) | (none) | `>` |
-| Step Back One Frame | `Left` | `Left`, `X` |
-| Step Forward One Frame | `Right` | `Right`, `C` |
-| Go to Start | `Home` | `Z`, `Home` |
-| Go to End | `End` | `V`, `End` |
-| Play Direction: Reverse | `,`, `<` | `,` |
-| Play Direction: Forward | `.`, `>` | `.` |
-| Go to In Point | `Shift+I` | (none) |
-| Go to Out Point | `Shift+O` | (none) |
-| Reset In Point to Start | `Alt+I` | `Shift+I` |
-| Reset Out Point to End | `Alt+O` | `Shift+O` |
-| Clear In and Out | `Alt+X` | (none) |
-| Set In Point and Load from Here | `Alt+Shift+I` | `Alt+I` |
-| Chat: Start Typing | `Return`, `Enter` | `Y` |
-| Chat: Show / Hide | (none) | `Ctrl+Y` |
-| Fit All Plates | `Shift+F` | `Alt+F`, `Shift+F` |
-| Flip Vertical | `V` | `Ctrl+8` |
-| Flip All Plates | `Shift+V` | `Ctrl+Alt+8` |
-| Flop Horizontal | `M` | `M`, `Ctrl+9` |
-| Flop All Plates | `Shift+M` | `Shift+M`, `Ctrl+Alt+9` |
-| Open Session… | `Ctrl+Shift+O` | `Ctrl+O`, `Ctrl+Shift+O` |
-| Fullscreen | `F11` (macOS also `Control+Cmd+F`) | `Ctrl+F`, `F11` (macOS: `Control+F`) |
-| Playlist | `F9` | `Ctrl+P`, `F9` |
-| Hold for Previous / Next LUT (+ Up / Down) (hold) | (none) | `L`, then `Up` / `Down` |
-| Quick Load… | `Ctrl+O` | (none) on Windows and Linux, where 1.7's `Ctrl+O` opened a session; `Ctrl+O` on macOS, where that was `Control+O` |
-| Preferences… | `Ctrl+P`, `Ctrl+,` | `Ctrl+,` only on Windows and Linux, where 1.7's `Ctrl+P` opened the Playlist Manager |
+| Command | Editing (Windows / Linux) | 1.7 preset on macOS | 1.7 preset on Windows / Linux |
+|---|---|---|---|
+| Play Backward | `J` | (none) | (none) |
+| Pause | `K` | (none) | (none) |
+| Play Forward | `L` | (none) | (none) |
+| Play Reverse (toggle) | (none) | `<` | `<` |
+| Play Forward (toggle) | (none) | `>` | `>` |
+| Step Back One Frame | `Left` | `Left`, `X` | `Left`, `X` |
+| Step Forward One Frame | `Right` | `Right`, `C` | `Right`, `C` |
+| Go to Start | `Home` | `Z`, `Home` | `Z`, `Home` |
+| Go to End | `End` | `V`, `End` | `V`, `End` |
+| Play Direction: Reverse | `,`, `<` | `,` | `,` |
+| Play Direction: Forward | `.`, `>` | `.` | `.` |
+| Go to In Point | `Shift+I` | (none) | (none) |
+| Go to Out Point | `Shift+O` | (none) | (none) |
+| Reset In Point to Start | `Alt+I` | `Shift+I` | `Shift+I` |
+| Reset Out Point to End | `Alt+O` | `Shift+O` | `Shift+O` |
+| Clear In and Out | `Alt+X` | (none) | (none) |
+| Set In Point and Load from Here | `Alt+Shift+I` | `Alt+I` | `Alt+I` |
+| Append FX Favorites 1-5 | `Ctrl+F1-5` | `Control+F1-5`, `Alt+F1-5` | `Ctrl+F1-5` |
+| Save FX Favorites 1-5 | `Ctrl+Shift+F1-5` | `Control+Shift+F1-5` | `Ctrl+Shift+F1-5` |
+| Chat: Start Typing | `Return`, `Enter` | `Y` | `Y` |
+| Chat: Show / Hide | (none) | `Control+Y` | `Ctrl+Y` |
+| Layout: Single | `Ctrl+1` | `Control+1`, `Ctrl+1` | `Ctrl+1` |
+| Layout: Side by Side | `Ctrl+2` | `Control+2`, `Ctrl+2` | `Ctrl+2` |
+| Layout: Top / Bottom | `Ctrl+3` | `Control+3`, `Ctrl+3` | `Ctrl+3` |
+| Layout: 2 x 2 | `Ctrl+4` | `Control+4`, `Ctrl+4` | `Ctrl+4` |
+| Fit All Plates | `Shift+F` | `Alt+F`, `Shift+F` | `Alt+F`, `Shift+F` |
+| Flip Vertical | `V` | `Control+8` | `Ctrl+8` |
+| Flip All Plates | `Shift+V` | `Control+Alt+8` | `Ctrl+Alt+8` |
+| Flop Horizontal | `M` | `M`, `Control+9` | `M`, `Ctrl+9` |
+| Flop All Plates | `Shift+M` | `Shift+M`, `Control+Alt+9` | `Shift+M`, `Ctrl+Alt+9` |
+| Reset Plate | `Ctrl+R` | `Control+R`, `Ctrl+R` | `Ctrl+R` |
+| Reset All Plates | `Ctrl+Alt+R` | `Control+Alt+R`, `Ctrl+Alt+R` | `Ctrl+Alt+R` |
+| Show Histogram | `Ctrl+H` | `Control+H`, `Ctrl+H` | `Ctrl+H` |
+| Show Histogram (All Plates) | `Ctrl+Alt+H` | `Control+Alt+H`, `Ctrl+Alt+H` | `Ctrl+Alt+H` |
+| Quick Load… | `Ctrl+O` | `Ctrl+O` (that is `Cmd+O`; 1.7's `Control+O` is Open Session) | (none) (1.7's `Ctrl+O` is Open Session) |
+| Load Sequence Manager… | `Ctrl+L` | `Control+L`, `Ctrl+L` | `Ctrl+L` |
+| Save Session | `Ctrl+S` | `Control+S`, `Ctrl+S` | `Ctrl+S` |
+| Open Session… | `Ctrl+Shift+O` | `Control+O`, `Ctrl+Shift+O` | `Ctrl+O`, `Ctrl+Shift+O` |
+| Preferences… | `Ctrl+P`, `Ctrl+,` | `Ctrl+P`, `Ctrl+,` | `Ctrl+,` |
+| Quit | `Ctrl+Q` | `Ctrl+Q`, `Control+Q` | `Ctrl+Q` |
+| Fullscreen | `F11` (macOS also `Control+Cmd+F`) | `Control+F`, `F11` | `Ctrl+F`, `F11` |
+| Playlist | `F9` | `Control+P`, `F9` | `Ctrl+P`, `F9` |
+| Hide Controls | `Ctrl+Alt+F` | `Control+Alt+F`, `Ctrl+Alt+F` | `Ctrl+Alt+F` |
+| Hold L, then Up / Down: Previous / Next LUT | (none) | `L`, then `Up` / `Down` | `L`, then `Up` / `Down` |
 
-On macOS the 1.7 preset uses the physical `Control` key wherever 1.7 did (for example `Control+L` for the Load Sequence Manager); `Cmd+L` works too. The Editing preset also differs between platforms, because macOS keeps some keys for itself:
+In this table `Ctrl` is `Cmd` on macOS and `Control` is the physical Control key, which is what JefeCheck 1.7 used there; on macOS the 1.7 preset gives most of those commands both keys (for example `Control+L` and `Cmd+L`). The Editing column shows the Windows and Linux keys, with macOS exceptions below. Commands not listed have the same keys in both presets. The timeline zoom keys (`=`, `-`, `\`, `Shift+\`) are reserved in both presets for the upcoming timeline zoom and do nothing yet.
+
+The Editing preset differs between platforms, because macOS keeps some keys for itself:
 
 - **Save Color Favorite 1-5** is `Control+Shift+1-5` on macOS (`Cmd+Shift+3`, `4` and `5` are screenshots) and `Ctrl+Shift+1-5` on Windows and Linux.
 - **Append FX Favorite 1-5** is `Option+F1-5` on macOS (`Control+F1-5` is macOS keyboard navigation) and `Ctrl+F1-5` on Windows and Linux.
