@@ -9,6 +9,8 @@
 #include <QAction>
 #include <QApplication>
 #include <QImage>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
@@ -2165,6 +2167,30 @@ void testKeymapPage(Registry& reg)
     reg.reset();
 }
 
+// Preferences opens at 940 x 660, smaller on a small screen so Done / Cancel stay above a taskbar.
+void testPrefsInitialSize()
+{
+    const QSize big = PreferencesWindow_Qt::initialSize(QSize(1920, 1040));
+    const QSize win720 = PreferencesWindow_Qt::initialSize(QSize(1280, 680));  // 1280 x 720 less a 40 px taskbar
+    const QSize small = PreferencesWindow_Qt::initialSize(QSize(800, 560));
+    const QSize none = PreferencesWindow_Qt::initialSize(QSize());
+    // The dialog itself opens at the helper's size for its screen (offscreen: 800 x 600).
+    QSize opened, wanted;
+    if (QScreen* scr = QGuiApplication::primaryScreen()) {
+        PreferencesWindow_Qt dlg;
+        opened = dlg.size();
+        wanted = PreferencesWindow_Qt::initialSize(scr->availableGeometry().size());
+    }
+    check("prefs-opens-clamped", opened.isValid() && opened == wanted,
+          QStringLiteral("opened=%1x%2 wanted=%3x%4").arg(opened.width()).arg(opened.height())
+              .arg(wanted.width()).arg(wanted.height()));
+    check("prefs-initial-size", big == QSize(940, 660) && win720 == QSize(940, 620) && small == QSize(760, 500) &&
+                                    none == QSize(940, 660),
+          QStringLiteral("1920x1040=%1x%2 1280x680=%3x%4 800x560=%5x%6")
+              .arg(big.width()).arg(big.height()).arg(win720.width()).arg(win720.height())
+              .arg(small.width()).arg(small.height()));
+}
+
 // JEFE_SHORTCUTS_DUMP=1: print both presets' keys (for the docs and reviews).
 void dumpPresets(Registry& reg)
 {
@@ -2286,6 +2312,7 @@ int shortcutsSelfTest()
     testPersistUnknownPreset(reg);
     testPersistUnreadableKept(reg);
     testPrefsCancelDone(reg);
+    testPrefsInitialSize();
     testParity20(reg);
     testPresetEditing(reg);
     testParity17(reg);
