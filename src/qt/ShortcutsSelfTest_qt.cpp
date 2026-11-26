@@ -726,31 +726,72 @@ void testHelpText(Registry& reg)
 {
     reg.reset();
     registerAllCommands(reg);
+    const QList<HelpLine> lines = buildHelpLines(reg);
     const QString text = buildHelpText(reg);
     const QStringList headings = {"VIEWPORT LAYOUTS", "WINDOW / GUI", "WINDOW MENU", "PLAYBACK",
                                   "TRANSFORMS", "COLOR CORRECTION", "REMOTE SESSIONS"};
     QStringList missing;
     for (const QString& h : headings)
         if (!text.contains(h)) missing << h;
+    // Every placed id: the line that shows it also shows its current key label.
+    QStringList shown;
+    for (const HelpLine& l : lines)
+        for (const QString& id : l.ids) {
+            shown << id;
+            const QByteArray b = id.toUtf8();
+            QString label = reg.key(b.constData()).toString(QKeySequence::PortableText);
+            if (label.isEmpty()) {
+                const Qt::Key k = reg.holdKey(b.constData());
+                if (k != Qt::Key_unknown) label = QKeySequence(k).toString(QKeySequence::PortableText);
+            }
+            if (label.isEmpty() || !l.text.contains(label)) missing << id;
+        }
+    // Extras read "(+Shift = ...)" when they are the base key plus modifiers, else show their label.
+    for (const HelpLine& l : lines)
+        for (const QString& id : l.extraIds) {
+            const QByteArray b = id.toUtf8();
+            if (!l.text.contains(reg.key(b.constData()).toString(QKeySequence::PortableText)) && !l.text.contains("(+") && !l.text.contains(", +"))
+                missing << id;
+        }
+    // Every command and hold key is in the overlay unless deliberately left out here.
+    const QStringList notInOverlay = {"file.quick-load", "file.load-manager", "file.save-session",
+                                      "file.open-session", "file.quit", "panels.minimize"};
+    const QStringList placed = helpPlacedIds();
+    QStringList unplaced, unknown;
     for (const Command& c : reg.commands()) {
-        const QString l = reg.label(c.id);
-        if (!l.isEmpty() && c.scope == Scope::Global && text.contains(c.name) && !text.contains(l))
-            missing << QString::fromUtf8(c.id);
+        const QString id = QString::fromUtf8(c.id);
+        if (!placed.contains(id) && !notInOverlay.contains(id)) unplaced << id;
+    }
+    for (const HoldKey& h : reg.holdKeys())
+        if (!placed.contains(QString::fromUtf8(h.id))) unplaced << QString::fromUtf8(h.id);
+    for (const QString& id : placed) {
+        const QByteArray b = id.toUtf8();
+        if (!reg.action(b.constData()) && reg.holdKey(b.constData()) == Qt::Key_unknown) unknown << id;
     }
     const bool mouse = text.contains("Alt+LMB") && text.contains("Pan - LMB drag")
                        && text.contains("Zoom - Mouse Wheel") && text.contains("Shift + LMB drag");
-    check("help-labels", missing.isEmpty() && mouse && text.contains("Play / Pause - " + reg.label("playback.play-pause")),
-          missing.join(','));
+    check("help-labels", missing.isEmpty() && unplaced.isEmpty() && unknown.isEmpty() && mouse
+                             && shown.contains("playback.play-pause"),
+          QStringLiteral("missing=%1 unplaced=%2 unknown=%3").arg(missing.join(','), unplaced.join(','), unknown.join(',')));
+
+    // The overlay is drawn centred and unclipped: it must not grow past today's string
+    // (53 lines in gfcPlateManager's fallback helpMessage).
+    check("help-fits", lines.size() <= 53, QStringLiteral("lines=%1").arg(lines.size()));
+    check("help-all-plates-suffix",
+          text.contains(QStringLiteral("Fit to Screen - %1  (+Shift = all plates)").arg(reg.key("plate.fit").toString(QKeySequence::PortableText))),
+          QString());
 
     reg.setOverride("inout.set-in", QKeySequence("K"));
     const QString after = buildHelpText(reg);
-    bool inOk = after.contains("Set In Point at Playhead - K");
+    bool inOk = after.contains("Set IN Point - K");
     for (const QString& line : after.split('\n'))
-        if (line.startsWith("Set In Point at Playhead") && line.contains(" - I")) inOk = false;
+        if (line.startsWith("Set IN Point") && line.contains(" - I")) inOk = false;
     check("help-override", inOk);
 
     reg.setOverride("inout.set-in", QKeySequence());
-    check("help-unbound-omitted", !buildHelpText(reg).contains("Set In Point at Playhead"));
+    check("help-unbound-omitted", !buildHelpText(reg).contains("Set IN Point"));
+    reg.setOverride("help.toggle-overlay", QKeySequence());
+    check("help-header-unbound", !buildHelpText(reg).contains("toggle on/off"));
     check("tooltip-with-key",
           tooltipWithKey("Play", "playback.play-pause") == "Play (" + reg.label("playback.play-pause") + ")"
           && tooltipWithKey("Set In", "inout.set-in") == "Set In");

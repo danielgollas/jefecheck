@@ -135,6 +135,13 @@ void registerAllCommands(Registry& reg);
 // in gfcPlateManager. Unbound commands have no line.
 QString buildHelpText(const Registry& reg);
 
+// The same text line by line: `ids` are the commands/hold keys whose keys the line shows
+// (empty for headings, blanks and fixed mouse lines). helpPlacedIds() lists every id the
+// overlay places, so a test can tell when a new command is missing from it.
+struct HelpLine { QString text; QStringList ids; QStringList extraIds; };  // extras: "(+Shift = ...)" notes
+QList<HelpLine> buildHelpLines(const Registry& reg);
+QStringList helpPlacedIds();
+
 // "Play / Pause (Space)"; just `text` when the command is unbound.
 QString tooltipWithKey(const QString& text, const char* id);
 
