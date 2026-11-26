@@ -124,8 +124,10 @@ const char* layoutName(int framingMode) {
 
 // The registry's action for `id`, dressed as a menu item: the menu's own text and objectName
 // (UI tests resolve menu items by their menu.* name). The key comes from the registry.
+// A mistyped id is a programming error: stop at startup naming it, rather than crash later.
 QAction* registryMenuAction(const char* id, const QString& text, const char* objectName) {
     QAction* a = jefe::shortcuts::Registry::instance().action(id);
+    if (!a) qFatal("registryMenuAction: no registered shortcut command \"%s\" (menu item %s)", id, objectName);
     a->setText(text);
     a->setObjectName(QString::fromLatin1(objectName));
     return a;
@@ -3603,19 +3605,10 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             }
         };
         for (QAction* top : menuBar()->actions()) if (top->menu()) walk(top->menu());
-        // Standalone QShortcuts on the main window (none since the registry; REGISTRY keys checks that).
-        int standalone = 0;
-        for (QShortcut* sc : findChildren<QShortcut*>()) {
-            const QString key = sc->key().toString();
-            if (key.isEmpty()) continue;
-            ++standalone;
-            const QString name = sc->objectName().isEmpty() ? QString("QShortcut(%1)").arg(key) : sc->objectName();
-            if (seen.contains(key)) bad << QString("%1 shared by %2 and %3").arg(key, seen[key], name);
-            else seen[key] = name;
-        }
+        // No standalone QShortcut is left to compare against: REGISTRY keys asserts that.
         report("WINDOW menu", bad.isEmpty(),
-               bad.isEmpty() ? QString("8 panel shortcuts [%1]; %2 menu-bar + %3 standalone QShortcut keys, all distinct")
-                                   .arg(keys.join(" ")).arg(seen.size() - standalone).arg(standalone)
+               bad.isEmpty() ? QString("8 panel shortcuts [%1]; %2 menu-bar keys, all distinct")
+                                   .arg(keys.join(" ")).arg(seen.size())
                              : bad.join("; "));
     }
     {   // Every key lives in the registry: no standalone QShortcut, every command runs, no clashes,

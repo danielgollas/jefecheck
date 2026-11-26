@@ -380,14 +380,21 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
                 if (!ran.isEmpty()) bad << "ran " + ran.join(",");
                 report("REAL-KEY f", bad.isEmpty(),
                        bad.isEmpty() ? QString("typed into %1, plate.fit not run").arg(dockEdit->objectName()) : bad.join("; "));
-                // Control: the same real keystroke on the viewport does run Fit.
+                // Control: the same real keystroke on the viewport does run Fit. Check again
+                // that we are frontmost: the keystroke goes to whichever app is.
                 focusOn(viewport_);
-                ran.clear();
-                osa("tell application \"System Events\" to keystroke \"f\"");
-                settleFor(500);
-                report("REAL-KEY f control", ran.contains("plate.fit"),
-                       ran.contains("plate.fit") ? QString("viewport focused: plate.fit ran")
-                                                 : QString("viewport focused: ran [%1]").arg(ran.join(",")));
+                osa("tell application \"System Events\" to get unix id of (first process whose frontmost is true)",
+                    &frontPid);
+                if (frontPid != pid) {
+                    skip("REAL-KEY f control", QString("JefeCheck is not frontmost (%1)").arg(frontPid));
+                } else {
+                    ran.clear();
+                    osa("tell application \"System Events\" to keystroke \"f\"");
+                    settleFor(500);
+                    report("REAL-KEY f control", ran.contains("plate.fit"),
+                           ran.contains("plate.fit") ? QString("viewport focused: plate.fit ran")
+                                                     : QString("viewport focused: ran [%1]").arg(ran.join(",")));
+                }
             }
         }
         dockEdit->setText(saved);

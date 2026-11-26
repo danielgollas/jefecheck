@@ -964,8 +964,11 @@ void testTooltipGrep()
                 hits << QStringLiteral("%1:%2").arg(QFileInfo(f).fileName()).arg(n);
         }
     }
-    check("tooltip-grep", files > 0 && hits.isEmpty(),
-          QStringLiteral("files=%1 hits=%2").arg(files).arg(hits.join(',')));
+    if (files == 0) {  // a release build run away from its source tree: nothing to grep
+        std::printf("SHORTCUTS-TEST tooltip-grep SKIP no source files under %s/src/qt\n", JEFE_SOURCE_DIR);
+        return;
+    }
+    check("tooltip-grep", hits.isEmpty(), QStringLiteral("files=%1 hits=%2").arg(files).arg(hits.join(',')));
 #else
     check("tooltip-grep", false, QStringLiteral("JEFE_SOURCE_DIR not defined"));
 #endif
