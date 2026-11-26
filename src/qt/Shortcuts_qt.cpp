@@ -2,6 +2,12 @@
 // Keyboard shortcut registry. See Shortcuts_qt.h.
 #include "Shortcuts_qt.h"
 
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSaveFile>
+#include <QSettings>
 #include <QWidget>
 #include <QtGlobal>
 
@@ -15,6 +21,66 @@ const QString kClassic = QStringLiteral("classic");
 // Global keys clash with every scope; Player keys clash with Player and Global.
 // With two scopes every pair clashes; kept as a function so the rule has one home.
 bool scopesClash(Scope, Scope) { return true; }
+
+const char* const kFormat = "jefecheck-shortcuts";
+
+QString keyText(const QKeySequence& k) { return k.toString(QKeySequence::PortableText); }
+QString holdText(Qt::Key k)
+{
+    return k == Qt::Key_unknown ? QString() : keyText(QKeySequence(k));
+}
+
+// One shortcut: a single key plus modifiers (no chords). Empty text = unbound (valid).
+bool parseKey(const QString& text, QKeySequence* out)
+{
+    *out = QKeySequence();
+    if (text.isEmpty()) return true;
+    const QKeySequence k = QKeySequence::fromString(text, QKeySequence::PortableText);
+    if (k.isEmpty() || k.count() != 1 || k[0].key() == Qt::Key_unknown) return false;
+    *out = k;
+    return true;
+}
+
+// Hold keys are a bare key (no modifiers).
+bool parseHold(const QString& text, Qt::Key* out)
+{
+    *out = Qt::Key_unknown;
+    if (text.isEmpty()) return true;
+    const QKeySequence k = QKeySequence::fromString(text, QKeySequence::PortableText);
+    if (k.isEmpty() || k.count() != 1 || k[0].keyboardModifiers() != Qt::NoModifier ||
+        k[0].key() == Qt::Key_unknown)
+        return false;
+    *out = k[0].key();
+    return true;
+}
+
+// JSON value for a command: "" / "K" for 0-1 keys, an array for 2.
+QJsonValue keysToJson(const QList<QKeySequence>& ks)
+{
+    if (ks.size() <= 1) return ks.isEmpty() ? QString() : keyText(ks.first());
+    QJsonArray a;
+    for (const QKeySequence& k : ks) a.append(keyText(k));
+    return a;
+}
+
+bool jsonToKeys(const QJsonValue& v, QList<QKeySequence>* out)
+{
+    out->clear();
+    QStringList texts;
+    if (v.isString()) texts << v.toString();
+    else if (v.isArray()) {
+        for (const QJsonValue& e : v.toArray()) {
+            if (!e.isString() || e.toString().isEmpty()) return false;
+            texts << e.toString();
+        }
+    } else return false;
+    for (const QString& t : texts) {
+        QKeySequence k;
+        if (!parseKey(t, &k)) return false;
+        if (!k.isEmpty()) out->append(k);
+    }
+    return true;
+}
 
 }  // namespace
 
@@ -128,6 +194,8 @@ Qt::Key Registry::holdKey(const char* id) const
     const int i = holdIndex_.value(QString::fromUtf8(id), -1);
     if (i < 0) return Qt::Key_unknown;
     const HoldKey& h = holdKeys_[i];
+    const auto ov = holdOverrides_.constFind(QString::fromUtf8(h.id));
+    if (ov != holdOverrides_.cend()) return *ov;
     return preset_ == kClassic ? h.classic : h.editing;
 }
 
@@ -139,9 +207,32 @@ void Registry::setPreset(const QString& preset)
         qWarning("Shortcuts: unknown preset \"%s\"; ignored", qPrintable(preset));
         return;
     }
+    if (preset == preset_) return;
     preset_ = preset;
     overrides_.clear();
+    holdOverrides_.clear();
     applyKeys();
+}
+
+QList<QKeySequence> Registry::presetKeys(int i) const
+{
+    return preset_ == kClassic ? commands_[i].classic : commands_[i].editing;
+}
+
+void Registry::storeOverride(const QString& id, const QList<QKeySequence>& keys)
+{
+    const int i = indexOf(id);
+    if (i >= 0 && keys == presetKeys(i)) overrides_.remove(id);
+    else overrides_.insert(id, keys);
+}
+
+void Registry::storeHoldOverride(const QString& id, Qt::Key key)
+{
+    const int i = holdIndex_.value(id, -1);
+    const Qt::Key preset = i < 0 ? Qt::Key_unknown
+                                 : (preset_ == kClassic ? holdKeys_[i].classic : holdKeys_[i].editing);
+    if (i >= 0 && key == preset) holdOverrides_.remove(id);
+    else holdOverrides_.insert(id, key);
 }
 
 void Registry::setOverride(const char* id, const QKeySequence& key)
@@ -151,7 +242,10 @@ void Registry::setOverride(const char* id, const QKeySequence& key)
         qWarning("Shortcuts: override for unknown command \"%s\"", id);
         return;
     }
-    overrides_.insert(sid, key.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{key});
+    const auto before = overrides_.value(sid);
+    const bool had = overrides_.contains(sid);
+    storeOverride(sid, key.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{key});
+    if (had == overrides_.contains(sid) && before == overrides_.value(sid)) return;
     applyKeys();
 }
 
@@ -160,7 +254,181 @@ void Registry::clearOverride(const char* id)
     if (overrides_.remove(QString::fromUtf8(id)) > 0) applyKeys();
 }
 
-bool Registry::isCustom() const { return !overrides_.isEmpty(); }
+void Registry::setHoldOverride(const char* id, Qt::Key key)
+{
+    const QString sid = QString::fromUtf8(id);
+    if (!holdIndex_.contains(sid)) {
+        qWarning("Shortcuts: override for unknown hold key \"%s\"", id);
+        return;
+    }
+    const bool had = holdOverrides_.contains(sid);
+    const Qt::Key before = holdOverrides_.value(sid, Qt::Key_unknown);
+    storeHoldOverride(sid, key);
+    if (had == holdOverrides_.contains(sid) && before == holdOverrides_.value(sid, Qt::Key_unknown))
+        return;
+    applyKeys();
+}
+
+void Registry::clearHoldOverride(const char* id)
+{
+    if (holdOverrides_.remove(QString::fromUtf8(id)) > 0) applyKeys();
+}
+
+bool Registry::isCustom() const { return !overrides_.isEmpty() || !holdOverrides_.isEmpty(); }
+
+void Registry::load(QSettings& s)
+{
+    const QString p = s.value(QStringLiteral("Shortcuts/preset"), kEditing).toString();
+    preset_ = p == kClassic ? kClassic : kEditing;
+    overrides_.clear();
+    holdOverrides_.clear();
+    orphanOverrides_.clear();
+    orphanHoldOverrides_.clear();
+
+    s.beginGroup(QStringLiteral("Shortcuts/overrides"));
+    for (const QString& id : s.childKeys()) {
+        const QString text = s.value(id).toString();
+        if (indexOf(id) < 0) {
+            orphanOverrides_.insert(id, text);
+            continue;
+        }
+        QKeySequence k;
+        if (!parseKey(text, &k)) continue;  // unreadable value: fall back to the preset
+        storeOverride(id, k.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{k});
+    }
+    s.endGroup();
+
+    s.beginGroup(QStringLiteral("Shortcuts/holdOverrides"));
+    for (const QString& id : s.childKeys()) {
+        const QString text = s.value(id).toString();
+        if (!holdIndex_.contains(id)) {
+            orphanHoldOverrides_.insert(id, text);
+            continue;
+        }
+        Qt::Key k;
+        if (!parseHold(text, &k)) continue;
+        storeHoldOverride(id, k);
+    }
+    s.endGroup();
+    applyKeys();
+}
+
+void Registry::save(QSettings& s) const
+{
+    s.setValue(QStringLiteral("Shortcuts/preset"), preset_);
+    s.remove(QStringLiteral("Shortcuts/overrides"));
+    s.remove(QStringLiteral("Shortcuts/holdOverrides"));
+    for (auto it = overrides_.cbegin(); it != overrides_.cend(); ++it)
+        s.setValue(QStringLiteral("Shortcuts/overrides/") + it.key(),
+                   it.value().isEmpty() ? QString() : keyText(it.value().first()));
+    for (auto it = orphanOverrides_.cbegin(); it != orphanOverrides_.cend(); ++it)
+        s.setValue(QStringLiteral("Shortcuts/overrides/") + it.key(), it.value());
+    for (auto it = holdOverrides_.cbegin(); it != holdOverrides_.cend(); ++it)
+        s.setValue(QStringLiteral("Shortcuts/holdOverrides/") + it.key(), holdText(it.value()));
+    for (auto it = orphanHoldOverrides_.cbegin(); it != orphanHoldOverrides_.cend(); ++it)
+        s.setValue(QStringLiteral("Shortcuts/holdOverrides/") + it.key(), it.value());
+}
+
+Registry::Snapshot Registry::snapshot() const
+{
+    return {preset_, overrides_, holdOverrides_, orphanOverrides_, orphanHoldOverrides_};
+}
+
+void Registry::restore(const Snapshot& s)
+{
+    preset_ = s.preset == kClassic ? kClassic : kEditing;
+    overrides_ = s.overrides;
+    holdOverrides_ = s.holdOverrides;
+    orphanOverrides_ = s.orphanOverrides;
+    orphanHoldOverrides_ = s.orphanHoldOverrides;
+    applyKeys();
+}
+
+bool Registry::exportTo(const QString& path) const
+{
+    QJsonObject keys, hold;
+    for (int i = 0; i < commands_.size(); ++i)
+        keys.insert(QString::fromUtf8(commands_[i].id), keysToJson(effectiveKeys(i)));
+    for (const HoldKey& h : holdKeys_)
+        hold.insert(QString::fromUtf8(h.id), holdText(holdKey(h.id)));
+    QJsonObject root;
+    root.insert(QStringLiteral("format"), QString::fromLatin1(kFormat));
+    root.insert(QStringLiteral("version"), 1);
+    root.insert(QStringLiteral("basedOn"), preset_);
+    root.insert(QStringLiteral("keys"), keys);
+    root.insert(QStringLiteral("hold"), hold);
+    QSaveFile f(path);
+    if (!f.open(QIODevice::WriteOnly)) return false;
+    f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    return f.commit();
+}
+
+bool Registry::importFrom(const QString& path, QString* error)
+{
+    QString dummy;
+    QString& err = error ? *error : dummy;
+    err.clear();
+    auto fail = [&err](const QString& msg) { err = msg; return false; };
+
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) return fail(QStringLiteral("Cannot read the file."));
+    const QByteArray data = f.readAll();
+    if (data.trimmed().isEmpty()) return fail(QStringLiteral("The file is empty."));
+    QJsonParseError pe;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &pe);
+    if (pe.error != QJsonParseError::NoError || !doc.isObject())
+        return fail(QStringLiteral("Not a shortcuts file (invalid JSON)."));
+    const QJsonObject root = doc.object();
+    if (root.value(QStringLiteral("format")).toString() != QLatin1String(kFormat))
+        return fail(QStringLiteral("Not a JefeCheck shortcuts file."));
+    const QJsonValue ver = root.value(QStringLiteral("version"));
+    if (!ver.isDouble() || ver.toInt() < 1)
+        return fail(QStringLiteral("The file has no valid version."));
+    if (ver.toInt() > 1)
+        return fail(QStringLiteral("The file was made by a newer JefeCheck (version %1).").arg(ver.toInt()));
+    const QJsonValue based = root.value(QStringLiteral("basedOn"));
+    QString newPreset = kEditing;
+    if (!based.isUndefined()) {
+        newPreset = based.toString();
+        if (newPreset != kEditing && newPreset != kClassic)
+            return fail(QStringLiteral("Unknown preset in the file."));
+    }
+    const QJsonValue keysV = root.value(QStringLiteral("keys"));
+    const QJsonValue holdV = root.value(QStringLiteral("hold"));
+    if ((!keysV.isUndefined() && !keysV.isObject()) || (!holdV.isUndefined() && !holdV.isObject()))
+        return fail(QStringLiteral("The file's key lists are malformed."));
+
+    // Validate everything before touching any state.
+    QHash<QString, QList<QKeySequence>> newKeys;
+    QHash<QString, Qt::Key> newHold;
+    int unknown = 0;
+    const QJsonObject keysO = keysV.toObject();
+    for (auto it = keysO.begin(); it != keysO.end(); ++it) {
+        QList<QKeySequence> ks;
+        if (!jsonToKeys(it.value(), &ks))
+            return fail(QStringLiteral("Cannot read the key for \"%1\".").arg(it.key().left(80)));
+        if (indexOf(it.key()) < 0) ++unknown;
+        else newKeys.insert(it.key(), ks);
+    }
+    const QJsonObject holdO = holdV.toObject();
+    for (auto it = holdO.begin(); it != holdO.end(); ++it) {
+        Qt::Key k;
+        if (!it.value().isString() || !parseHold(it.value().toString(), &k))
+            return fail(QStringLiteral("Cannot read the hold key for \"%1\".").arg(it.key().left(80)));
+        if (!holdIndex_.contains(it.key())) ++unknown;
+        else newHold.insert(it.key(), k);
+    }
+
+    preset_ = newPreset;
+    overrides_.clear();
+    holdOverrides_.clear();
+    for (auto it = newKeys.cbegin(); it != newKeys.cend(); ++it) storeOverride(it.key(), it.value());
+    for (auto it = newHold.cbegin(); it != newHold.cend(); ++it) storeHoldOverride(it.key(), it.value());
+    applyKeys();
+    if (unknown > 0)
+        err = QStringLiteral("%1 unknown shortcut id(s) in the file were skipped.").arg(unknown);
+    return true;
+}
 
 void Registry::applyKeys()
 {
@@ -201,6 +469,9 @@ void Registry::reset()
     holdKeys_.clear();
     holdIndex_.clear();
     overrides_.clear();
+    holdOverrides_.clear();
+    orphanOverrides_.clear();
+    orphanHoldOverrides_.clear();
     preset_ = kEditing;
 }
 

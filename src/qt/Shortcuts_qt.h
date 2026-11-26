@@ -15,6 +15,7 @@
 
 #include <functional>
 
+class QSettings;
 class QWidget;
 
 namespace jefe::shortcuts {
@@ -60,10 +61,35 @@ public:
     Qt::Key holdKey(const char* id) const;
 
     QString preset() const;                  // "editing" | "classic"
-    void setPreset(const QString& preset);   // keeps no overrides
-    void setOverride(const char* id, const QKeySequence& key);  // empty = unbound
+    void setPreset(const QString& preset);   // a different preset keeps no overrides; the same one is a no-op
+    // An override equal to the preset's keys is dropped. Empty key = deliberately unbound.
+    void setOverride(const char* id, const QKeySequence& key);
     void clearOverride(const char* id);
-    bool isCustom() const;                   // any override present
+    void setHoldOverride(const char* id, Qt::Key key);  // Qt::Key_unknown = unbound
+    void clearHoldOverride(const char* id);
+    bool isCustom() const;                   // any command or hold override present
+
+    // QSettings: Shortcuts/preset, Shortcuts/overrides/<id>, Shortcuts/holdOverrides/<id>.
+    // Overrides for ids that are not registered are kept verbatim and written back by save().
+    void load(QSettings& s);                 // replaces preset and overrides; emits changed() once
+    void save(QSettings& s) const;
+
+    // Preferences Cancel: capture and restore preset, overrides, hold overrides and orphans.
+    struct Snapshot {
+        QString preset;
+        QHash<QString, QList<QKeySequence>> overrides;
+        QHash<QString, Qt::Key> holdOverrides;
+        QHash<QString, QString> orphanOverrides;
+        QHash<QString, QString> orphanHoldOverrides;
+    };
+    Snapshot snapshot() const;
+    void restore(const Snapshot& s);         // emits changed() once
+
+    // .jcshortcuts (JSON). exportTo writes the preset and every command's current keys.
+    // importFrom validates the whole file first; on failure nothing changes, returns false and
+    // *error is one line. On success *error may carry a one-line note (skipped unknown ids).
+    bool exportTo(const QString& path) const;
+    bool importFrom(const QString& path, QString* error);
 
     // Ids of other commands already holding `key` in a clashing scope (same scope, or
     // Global vs Player).
@@ -83,6 +109,9 @@ private:
     Registry() = default;
     int indexOf(const QString& id) const;
     QList<QKeySequence> effectiveKeys(int index) const;
+    QList<QKeySequence> presetKeys(int index) const;
+    void storeOverride(const QString& id, const QList<QKeySequence>& keys);  // drop-equal, no signal
+    void storeHoldOverride(const QString& id, Qt::Key key);                  // drop-equal, no signal
     void applyKeys();                        // re-sets every action's shortcuts, emits changed() once
     void runCommand(const QString& id);
 
@@ -92,6 +121,9 @@ private:
     QList<HoldKey> holdKeys_;
     QHash<QString, int> holdIndex_;
     QHash<QString, QList<QKeySequence>> overrides_;
+    QHash<QString, Qt::Key> holdOverrides_;
+    QHash<QString, QString> orphanOverrides_;      // stored for ids not registered; written back
+    QHash<QString, QString> orphanHoldOverrides_;
     QString preset_ = QStringLiteral("editing");
 };
 
