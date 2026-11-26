@@ -5,6 +5,7 @@
 #include "PreferencesWindow_qt.h"
 
 #include <QAction>
+#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QRegularExpression>
@@ -1634,6 +1635,35 @@ void dumpPresets(Registry& reg)
     reg.reset();
 }
 
+// --shortcuts-test --dump-presets: a Markdown table (Command | Editing | JefeCheck 1.7) of the
+// registry's real preset keys in portable names (Meta shown as Control), for the user docs.
+void dumpPresetsMarkdown(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    auto text = [](const QList<QKeySequence>& ks) {
+        QStringList out;
+        for (const QKeySequence& k : ks) {
+            QString t = k.toString(QKeySequence::PortableText);
+            t.replace(QStringLiteral("Meta+"), QStringLiteral("Control+"));
+            out << QStringLiteral("`") + t + QStringLiteral("`");
+        }
+        return out.isEmpty() ? QStringLiteral("(none)") : out.join(QStringLiteral(", "));
+    };
+    auto holdText = [](Qt::Key k) {
+        return k == Qt::Key_unknown ? QStringLiteral("(none)")
+                                    : QStringLiteral("`") + QKeySequence(k).toString(QKeySequence::PortableText) + QStringLiteral("`");
+    };
+    std::printf("| Command | Editing | JefeCheck 1.7 |\n|---|---|---|\n");
+    for (const Command& c : reg.commands())
+        std::printf("| %s | %s | %s |\n", c.name.toUtf8().constData(), text(c.editing).toUtf8().constData(),
+                    text(c.classic).toUtf8().constData());
+    for (const HoldKey& h : reg.holdKeys())
+        std::printf("| %s (hold) | %s | %s |\n", h.name.toUtf8().constData(), holdText(h.editing).toUtf8().constData(),
+                    holdText(h.classic).toUtf8().constData());
+    reg.reset();
+}
+
 // No setToolTip in src/qt may hard-code a key name; use tooltipWithKey(text, id).
 void testTooltipGrep()
 {
@@ -1671,6 +1701,10 @@ int shortcutsSelfTest()
 {
     g_fails = 0;
     Registry& reg = Registry::instance();
+    if (QCoreApplication::arguments().contains(QStringLiteral("--dump-presets"))) {
+        dumpPresetsMarkdown(reg);
+        return 0;
+    }
     testIdsUnique(reg);
     testActionKey(reg);
     testTwoKeys(reg);
