@@ -55,6 +55,11 @@ private:
 class ShortcutsPage_Qt : public QWidget {
     Q_OBJECT
 public:
+    // The list's rows: kIdRole holds the command / hold-key id, kKindRole the Kind.
+    enum Kind { Group = 0, CommandRow, HoldRow, PanelRow };
+    static constexpr int kIdRole = Qt::UserRole + 1;
+    static constexpr int kKindRole = Qt::UserRole + 2;
+
     explicit ShortcutsPage_Qt(QWidget* parent = nullptr);
 
     // Selects (and scrolls to) a command or hold-key row, clearing a search that hides it.
@@ -98,7 +103,6 @@ protected:
     void keyPressEvent(QKeyEvent* e) override;  // Escape from the page's other widgets
 
 private:
-    enum Kind { Group = 0, CommandRow, HoldRow, PanelRow };
     struct Pending {
         QString id;
         bool hold = false;
@@ -114,6 +118,7 @@ private:
     void finishCapture();
     void onCaptured(const QKeySequence& key);
     void requestBind(const Pending& p);  // reserved check, conflict bar, or apply
+    bool refuseReserved(const QKeySequence& key);  // a notice and true for a key the system takes
     void onUnbound();
     void apply(const Pending& p);
     void unbindFrom(const QString& id, const QKeySequence& key);

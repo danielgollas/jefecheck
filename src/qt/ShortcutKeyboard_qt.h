@@ -49,7 +49,7 @@ Qt::Key unshiftedKey(Qt::Key symbol);
 // shifted symbol ("<", not Shift+,); Shift on a digit stays Shift+digit, as the presets store it.
 QKeyCombination keyOnCap(Qt::Key cap, Qt::KeyboardModifiers mods);
 
-// The short name the map shows for a command or hold key ("Set In", "Gamma").
+// The short name the map shows for a command or hold key ("In", "Gam").
 QString shortCommandName(const QString& id, const QString& name);
 
 // One tint per category, derived from the theme's accent; readable under #e0e0e0 text.

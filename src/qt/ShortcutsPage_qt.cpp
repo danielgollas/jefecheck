@@ -35,8 +35,14 @@ namespace sc = jefe::shortcuts;
 namespace ui = jefe::qt::ui;
 
 namespace {
-constexpr int kRoleId = Qt::UserRole + 1;
-constexpr int kRoleKind = Qt::UserRole + 2;
+constexpr int kIdRole = ShortcutsPage_Qt::kIdRole;
+constexpr int kKindRole = ShortcutsPage_Qt::kKindRole;
+
+bool isDraggable(const QModelIndex& idx)
+{
+    const int kind = idx.siblingAtColumn(0).data(kKindRole).toInt();
+    return idx.isValid() && (kind == ShortcutsPage_Qt::CommandRow || kind == ShortcutsPage_Qt::HoldRow);
+}
 
 // The list's model: command and hold rows can be dragged out (their id as the command mime
 // type, for a drop on the keyboard map); groups and the read-only panel rows cannot, and
@@ -47,29 +53,21 @@ public:
     Qt::ItemFlags flags(const QModelIndex& idx) const override
     {
         Qt::ItemFlags f = QStandardItemModel::flags(idx) & ~Qt::ItemIsDropEnabled;
-        const int kind = idx.siblingAtColumn(0).data(kRoleKind).toInt();
-        if (!idx.isValid() || (kind != 1 && kind != 2)) f &= ~Qt::ItemIsDragEnabled;  // CommandRow, HoldRow
+        if (!isDraggable(idx)) f &= ~Qt::ItemIsDragEnabled;
         return f;
     }
     QStringList mimeTypes() const override { return {ShortcutKeyboard_Qt::commandMimeType()}; }
     QMimeData* mimeData(const QModelIndexList& indexes) const override
     {
         for (const QModelIndex& i : indexes) {
-            const int kind = i.siblingAtColumn(0).data(kRoleKind).toInt();
-            if (kind != 1 && kind != 2) continue;
+            if (!isDraggable(i)) continue;
             auto* m = new QMimeData;
-            m->setData(ShortcutKeyboard_Qt::commandMimeType(), i.siblingAtColumn(0).data(kRoleId).toString().toUtf8());
+            m->setData(ShortcutKeyboard_Qt::commandMimeType(), i.siblingAtColumn(0).data(kIdRole).toString().toUtf8());
             return m;
         }
         return nullptr;
     }
 };
-}  // namespace
-
-namespace {
-
-constexpr int kIdRole = Qt::UserRole + 1;
-constexpr int kKindRole = Qt::UserRole + 2;
 
 constexpr int kColName = 0;
 constexpr int kColKey0 = 1;
@@ -946,10 +944,7 @@ void ShortcutsPage_Qt::requestBind(const Pending& in)
     Pending p = in;
     const QKeySequence key = p.key;
     const QByteArray id = idBytes(p.id);
-    if (sc::isSystemReserved(key)) {  // the system takes it first: the command would never run
-        showNotice(tr("%1 is reserved by macOS.").arg(native(key)), true);
-        return;
-    }
+    if (refuseReserved(key)) return;
     if (p.hold) {
         if (key[0].keyboardModifiers() != Qt::NoModifier) {
             showNotice(tr("A hold key is one key without modifiers; %1 was not used.").arg(native(key)), true);
@@ -981,8 +976,7 @@ bool ShortcutsPage_Qt::assignKey(const QString& id, Qt::Key key, Qt::KeyboardMod
     if (!it) return false;
     const int kind = it->data(kKindRole).toInt();
     if (kind != CommandRow && kind != HoldRow) return false;
-    dismissConflict();  // a new drop replaces a pending conflict
-    finishCapture();
+    // Refusals first: a drop that binds nothing leaves an open conflict bar (and a capture) alone.
     if (kind == HoldRow && (mods & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         // A hold key is one bare key: the layer's modifiers cannot be part of it.
         showNotice(tr("A hold key is one key without modifiers; switch the map to no modifiers to assign it."), true);
@@ -996,6 +990,9 @@ bool ShortcutsPage_Qt::assignKey(const QString& id, Qt::Key key, Qt::KeyboardMod
         showNotice(tr("That key cannot be used."), true);
         return true;
     }
+    if (refuseReserved(seq)) return true;
+    dismissConflict();  // a new drop replaces a pending conflict
+    finishCapture();
     Pending p;
     p.id = id;
     p.hold = kind == HoldRow;
@@ -1003,6 +1000,13 @@ bool ShortcutsPage_Qt::assignKey(const QString& id, Qt::Key key, Qt::KeyboardMod
     p.key = seq;
     selectCommand(id);
     requestBind(p);
+    return true;
+}
+
+bool ShortcutsPage_Qt::refuseReserved(const QKeySequence& key)
+{
+    if (!sc::isSystemReserved(key)) return false;  // the system takes it first: the command would never run
+    showNotice(tr("%1 is reserved by macOS.").arg(native(key)), true);
     return true;
 }
 

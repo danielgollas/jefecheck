@@ -1738,7 +1738,7 @@ void testKeymapLayer(Registry& reg)
     const QString shiftAlt = map.keyCaption(Qt::Key_I);
     map.setLayer(Qt::NoModifier);
     const QString unbound = map.keyCaption(Qt::Key_U);
-    check("keymap-layer", none == "Set In" && shift == "Go In" && alt == "Clr In" && !shiftAlt.isEmpty() &&
+    check("keymap-layer", none == "In" && shift == QStringLiteral("→In") && alt == QStringLiteral("×In") && !shiftAlt.isEmpty() &&
                               unbound.isEmpty() && map.layer() == Qt::NoModifier,
           QStringLiteral("none=%1 shift=%2 alt=%3 shift+alt=%4 U=%5").arg(none, shift, alt, shiftAlt, unbound));
 
@@ -1754,7 +1754,7 @@ void testKeymapLayer(Registry& reg)
     reg.setOverride("inout.set-in", QKeySequence("P"));
     const QString moved = map.keyCaption(Qt::Key_P), left = map.keyCaption(Qt::Key_I);
     reg.clearOverride("inout.set-in");
-    check("keymap-changed", moved == "Set In" && left.isEmpty() && map.keyCaption(Qt::Key_I) == "Set In",
+    check("keymap-changed", moved == "In" && left.isEmpty() && map.keyCaption(Qt::Key_I) == "In",
           QStringLiteral("P=%1 I=%2").arg(moved, left));
 
     // Every layer of I, in layer order, for the side panel.
@@ -1856,6 +1856,22 @@ void testKeymapNoElide(Registry& reg)
 #endif
     check("keymap-no-elide", drawn > 0 && fits && map.font().pixelSize() == 13,
           QStringLiteral("drawn=%1 font=%2px hidden=%3").arg(drawn).arg(map.font().pixelSize()).arg(cut.join(' ')));
+
+    // No two commands share a short name (the numbered families, whose key shows the number,
+    // aside), so a caption never leaves the reader guessing which of two commands a key runs.
+    QHash<QString, QStringList> byCaption;
+    static const char* const families[] = {"color.cc-fav-", "fx.fav-", "plate.show-track-"};
+    for (const Command& c : reg.commands()) {
+        const QString id = QString::fromLatin1(c.id);
+        if (std::any_of(std::begin(families), std::end(families), [&](const char* f) { return id.startsWith(f); }))
+            continue;
+        byCaption[shortCommandName(id, c.name)] << id;
+    }
+    for (const HoldKey& h : reg.holdKeys()) byCaption[shortCommandName(QString::fromLatin1(h.id), h.name)] << h.id;
+    QStringList shared;
+    for (auto it = byCaption.cbegin(); it != byCaption.cend(); ++it)
+        if (it.value().size() > 1) shared << it.key() + "=" + it.value().join('/');
+    check("keymap-captions-distinct", shared.isEmpty(), shared.join(' '));
     reg.reset();
 }
 
@@ -1936,8 +1952,8 @@ void testKeymapDrop(Registry& reg)
         const QModelIndex gi = model->index(g, 0);
         for (int r = 0; r < model->rowCount(gi); ++r) {
             const QModelIndex ci = model->index(r, 0, gi);
-            if (ci.data(Qt::UserRole + 1).toString() == "playback.jkl-forward") cmdIdx = ci;
-            if (ci.data(Qt::UserRole + 2).toInt() == 3 && !panelIdx.isValid()) panelIdx = ci;
+            if (ci.data(ShortcutsPage_Qt::kIdRole).toString() == "playback.jkl-forward") cmdIdx = ci;
+            if (ci.data(ShortcutsPage_Qt::kKindRole).toInt() == ShortcutsPage_Qt::PanelRow && !panelIdx.isValid()) panelIdx = ci;
         }
     }
     const QMimeData* cm = cmdIdx.isValid() ? model->mimeData({cmdIdx}) : nullptr;
@@ -2012,6 +2028,16 @@ void testKeymapDrop(Registry& reg)
                                       raisedKey == QKeySequence("I") && reg.keys("playback.jkl-forward") == before,
           QStringLiteral("bar=%1 raised=%2 id=%3 key=%4").arg(!bar->isHidden()).arg(raised).arg(raisedId, raisedKey.toString()));
 
+    // A refused drop (a hold key on a modified layer) leaves the open conflict bar alone.
+    {
+        const QString h = reg.holdKeys().isEmpty() ? QString() : QString::fromUtf8(reg.holdKeys().first().id);
+        map->setLayer(Qt::ShiftModifier);
+        sendDrop(Qt::Key_G, h);
+        map->setLayer(Qt::NoModifier);
+        check("keymap-drop-refused-keeps-bar", !h.isEmpty() && !bar->isHidden() && !notice->isHidden() && raised == 1,
+              QStringLiteral("bar=%1 notice=%2 raised=%3").arg(!bar->isHidden()).arg(!notice->isHidden()).arg(raised));
+    }
+
     // A second drop replaces the pending conflict.
     sendDrop(Qt::Key_O, "playback.jkl-forward");
     const bool replaced = raised == 2 && raisedKey == QKeySequence("O");
@@ -2039,7 +2065,7 @@ void testKeymapDrop(Registry& reg)
     QApplication::sendEvent(map, &onMod);
     const QList<QKeySequence> k0 = reg.keys("playback.jkl-forward");
     sendDrop(Qt::Key_Q, "no.such.command");
-    const QString panelId = panelIdx.data(Qt::UserRole + 1).toString();
+    const QString panelId = panelIdx.data(ShortcutsPage_Qt::kIdRole).toString();
     sendDrop(Qt::Key_Q, panelId);
     check("keymap-drop-refuse", !onMod.isAccepted() && reg.keys("playback.jkl-forward") == k0 && bar->isHidden(),
           QStringLiteral("modAccepted=%1").arg(onMod.isAccepted()));
@@ -2140,7 +2166,7 @@ void testKeymapPage(Registry& reg)
     // Clicking "Go to In Point" there selects it in the list.
     QTreeWidgetItem* goIn = info->topLevelItemCount() > 1 ? info->topLevelItem(1) : nullptr;
     if (goIn) emit info->itemClicked(goIn, 1);
-    const QString current = page.list()->currentIndex().siblingAtColumn(0).data(Qt::UserRole + 1).toString();
+    const QString current = page.list()->currentIndex().siblingAtColumn(0).data(ShortcutsPage_Qt::kIdRole).toString();
     check("keymap-inspect-select", current == "inout.go-in", current);
 
     // Layer toggles: Shift on, then None.
@@ -2150,7 +2176,7 @@ void testKeymapPage(Registry& reg)
     if (toggles) {
         shiftBtn->click();
         toggles = map->layer() == Qt::ShiftModifier && shiftBtn->isChecked() && !noneBtn->isChecked() &&
-                  map->keyCaption(Qt::Key_I) == "Go In";
+                  map->keyCaption(Qt::Key_I) == QStringLiteral("→In");
         noneBtn->click();
         toggles = toggles && map->layer() == Qt::NoModifier && noneBtn->isChecked() && !shiftBtn->isChecked();
     }
@@ -2160,7 +2186,7 @@ void testKeymapPage(Registry& reg)
     QLineEdit* search = page.search();
     QKeyEvent altDown(QEvent::KeyPress, Qt::Key_Alt, Qt::AltModifier);
     QApplication::sendEvent(search, &altDown);
-    const bool held = map->layer() == Qt::AltModifier && map->keyCaption(Qt::Key_I) == "Clr In";
+    const bool held = map->layer() == Qt::AltModifier && map->keyCaption(Qt::Key_I) == QStringLiteral("×In");
     QKeyEvent altUp(QEvent::KeyRelease, Qt::Key_Alt, Qt::NoModifier);
     QApplication::sendEvent(search, &altUp);
     const bool released = map->layer() == Qt::NoModifier;

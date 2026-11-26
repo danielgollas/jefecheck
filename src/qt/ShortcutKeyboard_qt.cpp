@@ -245,27 +245,28 @@ bool capForKey(const QKeyCombination& key, Qt::Key* cap, Qt::KeyboardModifiers* 
 QString shortCommandName(const QString& id, const QString& name)
 {
     // Each fits a one-unit key at the preferred size in the 13 px font (--shortcuts-test
-    // keymap-no-elide). "*" = all plates. The tooltip and the side panel give the full name.
+    // keymap-no-elide). "*" = all plates, "→" go to, "×" clear, "<<" / "||" / ">>" the J/K/L
+    // shuttle. The tooltip and the side panel give the full name.
     static const QHash<QString, QString> table = {
-        {"playback.play-pause", "Play"},       {"playback.jkl-reverse", "Rev"},
-        {"playback.jkl-pause", "Stop"},       {"playback.jkl-forward", "Play"},
+        {"playback.play-pause", "Play"},       {"playback.jkl-reverse", "<<"},
+        {"playback.jkl-pause", "||"},         {"playback.jkl-forward", ">>"},
         {"playback.play-reverse", "Rev"},      {"playback.play-forward", "Fwd"},
-        {"playback.step-back", "Step"},        {"playback.step-forward", "Step"},
+        {"playback.step-back", "<Step"},       {"playback.step-forward", "Step>"},
         {"playback.go-start", "Start"},        {"playback.go-end", "End"},
-        {"playback.direction-reverse", "Dir"}, {"playback.direction-forward", "Dir"},
+        {"playback.direction-reverse", "<Dir"}, {"playback.direction-forward", "Dir>"},
         {"playback.loop-once", "Once"},        {"playback.loop", "Loop"},
         {"playback.bounce", "Bnc"},
-        {"inout.set-in", "Set In"},            {"inout.set-out", "Out"},
-        {"inout.go-in", "Go In"},              {"inout.go-out", "Go O"},
-        {"inout.reset-in", "Clr In"},          {"inout.reset-out", "Clr O"},
-        {"inout.clear-both", "Clr IO"},        {"inout.set-in-load", "In+Ld"},
+        {"inout.set-in", "In"},                {"inout.set-out", "Out"},
+        {"inout.go-in", "→In"},                {"inout.go-out", "→Out"},
+        {"inout.reset-in", "×In"},             {"inout.reset-out", "×Out"},
+        {"inout.clear-both", "×IO"},           {"inout.set-in-load", "In+Ld"},
         {"plate.track-prev", "Prev"},          {"plate.track-next", "Next"},
         {"color.channel-r", "Red"},            {"color.channel-g", "Grn"},
         {"color.channel-b", "Blue"},           {"color.channel-a", "Alpha"},
         {"plate.lut-prev", "LUT-"},            {"plate.lut-next", "LUT+"},
         {"timeline.zoom-in", "Zm+"},           {"timeline.zoom-out", "Zm-"},
         {"timeline.zoom-fit", "ZFit"},         {"timeline.zoom-inout", "Zm IO"},
-        {"remote.chat-type", "Chat"},          {"remote.chat-toggle", "Chat"},
+        {"remote.chat-type", "Msg"},           {"remote.chat-toggle", "Chat"},
         {"layout.single", "1-Up"},             {"layout.side", "Side"},
         {"layout.top-bottom", "Stack"},        {"layout.quad", "2x2"},
         {"plate.fit", "Fit"},                  {"plate.fit-all", "Fit*"},
@@ -274,7 +275,7 @@ QString shortCommandName(const QString& id, const QString& name)
         {"plate.text-mode", "Text"},           {"plate.text-mode-all", "Text*"},
         {"plate.reset", "Reset"},              {"plate.reset-all", "Rst*"},
         {"view.toggle-histogram", "Hist"},     {"view.toggle-histogram-all", "Hist*"},
-        {"view.toggle-note-overlay", "Notes"}, {"color.reset", "CC 0"},
+        {"view.toggle-note-overlay", "NtOvl"}, {"color.reset", "CC 0"},
         {"color.reset-all", "CC 0*"},          {"file.quick-load", "Load"},
         {"file.load-manager", "Mgr"},          {"file.save-session", "Save"},
         {"file.open-session", "Open"},         {"file.preferences", "Prefs"},
