@@ -223,6 +223,12 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     buildDocks();
     restoreLayout();
     shortcuts.attach(this, {viewport_, timelinePanelWidget_->scrubber(), timelinePanelWidget_->tracks()});
+    // The on-screen help (H) reads its keys from the registry and follows every change.
+    auto refreshHelp = [&shortcuts] {
+        jefe::qt::setHelpMessage(jefe::shortcuts::buildHelpText(shortcuts).toStdString());
+    };
+    refreshHelp();
+    connect(&shortcuts, &jefe::shortcuts::Registry::changed, this, refreshHelp);
 
     // Seed session state from QSettings + capture last-run clean-exit flag.
     {

@@ -1988,6 +1988,11 @@ void propagatePlateChanges() {
     plateManager.setChanged();
 }
 
+void setHelpMessage(const std::string& text) {
+    plateManager.setHelpMessage(text);
+    plateManager.setChanged();
+}
+
 void setAllPlatesShowPreview(bool showPreview) {
     for (int i = 0; i < 4; ++i) {
         plateManager.setPlateShowPreview(i, showPreview);

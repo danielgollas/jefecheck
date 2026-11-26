@@ -939,6 +939,10 @@ void adjustAllPlatesSaturation(float delta);
 // glad into Qt headers). Calls plateManager.setChanged().
 void setAllPlatesShowPreview(bool showPreview);
 
+// Replace the on-screen help overlay (H) text. Generated from the shortcut registry; the
+// hard-coded string in gfcPlateManager is only the fallback.
+void setHelpMessage(const std::string& text);
+
 // Hit-test for the plate under viewport pixel (x, y). y is top-down
 // in Qt's coord system. Falls back to 0 in single-plate mode.
 int plateAtViewportPos(int x, int y, int viewportW, int viewportH);

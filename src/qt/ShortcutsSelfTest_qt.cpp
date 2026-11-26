@@ -5,6 +5,8 @@
 
 #include <QAction>
 #include <QDir>
+#include <QDirIterator>
+#include <QRegularExpression>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -720,6 +722,69 @@ void testPresetsConflictFree(Registry& reg)
           QStringLiteral("commands=%1 %2").arg(reg.commands().size()).arg(bad.join(' ')));
 }
 
+void testHelpText(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    const QString text = buildHelpText(reg);
+    const QStringList headings = {"VIEWPORT LAYOUTS", "WINDOW / GUI", "WINDOW MENU", "PLAYBACK",
+                                  "TRANSFORMS", "COLOR CORRECTION", "REMOTE SESSIONS"};
+    QStringList missing;
+    for (const QString& h : headings)
+        if (!text.contains(h)) missing << h;
+    for (const Command& c : reg.commands()) {
+        const QString l = reg.label(c.id);
+        if (!l.isEmpty() && c.scope == Scope::Global && text.contains(c.name) && !text.contains(l))
+            missing << QString::fromUtf8(c.id);
+    }
+    const bool mouse = text.contains("Alt+LMB") && text.contains("Pan - LMB drag")
+                       && text.contains("Zoom - Mouse Wheel") && text.contains("Shift + LMB drag");
+    check("help-labels", missing.isEmpty() && mouse && text.contains("Play / Pause - " + reg.label("playback.play-pause")),
+          missing.join(','));
+
+    reg.setOverride("inout.set-in", QKeySequence("K"));
+    const QString after = buildHelpText(reg);
+    bool inOk = after.contains("Set In Point at Playhead - K");
+    for (const QString& line : after.split('\n'))
+        if (line.startsWith("Set In Point at Playhead") && line.contains(" - I")) inOk = false;
+    check("help-override", inOk);
+
+    reg.setOverride("inout.set-in", QKeySequence());
+    check("help-unbound-omitted", !buildHelpText(reg).contains("Set In Point at Playhead"));
+    check("tooltip-with-key",
+          tooltipWithKey("Play", "playback.play-pause") == "Play (" + reg.label("playback.play-pause") + ")"
+          && tooltipWithKey("Set In", "inout.set-in") == "Set In");
+    reg.reset();
+}
+
+// No setToolTip in src/qt may hard-code a key name; use tooltipWithKey(text, id).
+void testTooltipGrep()
+{
+#ifdef JEFE_SOURCE_DIR
+    const QRegularExpression keyName(
+        R"(\((Space|Shift\+|Ctrl\+|Alt\+|Cmd\+|F\d+|Home|End|[A-Z0-9,.<>])\))");
+    QStringList hits;
+    int files = 0;
+    QDirIterator it(QStringLiteral(JEFE_SOURCE_DIR "/src/qt"), {"*.cpp"}, QDir::Files);
+    while (it.hasNext()) {
+        QFile f(it.next());
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        ++files;
+        int n = 0;
+        while (!f.atEnd()) {
+            const QString line = QString::fromUtf8(f.readLine());
+            ++n;
+            if (line.contains("setToolTip(") && keyName.match(line).hasMatch())
+                hits << QStringLiteral("%1:%2").arg(QFileInfo(f).fileName()).arg(n);
+        }
+    }
+    check("tooltip-grep", files > 0 && hits.isEmpty(),
+          QStringLiteral("files=%1 hits=%2").arg(files).arg(hits.join(',')));
+#else
+    check("tooltip-grep", false, QStringLiteral("JEFE_SOURCE_DIR not defined"));
+#endif
+}
+
 }  // namespace
 
 int shortcutsSelfTest()
@@ -753,6 +818,8 @@ int shortcutsSelfTest()
     testPersistComma(reg);
     testParity20(reg);
     testPresetsConflictFree(reg);
+    testHelpText(reg);
+    testTooltipGrep();
     reg.reset();
     std::printf("SHORTCUTS-TEST %s\n", g_fails == 0 ? "PASS" : "FAIL");
     return g_fails;

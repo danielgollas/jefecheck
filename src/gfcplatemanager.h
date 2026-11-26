@@ -272,6 +272,7 @@ public:
 	void clearAllHistogramCache();
 	void setHistogramQuality(int whichOne, int quality);
 	void setHistogramQuality(int quality);
+	void setHelpMessage(const std::string& text) { helpMessage = text; }
 	
 private:
     

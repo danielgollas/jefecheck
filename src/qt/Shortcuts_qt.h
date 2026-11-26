@@ -131,6 +131,13 @@ private:
 // commands are registered with run = nullptr; MainWindow_Qt supplies them with bindRun().
 void registerAllCommands(Registry& reg);
 
+// Help overlay (H) text from the registry's current keys, same sections as the fallback string
+// in gfcPlateManager. Unbound commands have no line.
+QString buildHelpText(const Registry& reg);
+
+// "Play / Pause (Space)"; just `text` when the command is unbound.
+QString tooltipWithKey(const QString& text, const char* id);
+
 // --shortcuts-test: headless registry self-test. Returns the failure count.
 int shortcutsSelfTest();
 
