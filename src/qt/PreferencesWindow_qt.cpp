@@ -19,6 +19,8 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -51,6 +53,13 @@ void PreferencesWindow_Qt::reject() {
     QDialog::reject();
 }
 
+QSize PreferencesWindow_Qt::initialSize(const QSize& available) {
+    const QSize preferred(940, 660);  // room for the Shortcuts page's keyboard map above its list
+    if (!available.isValid() || available.isEmpty()) return preferred;
+    // 40 x 60 spare for the window frame and title bar.
+    return preferred.boundedTo(available - QSize(40, 60)).expandedTo(QSize(320, 240));
+}
+
 PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
     setObjectName("preferences.dialog");
@@ -61,7 +70,12 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     )");
     setAccessibleName("Preferences");
     setModal(true);
-    resize(640, 480);
+    {
+        // The parent's screen (this dialog has no window yet), else the primary one.
+        QScreen* scr = parent ? parent->screen() : screen();
+        if (!scr) scr = QGuiApplication::primaryScreen();
+        resize(initialSize(scr ? scr->availableGeometry().size() : QSize()));
+    }
 
     // Snapshot the live settings on open so Cancel can restore them verbatim
     // — pages below mutate `sett` directly as the user edits.

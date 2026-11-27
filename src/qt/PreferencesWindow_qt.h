@@ -55,6 +55,10 @@ public:
     bool showSection(int index);
     // Escape, the window close button and Cancel all end up here and revert.
     void reject() override;
+    // The size the dialog opens at on a screen with this much room (available geometry):
+    // 940 x 660 (room for the Shortcuts keyboard map), less where the screen is smaller, so
+    // the Done / Cancel row never falls under a taskbar.
+    static QSize initialSize(const QSize& available);
 
 signals:
     // Emitted continuously while the dialog is open so the owner can repaint

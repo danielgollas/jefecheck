@@ -3,17 +3,37 @@
 // (QAction) but no window.
 #include "Shortcuts_qt.h"
 #include "PreferencesWindow_qt.h"
+#include "ShortcutKeyboard_qt.h"
+#include "ShortcutsPage_qt.h"
 #include "SequenceLoadBridge_qt.h"
 
 #include <QAction>
+#include <QApplication>
+#include <QImage>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QMimeData>
+#include <QLineEdit>
+#include <QMouseEvent>
+#include <QPushButton>
+#include <QTreeView>
+#include <QTreeWidget>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QRegularExpression>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QUuid>
@@ -21,6 +41,7 @@
 #include <QtGlobal>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <iterator>
 #include <memory>
@@ -1652,6 +1673,587 @@ void testHelpText(Registry& reg)
     reg.reset();
 }
 
+// ---- Keyboard map (ShortcutKeyboard_Qt) -----------------------------------------------------
+
+double relLuminance(const QColor& c)
+{
+    auto ch = [](double v) { return v <= 0.03928 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * ch(c.redF()) + 0.7152 * ch(c.greenF()) + 0.0722 * ch(c.blueF());
+}
+double contrast(const QColor& a, const QColor& b)
+{
+    double x = relLuminance(a), y = relLuminance(b);
+    if (x < y) std::swap(x, y);
+    return (x + 0.05) / (y + 0.05);
+}
+
+void testKeymapLayout(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    const QList<KeyCap> caps = ansiLayout();
+    QSet<int> onMap;
+    for (const KeyCap& c : caps) onMap.insert(c.key);
+    QStringList missing;
+    auto need = [&](const QKeySequence& k, const char* id) {
+        if (k.isEmpty()) return;
+        // Qt::Key_Exit: the platform's Quit key on a platform with no Quit shortcut (offscreen).
+        if (k[0].key() == Qt::Key_Exit) return;
+        Qt::Key cap = Qt::Key_unknown;
+        Qt::KeyboardModifiers mods;
+        if (!capForKey(k[0], &cap, &mods) || !onMap.contains(cap))
+            missing << QStringLiteral("%1:%2").arg(id, k.toString(QKeySequence::PortableText));
+    };
+    for (const Command& c : reg.commands()) {
+        for (const QKeySequence& k : c.editing) need(k, c.id);
+        for (const QKeySequence& k : c.classic) need(k, c.id);
+    }
+    for (const HoldKey& h : reg.holdKeys())
+        for (Qt::Key k : {h.editing, h.classic})
+            if (k != Qt::Key_unknown) need(QKeySequence(k), h.id);
+    QStringList overlaps;
+    for (int i = 0; i < caps.size(); ++i)
+        for (int j = i + 1; j < caps.size(); ++j) {
+            const QRectF a(caps[i].x, caps[i].y, caps[i].w, 1.0), b(caps[j].x, caps[j].y, caps[j].w, 1.0);
+            if (a.adjusted(0.01, 0.01, -0.01, -0.01).intersects(b.adjusted(0.01, 0.01, -0.01, -0.01)))
+                overlaps << caps[i].label + "/" + caps[j].label;
+        }
+    check("keymap-layout", caps.size() > 70 && missing.isEmpty() && overlaps.isEmpty(),
+          QStringLiteral("caps=%1 missing=%2 overlaps=%3").arg(caps.size()).arg(missing.join(','), overlaps.join(',')));
+    reg.reset();
+}
+
+void testKeymapLayer(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    map.setLayer(Qt::NoModifier);
+    const QString none = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::ShiftModifier);
+    const QString shift = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::AltModifier);
+    const QString alt = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::AltModifier | Qt::ShiftModifier);
+    const QString shiftAlt = map.keyCaption(Qt::Key_I);
+    map.setLayer(Qt::NoModifier);
+    const QString unbound = map.keyCaption(Qt::Key_U);
+    check("keymap-layer", none == "In" && shift == QStringLiteral("→In") && alt == QStringLiteral("×In") && !shiftAlt.isEmpty() &&
+                              unbound.isEmpty() && map.layer() == Qt::NoModifier,
+          QStringLiteral("none=%1 shift=%2 alt=%3 shift+alt=%4 U=%5").arg(none, shift, alt, shiftAlt, unbound));
+
+    // Under the 1.7 preset "<" (Shift+comma) is Play Reverse: it is on the comma key's Shift layer.
+    reg.pinPreset(QStringLiteral("classic"));
+    map.setLayer(Qt::ShiftModifier);
+    const QString lessThan = map.keyCaption(Qt::Key_Comma);
+    reg.pinPreset(QStringLiteral("editing"));
+    map.setLayer(Qt::NoModifier);
+    check("keymap-layer-symbol", lessThan == shortCommandName("playback.play-reverse", QString()), lessThan);
+
+    // An override moves the caption, and the map follows Registry::changed.
+    reg.setOverride("inout.set-in", QKeySequence("P"));
+    const QString moved = map.keyCaption(Qt::Key_P), left = map.keyCaption(Qt::Key_I);
+    reg.clearOverride("inout.set-in");
+    check("keymap-changed", moved == "In" && left.isEmpty() && map.keyCaption(Qt::Key_I) == "In",
+          QStringLiteral("P=%1 I=%2").arg(moved, left));
+
+    // Every layer of I, in layer order, for the side panel.
+    QStringList ids;
+    for (const ShortcutKeyboard_Qt::Binding& b : map.bindingsFor(Qt::Key_I)) ids << b.id;
+    check("keymap-bindings", ids == QStringList{"inout.set-in", "inout.go-in", "inout.reset-in", "inout.set-in-load"},
+          ids.join(','));
+    reg.reset();
+}
+
+void testKeymapHold(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    const bool bare = map.showsHoldMark(Qt::Key_W) && map.keyCaption(Qt::Key_W) == "Gam";
+    map.setLayer(Qt::ShiftModifier);
+    const bool shifted = !map.showsHoldMark(Qt::Key_W);
+    map.setLayer(Qt::NoModifier);
+    const bool notHold = !map.showsHoldMark(Qt::Key_I);
+    check("keymap-hold", bare && shifted && notHold,
+          QStringLiteral("W=%1 bare=%2 shifted=%3 I=%4").arg(map.keyCaption(Qt::Key_W)).arg(bare).arg(shifted).arg(notHold));
+    reg.reset();
+}
+
+void testKeymapTints(Registry& reg)
+{
+    // One tint per category, all different, and #e0e0e0 text stays legible on each (WCAG AA 4.5).
+    QSet<QRgb> seen;
+    QStringList weak;
+    for (Category c : allCategories()) {
+        seen.insert(categoryTint(c).rgb());
+        const double r = contrast(categoryTint(c), QColor(0xe0, 0xe0, 0xe0));
+        if (r < 4.5) weak << QStringLiteral("%1=%2").arg(categoryDisplayName(c)).arg(r, 0, 'f', 1);
+    }
+    check("keymap-tints", allCategories().size() == 9 && seen.size() == 9 && weak.isEmpty(), weak.join(','));
+
+    // Painted: a bound key is tinted, an unbound one is not, and two categories differ.
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    const QImage img = map.grab().toImage();
+    const qreal dpr = img.devicePixelRatio();
+    auto sample = [&](Qt::Key k) {
+        const QRectF r = map.keyRect(k);
+        const QPointF p(r.right() - 3, r.top() + r.height() / 2);  // right edge: clear of the label
+        return img.pixelColor(int(p.x() * dpr), int(p.y() * dpr));
+    };
+    const QColor inout = sample(Qt::Key_I), unbound = sample(Qt::Key_U), playback = sample(Qt::Key_L);
+    check("keymap-paint", !img.isNull() && inout != unbound && inout != playback && playback != unbound &&
+                              inout.rgb() == categoryTint(Category::InOut).rgb(),
+          QStringLiteral("I=%1 U=%2 L=%3 tint=%4").arg(inout.name(), unbound.name(), playback.name(),
+                                                       categoryTint(Category::InOut).name()));
+    reg.reset();
+}
+
+// At the preferred size every caption the map draws fits its key whole, in both presets and on
+// every layer (drawnCaption is empty when a caption would need eliding).
+void testKeymapNoElide(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    ShortcutKeyboard_Qt map;
+    map.ensurePolished();  // the theme's 13 px font
+    map.resize(map.sizeHint());
+    const QList<Qt::KeyboardModifier> mods = layerModifiers();
+    QStringList cut;
+    int drawn = 0;
+    for (const char* preset : {"editing", "classic"}) {
+        reg.pinPreset(QString::fromLatin1(preset));
+        for (int mask = 0; mask < (1 << mods.size()); ++mask) {
+            Qt::KeyboardModifiers layer;
+            for (int i = 0; i < mods.size(); ++i)
+                if (mask & (1 << i)) layer |= mods[i];
+            map.setLayer(layer);
+            for (const KeyCap& c : ansiLayout()) {
+                const QString caption = map.keyCaption(c.key);
+                if (caption.isEmpty()) continue;
+                if (map.drawnCaption(c.key) == caption) ++drawn;
+                else
+                    cut << QStringLiteral("%1:%2+%3=\"%4\"(%5px>%6px)")
+                               .arg(preset, QKeySequence(int(layer)).toString(QKeySequence::PortableText), c.label, caption)
+                               .arg(QFontMetricsF(map.font()).horizontalAdvance(caption), 0, 'f', 0)
+                               .arg(map.keyRect(c.key).width() - 8, 0, 'f', 0);
+            }
+        }
+    }
+    cut.removeDuplicates();
+    // Font metrics differ per platform, so only macOS (the primary target) hard-asserts; elsewhere
+    // the hidden captions are reported in the detail.
+#ifdef Q_OS_MACOS
+    const bool fits = cut.isEmpty();
+#else
+    const bool fits = true;
+#endif
+    check("keymap-no-elide", drawn > 0 && fits && map.font().pixelSize() == 13,
+          QStringLiteral("drawn=%1 font=%2px hidden=%3").arg(drawn).arg(map.font().pixelSize()).arg(cut.join(' ')));
+
+    // No two commands share a short name (the numbered families, whose key shows the number,
+    // aside), so a caption never leaves the reader guessing which of two commands a key runs.
+    QHash<QString, QStringList> byCaption;
+    static const char* const families[] = {"color.cc-fav-", "fx.fav-", "plate.show-track-"};
+    for (const Command& c : reg.commands()) {
+        const QString id = QString::fromLatin1(c.id);
+        if (std::any_of(std::begin(families), std::end(families), [&](const char* f) { return id.startsWith(f); }))
+            continue;
+        byCaption[shortCommandName(id, c.name)] << id;
+    }
+    for (const HoldKey& h : reg.holdKeys()) byCaption[shortCommandName(QString::fromLatin1(h.id), h.name)] << h.id;
+    QStringList shared;
+    for (auto it = byCaption.cbegin(); it != byCaption.cend(); ++it)
+        if (it.value().size() > 1) shared << it.key() + "=" + it.value().join('/');
+    check("keymap-captions-distinct", shared.isEmpty(), shared.join(' '));
+    reg.reset();
+}
+
+// Two commands on one key and layer (a Global and a Player command, as a hand-edited settings
+// file could leave them): the key carries the "+" mark and the tooltip names both.
+void testKeymapMulti(Registry& reg)
+{
+    reg.reset();
+    reg.registerCommand(Command{"t.global", QStringLiteral("Global Thing"), Category::File, Scope::Global,
+                                {QKeySequence("K")}, {}, {}});
+    reg.registerCommand(Command{"t.player", QStringLiteral("Player Thing"), Category::Playback, Scope::Player,
+                                {QKeySequence("K")}, {}, {}});
+    reg.registerCommand(Command{"t.single", QStringLiteral("Single Thing"), Category::Playback, Scope::Player,
+                                {QKeySequence("J")}, {}, {}});
+    ShortcutKeyboard_Qt map;
+    map.resize(map.sizeHint());
+    const QString tip = map.keyToolTip(Qt::Key_K);
+    const bool multi = map.bindingCount(Qt::Key_K) == 2 && tip.contains("Global Thing") && tip.contains("Player Thing");
+    const bool single = map.bindingCount(Qt::Key_J) == 1 && map.keyToolTip(Qt::Key_J).contains("Single Thing");
+    // Painted: the "+" sits in the key's top-right corner, which is plain tint on J.
+    const QImage img = map.grab().toImage();
+    const qreal dpr = img.devicePixelRatio();
+    auto cornerHasMark = [&](Qt::Key k) {
+        const QRectF r = map.keyRect(k);
+        const QColor tint = img.pixelColor(int((r.left() + r.width() / 2) * dpr), int((r.top() + 3) * dpr));
+        for (int y = int(r.top() + 3); y < int(r.top() + 18); ++y)
+            for (int x = int(r.right() - 14); x < int(r.right() - 3); ++x)
+                if (img.pixelColor(int(x * dpr), int(y * dpr)) != tint) return true;
+        return false;
+    };
+    const bool painted = cornerHasMark(Qt::Key_K) && !cornerHasMark(Qt::Key_J);
+    // One command on two keys of one cap (Return and Enter) is not two commands.
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    const int returnCount = map.bindingCount(Qt::Key_Return);
+    check("keymap-multi", multi && single && painted && returnCount == 1,
+          QStringLiteral("multi=%1 painted=%2 return=%3 tip=%4").arg(multi).arg(painted).arg(returnCount).arg(QString(tip).replace('\n', " / ")));
+    reg.reset();
+}
+
+// Drag a command from the list onto a key of the map: the drop assigns on the shown layer
+// through the capture path (conflict bar, reserved-key refusal, hold keys bare only).
+void testKeymapDrop(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutsPage_Qt page;
+    page.resize(700, 560);
+    auto* map = page.keymap();
+    const QString mimeType = QStringLiteral("application/x-jefecheck-command");
+    auto mimeFor = [&](const QString& id) {
+        auto* m = new QMimeData;
+        m->setData(mimeType, id.toUtf8());
+        return m;
+    };
+    auto sendDrop = [&](Qt::Key key, const QString& id) {
+        std::unique_ptr<QMimeData> m(mimeFor(id));
+        const QPoint at = map->keyRect(key).center().toPoint();
+        QDragEnterEvent enter(at, Qt::CopyAction, m.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(map, &enter);
+        QDropEvent drop(QPointF(at), Qt::CopyAction, m.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(map, &drop);
+        return enter.isAccepted() && drop.isAccepted();
+    };
+    auto* bar = page.findChild<QWidget*>(QStringLiteral("prefs.shortcuts.conflict"));
+    auto* cancel = page.findChild<QPushButton*>(QStringLiteral("prefs.shortcuts.conflict.cancel"));
+    auto* notice = page.findChild<QLabel*>(QStringLiteral("prefs.shortcuts.notice"));
+    const bool ui = map && bar && cancel && notice;
+    check("keymap-drop-ui", ui);
+    if (!ui) { reg.reset(); return; }
+
+    // The list side: command rows carry the command id, panel rows and groups are not draggable.
+    QAbstractItemModel* model = page.list()->model();
+    QModelIndex cmdIdx, panelIdx, groupIdx = model->index(0, 0);
+    for (int g = 0; g < model->rowCount(); ++g) {
+        const QModelIndex gi = model->index(g, 0);
+        for (int r = 0; r < model->rowCount(gi); ++r) {
+            const QModelIndex ci = model->index(r, 0, gi);
+            if (ci.data(ShortcutsPage_Qt::kIdRole).toString() == "playback.jkl-forward") cmdIdx = ci;
+            if (ci.data(ShortcutsPage_Qt::kKindRole).toInt() == ShortcutsPage_Qt::PanelRow && !panelIdx.isValid()) panelIdx = ci;
+        }
+    }
+    const QMimeData* cm = cmdIdx.isValid() ? model->mimeData({cmdIdx}) : nullptr;
+    const bool listMime = cm && cm->data(mimeType) == "playback.jkl-forward" &&
+                          (model->flags(cmdIdx) & Qt::ItemIsDragEnabled) &&
+                          panelIdx.isValid() && !(model->flags(panelIdx) & Qt::ItemIsDragEnabled) &&
+                          !(model->flags(groupIdx) & Qt::ItemIsDragEnabled) &&
+                          page.list()->dragDropMode() == QAbstractItemView::DragOnly;
+    delete cm;
+    check("keymap-drop-list", listMime);
+
+    // Drop on a free key on the Shift layer.
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    map->setLayer(Qt::ShiftModifier);
+    const bool freeKey = reg.conflicts("playback.jkl-forward", QKeySequence("Shift+P")).isEmpty();
+    const bool sent = sendDrop(Qt::Key_P, "playback.jkl-forward");
+    const QList<QKeySequence> keys = reg.keys("playback.jkl-forward");
+    check("keymap-drop-assign", freeKey && sent && !keys.isEmpty() && keys.first() == QKeySequence("Shift+P") &&
+                                    page.rowShowsChanged("playback.jkl-forward") && bar->isHidden(),
+          QStringLiteral("free=%1 sent=%2 keys=%3 changed=%4").arg(freeKey).arg(sent)
+              .arg(keys.isEmpty() ? QString() : keys.first().toString()).arg(page.rowShowsChanged("playback.jkl-forward")));
+
+    // Shift on a symbol key binds the shifted symbol ("<", "?"), not the bare key, and the caption
+    // lands on that key's Shift layer; Shift on a digit stays Shift+digit, as the presets store it.
+    {
+        const QString tipLess = map->dropToolTip(Qt::Key_Comma), tipQ = map->dropToolTip(Qt::Key_Slash);
+        // Editing binds "<" too (Reverse Direction's second key): free it, so the drop applies.
+        for (const QString& other : reg.conflicts("playback.jkl-forward", QKeySequence("<"))) {
+            QList<QKeySequence> ks = reg.keys(other.toUtf8().constData());
+            ks.removeAll(QKeySequence("<"));
+            reg.setOverrideKeys(other.toUtf8().constData(), ks);
+        }
+        const bool freeLess = reg.conflicts("playback.jkl-forward", QKeySequence("<")).isEmpty();
+        const bool freeQ = reg.conflicts("playback.jkl-reverse", QKeySequence("?")).isEmpty();
+        sendDrop(Qt::Key_Comma, "playback.jkl-forward");
+        const QList<QKeySequence> less = reg.keys("playback.jkl-forward");
+        const QString commaCaption = map->keyCaption(Qt::Key_Comma);
+        bool onShiftLayer = false;
+        for (const ShortcutKeyboard_Qt::Binding& b : map->bindingsFor(Qt::Key_Comma))
+            if (b.id == "playback.jkl-forward" && b.mods == Qt::ShiftModifier) onShiftLayer = true;
+        sendDrop(Qt::Key_Slash, "playback.jkl-reverse");
+        const QList<QKeySequence> question = reg.keys("playback.jkl-reverse");
+        const QString slashCaption = map->keyCaption(Qt::Key_Slash);
+        const QKeyCombination digit = keyOnCap(Qt::Key_1, Qt::ShiftModifier);
+        check("keymap-drop-shift-symbol",
+              freeLess && freeQ && !less.isEmpty() && less.first() == QKeySequence(Qt::Key_Less) &&
+                  !question.isEmpty() && question.first() == QKeySequence(Qt::Key_Question) &&
+                  commaCaption == shortCommandName("playback.jkl-forward", QString()) && onShiftLayer &&
+                  slashCaption == shortCommandName("playback.jkl-reverse", QString()) && bar->isHidden() &&
+                  tipLess == QStringLiteral("Assign <") && tipQ == QStringLiteral("Assign ?") &&
+                  digit == QKeyCombination(Qt::ShiftModifier, Qt::Key_1),
+              QStringLiteral("free=%1/%2 <:%3 ?:%4 comma=%5 shiftLayer=%6 slash=%7 tips=%8|%9")
+                  .arg(freeLess).arg(freeQ)
+                  .arg(less.isEmpty() ? QString() : less.first().toString(),
+                       question.isEmpty() ? QString() : question.first().toString(), commaCaption)
+                  .arg(onShiftLayer).arg(slashCaption, tipLess, tipQ));
+    }
+
+    // Drop on a taken key: the capture's conflict bar, nothing applied until Replace.
+    map->setLayer(Qt::NoModifier);
+    QString raisedId;
+    QKeySequence raisedKey;
+    int raised = 0;
+    QObject::connect(&page, &ShortcutsPage_Qt::conflictRaised, &page, [&](const QString& id, const QKeySequence& k) {
+        raisedId = id; raisedKey = k; ++raised;
+    });
+    const QList<QKeySequence> before = reg.keys("playback.jkl-forward");
+    sendDrop(Qt::Key_I, "playback.jkl-forward");
+    check("keymap-drop-conflict", !bar->isHidden() && raised == 1 && raisedId == "playback.jkl-forward" &&
+                                      raisedKey == QKeySequence("I") && reg.keys("playback.jkl-forward") == before,
+          QStringLiteral("bar=%1 raised=%2 id=%3 key=%4").arg(!bar->isHidden()).arg(raised).arg(raisedId, raisedKey.toString()));
+
+    // A refused drop (a hold key on a modified layer) leaves the open conflict bar alone.
+    {
+        const QString h = reg.holdKeys().isEmpty() ? QString() : QString::fromUtf8(reg.holdKeys().first().id);
+        map->setLayer(Qt::ShiftModifier);
+        sendDrop(Qt::Key_G, h);
+        map->setLayer(Qt::NoModifier);
+        check("keymap-drop-refused-keeps-bar", !h.isEmpty() && !bar->isHidden() && !notice->isHidden() && raised == 1,
+              QStringLiteral("bar=%1 notice=%2 raised=%3").arg(!bar->isHidden()).arg(!notice->isHidden()).arg(raised));
+    }
+
+    // A second drop replaces the pending conflict.
+    sendDrop(Qt::Key_O, "playback.jkl-forward");
+    const bool replaced = raised == 2 && raisedKey == QKeySequence("O");
+    cancel->click();
+    check("keymap-drop-replaces-pending", replaced && bar->isHidden() && reg.keys("playback.jkl-forward") == before,
+          QStringLiteral("raised=%1 key=%2").arg(raised).arg(raisedKey.toString()));
+
+    // Hold keys: bare key only; a modified layer is refused with a notice.
+    const QString hold = reg.holdKeys().isEmpty() ? QString() : QString::fromUtf8(reg.holdKeys().first().id);
+    const Qt::Key holdBefore = hold.isEmpty() ? Qt::Key_unknown : reg.holdKey(hold.toUtf8().constData());
+    map->setLayer(Qt::ShiftModifier);
+    sendDrop(Qt::Key_G, hold);
+    const bool refused = !hold.isEmpty() && reg.holdKey(hold.toUtf8().constData()) == holdBefore && !notice->isHidden();
+    map->setLayer(Qt::NoModifier);
+    sendDrop(Qt::Key_Semicolon, hold);
+    const bool setBare = !hold.isEmpty() && reg.holdKey(hold.toUtf8().constData()) == Qt::Key_Semicolon;
+    check("keymap-drop-hold", refused && setBare,
+          QStringLiteral("hold=%1 refused=%2 set=%3").arg(hold).arg(refused).arg(setBare));
+
+    // Modifier keys, unknown ids and panel rows are not drop targets / payloads.
+    const Qt::Key shiftCap = Qt::Key_Shift;
+    std::unique_ptr<QMimeData> m(mimeFor("playback.jkl-forward"));
+    QDragMoveEvent onMod(map->keyRect(shiftCap).center().toPoint(), Qt::CopyAction, m.get(), Qt::LeftButton, Qt::NoModifier);
+    onMod.ignore();
+    QApplication::sendEvent(map, &onMod);
+    const QList<QKeySequence> k0 = reg.keys("playback.jkl-forward");
+    sendDrop(Qt::Key_Q, "no.such.command");
+    const QString panelId = panelIdx.data(ShortcutsPage_Qt::kIdRole).toString();
+    sendDrop(Qt::Key_Q, panelId);
+    check("keymap-drop-refuse", !onMod.isAccepted() && reg.keys("playback.jkl-forward") == k0 && bar->isHidden(),
+          QStringLiteral("modAccepted=%1").arg(onMod.isAccepted()));
+
+    // Hover: the key under the cursor lights up during the drag and clears on leave.
+    std::unique_ptr<QMimeData> m2(mimeFor("playback.jkl-forward"));
+    const QPoint at = map->keyRect(Qt::Key_T).center().toPoint();
+    QDragEnterEvent en(at, Qt::CopyAction, m2.get(), Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(map, &en);
+    const Qt::Key hovered = map->dropHoverKey();
+    QDragLeaveEvent leave;
+    QApplication::sendEvent(map, &leave);
+    check("keymap-drop-hover", hovered == Qt::Key_T && map->dropHoverKey() == Qt::Key_unknown);
+
+    // Modifiers during a drag follow the keyboard (no key events arrive mid-drag on macOS): a
+    // held layer whose release was missed clears on drag leave, and a drop binds on the layer
+    // shown at the drop. (Here no key is really down, so the keyboard reads no modifiers.)
+    {
+        QKeyEvent altDown(QEvent::KeyPress, Qt::Key_Alt, Qt::AltModifier);
+        QApplication::sendEvent(page.search(), &altDown);
+        const bool heldAlt = map->layer() == Qt::AltModifier;
+        QDragLeaveEvent left;
+        QApplication::sendEvent(map, &left);
+        const bool clearedOnLeave = map->layer() == Qt::NoModifier;
+        QApplication::sendEvent(page.search(), &altDown);  // Alt "held" again, released mid-drag
+        const bool freeU = reg.conflicts("playback.jkl-reverse", QKeySequence("U")).isEmpty();
+        sendDrop(Qt::Key_U, "playback.jkl-reverse");
+        const QList<QKeySequence> ks = reg.keys("playback.jkl-reverse");
+        check("keymap-drag-modifiers", heldAlt && clearedOnLeave && freeU && !ks.isEmpty() &&
+                                           ks.first() == QKeySequence("U") && map->layer() == Qt::NoModifier,
+              QStringLiteral("held=%1 cleared=%2 free=%3 key=%4").arg(heldAlt).arg(clearedOnLeave).arg(freeU)
+                  .arg(ks.isEmpty() ? QString() : ks.first().toString()));
+    }
+
+    // A reserved key is refused like a captured one (macOS only).
+#ifdef Q_OS_MACOS
+    map->setLayer(Qt::ControlModifier);
+    sendDrop(Qt::Key_H, "playback.jkl-forward");
+    const bool reservedRefused = reg.keys("playback.jkl-forward") == k0 && !notice->isHidden() && bar->isHidden();
+    check("keymap-drop-reserved", reservedRefused,
+          QStringLiteral("same=%1 notice=%2 bar=%3 reserved=%4").arg(reg.keys("playback.jkl-forward") == k0).arg(!notice->isHidden()).arg(bar->isHidden()).arg(isSystemReserved(QKeySequence("Ctrl+H"))));
+#endif
+    map->setLayer(Qt::NoModifier);
+    reg.reset();
+}
+
+// The map inside the page: click a key to inspect it, click a command there to select it in
+// the list, layer toggles, and held modifiers while a page widget has focus.
+void testKeymapPage(Registry& reg)
+{
+    reg.reset();
+    registerAllCommands(reg);
+    reg.pinPreset(QStringLiteral("editing"));
+    ShortcutsPage_Qt page;
+    page.resize(700, 560);
+    auto* map = page.findChild<ShortcutKeyboard_Qt*>(QStringLiteral("prefs.shortcuts.keymap"));
+    auto* info = page.findChild<QTreeWidget*>(QStringLiteral("prefs.shortcuts.keyinfo.list"));
+    const bool found = map && info && !page.keymapSlot()->isHidden() && map->focusPolicy() == Qt::NoFocus;
+    check("keymap-in-page", found, QStringLiteral("map=%1 info=%2").arg(map != nullptr).arg(info != nullptr));
+    if (!found) { reg.reset(); return; }
+
+    // Click I: the side panel lists I on every layer.
+    Qt::Key clicked = Qt::Key_unknown;
+    QObject::connect(map, &ShortcutKeyboard_Qt::keyClicked, map, [&clicked](Qt::Key k) { clicked = k; });
+    const QPointF at = map->keyRect(Qt::Key_I).center();
+    QMouseEvent press(QEvent::MouseButtonPress, at, map->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(map, &press);
+    QStringList rows;
+    for (int i = 0; i < info->topLevelItemCount(); ++i) rows << info->topLevelItem(i)->text(1);
+    check("keymap-click", clicked == Qt::Key_I && map->selectedKey() == Qt::Key_I && info->topLevelItemCount() == 4 &&
+                              rows.value(0) == QStringLiteral("Set In Point at Playhead"),
+          rows.join(" | "));
+
+    // tests/ui/test_shortcuts.py clicks I at a point computed from the layout (8 px margin, 16
+    // units, 38 px rows; I centred at 9.0 units, 2.75 rows): that point must stay I's centre.
+    {
+        QStringList off;
+        const int widths[] = {map->width(), map->sizeHint().width(), map->minimumSizeHint().width(), 1100};
+        ShortcutKeyboard_Qt probe;
+        Qt::Key hit = Qt::Key_unknown;
+        QObject::connect(&probe, &ShortcutKeyboard_Qt::keyClicked, &probe, [&hit](Qt::Key k) { hit = k; });
+        for (int w : widths) {
+            probe.resize(w, probe.sizeHint().height());
+            const qreal unit = (w - 2 * 8) / 16.0;
+            const QPointF expect(8 + 9.0 * unit, 8 + 2.75 * 38);
+            const QPointF got = probe.keyRect(Qt::Key_I).center();
+            hit = Qt::Key_unknown;
+            QMouseEvent p(QEvent::MouseButtonPress, expect, probe.mapToGlobal(expect), Qt::LeftButton, Qt::LeftButton,
+                          Qt::NoModifier);
+            QApplication::sendEvent(&probe, &p);
+            if (std::abs(got.x() - expect.x()) > 0.5 || std::abs(got.y() - expect.y()) > 0.5 || hit != Qt::Key_I)
+                off << QStringLiteral("w=%1 expect=(%2,%3) got=(%4,%5) hit=%6")
+                           .arg(w).arg(expect.x()).arg(expect.y()).arg(got.x()).arg(got.y()).arg(int(hit), 0, 16);
+        }
+        check("keymap-click-point", off.isEmpty(), off.join("; "));
+    }
+
+    // Clicking "Go to In Point" there selects it in the list.
+    QTreeWidgetItem* goIn = info->topLevelItemCount() > 1 ? info->topLevelItem(1) : nullptr;
+    if (goIn) emit info->itemClicked(goIn, 1);
+    const QString current = page.list()->currentIndex().siblingAtColumn(0).data(ShortcutsPage_Qt::kIdRole).toString();
+    check("keymap-inspect-select", current == "inout.go-in", current);
+
+    // Layer toggles: Shift on, then None.
+    auto* shiftBtn = page.findChild<QPushButton*>(QStringLiteral("prefs.shortcuts.keymap.layer.shift"));
+    auto* noneBtn = page.findChild<QPushButton*>(QStringLiteral("prefs.shortcuts.keymap.layer.none"));
+    bool toggles = shiftBtn && noneBtn;
+    if (toggles) {
+        shiftBtn->click();
+        toggles = map->layer() == Qt::ShiftModifier && shiftBtn->isChecked() && !noneBtn->isChecked() &&
+                  map->keyCaption(Qt::Key_I) == QStringLiteral("→In");
+        noneBtn->click();
+        toggles = toggles && map->layer() == Qt::NoModifier && noneBtn->isChecked() && !shiftBtn->isChecked();
+    }
+    check("keymap-toggles", toggles);
+
+    // Holding Alt with the search box focused shows the Alt layer; a letter still types.
+    QLineEdit* search = page.search();
+    QKeyEvent altDown(QEvent::KeyPress, Qt::Key_Alt, Qt::AltModifier);
+    QApplication::sendEvent(search, &altDown);
+    const bool held = map->layer() == Qt::AltModifier && map->keyCaption(Qt::Key_I) == QStringLiteral("×In");
+    QKeyEvent altUp(QEvent::KeyRelease, Qt::Key_Alt, Qt::NoModifier);
+    QApplication::sendEvent(search, &altUp);
+    const bool released = map->layer() == Qt::NoModifier;
+    QKeyEvent x(QEvent::KeyPress, Qt::Key_X, Qt::NoModifier, QStringLiteral("x"));
+    QApplication::sendEvent(search, &x);
+    const bool typed = search->text() == "x";
+    search->clear();
+    check("keymap-held-modifier", held && released && typed,
+          QStringLiteral("held=%1 released=%2 typed=%3").arg(held).arg(released).arg(typed));
+
+    // A held modifier adds to the toggled layer: toggled Shift with Cmd (Qt's Control) held
+    // shows Shift+Cmd, and releasing Cmd goes back to Shift.
+    map->setLayer(Qt::ShiftModifier);
+    QKeyEvent ctrlDown(QEvent::KeyPress, Qt::Key_Control, Qt::ControlModifier);
+    QApplication::sendEvent(search, &ctrlDown);
+    const Qt::KeyboardModifiers combined = map->layer();
+    QKeyEvent ctrlUp(QEvent::KeyRelease, Qt::Key_Control, Qt::NoModifier);
+    QApplication::sendEvent(search, &ctrlUp);
+    const Qt::KeyboardModifiers after = map->layer();
+    const bool buttonsShow = shiftBtn && noneBtn && shiftBtn->isChecked() && !noneBtn->isChecked();
+    map->setLayer(Qt::NoModifier);
+    check("keymap-layer-combines", combined == (Qt::ShiftModifier | Qt::ControlModifier) &&
+                                       after == Qt::ShiftModifier && buttonsShow,
+          QStringLiteral("combined=%1 after=%2").arg(int(combined), 0, 16).arg(int(after), 0, 16));
+
+    // JEFE_KEYMAP_SHOT=<png>: the page with I selected, for a look by eye (and <png>-shift.png).
+    const QString shot = qEnvironmentVariable("JEFE_KEYMAP_SHOT");
+    if (!shot.isEmpty()) {
+        QDir().mkpath(QFileInfo(shot).absolutePath());
+        page.resize(940 - 140 - 3 * 8, 660 - 3 * 8 - 24);  // the page inside the default 940 x 660 dialog
+        page.grab().save(shot);
+        map->setLayer(Qt::ShiftModifier);
+        QString shifted = shot;
+        shifted.replace(QStringLiteral(".png"), QStringLiteral("-shift.png"));
+        page.grab().save(shifted);
+        map->setLayer(Qt::NoModifier);
+        std::printf("SHORTCUTS-TEST keymap-shot %s\n", shot.toUtf8().constData());
+    }
+    reg.reset();
+}
+
+// Preferences opens at 940 x 660, smaller on a small screen so Done / Cancel stay above a taskbar.
+void testPrefsInitialSize()
+{
+    const QSize big = PreferencesWindow_Qt::initialSize(QSize(1920, 1040));
+    const QSize win720 = PreferencesWindow_Qt::initialSize(QSize(1280, 680));  // 1280 x 720 less a 40 px taskbar
+    const QSize small = PreferencesWindow_Qt::initialSize(QSize(800, 560));
+    const QSize none = PreferencesWindow_Qt::initialSize(QSize());
+    // The dialog itself opens at the helper's size for its screen (offscreen: 800 x 600).
+    QSize opened, wanted;
+    if (QScreen* scr = QGuiApplication::primaryScreen()) {
+        PreferencesWindow_Qt dlg;
+        opened = dlg.size();
+        wanted = PreferencesWindow_Qt::initialSize(scr->availableGeometry().size());
+    }
+    check("prefs-opens-clamped", opened.isValid() && opened == wanted,
+          QStringLiteral("opened=%1x%2 wanted=%3x%4").arg(opened.width()).arg(opened.height())
+              .arg(wanted.width()).arg(wanted.height()));
+    check("prefs-initial-size", big == QSize(940, 660) && win720 == QSize(940, 620) && small == QSize(760, 500) &&
+                                    none == QSize(940, 660),
+          QStringLiteral("1920x1040=%1x%2 1280x680=%3x%4 800x560=%5x%6")
+              .arg(big.width()).arg(big.height()).arg(win720.width()).arg(win720.height())
+              .arg(small.width()).arg(small.height()));
+}
+
 // JEFE_SHORTCUTS_DUMP=1: print both presets' keys (for the docs and reviews).
 void dumpPresets(Registry& reg)
 {
@@ -1793,6 +2395,7 @@ int shortcutsSelfTest()
     testPersistUnknownPreset(reg);
     testPersistUnreadableKept(reg);
     testPrefsCancelDone(reg);
+    testPrefsInitialSize();
     testParity20(reg);
     testPresetEditing(reg);
     testParity17(reg);
@@ -1805,6 +2408,14 @@ int shortcutsSelfTest()
     testMacosReserved(reg);
     testPresetsConflictFree(reg);
     testHelpText(reg);
+    testKeymapLayout(reg);
+    testKeymapLayer(reg);
+    testKeymapHold(reg);
+    testKeymapTints(reg);
+    testKeymapNoElide(reg);
+    testKeymapMulti(reg);
+    testKeymapPage(reg);
+    testKeymapDrop(reg);
     testFavoritesFileKeepsFX();
     dumpPresets(reg);
     testTooltipGrep();
