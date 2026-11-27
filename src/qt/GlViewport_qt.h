@@ -36,6 +36,14 @@ public:
     void setLoadWindowOpen(bool open);
     bool isLoadWindowOpen() const { return loadWindowOpen_; }
 
+    // True while the hold key registered as `holdId` (e.g. "color.drag-gamma") is held down
+    // with the viewport focused. mouseMoveEvent uses it for key+drag colour adjustments.
+    bool isHolding(const char* holdId) const;
+
+    // A registry command just changed playback or plate state from the keyboard: repaint,
+    // refresh the plate cards (plateStateChanged) and tell the listener, as a viewport key did.
+    void commandApplied();
+
 signals:
     // Legacy single-arg signal — kept so any existing connections that
     // don't care about scale (e.g. future logging hooks) still work.
@@ -94,6 +102,7 @@ protected:
     void keyReleaseEvent(QKeyEvent*) override;
     void enterEvent(QEnterEvent*) override;
     void leaveEvent(QEvent*) override;
+    void focusOutEvent(QFocusEvent*) override;
 
     // Drag-and-drop for image files.
     void dragEnterEvent(QDragEnterEvent*) override;
@@ -134,14 +143,10 @@ private:
     QElapsedTimer dragEmitTimer_;
     bool dragEmittedAny_ = false;
 
-    // Set of currently-held lowercase letter keycodes that combine with
-    // left-drag to perform color-correction adjustments (FLTK
-    // convention: W=gamma, E=exposure, Q=brightness, D=contrast,
-    // S=saturation). Tracked here because Qt only delivers keyboard
-    // events when the widget has focus, and key state otherwise has
-    // to be polled per mouseMoveEvent. Cleared on key release AND on
-    // leaveEvent to avoid the stuck-modifier trap when the user
-    // releases a key while the cursor is outside the viewport.
+    // Qt::Key values of the registry hold keys currently held down (by default W=gamma,
+    // E=exposure, Q=brightness, D=contrast, S=saturation; see Registry::holdKeys()) that
+    // combine with left-drag for color-correction adjustments. Cleared on a non-repeat key
+    // release, on focus-out and on leaveEvent, so a key released elsewhere never sticks.
     QSet<int> heldDragModifierKeys_;
 
     // Pinch-zoom target plate, captured on QPinchGesture::GestureStarted
@@ -154,6 +159,9 @@ private:
     // scaleFactor as an incremental zoom delta (scaleFactor>1 zooms in)
     // and emits the throttled targeted signal.
     void handlePinchGesture(QPinchGesture* g);
+
+    // Adds / removes `key` from heldDragModifierKeys_ when it is a registered hold key.
+    void trackHoldKey(int key, bool down);
 };
 
 #endif

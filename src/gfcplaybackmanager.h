@@ -60,6 +60,7 @@ public:
     /// update. The renderer puts the old frame back the same way when done.
     void setRenderFrame(int frame);
     void setDirection(int direction);
+    int direction() const { return currentDirection; }
     void setToFrame(int frame);
     void setFromFrame(int frame);
 

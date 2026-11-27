@@ -85,6 +85,9 @@ endif()
 # Main executable
 add_executable(jefecheck ${JEFECHECK_SOURCES})
 
+# --shortcuts-test greps src/qt for tooltips that hard-code a key name.
+target_compile_definitions(jefecheck PRIVATE JEFE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 # Suppress warnings in vendored RakNet code (template dependent base class issues)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(jefecheck PRIVATE

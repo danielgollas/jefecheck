@@ -63,15 +63,17 @@ MENU_VIEW_RESETPLATE = "menu.view.resetplate"          # Ctrl+R
 MENU_VIEW_RESETCC = "menu.view.resetcc"                # Shift+R
 # The Window menu is the single home for every panel toggle (each with an F-key), plus
 # Remote, Render and Hide Controls; on macOS also Minimize / Zoom / Bring All to Front.
+# Each keyed item is the shortcut registry's QAction (shortcut.<id>, src/qt/Shortcuts_qt.h)
+# renamed to its menu.window.* objectName; the key comes from the registry.
 MENU_WINDOW = "menu.window"
-MENU_WINDOW_PLATEMANAGER = "menu.window.platemanager"  # F2 (dock toggleViewAction)
-MENU_WINDOW_FXPARAMS = "menu.window.fxparams"          # F3 (dock toggleViewAction)
-MENU_WINDOW_LUT = "menu.window.lut"                    # F4 (dock toggleViewAction)
+MENU_WINDOW_PLATEMANAGER = "menu.window.platemanager"  # F2 (registry action)
+MENU_WINDOW_FXPARAMS = "menu.window.fxparams"          # F3 (registry action)
+MENU_WINDOW_LUT = "menu.window.lut"                    # F4 (registry action)
 MENU_WINDOW_REMOTE = "menu.window.remote"              # F5
 MENU_WINDOW_RENDER = "menu.window.render"              # F6
-MENU_WINDOW_NOTES = "menu.window.notes"                # F7 (dock toggleViewAction)
-MENU_WINDOW_TIMELINE = "menu.window.timeline"          # F8 (dock toggleViewAction)
-MENU_WINDOW_PLAYLIST = "menu.window.playlist"          # F9 (dock toggleViewAction)
+MENU_WINDOW_NOTES = "menu.window.notes"                # F7 (registry action)
+MENU_WINDOW_TIMELINE = "menu.window.timeline"          # F8 (registry action)
+MENU_WINDOW_PLAYLIST = "menu.window.playlist"          # F9 (registry action)
 MENU_WINDOW_HIDECONTROLS = "menu.window.hidecontrols"  # Ctrl+Alt+F
 MENU_WINDOW_MINIMIZE = "menu.window.minimize"          # Cmd+M, macOS only
 MENU_WINDOW_ZOOM = "menu.window.zoom"                  # macOS only

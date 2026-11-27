@@ -141,6 +141,7 @@ void togglePlayFwd();
 void rewindPlayback();
 void fastFwdPlayback();
 void setPlayDirection(int direction);   // FLTK '.' = +1 fwd, ',' = -1 rev
+int  getPlayDirection();               // +1 forward, -1 reverse
 void seekToFrame(int frame);
 void setLoopMode(int mode);     // 0 once, 1 loop, 2 bounce
 int  getLoopMode();
@@ -713,6 +714,8 @@ void remoteChatCancel();
 void remoteChatBackspace();
 void remoteChatAppend(const std::string& s);
 void remoteChatSubmit();
+// The message being composed (empty outside chat mode).
+std::string remoteChatText();
 
 // Remote pointer broadcast. Sends the local cursor position to all
 // session peers. xPx/yPx are framebuffer pixel coords with GL bottom-left
@@ -937,6 +940,10 @@ void adjustAllPlatesSaturation(float delta);
 // viewport TU doesn't have to pull gfcplatemanager.h (which drags
 // glad into Qt headers). Calls plateManager.setChanged().
 void setAllPlatesShowPreview(bool showPreview);
+
+// Replace the on-screen help overlay (H) text. Generated from the shortcut registry; the
+// hard-coded string in gfcPlateManager is only the fallback.
+void setHelpMessage(const std::string& text);
 
 // Hit-test for the plate under viewport pixel (x, y). y is top-down
 // in Qt's coord system. Falls back to 0 in single-plate mode.

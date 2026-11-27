@@ -66,6 +66,7 @@
 #include "qt/ReviewPackage_qt.h"
 #include "qt/MovieTestMedia_qt.h"
 #include "qt/VideoEncoder_qt.h"
+#include "qt/Shortcuts_qt.h"
 
 extern gfcSettings sett;
 
@@ -265,6 +266,13 @@ static bool resolveFXUiTestDir(int argc, char* argv[], std::string& dir) {
             dir = (i + 1 < argc) ? argv[i + 1] : "";
             return true;
         }
+    return false;
+}
+
+// --shortcuts-test : headless shortcut-registry self-test (QAction, no window). No argument.
+static bool hasShortcutsTest(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--shortcuts-test") == 0) return true;
     return false;
 }
 
@@ -641,6 +649,13 @@ int main(int argc, char* argv[]) {
             std::fflush(stdout);
             std::_Exit(fails == 0 ? 0 : 2);
         }
+    }
+
+    // Headless shortcut-registry self-test (--shortcuts-test): needs QApplication, no window.
+    if (hasShortcutsTest(argc, argv)) {
+        const int fails = jefe::shortcuts::shortcutsSelfTest();
+        std::fflush(stdout);
+        std::_Exit(fails == 0 ? 0 : 2);
     }
 
     if (hasPlateLayoutTest(argc, argv)) {
@@ -1557,6 +1572,21 @@ int main(int argc, char* argv[]) {
             outDir = QString::fromUtf8(argv[i + 1]);
         QTimer::singleShot(3000, &window, [&window, outDir]() {
             const int code = window.runHeadlessUiDensityTest(outDir);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --shortcuts-focus-test [--real-keys]: keys fire only where they should (focus, floating
+    // docks, chat mode). --real-keys adds one System Events keystroke (needs Accessibility).
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--shortcuts-focus-test") != 0) continue;
+        bool realKeys = false;
+        for (int j = 1; j < argc; ++j)
+            if (std::strcmp(argv[j], "--real-keys") == 0) realKeys = true;
+        QTimer::singleShot(3000, &window, [&window, realKeys]() {
+            const int code = window.runHeadlessShortcutsFocusTest(realKeys);
             fflush(stdout);
             std::_Exit(code);
         });

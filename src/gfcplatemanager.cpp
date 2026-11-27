@@ -37,6 +37,8 @@ gfcPlateManager::gfcPlateManager() : myGUI(nullptr) {
     activeQuad=0;
     framingMode=FRAMINGSINGLE_ID;
     showHelp=false;
+    // FALLBACK only: the Qt build replaces this at startup with text generated from the
+    // shortcut registry (jefe::shortcuts::buildHelpText -> jefe::qt::setHelpMessage).
     // Keep in sync with the Qt key bindings (MainWindow_Qt ctor bindPlateAction /
     // bindLayout; GlViewport_Qt::keyPressEvent and mouse handlers).
     helpMessage =

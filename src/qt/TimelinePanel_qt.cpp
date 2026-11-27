@@ -63,6 +63,8 @@ TimelineScrubber_Qt::TimelineScrubber_Qt(QWidget* parent) : QWidget(parent) {
     setMouseTracking(false);
     setCursor(Qt::PointingHandCursor);
     setObjectName("timeline.scrubber");
+    // No focus while docked (the viewport keeps it); TimelinePanel_Qt::setTakesKeyFocus.
+    setFocusPolicy(Qt::NoFocus);
     setAccessibleName("Timeline scrubber");
     setToolTip("Click to jump · Alt-click to load every track from this frame");
 }
@@ -147,6 +149,7 @@ TimelineTracks_Qt::TimelineTracks_Qt(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(96);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setObjectName("timeline.tracks");
+    setFocusPolicy(Qt::NoFocus);   // see TimelinePanel_Qt::setTakesKeyFocus
     setAccessibleName("Timeline tracks");
     setAcceptDrops(true);
     setCursor(Qt::SizeHorCursor);  // hint that horizontal drag = offset
@@ -560,6 +563,12 @@ void TimelineTracks_Qt::dropEvent(QDropEvent* e) {
 }
 
 // ---- TimelinePanel_Qt ----
+
+void TimelinePanel_Qt::setTakesKeyFocus(bool on) {
+    const Qt::FocusPolicy p = on ? Qt::ClickFocus : Qt::NoFocus;
+    scrubber_->setFocusPolicy(p);
+    tracks_->setFocusPolicy(p);
+}
 
 TimelinePanel_Qt::TimelinePanel_Qt(QWidget* parent) : QWidget(parent) {
     setObjectName("timeline.panel");

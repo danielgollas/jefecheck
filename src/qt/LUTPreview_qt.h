@@ -72,6 +72,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* e) override;
     void wheelEvent(QWheelEvent* e) override;
     void keyPressEvent(QKeyEvent* e) override;
+    bool event(QEvent* e) override;   // claims bare F (frame the cube) over the Global Fit key
 
 private:
     void applyCamera();               // load projection+modelview from camera

@@ -433,6 +433,8 @@ void setPlayDirection(int direction) {
     playbackManager.setDirection(direction);
 }
 
+int getPlayDirection() { return playbackManager.direction(); }
+
 void setInPointAndLoad() {
     // FLTK's Alt+I: set the in point at the current frame and load from there. The rolling cache
     // already loads around the playhead; with it off, the load refills forward from this frame.
@@ -1986,6 +1988,11 @@ void propagatePlateChanges() {
     plateManager.setChanged();
 }
 
+void setHelpMessage(const std::string& text) {
+    plateManager.setHelpMessage(text);
+    plateManager.setChanged();
+}
+
 void setAllPlatesShowPreview(bool showPreview) {
     for (int i = 0; i < 4; ++i) {
         plateManager.setPlateShowPreview(i, showPreview);
@@ -3132,6 +3139,7 @@ void sendChatMessageText(const std::string& text) {
 
 bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
 void remoteChatBegin()      { networkManager.gChatMode = 1; }
+std::string remoteChatText() { return networkManager.gChatTextString; }
 void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }
 void remoteChatBackspace()  {
     auto& s = networkManager.gChatTextString;
