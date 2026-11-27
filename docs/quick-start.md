@@ -81,14 +81,14 @@ Hold `Shift` while you drop a file onto the viewport to load it at 50%, or `Shif
 
 Click anywhere on the timeline. JefeCheck loads around that frame first: the frame appears after a short wait, the frames after it load next, and playback carries on from there. You don't have to fit the whole sequence into memory to look at any part of it.
 
-`Alt+Left Click` on the timeline (or on a specific track) jumps to that frame. `Alt+I` sets the IN point at the current frame. With the rolling cache on (the default) that frame is already loading, so nothing else happens; with it off (below), both also reload every track from that frame until memory is full.
+`Alt+Left Click` on the timeline (or on a specific track) jumps to that frame. `Alt+Shift+I` sets the IN point at the current frame. With the rolling cache on (the default) that frame is already loading, so nothing else happens; with it off (below), both also reload every track from that frame until memory is full.
 
 ### How to Load a Fixed Stretch Instead of a Rolling One
 
 The circular-arrow button at the right of the Timeline's transport row turns the **rolling cache** on and off.
 
 - **On** (default): frames load around the playhead and unload behind it, so a clip longer than memory plays end to end.
-- **Off**: every track loads from the IN point until memory is full and keeps those frames; moving the playhead doesn't change what's loaded. Playback follows the loop mode (Once, Loop, Bounce) over what is loaded, using the loop priority: Shortest stops at the end of the track with the least loaded, Longest at the end of the track with the most, Timeline at the IN/OUT points. `Alt+Left Click` on the timeline, or `Alt+I`, loads from another frame instead.
+- **Off**: every track loads from the IN point until memory is full and keeps those frames; moving the playhead doesn't change what's loaded. Playback follows the loop mode (Once, Loop, Bounce) over what is loaded, using the loop priority: Shortest stops at the end of the track with the least loaded, Longest at the end of the track with the most, Timeline at the IN/OUT points. `Alt+Left Click` on the timeline, or `Alt+Shift+I`, loads from another frame instead.
 
 The setting is remembered between launches.
 
@@ -166,12 +166,20 @@ Click the channel button (it shows **RGB**) on the viewport's card to step throu
 
 The transport is in the Timeline panel (`F8`).
 
-- Play/pause: `Space`. Rewind to start: `Home`. Fast forward to end: `End`.
-- Step one frame back or forward: `Left`/`Right` or `X`/`C`.
+- Play/pause: `Space`. Play backward, pause, play forward: `J`, `K`, `L`. Go to start: `Home`. Go to end: `End`.
+- Step one frame back or forward: `Left`/`Right`.
 - Play direction reverse/forward: `,`/`.` (the `<` and `>` keys).
 - Scrub by clicking and dragging on the timeline bar.
 - Choose **Once** (`8`), **Loop** (`9`) or **Bounce** (`0`) in the loop mode box.
-- Set the In and Out points with `I` and `O` (`Shift+I` / `Shift+O` reset them to the timeline's ends), or type them in the **In** and **Out** boxes.
+- Set the In and Out points with `I` and `O`, go to them with `Shift+I` / `Shift+O`, and reset them to the timeline's ends with `Alt+I` / `Alt+O` (`Alt+X` for both), or type them in the **In** and **Out** boxes.
+
+### How to Change the Keyboard Shortcuts
+
+Open **File > Preferences… > Shortcuts**. Double-click a key and press the new one; `Backspace` while capturing removes it, and a bar offers **Replace** if another command already has the key. A dot marks changed keys (click it to reset), **Reset to preset** puts everything back, and **Import…** / **Export…** share a `.jcshortcuts` file with colleagues.
+
+### How to Get the JefeCheck 1.7 Keys Back
+
+JefeCheck 2.0 starts with the **Editing** keys (`J` `K` `L`, `I` `O`). Choose **JefeCheck 1.7** in the Preset menu of **Preferences > Shortcuts**, or click **Use 1.7 keys** in the bar shown on first launch. The manual lists every difference under Keyboard Shortcuts, Coming from JefeCheck 1.7.
 
 ### How to Hear or Mute a Movie's Sound
 
@@ -213,7 +221,7 @@ Press `H` to show or hide the on-screen help, which lists the keyboard shortcuts
 
 ### How to Show a Histogram
 
-Press `Ctrl+H` (or **View > Show Histogram**) for the active viewport, or `Ctrl+Alt+H` for all viewports. Drag the histogram to move it.
+Press `Ctrl+H` (`Control+H` on macOS, or **View > Show Histogram**) for the active viewport, or `Ctrl+Alt+H` (`Control+Option+H` on macOS) for all viewports. Drag the histogram to move it.
 
 ---
 

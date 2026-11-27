@@ -419,17 +419,20 @@ void GlViewport_Qt::keyPressEvent(QKeyEvent* e) {
         update();     // repaint the overlay with the new text
         return;       // consume — don't fall through to plate shortcuts
     }
-    // Enter chat mode with Return when connected and not already typing.
-    if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) &&
-        jefe::qt::isRemoteConnected()) {
-        jefe::qt::remoteChatBegin();
-        update();
-        return;
-    }
+    // Starting a chat message (Return, or Y in the 1.7 preset) is the registry command
+    // remote.chat-type; while composing, the branch above sends on Return.
 
     // Hold keys (W/E/Q/D/S by default) combine with left-drag in mouseMoveEvent. Modifiers
     // don't matter (Alt+W drag = every plate). Auto-repeat presses only re-insert.
     trackHoldKey(e->key(), true);
+
+    // Hold-key combinations (1.7 preset: hold L + Up / Down = previous / next LUT). event()
+    // claimed the key through ShortcutOverride, so the Player action on it did not fire.
+    if (jefe::shortcuts::Registry::instance().runHoldWith(heldDragModifierKeys_, e->key(), e->modifiers())) {
+        commandApplied();
+        e->accept();
+        return;
+    }
 
     // Every other key binding is a registry QAction (Shortcuts_qt.h): Player keys on this
     // widget, Global keys on the main window. Unhandled keys go to the listener and Qt's
@@ -550,6 +553,15 @@ bool GlViewport_Qt::event(QEvent* e) {
         const bool combo = ke->modifiers() & (Qt::ControlModifier | Qt::MetaModifier);
         const bool fkey = ke->key() >= Qt::Key_F1 && ke->key() <= Qt::Key_F35;
         if (!combo && !fkey) {
+            e->accept();
+            return true;
+        }
+    }
+    // A held key with a `with` entry for this key (hold L + Up) claims it from the Player action
+    // on the same key (Up = previous track); keyPressEvent runs the combination.
+    if (e->type() == QEvent::ShortcutOverride && !jefe::qt::remoteChatModeActive()) {
+        const auto* ke = static_cast<QKeyEvent*>(e);
+        if (jefe::shortcuts::Registry::instance().holdWithClaims(heldDragModifierKeys_, ke->key(), ke->modifiers())) {
             e->accept();
             return true;
         }

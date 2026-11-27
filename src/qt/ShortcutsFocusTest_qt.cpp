@@ -12,6 +12,7 @@
 #include "TimelinePanel_qt.h"
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDockWidget>
@@ -120,6 +121,17 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         fflush(stdout);
         return 2;
     }
+
+    // The checks assert the Editing keys (V is Go to End in the 1.7 preset); the preset is put
+    // back at the end, in memory only.
+    // JEFE_TEST_SEED_OVERRIDE=1 plays a user who rebound Play/Pause to P: the checks must not notice.
+    const bool seeded = qEnvironmentVariableIsSet("JEFE_TEST_SEED_OVERRIDE");
+    if (seeded) sc::Registry::instance().setOverride("playback.play-pause", QKeySequence("P"));
+    struct RestoreKeys {
+        sc::Registry::Snapshot before = sc::Registry::instance().snapshot();
+        ~RestoreKeys() { sc::Registry::instance().restore(before); }
+    } restoreKeys;   // every return below puts the preset back
+    sc::Registry::instance().pinPreset(QStringLiteral("editing"));
 
     // Every registry command that runs, in order; each check clears it first.
     QStringList ran;
@@ -241,11 +253,11 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
         const QString before = QString::fromStdString(remoteChatText());
         ran.clear();
         press(Qt::Key_I, QString(QChar(0x0131)), Qt::AltModifier);
-        if (ran.contains("inout.set-in-load")) bad << "Alt+I ran inout.set-in-load while chatting";
+        if (!ran.isEmpty()) bad << "Alt+I ran " + ran.join(",") + " while chatting";
         if (QString::fromStdString(remoteChatText()) == before) bad << "Alt+I did not type into the chat";
         remoteChatCancel();
         report("CHAT f", bad.isEmpty(),
-               bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run; Ctrl+2 ran layout.side; Alt+I typed, set-in-load not run") : bad.join("; "));
+               bad.isEmpty() ? QString("chat buffer \"f\", plate.fit not run; Ctrl+2 ran layout.side; Alt+I typed, no command run") : bad.join("; "));
     }
 
     {   // Viewport focused: Space toggles playback.
@@ -405,6 +417,38 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
             }
         }
         dockEdit->setText(saved);
+
+        // Cmd+H on the focused viewport: the app menu's Hide or a command bound to Cmd+H.
+        // Passes when the outcome matches the registry: Cmd+H bound -> its command runs and the
+        // app stays visible; unbound (reserved) -> macOS hides the app. Shown again afterwards.
+        const QKeySequence cmdH(Qt::CTRL | Qt::Key_H);   // Qt Ctrl = Cmd on macOS
+        const QString boundTo = sc::Registry::instance().commandForKey(sc::Scope::Global, cmdH);
+        focusOn(viewport_);
+        osa("tell application \"System Events\" to get unix id of (first process whose frontmost is true)", &frontPid);
+        if (frontPid != pid) {
+            skip("REAL-KEY cmd+h", QString("JefeCheck is not frontmost (%1)").arg(frontPid));
+        } else {
+            ran.clear();
+            osa("tell application \"System Events\" to keystroke \"h\" using command down");
+            settleFor(800);
+            QString visible;
+            osa(QString("tell application \"System Events\" to get visible of (first process whose unix id is %1)").arg(pid),
+                &visible);
+            const bool hid = visible == QLatin1String("false") ||
+                             QGuiApplication::applicationState() == Qt::ApplicationHidden;
+            if (hid) {
+                osa(QString("tell application \"System Events\" to set visible of (first process whose unix id is %1) to true")
+                        .arg(pid));
+                settleFor(500);
+            } else if (!boundTo.isEmpty() && ran.contains(boundTo)) {
+                // Put the toggle back.
+                sc::Registry::instance().action(boundTo.toUtf8().constData())->trigger();
+                settleFor(100);
+            }
+            const bool ok = boundTo.isEmpty() ? hid : (!hid && ran.contains(boundTo));
+            report("REAL-KEY cmd+h", ok,
+                   QString("bound to [%1]; app hid=%2; ran [%3]").arg(boundTo).arg(hid).arg(ran.join(",")));
+        }
     }
 
     remoteDock_->setFloating(remoteWasFloating);
@@ -412,6 +456,12 @@ int MainWindow_Qt::runHeadlessShortcutsFocusTest(bool realKeys) {
     settleFor(100);
 
     disconnect(spy);
+    if (seeded) {
+        sc::Registry::instance().restore(restoreKeys.before);
+        const bool back = sc::Registry::instance().key("playback.play-pause") == QKeySequence("P");
+        printf("SHORTCUTS-FOCUS-TEST SEED restored %s\n", back ? "PASS" : "FAIL");
+        allPass = allPass && back;
+    }
     printf("SHORTCUTS-FOCUS-TEST %s\n", allPass ? "PASS" : "FAIL");
     fflush(stdout);
     return allPass ? 0 : 2;

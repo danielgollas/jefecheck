@@ -251,6 +251,8 @@ public:
     // arrangement, the title bar (mini-map, buttons, drag) and mode menus, then the dock shapes
     // (side, floating, re-dock), the Timeline height and the remote sync. With
     // outDir it saves and checks a screenshot matrix there. Returns 0 on PASS, 2 on FAIL.
+    // First-launch keyboard-preset bar above the viewport (no-op for test runs or a stored choice).
+    void maybeShowShortcutsBanner(bool isTestRun);
     int runHeadlessPlateManagerTest(const QString& shotsDir = QString());
 
     // --shortcuts-focus-test [--real-keys]: proves keys fire only where they should. Text
@@ -258,6 +260,10 @@ public:
     // Timeline's scrubber get Player keys. --real-keys adds one real keystroke through
     // System Events (needs Accessibility). Returns 0 on PASS, 2 on FAIL.
     int runHeadlessShortcutsFocusTest(bool realKeys = false);
+    // --shortcuts-page-test [outDir]: drives Preferences -> Shortcuts in process (search,
+    // capture, conflicts, reset dot, preset switch, import / export, reject). Saves page
+    // grabs to outDir. Returns 0 on PASS, 2 on FAIL.
+    int runHeadlessShortcutsPageTest(const QString& outDir);
 
     // Width a bottom/top Plate Manager row may fill: the window width, less the
     // Timeline's minimum width (and a gap) when the Timeline shares the strip
@@ -293,6 +299,8 @@ private slots:
     void onLoadWindowDropForwarded(int plateIdx, const QString& path);
 
 private:
+    void openPreferences(const QString& section = QString());
+    class ShortcutsBanner_Qt* shortcutsBanner_ = nullptr;
     void buildMenuBar();
     void buildDocks();
     void restoreLayout();

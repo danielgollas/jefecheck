@@ -180,7 +180,7 @@ Rules:
 | Fullscreen | F11, Cmd+Ctrl+F | Ctrl+F, F11 |
 | Hide controls | Ctrl+Alt+F | Ctrl+Alt+F |
 | On-screen help | H | H |
-| Histogram / all | Ctrl+H / Ctrl+Alt+H | same |
+| Histogram / all | Ctrl+H / Ctrl+Alt+H (macOS: Control+H / Control+Option+H; Cmd+H is the app menu's Hide) | same |
 | Load Sequence Manager | Ctrl+L | Ctrl+L |
 | Preferences | Ctrl+P, Ctrl+, | Ctrl+P |
 | Quit | standard Quit (Cmd+Q / Ctrl+Q) | same |

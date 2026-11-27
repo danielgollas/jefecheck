@@ -1310,6 +1310,15 @@ int main(int argc, char* argv[]) {
     MainWindow_Qt window;
     window.setObjectName("MainWindow");
     window.show();
+    {   // First-launch keyboard-preset bar: never in a self-test or a --config-dir (UI test) run.
+        bool testRun = !configDir.isEmpty();
+        for (int i = 1; i < argc && !testRun; ++i) {
+            const QByteArray a(argv[i]);
+            testRun = a.endsWith("-test") || a.endsWith("-bench") || a.endsWith("-test-peer") ||
+                      a == "--ui-preview" || a == "--fx-panel-test";
+        }
+        window.maybeShowShortcutsBanner(testRun);
+    }
 
     // Also keep review-package extraction inside the caller-supplied config dir
     // (--config-dir only redirects QSettings on its own).
@@ -1587,6 +1596,20 @@ int main(int argc, char* argv[]) {
             if (std::strcmp(argv[j], "--real-keys") == 0) realKeys = true;
         QTimer::singleShot(3000, &window, [&window, realKeys]() {
             const int code = window.runHeadlessShortcutsFocusTest(realKeys);
+            fflush(stdout);
+            std::_Exit(code);
+        });
+        break;
+    }
+
+    // --shortcuts-page-test [outDir]: Preferences -> Shortcuts, driven in process.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--shortcuts-page-test") != 0) continue;
+        QString outDir;
+        if (i + 1 < argc && std::strncmp(argv[i + 1], "--", 2) != 0)
+            outDir = QString::fromUtf8(argv[i + 1]);
+        QTimer::singleShot(3000, &window, [&window, outDir]() {
+            const int code = window.runHeadlessShortcutsPageTest(outDir);
             fflush(stdout);
             std::_Exit(code);
         });

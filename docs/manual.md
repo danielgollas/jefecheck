@@ -229,11 +229,11 @@ The Timeline panel has a row of transport controls at the top, the timeline bar 
 
 **Current Frame (F)** — Shows the current timeline frame. Type a frame number to jump to it.
 
-**In/Out** — The **In** and **Out** boxes set the range of the timeline that plays. This is helpful if you only want to see a certain range of frames at a time. It is different from loading only a range of frames: you can change In and Out at any time without unloading or reloading anything. The timeline bar and the track lanes always show the In–Out range across their full width, so narrowing the range zooms in. You can also press `I` and `O` to set the In and Out points at the current frame, and `Shift+I` and `Shift+O` to reset them to the ends of the timeline. `Alt+I` sets the In point; with the rolling cache off (below) every track also reloads from that frame until memory is full. Whenever you load a sequence, In and Out are reset to fit it.
+**In/Out** — The **In** and **Out** boxes set the range of the timeline that plays. This is helpful if you only want to see a certain range of frames at a time. It is different from loading only a range of frames: you can change In and Out at any time without unloading or reloading anything. The timeline bar and the track lanes always show the In–Out range across their full width, so narrowing the range zooms in. You can also press `I` and `O` to set the In and Out points at the current frame, `Shift+I` and `Shift+O` to go to them, and `Alt+I` and `Alt+O` to reset them to the ends of the timeline (`Alt+X` resets both). `Alt+Shift+I` sets the In point and, with the rolling cache off (below), also reloads every track from that frame until memory is full. Whenever you load a sequence, In and Out are reset to fit it.
 
 **The Timeline** — Click or drag on the timeline bar to jump or scrub to any frame. The orange line is the playhead.
 
-**Rolling cache** — The circular-arrow button at the right of the transport row turns the rolling cache on and off; the setting is remembered between launches. **On** (default): frames load around the playhead and unload behind it, so a clip longer than memory plays end to end. **Off**: every track loads from the In point until memory is full and keeps those frames, and playback follows the loop mode over what is loaded. `Alt`+click on the timeline or a lane, or `Alt+I`, loads from another frame.
+**Rolling cache** — The circular-arrow button at the right of the transport row turns the rolling cache on and off; the setting is remembered between launches. **On** (default): frames load around the playhead and unload behind it, so a clip longer than memory plays end to end. **Off**: every track loads from the In point until memory is full and keeps those frames, and playback follows the loop mode over what is loaded. `Alt`+click on the timeline or a lane, or `Alt+Shift+I`, loads from another frame.
 
 **Track Lanes** — Under the timeline there is one lane for each track.
 
@@ -270,12 +270,12 @@ The **Playback Controls** are the transport row at the top of the Timeline panel
 | Control | Action | Shortcut |
 |---------|--------|----------|
 | Rewind | Go to the first frame | `Home` |
-| Step Back | Move one frame back | `X` or `Left Arrow` |
+| Step Back | Move one frame back | `Left Arrow` |
 | Play/Pause | Play or pause | `Space` |
-| Step Forward | Move one frame forward | `C` or `Right Arrow` |
+| Step Forward | Move one frame forward | `Right Arrow` |
 | Fast Forward | Go to the last frame | `End` |
 
-Press `,` (or `<`) to set the play direction to reverse, and `.` (or `>`) to set it to forward.
+Press `,` (or `<`) to set the play direction to reverse, and `.` (or `>`) to set it to forward. `J` plays backward, `K` pauses and `L` plays forward. See Keyboard Shortcuts in Section 4 for every key and for the JefeCheck 1.7 preset.
 
 **Loop Modes** — Control what happens when the current timeline value reaches its limit:
 
@@ -508,8 +508,8 @@ At the top of the Main Window is the **Menu Bar**, from which you can access set
 #### View Menu
 
 - **Fullscreen** (`F11` or `Cmd+Ctrl+F`) — Toggles full-screen mode. With two monitors, full screen uses the monitor the main window is on.
-- **Show Histogram** (`Ctrl+H`) — Shows an RGB histogram for the active viewport. You can drag the histogram within the viewport.
-- **Show Histogram (All Plates)** (`Ctrl+Alt+H`) — Shows a histogram on every viewport.
+- **Show Histogram** (`Ctrl+H`; `Control+H` on macOS) — Shows an RGB histogram for the active viewport. You can drag the histogram within the viewport.
+- **Show Histogram (All Plates)** (`Ctrl+Alt+H`; `Control+Option+H` on macOS) — Shows a histogram on every viewport.
 - **Show Notes** (`N`) — Shows or hides review notes on the viewports.
 - **Show Status Bar** — Shows or hides the status bar.
 - **Plate Manager Shows** — Active, Visible or All plate cards in the Plate Manager (also on right-click in the panel).
@@ -826,7 +826,7 @@ The **Preferences** window (`Ctrl+P` or **File > Preferences…**) changes setti
 
 Most changes show straight away, for example the viewport background or the text style, so you can see them while the window is open. Click **Done** to keep your changes, or **Cancel** to put everything back as it was when you opened the window.
 
-Choose a section from the list on the left:
+Choose a section from the list on the left. There are six: General, Text, Formats, Search Paths, Remote and Shortcuts.
 
 #### General
 
@@ -877,6 +877,185 @@ Settings for the information text drawn on each viewport: **Size**, **Color**, *
 - **JefeCheck Cloud: Coordinator** — The address of the coordinator used by the Cloud option in the Remote Session window.
 - **Chat** — **Fade delay (s)**, **Auto-fade chat**, **Chat text background**, **Font size**, **Opacity** and **Display lines** for the chat shown on the viewport.
 - **Remote pointer** — **Fade delay (s)** (how long a pointer stays after it stops moving) and **Color** (your pointer's color as others see it).
+
+#### Shortcuts
+
+Change any keyboard shortcut, or switch between the Editing and JefeCheck 1.7 key sets. See Keyboard Shortcuts, below.
+
+---
+
+### Keyboard Shortcuts
+
+Every key in JefeCheck is a command in one list, and you can change any of them in **Preferences > Shortcuts** (below). Keys that act on a viewport (playback, In/Out, tracks, channels, favorites) work while the viewport or the timeline has the focus, so typing in a text box never triggers them. Keys for windows, panels and layouts work everywhere.
+
+JefeCheck ships two sets of keys, called **presets**. **Editing** is the default and follows the keys editing software uses (`J`, `K` and `L` to play, `I` and `O` for In and Out). **JefeCheck 1.7** keeps the keys the older versions used. The tables in this manual show **Editing** unless they say otherwise. On macOS `Ctrl` means `Cmd` and `Alt` means `Option`; where a key uses the physical Control key, it says `Control`.
+
+#### J, K and L
+
+`L` plays forward and `J` plays backward. Press `L` again while playing forward and nothing changes; press `J` while playing forward and the direction reverses and playback continues. `K` pauses. `Space` still plays and pauses in the current direction. These keys are not in the 1.7 preset, where `L` is the hold key for stepping through LUTs.
+
+#### Keys in the Editing preset
+
+| Command | Key |
+|---|---|
+| Play / Pause | `Space` |
+| Play Backward | `J` |
+| Pause | `K` |
+| Play Forward | `L` |
+| Step Back One Frame | `Left` |
+| Step Forward One Frame | `Right` |
+| Go to Start | `Home` |
+| Go to End | `End` |
+| Play Direction: Reverse | `,`, `<` |
+| Play Direction: Forward | `.`, `>` |
+| Loop Mode: Once | `8` |
+| Loop Mode: Loop | `9` |
+| Loop Mode: Bounce | `0` |
+| Set In Point at Playhead | `I` |
+| Set Out Point at Playhead | `O` |
+| Go to In Point | `Shift+I` |
+| Go to Out Point | `Shift+O` |
+| Reset In Point to Start | `Alt+I` |
+| Reset Out Point to End | `Alt+O` |
+| Clear In and Out | `Alt+X` |
+| Set In Point and Load from Here | `Alt+Shift+I` |
+| Previous Track on Active Plate | `Up` |
+| Next Track on Active Plate | `Down` |
+| Show Track A | `1` |
+| Show Track B | `2` |
+| Show Track C | `3` |
+| Show Track D | `4` |
+| Toggle Red Channel | `R` |
+| Toggle Green Channel | `G` |
+| Toggle Blue Channel | `B` |
+| Toggle Alpha Channel | `A` |
+| Apply Color Favorites 1-5 | `Shift+1-5` |
+| Save Color Favorites 1-5 | `Ctrl+Shift+1-5` (macOS: `Control+Shift+1-5`) |
+| Load FX Favorites 1-5 | `Shift+F1-5` |
+| Append FX Favorites 1-5 | `Ctrl+F1-5` (macOS: `Option+F1-5`) |
+| Save FX Favorites 1-5 | `Ctrl+Shift+F1-5` |
+| Chat: Start Typing | `Return`, `Enter` |
+| Layout: Single | `Ctrl+1` |
+| Layout: Side by Side | `Ctrl+2` |
+| Layout: Top / Bottom | `Ctrl+3` |
+| Layout: 2 x 2 | `Ctrl+4` |
+| Fit to Screen | `F` |
+| Fit All Plates | `Shift+F` |
+| Flip Vertical | `V` |
+| Flip All Plates | `Shift+V` |
+| Flop Horizontal | `M` |
+| Flop All Plates | `Shift+M` |
+| Text Overlay Mode | `T` |
+| Text Overlay Mode (All Plates) | `Alt+T` |
+| Reset Plate | `Ctrl+R` |
+| Reset All Plates | `Ctrl+Alt+R` |
+| Show Histogram | `Ctrl+H` (macOS `Control+H`) |
+| Show Histogram (All Plates) | `Ctrl+Alt+H` (macOS `Control+Option+H`) |
+| Show Notes | `N` |
+| Reset Color Correction | `Shift+R` |
+| Reset All Color Corrections | `Alt+Shift+R` |
+| Quick Load… | `Ctrl+O` |
+| Load Sequence Manager… | `Ctrl+L` |
+| Save Session | `Ctrl+S` |
+| Open Session… | `Ctrl+Shift+O` |
+| Preferences… | `Ctrl+P`, `Ctrl+,` |
+| Quit | `Ctrl+Q` |
+| Fullscreen | `F11` (macOS also `Control+Cmd+F`) |
+| Plate Manager | `F2` |
+| FX | `F3` |
+| LUTs | `F4` |
+| Remote Session… | `F5` |
+| Render… | `F6` |
+| Notes | `F7` |
+| Timeline | `F8` |
+| Playlist | `F9` |
+| Hide Controls | `Ctrl+Alt+F` |
+| Minimize (macOS only) | `Ctrl+M` |
+| User Manual | `F1` |
+| Toggle On-Screen Help | `H` |
+| Drag Gamma (hold) | `W` |
+| Drag Exposure (hold) | `E` |
+| Drag Brightness (hold) | `Q` |
+| Drag Contrast (hold) | `D` |
+| Drag Saturation (hold) | `S` |
+
+Hold keys are held while you click-drag on the viewport (see Color Correction). The keys `Left` and `Right` step by one frame; `Home` and `End` go to the ends of the timeline. The Previous and Next LUT commands have no key until you give them one in Preferences.
+
+#### Coming from JefeCheck 1.7
+
+If you used JefeCheck 1.7 you can switch back to its keys at any time: **File > Preferences… > Shortcuts**, then choose **JefeCheck 1.7** in the preset menu. The first time you start JefeCheck 2.0 a banner offers this choice. The two presets differ in the commands below; every other command has the same key in both.
+
+| Command | Editing (Windows / Linux) | 1.7 preset on macOS | 1.7 preset on Windows / Linux |
+|---|---|---|---|
+| Play Backward | `J` | (none) | (none) |
+| Pause | `K` | (none) | (none) |
+| Play Forward | `L` | (none) | (none) |
+| Play Reverse (toggle) | (none) | `<` | `<` |
+| Play Forward (toggle) | (none) | `>` | `>` |
+| Step Back One Frame | `Left` | `Left`, `X` | `Left`, `X` |
+| Step Forward One Frame | `Right` | `Right`, `C` | `Right`, `C` |
+| Go to Start | `Home` | `Z`, `Home` | `Z`, `Home` |
+| Go to End | `End` | `V`, `End` | `V`, `End` |
+| Play Direction: Reverse | `,`, `<` | `,` | `,` |
+| Play Direction: Forward | `.`, `>` | `.` | `.` |
+| Go to In Point | `Shift+I` | (none) | (none) |
+| Go to Out Point | `Shift+O` | (none) | (none) |
+| Reset In Point to Start | `Alt+I` | `Shift+I` | `Shift+I` |
+| Reset Out Point to End | `Alt+O` | `Shift+O` | `Shift+O` |
+| Clear In and Out | `Alt+X` | (none) | (none) |
+| Set In Point and Load from Here | `Alt+Shift+I` | `Alt+I` | `Alt+I` |
+| Append FX Favorites 1-5 | `Ctrl+F1-5` | `Control+F1-5`, `Alt+F1-5` | `Ctrl+F1-5` |
+| Save FX Favorites 1-5 | `Ctrl+Shift+F1-5` | `Control+Shift+F1-5` | `Ctrl+Shift+F1-5` |
+| Chat: Start Typing | `Return`, `Enter` | `Y` | `Y` |
+| Chat: Show / Hide | (none) | `Control+Y` | `Ctrl+Y` |
+| Layout: Single | `Ctrl+1` | `Control+1`, `Ctrl+1` | `Ctrl+1` |
+| Layout: Side by Side | `Ctrl+2` | `Control+2`, `Ctrl+2` | `Ctrl+2` |
+| Layout: Top / Bottom | `Ctrl+3` | `Control+3`, `Ctrl+3` | `Ctrl+3` |
+| Layout: 2 x 2 | `Ctrl+4` | `Control+4`, `Ctrl+4` | `Ctrl+4` |
+| Fit All Plates | `Shift+F` | `Alt+F`, `Shift+F` | `Alt+F`, `Shift+F` |
+| Flip Vertical | `V` | `Control+8` | `Ctrl+8` |
+| Flip All Plates | `Shift+V` | `Control+Alt+8` | `Ctrl+Alt+8` |
+| Flop Horizontal | `M` | `M`, `Control+9` | `M`, `Ctrl+9` |
+| Flop All Plates | `Shift+M` | `Shift+M`, `Control+Alt+9` | `Shift+M`, `Ctrl+Alt+9` |
+| Reset Plate | `Ctrl+R` | `Control+R`, `Ctrl+R` | `Ctrl+R` |
+| Reset All Plates | `Ctrl+Alt+R` | `Control+Alt+R`, `Ctrl+Alt+R` | `Ctrl+Alt+R` |
+| Quick Load… | `Ctrl+O` | `Ctrl+O` (that is `Cmd+O`; 1.7's `Control+O` is Open Session) | (none) (1.7's `Ctrl+O` is Open Session) |
+| Load Sequence Manager… | `Ctrl+L` | `Control+L`, `Ctrl+L` | `Ctrl+L` |
+| Save Session | `Ctrl+S` | `Control+S`, `Ctrl+S` | `Ctrl+S` |
+| Open Session… | `Ctrl+Shift+O` | `Control+O`, `Ctrl+Shift+O` | `Ctrl+O`, `Ctrl+Shift+O` |
+| Preferences… | `Ctrl+P`, `Ctrl+,` | `Ctrl+P`, `Ctrl+,` | `Ctrl+,` |
+| Quit | `Ctrl+Q` | `Ctrl+Q`, `Control+Q` | `Ctrl+Q` |
+| Fullscreen | `F11` (macOS also `Control+Cmd+F`) | `Control+F`, `F11` | `Ctrl+F`, `F11` |
+| Playlist | `F9` | `Control+P`, `F9` | `Ctrl+P`, `F9` |
+| Hide Controls | `Ctrl+Alt+F` | `Control+Alt+F`, `Ctrl+Alt+F` | `Ctrl+Alt+F` |
+| Hold L, then Up / Down: Previous / Next LUT | (none) | `L`, then `Up` / `Down` | `L`, then `Up` / `Down` |
+
+In this table `Ctrl` is `Cmd` on macOS and `Control` is the physical Control key, which is what JefeCheck 1.7 used there; on macOS the 1.7 preset gives most of those commands both keys (for example `Control+L` and `Cmd+L`). The Editing column shows the Windows and Linux keys, with macOS exceptions below. Commands not listed have the same keys in both presets. The timeline zoom keys (`=`, `-`, `\`, `Shift+\`) are reserved in both presets for the upcoming timeline zoom and do nothing yet.
+
+The Editing preset differs between platforms, because macOS keeps some keys for itself:
+
+- **Save Color Favorite 1-5** is `Control+Shift+1-5` on macOS (`Cmd+Shift+3`, `4` and `5` are screenshots) and `Ctrl+Shift+1-5` on Windows and Linux.
+- **Append FX Favorite 1-5** is `Option+F1-5` on macOS (`Control+F1-5` is macOS keyboard navigation) and `Ctrl+F1-5` on Windows and Linux.
+- **Fullscreen** also has `Control+Cmd+F` on macOS, the standard Mac key.
+- **Show Histogram** is `Control+H` and **Show Histogram (All Plates)** `Control+Option+H` on macOS, in both presets (`Cmd+H` and `Option+Cmd+H` are the app menu's Hide and Hide Others), and `Ctrl+H` / `Ctrl+Alt+H` on Windows and Linux.
+
+macOS takes some keys before they reach JefeCheck: `Cmd+Shift+3`, `4` and `5` (screenshots), `Cmd+F5` and `Option+Cmd+F5` (VoiceOver), `Cmd+Tab` and `Shift+Cmd+Tab` (switch apps), `Cmd+Space` (Spotlight), `Option+Cmd+Esc` (Force Quit), `Shift+Cmd+Q` and `Control+Cmd+Q` (Log Out, Lock Screen), and the app menu's `Cmd+H` (Hide), `Option+Cmd+H` (Hide Others) and `Option+Cmd+Q` (Quit and Close All Windows). No preset uses them, and the Shortcuts page refuses them with a note ("⇧⌘3 is reserved by macOS"). `Cmd+Q` (Quit) and `Cmd+M` (Minimize) are JefeCheck's own commands.
+
+#### The Shortcuts page in Preferences
+
+**File > Preferences… > Shortcuts** lists every command with its **Key** and a **Second key**, grouped by what it does.
+
+- The **Preset** menu switches between Editing and JefeCheck 1.7. If you have changed keys, a bar asks first (**Switch** discards your changes, **Keep** stays on the current preset).
+- **Search** filters the list by command name or by key.
+- **Double-click** a key (or select the row and press `Enter`), then press the new key combination. A command can have two keys. Press `Backspace` while capturing to leave it with no key, and `Esc` to cancel. Hold keys (the drag keys) take one key without modifiers.
+- If the key is already used, a bar names the other command. **Replace** gives the key to the command you are editing and takes it from the other; **Cancel** leaves things as they were.
+- A command whose keys differ from the preset is marked in orange with a **reset dot**. Click the dot (or right-click the row) to put that command back; **Reset to preset** puts every command back.
+- **Import…** and **Export…** read and write `.jcshortcuts` files, so a studio can give everyone the same keys. An import is checked as a whole: if anything in the file is wrong, nothing changes and a one-line message says why.
+- Keys that work only inside a panel (for example in a list) are shown under **Inside panels** and cannot be changed.
+
+**Done** keeps your changes; **Cancel** puts every key back as it was. The on-screen help (`H`) and the tooltips always show your current keys. The first time you start JefeCheck 2.0, a bar above the viewport offers **Use 1.7 keys**, **Keep** (Editing) or **Customize…** (opens this page); it does not appear again.
+
+**Limit:** the presets are written for a US keyboard layout. On other layouts a key can be hard to reach: on a French (AZERTY) keyboard the digits need `Shift`, so the `Shift+digit` commands (Apply Color Favorite) may not be available. The list is authoritative; rebind such commands here.
 
 ---
 

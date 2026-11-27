@@ -5,7 +5,8 @@
 // `sett` snapshot.
 //
 // Pages cover: General (incl. the folded Playback & Engine controls), Text,
-// Formats, Search Paths, Remote. Text binds to the GfcTextRenderer singleton
+// Formats, Search Paths, Remote, Shortcuts (ShortcutsPage_Qt: edits the shortcut
+// registry live; Done saves it, Cancel restores the snapshot). Text binds to the GfcTextRenderer singleton
 // (not `sett`) with deferred QSettings persistence — see writeTextPrefs() and
 // qt_prefs_persist's applyTextPrefs().
 //
@@ -18,6 +19,7 @@
 
 #include <QColor>
 #include <QDialog>
+#include "Shortcuts_qt.h"
 
 #include <memory>
 
@@ -44,12 +46,23 @@ public:
     explicit PreferencesWindow_Qt(QWidget* parent = nullptr);
     ~PreferencesWindow_Qt() override;
 
+    // The Done / Cancel handlers, callable without a click (headless --shortcuts-test).
+    void commitForTest() { onDone(); }
+    void cancelForTest() { reject(); }
+    // Selects the section whose page has this objectName ("prefs.shortcuts.page"), or the
+    // index-th section; false if there is none.
+    bool showSection(const QString& pageObjectName);
+    bool showSection(int index);
+    // Escape, the window close button and Cancel all end up here and revert.
+    void reject() override;
+
 signals:
     // Emitted continuously while the dialog is open so the owner can repaint
     // the viewport for live preview of viewport-affecting settings.
     void viewportRepaintRequested();
 
 private:
+    void onDone();
     void addPage(const QString& title, QWidget* page);
     void buildGeneralPage();
     void buildTextPage();
@@ -92,6 +105,8 @@ private:
     // (see the forward-declaration comment above); allocated/populated in
     // the .cpp where gfcStructures.h is available.
     std::unique_ptr<gfcSettings> sett_backup_;
+    // Same snapshot for the shortcut registry (preset, overrides, orphans).
+    std::unique_ptr<jefe::shortcuts::Registry::Snapshot> shortcuts_backup_;
 };
 
 #endif

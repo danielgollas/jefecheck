@@ -28,6 +28,7 @@
 #include <QEventLoop>
 #include "SequenceLoadBridge_qt.h"
 #include "Shortcuts_qt.h"
+#include "ShortcutsBanner_qt.h"
 #include "TimelinePanel_qt.h"
 #include "UiDensityCheck_qt.h"
 #include "UiMetrics_qt.h"
@@ -72,6 +73,9 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QVBoxLayout>
+#include <QUuid>
+#include <QDir>
 #include <QShortcut>
 #include <QContextMenuEvent>
 #include <QFocusEvent>
@@ -159,7 +163,21 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     resize(1280, 800);
 
     viewport_ = new GlViewport_Qt(this);
-    setCentralWidget(viewport_);
+    // The viewport sits in a zero-margin column under the first-launch shortcuts bar (hidden
+    // unless maybeShowShortcutsBanner shows it), so the bar pushes the viewport down instead of
+    // covering it.
+    auto* central = new QWidget(this);
+    central->setObjectName("central.container");
+    auto* centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    shortcutsBanner_ = new ShortcutsBanner_Qt(central);
+    shortcutsBanner_->hide();
+    centralLayout->addWidget(shortcutsBanner_);
+    centralLayout->addWidget(viewport_, 1);
+    setCentralWidget(central);
+    connect(shortcutsBanner_, &ShortcutsBanner_Qt::customizeRequested, this,
+            [this]() { openPreferences(QStringLiteral("prefs.shortcuts.page")); });
 
     // Initialize the rendering pipeline's GUI bridges before paintGL runs.
     // Routed through a Qt-free TU: glad can't share a TU with QOpenGLWidget on macOS.
@@ -219,7 +237,13 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
     // take their actions; window-level commands get their run from bindRun in buildMenuBar /
     // buildDocks, and attach() puts the actions on this window and the Player widgets.
     auto& shortcuts = jefe::shortcuts::Registry::instance();
-    if (shortcuts.commands().isEmpty()) jefe::shortcuts::registerAllCommands(shortcuts);
+    if (shortcuts.commands().isEmpty()) {
+        jefe::shortcuts::registerAllCommands(shortcuts);
+        // The saved preset and overrides need the commands to exist, so they load here and not in
+        // loadPreferences() (which runs before registration); this precedes the menus and help text.
+        QSettings savedShortcuts;
+        shortcuts.load(savedShortcuts);
+    }
 
     buildMenuBar();
     buildDocks();
@@ -248,7 +272,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         lastExitWasClean_ = s.value("Session/cleanExit", true).toBool();
         s.setValue("Session/cleanExit", false);   // unclean until proven otherwise
     }
-    // App-global color-correction favorites (persist across launches).
+    // App-global colour favourites (persist across launches). FX favourites load after the
+    // FX autoload (autoloadStep), since they need the loaded effects.
     jefe::qt::loadCCFavoritesFile(jefe::qt::getFavoritesFilePath());
 
     // After a keyboard (or menu) command: what each old handler did besides its bridge call.
@@ -258,6 +283,15 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
             [this](const QString& id, jefe::shortcuts::Category category) {
         using jefe::shortcuts::Category;
         const auto& reg = jefe::shortcuts::Registry::instance();
+        // Colour favourites (key or View menu): what the menu items used to do besides the bridge call.
+        static const QRegularExpression ccFav(QStringLiteral("^color\\.cc-fav-(save|apply)-(\\d)$"));
+        if (const QRegularExpressionMatch m = ccFav.match(id); m.hasMatch()) {
+            const bool save = m.captured(1) == QLatin1String("save");
+            if (!save && plateManagerWidget_) plateManagerWidget_->refreshAllCards();
+            statusBar()->showMessage(save ? tr("Saved color correction to favorite %1").arg(m.captured(2))
+                                          : tr("Loaded color correction favorite %1").arg(m.captured(2)),
+                                     3000);
+        }
         for (const jefe::shortcuts::Command& c : reg.commands()) {
             if (id != QLatin1String(c.id)) continue;
             if (c.scope == jefe::shortcuts::Scope::Player) {
@@ -559,12 +593,7 @@ void MainWindow_Qt::buildMenuBar() {
     auto* prefsAction = registryMenuAction("file.preferences", "&Preferences…", "menu.file.preferences");
     fileMenu->addAction(prefsAction);
     reg.bindRun("file.preferences", [this]() {
-        // Modal — settings persist on Done via jefe::qt::writePreferences() inside the dialog.
-        // Live preview: repaint the viewport as viewport-affecting settings change.
-        PreferencesWindow_Qt dlg(this);
-        connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
-                this, [this]() { if (viewport_) viewport_->update(); });
-        dlg.exec();
+        openPreferences();
     });
     // Suppress Qt's "Preferences..." auto-detection: it moves the action into the
     // macOS Application menu and steals Cmd+, .
@@ -636,32 +665,23 @@ void MainWindow_Qt::buildMenuBar() {
     plateModeMenu_ = viewMenu->addMenu(tr("Plate Manager Shows"));
     plateModeMenu_->setObjectName("menu.view.platemanager");
 
-    // View → Color Correction Favorites: 5 save/load slots on the active plate.
-    // Menu-only (no Ctrl+1-5 shortcuts — they'd collide with the layout ones).
+    // View → Color Correction Favorites: 5 save/load slots on the active plate. The items are
+    // the registry's colour-favourite commands, so they show the keys (Shift+1-5 apply; save is
+    // Control+Shift+1-5 on macOS, Ctrl+Shift+1-5 elsewhere). The save command also writes the
+    // favourites file; the commandRan slot (ctor) shows the status message and refreshes.
     viewMenu->addSeparator();
     auto* ccFavMenu = viewMenu->addMenu(tr("Color Correction Favorites"));
     ccFavMenu->setObjectName("menu.view.ccfavorites");
     for (int i = 0; i < 5; ++i) {
-        QAction* save = ccFavMenu->addAction(tr("Save to Slot %1").arg(i + 1));
-        save->setObjectName(QString("menu.view.ccfav.save.%1").arg(i));
-        connect(save, &QAction::triggered, this, [this, i]() {
-            jefe::qt::saveCCFavoriteFromActive(i);
-            jefe::qt::saveCCFavoritesFile(jefe::qt::getFavoritesFilePath());
-            statusBar()->showMessage(
-                tr("Saved color correction to favorite %1").arg(i + 1), 3000);
-        });
+        const QByteArray id = "color.cc-fav-save-" + QByteArray::number(i + 1);
+        const QByteArray name = "menu.view.ccfav.save." + QByteArray::number(i);
+        ccFavMenu->addAction(registryMenuAction(id.constData(), tr("Save to Slot %1").arg(i + 1), name.constData()));
     }
     ccFavMenu->addSeparator();
     for (int i = 0; i < 5; ++i) {
-        QAction* load = ccFavMenu->addAction(tr("Load Slot %1").arg(i + 1));
-        load->setObjectName(QString("menu.view.ccfav.load.%1").arg(i));
-        connect(load, &QAction::triggered, this, [this, i]() {
-            jefe::qt::applyCCFavoriteToActive(i);
-            if (plateManagerWidget_) plateManagerWidget_->refreshAllCards();
-            if (viewport_) viewport_->update();
-            statusBar()->showMessage(
-                tr("Loaded color correction favorite %1").arg(i + 1), 3000);
-        });
+        const QByteArray id = "color.cc-fav-apply-" + QByteArray::number(i + 1);
+        const QByteArray name = "menu.view.ccfav.load." + QByteArray::number(i);
+        ccFavMenu->addAction(registryMenuAction(id.constData(), tr("Load Slot %1").arg(i + 1), name.constData()));
     }
 
     // Active-plate transforms. The all-plates variants (Shift+F, Alt+T, ...) are registry
@@ -2788,6 +2808,22 @@ int MainWindow_Qt::runHeadlessPlateFrameTest() {
     return allPass ? 0 : 2;
 }
 
+void MainWindow_Qt::openPreferences(const QString& section) {
+    // Modal — settings persist on Done via jefe::qt::writePreferences() inside the dialog.
+    // Live preview: repaint the viewport as viewport-affecting settings change.
+    PreferencesWindow_Qt dlg(this);
+    if (!section.isEmpty()) dlg.showSection(section);
+    connect(&dlg, &PreferencesWindow_Qt::viewportRepaintRequested,
+            this, [this]() { if (viewport_) viewport_->update(); });
+    // Done saves the shortcut preset, so the first-launch banner has had its answer.
+    if (dlg.exec() == QDialog::Accepted && shortcutsBanner_) shortcutsBanner_->hide();
+}
+
+void MainWindow_Qt::maybeShowShortcutsBanner(bool isTestRun) {
+    if (shortcutsBanner_ && ShortcutsBanner_Qt::shouldShow(QSettings(), isTestRun))
+        shortcutsBanner_->show();
+}
+
 int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
     if (!plateDock_ || !plateManagerWidget_) {
         printf("PLATEMANAGER-TEST FAIL: no plate dock\n"); fflush(stdout); return 2;
@@ -3575,6 +3611,13 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         resize(1280, 800);
         settleFor(300);
     }
+    // The key checks below assert the Editing keys; the preset is put back afterwards (in memory
+    // only, nothing is written to QSettings).
+    // JEFE_TEST_SEED_OVERRIDE=1 plays a user who rebound Play/Pause to P: the checks must not notice.
+    const bool seeded = qEnvironmentVariableIsSet("JEFE_TEST_SEED_OVERRIDE");
+    if (seeded) jefe::shortcuts::Registry::instance().setOverride("playback.play-pause", QKeySequence("P"));
+    const jefe::shortcuts::Registry::Snapshot keysBefore = jefe::shortcuts::Registry::instance().snapshot();
+    jefe::shortcuts::Registry::instance().pinPreset(QStringLiteral("editing"));
     {   // Window menu: every panel has a shortcut, and no two menu-bar actions share one.
         QStringList bad;
         auto* wm = menuBar()->findChild<QMenu*>("menu.window");
@@ -3618,7 +3661,9 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         QStringList bad;
         if (reg.commands().isEmpty()) bad << "registry is empty";
         for (const sc::Command& c : reg.commands()) {
-            if (!c.run) bad << QString("%1 has no run").arg(c.id);
+            // timeline.* are reserved for the timeline project, which binds their runs.
+            if (!c.run && !QString::fromUtf8(c.id).startsWith(QLatin1String("timeline.")))
+                bad << QString("%1 has no run").arg(c.id);
             for (const QKeySequence& k : reg.keys(c.id)) {
                 const QStringList other = reg.conflicts(c.id, k);
                 if (!other.isEmpty())
@@ -3719,6 +3764,255 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             bad << "no LUT cube";
         }
         report("PLAYER keys", bad.isEmpty(), bad.isEmpty() ? QString("< > , . 9 8 on the viewport; LUT cube claims F only") : bad.join("; "));
+    }
+    {   // Preset keys on the focused viewport: Editing's J / K / L and Return, then the 1.7 preset's
+        // '<' (play reverse) and hold L + Down / Up (next / previous LUT, not the track).
+        namespace sc = jefe::shortcuts;
+        sc::Registry& reg = sc::Registry::instance();
+        QStringList bad, ran;
+        const QMetaObject::Connection spy = connect(&reg, &sc::Registry::commandRan, this,
+                [&ran](const QString& id, sc::Category) { ran << id; });
+        viewport_->setFocus(Qt::OtherFocusReason);
+        settleFor(50);
+        auto send = [this](QEvent::Type t, Qt::Key k, const QString& text) {
+            QKeyEvent ev(t, k, Qt::NoModifier, text);
+            QApplication::sendEvent(viewport_, &ev);
+        };
+        auto press = [&](Qt::Key k, const QString& text) {
+            send(QEvent::KeyPress, k, text);
+            send(QEvent::KeyRelease, k, text);
+        };
+        if (jefe::qt::isPlaying()) jefe::qt::pausePlayback();
+        jefe::qt::setPlayDirection(-1);
+        ran.clear();
+        press(Qt::Key_L, "l");
+        if (!ran.contains("playback.jkl-forward") || !jefe::qt::isPlaying() || jefe::qt::getPlayDirection() != 1)
+            bad << QString("L: ran [%1] playing=%2 dir=%3").arg(ran.join(",")).arg(jefe::qt::isPlaying()).arg(jefe::qt::getPlayDirection());
+        press(Qt::Key_K, "k");
+        if (jefe::qt::isPlaying()) bad << "K did not pause";
+        ran.clear();
+        press(Qt::Key_Return, "\r");
+        if (!ran.contains("remote.chat-type")) bad << "Return did not run remote.chat-type";
+        if (!jefe::qt::isRemoteConnected() && jefe::qt::remoteChatModeActive()) bad << "Return started chat while not connected";
+        jefe::qt::remoteChatCancel();
+        // Composing: the viewport claims Return (it sends the message) instead of the command.
+        jefe::qt::remoteChatBegin();
+        QKeyEvent ovReturn(QEvent::ShortcutOverride, Qt::Key_Return, Qt::NoModifier, "\r");
+        ovReturn.ignore();
+        QApplication::sendEvent(viewport_, &ovReturn);
+        if (!ovReturn.isAccepted()) bad << "chat mode does not claim Return";
+        jefe::qt::remoteChatCancel();
+
+        reg.pinPreset(QStringLiteral("classic"));
+        press(Qt::Key_Less, "<");
+        if (!jefe::qt::isPlaying() || jefe::qt::getPlayDirection() != -1) bad << "classic < did not play reverse";
+        press(Qt::Key_Less, "<");
+        if (jefe::qt::isPlaying()) bad << "classic < again did not stop";
+        jefe::qt::setPlayDirection(+1);
+        const int track0 = jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate());
+        const int lut0 = jefe::qt::getLUTOnActivePlate();
+        ran.clear();
+        send(QEvent::KeyPress, Qt::Key_L, "l");
+        if (!viewport_->isHolding("plate.lut-hold")) bad << "L not held";
+        press(Qt::Key_Down, QString());
+        const int lutDown = jefe::qt::getLUTOnActivePlate();
+        press(Qt::Key_Up, QString());
+        send(QEvent::KeyRelease, Qt::Key_L, "l");
+        if (!jefe::qt::getLutNames().empty() && lutDown == lut0) bad << "L+Down did not change the LUT";
+        if (jefe::qt::getLUTOnActivePlate() != lut0) bad << "L+Down, L+Up did not return to the LUT";
+        if (jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate()) != track0) bad << "L+Up/Down changed the track";
+        if (ran.contains("plate.track-prev") || ran.contains("plate.track-next")) bad << "L+Up/Down ran " + ran.join(",");
+        jefe::qt::applyLUTToActivePlate(lut0);
+        ran.clear();
+        press(Qt::Key_Up, QString());
+        if (!ran.contains("plate.track-prev")) bad << "Up without L did not run plate.track-prev";
+        jefe::qt::showTrackOnActive(track0 < 0 ? 0 : track0);
+        disconnect(spy);
+        reg.pinPreset(QStringLiteral("editing"));
+        report("PRESET keys", bad.isEmpty(), bad.isEmpty() ? QString("J/K/L, Return; classic < and hold L + Down/Up (%1 LUTs)").arg(jefe::qt::getLutNames().size()) : bad.join("; "));
+    }
+    jefe::shortcuts::Registry::instance().restore(keysBefore);
+    if (seeded)
+        report("SEED restored", jefe::shortcuts::Registry::instance().key("playback.play-pause") == QKeySequence("P"),
+               "the seeded Play/Pause override is back after the pinned checks");
+    {   // Bridge calls behind the brought-back 1.7 keys; every changed state is put back.
+        QStringList bad;
+        // R is a solo toggle (R alone, or back to RGB), so one press flips G and B, not R.
+        const bool g0 = jefe::qt::getChannelOnActive(1);
+        const bool b0 = jefe::qt::getChannelOnActive(2);
+        jefe::qt::toggleChannelOnActive(0);
+        const bool g1 = jefe::qt::getChannelOnActive(1);
+        const bool soloR = jefe::qt::getChannelOnActive(0) && !g1 && !jefe::qt::getChannelOnActive(2) && !jefe::qt::getChannelOnActive(3);
+        jefe::qt::toggleChannelOnActive(0);
+        if (g1 == g0 && !soloR) bad << "R toggle changed nothing";
+        if (!soloR && g0) bad << "R toggle did not solo R";
+        if (jefe::qt::getChannelOnActive(1) != g0 || jefe::qt::getChannelOnActive(2) != b0) bad << "R toggle twice did not return";
+        const int track0 = jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate());
+        jefe::qt::showTrackOnActive(2);
+        if (jefe::qt::getTrackOnPlate(jefe::qt::getActivePlate()) != 2) bad << "showTrackOnActive(2)";
+        jefe::qt::showTrackOnActive(track0 < 0 ? 0 : track0);
+        const int lut0 = jefe::qt::getLUTOnActivePlate();
+        jefe::qt::scrollLUTOnActive(+1);
+        const int lutUp = jefe::qt::getLUTOnActivePlate();
+        jefe::qt::scrollLUTOnActive(-1);
+        if (jefe::qt::getLutNames().size() > 1 && lutUp == lut0) bad << "LUT did not scroll";
+        if (jefe::qt::getLUTOnActivePlate() != lut0) bad << "LUT scroll +1 -1 did not return";
+        jefe::qt::applyLUTToActivePlate(lut0);
+        const int plate = jefe::qt::getActivePlate();
+        const auto stack0 = jefe::qt::getFXStackXmlOnPlate(plate);
+        jefe::qt::clearFXStackOnPlate(plate);
+        if (!jefe::qt::getAvailableFXNames().empty()) {
+            jefe::qt::addFXToActivePlate(0);
+            const size_t one = jefe::qt::getFXStackOnPlate(plate).size();
+            jefe::qt::saveFXFavoriteFromActive(4);
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::loadFXFavoriteToActive(4);
+            const size_t loaded = jefe::qt::getFXStackOnPlate(plate).size();
+            jefe::qt::appendFXFavoriteToActive(4);
+            const size_t appended = jefe::qt::getFXStackOnPlate(plate).size();
+            if (one != 1 || loaded != 1 || appended != 2)
+                bad << QString("FX favourite sizes %1/%2/%3, wanted 1/1/2").arg(one).arg(loaded).arg(appended);
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::saveFXFavoriteFromActive(4);   // slot 4 back to empty (in-memory only)
+        } else {
+            bad << "no FX loaded";
+        }
+        jefe::qt::setFXStackXmlOnPlate(plate, stack0);
+        report("BROUGHT-BACK", bad.isEmpty(), bad.isEmpty() ? QString("channel toggle, show track, LUT scroll, FX favourites") : bad.join("; "));
+    }
+    {   // CC-FAV-FILE: saving a colour favourite (key or View menu, the same registry action) writes
+        // the favourites file. The file path points at a temp dir and the in-memory favourites
+        // are put back from a copy, so the user's favourites file is never read or written here.
+        namespace sc = jefe::shortcuts;
+        QStringList bad;
+        QTemporaryDir favDir;
+        const std::string before = (favDir.path() + "/before.jcs").toStdString();
+        const QString path = favDir.path() + "/favorites.jcs";
+        if (!favDir.isValid() || !jefe::qt::saveFavoritesFile(before)) {
+            bad << "cannot snapshot the favourites";
+        } else {
+            jefe::qt::setFavoritesFilePathForTest(path.toStdString());
+            // The registry owns the actions, so look in the menu rather than among our children.
+            QMenu* favMenu = findChild<QMenu*>(QStringLiteral("menu.view.ccfavorites"));
+            auto inMenu = [favMenu](const char* name) -> QAction* {
+                if (favMenu)
+                    for (QAction* a : favMenu->actions())
+                        if (a->objectName() == QLatin1String(name)) return a;
+                return nullptr;
+            };
+            QAction* menuSave = inMenu("menu.view.ccfav.save.4");
+            QAction* regSave = sc::Registry::instance().action("color.cc-fav-save-5");
+            QAction* menuLoad = inMenu("menu.view.ccfav.load.0");
+            if (!menuSave || menuSave != regSave) bad << "Save to Slot 5 is not the registry's color.cc-fav-save-5";
+            if (!menuLoad || menuLoad != sc::Registry::instance().action("color.cc-fav-apply-1"))
+                bad << "Load Slot 1 is not the registry's color.cc-fav-apply-1";
+            if (regSave && regSave->shortcut().isEmpty()) bad << "save action has no key";
+            if (regSave) regSave->trigger();
+            settle();
+            if (!QFile::exists(path) || QFileInfo(path).size() == 0) bad << "favourites file not written";
+            if (!statusBar()->currentMessage().contains("favorite 5")) bad << "no status message: " + statusBar()->currentMessage();
+            jefe::qt::setFavoritesFilePathForTest(std::string());
+            jefe::qt::loadCCFavoritesFile(before);   // in-memory favourites as they were
+        }
+        report("CC-FAV-FILE", bad.isEmpty(), bad.isEmpty() ? QString("save action wrote the file; menu items are the registry actions") : bad.join("; "));
+    }
+    {   // FX-FAV-FILE: saving an FX favourite writes it to the favourites file, and reading the
+        // file back (what startup does after the FX autoload) restores it. Temp file and a
+        // snapshot of the in-memory favourites, as in CC-FAV-FILE.
+        QStringList bad;
+        QTemporaryDir favDir;
+        const std::string before = (favDir.path() + "/before.jcs").toStdString();
+        const QString path = favDir.path() + "/favorites.jcs";
+        const int plate = jefe::qt::getActivePlate();
+        const auto stack0 = jefe::qt::getFXStackXmlOnPlate(plate);
+        QAction* fxSave = jefe::shortcuts::Registry::instance().action("fx.fav-save-5");
+        if (!favDir.isValid() || !jefe::qt::saveFavoritesFile(before)) {
+            bad << "cannot snapshot the favourites";
+        } else if (jefe::qt::getAvailableFXNames().empty()) {
+            bad << "no FX loaded";
+        } else if (!fxSave) {
+            bad << "no fx.fav-save-5 action";
+        } else {
+            jefe::qt::setFavoritesFilePathForTest(path.toStdString());
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::addFXToActivePlate(0);
+            fxSave->trigger();
+            settle();
+            QFile f(path);
+            const QString text = f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+            if (text.count("<favoriteStack") != 5) bad << QString("file has %1 FX favourites, wanted 5").arg(text.count("<favoriteStack"));
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::saveFXFavoriteFromActive(4);          // slot 5 empty in memory only
+            if (!jefe::qt::loadFXFavoritesFile(path.toStdString())) bad << "file did not load";
+            jefe::qt::loadFXFavoriteToActive(4);
+            if (jefe::qt::getFXStackOnPlate(plate).size() != 1)
+                bad << QString("slot 5 after reload has %1 FX, wanted 1").arg(jefe::qt::getFXStackOnPlate(plate).size());
+            jefe::qt::setFavoritesFilePathForTest(std::string());
+            jefe::qt::loadCCFavoritesFile(before);
+            jefe::qt::loadFXFavoritesFile(before);         // in-memory favourites as they were
+        }
+        jefe::qt::setFXStackXmlOnPlate(plate, stack0);
+        report("FX-FAV-FILE", bad.isEmpty(), bad.isEmpty() ? QString("save key wrote slot 5; reading the file restored it") : bad.join("; "));
+    }
+    {   // BANNER: the first-launch keyboard-preset bar. QSettings goes to a temp ini and the registry
+        // is snapshotted, so the user's own Shortcuts/preset and keys are untouched.
+        namespace sc = jefe::shortcuts;
+        sc::Registry& reg = sc::Registry::instance();
+        const sc::Registry::Snapshot snap = reg.snapshot();
+        const QString dir = QDir::tempPath() + QStringLiteral("/jefe-banner-test-") +
+                            QUuid::createUuid().toString(QUuid::Id128);
+        QDir().mkpath(dir);
+        const QSettings::Format oldFmt = QSettings::defaultFormat();
+        const QString oldIniPath = sc::iniUserScopePath();
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QStringList bad;
+        auto stored = []() { return QSettings().value("Shortcuts/preset").toString(); };
+        auto clear = []() { QSettings s; s.remove("Shortcuts/preset"); s.sync(); };
+        clear();
+        if (!ShortcutsBanner_Qt::shouldShow(QSettings(), false)) bad << "unset preset should show";
+        if (ShortcutsBanner_Qt::shouldShow(QSettings(), true)) bad << "test run should not show";
+        for (const char* name : {"classic", "keep", "customize"}) {
+            clear();
+            reg.setPreset(QStringLiteral("editing"));
+            {   // A stored custom key: a switch to 1.7 drops it, and it must not come back next launch.
+                reg.setOverride("playback.play-pause", QKeySequence("Ctrl+Alt+Q"));
+                QSettings s;
+                reg.save(s);
+                s.remove("Shortcuts/preset");   // still a first launch
+                s.sync();
+            }
+            ShortcutsBanner_Qt banner;
+            banner.show();
+            bool customized = false;
+            connect(&banner, &ShortcutsBanner_Qt::customizeRequested, &banner, [&]() { customized = true; });
+            auto* b = banner.findChild<QPushButton*>(QStringLiteral("shortcuts.banner.") + name);
+            if (!b) { bad << QStringLiteral("no %1 button").arg(name); continue; }
+            b->click();
+            const QString want = QString::fromLatin1(name) == "classic" ? "classic" : "editing";
+            if (stored() != want) bad << QStringLiteral("%1 stored '%2'").arg(name, stored());
+            if (reg.preset() != want) bad << QStringLiteral("%1 registry '%2'").arg(name, reg.preset());
+            if (banner.isVisible()) bad << QStringLiteral("%1 left the bar visible").arg(name);
+            if (customized != (QString::fromLatin1(name) == "customize")) bad << QStringLiteral("%1 customizeRequested=%2").arg(name).arg(customized);
+            if (ShortcutsBanner_Qt::shouldShow(QSettings(), false)) bad << QStringLiteral("%1 still asks").arg(name);
+            const bool keptStored = QSettings().contains("Shortcuts/overrides/playback.play-pause");
+            if (keptStored != (QString::fromLatin1(name) != "classic"))
+                bad << QStringLiteral("%1 stored override present=%2").arg(name).arg(keptStored);
+            reg.clearOverride("playback.play-pause");
+        }
+        {   // Preferences can open on the Shortcuts section.
+            PreferencesWindow_Qt dlg(this);
+            QListWidget* sidebar = dlg.findChild<QListWidget*>();
+            if (!dlg.showSection("prefs.shortcuts.page") || !sidebar || sidebar->currentItem()->text() != "Shortcuts")
+                bad << "showSection(Shortcuts) did not select the page";
+            dlg.cancelForTest();
+        }
+        QSettings::setDefaultFormat(oldFmt);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, oldIniPath);
+        if (sc::iniUserScopePath() != oldIniPath) bad << "QSettings ini path not restored";
+        reg.restore(snap);
+        QDir(dir).removeRecursively();
+        report("BANNER", bad.isEmpty(), bad.isEmpty() ? QString("shouldShow, 3 buttons write+apply the preset, Preferences opens on Shortcuts") : bad.join("; "));
     }
     pm->setMode(pl::PlateMode::Visible);
     layout(FRAMINGSINGLE_ID);
@@ -5287,6 +5581,7 @@ void MainWindow_Qt::autoloadStep() {
         // FX list fully populated — sortFXs + rebuildFXHashMap once,
         // then health-check counts.
         jefe::qt::finalizeFXLoad();
+        jefe::qt::loadFXFavoritesFile(jefe::qt::getFavoritesFilePath());
         viewport_->doneCurrent();
         autoloadPhase_ = AutoloadPhase::Done;
 

@@ -6,6 +6,7 @@
 #include "../gfcTextRenderer.h"
 #include "../UIConstants.h"
 #include "qt_prefs_persist.h"
+#include "ShortcutsPage_qt.h"
 
 #include <QCheckBox>
 #include <QTimer>
@@ -35,6 +36,21 @@
 
 extern gfcSettings sett;
 
+void PreferencesWindow_Qt::onDone() {
+    writeTextPrefs();                // Text/* (deferred persistence — see header)
+    jefe::qt::writePreferences();    // everything else, shortcut preset and overrides included
+    accept();
+}
+
+void PreferencesWindow_Qt::reject() {
+    sett = *sett_backup_;            // revert live mutations
+    jefe::shortcuts::Registry::instance().restore(*shortcuts_backup_);
+    jefe::qt::applyTextPrefs();      // revert live text-renderer edits (Text/* QSettings are
+                                     // untouched; this reapplies the pre-dialog state)
+    emit viewportRepaintRequested(); // paint the reverted state before closing
+    QDialog::reject();
+}
+
 PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
     setObjectName("preferences.dialog");
@@ -50,6 +66,8 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     // Snapshot the live settings on open so Cancel can restore them verbatim
     // — pages below mutate `sett` directly as the user edits.
     sett_backup_ = std::make_unique<gfcSettings>(sett);
+    shortcuts_backup_ = std::make_unique<jefe::shortcuts::Registry::Snapshot>(
+        jefe::shortcuts::Registry::instance().snapshot());
 
     sidebar_ = new QListWidget(this);
     sidebar_->setFixedWidth(140);
@@ -70,6 +88,7 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     buildFormatsPage();
     buildSearchPathsPage();
     buildRemotePage();
+    addPage(tr("Shortcuts"), new ShortcutsPage_Qt(this));  // objectName prefs.shortcuts.page
 
     sidebar_->setCurrentRow(0);
 
@@ -79,19 +98,8 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
     buttons->button(QDialogButtonBox::Save)->setText("Done");
     buttons->button(QDialogButtonBox::Save)->setObjectName("preferences.done.button");
     buttons->button(QDialogButtonBox::Cancel)->setObjectName("preferences.cancel.button");
-    connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
-        writeTextPrefs();                // Text/* (deferred persistence — see header)
-        jefe::qt::writePreferences();   // real persistence (was a no-op)
-        accept();
-    });
-    connect(buttons, &QDialogButtonBox::rejected, this, [this]() {
-        sett = *sett_backup_;           // revert live mutations
-        jefe::qt::applyTextPrefs();     // revert live text-renderer edits (Text/*
-                                         // QSettings are untouched; this reapplies
-                                         // the pre-dialog state)
-        emit viewportRepaintRequested(); // paint the reverted state before closing
-        reject();
-    });
+    connect(buttons, &QDialogButtonBox::accepted, this, &PreferencesWindow_Qt::onDone);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     // Live preview: repaint the viewport at ~30 Hz while this modal dialog is open
     // (a modal exec() still processes the parent's paint events).
@@ -115,6 +123,20 @@ PreferencesWindow_Qt::PreferencesWindow_Qt(QWidget* parent) : QDialog(parent) {
 // Out-of-line so the unique_ptr<gfcSettings> destructor sees the complete
 // type from gfcStructures.h (the header only forward-declares it).
 PreferencesWindow_Qt::~PreferencesWindow_Qt() = default;
+
+bool PreferencesWindow_Qt::showSection(const QString& pageObjectName) {
+    // By the page's objectName, not the sidebar text (which is translated).
+    for (int i = 0; i < pages_->count(); ++i) {
+        if (pages_->widget(i)->objectName() == pageObjectName) return showSection(i);
+    }
+    return false;
+}
+
+bool PreferencesWindow_Qt::showSection(int index) {
+    if (index < 0 || index >= sidebar_->count()) return false;
+    sidebar_->setCurrentRow(index);
+    return true;
+}
 
 void PreferencesWindow_Qt::addPage(const QString& title, QWidget* page) {
     sidebar_->addItem(title);

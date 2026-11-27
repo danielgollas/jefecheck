@@ -67,9 +67,12 @@ class JefeCheckApp:
         config_dir: Optional[Path] = None,
         slow_mo: float = 0.0,
         open_files: Optional[list[Path]] = None,
+        env: Optional[dict[str, str]] = None,
     ) -> "JefeCheckApp":
         """Start the app under Appium and return a wrapped client.
-        `open_files` are loaded into plates 0..3 in order so visual-diff tests have known content."""
+        `open_files` are loaded into plates 0..3 in order so visual-diff tests have known content.
+        `env` adds environment variables (e.g. JEFECHECK_SHORTCUTS_FILE, which makes the
+        Shortcuts page's Import…/Export… use that path instead of a file dialog)."""
         owns_config_dir = config_dir is None
         if config_dir is None:
             config_dir = Path(tempfile.mkdtemp(prefix="jefecheck-test-"))
@@ -84,7 +87,7 @@ class JefeCheckApp:
         opts.bundle_id = locators.BUNDLE_ID
         opts.app = str(binary)
         opts.arguments = args
-        opts.environment = {"JEFECHECK_CONFIG_DIR": str(config_dir)}
+        opts.environment = {"JEFECHECK_CONFIG_DIR": str(config_dir), **(env or {})}
         # mac2 spends most of its time on the initial bundle path resolve
         # and a (slow) UI tree warm-up; give it room without hiding bugs.
         opts.set_capability("appium:newCommandTimeout", 120)

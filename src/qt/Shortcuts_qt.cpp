@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QFileInfo>
 #include <QSettings>
 #include <QWidget>
 #include <QtGlobal>
@@ -112,6 +113,9 @@ bool jsonToKeys(const QJsonValue& v, QList<QKeySequence>* out)
     }
     return true;
 }
+
+// An id from a file, quoted in a one-line error: line breaks folded, length capped.
+QString idForMessage(const QString& id) { return id.simplified().left(80); }
 
 }  // namespace
 
@@ -248,6 +252,27 @@ void Registry::setPreset(const QString& preset)
     applyKeys();
 }
 
+void Registry::pinPreset(const QString& preset)
+{
+    if (preset != kEditing && preset != kClassic) return;
+    preset_ = preset;
+    unknownPreset_.clear();
+    overrides_.clear();
+    holdOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
+    applyKeys();
+}
+
+void Registry::resetToPreset()
+{
+    overrides_.clear();
+    holdOverrides_.clear();
+    unreadableOverrides_.clear();
+    unreadableHoldOverrides_.clear();
+    applyKeys();
+}
+
 QList<QKeySequence> Registry::presetKeys(int i) const
 {
     return preset_ == kClassic ? commands_[i].classic : commands_[i].editing;
@@ -285,6 +310,44 @@ void Registry::setOverride(const char* id, const QKeySequence& key)
     applyKeys();
 }
 
+void Registry::setOverrideKeys(const char* id, const QList<QKeySequence>& keys)
+{
+    const QString sid = QString::fromUtf8(id);
+    if (indexOf(sid) < 0) {
+        qWarning("Shortcuts: override for unknown command \"%s\"", id);
+        return;
+    }
+    QList<QKeySequence> ks;
+    for (const QKeySequence& k : keys)
+        if (!k.isEmpty() && !ks.contains(k) && ks.size() < 2) ks.append(k);
+    const auto before = overrides_.value(sid);
+    const bool had = overrides_.contains(sid);
+    storeOverride(sid, ks);
+    if (had == overrides_.contains(sid) && before == overrides_.value(sid)) return;
+    applyKeys();
+}
+
+QList<QKeySequence> Registry::presetKeys(const char* id) const
+{
+    const int i = indexOf(QString::fromUtf8(id));
+    return i < 0 ? QList<QKeySequence>{} : presetKeys(i);
+}
+
+Qt::Key Registry::presetHoldKey(const char* id) const
+{
+    const int i = holdIndex_.value(QString::fromUtf8(id), -1);
+    if (i < 0) return Qt::Key_unknown;
+    return preset_ == kClassic ? holdKeys_[i].classic : holdKeys_[i].editing;
+}
+
+bool Registry::hasOverride(const char* id) const
+{
+    const QString sid = QString::fromUtf8(id);
+    return overrides_.contains(sid) || holdOverrides_.contains(sid);
+}
+
+int Registry::overrideCount() const { return int(overrides_.size() + holdOverrides_.size()); }
+
 void Registry::clearOverride(const char* id)
 {
     unreadableOverrides_.remove(QString::fromUtf8(id));
@@ -316,10 +379,10 @@ bool Registry::isCustom() const { return !overrides_.isEmpty() || !holdOverrides
 
 void Registry::load(QSettings& s)
 {
-    const QString p = s.value(QStringLiteral("Shortcuts/preset"), kEditing).toString();
-    // A preset this build does not know (a later version's) behaves as editing but is written
-    // back as it was until the user picks one.
-    preset_ = p == kClassic ? kClassic : kEditing;
+    const QString p = s.value(QStringLiteral("Shortcuts/preset"), defaultPreset_).toString();
+    // A preset this build does not know (a later version's) behaves as the default but is
+    // written back as it was until the user picks one.
+    preset_ = (p == kClassic || p == kEditing) ? p : defaultPreset_;
     unknownPreset_ = (p == kClassic || p == kEditing) ? QString() : p;
     overrides_.clear();
     holdOverrides_.clear();
@@ -463,7 +526,11 @@ bool Registry::importFrom(const QString& path, QString* error)
     for (auto it = keysO.begin(); it != keysO.end(); ++it) {
         QList<QKeySequence> ks;
         if (!jsonToKeys(it.value(), &ks))
-            return fail(QStringLiteral("Cannot read the key for \"%1\".").arg(it.key().left(80)));
+            return fail(QStringLiteral("Cannot read the key for \"%1\".").arg(idForMessage(it.key())));
+        if (ks.size() > 2)
+            return fail(QStringLiteral("\"%1\" has %2 keys; a command holds at most 2.")
+                            .arg(idForMessage(it.key()))
+                            .arg(ks.size()));
         if (indexOf(it.key()) < 0) ++unknown;
         else newKeys.insert(it.key(), ks);
     }
@@ -471,7 +538,7 @@ bool Registry::importFrom(const QString& path, QString* error)
     for (auto it = holdO.begin(); it != holdO.end(); ++it) {
         Qt::Key k;
         if (!it.value().isString() || !parseHold(it.value().toString(), &k))
-            return fail(QStringLiteral("Cannot read the hold key for \"%1\".").arg(it.key().left(80)));
+            return fail(QStringLiteral("Cannot read the hold key for \"%1\".").arg(idForMessage(it.key())));
         if (!holdIndex_.contains(it.key())) ++unknown;
         else newHold.insert(it.key(), k);
     }
@@ -502,11 +569,20 @@ QStringList Registry::conflicts(const char* id, const QKeySequence& key) const
     if (key.isEmpty()) return out;
     const QString sid = QString::fromUtf8(id);
     const int self = indexOf(sid);
+    const int selfHold = holdIndex_.value(sid, -1);
     // An unregistered id is treated as Player, the narrower scope (it still clashes with Global).
     const Scope scope = self < 0 ? Scope::Player : commands_[self].scope;
     for (int i = 0; i < commands_.size(); ++i) {
         if (i == self || !scopesClash(scope, commands_[i].scope)) continue;
         if (effectiveKeys(i).contains(key)) out << QString::fromUtf8(commands_[i].id);
+    }
+    // A hold key is a bare key: it clashes with a command on that bare key and with another hold.
+    const QKeyCombination kc = key[0];
+    if (key.count() == 1 && kc.keyboardModifiers() == Qt::NoModifier) {
+        for (int i = 0; i < holdKeys_.size(); ++i) {
+            if (i == selfHold) continue;
+            if (holdKey(holdKeys_[i].id) == kc.key()) out << QString::fromUtf8(holdKeys_[i].id);
+        }
     }
     return out;
 }
@@ -518,6 +594,68 @@ QString Registry::commandForKey(Scope scope, const QKeySequence& key) const
         if (commands_[i].scope == scope && effectiveKeys(i).contains(key))
             return QString::fromUtf8(commands_[i].id);
     return {};
+}
+
+void Registry::setDefaultPreset(const QString& preset)
+{
+    if (preset != kEditing && preset != kClassic) {
+        qWarning("Shortcuts: unknown default preset \"%s\"; ignored", qPrintable(preset));
+        return;
+    }
+    defaultPreset_ = preset;
+}
+
+const std::function<void()>* Registry::holdWithEntry(const QSet<int>& held, int key,
+                                                     Qt::KeyboardModifiers mods) const
+{
+    if ((mods & ~Qt::KeypadModifier) != Qt::NoModifier) return nullptr;
+    for (const HoldKey& h : holdKeys_) {
+        if (h.with.isEmpty()) continue;
+        const Qt::Key hk = holdKey(h.id);
+        if (hk == Qt::Key_unknown || !held.contains(int(hk))) continue;
+        for (const auto& w : h.with)
+            if (int(w.first) == key) return &w.second;
+    }
+    return nullptr;
+}
+
+bool Registry::holdWithClaims(const QSet<int>& held, int key, Qt::KeyboardModifiers mods) const
+{
+    return holdWithEntry(held, key, mods) != nullptr;
+}
+
+bool Registry::runHoldWith(const QSet<int>& held, int key, Qt::KeyboardModifiers mods)
+{
+    const std::function<void()>* entry = holdWithEntry(held, key, mods);
+    if (!entry) return false;
+    const std::function<void()> fn = *entry;  // copy: fn may re-enter the registry
+    if (fn) fn();
+    return true;
+}
+
+void Registry::bindHoldWith(const char* holdId, Qt::Key key, std::function<void()> fn)
+{
+    const int i = holdIndex_.value(QString::fromUtf8(holdId), -1);
+    if (i < 0) {
+        qWarning("Shortcuts: bindHoldWith for unknown hold key \"%s\"", holdId);
+        return;
+    }
+    for (auto& w : holdKeys_[i].with)
+        if (w.first == key) {
+            w.second = std::move(fn);
+            return;
+        }
+    holdKeys_[i].with.append({key, std::move(fn)});
+}
+
+void runJKL(int direction, const Transport& t)
+{
+    if (direction == 0) {
+        if (t.isPlaying()) t.togglePause();
+        return;
+    }
+    t.setDirection(direction > 0 ? +1 : -1);
+    if (!t.isPlaying()) t.togglePause();
 }
 
 void Registry::reset()
@@ -536,6 +674,40 @@ void Registry::reset()
     unreadableHoldOverrides_.clear();
     unknownPreset_.clear();
     preset_ = kEditing;
+    defaultPreset_ = kEditing;
+}
+
+const QList<QKeySequence>& systemReservedKeys()
+{
+    static const QList<QKeySequence> keys = [] {
+        QList<QKeySequence> out;
+#ifdef Q_OS_MACOS
+        // PortableText, where Ctrl is Cmd and Meta the Control key on macOS.
+        for (const char* k : {"Ctrl+Shift+3", "Ctrl+Shift+4", "Ctrl+Shift+5", "Ctrl+F5", "Ctrl+Alt+F5", "Ctrl+Tab",
+                              "Ctrl+Shift+Tab", "Ctrl+Space", "Ctrl+Alt+Esc", "Ctrl+Shift+Q", "Meta+Ctrl+Q", "Ctrl+H",
+                              "Ctrl+Alt+H", "Ctrl+Alt+Q"})
+            out << QKeySequence::fromString(QString::fromLatin1(k), QKeySequence::PortableText);
+#endif
+        return out;
+    }();
+    return keys;
+}
+
+bool isSystemReserved(const QKeySequence& key)
+{
+    if (key.isEmpty()) return false;
+    // Shift+Tab arrives as Backtab: compare both spellings.
+    QKeySequence k = key;
+    if (k[0].key() == Qt::Key_Backtab) k = QKeySequence(QKeyCombination(k[0].keyboardModifiers() | Qt::ShiftModifier, Qt::Key_Tab));
+    return systemReservedKeys().contains(k);
+}
+
+QString iniUserScopePath()
+{
+    // "<path>/<org>/<app>.ini": two levels up is the UserScope directory. Nothing is written.
+    const QSettings probe(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("probe-org"),
+                          QStringLiteral("probe-app"));
+    return QFileInfo(QFileInfo(probe.fileName()).absolutePath()).absolutePath();
 }
 
 }  // namespace jefe::shortcuts

@@ -6,6 +6,7 @@
 #include "../gfcStructures.h"
 #include "../gfcTextRenderer.h"
 #include "../gfcMovieReader.h"
+#include "Shortcuts_qt.h"
 #include <QSettings>
 #include <QString>
 #include <QStringList>
@@ -119,6 +120,8 @@ void applyTextPrefs() {
 
 void writePreferences() {
     QSettings s;
+    // Preset and overrides as they stand (an unknown preset from a later version is written back as it was).
+    jefe::shortcuts::Registry::instance().save(s);
     s.setValue("Engine/defaultDecodeFilter",  sett.defaultDecodeFilter);
     s.setValue("Engine/defaultTextureFormat", sett.defaultTextureFormat);
     s.setValue("Engine/memoryLimitPercent", sett.memoryLimitPercent);

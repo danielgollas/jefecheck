@@ -414,6 +414,9 @@ int getActivePlate() {
     return plateManager.getActiveQuad();
 }
 
+void playForwardToggle() { playbackManager.startPlayFwd(); plateManager.setChanged(); }
+void playReverseToggle() { playbackManager.startPlayRev(); plateManager.setChanged(); }
+
 void togglePlayFwd() {
     if (playbackManager.isPlaying()) {
         playbackManager.pause();
@@ -2637,9 +2640,90 @@ void applyCCFavoriteToActive(int slot) {
     plateManager.setChanged();
 }
 
-bool saveCCFavoritesFile(const std::string& path) {
+void toggleChannelOnActive(int channel) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0) return;
+    switch (channel) {
+        case 0: plateManager.toggleChannelR(q); break;
+        case 1: plateManager.toggleChannelG(q); break;
+        case 2: plateManager.toggleChannelB(q); break;
+        case 3: plateManager.toggleChannelA(q); break;
+        default: return;
+    }
+    propagatePlateChanges();
+}
+
+bool getChannelOnActive(int channel) {
+    const int q = plateManager.getActiveQuad();
+    auto* gui = q < 0 ? nullptr : plateManager.getPlateGUI(q);
+    if (!gui) return false;
+    switch (channel) {
+        case 0: return gui->getChannelR();
+        case 1: return gui->getChannelG();
+        case 2: return gui->getChannelB();
+        case 3: return gui->getChannelA();
+        default: return false;
+    }
+}
+
+void showTrackOnActive(int track) {
+    const int q = plateManager.getActiveQuad();
+    if (q < 0 || track < 0 || track > 3) return;
+    plateManager.setTrackOnPlate(q, track);
+    propagatePlateChanges();
+}
+
+void scrollLUTOnActive(int direction) {
+    const int q = plateManager.getActiveQuad();
+    // No LUT loaded: gfcPlate::scrollLUT would ask lutManager for LUT -1.
+    if (q < 0 || lutManager.getAllNames().empty()) return;
+    plateManager.scrollLUT(q, direction >= 0 ? 1 : -1);
+    propagatePlateChanges();
+}
+
+void loadFXFavoriteToActive(int slot) {
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS || plateManager.getActiveQuad() < 0) return;
+    plateManager.setFavoriteOnPlate(slot);
+    propagatePlateChanges();
+}
+
+void appendFXFavoriteToActive(int slot) {
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS || plateManager.getActiveQuad() < 0) return;
+    plateManager.appendFavoriteOnPlate(slot);
+    propagatePlateChanges();
+}
+
+void saveFXFavoriteFromActive(int slot) {
+    if (slot < 0 || slot >= GFC_MAX_FAVORITE_STACKS) return;
+    const int q = plateManager.getActiveQuad();
+    if (q < 0 || !plateManager.getFXStack(q)) return;   // saveFavoriteFromPlate dereferences it
+    plateManager.saveFavoriteFromPlate(slot);
+}
+
+namespace {
+std::string gFavoritesPathForTest;   // empty: the real file
+// False until loadFXFavoritesFile has run: FX favourites are read only after the FX
+// autoload, so a colour favourite saved before then must keep the file's FX favourites.
+bool gFXFavoritesLoaded = false;
+}
+
+// The favourites file: a "ccFavorites" top node holding the colour favourites ("CC") and,
+// since 2.0, the FX favourites ("favoriteStack", as 1.7's settings file stored them).
+bool saveFavoritesFile(const std::string& path) {
     XMLNode root = XMLNode::createXMLTopNode("ccFavorites");
     plateManager.saveFavoriteColorCorrectionsToNode(root);
+    if (gFXFavoritesLoaded) {
+        plateManager.saveFavoriteStacksToNode(root);
+    } else {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (fs::exists(path, ec)) {
+            XMLNode old = XMLNode::openFileHelper(path.c_str(), "ccFavorites");
+            if (!old.isEmpty())
+                while (old.nChildNode("favoriteStack") > 0)
+                    root.addChild(old.getChildNode("favoriteStack"));   // detaches it from `old`
+        }
+    }
     return root.writeToFile(path.c_str()) == eXMLErrorNone;
 }
 
@@ -2653,7 +2737,21 @@ bool loadCCFavoritesFile(const std::string& path) {
     return true;
 }
 
+bool loadFXFavoritesFile(const std::string& path) {
+    gFXFavoritesLoaded = true;   // from now on saves write the in-memory FX favourites
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::exists(path, ec)) return false;
+    XMLNode root = XMLNode::openFileHelper(path.c_str(), "ccFavorites");
+    if (root.isEmpty()) return false;
+    plateManager.loadFavoriteStacksFromNode(root);
+    return true;
+}
+
+void setFavoritesFilePathForTest(const std::string& path) { gFavoritesPathForTest = path; }
+
 std::string getFavoritesFilePath() {
+    if (!gFavoritesPathForTest.empty()) return gFavoritesPathForTest;
     return ::getApplicationDataPath() + "favorites.jcs";
 }
 
@@ -3139,6 +3237,16 @@ void sendChatMessageText(const std::string& text) {
 
 bool remoteChatModeActive() { return networkManager.gChatMode == 1; }
 void remoteChatBegin()      { networkManager.gChatMode = 1; }
+void remoteChatToggleShown() {
+    // JefeCheck 1.7's Ctrl+Y: fade a showing chat out now, or bring a faded one back.
+    if (networkManager.chatFadeCounter > networkManager.chatOpacity)
+        networkManager.chatFadeCounter = networkManager.chatOpacity;
+    else
+        remoteChatShowNow();
+}
+void remoteChatShowNow() {
+    networkManager.chatFadeCounter = networkManager.chatFadeDelay / GFCNET_CHAT_FADE_SPEED;
+}
 std::string remoteChatText() { return networkManager.gChatTextString; }
 void remoteChatCancel()     { networkManager.gChatMode = 0; networkManager.gChatTextString.clear(); }
 void remoteChatBackspace()  {

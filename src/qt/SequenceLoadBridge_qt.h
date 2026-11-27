@@ -138,6 +138,10 @@ int  getActivePlate();
 // per-tick refreshFromPlayback() reads the current state back so the
 // playhead and frame counter advance during playback.
 void togglePlayFwd();
+// JefeCheck 1.7's transport buttons ('>' / '<'): start playing that way, switch to it while
+// playing the other way, or stop when already playing that way.
+void playForwardToggle();
+void playReverseToggle();
 void rewindPlayback();
 void fastFwdPlayback();
 void setPlayDirection(int direction);   // FLTK '.' = +1 fwd, ',' = -1 rev
@@ -710,6 +714,8 @@ std::vector<ChatEntry> remoteChatEntries();
 void drawNetworkOverlay(int w, int h);
 bool remoteChatModeActive();
 void remoteChatBegin();
+void remoteChatShowNow();       // restart the chat overlay's fade (shown at full opacity)
+void remoteChatToggleShown();   // show a faded chat overlay again, or fade it out now (1.7 Ctrl+Y)
 void remoteChatCancel();
 void remoteChatBackspace();
 void remoteChatAppend(const std::string& s);
@@ -1236,9 +1242,26 @@ std::string getDefaultBrowsePath();
 // Color-correction favorites (slot 0..4, on the active plate).
 void saveCCFavoriteFromActive(int slot);
 void applyCCFavoriteToActive(int slot);
-bool saveCCFavoritesFile(const std::string& path);
+// Brought-back JefeCheck 1.7 keys, all on the active plate. Channel 0 R, 1 G, 2 B, 3 A
+// (a toggle follows gfcPlate: solo the channel, or back to RGB if it already is solo).
+void toggleChannelOnActive(int channel);
+bool getChannelOnActive(int channel);
+void showTrackOnActive(int track);       // 0..3
+void scrollLUTOnActive(int direction);   // +1 / -1
+// FX-stack favourites (slot 0..4): load replaces the stack, append adds to it.
+void loadFXFavoriteToActive(int slot);
+void appendFXFavoriteToActive(int slot);
+void saveFXFavoriteFromActive(int slot);
+// The favourites file holds colour and FX favourites. Colour favourites load at startup;
+// FX favourites load once the FX autoload has finished, because each FX is looked up among
+// the loaded effects. Until then a save keeps the file's FX favourites as they are.
+bool saveFavoritesFile(const std::string& path);
 bool loadCCFavoritesFile(const std::string& path);
+bool loadFXFavoritesFile(const std::string& path);
 std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
+// Tests: getFavoritesFilePath() returns `path` instead (empty = the real file again), so a
+// test that saves a favourite never touches the user's.
+void setFavoritesFilePathForTest(const std::string& path);
 
 // --- Notes dock ---------------------------------------------------------------
 // NotesPanel_Qt must not include gfcreview.h / gfcrevision.h / gfcnote.h; only
