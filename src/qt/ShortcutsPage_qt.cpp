@@ -19,6 +19,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QtGlobal>
 #include <QMenu>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -172,7 +173,9 @@ bool isModifierOnly(int key)
 
 ShortcutCaptureEdit_Qt::ShortcutCaptureEdit_Qt(QWidget* parent) : QKeySequenceEdit(parent)
 {
-    setMaximumSequenceLength(1);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    setMaximumSequenceLength(1);   // keyPressEvent ends the capture after one key anyway (Qt 6.4: Ubuntu 24.04)
+#endif
     setToolTip(tr("Press the new key. Esc cancels; Backspace unbinds."));
     if (auto* le = findChild<QLineEdit*>()) le->setPlaceholderText(tr("Press a key…"));
 }
