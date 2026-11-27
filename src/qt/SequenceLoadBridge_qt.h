@@ -1252,8 +1252,12 @@ void scrollLUTOnActive(int direction);   // +1 / -1
 void loadFXFavoriteToActive(int slot);
 void appendFXFavoriteToActive(int slot);
 void saveFXFavoriteFromActive(int slot);
-bool saveCCFavoritesFile(const std::string& path);
+// The favourites file holds colour and FX favourites. Colour favourites load at startup;
+// FX favourites load once the FX autoload has finished, because each FX is looked up among
+// the loaded effects. Until then a save keeps the file's FX favourites as they are.
+bool saveFavoritesFile(const std::string& path);
 bool loadCCFavoritesFile(const std::string& path);
+bool loadFXFavoritesFile(const std::string& path);
 std::string getFavoritesFilePath();   // getApplicationDataPath()+favorites.jcs
 // Tests: getFavoritesFilePath() returns `path` instead (empty = the real file again), so a
 // test that saves a favourite never touches the user's.

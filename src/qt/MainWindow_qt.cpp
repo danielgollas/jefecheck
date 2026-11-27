@@ -272,7 +272,8 @@ MainWindow_Qt::MainWindow_Qt(QWidget* parent) : QMainWindow(parent) {
         lastExitWasClean_ = s.value("Session/cleanExit", true).toBool();
         s.setValue("Session/cleanExit", false);   // unclean until proven otherwise
     }
-    // App-global color-correction favorites (persist across launches).
+    // App-global colour favourites (persist across launches). FX favourites load after the
+    // FX autoload (autoloadStep), since they need the loaded effects.
     jefe::qt::loadCCFavoritesFile(jefe::qt::getFavoritesFilePath());
 
     // After a keyboard (or menu) command: what each old handler did besides its bridge call.
@@ -3887,7 +3888,7 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
         QTemporaryDir favDir;
         const std::string before = (favDir.path() + "/before.jcs").toStdString();
         const QString path = favDir.path() + "/favorites.jcs";
-        if (!favDir.isValid() || !jefe::qt::saveCCFavoritesFile(before)) {
+        if (!favDir.isValid() || !jefe::qt::saveFavoritesFile(before)) {
             bad << "cannot snapshot the favourites";
         } else {
             jefe::qt::setFavoritesFilePathForTest(path.toStdString());
@@ -3914,6 +3915,44 @@ int MainWindow_Qt::runHeadlessPlateManagerTest(const QString& shotsDir) {
             jefe::qt::loadCCFavoritesFile(before);   // in-memory favourites as they were
         }
         report("CC-FAV-FILE", bad.isEmpty(), bad.isEmpty() ? QString("save action wrote the file; menu items are the registry actions") : bad.join("; "));
+    }
+    {   // FX-FAV-FILE: saving an FX favourite writes it to the favourites file, and reading the
+        // file back (what startup does after the FX autoload) restores it. Temp file and a
+        // snapshot of the in-memory favourites, as in CC-FAV-FILE.
+        QStringList bad;
+        QTemporaryDir favDir;
+        const std::string before = (favDir.path() + "/before.jcs").toStdString();
+        const QString path = favDir.path() + "/favorites.jcs";
+        const int plate = jefe::qt::getActivePlate();
+        const auto stack0 = jefe::qt::getFXStackXmlOnPlate(plate);
+        QAction* fxSave = jefe::shortcuts::Registry::instance().action("fx.fav-save-5");
+        if (!favDir.isValid() || !jefe::qt::saveFavoritesFile(before)) {
+            bad << "cannot snapshot the favourites";
+        } else if (jefe::qt::getAvailableFXNames().empty()) {
+            bad << "no FX loaded";
+        } else if (!fxSave) {
+            bad << "no fx.fav-save-5 action";
+        } else {
+            jefe::qt::setFavoritesFilePathForTest(path.toStdString());
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::addFXToActivePlate(0);
+            fxSave->trigger();
+            settle();
+            QFile f(path);
+            const QString text = f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+            if (text.count("<favoriteStack") != 5) bad << QString("file has %1 FX favourites, wanted 5").arg(text.count("<favoriteStack"));
+            jefe::qt::clearFXStackOnPlate(plate);
+            jefe::qt::saveFXFavoriteFromActive(4);          // slot 5 empty in memory only
+            if (!jefe::qt::loadFXFavoritesFile(path.toStdString())) bad << "file did not load";
+            jefe::qt::loadFXFavoriteToActive(4);
+            if (jefe::qt::getFXStackOnPlate(plate).size() != 1)
+                bad << QString("slot 5 after reload has %1 FX, wanted 1").arg(jefe::qt::getFXStackOnPlate(plate).size());
+            jefe::qt::setFavoritesFilePathForTest(std::string());
+            jefe::qt::loadCCFavoritesFile(before);
+            jefe::qt::loadFXFavoritesFile(before);         // in-memory favourites as they were
+        }
+        jefe::qt::setFXStackXmlOnPlate(plate, stack0);
+        report("FX-FAV-FILE", bad.isEmpty(), bad.isEmpty() ? QString("save key wrote slot 5; reading the file restored it") : bad.join("; "));
     }
     {   // BANNER: the first-launch keyboard-preset bar. QSettings goes to a temp ini and the registry
         // is snapshotted, so the user's own Shortcuts/preset and keys are untouched.
@@ -5542,6 +5581,7 @@ void MainWindow_Qt::autoloadStep() {
         // FX list fully populated — sortFXs + rebuildFXHashMap once,
         // then health-check counts.
         jefe::qt::finalizeFXLoad();
+        jefe::qt::loadFXFavoritesFile(jefe::qt::getFavoritesFilePath());
         viewport_->doneCurrent();
         autoloadPhase_ = AutoloadPhase::Done;
 

@@ -213,14 +213,17 @@ void registerAllCommands(Registry& reg)
         add(reg, kCCSave[i], kNames[1][i].constData(), Category::Color, P, ccSaveEditing, ccSaveClassic,
             [i] {
                 saveCCFavoriteFromActive(i);
-                saveCCFavoritesFile(getFavoritesFilePath());   // colour favourites persist across launches
+                saveFavoritesFile(getFavoritesFilePath());   // favourites persist across launches
             });
         both(reg, kFXLoad[i], kNames[2][i].constData(), Category::Plate, P, {k("Shift+" + f)},
              [i] { loadFXFavoriteToActive(i); });
         add(reg, kFXAppend[i], kNames[3][i].constData(), Category::Plate, P, fxAppendEditing, fxAppendClassic,
             [i] { appendFXFavoriteToActive(i); });
         add(reg, kFXSave[i], kNames[4][i].constData(), Category::Plate, P, {k("Ctrl+Shift+" + f)}, fxSaveClassic,
-            [i] { saveFXFavoriteFromActive(i); });
+            [i] {
+                saveFXFavoriteFromActive(i);
+                saveFavoritesFile(getFavoritesFilePath());
+            });
     }
 
     // ---- Timeline (Player): reserved for the timeline project, which binds the runs --------

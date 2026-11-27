@@ -2700,9 +2700,30 @@ void saveFXFavoriteFromActive(int slot) {
     plateManager.saveFavoriteFromPlate(slot);
 }
 
-bool saveCCFavoritesFile(const std::string& path) {
+namespace {
+std::string gFavoritesPathForTest;   // empty: the real file
+// False until loadFXFavoritesFile has run: FX favourites are read only after the FX
+// autoload, so a colour favourite saved before then must keep the file's FX favourites.
+bool gFXFavoritesLoaded = false;
+}
+
+// The favourites file: a "ccFavorites" top node holding the colour favourites ("CC") and,
+// since 2.0, the FX favourites ("favoriteStack", as 1.7's settings file stored them).
+bool saveFavoritesFile(const std::string& path) {
     XMLNode root = XMLNode::createXMLTopNode("ccFavorites");
     plateManager.saveFavoriteColorCorrectionsToNode(root);
+    if (gFXFavoritesLoaded) {
+        plateManager.saveFavoriteStacksToNode(root);
+    } else {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (fs::exists(path, ec)) {
+            XMLNode old = XMLNode::openFileHelper(path.c_str(), "ccFavorites");
+            if (!old.isEmpty())
+                while (old.nChildNode("favoriteStack") > 0)
+                    root.addChild(old.getChildNode("favoriteStack"));   // detaches it from `old`
+        }
+    }
     return root.writeToFile(path.c_str()) == eXMLErrorNone;
 }
 
@@ -2716,8 +2737,15 @@ bool loadCCFavoritesFile(const std::string& path) {
     return true;
 }
 
-namespace {
-std::string gFavoritesPathForTest;   // empty: the real file
+bool loadFXFavoritesFile(const std::string& path) {
+    gFXFavoritesLoaded = true;   // from now on saves write the in-memory FX favourites
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::exists(path, ec)) return false;
+    XMLNode root = XMLNode::openFileHelper(path.c_str(), "ccFavorites");
+    if (root.isEmpty()) return false;
+    plateManager.loadFavoriteStacksFromNode(root);
+    return true;
 }
 
 void setFavoritesFilePathForTest(const std::string& path) { gFavoritesPathForTest = path; }

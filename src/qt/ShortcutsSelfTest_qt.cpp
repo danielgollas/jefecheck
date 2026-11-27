@@ -3,6 +3,7 @@
 // (QAction) but no window.
 #include "Shortcuts_qt.h"
 #include "PreferencesWindow_qt.h"
+#include "SequenceLoadBridge_qt.h"
 
 #include <QAction>
 #include <QCoreApplication>
@@ -14,6 +15,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>
+#include <QTemporaryDir>
 #include <QUuid>
 #include <QWidget>
 #include <QtGlobal>
@@ -1728,6 +1730,26 @@ void testTooltipGrep()
 #endif
 }
 
+// Colour favourite saved before the FX autoload (here: no autoload at all) keeps the FX
+// favourites already in the file; they are read only once the effects are loaded.
+void testFavoritesFileKeepsFX()
+{
+    QTemporaryDir dir;
+    const QString path = dir.path() + "/favorites.jcs";
+    QFile f(path);
+    const bool wrote = dir.isValid() && f.open(QIODevice::WriteOnly);
+    if (wrote) {
+        f.write("<ccFavorites><favoriteStack><FXS><FX name=\"keepme\"/></FXS></favoriteStack>"
+                "<favoriteStack><FXS/></favoriteStack></ccFavorites>");
+        f.close();
+    }
+    const bool saved = wrote && jefe::qt::saveFavoritesFile(path.toStdString());
+    QString text;
+    if (f.open(QIODevice::ReadOnly)) text = QString::fromUtf8(f.readAll());
+    check("fav-file-keeps-fx", saved && text.count("<favoriteStack") == 2 && text.contains("keepme"),
+          QStringLiteral("saved=%1 stacks=%2").arg(saved).arg(text.count("<favoriteStack")));
+}
+
 }  // namespace
 
 int shortcutsSelfTest()
@@ -1783,6 +1805,7 @@ int shortcutsSelfTest()
     testMacosReserved(reg);
     testPresetsConflictFree(reg);
     testHelpText(reg);
+    testFavoritesFileKeepsFX();
     dumpPresets(reg);
     testTooltipGrep();
     reg.reset();
